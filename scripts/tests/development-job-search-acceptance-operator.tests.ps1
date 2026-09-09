@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+. (Join-Path $repositoryRoot "scripts/lib/terraform-toolchain.ps1")
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-job-search-acceptance.ps1"
 $guardPath = Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1"
 $source = Get-Content -LiteralPath $operatorPath -Raw
@@ -184,6 +185,7 @@ $runtime = [pscustomobject]@{
 # The state bucket and one-off task definition retain the same fail-closed controls as the
 # migration operator they reuse. Exercise the public-access and ECS task-definition parity here.
 $script:statePublicAccessTamper = ""
+$script:stateWriterVersion = "1.9.8"
 $script:taskTamper = ""
 $script:testStateKmsKey = "arn:aws:kms:us-east-2:111122223333:key/11111111-2222-3333-4444-555555555555"
 function Invoke-AwsJson {
@@ -219,7 +221,7 @@ function Invoke-AwsJson {
       $outputPath = [string]$Arguments[-1]
       [IO.File]::WriteAllText(
         $outputPath,
-        '{"lineage":"11111111-2222-3333-4444-555555555555","serial":108,"terraform_version":"1.9.8","outputs":{}}',
+        ('{"lineage":"11111111-2222-3333-4444-555555555555","serial":108,"terraform_version":"' + $script:stateWriterVersion + '","outputs":{}}'),
         (New-Object Text.UTF8Encoding($false))
       )
       return [pscustomobject]@{ VersionId = "state-version" }
@@ -283,6 +285,13 @@ $stateEvidence = Read-StateSnapshot
 if ([string]$stateEvidence.VersionId -cne "state-version" -or [long]$stateEvidence.Serial -ne 108) {
   throw "The exact private encrypted state fixture was not accepted."
 }
+$script:stateWriterVersion = "1.16.2"
+$null = Read-StateSnapshot
+foreach ($invalidWriter in @("1.9.7", "1.16.1", "1.16.3", "1.16.2 ", "")) {
+  $script:stateWriterVersion = $invalidWriter
+  Assert-TestRejected -Description "unapproved state writer '$invalidWriter'" -Operation { $null = Read-StateSnapshot }
+}
+$script:stateWriterVersion = "1.9.8"
 foreach ($publicAccessTamper in @("false", "string")) {
   $script:statePublicAccessTamper = $publicAccessTamper
   Assert-TestRejected -Description "state bucket public-access tampering '$publicAccessTamper'" -Operation {

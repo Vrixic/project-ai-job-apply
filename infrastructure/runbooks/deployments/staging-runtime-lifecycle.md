@@ -16,7 +16,7 @@ Staging permits synthetic data only. Shutdown intentionally retains no database 
 
 ## Operator prerequisites
 
-- Terraform `1.9.8`, AWS CLI, and a fresh temporary `ai-job-apply-staging-admin` SSO session.
+- Terraform `1.16.2`, AWS CLI, and a fresh temporary `ai-job-apply-staging-admin` SSO session.
 - A clean `main` checkout exactly matching `origin/main`.
 - The exact staging account ID, encrypted platform-state bucket, and most recent applied saved plan.
 - Empty event queues/DLQs and no disposable PITR copy or unfinished migration.

@@ -29,6 +29,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 
 if ($Help) {
   @"
@@ -149,10 +150,7 @@ function Assert-CallerAndTools {
     throw "Use a temporary staging IAM Identity Center session; long-lived callers are rejected."
   }
 
-  $version = & terraform version -json 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or [string]$version.terraform_version -ne "1.9.8") {
-    throw "Terraform 1.9.8 is required."
-  }
+  Assert-DeploymentTerraformCli
 }
 
 function Assert-CleanMergedMain {
@@ -186,8 +184,10 @@ function Initialize-Backend {
   $env:TF_DATA_DIR = $terraformDataDirectory
   & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
     "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" `
-    "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsKeyArn" | Out-Null
+    "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsKeyArn" "-backend-config=encrypt=true" "-backend-config=use_lockfile=true" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The encrypted staging backend could not be initialized." }
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataDirectory `
+    -ExpectedBucket $StateBucket -ExpectedKey "platform.tfstate" -ExpectedRegion $Region -ExpectedKmsKeyArn $kmsKeyArn
 }
 
 function Resolve-PlanBelowTerraformData {
@@ -213,8 +213,8 @@ function Set-VariablesFromAppliedPlan {
   )
 
   $source = Resolve-PlanBelowTerraformData -Candidate $SourcePlanPath -MustExist
-  $plan = & terraform "-chdir=$terraformDirectory" show -json $source 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or $null -eq $plan.variables) {
+  $plan = Read-DeploymentTerraformPlan -Path $source -TerraformDirectory $terraformDirectory -AllowHistorical
+  if ($null -eq $plan.variables) {
     throw "The already-applied runtime plan could not be inspected."
   }
   $properties = @($plan.variables.PSObject.Properties)
@@ -751,13 +751,7 @@ if ($Action -eq "PlanTraffic") {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $resolvedPlan -PathType Leaf)) {
       throw "The refresh-backed staging traffic plan failed."
     }
-    $planJson = (& terraform "-chdir=$terraformDirectory" show -json $resolvedPlan)
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($planJson)) {
-      throw "The saved traffic plan could not be inspected."
-    }
-    try { $plan = $planJson | ConvertFrom-Json }
-    catch { throw "The saved traffic plan JSON is invalid." }
-    if ($null -eq $plan) { throw "The saved traffic plan is empty." }
+    $plan = Read-DeploymentTerraformPlan -Path $resolvedPlan -TerraformDirectory $terraformDirectory
     $changes = Assert-TrafficPlanBoundary -Plan $plan
   }
   catch {
@@ -816,13 +810,7 @@ if ($Action -eq "Plan") {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $resolvedPlan -PathType Leaf)) {
       throw "The refresh-backed staging lifecycle plan failed."
     }
-    $planJson = (& terraform "-chdir=$terraformDirectory" show -json $resolvedPlan)
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($planJson)) {
-      throw "The saved lifecycle plan could not be inspected."
-    }
-    try { $plan = $planJson | ConvertFrom-Json }
-    catch { throw "The saved lifecycle plan JSON is invalid." }
-    if ($null -eq $plan) { throw "The saved lifecycle plan is empty." }
+    $plan = Read-DeploymentTerraformPlan -Path $resolvedPlan -TerraformDirectory $terraformDirectory
     $changes = Assert-PlanBoundary -Plan $plan
   }
   catch {
@@ -881,6 +869,8 @@ if ($Action -eq "ApplyTraffic") {
 
   $current = Get-LifecycleStatus
   Assert-TrafficPreconditions -Status $current
+  $plan = Read-DeploymentTerraformPlan -Path $resolvedPlan -TerraformDirectory $terraformDirectory
+  $null = Assert-TrafficPlanBoundary -Plan $plan
   & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $resolvedPlan
   if ($LASTEXITCODE -ne 0) { throw "The exact reviewed traffic plan did not apply successfully." }
   $result = Get-LifecycleStatus
@@ -920,6 +910,8 @@ if (
 
 $current = Get-LifecycleStatus
 Assert-TransitionPreconditions -Status $current
+$plan = Read-DeploymentTerraformPlan -Path $resolvedPlan -TerraformDirectory $terraformDirectory
+$null = Assert-PlanBoundary -Plan $plan
 & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $resolvedPlan
 if ($LASTEXITCODE -ne 0) { throw "The exact reviewed lifecycle plan did not apply successfully." }
 $result = Get-LifecycleStatus

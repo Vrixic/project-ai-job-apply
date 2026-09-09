@@ -3,6 +3,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 . (Join-Path $root 'scripts/lib/candidate-deletion-replay.ps1')
+. (Join-Path $root 'scripts/lib/terraform-toolchain.ps1')
 $fixture = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'fixtures/candidate-deletion-restore-contract.v1.json')))
 $now = [datetimeoffset]$fixture.now
 $script:checks = 0
@@ -271,6 +272,31 @@ Assert ($operator -match "AWS_MAX_ATTEMPTS = '1'" -and $operator -match 'Deletio
 Assert ($operator -match 'Assert-DeletionReplayHash \$disabledPath \$ReviewedCleanupDisabledSha256') 'cleanup drain journal checksum-bound'
 $inspector = [IO.File]::ReadAllText((Join-Path $root 'scripts/inspect-staging-workload-and-cost.ps1'))
 Assert ($inspector -match '"candidate_deletion_restore_role_enabled"') 'current exact runtime-plan reconstruction retains restore role flag'
+
+# The replay executor is actionable: even an otherwise matching historical zero-drift plan is
+# not an approved runtime authority. Exercise the real wrapper with only file/decoder ports mocked.
+& {
+  $readerAst = [Management.Automation.Language.Parser]::ParseFile($operatorPath,[ref]$tokens,[ref]$errors)
+  $definition = @($readerAst.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Read-ReplayPlan'},$true))
+  Assert ($definition.Count -eq 1) 'real replay plan reader found once'
+  . ([scriptblock]::Create($definition[0].Extent.Text))
+  $terraformRoot = $root
+  $terraformPrivate = $root
+  $syntheticPath = Join-Path $root 'synthetic-current-plan.tfplan'
+  function Resolve-DeletionReplayPrivatePath([string]$Path,[string]$Root,[switch]$MustExist) { return $Path }
+  function Assert-DeletionReplayHash([string]$Path,[string]$Sha256) {}
+  function Read-DeploymentTerraformPlan([string]$Path,[string]$TerraformDirectory,[switch]$AllowHistorical) {
+    Assert (-not $AllowHistorical) 'replay plan decoder never permits historical fallback'
+    return $runtimePlan
+  }
+  $runtimePlan = Clone @{terraform_version='1.16.2';variables=@{candidate_deletion_restore_role_enabled=@{value=$true}};resource_changes=@()}
+  $null = Read-ReplayPlan $syntheticPath ('a'*64)
+  Assert $true 'current exact-version replay plan accepted'
+  foreach ($version in @('1.9.8','1.16.1','1.16.3','1.16.2 ','')) {
+    $runtimePlan.terraform_version=$version
+    Reject { Read-ReplayPlan $syntheticPath ('a'*64) } 'historical or unapproved replay runtime plan refused'
+  }
+}
 
 # Execute the real operator role reader without loading its top-level cloud actions. Only the
 # native AWS boundary is replaced; the plan lookup and policy/ARN comparisons remain unchanged.

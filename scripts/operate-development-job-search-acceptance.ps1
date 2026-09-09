@@ -42,6 +42,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
 
 if ($Help) {
@@ -313,7 +314,8 @@ function Read-StateSnapshot {
   } finally {
     if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
   }
-  if ([string]$state.lineage -notmatch '^[0-9a-f-]{36}$' -or [long]$state.serial -lt 1 -or [string]$state.terraform_version -cne "1.9.8") {
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
+  if ([string]$state.lineage -notmatch '^[0-9a-f-]{36}$' -or [long]$state.serial -lt 1) {
     throw "The encrypted state identity is incomplete or uses an unexpected Terraform version."
   }
   return [pscustomobject]@{

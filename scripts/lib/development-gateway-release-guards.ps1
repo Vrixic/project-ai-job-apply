@@ -1,5 +1,6 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "terraform-toolchain.ps1")
 
 function Get-GatewayPlanVariableValue {
   param([Parameter(Mandatory)][object]$Variables, [Parameter(Mandatory)][string]$Name)
@@ -242,9 +243,9 @@ function Assert-RetainedGatewayBaselinePlan {
   if ($Plan.complete -isnot [bool] -or -not $Plan.complete -or
       $Plan.errored -isnot [bool] -or $Plan.errored -or
       $Plan.applyable -isnot [bool] -or $Plan.applyable -or
-      [string]$Plan.terraform_version -cne "1.9.8" -or
+      [string]$Plan.terraform_version -cnotin @("1.9.8", (Get-DeploymentTerraformVersion)) -or
       $null -eq $Plan.variables -or $null -eq $Plan.planned_values -or $null -eq $Plan.planned_values.root_module) {
-    throw "The retained gateway baseline is not a complete, nonerrored, nonapplyable Terraform 1.9.8 plan."
+    throw "The retained gateway baseline is not a complete, nonerrored, nonapplyable approved-version Terraform plan."
   }
   if (@(Get-GatewayMeaningfulChanges @($Plan.resource_changes)).Count -ne 0) {
     throw "The retained gateway baseline contains a meaningful resource change."
@@ -381,9 +382,11 @@ function Assert-GatewayReleaseVariables {
 }
 
 function Assert-ExactGatewayReleasePlan {
-  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][object]$Artifact)
-  if ([string]$Plan.terraform_version -cne "1.9.8" -or $Plan.errored -or -not $Plan.complete -or -not $Plan.applyable) {
-    throw "The gateway release must be a successful Terraform 1.9.8 plan."
+  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][object]$Artifact, [switch]$AllowHistorical)
+  $acceptedVersions = @((Get-DeploymentTerraformVersion))
+  if ($AllowHistorical) { $acceptedVersions += "1.9.8" }
+  if ([string]$Plan.terraform_version -cnotin $acceptedVersions -or $Plan.errored -or -not $Plan.complete -or -not $Plan.applyable) {
+    throw "The gateway release must be a successful current-version Terraform plan."
   }
   Assert-AcceptedGatewayProviderDrift -Plan $Plan
   $outputChanges = Get-GatewayOptionalProperty $Plan "output_changes"

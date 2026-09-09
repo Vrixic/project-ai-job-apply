@@ -1,4 +1,5 @@
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot "terraform-toolchain.ps1")
 
 function ConvertFrom-DevelopmentDocumentJson {
   param([Parameter(Mandatory)][string]$Json)
@@ -1262,10 +1263,10 @@ function Assert-DevelopmentDocumentRetainedBaselinePlan {
   if ($Plan.complete -isnot [bool] -or -not $Plan.complete -or
     $Plan.errored -isnot [bool] -or $Plan.errored -or
     $Plan.applyable -isnot [bool] -or $Plan.applyable -or
-    [string]$Plan.terraform_version -cne "1.9.8" -or
+    [string]$Plan.terraform_version -cnotin @("1.9.8", (Get-DeploymentTerraformVersion)) -or
     $null -eq $Plan.variables -or $null -eq $Plan.planned_values -or
     $null -eq $Plan.planned_values.root_module) {
-    throw "The retained document baseline is not a complete, nonerrored, nonapplyable Terraform 1.9.8 zero-change plan."
+    throw "The retained document baseline is not a complete, nonerrored, nonapplyable approved-version Terraform zero-change plan."
   }
 
   $meaningfulResources = @($Plan.resource_changes | Where-Object {
@@ -2045,12 +2046,15 @@ function Assert-DevelopmentDocumentDarkPlan {
     [switch]$ParserSourceTransition,
     [switch]$CompleteDarkParserRefresh,
     [switch]$CompleteDarkProcessorRefresh,
+    [switch]$AllowHistorical,
     [AllowNull()][object]$BaselineVariables,
     [AllowNull()][object]$Receipt,
     [string]$ParserQualifiedArn = "")
 
-  if ([string]$Plan.terraform_version -cne "1.9.8" -or $Plan.errored -or -not $Plan.complete -or -not $Plan.applyable) {
-    throw "The document dark transition must be a successful applyable Terraform 1.9.8 plan."
+  $acceptedVersions = @((Get-DeploymentTerraformVersion))
+  if ($AllowHistorical) { $acceptedVersions += "1.9.8" }
+  if ([string]$Plan.terraform_version -cnotin $acceptedVersions -or $Plan.errored -or -not $Plan.complete -or -not $Plan.applyable) {
+    throw "The document dark transition must be a successful applyable current-version Terraform plan."
   }
   $outputChanges = Get-OptionalTerraformChangeValue $Plan "output_changes"
   if (@(@($ParserSourceTransition, $CompleteDarkParserRefresh, $CompleteDarkProcessorRefresh) |

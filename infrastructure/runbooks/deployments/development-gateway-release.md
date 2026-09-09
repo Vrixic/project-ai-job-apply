@@ -7,7 +7,7 @@ migration image, public-route switch, identity settings, data resources, or dura
 
 ## Preconditions
 
-- Use Terraform `1.9.8`, Node.js 24, pnpm `10.24.0`, and a temporary development IAM Identity
+- Use portable Terraform `1.16.2`, Node.js 24, pnpm `10.24.0`, and a temporary development IAM Identity
   Center session in `us-east-2`.
 - Require a clean `main` checkout exactly equal to `origin/main`; pass that 40-character commit as
   `SourceSha`.

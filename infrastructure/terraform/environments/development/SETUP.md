@@ -48,14 +48,18 @@ Budgets notify; they do not guarantee that services stop spending.
 
 ### 4. Install the pinned deployment tool
 
-Terraform must match CI:
+Use the approved portable deployment toolchain. The excluded GitHub Actions pin is unchanged:
 
 ```powershell
-winget install --id Hashicorp.Terraform --exact --version 1.9.8
+pwsh -NoProfile -File scripts/install-terraform-toolchain.ps1
+. ./scripts/use-deployment-terraform.ps1
 terraform version
 ```
 
-Open a new PowerShell session if the executable is not immediately found.
+The installer verifies signed checksums and keeps both versions below ignored `.tmp/toolchains`.
+Dot-source the selector in each new operator shell; it changes only that process's PATH. Current
+operations use 1.16.2; 1.9.8 is retained only for explicit historical-plan reads. Do not use the old
+GitHub workflows for cloud planning or replace historical plans/receipts with new version labels.
 
 ### 5. Prepare GitHub environments
 
@@ -90,7 +94,7 @@ account. Treat any historical provider setup instruction as evidence only.
 After the product-owner setup is confirmed, platform engineering:
 
 1. verifies the exact AWS caller/account/region and records only sanitized evidence;
-2. validates Terraform 1.9.8 and repository checks;
+2. validates Terraform 1.16.2, effective S3 state locking and repository checks;
 3. bootstraps encrypted/versioned state and the GitHub OIDC deployment role;
 4. configures GitHub Environment variables from bootstrap outputs;
 5. applies network, KMS, RDS, S3, SQS/DLQ, the migration repository/task, Lambda durable runtime,

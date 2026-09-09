@@ -8,7 +8,7 @@ apply Terraform, register a task definition, execute a migration, or change appl
 
 - Work from clean `main` exactly equal to `origin/main`, and pass that 40-character commit as
   `SourceSha`.
-- Use Terraform `1.9.8`, Docker Buildx, and temporary IAM Identity Center credentials for the exact
+- Use Terraform `1.16.2`, Docker Buildx, and temporary IAM Identity Center credentials for the exact
   development account in `us-east-2`.
 - Resolve `ai-job-apply/migration` and its customer-managed KMS key from the encrypted development
   Terraform state. The operator cross-checks the live repository ARN, URI, account, immutable-tag

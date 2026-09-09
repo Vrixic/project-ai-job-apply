@@ -36,6 +36,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\terraform-toolchain.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-gateway-release-guards.ps1")
 
@@ -440,8 +441,7 @@ function Assert-CallerAndSource {
   if ([string]$identity.Account -cne $ExpectedAccountId -or -not ([string]$identity.Arn).Contains(":assumed-role/")) {
     throw "Use the exact temporary development IAM Identity Center caller."
   }
-  $version = (& terraform version -json 2>$null | ConvertFrom-Json).terraform_version
-  if ($LASTEXITCODE -ne 0 -or [string]$version -cne "1.9.8") { throw "Terraform 1.9.8 is required." }
+  Assert-DeploymentTerraformCli
   $branch = (& git -C $repositoryRoot branch --show-current 2>$null).Trim()
   $head = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
   $origin = (& git -C $repositoryRoot rev-parse origin/main 2>$null).Trim()
@@ -502,15 +502,15 @@ function Initialize-Backend {
   $env:TF_DATA_DIR = $terraformRuntimeData
   & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
     "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" `
-    "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsArn" | Out-Null
+    "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsArn" "-backend-config=use_lockfile=true" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The encrypted development backend could not be initialized." }
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformRuntimeData `
+    -ExpectedBucket $StateBucket -ExpectedKey "platform.tfstate" -ExpectedRegion $Region -ExpectedKmsKeyArn $kmsArn
 }
 
 function Read-Plan {
-  param([Parameter(Mandatory)][string]$Path)
-  $raw = & terraform "-chdir=$terraformDirectory" show -json $Path 2>$null
-  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { throw "A saved Terraform plan could not be inspected." }
-  return $raw | ConvertFrom-Json
+  param([Parameter(Mandatory)][string]$Path, [switch]$AllowHistorical)
+  return Read-DeploymentTerraformPlan -Path $Path -TerraformDirectory $terraformDirectory -AllowHistorical:$AllowHistorical
 }
 
 function Assert-CurrentBootstrapTemplateSource {
@@ -580,7 +580,7 @@ function Read-CurrentBootstrapTemplate {
   Assert-CurrentBootstrapTemplateVerification -Verification $verification -PlanPath $planPath `
     -PlanSha256 $planSha -StateIdentity $state -OperatorSourceSha $operatorCommit `
     -RepositoryPath $repositoryRoot
-  $plan = Read-Plan -Path $planPath
+  $plan = Read-Plan -Path $planPath -AllowHistorical
   Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $plan
   return $plan
 }
@@ -1444,13 +1444,14 @@ function Read-AppliedGatewayRecovery {
     }
   }
 
-  $plan = Read-Plan -Path $planPath
+  $plan = Read-Plan -Path $planPath -AllowHistorical
   $expectedMigrationRepository = "$ExpectedAccountId.dkr.ecr.$Region.amazonaws.com/ai-job-apply/migration"
   $null = Assert-GatewayReleaseVariables -BaselineVariables $Baseline.variables `
     -ReleaseVariables $plan.variables -Artifact $artifact -ExpectedAccountId $ExpectedAccountId `
     -ExpectedMigrationRepositoryUrl $expectedMigrationRepository `
     -ExpectedParserQualifiedArn $appliedGatewayRecoveryParserQualifiedArn
-  $null = Assert-ExactGatewayReleasePlan -Plan $plan -Artifact $artifact
+  # Audit an already-applied, checksum-bound recovery receipt only; never execute this old plan.
+  $null = Assert-ExactGatewayReleasePlan -Plan $plan -Artifact $artifact -AllowHistorical
   if ([string]$CurrentStateIdentity.Lineage -cne [string]$metadata.StateLineage -or
     [long]$CurrentStateIdentity.Serial -ne ([long]$metadata.StateSerial + 1)) {
     throw "The already-applied gateway recovery state is not the exact reviewed serial plus one."
@@ -1483,10 +1484,10 @@ function Read-Baseline {
   $resolved = Resolve-InputPath -Candidate $BaselinePlanPath -MustExist
   $sha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($sha -cne $ReviewedBaselineSha256) { throw "The zero-change baseline checksum does not match review." }
-  $baseline = Read-Plan -Path $resolved
+  $baseline = Read-Plan -Path $resolved -AllowHistorical
   $changes = @($baseline.resource_changes | Where-Object { (@($_.change.actions) -join ",") -ne "no-op" })
-  if ($changes.Count -ne 0 -or [string]$baseline.terraform_version -cne "1.9.8") {
-    throw "The reviewed baseline is not a Terraform 1.9.8 zero-change plan."
+  if ($changes.Count -ne 0 -or [string]$baseline.terraform_version -cnotin @("1.9.8", (Get-DeploymentTerraformVersion))) {
+    throw "The reviewed baseline is not an approved-version Terraform zero-change plan."
   }
   $schemaSixBootstrapBaseline = $false
   if (($completeDarkParserRefresh -or $completeDarkProcessorRefresh) -and
@@ -1871,6 +1872,7 @@ function Get-StateResourceMap {
   $raw = & terraform "-chdir=$terraformDirectory" show -json 2>$null
   if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { throw "Terraform state could not be inspected for live verification." }
   $state = $raw | ConvertFrom-Json
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
   return Get-TerraformStateResourceMap -RootModule $state.values.root_module
 }
 
@@ -2366,6 +2368,7 @@ function Get-StateIdentity {
   $raw = & terraform "-chdir=$terraformDirectory" state pull 2>$null
   if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) { throw "Terraform state identity could not be read." }
   $state = $raw | ConvertFrom-Json
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
   if ([string]::IsNullOrWhiteSpace([string]$state.lineage) -or [long]$state.serial -lt 1) {
     throw "Terraform state lacks a valid lineage or serial."
   }

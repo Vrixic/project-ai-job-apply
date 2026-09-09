@@ -63,6 +63,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 
 if ($Help) {
   @"
@@ -218,7 +219,8 @@ function Read-StateSnapshot {
     if ([string]$get.VersionId -cne [string]$head.VersionId) { throw "The state version changed while it was read." }
     $state = ConvertFrom-OperatorJson (Get-Content -LiteralPath $temporary -Raw) "Terraform state"
   } finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
-  if ([string]$state.terraform_version -cne "1.9.8" -or [long]$state.serial -lt 1 -or [string]$state.lineage -notmatch '^[0-9a-f-]{36}$') { throw "The Terraform state identity is invalid." }
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
+  if ([long]$state.serial -lt 1 -or [string]$state.lineage -notmatch '^[0-9a-f-]{36}$') { throw "The Terraform state identity is invalid." }
   return [pscustomobject]@{ State = $state; VersionId = [string]$head.VersionId; Serial = [long]$state.serial; Lineage = [string]$state.lineage }
 }
 
@@ -257,15 +259,14 @@ function Read-ReviewedZeroDrift {
   try {
     $env:TF_DATA_DIR = $terraformInspectionDataDirectory
     $null = New-Item -ItemType Directory -Path $terraformInspectionDataDirectory -Force
+    Assert-DeploymentTerraformCli
     & terraform "-chdir=$terraformDirectory" init -backend=false -input=false -lockfile=readonly 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Terraform provider schemas could not be initialized for zero-drift inspection." }
-    $shown = & terraform "-chdir=$terraformDirectory" show -json $path 2>$null
-    if ($LASTEXITCODE -ne 0) { throw "The reviewed zero-drift plan cannot be inspected." }
+    $plan = Read-DeploymentTerraformPlan -Path $path -TerraformDirectory $terraformDirectory -AllowHistorical
   } finally {
     if ($null -eq $savedTerraformDataDirectory) { Remove-Item Env:TF_DATA_DIR -ErrorAction SilentlyContinue }
     else { $env:TF_DATA_DIR = $savedTerraformDataDirectory }
   }
-  $plan = ConvertFrom-OperatorJson ($shown -join "`n") "Zero-drift plan"
   $changes = @($plan.resource_changes | Where-Object { (@($_.change.actions) -join ',') -cne 'no-op' })
   if ($changes.Count -ne 0) { throw "The reviewed Terraform plan is not zero drift." }
   return [pscustomobject]@{ Sha256 = $ReviewedZeroDriftPlanSha256; TerraformVersion = [string]$plan.terraform_version; MeaningfulChanges = 0 }

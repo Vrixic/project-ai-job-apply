@@ -90,7 +90,7 @@ never accepts or records the Auth0 M2M secret, candidate tokens, or identity val
 
 Stop before planning unless all of these are independently available:
 
-- clean `main == origin/main`, the exact merged source SHA, Terraform 1.9.8, and an approved
+- clean `main == origin/main`, the exact merged source SHA, Terraform 1.16.2, and an approved
   development IAM Identity Center session in the exact account and `us-east-2`;
 - `candidate_rights_enabled=true` in the applied state and the exact reviewed policy version/digest,
   export lifetime, download-grant lifetime, backup retention, recent-authentication age,

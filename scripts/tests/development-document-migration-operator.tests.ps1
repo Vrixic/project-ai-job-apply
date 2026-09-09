@@ -1177,6 +1177,16 @@ $driftRoot = [pscustomobject]@{ resources = @(
 $retainedPlan.planned_values.root_module = $driftRoot
 $retainedPlan.resource_drift = $fullProviderDrift
 Assert-RetainedMigrationBaselinePlan -Plan $retainedPlan
+$currentVersionBaseline = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$currentVersionBaseline.terraform_version = "1.16.2"
+Assert-RetainedMigrationBaselinePlan -Plan $currentVersionBaseline
+foreach ($invalidVersion in @("1.9.9", "1.16.1", "1.16.3", "1.16.2 ", "")) {
+  $versionPlan = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $versionPlan.terraform_version = $invalidVersion
+  $rejected = $false
+  try { Assert-RetainedMigrationBaselinePlan -Plan $versionPlan } catch { $rejected = $true }
+  if (-not $rejected) { throw "The retained migration baseline accepted an unapproved Terraform version." }
+}
 foreach ($record in $fullProviderDrift) {
   $subsetPlan = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
   $subsetPlan.resource_drift = @($record)
@@ -1480,7 +1490,7 @@ try {
   function Get-FileSha256([string]$Path) {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
   }
-  function Get-PlanJson([string]$Path) { return $script:retainedPlanFixture }
+  function Get-PlanJson([string]$Path, [switch]$AllowHistorical) { return $script:retainedPlanFixture }
   function Get-CurrentTerraformStateIdentity { return $script:retainedStateFixture }
   $script:retainedPlanFixture = $retainedPlan
   $script:retainedStateFixture = $retainedState
@@ -1590,7 +1600,7 @@ try {
     MigrationImage = $retainedMigrationImage; PlanPath = $retainedPath; PlanSha256 = $retainedSha
     Applyable = $false; MeaningfulChanges = 0; CreatedAt = "2026-08-15T20:00:00.0000000Z"
   }
-  function Get-PlanJson([string]$Path) { return $script:ancestorPlanFixture }
+  function Get-PlanJson([string]$Path, [switch]$AllowHistorical) { return $script:ancestorPlanFixture }
   $script:ancestorPlanFixture = $ancestorPlan
   $script:ancestorGitMode = "valid"
   function git {
@@ -2084,6 +2094,7 @@ $afterContainer = [ordered]@{
   }
 }
 $normalizedTaskPlan = [pscustomobject]@{
+  terraform_version = "1.16.2"
   complete = $true
   applyable = $true
   errored = $false
@@ -2165,6 +2176,13 @@ $normalizedTaskPlan = [pscustomobject]@{
   }
 }
 Assert-ExactTaskPlan -Plan $normalizedTaskPlan
+foreach ($invalidVersion in @("1.9.8", "1.16.1", "1.16.3", "1.16.2 ", "")) {
+  $versionPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $versionPlan.terraform_version = $invalidVersion
+  $rejected = $false
+  try { Assert-ExactTaskPlan -Plan $versionPlan } catch { $rejected = $true }
+  if (-not $rejected) { throw "The actionable migration task plan accepted an unapproved Terraform version." }
+}
 $subsequentTaskPlan = $normalizedTaskPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $subsequentTaskPlan.resource_changes = @($subsequentTaskPlan.resource_changes[0])
 foreach ($name in @(

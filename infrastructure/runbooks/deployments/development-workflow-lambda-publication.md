@@ -32,7 +32,7 @@ Run the read-only boundary check first:
   -StateBucket '<development-terraform-state-bucket>'
 ```
 
-It requires the exact account/Region, an assumed-role caller, Terraform `1.9.8`, Node.js 24, pnpm
+It requires the exact account/Region, an assumed-role caller, Terraform `1.16.2`, Node.js 24, pnpm
 `10.24.0`, clean current source, an exact customer-KMS-encrypted/versioned state object, and the
 Terraform-owned artifact bucket/KMS boundary. It writes no object.
 

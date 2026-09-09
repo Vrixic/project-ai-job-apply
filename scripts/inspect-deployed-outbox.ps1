@@ -15,6 +15,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $environmentDirectory = Join-Path $repositoryRoot "infrastructure/terraform/environments/$Environment"
 $applicationLogGroup = "/ai-job-apply/$Environment/application"
@@ -63,9 +64,7 @@ function Get-TerraformOutput {
 if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
   throw "AWS CLI is required."
 }
-if (-not (Get-Command terraform -ErrorAction SilentlyContinue)) {
-  throw "Terraform 1.9.8 is required."
-}
+Assert-DeploymentTerraformCli
 if (-not (Test-Path -LiteralPath $environmentDirectory -PathType Container)) {
   throw "The selected Terraform environment does not exist."
 }

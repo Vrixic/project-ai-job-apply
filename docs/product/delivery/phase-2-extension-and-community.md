@@ -56,8 +56,11 @@ The user's renewed SSO and corrected Auth0 Client Access now pass. At `13:44:24Z
 three-scope reviewer token supports nine bounded requests and reads three existing initial-review
 cases, with no next page, no role changes and zero decisions. Their provider evidence needs fresh
 verification before acceptance; D2-039 tracks the newly found refresh and ordering gaps. D2-040
-tracks Terraform 1.9.8's inability to enable the configured S3 state lock. No recovery IAM, restore
-or executor has been created. Installed sign-in/job-add acceptance remains distinct from publication.
+tracks Terraform 1.9.8's inability to enable the configured S3 state lock. The user has now approved
+the portable 1.16.2 transition: both binaries are verified and the isolated current development
+backend passes exact identity/encryption/locking checks. Integrated operator validation and a fresh
+locked plan remain next; no recovery IAM, restore or executor has been created. Installed
+sign-in/job-add acceptance remains distinct from publication.
 
 Preceding controlled-development release history (2026-09-05 through the 2026-09-08 reviewer
 assignment): D2-024–D2-029 are merged in `main`.
@@ -145,7 +148,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-037 | Patch release-blocking dependency advisories surfaced by the current registry audit. | Complete | Platform engineering | D2-016, D2-035 | Compatible dependency repairs and exact Vercel patch packaging pass the full repository verifier and focused guards. Exact source `42b9686` is released to the existing candidate/admin Vercel targets and development AWS migration/Gateway/D2 workers. Migration exits 0 with seven success records; state 290 runs Gateway/scheduled/Trust 55/17/13 with zero drift, 13 healthy alarms and unchanged development scope. No audit exemptions or production/store activation. |
 | D2-038 | Bind candidate-deletion replay to an authenticated, isolated AWS restore target. | Implemented; cloud validation pending | Platform engineering | D2-020, D2-036 | Temporary private Lambda, dedicated default-off read-only cloud role, complete historical-marker/restored-owner/document preflight and restored-only reconciliation are implemented. The new internal schema binds the PowerShell operator and runtime; the old unsafe direct-URL/per-marker path is removed. Focused tests and real seven-owner PostgreSQL replay pass. Exact IAM activation, current structural PITR and cloud replay/cleanup remain separate; no primary database, cloud document, completion tag or Auth0 mutation is permitted in this drill. |
 | D2-039 | Refresh stale unpublished contribution evidence and prevent out-of-order catalog regression. | In progress; locally verified, release pending | Platform engineering | D2-006, D2-007, D2-019, D2-020 | Implemented in `fab4960`, with deterministic database-fixture follow-up `cc2fa23`: append-only verification generations, bounded pending-review recovery, exact decision/evidence binding, server freshness checks and monotonic canonical/source updates. Full repository verification and real PostgreSQL checks pass, including 91 Jobs tests, seven Trust tests and composed review/publication/appeal/withdrawal. Original submissions, evidence and reviewer separation remain intact; no resubmission or automatic case decision. Coordinated migration/runtime release and live fresh-evidence acceptance remain blocked by D2-040. |
-| D2-040 | Correct the deployment toolchain's remote-state locking incompatibility. | In progress | Platform engineering; product owner | D2-016, D2-038 | Actual Terraform 1.9.8 rejects explicit `use_lockfile=true`; ordinary initialization omitted both S3 locking and DynamoDB locking. No recovery activation plan or apply was generated. Review an isolated supported exact CLI pin, effective-locking guards and fresh version-compatible plans while preserving old plan readers, provider locks, historical receipts and excluded GitHub Actions. |
+| D2-040 | Correct the deployment toolchain's remote-state locking incompatibility. | In progress | Platform engineering; product owner | D2-016, D2-038 | The user approved portable Terraform 1.16.2 and the deployment-skill update on 2026-09-09. Verified current/historical binaries are installed without replacing the system install. Current development backend initialization verifies the exact account/bucket/key/region/KMS and actual encrypted S3 locking; the retained state-290 plan remains readable and unchanged. Current-only operators, explicit historical readers and regression integration are being validated before a fresh locked plan. Provider locks and excluded GitHub Actions are unchanged; no resource apply. |
 | D2-041 | Include all implemented D2 owner data in the strict candidate-export contract. | Complete | Platform engineering | D2-017, D2-018, D2-020, D2-039 | Repository implementation completed 2026-09-09 in `fab4960`. Strict optional v1 sections now include existing authorizations, contributions/processing histories, private saved-page captures and Trust evidence, while preserving older D1 exports. The real seven-owner workflow test verifies full assembly, idempotency, isolation and redaction; the shared-schema regressions and full repository verifier pass. No additional SQL migration beyond D2-039. Release remains part of D2-039/D2-016; this row does not claim deployed export acceptance. |
 
 ### D2-039 — Fresh review evidence and monotonic catalog truth
@@ -205,15 +208,27 @@ no DynamoDB lock table. Supplying the same intended `use_lockfile=true` explicit
 `Invalid backend configuration argument`. Provider `-lockfile=readonly` does not supply state locking.
 No recovery activation plan, apply or cloud configuration mutation was performed.
 
-The proposed correction is separately verified portable Terraform `1.16.2`, with effective S3
-locking checked before live planning. The official [patch release](https://github.com/hashicorp/terraform/releases/tag/v1.16.2)
+The user approved separately verified portable Terraform `1.16.2` and the deployment-skill update
+on 2026-09-09. The official [patch release](https://github.com/hashicorp/terraform/releases/tag/v1.16.2)
 and [S3 backend locking documentation](https://developer.hashicorp.com/terraform/language/backend/s3)
-were checked on 2026-09-09; no binary has been downloaded or installed. Preserve 1.9.8 only for explicit read-only historical-plan
-decoding; a newer CLI cannot apply its binary plans. Reconstruct exact reviewed inputs and create
-fresh plans instead of relabeling receipts. Do not disable locking, replace the backend, alter provider
-versions or modify GitHub Actions. The deployment skill still explicitly pins 1.9.8, so the toolchain
-correction requires resolving that instruction before cloud continuation; the already approved
-development recovery drill does not need renewed approval.
+were checked. The new [installer](../../../scripts/install-terraform-toolchain.ps1) verifies the
+published checksum signature against HashiCorp's exact primary signing fingerprint and independently
+pinned Windows archive checksums before executing either binary. Both versions are now installed
+under ignored `.tmp/toolchains/terraform`; the original system installation and personal keyring
+are untouched. [Shell selection](../../../scripts/use-deployment-terraform.ps1) changes process PATH
+only. The [shared guard](../../../scripts/lib/terraform-toolchain.ps1) rejects injected CLI arguments,
+nondefault workspaces, current-command version drift and unlocked or mismatched cached backends.
+
+The new isolated `development-d2-toolchain-data` backend initializes successfully using the exact
+retained S3 bucket/key/region/KMS and explicit `encrypt=true`/`use_lockfile=true`; fresh STS verifies
+the development account. This proves effective configuration, not yet actual lock acquisition.
+The retained state-290 plan decodes through the explicit read-only 1.9.8 fallback and its SHA-256
+remains `66eb4747de80b18d3d213104b0bb7c3bbccb5ee8d823323dbda70128551296fd`.
+Current apply readers accept only 1.16.2 plans. Complete integrated validation and reconstruct exact
+reviewed inputs for a fresh locked plan; never relabel historical receipts. Provider versions,
+provider locks, historical files and excluded GitHub Actions stay unchanged. No resource apply,
+recovery role or executor has run. The already approved development recovery drill needs no renewed
+approval.
 
 ### D2-041 — Complete candidate-data export coverage
 
@@ -994,6 +1009,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-09 | Found real remaining implementation gaps after reviewer access became usable: stale proofs cannot be refreshed, backend acceptance lacks a freshness fence, the processor rejects real UUIDv8 Trust decisions, and out-of-order exact publication can regress catalog truth. Started D2-039 with separate shared-main agent ownership, no branches or live case writes. Separately verified that Terraform 1.9.8 cannot enable the intended S3 lock; no recovery plan/apply was generated. D2-040 records the toolchain correction instead of bypassing locking. | D2-039, D2-040; D2-R18 | [Fresh-evidence implementation](#d2-039--fresh-review-evidence-and-monotonic-catalog-truth), [effective state locking](#d2-040--effective-s3-state-locking) |
 | 2026-09-09 | Integrated `fab4960` and `cc2fa23` directly on shared `main`, with no new branches. D2-039's evidence refresh, explicit provider basis and monotonic publication and D2-041's strict full export are implemented. Final root PostgreSQL integration passes 136/136 with seven opt-in tests separately passing as composed lifecycle 2/2, export/deletion 4/4 and cancellation 1/1. Logical recovery passes 44 migrations and 68 exact row sets; 296 restore-operator assertions and the full repository verifier pass. Fixed current migration expectations, startup ordering and bounded multi-page test queue inspection rather than relaxing runtime checks. Disposable resources were removed and Docker/WSL stopped. No cloud write, case decision, provider expansion, credential change or GitHub Actions edit. | D2-016, D2-020, D2-036, D2-039, D2-041 | [Refresh database regressions](../../../backend/services/jobs/src/persistence/contribution-refresh.integration.test.ts), [full export regression](../../../backend/workflows/src/candidate-deletion-restore-store.integration.test.ts), [maintained recovery command](../../../scripts/tests/d2-recovery/run.mjs), [repository verifier](../../../scripts/verify-phase0.ps1) |
 | 2026-09-09 | Final maintained infrastructure validation passes against committed source, including current 44-migration publisher/restore guards and all D2 operator/public/authenticated-runner checks. The final handoff requests only correction of the deployment skill's incompatible Terraform pin under D2-040; reviewer access and recovery-drill authority are already resolved. Local verification does not claim fresh hosted, provider, recovery or production acceptance. | D2-016, D2-038–D2-041; D2-R18 | [Maintained validation commands](../../../package.json), [effective-locking blocker](#d2-040--effective-s3-state-locking) |
+| 2026-09-09 | User approved the exact portable Terraform 1.16.2 transition. Updated the deployment skill, local constraints and operator boundaries while preserving old readers and excluded Actions. Both current/historical archives pass official signature and pinned checksum verification; the old state-290 plan reads without changing its hash. Fresh exact-account backend initialization in an isolated data directory passes encrypted S3 locking and exact identity checks; integrated tests and an actual locked plan remain next. No cloud resource apply or personal toolchain/keyring overwrite. | D2-040; D2-R18 | [Toolchain implementation and state](#d2-040--effective-s3-state-locking), [shared guard regressions](../../../scripts/tests/terraform-toolchain.tests.ps1), [composed peripheral regressions](../../../scripts/tests/peripheral-terraform-toolchain.tests.ps1) |
 
 ## Decisions and scope changes
 
@@ -1027,6 +1043,13 @@ old binary solely to read historical plans. Preserve the backend, provider versi
 receipts and excluded GitHub Actions. Resolve the skill's incompatible 1.9.8 instruction explicitly
 before executing this toolchain transition. Do not request the already granted recovery-drill
 approval again.
+
+The user's subsequent 2026-09-09 approval selects exact portable Terraform 1.16.2 for current local
+deployment, with 1.9.8 confined to explicit historical `show`. Use a process-local selector and
+signature/checksum-verified installation instead of replacing the machine toolchain. Check the
+effective cached backend after initialization, since a successful init or provider lock says
+nothing about state locking. Keep historical evidence immutable, regenerate current plans from
+reviewed inputs, and leave GitHub Actions excluded and unchanged as requested.
 
 For D2-038 on 2026-09-08, use the bounded restore-only design recorded above, not the live
 candidate-rights mutation role or a migration-task command override. This keeps disaster-recovery
@@ -1148,7 +1171,7 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R15 | Closed | Exact development account/temporary SSO caller verification passes at `2026-09-09T13:42:25Z` after renewal. No recovery cloud mutation has run. | Product owner; platform engineering | Recheck current authority at the actual cloud operation. D2-R18, not SSO, is the present infrastructure blocker. Preserve Greenhouse-only activation and reviewer separation. |
 | D2-R16 | Closed | The corrected existing Client Access grant passes exact three-scope authentication at `2026-09-09T13:44:24Z`; nine bounded requests read three initial-review cases and their evidence, with no next page or decisions. No grant, role, credential, Management API or human-session operation was performed. | Product owner; platform engineering | Keep the unchanged least-privilege assignment. D2-039 must refresh stale proof before supported review/publication; hosted and separate human appeal acceptance remain open. No further screenshot or new secret is needed for the resolved grant. |
 | D2-R17 | Closed; isolated drill authorized | The user explicitly approved the development-only recovery role, one isolated restore/replay drill and exact cleanup on 2026-09-09. No activation plan, current 42-migration cloud restore or restore-only replay has yet run; execution remains tracked by D2-038. | Product owner; platform engineering | After R15 is resolved, prepare/review/apply only the exact drill plans. Preserve the primary database, cloud document objects, completion tags, retention and Auth0. Clean up the exact temporary Lambda and restored database and deactivate drill-only permissions afterward. Do not request the same approval again or expand it to other environments or candidate mutations. |
-| D2-R18 | Open | Actual Terraform 1.9.8 rejects explicit S3 `use_lockfile=true`; refreshed backend metadata contains neither that setting nor DynamoDB locking. The deployment skill and current operators still pin 1.9.8. No recovery activation plan/apply was performed. | Platform engineering; product owner | Resolve the incompatible toolchain instruction, install a verified isolated supported binary, enforce effective locking and regenerate exact reviewed plans. Preserve historical readers/receipts and provider locks; do not bypass locking or change GitHub Actions. |
+| D2-R18 | Open; correction authorized and installed | User approval resolves the old skill pin. Verified portable 1.16.2 and historical 1.9.8 are installed, and the isolated current development backend passes exact encrypted S3-lock configuration checks. No resource apply has run. | Platform engineering | Finish integrated operator validation and an actual fresh locked plan before closing this implementation risk. Preserve historical readers/receipts and provider locks; do not bypass locking, change GitHub Actions or request the resolved approval again. |
 
 ## Completion record
 

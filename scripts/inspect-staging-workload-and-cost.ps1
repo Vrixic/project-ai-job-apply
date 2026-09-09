@@ -19,6 +19,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 
 if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
   $AwsProfile = "ai-job-apply-$Environment-admin"
@@ -155,10 +156,7 @@ function Assert-CallerAndTerraform {
   if (-not ([string]$identity.Arn).Contains(":assumed-role/")) {
     throw "Use the temporary $Environment IAM Identity Center session; long-lived callers are rejected."
   }
-  $version = & terraform version -json 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or [string]$version.terraform_version -ne "1.9.8") {
-    throw "Terraform 1.9.8 is required for this measurement."
-  }
+  Assert-DeploymentTerraformCli
   return $identity
 }
 
@@ -194,8 +192,8 @@ function Get-RuntimeStatus {
   try {
     $null = New-Item -ItemType Directory -Path $terraformDataDirectory -Force
     $env:TF_DATA_DIR = $terraformDataDirectory
-    $plan = & terraform "-chdir=$terraformDirectory" show -json $planPath 2>$null | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0 -or $null -eq $plan.variables) {
+    $plan = Read-DeploymentTerraformPlan -Path $planPath -TerraformDirectory $terraformDirectory -AllowHistorical
+    if ($null -eq $plan.variables) {
       throw "The applied runtime plan could not be inspected."
     }
   } finally {
@@ -233,8 +231,10 @@ function Get-RuntimeStatus {
 
     & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
       "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" `
-      "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsKeyArn" | Out-Null
+      "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsKeyArn" "-backend-config=encrypt=true" "-backend-config=use_lockfile=true" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "The encrypted backend could not be initialized." }
+    Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataDirectory `
+      -ExpectedBucket $StateBucket -ExpectedKey "platform.tfstate" -ExpectedRegion $Region -ExpectedKmsKeyArn $kmsKeyArn
     & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m -detailed-exitcode `
       "-out=$temporaryPlan" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "The $Environment runtime is not zero drift." }

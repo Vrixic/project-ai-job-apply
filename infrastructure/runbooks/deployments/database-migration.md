@@ -5,7 +5,7 @@ service and must return to zero running tasks after every migration.
 
 ## Preconditions
 
-- Use exact merged source, Terraform `1.9.8`, and the selected environment's temporary IAM
+- Use exact merged source, portable Terraform `1.16.2`, and the selected environment's temporary IAM
   Identity Center profile in `us-east-2`.
 - Confirm RDS is available, encrypted, deletion protected, and covered by current backups/PITR.
 - Build only `Dockerfile.migration`; push it to the environment-local immutable, KMS-encrypted,
@@ -158,7 +158,7 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    Terraform input from the checksum-bound retained `ParserDark` or `CompleteDark` verification
    plan, and saves a refresh-backed plan. The adjacent `.baseline.json` sidecar is mandatory and
    must bind its exact release/operator source, account, region, absolute plan path/hash,
-   Terraform 1.9.8 zero-change shape, retained state lineage/serial, exact variable set,
+   approved-version zero-change shape (1.16.2 current; 1.9.8 historical read-only), retained state lineage/serial, exact variable set,
    publication receipt, rollout stage, and applicable parser-version pin. A
    KMS-prerequisite-only baseline is rejected. An exact-current retained baseline requires
    `-ReviewedBaselineToCurrentDeltaSha256` to be omitted. An older retained baseline is accepted
@@ -242,7 +242,7 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    original operator delta separately from the checksum-reviewed migration release, reviewed
    baseline-to-release delta, and later verifier-only operator delta. It also binds the current Terraform variable inventory,
    account, region, state lineage/serial, document stage, parser-version pin, reviewed document-
-   publication receipt, immutable migration-image digest, plan path/hash, Terraform `1.9.8`,
+   publication receipt, immutable migration-image digest, plan path/hash, Terraform `1.16.2`,
    nonapplyable shape, zero meaningful resource/output changes, and only the bounded provider
    refresh records. Retain the printed `BaselinePath`,
    `BaselineSha256`, `BaselineMetadataPath`, and `BaselineMetadataSha256` for the next separately

@@ -19,6 +19,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 
@@ -366,8 +367,7 @@ if ((& git -C $repositoryRoot branch --show-current).Trim() -cne "main" -or @(& 
     (& git -C $repositoryRoot rev-parse HEAD).Trim() -cne $SourceSha -or (& git -C $repositoryRoot rev-parse origin/main).Trim() -cne $SourceSha) { throw "Require clean main equal to origin/main and the exact source SHA." }
 $caller = (& aws sts get-caller-identity --output json 2>$null | ConvertFrom-Json)
 if ($LASTEXITCODE -ne 0 -or [string]$caller.Account -cne $ExpectedAccountId -or -not ([string]$caller.Arn).Contains(":assumed-role/AWSReservedSSO_")) { throw "Use the exact temporary development IAM Identity Center caller." }
-$terraformVersion = (& terraform version -json 2>$null | ConvertFrom-Json).terraform_version
-if ([string]$terraformVersion -cne "1.9.8") { throw "Terraform 1.9.8 is required." }
+Assert-DeploymentTerraformCli
 
 $location = (& aws s3api get-bucket-location --bucket $StateBucket --query LocationConstraint --output text 2>$null).Trim()
 $versioning = (& aws s3api get-bucket-versioning --bucket $StateBucket --output json 2>$null | ConvertFrom-Json)
@@ -377,8 +377,10 @@ if ($LASTEXITCODE -ne 0) { throw "The exact Terraform state bucket boundary coul
 $kmsArn = Assert-StateBucketBoundary $location $versioning $publicAccess $encryption $ExpectedAccountId $Region
 $null = New-Item -ItemType Directory -Path $terraformDataDirectory -Force
 $env:TF_DATA_DIR = $terraformDataDirectory
-& terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsArn" "-backend-config=encrypt=true" | Out-Null
+& terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsArn" "-backend-config=encrypt=true" "-backend-config=use_lockfile=true" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Backend initialization failed." }
+Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataDirectory `
+  -ExpectedBucket $StateBucket -ExpectedKey "platform.tfstate" -ExpectedRegion $Region -ExpectedKmsKeyArn $kmsArn
 $liveRaw = & terraform "-chdir=$terraformDirectory" state pull 2>$null
 if ($LASTEXITCODE -ne 0) { throw "Current state read failed." }
 $live = ($liveRaw -join "`n") | ConvertFrom-Json
@@ -393,8 +395,7 @@ $secretCurrent = $null
 
 $baselinePath = Resolve-OperatorPath $BaselinePlanPath -MustExist
 if ((Get-FileSha256 $baselinePath) -cne $ReviewedBaselineSha256) { throw "The reviewed baseline checksum does not match." }
-$baseline = ((& terraform "-chdir=$terraformDirectory" show -json $baselinePath 2>$null) -join "`n") | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { throw "Baseline inspection failed." }
+$baseline = Read-DeploymentTerraformPlan -Path $baselinePath -TerraformDirectory $terraformDirectory -AllowHistorical
 Assert-ZeroDriftBaseline $baseline (Get-PlanStateIdentity $baselinePath) $liveIdentity
 
 $receiptPath = Resolve-OperatorPath $GatewayReceiptPath -MustExist
@@ -416,7 +417,7 @@ if ($Action -ceq "Plan") {
     & terraform "-chdir=$terraformDirectory" plan -input=false -lock-timeout=5m -detailed-exitcode "-out=$resolvedPlan"
     if ($LASTEXITCODE -ne 2) { throw "Stage B must produce one applyable change plan." }
   } finally { Restore-TerraformVariables $saved }
-  $plan = ((& terraform "-chdir=$terraformDirectory" show -json $resolvedPlan 2>$null) -join "`n") | ConvertFrom-Json
+  $plan = Read-DeploymentTerraformPlan -Path $resolvedPlan -TerraformDirectory $terraformDirectory
   $planState = Get-PlanStateIdentity $resolvedPlan
   if (-not $plan.applyable -or -not $plan.complete -or $plan.errored -or $planState.Lineage -cne $liveIdentity.Lineage -or $planState.Serial -ne $liveIdentity.Serial) { throw "The saved Stage B plan is invalid or stale." }
   $changes = Get-MeaningfulChanges $plan
@@ -436,7 +437,7 @@ $resolvedPlan = Resolve-OperatorPath $PlanPath -MustExist -StageBOnly
 $metadataPath = Resolve-OperatorPath $PlanMetadataPath -MustExist -StageBOnly
 if ([IO.Path]::GetFullPath($metadataPath) -cne [IO.Path]::GetFullPath("$resolvedPlan.stage-b.json") -or (Get-FileSha256 $resolvedPlan) -cne $ReviewedPlanSha256 -or (Get-FileSha256 $metadataPath) -cne $ReviewedPlanMetadataSha256) { throw "The reviewed Stage B plan or metadata binding is invalid." }
 $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-$plan = ((& terraform "-chdir=$terraformDirectory" show -json $resolvedPlan 2>$null) -join "`n") | ConvertFrom-Json
+$plan = Read-DeploymentTerraformPlan -Path $resolvedPlan -TerraformDirectory $terraformDirectory
 $planState = Get-PlanStateIdentity $resolvedPlan
 if (-not $plan.applyable -or -not $plan.complete -or $plan.errored -or $planState.Lineage -cne $liveIdentity.Lineage -or $planState.Serial -ne $liveIdentity.Serial) { throw "The reviewed Stage B plan is nonapplyable, incomplete, errored, or stale." }
 $changes = Get-MeaningfulChanges $plan; $null = Assert-StageBChangeSet $changes; $summary = Get-ChangeSummary $changes

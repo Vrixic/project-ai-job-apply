@@ -25,6 +25,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 
 if ($Help) {
   @"
@@ -639,8 +640,7 @@ function Assert-CallerToolsAndSource {
     }
   }
   if ($RequireTerraform) {
-    $version = & terraform version -json 2>$null | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0 -or [string]$version.terraform_version -cne "1.9.8") { throw "Terraform 1.9.8 is required." }
+    Assert-DeploymentTerraformCli
   }
   if ($RequireDocker) {
     & docker buildx version *> $null
@@ -674,8 +674,10 @@ function Initialize-Backend {
   $env:TF_DATA_DIR = $terraformDataDirectory
   & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
     "-backend-config=bucket=$StateBucket" "-backend-config=key=$stateKey" `
-    "-backend-config=region=$Region" "-backend-config=kms_key_id=$stateKmsArn" | Out-Null
+    "-backend-config=region=$Region" "-backend-config=kms_key_id=$stateKmsArn" "-backend-config=encrypt=true" "-backend-config=use_lockfile=true" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The encrypted development backend could not be initialized." }
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataDirectory `
+    -ExpectedBucket $StateBucket -ExpectedKey $stateKey -ExpectedRegion $Region -ExpectedKmsKeyArn $stateKmsArn
   $head = Invoke-AwsJson -Arguments @("s3api", "head-object", "--bucket", $StateBucket, "--key", $stateKey, "--output", "json") -Operation "State object validation"
   if ([string]$head.ServerSideEncryption -cne "aws:kms" -or [string]$head.SSEKMSKeyId -cne $stateKmsArn -or
       -not $head.BucketKeyEnabled -or [long]$head.ContentLength -le 0 -or [string]::IsNullOrWhiteSpace([string]$head.VersionId)) {

@@ -404,11 +404,21 @@ $snsAdded = @{ Sid = "AllowExactDocumentOperationalRules"; Effect = "Allow"; Act
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_s3_bucket_policy.candidate_documents[0]" (New-TestPolicy @($transport)) (New-TestPolicy @($transport, $candidateDeny))
 $parserChanges += New-TestPolicyUpdate "module.platform.aws_sns_topic_policy.operational_alerts" (New-TestPolicy @($snsBase)) (New-TestPolicy @($snsBase, $snsAdded))
 $validParserPlan = [pscustomobject]@{
-  terraform_version = "1.9.8"; complete = $true; errored = $false; applyable = $true
+  terraform_version = "1.16.2"; complete = $true; errored = $false; applyable = $true
   output_changes = [pscustomobject]@{}; resource_drift = $kmsPlan.resource_drift
   planned_values = $kmsPlan.planned_values; resource_changes = @($kmsNoop) + $parserChanges
 }
 $null = Assert-DevelopmentDocumentDarkPlan $validParserPlan $account parser-dark
+$historicalParserPlan = $validParserPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$historicalParserPlan.terraform_version = "1.9.8"
+$null = Assert-DevelopmentDocumentDarkPlan $historicalParserPlan $account parser-dark -AllowHistorical
+foreach ($invalidVersion in @("1.9.8", "1.16.1", "1.16.3", "1.16.2 ", "")) {
+  $versionPlan = $validParserPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $versionPlan.terraform_version = $invalidVersion
+  $rejected = $false
+  try { $null = Assert-DevelopmentDocumentDarkPlan $versionPlan $account parser-dark } catch { $rejected = $true }
+  if (-not $rejected) { throw "The document transition accepted an unapproved actionable Terraform version." }
+}
 foreach ($fixture in @(
     [pscustomobject]@{ Label = "AWS wildcard object"; Principal = @{ AWS = "*" } },
     [pscustomobject]@{ Label = "service wildcard object"; Principal = @{ Service = "*" } },
@@ -511,7 +521,7 @@ $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.sqs[0
 $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.lambda[0]" (New-TestPolicy @($endpointBase)) (New-TestPolicy @($endpointBase, $lambdaAdded))
 $completeChanges += New-TestPolicyUpdate "module.platform.aws_vpc_endpoint.secretsmanager[0]" (New-TestPolicy @($endpointBase, $secretBase)) (New-TestPolicy @($endpointBase, $secretAfter))
 $validCompletePlan = [pscustomobject]@{
-  terraform_version = "1.9.8"; complete = $true; errored = $false; applyable = $true
+  terraform_version = "1.16.2"; complete = $true; errored = $false; applyable = $true
   output_changes = [pscustomobject]@{}; resource_drift = $kmsPlan.resource_drift
   planned_values = $kmsPlan.planned_values; resource_changes = @($kmsNoop) + $completeChanges
 }
@@ -867,7 +877,7 @@ if ($diagnosticPlanPresent) {
   $diagnosticPin = [string]$diagnosticFunction.change.before.qualified_arn
   $diagnosticPlan.output_changes = New-TestCompleteDarkSourceTransitionOutputs $diagnosticPin
   $diagnosticChanges = @(Assert-DevelopmentDocumentDarkPlan $diagnosticPlan "362544434697" complete-dark `
-      -ParserSourceTransition -BaselineVariables $diagnosticBaselineVariables `
+      -AllowHistorical -ParserSourceTransition -BaselineVariables $diagnosticBaselineVariables `
       -Receipt $diagnosticReceipt -ParserQualifiedArn $diagnosticPin)
   if ($diagnosticPin -cne "arn:aws:lambda:us-east-2:362544434697:function:ai-job-apply-development-document-parser:1" -or
     $diagnosticChanges.Count -ne 12 -or
@@ -897,6 +907,16 @@ $retainedBaselinePlan = [pscustomobject]@{
   output_changes = [pscustomobject]@{}
 }
 Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedBaselinePlan
+$currentBaselineVersion = $retainedBaselinePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+$currentBaselineVersion.terraform_version = "1.16.2"
+Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $currentBaselineVersion
+foreach ($invalidVersion in @("1.9.9", "1.16.1", "1.16.3", "1.16.2 ", "")) {
+  $versionPlan = $retainedBaselinePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $versionPlan.terraform_version = $invalidVersion
+  $rejected = $false
+  try { Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $versionPlan } catch { $rejected = $true }
+  if (-not $rejected) { throw "The retained document baseline accepted an unapproved Terraform version." }
+}
 
 function New-DriftRecord([string]$Address, [string]$Type, [object]$Before, [object]$After,
   [object]$BeforeSensitive = ([pscustomobject]@{}), [object]$AfterSensitive = ([pscustomobject]@{})) {

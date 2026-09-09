@@ -6,7 +6,7 @@ workflows. There is no continuously running application service or provider fall
 
 ## Preconditions
 
-- Use an exact clean upstream-matched `main` checkout and Terraform `1.9.8`.
+- Use an exact clean upstream-matched `main` checkout and portable Terraform `1.16.2`.
 - Select the environment's IAM Identity Center profile, AWS account, `us-east-2` state bucket, and
   KMS-encrypted `platform.tfstate`; never reuse another environment's inputs.
 - Require passing repository checks, a healthy current alias, enabled triggers, empty DLQ, and a
@@ -54,4 +54,3 @@ For a bad release, disable `serverless_runtime_enabled` only through a separatel
 plan when fail-closed unavailability is required. Otherwise move aliases only through an exact,
 checksum-reviewed rollback plan to an already accepted immutable version, then repeat the entire
 verification boundary. Never reconstruct the retired runtime.
-

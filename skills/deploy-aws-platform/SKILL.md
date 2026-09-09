@@ -46,7 +46,20 @@ Do not run against an ambiguous account or reuse development state for staging.
 
 ## Validate and plan
 
-Use Terraform 1.9.8 to match CI:
+Use the approved portable Terraform **1.16.2** for current local deployment and validation:
+
+```powershell
+# Install once; verifies HashiCorp's signature and pinned Windows archive checksums.
+pwsh -NoProfile -File scripts/install-terraform-toolchain.ps1
+# Select in each operator shell; does not replace the system install or persistent PATH.
+. ./scripts/use-deployment-terraform.ps1
+```
+
+The same installer retains 1.9.8 only for explicit read-only historical `show` through
+`scripts/lib/terraform-toolchain.ps1`. Old binary plans cannot be applied by the new CLI; rebuild
+fresh plans from the exact reviewed inputs without changing old plans, receipts or provider locks.
+GitHub Actions remain excluded and unchanged at the user's direction; their legacy pin is not
+authority for current deployment. Do not use those workflows for cloud planning.
 
 ```powershell
 terraform fmt -check -recursive infrastructure/terraform
@@ -58,7 +71,13 @@ terraform -chdir=infrastructure/terraform/environments/staging init -backend=fal
 terraform -chdir=infrastructure/terraform/environments/staging validate
 ```
 
-For a real environment, initialize its configured remote backend, run a refresh-backed plan, save
+For a real environment, initialize its configured remote backend with explicit
+`-backend-config=use_lockfile=true`. Use the shared toolchain guard to verify the cached S3 backend's
+exact bucket/key/region/KMS binding and actual boolean locking/encryption settings before planning
+or applying. Provider `-lockfile=readonly` is not state locking. Reject injected `TF_CLI_ARGS*` or
+nondefault workspaces; never use `-lock=false` or an older CLI for new state writes.
+
+Run a refresh-backed plan, save
 the plan artifact, review resource replacement/destruction and secret exposure, and apply that
 exact reviewed plan. Do not apply a newly regenerated unreviewed plan.
 

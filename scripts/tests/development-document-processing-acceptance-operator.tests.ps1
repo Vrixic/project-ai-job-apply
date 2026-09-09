@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+. (Join-Path $repositoryRoot "scripts/lib/terraform-toolchain.ps1")
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-document-processing-acceptance.ps1"
 $fixtureGenerator = Join-Path $repositoryRoot "scripts\lib\development-document-processing-fixtures.mjs"
 $corpusGenerator = Join-Path $repositoryRoot "scripts\lib\development-document-parser-corpus.mjs"

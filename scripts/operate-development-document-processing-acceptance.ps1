@@ -19,6 +19,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 
@@ -421,10 +422,7 @@ function Assert-CallerAndSource {
   ) {
     throw "Use the exact temporary development IAM Identity Center caller."
   }
-  $version = (& terraform version -json 2>$null | ConvertFrom-Json).terraform_version
-  if ($LASTEXITCODE -ne 0 -or [string]$version -cne '1.9.8') {
-    throw "Terraform 1.9.8 is required."
-  }
+  Assert-DeploymentTerraformCli
   if ($RequireSource) {
     $branch = (& git -C $repositoryRoot branch --show-current 2>$null).Trim()
     $head = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
@@ -474,10 +472,12 @@ function Initialize-Backend {
   }
   $null = New-Item -ItemType Directory -Path $terraformRuntimeData -Force
   $env:TF_DATA_DIR = $terraformRuntimeData
-  & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly "-backend-config=bucket=$StateBucket" "-backend-config=key=$stateKey" "-backend-config=region=$Region" "-backend-config=kms_key_id=$script:stateKmsArn" | Out-Null
+  & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly "-backend-config=bucket=$StateBucket" "-backend-config=key=$stateKey" "-backend-config=region=$Region" "-backend-config=kms_key_id=$script:stateKmsArn" "-backend-config=encrypt=true" "-backend-config=use_lockfile=true" | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw "The encrypted development backend could not be initialized."
   }
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformRuntimeData `
+    -ExpectedBucket $StateBucket -ExpectedKey $stateKey -ExpectedRegion $Region -ExpectedKmsKeyArn $script:stateKmsArn
 }
 
 function Get-TerraformState {
@@ -492,10 +492,10 @@ function Get-StateIdentity {
   $raw = & terraform "-chdir=$terraformDirectory" state pull 2>$null
   if ($LASTEXITCODE -ne 0) { throw "Terraform state identity could not be read." }
   $state = ConvertFrom-OperatorJson -Json ($raw -join "`n") -Description 'Terraform state identity'
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
   if (
     [string]$state.lineage -notmatch '^[a-f0-9-]{36}$' -or
-    [long]$state.serial -lt 1 -or
-    [string]$state.terraform_version -cne '1.9.8'
+    [long]$state.serial -lt 1
   ) {
     throw "Terraform state identity is invalid."
   }

@@ -17,7 +17,7 @@ identity-provider isolation.
 ## Safety and cost boundary
 
 - Authenticate through the temporary `ai-job-apply-staging-admin` IAM Identity Center profile in
-  `us-east-2`; require Terraform `1.9.8`.
+  `us-east-2`; require portable Terraform `1.16.2` and verified S3 state locking.
 - Resolve only the exact Terraform-managed `ai-job-apply-staging` source and require its project,
   environment, and manager tags.
 - Require the source to be available, private, KMS encrypted, deletion protected, Single-AZ,

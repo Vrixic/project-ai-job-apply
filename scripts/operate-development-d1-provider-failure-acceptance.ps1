@@ -40,6 +40,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 
 if ($Help) {
   @"
@@ -342,9 +343,7 @@ function Assert-ReviewedZeroDriftPlan {
   if ((Get-FileSha256 -Path $planPath) -cne $Binding.RuntimePlanSha256) {
     throw "The provider-fixture runtime plan checksum does not match its reviewed binding."
   }
-  $shown = & terraform "-chdir=$terraformDirectory" show -json $planPath 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "The reviewed provider-fixture runtime plan cannot be inspected." }
-  $plan = ConvertFrom-OperatorJson -Json ($shown -join "`n") -Description "Reviewed provider-fixture runtime plan"
+  $plan = Read-DeploymentTerraformPlan -Path $planPath -TerraformDirectory $terraformDirectory -AllowHistorical
   $null = Assert-ZeroChangePlan $plan "Reviewed provider-fixture runtime plan"
   return [pscustomobject]@{ Path = $planPath; Plan = $plan }
 }
@@ -374,9 +373,7 @@ function Invoke-FreshZeroDriftPlan {
   $path = Join-Path $operatorRoot "$Phase-zero-drift-$RunId.tfplan"
   $logPath = "$path.log"
   if ($AllowExisting -and (Test-Path -LiteralPath $path -PathType Leaf)) {
-    $shown = & terraform "-chdir=$terraformDirectory" show -json $path 2>$null
-    if ($LASTEXITCODE -ne 0) { throw "The retained $Phase refresh-backed plan cannot be inspected." }
-    $plan = ConvertFrom-OperatorJson ($shown -join "`n") "Retained $Phase refresh-backed plan"
+    $plan = Read-DeploymentTerraformPlan -Path $path -TerraformDirectory $terraformDirectory -AllowHistorical
     $null = Assert-ZeroChangePlan $plan "Retained $Phase refresh-backed plan"
     return [pscustomobject]@{ Path = $path; Sha256 = Get-FileSha256 $path }
   }
@@ -405,9 +402,7 @@ function Invoke-FreshZeroDriftPlan {
   if ($exitCode -ne 0) {
     throw "The fresh refresh-backed development plan is not zero drift. Inspect only its ignored local log."
   }
-  $shown = & terraform "-chdir=$terraformDirectory" show -json $path 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "The fresh refresh-backed zero-drift plan cannot be inspected." }
-  $plan = ConvertFrom-OperatorJson ($shown -join "`n") "Fresh refresh-backed zero-drift plan"
+  $plan = Read-DeploymentTerraformPlan -Path $path -TerraformDirectory $terraformDirectory
   $null = Assert-ZeroChangePlan $plan "Fresh refresh-backed development plan"
   return [pscustomobject]@{ Path = $path; Sha256 = Get-FileSha256 $path }
 }
@@ -416,6 +411,7 @@ function Assert-Caller {
   if ($Region -cne "us-east-2" -or $ExpectedAccountId -notmatch '^[0-9]{12}$' -or [string]::IsNullOrWhiteSpace($StateBucket)) {
     throw "The exact development account, us-east-2 region, and encrypted state bucket are required."
   }
+  Assert-DeploymentTerraformCli
   if (-not (Get-Command aws -ErrorAction SilentlyContinue)) { throw "AWS CLI v2 is required." }
   $caller = Invoke-AwsJson -Arguments @("sts", "get-caller-identity", "--output", "json") -Operation "AWS caller validation"
   if ([string]$caller.Account -cne $ExpectedAccountId -or -not ([string]$caller.Arn).Contains(":assumed-role/AWSReservedSSO_")) {
@@ -448,7 +444,11 @@ function Read-StateSnapshot {
     if ([string]$download.VersionId -cne [string]$head.VersionId) { throw "The Terraform state version changed during its exact read." }
     $state = ConvertFrom-OperatorJson -Json (Get-Content -LiteralPath $temporary -Raw) -Description "Versioned Terraform state"
   } finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
-  if ([string]$state.lineage -notmatch '^[0-9a-f-]{36}$' -or [long]$state.serial -lt 1 -or [string]$state.terraform_version -cne "1.9.8") {
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataRoot `
+    -ExpectedBucket $StateBucket -ExpectedKey $stateKey -ExpectedRegion $Region `
+    -ExpectedKmsKeyArn ([string]$rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID)
+  if ([string]$state.lineage -notmatch '^[0-9a-f-]{36}$' -or [long]$state.serial -lt 1) {
     throw "The encrypted Terraform state identity is invalid."
   }
   return [pscustomobject]@{ State = $state; VersionId = [string]$head.VersionId; Serial = [long]$state.serial; Lineage = [string]$state.lineage }

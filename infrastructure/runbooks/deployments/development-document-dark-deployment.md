@@ -32,7 +32,7 @@ and it remains immutable for direct dark conformance.
 - clean `main` exactly matching `origin/main`;
 - the development IAM Identity Center caller in the exact account and `us-east-2`;
 - the private, versioned, customer-KMS Terraform state bucket;
-- a checksum-reviewed Terraform `1.9.8` zero-change baseline;
+- a checksum-reviewed zero-change baseline (current Terraform `1.16.2`, or explicit read-only historical `1.9.8` evidence);
 - for parser and complete stages, the checksum-reviewed verified document publication receipt.
 
 If the retained schema-3/4 ParserDark baseline's operator revision is an ancestor of current
@@ -95,7 +95,7 @@ Successful verification retains the exact refresh-backed zero-change plan under 
 The printed `BaselinePath`, `BaselineSha256`, `BaselineMetadataPath`, and
 `BaselineMetadataSha256` bind the plan and adjacent `.baseline.json` sidecar to the exact account,
 region, merged source, state lineage and serial, stage, publication receipt, and parser-version pin.
-The plan is independently re-read and accepted only when Terraform 1.9.8
+The plan is independently re-read with its exact approved Terraform version and accepted only when it
 reports it complete, nonerrored, nonapplyable, and free of meaningful resource or output changes;
 only the already bounded provider refresh records may remain. The operator never overwrites a
 plan or sidecar.

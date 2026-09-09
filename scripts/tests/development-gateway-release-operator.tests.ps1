@@ -6,6 +6,29 @@ $operator = Get-Content -LiteralPath $operatorPath -Raw
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($operatorPath, [ref]$tokens, [ref]$errors)
 if (@($errors).Count -ne 0) { throw "The gateway release operator does not parse: $($errors.Message -join '; ')." }
+foreach ($coreOperator in @(
+    "operate-bootstrap-workload-boundary.ps1", "operate-development-gateway-release.ps1",
+    "operate-development-document-migration.ps1", "operate-development-document-dark-deployment.ps1"
+  )) {
+  $coreSource = Get-Content -LiteralPath (Join-Path $repositoryRoot "scripts/$coreOperator") -Raw
+  foreach ($required in @(
+      'lib\terraform-toolchain.ps1', 'Assert-DeploymentTerraformCli', '-backend-config=use_lockfile=true',
+      'Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory',
+      '-ExpectedBucket $StateBucket -ExpectedKey', '-ExpectedRegion $Region -ExpectedKmsKeyArn',
+      'Read-DeploymentTerraformPlan -Path', 'Assert-DeploymentTerraformStateVersion'
+    )) {
+    if (-not $coreSource.Contains($required)) { throw "The core operator $coreOperator omits the current toolchain/locking boundary." }
+  }
+  if ($coreSource -notmatch '(?s) init -reconfigure.+?-backend-config=use_lockfile=true.+?if \(\$LASTEXITCODE -ne 0\).+?Assert-DeploymentTerraformBackend' -or
+      $coreSource -match '-lock=false') {
+    throw "The core operator $coreOperator does not validate native locking immediately after successful init."
+  }
+}
+if (-not $operator.Contains('$plan = Read-Plan $planPath -AllowHistorical') -or
+    -not $operator.Contains('$seed = Read-Plan $seedPath -AllowHistorical') -or
+    $operator -match 'Read-Plan \$(path|reviewedPath|capturedPath) -AllowHistorical') {
+  throw "Historical gateway reads are not restricted to retained baseline/seed paths."
+}
 foreach ($required in @(
     'Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf"',
     'The gateway baseline variable inventory is empty or duplicated.',

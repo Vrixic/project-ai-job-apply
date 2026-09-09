@@ -41,7 +41,7 @@ roles, or network destinations. The only documents are produced by the reviewed 
 - The exact verified version-2 migration-image publication receipt and its reviewed SHA-256. The
   receipt must bind the source SHA to the scanned immutable `ai-job-apply/migration` platform
   digest.
-- Terraform 1.9.8, AWS CLI v2, Node.js, pnpm, PowerShell 7, and Windows PowerShell 5.1 for the
+- Terraform 1.16.2, AWS CLI v2, Node.js, pnpm, PowerShell 7, and Windows PowerShell 5.1 for the
   focused local gate.
 
 Never publish an execution plan, receipt, recovery descriptor, task override, or CloudWatch payload.

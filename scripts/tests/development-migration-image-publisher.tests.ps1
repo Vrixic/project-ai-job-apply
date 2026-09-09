@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+. (Join-Path $repositoryRoot "scripts/lib/terraform-toolchain.ps1")
 $publisherPath = Join-Path $repositoryRoot "scripts\publish-development-migration-image.ps1"
 $source = Get-Content -LiteralPath $publisherPath -Raw
 $tokens = $null

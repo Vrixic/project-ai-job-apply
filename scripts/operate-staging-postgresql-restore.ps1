@@ -17,6 +17,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 
 if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
   $AwsProfile = "ai-job-apply-$Environment-admin"
@@ -99,10 +100,7 @@ function Assert-ExecutionAuthorized {
 
 function Assert-CallerAndTerraform {
   Assert-CurrentAwsCaller
-  $version = & terraform version -json 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or [string]$version.terraform_version -cne "1.9.8") {
-    throw "Terraform 1.9.8 is required for this restore procedure."
-  }
+  Assert-DeploymentTerraformCli
 }
 
 function Assert-CurrentAwsCaller {

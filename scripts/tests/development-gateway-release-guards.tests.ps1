@@ -323,6 +323,12 @@ $baselinePlan = [pscustomobject]@{
   resource_changes = @(); resource_drift = @(); output_changes = [pscustomobject]@{ stable = [pscustomobject]@{ actions = @("no-op") } }
 }
 $null = Assert-RetainedGatewayBaselinePlan $baselinePlan @($baselineVariables.PSObject.Properties | ForEach-Object Name); $passed++
+$currentBaseline = Copy-Fixture $baselinePlan; $currentBaseline.terraform_version = "1.16.2"
+$null = Assert-RetainedGatewayBaselinePlan $currentBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name); $passed++
+foreach ($invalidVersion in @("1.9.9", "1.16.1", "1.16.3", "1.16.2 ", "")) {
+  $badBaseline = Copy-Fixture $baselinePlan; $badBaseline.terraform_version = $invalidVersion
+  Assert-Rejected { Assert-RetainedGatewayBaselinePlan $badBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name) } "An unapproved retained Terraform version was accepted."
+}
 $badBaseline = Copy-Fixture $baselinePlan; $badBaseline.applyable = $true
 Assert-Rejected { Assert-RetainedGatewayBaselinePlan $badBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name) } "An applyable retained plan was accepted."
 $badBaseline = Copy-Fixture $baselinePlan; $badBaseline.output_changes.stable.actions = @("update")
@@ -446,7 +452,7 @@ $functionSensitivity = [pscustomobject]@{
 $aliasUnknown = [pscustomobject]@{ function_version = $true; routing_config = @() }
 $aliasSensitivity = [pscustomobject]@{ routing_config = @() }
 $plan = [pscustomobject]@{
-  complete = $true; applyable = $true; errored = $false; terraform_version = "1.9.8"; resource_drift = @()
+  complete = $true; applyable = $true; errored = $false; terraform_version = "1.16.2"; resource_drift = @()
   output_changes = [pscustomobject]@{ gateway_lambda_alias_arn = [pscustomobject]@{ actions = @("no-op") } }
   resource_changes = @(
     [pscustomobject]@{ address = "module.platform.aws_lambda_function.gateway[0]"; mode = "managed"; type = "aws_lambda_function"; change = [pscustomobject]@{ actions = @("update"); before = $functionBefore; after = $functionAfter; replace_paths = @(); before_sensitive = $functionSensitivity; after_sensitive = (Copy-Fixture $functionSensitivity); after_unknown = $functionUnknown } },
@@ -454,6 +460,13 @@ $plan = [pscustomobject]@{
   )
 }
 $null = Assert-ExactGatewayReleasePlan $plan $artifact; $passed++
+$historicalRelease = Copy-Fixture $plan; $historicalRelease.terraform_version = "1.9.8"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $historicalRelease $artifact } "An actionable historical gateway plan was accepted."
+$null = Assert-ExactGatewayReleasePlan $historicalRelease $artifact -AllowHistorical; $passed++
+foreach ($invalidVersion in @("1.9.9", "1.16.1", "1.16.3", "1.16.2 ", "")) {
+  $badPlan = Copy-Fixture $plan; $badPlan.terraform_version = $invalidVersion
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact -AllowHistorical } "The historical audit switch accepted an unapproved gateway plan version."
+}
 $unknownBefore = ConvertTo-GatewayCanonicalJson $plan.resource_changes[0].change.after_unknown
 $actualUnknownPaths = @(Get-GatewayUnknownTrueLeafPaths $plan.resource_changes[0].change.after_unknown | Sort-Object)
 if (($actualUnknownPaths -join "|") -cne "last_modified|qualified_arn|qualified_invoke_arn|version" -or
@@ -564,10 +577,8 @@ if (Test-Path -LiteralPath $diagnosticPlanPath -PathType Leaf) {
   $diagnosticArtifact = Assert-GatewayPublicationReceipt $diagnosticReceipt `
     "1948a4d49366872981a9419b76968b9bc372b8f3" `
     "6a2decf2ded0ea2c5b6d1236108d2eb61a5990af40434f38d7423a1c317624b9"
-  $diagnosticRaw = & terraform "-chdir=$terraformDirectory" show -json $diagnosticPlanPath 2>$null
-  if ($LASTEXITCODE -ne 0 -or -not $diagnosticRaw) { throw "The local gateway diagnostic plan could not be decoded." }
-  $diagnosticPlan = ($diagnosticRaw -join [Environment]::NewLine) | ConvertFrom-Json
-  $null = Assert-ExactGatewayReleasePlan $diagnosticPlan $diagnosticArtifact
+  $diagnosticPlan = Read-DeploymentTerraformPlan -Path $diagnosticPlanPath -TerraformDirectory $terraformDirectory -AllowHistorical
+  $null = Assert-ExactGatewayReleasePlan $diagnosticPlan $diagnosticArtifact -AllowHistorical
   if ((Get-FileHash -LiteralPath $diagnosticPlanPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $diagnosticPlanSha256) {
     throw "The local gateway diagnostic plan changed during guard validation."
   }

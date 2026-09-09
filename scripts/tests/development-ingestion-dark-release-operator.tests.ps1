@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+. (Join-Path $repositoryRoot "scripts/lib/terraform-toolchain.ps1")
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-ingestion-dark-release.ps1"
 $source = Get-Content -LiteralPath $operatorPath -Raw
 $tokens = $null
@@ -50,7 +51,7 @@ foreach ($requiredSource in @(
     'list-event-source-mappings',
     '$starterAliasArn',
     'INGESTION_ACTIVITY_FUNCTION_ARN -cne $activityArn',
-    'Terraform 1.9.8 is required',
+    'Assert-DeploymentTerraformCli',
     '$values = Convert-BaselineDarkVariables $values',
     'Remove-SensitiveTemporaryFile $temporary',
     'Remove-SensitiveTemporaryFile $varsPath'
@@ -171,17 +172,27 @@ try {
   Remove-SensitiveTemporaryFile $sensitive
   if (Test-Path -LiteralPath $sensitive) { throw "Sensitive temporary cleanup did not prove deletion." }
 
-  function terraform {
-    '{"terraform_version":"1.9.8"}'
-    $global:LASTEXITCODE = 0
+  $nativeResolver = ${function:Get-DeploymentTerraformExecutable}
+  $nativeReader = ${function:Invoke-DeploymentTerraformReadCommand}
+  try {
+    function Get-DeploymentTerraformExecutable { return "synthetic-current-terraform.exe" }
+    function Invoke-DeploymentTerraformReadCommand {
+      param([string]$Executable, [string]$Operation)
+      if ($Executable -cne "synthetic-current-terraform.exe" -or $Operation -cne "Version") {
+        throw "Unexpected native Terraform operation."
+      }
+      return [pscustomobject]@{ ExitCode = 0; Output = ('{"terraform_version":"' + $script:syntheticTerraformVersion + '"}') }
+    }
+    $script:syntheticTerraformVersion = "1.16.2"
+    Assert-TerraformVersion
+    foreach ($invalidVersion in @("1.9.8", "1.9.7", "1.16.1", "1.16.3", "1.16.2 ")) {
+      $script:syntheticTerraformVersion = $invalidVersion
+      Assert-Rejected { Assert-TerraformVersion } "active Terraform other than exact 1.16.2"
+    }
+  } finally {
+    Set-Item Function:Get-DeploymentTerraformExecutable -Value $nativeResolver
+    Set-Item Function:Invoke-DeploymentTerraformReadCommand -Value $nativeReader
   }
-  Assert-TerraformVersion
-  function terraform {
-    '{"terraform_version":"1.9.7"}'
-    $global:LASTEXITCODE = 0
-  }
-  Assert-Rejected { Assert-TerraformVersion } "Terraform other than exact 1.9.8"
-  Remove-Item Function:terraform
 
   $mapping = [pscustomobject]@{ EventSourceMappings = @([pscustomobject]@{
         State = "Disabled"

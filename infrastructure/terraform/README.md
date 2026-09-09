@@ -72,8 +72,20 @@ evidence remain audit history; current modules, scripts, and runbooks must not d
 
 ## Safe changes
 
-Use Terraform 1.9.8, the exact environment SSO profile/account, the encrypted state bucket, a clean
+Use portable Terraform 1.16.2, the exact environment SSO profile/account, the encrypted state bucket, a clean
 upstream-matched `main`, refresh-backed saved plans, and explicit SHA-256 review before apply.
 Database changes must use the dedicated migration digest and pass fail-closed migration checks.
 Never print plan bodies, secrets, raw logs, candidate identifiers, or state values into shared
 evidence.
+
+Install the approved Windows binaries with `scripts/install-terraform-toolchain.ps1`, then
+dot-source `scripts/use-deployment-terraform.ps1` in each operator shell. The installer verifies
+HashiCorp's PGP signature/fingerprint and pinned archive checksums without replacing the existing
+system installation or changing persistent PATH. Portable 1.9.8 remains available only for explicit
+read-only historical-plan inspection; all new plans and applies require 1.16.2. Reconstruct reviewed
+inputs and generate new binary plans, retaining old artifacts and unchanged provider locks.
+
+Remote init must explicitly request `use_lockfile=true`, and operators must verify the effective
+cached S3 backend's locking, encryption and exact identity before planning or applying. A provider
+dependency lock is not a remote state lock. Never disable locking. The excluded GitHub Actions
+files retain their old pin and must not be used for cloud planning during this local-only transition.

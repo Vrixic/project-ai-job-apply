@@ -6,6 +6,15 @@ both AWS environments accepted the steady-state serverless runtime.
 
 ## Local setup and identity
 
+- `install-terraform-toolchain.ps1` — Installs isolated Windows Terraform 1.16.2 for current local
+  deployment plus 1.9.8 for explicit historical plan reading. Requires PowerShell 7 and GPG;
+  verifies HashiCorp's signing fingerprint, signature and pinned archive checksums before execution.
+  It does not replace the system installation or modify the personal keyring.
+- `use-deployment-terraform.ps1` — Dot-source in each operator shell to select the approved portable
+  current binary through process PATH only. Historical decoding remains read-only through
+  `lib/terraform-toolchain.ps1`; current plans/applies require 1.16.2 and an exact encrypted,
+  S3-locking backend. Excluded GitHub Actions retain their historical pin and are not the current
+  cloud-planning path. `pnpm test:terraform-toolchain` runs the offline regression boundary.
 - `start-local.ps1` — Starts PostgreSQL, Redis, and the OpenTelemetry collector. Workflow execution
   uses the local Lambda durable adapter; no external workflow service is required.
 - `configure-auth0-local.ps1` — Writes ignored local Auth0 web settings with compatibility-safe
@@ -224,6 +233,6 @@ migration execution, or AWS restore execution. No gateway or general worker imag
 - `validate-skills.mjs` — Validates repository-local agent skills.
 - `verify-phase0.ps1` — Runs the complete repository-side Phase 0 verification sequence.
 
-Use Terraform `1.9.8`, temporary IAM Identity Center credentials, environment-specific encrypted
+Use portable Terraform `1.16.2`, temporary IAM Identity Center credentials, environment-specific encrypted
 state, immutable artifacts, refresh-backed saved plans, and explicit checksum approval for every
 material cloud change. Never replay historical cutover commands or reconstruct a retired runtime.

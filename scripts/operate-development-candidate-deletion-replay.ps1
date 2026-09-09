@@ -50,6 +50,7 @@ $manifestPath = Join-Path $artifactRoot 'candidate-deletion-restore-lambda.manif
 $sbomPath = Join-Path $artifactRoot 'candidate-deletion-restore-lambda.cdx.json'
 $guardPath = Join-Path $PSScriptRoot 'lib/candidate-deletion-replay.ps1'
 . $guardPath
+. (Join-Path $PSScriptRoot 'lib/terraform-toolchain.ps1')
 
 function Invoke-ReplayAws([string[]]$Arguments, [switch]$AllowNotFound) {
   # A named SSO profile and fixed region are always explicit. Never dump AWS diagnostics.
@@ -83,10 +84,8 @@ function Get-ReplayPlanResource([object]$Plan, [string]$Address) {
 function Read-ReplayPlan([string]$Path, [string]$Sha256) {
   $resolved = Resolve-DeletionReplayPrivatePath ([IO.Path]::GetFullPath($Path)) $terraformPrivate -MustExist
   Assert-DeletionReplayHash $resolved $Sha256
-  $raw = @(& terraform "-chdir=$terraformRoot" show -json $resolved 2>$null)
-  if ($LASTEXITCODE -ne 0) { throw 'DeletionReplayPlanUnreadable' }
-  $plan = ConvertFrom-D1RestoreJson ($raw -join "`n")
-  if ($plan.terraform_version -cne '1.9.8' -or $plan.variables.candidate_deletion_restore_role_enabled.value -ne $true -or @($plan.resource_changes | Where-Object { (@($_.change.actions) -join ',') -cne 'no-op' }).Count -ne 0) { throw 'DeletionReplayPlanNotCurrentZeroDrift' }
+  $plan = Read-DeploymentTerraformPlan -Path $resolved -TerraformDirectory $terraformRoot
+  if ($plan.terraform_version -cne (Get-DeploymentTerraformVersion) -or $plan.variables.candidate_deletion_restore_role_enabled.value -ne $true -or @($plan.resource_changes | Where-Object { (@($_.change.actions) -join ',') -cne 'no-op' }).Count -ne 0) { throw 'DeletionReplayPlanNotCurrentZeroDrift' }
   return $plan
 }
 

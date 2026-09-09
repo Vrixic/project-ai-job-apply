@@ -23,6 +23,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\terraform-toolchain.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-gateway-release-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-current-document-baseline.ps1")
@@ -182,8 +183,7 @@ function Assert-CallerAndSource {
   if ([string]$identity.Account -cne $ExpectedAccountId -or -not ([string]$identity.Arn).Contains(":assumed-role/")) {
     throw "Use the exact temporary development IAM Identity Center caller."
   }
-  $terraformVersion = (& terraform version -json 2>$null | ConvertFrom-Json).terraform_version
-  if ($LASTEXITCODE -ne 0 -or [string]$terraformVersion -cne "1.9.8") { throw "Terraform 1.9.8 is required." }
+  Assert-DeploymentTerraformCli
   if ((& node --version 2>$null).Trim() -notmatch '^v24\.' -or (& pnpm --version 2>$null).Trim() -cne "10.24.0") {
     throw "Node.js 24 and pnpm 10.24.0 are required."
   }
@@ -256,8 +256,10 @@ function Initialize-Backend {
   $env:TF_DATA_DIR = $terraformDataDirectory
   & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
     "-backend-config=bucket=$StateBucket" "-backend-config=key=platform.tfstate" `
-    "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsArn" | Out-Null
+    "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsArn" "-backend-config=use_lockfile=true" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The encrypted development backend could not be initialized." }
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataDirectory `
+    -ExpectedBucket $StateBucket -ExpectedKey "platform.tfstate" -ExpectedRegion $Region -ExpectedKmsKeyArn $kmsArn
   $head = Invoke-AwsJson @("s3api", "head-object", "--bucket", $StateBucket, "--key", "platform.tfstate", "--output", "json") "State object validation"
   if ([long]$head.ContentLength -le 0 -or [string]::IsNullOrWhiteSpace([string]$head.VersionId) -or
       [string]$head.ServerSideEncryption -cne "aws:kms" -or -not $head.BucketKeyEnabled) {
@@ -371,11 +373,15 @@ function Resolve-ArtifactBoundary {
     ProcessorParserQualifiedArn = $processorParserQualifiedArn
   }
 }
-function Read-Plan { param([Parameter(Mandatory)][string]$Path); return Invoke-TerraformJson @("show", "-json", $Path) "Saved plan inspection" }
+function Read-Plan {
+  param([Parameter(Mandatory)][string]$Path, [switch]$AllowHistorical)
+  return Read-DeploymentTerraformPlan -Path $Path -TerraformDirectory $terraformDirectory -AllowHistorical:$AllowHistorical
+}
 function Get-StateIdentity {
   $raw = & terraform "-chdir=$terraformDirectory" state pull 2>$null
   if ($LASTEXITCODE -ne 0 -or -not $raw) { throw "Current Terraform state identity could not be read." }
   $state = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
   if ([string]$state.lineage -cnotmatch '^[a-f0-9-]{36}$' -or [long]$state.serial -lt 1) { throw "Current Terraform state identity is invalid." }
   return [pscustomobject]@{ Lineage = [string]$state.lineage; Serial = [long]$state.serial }
 }
@@ -438,7 +444,7 @@ function Read-Baseline {
     throw "A baseline plan or metadata checksum does not match review."
   }
   $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-  $plan = Read-Plan $planPath
+  $plan = Read-Plan $planPath -AllowHistorical
   $terraformFiles = @(Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf" | Sort-Object Name)
   $declaredVariables = @($terraformFiles | ForEach-Object {
       $variableSource = Get-Content -LiteralPath $_.FullName -Raw
@@ -619,7 +625,7 @@ if ($Action -ceq "CaptureBaseline") {
   if ((Get-FileSha256 $seedPath) -cne $ReviewedBaselineSha256) {
     throw "The zero-drift seed checksum does not match review."
   }
-  $seed = Read-Plan $seedPath
+  $seed = Read-Plan $seedPath -AllowHistorical
   $terraformFiles = @(Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf" | Sort-Object Name)
   $declaredVariables = @($terraformFiles | ForEach-Object {
       $variableSource = Get-Content -LiteralPath $_.FullName -Raw

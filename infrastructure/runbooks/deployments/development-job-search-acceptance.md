@@ -18,7 +18,7 @@ the `generated-synthetic-only` confirmation.
 - Work from a clean `main` checkout exactly equal to `origin/main`. Use that merged 40-character
   commit for every `SourceSha` below. Do not publish or accept an artifact built from a working
   tree or a different commit.
-- Use PowerShell 7, Terraform `1.9.8`, AWS CLI v2, Node.js 24, pnpm `10.24.0`, Docker Buildx, and a
+- Use PowerShell 7, Terraform `1.16.2`, AWS CLI v2, Node.js 24, pnpm `10.24.0`, Docker Buildx, and a
   temporary IAM Identity Center assumed-role session for the exact development account in
   `us-east-2`.
 - Resolve the development account ID and the Terraform state bucket locally. Require versioning,

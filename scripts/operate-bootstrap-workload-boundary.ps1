@@ -28,6 +28,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\terraform-toolchain.ps1")
 
 if ($Help) {
   @"
@@ -139,12 +140,7 @@ function Assert-CallerAndTools {
     throw "Use a temporary IAM Identity Center session; long-lived callers are rejected."
   }
 
-  $versionRaw = & terraform version -json 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "Terraform is unavailable." }
-  $version = $versionRaw | ConvertFrom-Json
-  if ([string]$version.terraform_version -cne "1.9.8") {
-    throw "Terraform 1.9.8 is required."
-  }
+  Assert-DeploymentTerraformCli
 }
 
 function Assert-CleanMergedMain {
@@ -216,8 +212,10 @@ function Initialize-BootstrapBackend {
   $env:TF_DATA_DIR = $terraformDataDirectory
   & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
     "-backend-config=bucket=$StateBucket" "-backend-config=key=bootstrap.tfstate" `
-    "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsKeyArn" | Out-Null
+    "-backend-config=region=$Region" "-backend-config=kms_key_id=$kmsKeyArn" "-backend-config=use_lockfile=true" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The encrypted bootstrap backend could not be initialized." }
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataDirectory `
+    -ExpectedBucket $StateBucket -ExpectedKey "bootstrap.tfstate" -ExpectedRegion $Region -ExpectedKmsKeyArn $kmsKeyArn
 
   $stateAccount = (& terraform "-chdir=$terraformDirectory" output -raw account_id 2>$null).Trim()
   $stateBucketOutput = (& terraform "-chdir=$terraformDirectory" output -raw state_bucket 2>$null).Trim()
@@ -236,6 +234,9 @@ function Get-ChangedResources {
 function Assert-ApprovedPlanBoundary {
   param([Parameter(Mandatory)][object]$Plan)
 
+  if ([string]$Plan.terraform_version -cne (Get-DeploymentTerraformVersion)) {
+    throw "The actionable bootstrap plan must use the current approved Terraform version."
+  }
   $changes = Get-ChangedResources -Plan $Plan
   if ($changes.Count -ne 1) { throw "The plan must change exactly one bootstrap resource." }
   $change = $changes[0]
@@ -258,12 +259,7 @@ function Assert-ApprovedPlanBoundary {
 function Read-SavedPlan {
   param([Parameter(Mandatory)][string]$ResolvedPlan)
 
-  $raw = & terraform "-chdir=$terraformDirectory" show -json $ResolvedPlan 2>$null
-  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) {
-    throw "The saved bootstrap plan could not be inspected."
-  }
-  try { return $raw | ConvertFrom-Json }
-  catch { throw "The saved bootstrap plan JSON is invalid." }
+  return Read-DeploymentTerraformPlan -Path $ResolvedPlan -TerraformDirectory $terraformDirectory
 }
 
 function Assert-PolicyValidation {
@@ -292,6 +288,7 @@ function Get-TerraformStatePolicy {
     throw "The bootstrap Terraform state could not be inspected."
   }
   $state = $raw | ConvertFrom-Json
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
   $resources = @($state.values.root_module.resources | Where-Object {
       [string]$_.address -ceq "aws_iam_policy.workload_boundary"
     })

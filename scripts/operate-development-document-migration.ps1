@@ -48,6 +48,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\terraform-toolchain.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-gateway-release-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-current-document-baseline.ps1")
@@ -661,10 +662,7 @@ function Assert-CallerToolsAndSource {
     throw "Use a temporary development IAM Identity Center session; long-lived callers are rejected."
   }
 
-  $terraformVersion = & terraform version -json 2>$null | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or [string]$terraformVersion.terraform_version -cne "1.9.8") {
-    throw "Terraform 1.9.8 is required."
-  }
+  Assert-DeploymentTerraformCli
 
   if ($RequireSource) {
     if ($SourceSha -notmatch "^[a-f0-9]{40}$") { throw "The exact merged release source SHA is required." }
@@ -771,8 +769,10 @@ function Initialize-EncryptedBackend {
   $env:TF_DATA_DIR = $terraformDataDirectory
   & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
     "-backend-config=bucket=$StateBucket" "-backend-config=key=$stateKey" `
-    "-backend-config=region=$Region" "-backend-config=kms_key_id=$script:stateKmsKeyArn" | Out-Null
+    "-backend-config=region=$Region" "-backend-config=kms_key_id=$script:stateKmsKeyArn" "-backend-config=use_lockfile=true" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The encrypted development backend could not be initialized." }
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataDirectory `
+    -ExpectedBucket $StateBucket -ExpectedKey $stateKey -ExpectedRegion $Region -ExpectedKmsKeyArn $script:stateKmsKeyArn
 }
 
 function Assert-StateObjectEncryption {
@@ -788,8 +788,8 @@ function Assert-StateObjectEncryption {
 }
 
 function Get-PlanJson {
-  param([Parameter(Mandatory)][string]$Path)
-  return Invoke-TerraformJson -Arguments @("show", "-json", $Path) -Operation "Saved-plan inspection"
+  param([Parameter(Mandatory)][string]$Path, [switch]$AllowHistorical)
+  return Read-DeploymentTerraformPlan -Path $Path -TerraformDirectory $terraformDirectory -AllowHistorical:$AllowHistorical
 }
 
 function Get-DeclaredVariableNames {
@@ -1013,6 +1013,7 @@ function Get-CurrentTerraformStateIdentity {
     throw "Terraform state identity could not be read."
   }
   $state = $raw | ConvertFrom-Json
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
   if ([string]$state.lineage -notmatch '^[a-f0-9-]{36}$' -or [long]$state.serial -lt 1) {
     throw "Terraform state lacks an exact lineage and positive serial."
   }
@@ -1059,10 +1060,10 @@ function Assert-RetainedMigrationBaselinePlan {
   if ($Plan.complete -isnot [bool] -or -not $Plan.complete -or
     $Plan.errored -isnot [bool] -or $Plan.errored -or
     $Plan.applyable -isnot [bool] -or $Plan.applyable -or
-    [string]$Plan.terraform_version -cne "1.9.8" -or
+    [string]$Plan.terraform_version -cnotin @("1.9.8", (Get-DeploymentTerraformVersion)) -or
     $null -eq $Plan.variables -or $null -eq $Plan.planned_values -or
     $null -eq $Plan.planned_values.root_module) {
-    throw "The retained migration baseline is not a complete, nonerrored, nonapplyable Terraform 1.9.8 plan."
+    throw "The retained migration baseline is not a complete, nonerrored, nonapplyable approved-version Terraform plan."
   }
   if (@(Get-MeaningfulChanges -Changes @($Plan.resource_changes)).Count -ne 0) {
     throw "The retained migration baseline contains a meaningful resource change."
@@ -1419,7 +1420,7 @@ function Read-RetainedMigrationBaseline {
     if (-not [string]::IsNullOrEmpty($ReviewedBaselineToCurrentDeltaSha256)) {
       throw "An exact-current schema-7 baseline cannot accept an ancestor-delta override."
     }
-    $currentPlan = Get-PlanJson -Path $resolvedPlan
+    $currentPlan = Get-PlanJson -Path $resolvedPlan -AllowHistorical
     Assert-RetainedMigrationBaselinePlan -Plan $currentPlan
     $currentState = if ($RequireCurrentState) { Get-CurrentTerraformStateIdentity } else {
       [pscustomobject]@{ Lineage = [string]$metadata.StateLineage; Serial = [long]$metadata.StateSerial }
@@ -1568,7 +1569,7 @@ function Read-RetainedMigrationBaseline {
       [string]$metadata.ParserQualifiedArn -notmatch "^arn:aws:lambda:$([regex]::Escape($Region)):$ExpectedAccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$")) {
     throw "The retained baseline metadata does not match the exact development migration handoff."
   }
-  $plan = Get-PlanJson -Path $resolvedPlan
+  $plan = Get-PlanJson -Path $resolvedPlan -AllowHistorical
   Assert-RetainedMigrationBaselinePlan -Plan $plan `
     -AllowCompatibilityDefaults:$allowExactCompleteDark107To108
   $stageProperty = $plan.variables.PSObject.Properties["document_processing_deployment_stage"]
@@ -1834,7 +1835,8 @@ function Assert-ExactIngestionActivationGuardCreate {
 function Assert-ExactTaskPlan {
   param([Parameter(Mandatory)][object]$Plan)
 
-  if (-not $Plan.complete -or -not $Plan.applyable -or $Plan.errored) {
+  if ([string]$Plan.terraform_version -cne (Get-DeploymentTerraformVersion) -or
+      -not $Plan.complete -or -not $Plan.applyable -or $Plan.errored) {
     throw "The task plan is not complete and applyable."
   }
   if ([string]$Plan.variables.migration_image.value -cne $MigrationImage) {

@@ -22,6 +22,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 
 if ($Help) {
   @"
@@ -157,10 +158,7 @@ function Remove-SensitiveTemporaryFile {
 }
 
 function Assert-TerraformVersion {
-  $raw = & terraform version -json 2>$null
-  if ($LASTEXITCODE -ne 0) { throw "Terraform 1.9.8 is required." }
-  $version = ConvertFrom-OperatorJson ($raw -join "`n") "Terraform version"
-  if ([string]$version.terraform_version -cne "1.9.8") { throw "Terraform 1.9.8 is required." }
+  Assert-DeploymentTerraformCli
 }
 
 function Assert-IngestionMappingInventory {
@@ -263,6 +261,9 @@ function Get-DeclaredTerraformVariables {
 
 function Invoke-TerraformJson {
   param([Parameter(Mandatory)][string[]]$Arguments, [Parameter(Mandatory)][string]$Operation)
+  if ($Arguments.Count -eq 3 -and $Arguments[0] -ceq "show" -and $Arguments[1] -ceq "-json") {
+    return Read-DeploymentTerraformPlan -Path $Arguments[2] -TerraformDirectory $terraformDirectory
+  }
   $raw = & terraform "-chdir=$terraformDirectory" @Arguments 2>$null
   if ($LASTEXITCODE -ne 0) { throw "$Operation failed." }
   return ConvertFrom-OperatorJson ($raw -join "`n") "$Operation output"
@@ -271,7 +272,7 @@ function Invoke-TerraformJson {
 function Read-BaselinePlan {
   $path = Resolve-PrivatePath $BaselinePlanPath -MustExist
   if ((Get-FileSha256 $path) -cne $ReviewedBaselinePlanSha256) { throw "The current baseline plan checksum does not match review." }
-  $plan = Invoke-TerraformJson @("show", "-json", $path) "Baseline plan inspection"
+  $plan = Read-DeploymentTerraformPlan -Path $path -TerraformDirectory $terraformDirectory -AllowHistorical
   $changes = @($plan.resource_changes | Where-Object { (@($_.change.actions) -join ",") -cne "no-op" })
   $outputs = @($plan.output_changes.PSObject.Properties | Where-Object { (@($_.Value.actions) -join ",") -cne "no-op" })
   if ($changes.Count -ne 0 -or $outputs.Count -ne 0) { throw "The reviewed current baseline is not zero drift." }
@@ -427,6 +428,10 @@ function Read-EncryptedStateSnapshot {
     if ([string]$download.VersionId -cne [string]$head.VersionId) { throw "The state version changed during its exact read." }
     $state = ConvertFrom-OperatorJson (Get-Content -LiteralPath $temporary -Raw) "Versioned Terraform state"
   } finally { Remove-SensitiveTemporaryFile $temporary }
+  Assert-DeploymentTerraformStateVersion -Version ([string]$state.terraform_version)
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataRoot `
+    -ExpectedBucket $StateBucket -ExpectedKey $stateKey -ExpectedRegion $Region `
+    -ExpectedKmsKeyArn ([string]$rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID)
   $serialAccepted = if ($AllowAdvancedSerial) { [int]$state.serial -gt $ExpectedStateSerial } else { [int]$state.serial -eq $ExpectedStateSerial }
   if ([string]$state.lineage -cne $ExpectedStateLineage -or -not $serialAccepted) {
     throw "Terraform state lineage or serial does not match the reviewed release boundary."
@@ -729,7 +734,7 @@ if ($Action -ceq "Plan") {
 $reviewedPlanReceipt = Read-PlanReceipt
 $resolvedPlan = Resolve-PrivatePath ([string]$reviewedPlanReceipt.Receipt.planPath) -MustExist
 if ((Get-FileSha256 $resolvedPlan) -cne [string]$reviewedPlanReceipt.Receipt.planSha256) { throw "The saved Terraform plan checksum changed after review." }
-$savedPlan = Invoke-TerraformJson @("show", "-json", $resolvedPlan) "Reviewed release plan inspection"
+$savedPlan = Read-DeploymentTerraformPlan -Path $resolvedPlan -TerraformDirectory $terraformDirectory -AllowHistorical:($Action -ceq "Verify")
 $inventory = @(Assert-ReleasePlan $savedPlan $releaseValues)
 if (($inventory -join "`n") -cne (@($reviewedPlanReceipt.Receipt.changeInventory) -join "`n")) { throw "The saved plan inventory does not match its receipt." }
 

@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+. (Join-Path $repositoryRoot "scripts/lib/terraform-toolchain.ps1")
 $operator = Join-Path $repositoryRoot 'scripts\operate-development-candidate-rights-acceptance.ps1'
 $source = Get-Content -LiteralPath $operator -Raw
 $tokens = $null

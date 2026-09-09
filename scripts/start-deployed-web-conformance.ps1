@@ -12,6 +12,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 Set-StrictMode -Version Latest
 
 if ($Help) {
@@ -115,10 +116,7 @@ if ($appBaseUrl.TrimEnd("/") -cne "http://localhost:3000") {
   throw "APP_BASE_URL must be http://localhost:3000 for deployed web conformance."
 }
 
-$terraformVersion = (& terraform version -json 2>$null | ConvertFrom-Json).terraform_version
-if ($LASTEXITCODE -ne 0 -or $terraformVersion -cne "1.9.8") {
-  throw "Terraform 1.9.8 is required."
-}
+Assert-DeploymentTerraformCli
 $caller = Invoke-AwsJson @("sts", "get-caller-identity") "The $Environment AWS session is unavailable."
 if ([string]$caller.Account -notmatch "^[0-9]{12}$" -or -not ([string]$caller.Arn).Contains(":assumed-role/")) {
   throw "Use the temporary IAM Identity Center session for the selected environment."
@@ -163,8 +161,10 @@ try {
 
   & terraform "-chdir=$terraformDirectory" init -reconfigure -input=false -lockfile=readonly `
     "-backend-config=bucket=$stateBucket" "-backend-config=key=platform.tfstate" `
-    "-backend-config=region=$AwsRegion" "-backend-config=kms_key_id=$stateKmsKeyArn" | Out-Null
+    "-backend-config=region=$AwsRegion" "-backend-config=kms_key_id=$stateKmsKeyArn" "-backend-config=encrypt=true" "-backend-config=use_lockfile=true" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "Terraform could not initialize the encrypted backend." }
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformDirectory -DataDirectory $terraformDataDirectory `
+    -ExpectedBucket $stateBucket -ExpectedKey "platform.tfstate" -ExpectedRegion $AwsRegion -ExpectedKmsKeyArn $stateKmsKeyArn
 
   $gatewayUrl = (& terraform "-chdir=$terraformDirectory" output -raw gateway_url 2>$null).TrimEnd("/")
   $clusterArn = (& terraform "-chdir=$terraformDirectory" output -raw ecs_cluster_arn 2>$null).Trim()

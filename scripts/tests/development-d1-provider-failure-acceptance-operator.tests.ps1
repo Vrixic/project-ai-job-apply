@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+. (Join-Path $repositoryRoot "scripts/lib/terraform-toolchain.ps1")
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-d1-provider-failure-acceptance.ps1"
 $source = Get-Content -LiteralPath $operatorPath -Raw
 $tokens = $null
