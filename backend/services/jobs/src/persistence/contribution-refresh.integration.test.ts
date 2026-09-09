@@ -133,22 +133,32 @@ databaseDescribe("append-only contribution verification refresh", () => {
     claims.delete(item.id);
   }
 
-  async function claimBatch(now: Date, targetId?: string) {
-    const items = await queue.claim({
-      workerId: "refresh:integration",
-      now,
-      claimExpiresAt: new Date(now.getTime() + 30_000),
-      limit: 25,
-    });
-    for (const item of items) {
-      claims.set(item.id, { item, now });
-      if (item.contributionId !== targetId) await park(item, now, "capability_disabled");
+  async function claimEligible(now: Date, targetId?: string) {
+    const observed: QueueItem[] = [];
+    // Other serial integration suites leave synthetic queue rows in this shared database.
+    // Drain at most 1,000 eligible fixtures through the real 25-item claim/park ports without
+    // advancing the clock or changing eligibility. Absence assertions must reach an empty batch;
+    // seeing only the first page could otherwise hide an incorrectly eligible target.
+    for (let batch = 0; batch < 40; batch++) {
+      const items = await queue.claim({
+        workerId: "refresh:integration",
+        now,
+        claimExpiresAt: new Date(now.getTime() + 30_000),
+        limit: 25,
+      });
+      observed.push(...items);
+      for (const item of items) claims.set(item.id, { item, now });
+      for (const item of items) {
+        if (item.contributionId !== targetId) await park(item, now, "capability_disabled");
+      }
+      if (items.length === 0 || items.some((item) => item.contributionId === targetId))
+        return observed;
     }
-    return items;
+    throw new Error("Synthetic refresh queue inspection exceeded its fixture bound");
   }
 
   async function claim(id: string, now: Date) {
-    const items = await claimBatch(now, id);
+    const items = await claimEligible(now, id);
     const item = items.find((entry) => entry.contributionId === id);
     if (!item) throw new Error("Synthetic refresh claim unavailable");
     return item;
@@ -179,6 +189,22 @@ databaseDescribe("append-only contribution verification refresh", () => {
       occurredAt: now,
     });
   }
+
+  it("finds a fixture behind a full queue page without reclaiming unrelated leases", async () => {
+    const at = new Date(Date.now() - 26 * 60 * 60_000);
+    const generatedIds = new Set<string>();
+    for (let index = 0; index < 26; index++) generatedIds.add((await stage(at)).id);
+    const f = await stage(at);
+    generatedIds.add(f.id);
+    const now = new Date(Date.now() + 1_000);
+    const item = await claim(f.id, now);
+    expect(item.attempt).toBe(1);
+    expect([...claims.values()].map((entry) => entry.item.contributionId)).toEqual([f.id]);
+    await park(item, now, "capability_disabled");
+    expect((await claimEligible(now)).some((entry) => generatedIds.has(entry.contributionId))).toBe(
+      false,
+    );
+  });
 
   it("holds an accepted proof that expires between preparation and the final catalog mutation", async () => {
     const now = new Date();
@@ -335,10 +361,10 @@ databaseDescribe("append-only contribution verification refresh", () => {
         occurredAt: now,
       });
       await park(item, now, "provider_pending");
-      expect((await claimBatch(now)).some((entry) => entry.contributionId === f.id)).toBe(false);
+      expect((await claimEligible(now)).some((entry) => entry.contributionId === f.id)).toBe(false);
     }
     const later = new Date(initialClock.getTime() + 4 * 60 * 60_000);
-    expect((await claimBatch(later)).some((entry) => entry.contributionId === f.id)).toBe(false);
+    expect((await claimEligible(later)).some((entry) => entry.contributionId === f.id)).toBe(false);
     expect((await store.load(f.id))?.independentVerification?.verificationId).toBe(
       f.proof.verificationId,
     );
