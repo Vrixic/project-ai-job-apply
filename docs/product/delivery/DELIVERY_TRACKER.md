@@ -337,8 +337,10 @@ This is the master record for the delivery phases defined in the [product and sy
   replay/cross-owner tests separately pass against fresh disposable PostgreSQL. PowerShell guards
   pass 279 assertions, platform/bootstrap Terraform tests pass 84/4, and the Lambda builds with a
   35-component SBOM. Docker/WSL stopped after exact generated-resource cleanup. Full repository
-  verification is pending the required committed Terraform source checkpoint; no new IAM or
-  cloud restore/executor activation is claimed.
+  verification and maintained infrastructure validation pass against committed source `831b1db`;
+  two source-bound ZIP/manifest/SBOM builds match. No new IAM or cloud restore/executor activation
+  is claimed; the new development-only recovery role and isolated drill need authorization and
+  exact plan review under D2-R17.
 - Earlier input checkpoint (2026-09-08, after the user's confirmation): fresh development STS
   and exact live reviewer-assignment checks pass. The user authorizes reuse of the existing
   encrypted agent credential; D2-R14/D2-R15 are Closed. Two bounded token requests fail with
@@ -1033,6 +1035,7 @@ Append only material cross-delivery events.
 | 2026-09-08 | D2 | A fresh reviewer exchange after the user's next confirmation still fails at Auth0 API access, with no token/case operation; requested the exact application-access screenshot. Continued independent release work: 189 Gateway tests pass, then current registry advisories stop publication before uploads. D2-037's compatible Next/sharp/js-yaml/Vitest patches now pass frozen install, audit, security regressions, focused suites, frontend builds and the full repository verifier without exemptions. Fresh pre-repair baseline capture confirms state 287/zero drift only; new exact-source releases remain. Docker/WSL stopped while image work is blocked; runtime/provider settings remain unchanged. | [Dependency remediation](phase-2-extension-and-community.md#d2-037--release-candidate-dependency-remediation), [remaining steps](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-08 | D2 | Published exact c66c8a5 Gateway/D2 artifacts without runtime changes. Vercel candidate/admin patch builds failed on an omitted required patch file; prior READY targets remain unchanged, and D2-037 now includes the exact-file upload repair. Added D2-038 for the missing isolated AWS deletion-replay executor found during current-schema recovery preparation. Structural PITR and completed local logical recovery remain distinct from that mutating cloud replay. | [Packaging repair and recovery next steps](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-08 | D2 | Completed exact `42b9686` Vercel/AWS release at state 290, 42 migrations/68 relations and Gateway/scheduled/Trust 55/17/13, with zero drift and unchanged activation scope. Implemented isolated D2-038 restore-only replay on shared main; workflow 533, real PostgreSQL 3, PowerShell 279 and Terraform 84+4 checks pass locally. Full committed-source repository verification and actual isolated cloud replay remain separate; reviewer API client access still needs correction. | [Current release](phase-2-extension-and-community.md#d2-037--release-candidate-dependency-remediation), [recovery implementation](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery) |
+| 2026-09-08 | D2 | Integrated recovery source `831b1db` passes the full repository verifier and maintained infrastructure validation. Two source-bound Lambda ZIP/manifest/SBOM builds match; all agents finished on shared main with no new branches. The completed application release remains unchanged at state 290. Auth0 client access and authorization of the new isolated development recovery drill remain inputs; no new cloud permissions, restore or executor are activated. Docker/WSL are stopped; the PC remains on. | [Recovery implementation](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery), [remaining steps](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 
 ## Cross-delivery decisions and changes
 
