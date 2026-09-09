@@ -391,4 +391,175 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
   throw "The development gateway wrapper can still terminate its parent operator."
 }
 
-Write-Output "Development gateway release operator and search-boundary tests passed."
+# Execute the real CaptureBaseline reconstruction/input fragment against synthetic plans.
+# No operator entrypoint, Terraform process, receipt file, or cloud service is invoked.
+& {
+  . (Join-Path $repositoryRoot "scripts/lib/deployment-operator-guards.ps1")
+  . (Join-Path $repositoryRoot "scripts/lib/development-document-dark-guards.ps1")
+  . (Join-Path $repositoryRoot "scripts/lib/development-gateway-release-guards.ps1")
+  foreach ($functionName in @("Get-GatewayCaptureSeedInputs", "Assert-GatewayCapturedSeedInputs",
+      "Set-VariablesFromPlan", "Save-AndClearTerraformVariables", "Restore-TerraformVariables")) {
+    $definitions = @($ast.FindAll({
+          param($node)
+          $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $functionName
+        }, $true))
+    if ($definitions.Count -ne 1) { throw "The actual capture helper is missing or duplicated." }
+    Invoke-Expression $definitions[0].Extent.Text
+  }
+  $captureBranches = @($ast.EndBlock.Statements | Where-Object {
+      $_ -is [Management.Automation.Language.IfStatementAst] -and
+      $_.Clauses[0].Item1.Extent.Text -ceq '$Action -ceq "CaptureBaseline"'
+    })
+  if ($captureBranches.Count -ne 1) { throw "The exact CaptureBaseline action is unavailable." }
+  $captureBranch = $captureBranches[0].Clauses[0].Item2
+  $captureTries = @($captureBranch.Statements | Where-Object {
+      $_ -is [Management.Automation.Language.TryStatementAst]
+    })
+  if ($captureTries.Count -ne 1 -or
+      $captureTries[0].Body.Statements[0].Extent.Text -cne 'Set-VariablesFromPlan $seed $null' -or
+      $captureTries[0].Body.Statements[1] -isnot [Management.Automation.Language.ForEachStatementAst] -or
+      $captureTries[0].Body.Statements[1].Condition.Extent.Text -cne '$captureInputs.DefaultVariables.GetEnumerator()') {
+    throw "The real CaptureBaseline input reconstruction fragment changed unexpectedly."
+  }
+  $captureInputFragment = [scriptblock]::Create((@(
+        $captureTries[0].Body.Statements[0].Extent.Text,
+        $captureTries[0].Body.Statements[1].Extent.Text
+      ) -join "`n"))
+  foreach ($required in @('$captureInputs = Get-GatewayCaptureSeedInputs $seed $declaredVariables',
+      'Assert-RetainedGatewayBaselinePlan $captured $declaredVariables',
+      'Assert-GatewayCapturedSeedInputs $seed $captured $declaredVariables',
+      '-ReceiptSha256 $ReviewedDocumentReceiptSha256 -Plan $seed',
+      '-ReceiptSha256 $ReviewedDocumentReceiptSha256 -Plan $captured')) {
+    if (-not $captureBranch.Extent.Text.Contains($required)) { throw "CaptureBaseline omitted a seed/current/receipt boundary." }
+  }
+  $readBaseline = @($ast.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq "Read-Baseline"
+      }, $true))[0]
+  if ($readBaseline.Extent.Text.Contains("Get-GatewayCaptureSeedInputs") -or
+      -not $readBaseline.Extent.Text.Contains('Assert-RetainedGatewayBaselinePlan $plan $declaredVariables')) {
+    throw "The historical input exception escaped CaptureBaseline into release/apply baseline validation."
+  }
+
+  $restoreFlag = "candidate_deletion_restore_role_enabled"
+  $declaredVariables = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "infrastructure/terraform/environments/development") `
+      -File -Filter "*.tf" | ForEach-Object {
+      [regex]::Matches((Get-Content -LiteralPath $_.FullName -Raw), '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') |
+        ForEach-Object { $_.Groups[1].Value }
+    })
+  if ($declaredVariables -cnotcontains $restoreFlag) { throw "The current source is missing the exact new restore flag." }
+  $variables = [ordered]@{}
+  foreach ($name in $declaredVariables) {
+    if ($name -cne $restoreFlag) { $variables[$name] = [pscustomobject]@{ value = "synthetic-$name" } }
+  }
+  $variables["serverless_runtime_enabled"] = [pscustomobject]@{ value = $true }
+  $variables["candidate_deletion_policy_json"] = [pscustomobject]@{ value = [pscustomobject]@{ synthetic = $true; version = 1 } }
+  # Use the source's actual complete inventory without introducing an unrelated fixture name.
+  if ($declaredVariables -cnotcontains "candidate_deletion_policy_json") { $variables.Remove("candidate_deletion_policy_json") }
+  $historical = [pscustomobject]@{
+    terraform_version = "1.9.8"; complete = $true; errored = $false; applyable = $false
+    variables = [pscustomobject]$variables; planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{ resources = @() } }
+    resource_changes = @([pscustomobject]@{ address = "synthetic.resource"; change = [pscustomobject]@{ actions = @("no-op") } })
+    resource_drift = @()
+    output_changes = [pscustomobject]@{ synthetic = [pscustomobject]@{ actions = @("no-op") } }
+  }
+  function Copy-CaptureFixture { param([object]$Value); return $Value | ConvertTo-Json -Depth 50 | ConvertFrom-Json }
+  $original = ConvertTo-GatewayCanonicalJson $historical
+  $inputs = Get-GatewayCaptureSeedInputs $historical $declaredVariables
+  if (($inputs.SeedDeclaredVariableNames -join "|") -cne (@($declaredVariables | Where-Object { $_ -cne $restoreFlag }) -join "|") -or
+      $inputs.DefaultVariables.Count -ne 1 -or $inputs.DefaultVariables[$restoreFlag] -isnot [bool] -or
+      $inputs.DefaultVariables[$restoreFlag] -ne $false -or (ConvertTo-GatewayCanonicalJson $historical) -cne $original) {
+    throw "Historical reconstruction changed retained evidence or did not return the exact false-only overlay."
+  }
+  $current = Copy-CaptureFixture $historical
+  $current.terraform_version = "1.16.2"
+  $current.variables | Add-Member -NotePropertyName $restoreFlag -NotePropertyValue ([pscustomobject]@{ value = $false })
+  Assert-GatewayCapturedSeedInputs $historical $current $declaredVariables
+  foreach ($version in @("1.9.8", "1.16.2")) {
+    foreach ($enabled in @($false, $true)) {
+      $complete = Copy-CaptureFixture $current
+      $complete.terraform_version = $version
+      $complete.variables.$restoreFlag.value = $enabled
+      $completeInputs = Get-GatewayCaptureSeedInputs $complete $declaredVariables
+      if ($completeInputs.DefaultVariables.Count -ne 0) { throw "A complete seed acquired a default overlay." }
+      $captured = Copy-CaptureFixture $complete
+      $captured.terraform_version = "1.16.2"
+      Assert-GatewayCapturedSeedInputs $complete $captured $declaredVariables
+    }
+  }
+  foreach ($invalid in @($null, "false", "true", 0, 1, [pscustomobject]@{}, [object[]]@($false))) {
+    $bad = Copy-CaptureFixture $current
+    $bad.variables.$restoreFlag.value = $invalid
+    Assert-Rejected { Get-GatewayCaptureSeedInputs $bad $declaredVariables } "A nonboolean restore-role seed value was accepted."
+  }
+  $bad = Copy-CaptureFixture $current
+  $bad.variables.$restoreFlag.PSObject.Properties.Remove("value")
+  Assert-Rejected { Get-GatewayCaptureSeedInputs $bad $declaredVariables } "A restore-role wrapper without a value was accepted."
+  foreach ($version in @("1.16.2", "1.9.7", "1.16.1", "1.9.8 ")) {
+    $bad = Copy-CaptureFixture $historical
+    $bad.terraform_version = $version
+    Assert-Rejected { Get-GatewayCaptureSeedInputs $bad $declaredVariables } "An unapproved missing-flag seed was accepted."
+  }
+  $otherName = @($declaredVariables | Where-Object { $_ -cne $restoreFlag })[0]
+  $bad = Copy-CaptureFixture $historical
+  $bad.variables.PSObject.Properties.Remove($otherName)
+  Assert-Rejected { Get-GatewayCaptureSeedInputs $bad $declaredVariables } "An unrelated missing seed variable was accepted."
+  $bad = Copy-CaptureFixture $historical
+  $bad.variables | Add-Member -NotePropertyName "unrelated_variable" -NotePropertyValue ([pscustomobject]@{ value = $false })
+  Assert-Rejected { Get-GatewayCaptureSeedInputs $bad $declaredVariables } "An unrelated extra seed variable was accepted."
+  $bad = Copy-CaptureFixture $historical
+  $bad.resource_changes[0].change.actions = @("update")
+  Assert-Rejected { Get-GatewayCaptureSeedInputs $bad $declaredVariables } "A changing historical resource was accepted."
+  $bad = Copy-CaptureFixture $historical
+  $bad.output_changes.synthetic.actions = @("update")
+  Assert-Rejected { Get-GatewayCaptureSeedInputs $bad $declaredVariables } "A changing historical output was accepted."
+  Assert-Rejected { Assert-RetainedGatewayBaselinePlan $historical $declaredVariables } `
+    "The general retained/release baseline guard accepted the incomplete historical input set."
+  foreach ($name in $declaredVariables) {
+    $bad = Copy-CaptureFixture $current
+    $bad.variables.$name.value = "changed-synthetic-value"
+    Assert-Rejected { Assert-GatewayCapturedSeedInputs $historical $bad $declaredVariables } `
+      "The captured baseline silently changed a retained or reconstructed input."
+  }
+  foreach ($value in @($true, $null, "false", [object[]]@($false))) {
+    $bad = Copy-CaptureFixture $current
+    $bad.variables.$restoreFlag.value = $value
+    Assert-Rejected { Assert-GatewayCapturedSeedInputs $historical $bad $declaredVariables } `
+      "The captured historical-upgrade baseline did not retain explicit boolean false."
+  }
+  $bad = Copy-CaptureFixture $current
+  $bad.variables.PSObject.Properties.Remove($restoreFlag)
+  Assert-Rejected { Assert-GatewayCapturedSeedInputs $historical $bad $declaredVariables } "The fresh baseline omitted the new input."
+  $bad = Copy-CaptureFixture $current
+  $bad.variables.PSObject.Properties.Remove($otherName)
+  Assert-Rejected { Assert-GatewayCapturedSeedInputs $historical $bad $declaredVariables } "The fresh baseline omitted another retained input."
+  $bad = Copy-CaptureFixture $current
+  $bad.variables | Add-Member -NotePropertyName "unrelated_variable" -NotePropertyValue ([pscustomobject]@{ value = $false })
+  Assert-Rejected { Assert-GatewayCapturedSeedInputs $historical $bad $declaredVariables } "The fresh baseline added an unrelated input."
+  $bad = Copy-CaptureFixture $current
+  $bad.resource_changes[0].change.actions = @("update")
+  Assert-Rejected { Assert-GatewayCapturedSeedInputs $historical $bad $declaredVariables } "The fresh baseline contained a meaningful resource change."
+  $bad = Copy-CaptureFixture $current
+  $bad.terraform_version = "1.9.8"
+  Assert-Rejected { Assert-GatewayCapturedSeedInputs $historical $bad $declaredVariables } "The fresh baseline used the historical CLI."
+
+  $saved = Save-AndClearTerraformVariables
+  try {
+    foreach ($fixture in @($historical, $current, $complete)) {
+      $seed = Copy-CaptureFixture $fixture
+      $before = ConvertTo-GatewayCanonicalJson $seed
+      $captureInputs = Get-GatewayCaptureSeedInputs $seed $declaredVariables
+      $env:TF_VAR_candidate_deletion_restore_role_enabled = "unreviewed-ambient-value"
+      & $captureInputFragment
+      $expected = if ($captureInputs.DefaultVariables.Count -eq 1) { "false" }
+        else { ([string]$seed.variables.$restoreFlag.value).ToLowerInvariant() }
+      if ($env:TF_VAR_candidate_deletion_restore_role_enabled -cne $expected -or
+          $env:TF_VAR_serverless_runtime_enabled -cne "true" -or
+          (ConvertTo-GatewayCanonicalJson $seed) -cne $before) {
+        throw "The actual capture input fragment changed retained seed data or omitted the explicit flag value."
+      }
+    }
+  } finally { Restore-TerraformVariables $saved }
+}
+
+Write-Output "Development gateway release operator, capture-input reconstruction, and search-boundary tests passed."

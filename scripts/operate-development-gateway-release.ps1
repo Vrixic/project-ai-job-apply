@@ -411,6 +411,61 @@ function Set-VariablesFromPlan {
     $env:TF_VAR_gateway_lambda_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
   }
 }
+function Get-GatewayCaptureSeedInputs {
+  param([Parameter(Mandatory)][object]$Seed, [Parameter(Mandatory)][string[]]$DeclaredVariableNames)
+  $restoreFlag = "candidate_deletion_restore_role_enabled"
+  if ($DeclaredVariableNames.Count -eq 0 -or
+      @($DeclaredVariableNames | Sort-Object -Unique).Count -ne $DeclaredVariableNames.Count -or
+      $DeclaredVariableNames -cnotcontains $restoreFlag -or $Seed.variables -isnot [pscustomobject]) {
+    throw "The baseline capture current variable inventory is invalid."
+  }
+  $seedDeclared = @($DeclaredVariableNames)
+  $defaults = @{}
+  $restoreProperty = $Seed.variables.PSObject.Properties[$restoreFlag]
+  if ($null -eq $restoreProperty) {
+    # This is input reconstruction for a fresh plan, never a mutation or relabeling of
+    # retained evidence. Only this new default-off flag may be absent from a 1.9.8 seed.
+    if ([string]$Seed.terraform_version -cne "1.9.8") {
+      throw "Only the historical baseline seed may omit the new default-off restore role flag."
+    }
+    $seedDeclared = @($DeclaredVariableNames | Where-Object { $_ -cne $restoreFlag })
+    $defaults[$restoreFlag] = $false
+  } else {
+    $restoreValue = $restoreProperty.Value.PSObject.Properties["value"]
+    if ($null -eq $restoreValue -or $restoreValue.Value -isnot [bool]) {
+      throw "The retained restore role flag must be an explicit boolean."
+    }
+  }
+  $null = Assert-RetainedGatewayBaselinePlan $Seed $seedDeclared
+  return [pscustomobject]@{ SeedDeclaredVariableNames = $seedDeclared; DefaultVariables = $defaults }
+}
+function Assert-GatewayCapturedSeedInputs {
+  param(
+    [Parameter(Mandatory)][object]$Seed,
+    [Parameter(Mandatory)][object]$Captured,
+    [Parameter(Mandatory)][string[]]$DeclaredVariableNames
+  )
+  $inputs = Get-GatewayCaptureSeedInputs $Seed $DeclaredVariableNames
+  # A fresh baseline is always current, fully populated, and still zero drift.
+  if ([string]$Captured.terraform_version -cne (Get-DeploymentTerraformVersion)) {
+    throw "The captured baseline must use the current Terraform version."
+  }
+  $null = Assert-RetainedGatewayBaselinePlan $Captured $DeclaredVariableNames
+  foreach ($name in $DeclaredVariableNames) {
+    if ($inputs.DefaultVariables.ContainsKey($name)) { $expected = $inputs.DefaultVariables[$name] }
+    else {
+      $seedValue = $Seed.variables.PSObject.Properties[$name].Value.PSObject.Properties["value"]
+      if ($null -eq $seedValue) { throw "The retained baseline variable value is missing." }
+      $expected = $seedValue.Value
+    }
+    $capturedValue = $Captured.variables.PSObject.Properties[$name].Value.PSObject.Properties["value"]
+    if ($null -eq $capturedValue) { throw "The captured baseline variable value is missing." }
+    $actual = $capturedValue.Value
+    if ((ConvertTo-GatewayCanonicalJson $actual) -cne (ConvertTo-GatewayCanonicalJson $expected)) {
+      throw "The captured baseline changed a retained or reconstructed variable value."
+    }
+  }
+}
 function Read-BaselineDocumentReceipt {
   param([Parameter(Mandatory)][string]$ReceiptSha256)
   if ($ReceiptSha256 -cnotmatch '^[a-f0-9]{64}$') {
@@ -636,7 +691,7 @@ if ($Action -ceq "CaptureBaseline") {
       @($declaredVariables | Sort-Object -Unique).Count -ne $declaredVariables.Count) {
     throw "The baseline capture variable inventory is empty or duplicated."
   }
-  $null = Assert-RetainedGatewayBaselinePlan $seed $declaredVariables
+  $captureInputs = Get-GatewayCaptureSeedInputs $seed $declaredVariables
 
   $documentPath = Resolve-GatewayOperatorPath $DocumentReceiptPath -MustExist
   if ((Get-FileSha256 $documentPath) -cne $ReviewedDocumentReceiptSha256) {
@@ -654,6 +709,9 @@ if ($Action -ceq "CaptureBaseline") {
   $saved = Save-AndClearTerraformVariables
   try {
     Set-VariablesFromPlan $seed $null
+    foreach ($entry in $captureInputs.DefaultVariables.GetEnumerator()) {
+      Set-Item "Env:TF_VAR_$($entry.Key)" ([string]$entry.Value).ToLowerInvariant()
+    }
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
       -detailed-exitcode "-out=$capturedPath" *> "$capturedPath.log"
     $exitCode = $LASTEXITCODE
@@ -664,6 +722,7 @@ if ($Action -ceq "CaptureBaseline") {
   }
   $captured = Read-Plan $capturedPath
   $null = Assert-RetainedGatewayBaselinePlan $captured $declaredVariables
+  Assert-GatewayCapturedSeedInputs $seed $captured $declaredVariables
   $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
     -ReceiptSha256 $ReviewedDocumentReceiptSha256 -Plan $captured `
     -SourceSha ([string]$documentReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256
