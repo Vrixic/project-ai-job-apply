@@ -20,6 +20,6 @@
     "@ai-job-apply/jobs-service": "workspace:*",
     "entities": "8.0.0",
     "parse5": "8.0.1",
-    "uuid": "14.0.1"
+    "uuid": "14.0.2"
   }
 }
