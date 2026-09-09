@@ -179,6 +179,37 @@ function Resolve-OperatorPath {
   return $resolved
 }
 
+function Resolve-DockerAuthDirectory {
+  param([Parameter(Mandatory)][string]$Candidate)
+  $resolved = Resolve-OperatorPath -Candidate $Candidate
+  if ([IO.Path]::GetDirectoryName($resolved) -cne [IO.Path]::GetFullPath($operatorRoot) -or
+      [IO.Path]::GetFileName($resolved) -cnotmatch '^docker-auth-[a-f0-9]{32}$') {
+    throw "Docker authentication cleanup requires one exact generated operator directory."
+  }
+  $cursor = $resolved
+  while ($cursor) {
+    if ((Test-Path -LiteralPath $cursor) -and
+        ((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw "Docker authentication paths must not traverse links."
+    }
+    $cursor = [IO.Path]::GetDirectoryName($cursor)
+  }
+  if (Test-Path -LiteralPath $resolved) {
+    if (-not (Test-Path -LiteralPath $resolved -PathType Container)) { throw "Docker authentication path must be a directory." }
+    $pending = [Collections.Generic.Stack[string]]::new()
+    $pending.Push($resolved)
+    while ($pending.Count -gt 0) {
+      foreach ($entry in Get-ChildItem -LiteralPath $pending.Pop() -Force) {
+        if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+          throw "Docker authentication cleanup must not traverse links."
+        }
+        if ($entry.PSIsContainer) { $pending.Push($entry.FullName) }
+      }
+    }
+  }
+  return $resolved
+}
+
 function Write-JsonFile {
   param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][object]$Value, [switch]$AllowReplace)
   if ((Test-Path -LiteralPath $Path) -and -not $AllowReplace) { throw "Refusing to replace an existing publication receipt." }
@@ -1032,7 +1063,7 @@ if ($Action -eq "Publish") {
   if ($resumeMode -in @("new-publication", "resume-push", "resume-index")) {
     $registryHost = $boundary.RepositoryUri.Split('/')[0]
     $buildxPluginPath = Get-DockerBuildxPluginPath
-    $dockerAuthDirectory = Join-Path $operatorRoot ("docker-auth-{0}" -f [guid]::NewGuid().ToString("N"))
+    $dockerAuthDirectory = Resolve-DockerAuthDirectory -Candidate (Join-Path $operatorRoot ("docker-auth-{0}" -f [guid]::NewGuid().ToString("N")))
     $dockerAuthPluginDirectory = Join-Path $dockerAuthDirectory "cli-plugins"
     $previousDockerConfig = $env:DOCKER_CONFIG
     $null = New-Item -ItemType Directory -Path $dockerAuthPluginDirectory
@@ -1066,7 +1097,8 @@ if ($Action -eq "Publish") {
       if ($null -eq $previousDockerConfig) { Remove-Item Env:\DOCKER_CONFIG -ErrorAction SilentlyContinue }
       else { $env:DOCKER_CONFIG = $previousDockerConfig }
       if (Test-Path -LiteralPath $dockerAuthDirectory -PathType Container) {
-        Remove-Item -LiteralPath $dockerAuthDirectory -Recurse -Force
+        $cleanupTarget = Resolve-DockerAuthDirectory -Candidate $dockerAuthDirectory
+        Remove-Item -LiteralPath $cleanupTarget -Recurse -Force
       }
     }
   }

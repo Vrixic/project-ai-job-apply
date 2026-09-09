@@ -92,6 +92,17 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
   input, limits a release to the gateway Lambda function and immutable alias, and runs the direct
   authenticated search boundary. See
   `infrastructure/runbooks/deployments/development-gateway-release.md`.
+- `operate-development-d2-runtime-release.ps1` — Separately plans, applies and verifies D2
+  maintenance, paused worker-artifact replacement and compatible resumption. It preserves queues,
+  provider/reviewer configuration and D1/private captures. A verified pause cutoff binds the old
+  async-retention/runtime window; old versions cannot be resumed onto Jobs `0023`/Trust `0004`.
+  See the coordinated ordering in
+  `infrastructure/runbooks/deployments/database-migration.md`.
+- `operate-development-deletion-restore-role.ps1` — Enables/disables only the separately approved
+  development restore-role allowance, exact role policy and private endpoint changes. Bootstrap
+  and platform stages have distinct saved plans, source/state bindings and live verification.
+  Disable requires exact cleanup or bounded unused-role rollback; it is not a generic IAM removal
+  command. See `infrastructure/runbooks/restore/candidate-deletion-recovery-replay.md`.
 
 Artifacts are normally published by the protected GitHub workflows; the development-only local
 publishers preserve the same immutable boundary when that route is unavailable. The migration-only
@@ -102,6 +113,10 @@ deployed Trust candidate-rights behavior, image publication, task-definition dep
 migration execution, or AWS restore execution. No gateway or general worker image exists.
 
 ## Deployed verification and evidence
+
+`pnpm test:d2-runtime-release` and `pnpm test:deletion-restore-role` run synthetic operator/guard
+regressions only; they do not pause a deployment, create permissions, run a restore or contact AWS.
+Both are included in maintained infrastructure and full repository verification.
 
 - `run-development-d2-public-boundary.mjs` — Verifies bounded unauthenticated contribution
   denials against the exact regional development API origin. The default signed mode also

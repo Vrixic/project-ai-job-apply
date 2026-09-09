@@ -29,6 +29,31 @@ uses existing read/write scopes, candidate contribution/consent/owner Trust uses
 generic `$default` route. No provider host, credential, NAT, egress rule, policy content, reviewer,
 appeal timing, or activation value is supplied by module defaults.
 
+`d2_community_runtime.maintenance_mode` defaults false. Setting it true pauses an already
+activated D2 contribution/review boundary without changing activation inputs or destroying
+resources. The existing scheduled rule and Trust-signal mapping are disabled in place, both D2
+worker reservations become zero, and their existing `D2_COMMUNITY_RUNTIME_ENABLED` setting is
+false. Gateway contribution and reviewer route flags become false, while the exact API routes,
+queues, aliases, permissions, alarms, provider-only network, provider registrations, reviewer
+assignments, policy inputs, and immutable artifact coordinates remain configured. The reviewed
+nonzero concurrency inputs and mapping maximum remain validated and retained for resumption.
+Maintenance neither grants authority nor bypasses any existing activation validation.
+
+Unrelated D1 functionality and the independently owner-scoped private-capture routes remain
+available. Private captures use Matching persistence and Profile account status; Jobs `0023`
+and Trust `0004` change neither path. The optional read-only signed-policy endpoint also remains
+unchanged. Existing handlers deny disabled contribution/reviewer routes before application
+dispatch, and disabled worker configuration performs no database, queue, or provider setup.
+
+Terraform changes are not atomic and zero concurrency does not terminate work already running.
+Before a migration, independently verify the deployed Gateway/worker flags, zero D2 reservations,
+disabled schedule/mapping, completed prior invocations and the bounded queue/in-flight drain
+conditions in the release runbook. A timeout alone is not proof that retained asynchronous work
+has retired. Keep pending jobs and signals intact; do not purge or reassign them. Resume only after
+the coordinated schema and compatible immutable Gateway/worker artifacts are verified, by
+reviewing a new plan with `maintenance_mode = false`. This restores the configured execution
+limits and triggers, not a second set of resources or a historical binary rollback.
+
 Development can explicitly set `d2_community_runtime.development_contributions_enabled = true`
 to remove the signed contribution-policy renewal dependency. This optional flag defaults false
 and is rejected unless `environment = "development"`. It does not activate the runtime on its

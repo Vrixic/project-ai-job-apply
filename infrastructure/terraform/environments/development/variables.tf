@@ -293,6 +293,7 @@ variable "d2_community_runtime" {
   default = {
     deploy                                         = false
     enabled                                        = false
+    maintenance_mode                               = false
     policy_endpoint_enabled                        = false
     development_contributions_enabled              = false
     development_contribution_providers             = ["greenhouse"]

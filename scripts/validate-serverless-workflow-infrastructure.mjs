@@ -70,8 +70,18 @@ if (
 }
 requirePattern(
   communityRuntime,
-  /reserved_concurrent_executions\s*=\s*var\.d2_community_runtime\.signal_reserved_concurrency/u,
-  "D2 Trust Lambda reservation must share the SQS maximum-concurrency input.",
+  /reserved_concurrent_executions\s*=\s*var\.d2_community_runtime\.maintenance_mode\s*\?\s*0\s*:\s*var\.d2_community_runtime\.signal_reserved_concurrency/u,
+  "D2 Trust Lambda must pause at zero or share the SQS maximum-concurrency input.",
+);
+requirePattern(
+  variables,
+  /maintenance_mode\s*=\s*optional\(bool,\s*false\)/u,
+  "D2 maintenance must remain an explicit default-off boolean.",
+);
+requirePattern(
+  communityRuntime,
+  /d2_community_operational\s*=\s*local\.d2_community_enabled\s*&&\s*!var\.d2_community_runtime\.maintenance_mode/u,
+  "D2 maintenance must gate operation without changing resource activation.",
 );
 requirePattern(
   variables,

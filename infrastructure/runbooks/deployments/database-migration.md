@@ -16,9 +16,14 @@ service and must return to zero running tasks after every migration.
 - For the Phase 2 package, require the exact
   `d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1` manifest, the ordered Profile,
   Jobs, Documents, Matching, Billing, and Trust runners, ten declared schemas, 68 declared regular
-  relations, and 42 checksum-bound migrations, including Jobs `0022` before updating the Gateway
-  or either D2 worker. Reject older D1 package and
+  relations, and 44 checksum-bound migrations, including Jobs `0023` and Trust `0004` before enabling
+  the compatible Gateway or either D2 worker. Reject older D1 package and
   receipt boundaries.
+- Before Jobs `0023`/Trust `0004`, pause D2 contribution/reviewer writes and both workers through
+  `d2_community_runtime.maintenance_mode = true`. Verify the exact disabled-version aliases,
+  existing false handler flags, both function reservations at zero, disabled EventBridge schedule,
+  and Trust mapping state `Disabled`. Drain already-running work before applying SQL. Do not use
+  `enabled = false`, which removes active resources/configuration instead of pausing them.
 - Require the exact platform digest to have a complete scan with zero High or Critical findings.
 - Review the SQL for transactional behavior, replay safety, bounded locks, data classification,
   downgrade/forward-recovery strategy, and aggregate-only observability.
@@ -58,10 +63,36 @@ schema-6 captures have a different shape and remain invalid migration inputs. Ob
 schema-7 capture rather than relabeling either format, accepting a stale serial, weakening
 zero-drift checks, or deploying unrelated ingestion artifacts just to regenerate old evidence.
 
-Release ordering remains migration package publication and scan, `PlanTask`/`ApplyTask`, reviewed
-`PlanExecution`/single `Execute`/`Verify`, compatible D2 worker upgrade and old-worker drain, and
-then the Gateway release. Other route or runtime changes require their own exact reviewed plan;
-none may enter the migration task-only replacement plan.
+Release ordering is migration package publication and scan, verified D2 maintenance and running-work
+drain, `PlanTask`/`ApplyTask`, reviewed `PlanExecution`/single `Execute`/`Verify`, and compatible D2
+worker/Gateway upgrades while maintenance stays enabled. Schedule the migration execution near or
+after the asynchronous retirement deadline: resume independently describes the actual stopped task,
+and AWS only guarantees stopped-task visibility for [at least one hour](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DescribeTasks.html).
+Publish artifacts and prepare the reviewed release beforehand so the final task verification and
+compatible runtime transitions can finish within that window. Resume only after the verified schema,
+artifacts and asynchronous retirement fence all pass. Other route or runtime changes require their
+own exact reviewed plan; none may enter the migration task-only replacement plan.
+
+The previous worker uses `ON CONFLICT (contribution_id)`, whose singleton constraint Jobs `0023`
+removes. Old Trust acceptance lacks the provider-proof basis required by Trust `0004`. Neither old
+writer can be restored after migration. Zero concurrency is function-wide but does not terminate an
+already-running invocation. Keep both workers fenced while the owners migrate independently.
+
+For the retained alias-only EventBridge target, verify that all aliases have moved to disabled
+versions with no weighted old-version route and that no other numeric-version ingress exists.
+Record the confirmed cutoff and preserve the existing asynchronous retention bound: ordinarily
+21,600 seconds, plus the prior maximum running timeout and a settling margin, before restoring
+concurrency. A new retry setting, empty metrics, or one timeout does not prove old accepted async
+work disappeared. Later EventBridge deliveries resolve the verified disabled alias; this is an
+inference from documented [alias targeting](https://docs.aws.amazon.com/lambda/latest/dg/using-aliases.html),
+not a claim that queued work is rebound or purged. Preserve queued contribution/signal records and
+immutable artifacts; no historical function-version deletion is authorized by this procedure.
+
+The pause receipt retains its original source and cutoff across reviewed descendant releases while
+the exact paused authority and live controls remain unchanged. Any out-of-band alias, trigger or
+reservation change invalidates that cutoff and requires a newly verified pause and full retirement
+window. Current metrics alone cannot prove uninterrupted fencing; do not rewrite an old receipt or
+claim an automatic safe resume.
 
 When an ancestor `CompleteDark` baseline is required, derive the review value independently from
 the exact merged commits before invoking `PlanTask`. Run this from clean `main == origin/main`,

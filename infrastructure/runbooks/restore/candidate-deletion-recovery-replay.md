@@ -20,6 +20,23 @@ deployed before preparation. They do not activate candidate rights, alter an exi
 effective permissions, or create the executor. Do not enable this flag in staging or production,
 reuse a live mutation-capable rights role, or override the migration task into replay.
 
+Use `scripts/operate-development-deletion-restore-role.ps1` for the separate temporary permission
+transition. It requires current portable Terraform 1.16.2, the exact encrypted S3-locking backend,
+clean merged source, current state lineage/serial and a reviewed zero-change baseline. Run
+`-Stage Bootstrap -Transition Enable` through `Plan`, reviewed `Apply -Execute`, and `Verify`,
+then the same sequence for `-Stage Platform`. Each plan changes only the named restore flag and
+its exact policy/role/endpoint effects; it must preserve maintenance, artifacts, reviewer/provider
+configuration and all other inputs. Retain the returned plan, metadata and verification hashes
+privately. The old general bootstrap workload-boundary changeset is not this activation path.
+
+After this drill's exact Lambda and RDS cleanup, use the platform `Disable` transition with
+`-CleanupMode CompletedDrill`, the reviewed preparation, preserved original restore-context copy
+and cleanup journal. Verify role/function-version/restore absence, then disable the bootstrap
+allowance. `UnusedRole` is a bounded rollback for permission setup that never reached execution,
+including bootstrap-only activation; it is not a substitute for actual drill cleanup evidence.
+An ambiguous or partially applied plan requires inspection and separately reviewed recovery,
+not a blind retry or a fabricated successful verification receipt.
+
 The complete current manifest is six migration contributors, ten schemas, 44 migrations and
 68 relations. All seven current candidate-data owners are reconciled. Historical D1/D2 completed
 markers retain their original version/digest and retention values, using the compiled catalog in

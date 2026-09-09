@@ -326,6 +326,20 @@ This is the master record for the delivery phases defined in the [product and sy
   Closed. Nine bounded requests read three existing initial-review cases, with no next page,
   role changes or decisions. R17 remains Closed: the isolated recovery drill is already approved.
   Fresh artifact/environment/role health matches state 290 and all 13 D2 alarms are OK.
+- Toolchain correction completed (2026-09-09): D2-040/R18 are Closed. Verified portable Terraform
+  1.16.2 and retained historical readers pass 441 assertions on each PowerShell host plus full
+  maintained infrastructure/repository checks. Actual encrypted S3-locked plans succeed. One exact
+  equal-value sensitivity update advances state to 291 without calling the budget update API or
+  changing application versions/settings; the fresh locked follow-up reports zero changes.
+  Historical evidence, provider locks and excluded GitHub Actions remain unchanged. D2-039's new
+  retained-resource maintenance configuration passes 93 Terraform tests; coordinated operator
+  integration/deployment and D2-038's approved temporary recovery drill are next.
+- Recovery-role rollout tooling (2026-09-09): the exact bootstrap/platform Enable/Disable operator
+  passes 210 generated assertions on both PowerShell hosts and independent review. Used executors
+  require original cleanup/drain evidence; genuinely unused setup has a separate rollback path.
+  D2 runtime tooling also passes 171 assertions on each host and an actual eight-update/no-delete
+  diagnostic Pause plan. No role, restore or runtime pause has been applied. Shared-main integration is next;
+  the full source-bound infrastructure check must be rerun after the shared changes are committed.
 - Implemented follow-up (2026-09-09, `fab4960`/`cc2fa23`): D2-039 adds append-only refresh for stale unpublished
   provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
   catalog updates. D2-041 corrects the strict candidate-export schema for existing contribution
@@ -1064,6 +1078,7 @@ Append only material cross-delivery events.
 | 2026-09-09 | D2 | `fab4960`/`cc2fa23` integrate stale-review refresh, explicit accepted provider proof, monotonic publication and complete strict seven-owner export coverage on shared main, without branches. D2-041 repository implementation is Complete. Root PostgreSQL integration passes 136 tests; the seven opt-in cases pass separately. Current-source logical recovery passes 44 migrations/68 row sets, and the full repository verifier passes. Docker/WSL stopped after exact disposable cleanup. D2-039 coordinated deployment and D2-038's already authorized cloud drill remain blocked by D2-040/R18, not by the resolved reviewer grant. | [Current implementation and tests](phase-2-extension-and-community.md#d2-039--fresh-review-evidence-and-monotonic-catalog-truth), [complete export coverage](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage) |
 
 | 2026-09-09 | D2 | User approved the exact portable Terraform 1.16.2 transition and deployment-skill update. Both current/historical binaries pass official signature and pinned checksum verification without replacing the system installation; the old state-290 plan remains unchanged/readable. Fresh exact-account development backend initialization verifies encrypted S3 locking in an isolated cache. Current-only operators and explicit historical readers are being integrated and validated; a fresh locked plan is still required before D2-040/R18 closes. No resource apply, recovery executor, provider expansion or GitHub Actions change. | [Current toolchain state and single rationale](phase-2-extension-and-community.md#d2-040--effective-s3-state-locking) |
+| 2026-09-09 | D2 | D2-040/R18 are Complete/Closed after 441 two-host toolchain assertions, full infrastructure/repository checks and actual locked planning. A reviewed equal-value sensitivity-only state transition moves 290 to 291; fresh follow-up exits 0 with no resource changes. The D2-039 retained-resource maintenance configuration passes 93 Terraform tests and all three current-root validations; coordinated release/recovery operators remain under implementation. No application deployment, budget setting, provider expansion, role/grant, historical plan, Actions or Docker/WSL change. | [Toolchain result and single rationale](phase-2-extension-and-community.md#d2-040--effective-s3-state-locking), [coordinated migration](phase-2-extension-and-community.md#d2-039--fresh-review-evidence-and-monotonic-catalog-truth) |
 
 ## Cross-delivery decisions and changes
 

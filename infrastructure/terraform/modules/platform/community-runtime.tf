@@ -5,6 +5,8 @@ locals {
     var.d2_community_runtime.enabled &&
     var.runtime_activation_allowed
   )
+  # Maintenance pauses execution without changing activation, resource identities, or networking.
+  d2_community_operational = local.d2_community_enabled && !var.d2_community_runtime.maintenance_mode
   d2_development_contributions_enabled = (
     local.d2_community_enabled &&
     var.environment == "development" &&
@@ -266,7 +268,7 @@ resource "aws_lambda_function" "d2_community_scheduled" {
   handler                        = "index.scheduled"
   memory_size                    = 512
   timeout                        = var.d2_community_runtime.lambda_timeout_seconds
-  reserved_concurrent_executions = var.d2_community_runtime.scheduled_reserved_concurrency
+  reserved_concurrent_executions = var.d2_community_runtime.maintenance_mode ? 0 : var.d2_community_runtime.scheduled_reserved_concurrency
   publish                        = true
   s3_bucket                      = aws_s3_bucket.artifacts.bucket
   s3_key                         = var.d2_community_runtime.artifact_s3_key
@@ -280,7 +282,7 @@ resource "aws_lambda_function" "d2_community_scheduled" {
       NODE_ENV                     = "production"
       RELEASE_SHA                  = var.d2_community_runtime.artifact_sha256
       DATABASE_SECRET_ID           = aws_secretsmanager_secret.database_url.arn
-      D2_COMMUNITY_RUNTIME_ENABLED = tostring(local.d2_community_enabled)
+      D2_COMMUNITY_RUNTIME_ENABLED = tostring(local.d2_community_operational)
       D2_TRUST_SIGNAL_QUEUE_URL    = aws_sqs_queue.d2_trust_signal[0].url
       }, local.d2_community_enabled ? {
       D2_COMMUNITY_ACCOUNT_ID                               = data.aws_caller_identity.current.account_id
@@ -349,7 +351,7 @@ resource "aws_lambda_function" "d2_trust_signal" {
   handler                        = "index.trustSignal"
   memory_size                    = 512
   timeout                        = var.d2_community_runtime.lambda_timeout_seconds
-  reserved_concurrent_executions = var.d2_community_runtime.signal_reserved_concurrency
+  reserved_concurrent_executions = var.d2_community_runtime.maintenance_mode ? 0 : var.d2_community_runtime.signal_reserved_concurrency
   publish                        = true
   s3_bucket                      = aws_s3_bucket.artifacts.bucket
   s3_key                         = var.d2_community_runtime.artifact_s3_key
@@ -363,7 +365,7 @@ resource "aws_lambda_function" "d2_trust_signal" {
       NODE_ENV                     = "production"
       RELEASE_SHA                  = var.d2_community_runtime.artifact_sha256
       DATABASE_SECRET_ID           = aws_secretsmanager_secret.database_url.arn
-      D2_COMMUNITY_RUNTIME_ENABLED = tostring(local.d2_community_enabled)
+      D2_COMMUNITY_RUNTIME_ENABLED = tostring(local.d2_community_operational)
       }, local.d2_community_enabled ? {
       D2_COMMUNITY_ACCOUNT_ID                = data.aws_caller_identity.current.account_id
       D2_COMMUNITY_REGION                    = data.aws_region.current.region
@@ -408,7 +410,7 @@ resource "aws_cloudwatch_event_rule" "d2_community_schedule" {
   name                = local.d2_community_schedule_rule_name
   description         = "Accountably activated bounded D2 community batch"
   schedule_expression = var.d2_community_runtime.schedule_expression
-  state               = "ENABLED"
+  state               = local.d2_community_operational ? "ENABLED" : "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "d2_community_schedule" {
@@ -437,7 +439,7 @@ resource "aws_lambda_event_source_mapping" "d2_trust_signal" {
   count                              = local.d2_community_enabled ? 1 : 0
   event_source_arn                   = aws_sqs_queue.d2_trust_signal[0].arn
   function_name                      = aws_lambda_alias.d2_trust_signal[0].arn
-  enabled                            = true
+  enabled                            = local.d2_community_operational
   batch_size                         = var.d2_community_runtime.trust_signal_batch_size
   maximum_batching_window_in_seconds = 0
   function_response_types            = ["ReportBatchItemFailures"]

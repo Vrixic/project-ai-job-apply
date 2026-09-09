@@ -23,6 +23,14 @@ mock_provider "aws" {
       qualified_arn = "arn:aws:lambda:us-east-2:111122223333:function:mock:1"
     }
   }
+  mock_resource "aws_cloudformation_stack" {
+    defaults = {
+      outputs = {
+        DurableAliasArn   = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-staging-profile-readiness-durable:staging"
+        DurableVersionArn = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-staging-profile-readiness-durable:1"
+      }
+    }
+  }
   mock_resource "aws_lambda_alias" {
     defaults = {
       arn        = "arn:aws:lambda:us-east-2:111122223333:function:mock:staging"
@@ -123,6 +131,7 @@ run "d2_defaults_create_nothing" {
     condition = (
       !var.d2_community_runtime.deploy &&
       !var.d2_community_runtime.enabled &&
+      !var.d2_community_runtime.maintenance_mode &&
       !var.d2_community_runtime.development_contributions_enabled &&
       var.d2_community_runtime.development_contribution_providers == tolist(["greenhouse"]) &&
       var.d2_community_runtime.signal_reserved_concurrency == 0 &&
@@ -246,6 +255,8 @@ run "d2_activation_requires_and_wires_every_explicit_boundary" {
 
   assert {
     condition = (
+      !var.d2_community_runtime.maintenance_mode &&
+      local.d2_community_operational &&
       length(aws_cloudwatch_event_rule.d2_community_schedule) == 1 &&
       aws_cloudwatch_event_rule.d2_community_schedule[0].schedule_expression == "rate(5 minutes)" &&
       length(aws_lambda_event_source_mapping.d2_trust_signal) == 1 &&
@@ -955,5 +966,270 @@ run "d2_development_mode_still_requires_provider_verification" {
     })
   }
 
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_maintenance_pauses_execution_without_changing_the_activated_boundary" {
+  command = plan
+
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, { maintenance_mode = true })
+  }
+
+  assert {
+    condition = (
+      local.d2_community_enabled && !local.d2_community_operational &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_RUNTIME_ENABLED == "false" &&
+      aws_lambda_function.d2_trust_signal[0].environment[0].variables.D2_COMMUNITY_RUNTIME_ENABLED == "false" &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 0 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 0 &&
+      aws_cloudwatch_event_rule.d2_community_schedule[0].state == "DISABLED" &&
+      !aws_lambda_event_source_mapping.d2_trust_signal[0].enabled &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "false" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ROUTES_ENABLED == "false" &&
+      var.d2_community_runtime.scheduled_reserved_concurrency == 1 &&
+      var.d2_community_runtime.signal_reserved_concurrency == 2 &&
+      aws_lambda_event_source_mapping.d2_trust_signal[0].scaling_config[0].maximum_concurrency == 2
+    )
+    error_message = "Maintenance must pause both existing handlers, reservations, triggers and mutation/review gates while retaining valid configured concurrency."
+  }
+
+  assert {
+    condition = (
+      length(aws_lambda_function.d2_community_scheduled) == 1 &&
+      length(aws_lambda_function.d2_trust_signal) == 1 &&
+      length(aws_lambda_alias.d2_community_scheduled) == 1 &&
+      length(aws_lambda_alias.d2_trust_signal) == 1 &&
+      length(aws_iam_role.d2_community_scheduled) == 1 &&
+      length(aws_iam_role.d2_trust_signal) == 1 &&
+      length(aws_iam_role_policy.d2_community_scheduled) == 1 &&
+      length(aws_iam_role_policy.d2_trust_signal) == 1 &&
+      length(aws_sqs_queue.d2_trust_signal) == 1 &&
+      length(aws_sqs_queue.d2_trust_signal_dead_letter) == 1 &&
+      length(aws_cloudwatch_event_rule.d2_community_schedule) == 1 &&
+      length(aws_cloudwatch_event_target.d2_community_schedule) == 1 &&
+      length(aws_lambda_permission.d2_community_schedule) == 1 &&
+      length(aws_lambda_event_source_mapping.d2_trust_signal) == 1 &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 18 &&
+      length(aws_apigatewayv2_route.d2_contribution_policy) == 1 &&
+      length(aws_nat_gateway.ingestion_provider) == 1 &&
+      local.provider_private_egress &&
+      length(aws_subnet.ingestion_provider) == 2 &&
+      length(aws_cloudwatch_metric_alarm.d2_community_lambda_errors) == 2 &&
+      length(aws_cloudwatch_metric_alarm.d2_community_lambda_throttles) == 2 &&
+      length(aws_cloudwatch_metric_alarm.d2_community_lambda_duration) == 2 &&
+      length(aws_cloudwatch_metric_alarm.d2_community_application_failures) == 5 &&
+      length(aws_cloudwatch_metric_alarm.d2_trust_signal_queue_age) == 1 &&
+      length(aws_cloudwatch_metric_alarm.d2_trust_signal_dead_letter) == 1 &&
+      aws_lambda_function.d2_community_scheduled[0].s3_key == var.d2_community_runtime.artifact_s3_key &&
+      aws_lambda_function.d2_community_scheduled[0].s3_object_version == var.d2_community_runtime.artifact_s3_object_version &&
+      aws_lambda_function.d2_trust_signal[0].s3_key == var.d2_community_runtime.artifact_s3_key &&
+      aws_lambda_function.d2_trust_signal[0].s3_object_version == var.d2_community_runtime.artifact_s3_object_version &&
+      aws_sqs_queue.d2_trust_signal[0].message_retention_seconds == var.d2_community_runtime.queue_message_retention_seconds &&
+      aws_sqs_queue.d2_trust_signal_dead_letter[0].message_retention_seconds == var.d2_community_runtime.dead_letter_retention_seconds &&
+      aws_cloudwatch_event_rule.d2_community_schedule[0].schedule_expression == var.d2_community_runtime.schedule_expression
+    )
+    error_message = "Maintenance must retain all routes, queues, immutable artifact inputs, aliases, IAM, alarms, provider networking, and configured scheduling/retention."
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_PRIVATE_CAPTURE_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.OIDC_ISSUER == var.oidc_issuer &&
+      aws_lambda_function.gateway[0].environment[0].variables.OIDC_AUDIENCE == var.oidc_audience &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_community_runtime.trust_reviewer_assignments_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_EVIDENCE_ALLOWLIST_JSON == var.d2_community_runtime.trust_evidence_allowlist_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON == var.d2_community_runtime.signed_policy_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.UGC_CONTRIBUTION_POLICY_VERSION == var.d2_community_runtime.ugc_contribution_policy_version &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_ACTIVATION_ALLOWED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_community_runtime.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_community_runtime.provider_verification_registrations_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_community_runtime.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_TRUST_POLICY_VERSION == var.d2_community_runtime.trust_policy_version &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON == var.d2_community_runtime.signed_policy_json &&
+      aws_lambda_function.d2_trust_signal[0].environment[0].variables.D2_COMMUNITY_PROCESSING_POLICY_VERSION == var.d2_community_runtime.processing_policy_version &&
+      alltrue([for route in aws_apigatewayv2_route.d2_community_protected : route.authorization_type == "JWT"]) &&
+      toset(aws_apigatewayv2_route.d2_community_protected["POST /v1/jobs/contributions"].authorization_scopes) == toset(["jobs:contribute"]) &&
+      toset(aws_apigatewayv2_route.d2_community_protected["POST /v1/admin/trust/cases/{caseId}/appeal-resolution"].authorization_scopes) == toset(["trust:review", "trust:appeal:resolve"]) &&
+      toset(aws_apigatewayv2_route.d2_community_protected["GET /v1/saved-job-captures/{captureId}"].authorization_scopes) == toset(["jobs:read"])
+    )
+    error_message = "Maintenance must retain private captures, read-only policy, provider/Trust configuration, identity and exact authorization scopes without adding authority."
+  }
+}
+
+run "d2_development_maintenance_retains_unsigned_mode_and_provider_selection" {
+  command = plan
+
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      maintenance_mode                   = true
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse", "lever", "ashby"]
+      policy_endpoint_enabled            = false
+      signed_policy_json                 = ""
+      signed_public_keys_json            = ""
+    })
+  }
+
+  assert {
+    condition = (
+      local.d2_development_contributions_enabled && !local.d2_community_operational &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "false" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ROUTES_ENABLED == "false" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_PRIVATE_CAPTURE_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "lever", "ashby"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "lever", "ashby"]) &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON") &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_RUNTIME_ENABLED == "false" &&
+      aws_lambda_function.d2_trust_signal[0].environment[0].variables.D2_COMMUNITY_RUNTIME_ENABLED == "false" &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 0 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 0 &&
+      aws_cloudwatch_event_rule.d2_community_schedule[0].state == "DISABLED" &&
+      !aws_lambda_event_source_mapping.d2_trust_signal[0].enabled &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 18 &&
+      length(aws_apigatewayv2_route.d2_contribution_policy) == 0 &&
+      length(aws_nat_gateway.ingestion_provider) == 1
+    )
+    error_message = "Development maintenance must pause execution without removing persistent development mode, selected providers, routes, or networking."
+  }
+}
+
+run "d2_maintenance_false_restores_reviewed_execution_limits" {
+  command = plan
+
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      maintenance_mode               = false
+      scheduled_reserved_concurrency = 3
+      signal_reserved_concurrency    = 5
+    })
+  }
+
+  assert {
+    condition = (
+      local.d2_community_operational &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 3 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 5 &&
+      aws_lambda_event_source_mapping.d2_trust_signal[0].scaling_config[0].maximum_concurrency == 5 &&
+      aws_cloudwatch_event_rule.d2_community_schedule[0].state == "ENABLED" &&
+      aws_lambda_event_source_mapping.d2_trust_signal[0].enabled &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_RUNTIME_ENABLED == "true" &&
+      aws_lambda_function.d2_trust_signal[0].environment[0].variables.D2_COMMUNITY_RUNTIME_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ROUTES_ENABLED == "true" &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 18
+    )
+    error_message = "Leaving maintenance must restore exact configured bounds and existing triggers/routes, not hardcoded concurrency defaults."
+  }
+}
+
+run "d2_maintenance_alone_does_not_activate_or_deploy" {
+  command = plan
+
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      deploy                      = false
+      enabled                     = false
+      maintenance_mode            = true
+      policy_endpoint_enabled     = false
+      provider_activation_allowed = false
+      provider_private_egress     = false
+    })
+  }
+
+  assert {
+    condition = (
+      !local.d2_community_deployed && !local.d2_community_enabled && !local.d2_community_operational &&
+      length(aws_lambda_function.d2_community_scheduled) == 0 &&
+      length(aws_lambda_function.d2_trust_signal) == 0 &&
+      length(aws_sqs_queue.d2_trust_signal) == 0 &&
+      length(aws_cloudwatch_event_rule.d2_community_schedule) == 0 &&
+      length(aws_lambda_event_source_mapping.d2_trust_signal) == 0 &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 0 &&
+      length(aws_nat_gateway.ingestion_provider) == 0 &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_CONTRIBUTION_ROUTES_ENABLED")
+    )
+    error_message = "A maintenance preference alone cannot deploy, activate, or authorize any D2 capability."
+  }
+}
+
+run "d2_maintenance_keeps_live_d1_routes_and_workflow_triggers_available" {
+  command = plan
+
+  variables {
+    serverless_runtime_enabled                            = true
+    deploy_serverless_outbox                              = true
+    workflow_ingress_artifact_s3_key                      = "lambda/workflow-ingress.zip"
+    workflow_ingress_artifact_s3_object_version           = "ingress-version"
+    workflow_ingress_artifact_sha256                      = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    workflow_ingress_artifact_base64sha256                = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+    workflow_ingress_lambda_extension_layer_arn           = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+    deploy_profile_readiness_durable                      = true
+    profile_readiness_durable_artifact_s3_key             = "lambda/profile/durable.zip"
+    profile_readiness_durable_artifact_s3_object_version  = "durable-version"
+    profile_readiness_durable_artifact_sha256             = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    profile_readiness_durable_artifact_base64sha256       = "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
+    profile_readiness_activity_artifact_s3_key            = "lambda/profile/activity.zip"
+    profile_readiness_activity_artifact_s3_object_version = "activity-version"
+    profile_readiness_activity_artifact_sha256            = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    profile_readiness_activity_artifact_base64sha256      = "ZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGQ="
+    profile_readiness_lambda_extension_layer_arn          = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+    d2_community_runtime                                  = merge(var.d2_active_runtime_fixture, { maintenance_mode = true })
+  }
+
+  assert {
+    condition = (
+      var.serverless_runtime_enabled &&
+      length(aws_apigatewayv2_route.gateway) == 1 &&
+      length(aws_apigatewayv2_route.gateway_lambda_public) == 2 &&
+      aws_lambda_event_source_mapping.outbox_starter[0].enabled &&
+      aws_cloudwatch_event_rule.outbox_reconciler[0].state == "ENABLED" &&
+      aws_cloudwatch_event_rule.profile_readiness_terminal[0].state == "ENABLED" &&
+      aws_lambda_function.gateway[0].reserved_concurrent_executions == var.gateway_lambda_reserved_concurrency &&
+      aws_lambda_function.gateway[0].environment[0].variables.OUTBOX_DISPATCH_TARGET == "lambda_durable" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_PRIVATE_CAPTURE_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "false" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ROUTES_ENABLED == "false" &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 0 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 0
+    )
+    error_message = "D2 maintenance must not disable the D1 gateway, public health routes, outbox, profile workflows, or private captures."
+  }
+}
+
+run "d2_maintenance_still_rejects_invalid_configured_signal_concurrency" {
+  command = plan
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, { maintenance_mode = true, signal_reserved_concurrency = 1 })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_maintenance_still_rejects_invalid_configured_scheduled_concurrency" {
+  command = plan
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, { maintenance_mode = true, scheduled_reserved_concurrency = 0 })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_maintenance_still_requires_provider_registrations" {
+  command = plan
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, { maintenance_mode = true, provider_verification_registrations_json = "[]" })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_maintenance_still_requires_reviewer_assignments" {
+  command = plan
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, { maintenance_mode = true, trust_reviewer_assignments_json = "[]" })
+  }
   expect_failures = [var.d2_community_runtime]
 }

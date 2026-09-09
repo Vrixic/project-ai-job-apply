@@ -562,6 +562,7 @@ variable "d2_community_runtime" {
   type = object({
     deploy                                         = bool
     enabled                                        = bool
+    maintenance_mode                               = optional(bool, false)
     policy_endpoint_enabled                        = bool
     development_contributions_enabled              = optional(bool, false)
     development_contribution_providers             = optional(list(string), ["greenhouse"])
@@ -620,6 +621,7 @@ variable "d2_community_runtime" {
   default = {
     deploy                                         = false
     enabled                                        = false
+    maintenance_mode                               = false
     policy_endpoint_enabled                        = false
     development_contributions_enabled              = false
     development_contribution_providers             = ["greenhouse"]

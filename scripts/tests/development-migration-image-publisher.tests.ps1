@@ -13,7 +13,7 @@ foreach ($functionName in @(
     "Get-OptionalProperty", "Get-FileSha256", "Get-TextSha256",
     "Get-DockerBuildxPluginPath",
     "ConvertTo-CanonicalUtcWholeSecond", "ConvertFrom-PublicationReceiptJson",
-    "Resolve-OperatorPath", "Write-JsonFile",
+    "Resolve-OperatorPath", "Resolve-DockerAuthDirectory", "Write-JsonFile",
     "Invoke-AwsScanJson",
     "Assert-RepositoryShape", "Resolve-OciBlobPath", "Get-OciLayoutIdentity",
     "Assert-DeterministicOciIdentity", "Assert-RemoteOciImage", "Assert-PlatformHandoff",
@@ -27,6 +27,17 @@ foreach ($functionName in @(
       }, $true))
   if ($functions.Count -ne 1) { throw "$functionName must be defined exactly once." }
   Invoke-Expression $functions[0].Extent.Text
+}
+
+$terraformDirectory = Join-Path $repositoryRoot 'infrastructure/terraform/environments/development'
+$operatorRoot = Join-Path $terraformDirectory '.terraform/development-migration-image'
+$authFixture = Join-Path $operatorRoot ('docker-auth-' + ('a' * 32))
+if ((Resolve-DockerAuthDirectory $authFixture) -cne [IO.Path]::GetFullPath($authFixture)) { throw 'Exact generated Docker auth path rejected.' }
+foreach ($badPath in @($repositoryRoot, $operatorRoot, (Join-Path $operatorRoot 'docker-auth'),
+    (Join-Path $operatorRoot ('docker-auth-' + ('a' * 31))), (Join-Path $authFixture 'nested'),
+    (Join-Path $operatorRoot '../docker-auth-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))) {
+  try { $null = Resolve-DockerAuthDirectory $badPath; throw 'Unsafe Docker auth path accepted.' }
+  catch { if ($_.Exception.Message -ceq 'Unsafe Docker auth path accepted.') { throw } }
 }
 
 $account = "123456789012"

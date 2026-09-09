@@ -1812,8 +1812,8 @@ resource "aws_lambda_function" "gateway" {
       local.d2_development_contribution_environment,
       local.d2_community_enabled ? {
         D2_PRIVATE_CAPTURE_ROUTES_ENABLED   = "true"
-        D2_CONTRIBUTION_ROUTES_ENABLED      = "true"
-        D2_TRUST_REVIEWER_ROUTES_ENABLED    = "true"
+        D2_CONTRIBUTION_ROUTES_ENABLED      = tostring(local.d2_community_operational)
+        D2_TRUST_REVIEWER_ROUTES_ENABLED    = tostring(local.d2_community_operational)
         UGC_CONTRIBUTION_POLICY_VERSION     = var.d2_community_runtime.ugc_contribution_policy_version
         D2_TRUST_REVIEWER_ASSIGNMENTS_JSON  = var.d2_community_runtime.trust_reviewer_assignments_json
         D2_TRUST_EVIDENCE_ALLOWLIST_JSON    = var.d2_community_runtime.trust_evidence_allowlist_json

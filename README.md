@@ -92,9 +92,12 @@ the prior processing snapshot is not a current owner-state observation.
 All three reviewer assignments are bound: the workflow is case-opener-only, the distinct delegated
 agent can read and make initial/takedown decisions, and the separate human can read and resolve
 appeals. Exact human identity/MFA/scope checks and the user-confirmed empty local appeal-queue read
-pass. Hosted reviewer and actual reviewed-decision journey acceptance remain open; the agent's
-latest token exchange still fails at the existing Auth0 API client-access grant. Assignments and
-an empty human queue read do not constitute working agent token access or case decisions.
+pass. The corrected agent Client Access grant also passes on 2026-09-09: nine bounded authenticated
+requests read three initial-review cases with zero decisions. D2-039 implements fresh provider-proof
+refresh and monotonic publication; its coordinated 44-migration deployment is next. Hosted reviewer
+and actual reviewed-decision journeys remain open. Terraform's approved 1.16.2 transition advances
+state to 291 through sensitivity metadata only, with a fresh locked zero-change plan and unchanged
+application versions, budget values, reviewer assignments and provider scope.
 
 The [admin hosting boundary](frontend/admin/README.md#vercel-hosting-boundary) records the earlier
 protected presentation preview, not hosted Auth0 moderation acceptance. Other provider activation,

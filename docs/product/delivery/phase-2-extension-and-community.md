@@ -45,7 +45,7 @@ QA representativeness acceptance, and an updated kill-switch policy.
 ## Task register
 
 Latest verified development release: source `42b96861c1ad61a85d7b66a67b19065b338e9666`
-runs at state `290`, with Gateway/scheduled/Trust `55`/`17`/`13`, Jobs `0022`, 42 migrations,
+runs unchanged at state `291` after the toolchain-only reconciliation, with Gateway/scheduled/Trust `55`/`17`/`13`, Jobs `0022`, 42 migrations,
 68 relations, six migration owners and ten schemas. The fresh `2026-09-09T13:44:17Z` readback
 matches exact artifacts, environments, roles and reservations `2/1/2`; all 13 D2 alarms are OK,
 Trust queues are approximately empty, mapping concurrency is two, the schedule remains five
@@ -57,9 +57,12 @@ three-scope reviewer token supports nine bounded requests and reads three existi
 cases, with no next page, no role changes and zero decisions. Their provider evidence needs fresh
 verification before acceptance; D2-039 tracks the newly found refresh and ordering gaps. D2-040
 tracks Terraform 1.9.8's inability to enable the configured S3 state lock. The user has now approved
-the portable 1.16.2 transition: both binaries are verified and the isolated current development
-backend passes exact identity/encryption/locking checks. Integrated operator validation and a fresh
-locked plan remain next; no recovery IAM, restore or executor has been created. Installed
+the portable 1.16.2 transition, now completed under D2-040. Both binaries are verified, integrated
+checks pass, and actual refresh-backed S3-locked plans run successfully. State advances to `291`
+only to retain a sensitivity mark, with no resource-value change and a fresh zero-change plan.
+D2-039's maintenance configuration passes 93 Terraform tests; its coordinated operator passes 171
+assertions on both PowerShell hosts and an actual eight-update diagnostic plan. Source integration
+and deployment are next. No recovery IAM, restore or executor has been created. Installed
 sign-in/job-add acceptance remains distinct from publication.
 
 Preceding controlled-development release history (2026-09-05 through the 2026-09-08 reviewer
@@ -147,8 +150,8 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-036 | Add repeatable current-schema logical backup/restore coverage with nonempty D2 data. | Complete | Platform engineering | D2-020, D2-035 | Completed 2026-09-08 at 42 migrations; rerun successfully on September 9 against D2-039's 44-migration source. The generated-only command performs real dump/restore, matches all 68 relation row sets including 18 nonempty D2 relations, and verifies restored owner/lease/publication/authorization behavior with exact disposable-container cleanup. This is local logical recovery, not cloud restore or provider acceptance. See details below. |
 | D2-037 | Patch release-blocking dependency advisories surfaced by the current registry audit. | Complete | Platform engineering | D2-016, D2-035 | Compatible dependency repairs and exact Vercel patch packaging pass the full repository verifier and focused guards. Exact source `42b9686` is released to the existing candidate/admin Vercel targets and development AWS migration/Gateway/D2 workers. Migration exits 0 with seven success records; state 290 runs Gateway/scheduled/Trust 55/17/13 with zero drift, 13 healthy alarms and unchanged development scope. No audit exemptions or production/store activation. |
 | D2-038 | Bind candidate-deletion replay to an authenticated, isolated AWS restore target. | Implemented; cloud validation pending | Platform engineering | D2-020, D2-036 | Temporary private Lambda, dedicated default-off read-only cloud role, complete historical-marker/restored-owner/document preflight and restored-only reconciliation are implemented. The new internal schema binds the PowerShell operator and runtime; the old unsafe direct-URL/per-marker path is removed. Focused tests and real seven-owner PostgreSQL replay pass. Exact IAM activation, current structural PITR and cloud replay/cleanup remain separate; no primary database, cloud document, completion tag or Auth0 mutation is permitted in this drill. |
-| D2-039 | Refresh stale unpublished contribution evidence and prevent out-of-order catalog regression. | In progress; locally verified, release pending | Platform engineering | D2-006, D2-007, D2-019, D2-020 | Implemented in `fab4960`, with deterministic database-fixture follow-up `cc2fa23`: append-only verification generations, bounded pending-review recovery, exact decision/evidence binding, server freshness checks and monotonic canonical/source updates. Full repository verification and real PostgreSQL checks pass, including 91 Jobs tests, seven Trust tests and composed review/publication/appeal/withdrawal. Original submissions, evidence and reviewer separation remain intact; no resubmission or automatic case decision. Coordinated migration/runtime release and live fresh-evidence acceptance remain blocked by D2-040. |
-| D2-040 | Correct the deployment toolchain's remote-state locking incompatibility. | In progress | Platform engineering; product owner | D2-016, D2-038 | The user approved portable Terraform 1.16.2 and the deployment-skill update on 2026-09-09. Verified current/historical binaries are installed without replacing the system install. Current development backend initialization verifies the exact account/bucket/key/region/KMS and actual encrypted S3 locking; the retained state-290 plan remains readable and unchanged. Current-only operators, explicit historical readers and regression integration are being validated before a fresh locked plan. Provider locks and excluded GitHub Actions are unchanged; no resource apply. |
+| D2-039 | Refresh stale unpublished contribution evidence and prevent out-of-order catalog regression. | In progress; locally verified, release pending | Platform engineering | D2-006, D2-007, D2-019, D2-020 | Implemented in `fab4960`, with deterministic database-fixture follow-up `cc2fa23`: append-only verification generations, bounded pending-review recovery, exact decision/evidence binding, server freshness checks and monotonic canonical/source updates. Full repository verification and real PostgreSQL checks pass, including 91 Jobs tests, seven Trust tests and composed review/publication/appeal/withdrawal. Original submissions, evidence and reviewer separation remain intact; no resubmission or automatic case decision. D2-040 is resolved; coordinated migration/runtime release and live fresh-evidence acceptance are next. |
+| D2-040 | Correct the deployment toolchain's remote-state locking incompatibility. | Complete | Platform engineering; product owner | D2-016, D2-038 | Verified portable 1.16.2/current and 1.9.8/historical readers, exact encrypted S3 lock checks and 441 toolchain assertions on both PowerShell hosts pass. Full infrastructure/repository validation passes. Actual locked plans succeed; one exact equal-value sensitivity-only apply advances state 290 to 291, followed by zero changes. Application versions, budget values, provider locks, old evidence and excluded Actions are unchanged. D2-039's coordinated deployment and D2-038's approved drill remain separate. |
 | D2-041 | Include all implemented D2 owner data in the strict candidate-export contract. | Complete | Platform engineering | D2-017, D2-018, D2-020, D2-039 | Repository implementation completed 2026-09-09 in `fab4960`. Strict optional v1 sections now include existing authorizations, contributions/processing histories, private saved-page captures and Trust evidence, while preserving older D1 exports. The real seven-owner workflow test verifies full assembly, idempotency, isolation and redaction; the shared-schema regressions and full repository verifier pass. No additional SQL migration beyond D2-039. Release remains part of D2-039/D2-016; this row does not claim deployed export acceptance. |
 
 ### D2-039 — Fresh review evidence and monotonic catalog truth
@@ -182,7 +185,32 @@ Quiesce contribution processing and reviewer decisions before applying these mig
 release the coordinated Gateway/workers before resuming. Jobs `0023` removes the old singleton
 conflict target, so the previous verification writer cannot be rolled back onto this schema.
 Keep contributions disabled or use a forward-compatible binary. The current live release remains
-42 migrations at state 290; no new deployment or case decision is claimed.
+42 migrations; the toolchain-only transition advances state to 291 without changing application
+versions. No new application deployment or case decision is claimed.
+
+The new default-false `d2_community_runtime.maintenance_mode` is implemented and passes all 93
+platform Terraform tests, including nine new pause/resume/default/negative cases. It retains D2
+routes, queues, provider networking and assignments, disables the existing contribution/reviewer
+handler flags and worker flags, disables the schedule/mapping, and sets both worker reservations
+to zero. D1 and Matching/Profile-owned private capture remain available. Both old handlers check
+their existing disabled flags before database/provider setup. Current-source module, development
+and staging validation pass; provider locks are unchanged.
+
+The [coordinated operator](../../../scripts/operate-development-d2-runtime-release.ps1) now verifies disabled aliases and requires a running-work drain before SQL,
+keeps the workers paused through migration and compatible artifact deployment, and preserves the
+pre-cutoff Lambda async retention horizon before resume. For this exact alias-only ingress, use
+the existing six-hour async bound plus old runtime/settling margin, not only one Lambda timeout.
+No queued contribution/signal or historical function version is deleted. This configuration and
+procedure are not yet a deployed pause or a completed migration.
+
+All 171 generated operator assertions pass on both PowerShell hosts, and independent review passes.
+The real diagnostic Pause plan contains exactly eight updates, no creation/deletion and no changed
+sensitivity markings. It is a pre-integration diagnostic, not an applyable release handoff. Native
+readback identified the exact alias-qualified event-mapping lookup; tests now model AWS's empty
+unqualified result and reject unexpected numeric-version mappings. Configuration-only Lambda plans
+retain `last_modified`, unlike code-release plans; both transition-specific unknown shapes are tested.
+Genuine apply-attempt/applied receipts bind the actual state serial, and any Resume attempt consumes
+its pause cutoff before mutation, including partial failure. No automatic retry or resume is claimed.
 
 The generated current-source logical recovery run passes 44 migration applications/replays,
 68 exact relation row sets (18 nonempty D2 relations), provider leases/publication replays,
@@ -221,14 +249,31 @@ nondefault workspaces, current-command version drift and unlocked or mismatched 
 
 The new isolated `development-d2-toolchain-data` backend initializes successfully using the exact
 retained S3 bucket/key/region/KMS and explicit `encrypt=true`/`use_lockfile=true`; fresh STS verifies
-the development account. This proves effective configuration, not yet actual lock acquisition.
+the development account. Actual full-environment refresh-backed plans then succeed with locking.
 The retained state-290 plan decodes through the explicit read-only 1.9.8 fallback and its SHA-256
 remains `66eb4747de80b18d3d213104b0bb7c3bbccb5ee8d823323dbda70128551296fd`.
-Current apply readers accept only 1.16.2 plans. Complete integrated validation and reconstruct exact
-reviewed inputs for a fresh locked plan; never relabel historical receipts. Provider versions,
-provider locks, historical files and excluded GitHub Actions stay unchanged. No resource apply,
-recovery role or executor has run. The already approved development recovery drill needs no renewed
-approval.
+Current apply readers accept only 1.16.2 plans. The three toolchain suites pass 441 assertions on
+both PowerShell 7 and Windows PowerShell 5.1; the full maintained infrastructure validation and
+repository verifier pass. The historical seed may omit only the new default-off restore-role
+variable. A native-plan follow-up handles Terraform's raw `TF_VAR` boolean string representation
+for that exact flag without changing its effective value or relaxing any other input comparison;
+the actual capture-helper regressions pass on both shells.
+
+The first current plan reports only a sensitivity-mark update to the existing budget notification:
+all before/after resource values are identical, there are no unknowns or output changes, and the
+only provider-observed drift is the advancing RDS restorable clock. Terraform's exact
+[1.16.2 apply implementation](https://github.com/hashicorp/terraform/blob/v1.16.2/internal/terraform/node_resource_abstract_instance.go#L2438-L2455)
+persists equal-value sensitivity changes without calling the provider's resource-update method.
+The reviewed saved plan `66899499f6411b3a01126cf9e42499aea2f02e224c8a167b97b395b99648f480`
+applies with locking, advancing state `290` to `291` with zero resource-value changes. The fresh
+locked follow-up exits 0, with no resource changes (plan
+`edaf6510788f49f97e7fa76507264b5e7c8ff9eeec76a8da29fcfdab3bb584b2`). A refresh-only diagnostic was
+not applied because it would not persist the required configuration sensitivity mark.
+
+D2-040/R18 are closed. Provider versions/locks, historical files, budget settings, application
+versions and excluded GitHub Actions remain unchanged. No recovery role or executor has run;
+the already approved development recovery drill needs no renewed approval. Capture a new
+source-bound schema-7 handoff after integrating the coordinated deployment operators.
 
 ### D2-041 — Complete candidate-data export coverage
 
@@ -355,6 +400,13 @@ and its inline policy) and two endpoint-policy updates. Existing runtime, provid
 primary database and migration-endpoint configuration must remain unchanged. The historical
 rights-only bootstrap operator does not support this new delta; use reviewed saved plans with
 the exact new flag and semantic scope, then reverse only these drill-specific changes at cleanup.
+
+The dedicated [restore-role transition operator](../../../scripts/operate-development-deletion-restore-role.ps1)
+now implements exact Bootstrap/Platform Enable/Disable plans, apply-attempt and post-apply state
+bindings, live permission readback, and original cleanup evidence before removing used permissions.
+Its 210 generated assertions pass independently and on both PowerShell hosts. A genuine unused
+setup can be rolled back without fabricating completed-drill evidence; partial applies require
+separate recovery inspection. This tooling is implemented, not yet a role activation or cloud replay.
 
 ### D2-035 — Complete multi-provider development contributions
 
@@ -830,6 +882,11 @@ Management API, grant change, new credential or human session was used. The new 
 D2-039's stale-evidence repair and D2-040's effective state-locking correction. No recovery IAM,
 restore or executor was created. Preserve the earlier records as history, not current blockers.
 
+The subsequent approved toolchain transition completes D2-040/R18 at state `291`, with actual
+locked planning, an equal-value sensitivity-only state update and a fresh zero-change plan.
+No new reviewer grant or toolchain approval is needed. D2-039's coordinated 44-migration deployment
+and D2-038's exact temporary-role activation/recovery/cleanup are the current engineering work.
+
 Independent read-only release preparation confirms state `287`, exact Gateway/scheduled/Trust
 versions `54`/`16`/`12`, unchanged Greenhouse-only source/verification registrations and all three
 reviewer assignments, RDS backup coverage, and zero ECS tasks/services. Current-source release
@@ -848,7 +905,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Owner processing state through website publication | Application source `42b9686` is deployed at state `290`, with all three reviewer assignments preserved and unchanged two-way Trust concurrency. The prior owner-processing snapshot cleared both provider-verification holds and recorded both items parked and unpublished; this rollout did not refresh authenticated owner state. | Refresh the existing owner receipt's Processing and Trust state, then review independently verified cases through the separately bound delegated initial/takedown agent and human appeal reviewer. Both identities are now bound; the user-confirmed local human queue read passes, while hosted reviewer and appeal-decision journey acceptance remain open under D2-030. Do not infer a particular Trust status from aggregate parking counts, resubmit acknowledged jobs, delete account-held items, or bypass Trust. |
 | Delegated initial/takedown review and human appeal acceptance | All three server-side assignments remain unchanged at state `290`. Exact three-scope agent authentication and the three-case initial queue read now pass on 2026-09-09; R16 is Closed. The private human identity/fresh-MFA/two-scope check and user-confirmed empty local appeal-queue read pass on 2026-09-08. | Complete D2-039, obtain fresh independent evidence for the existing cases, and make only supported version-bound decisions. Then complete hosted reviewer and separate human appeal acceptance. Do not manufacture a case, resubmit a contribution, borrow the human session or accept stale evidence. |
 | Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. Both providers remain disabled in development. | Acquire representative provider-derived fixtures, complete sanitization/scanning and separate QA acceptance, then activate exact development registrations. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
-| Current-schema deployed recovery | Historical AWS PITR covers 39 migrations; development remains at 42/68. D2-036 proves current-source local logical recovery at 44/68; D2-038's executor passes real seven-owner replay locally and its development drill is authorized. D2-039's two new forward migrations require a coordinated release. | Resolve D2-040's toolchain/locking incompatibility first; regenerate exact version-compatible plans without changing historical receipts. Review and activate only the approved role/endpoint scope, then run structural PITR and marker/owner-bound replay against the actually deployed migration boundary. Writes remain confined to restored rows; clean up exact temporary resources. |
+| Current-schema deployed recovery | Historical AWS PITR covers 39 migrations; development remains at 42/68. D2-036 proves current-source local logical recovery at 44/68; D2-038's executor passes real seven-owner replay locally and its development drill is authorized. D2-040's locking correction is complete. | Complete D2-039's coordinated migration, capture a fresh current-source baseline, and activate only the approved temporary role/endpoint scope. Run structural PITR and marker/owner-bound replay against the actually deployed boundary, then remove exact temporary resources and restore-role authority. Writes remain confined to restored rows. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
 | Authenticated load and abuse acceptance | Paced public-policy and unauthenticated-boundary workload passed. The separate paused-intake and active-processing-to-review runners pass 26 synthetic regressions, with exact-run cancellation/withdrawal/revocation and explicit ambiguous recovery. | Use explicitly scoped disposable authenticated candidates for a bounded development workload and exact-window server aggregates. The active runner follows the existing five-minute schedule, never approves a case, and is not throughput/publication acceptance. No production traffic, raw tokens, personal payloads, or invented provider truth. |
@@ -1010,8 +1067,31 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-09 | Integrated `fab4960` and `cc2fa23` directly on shared `main`, with no new branches. D2-039's evidence refresh, explicit provider basis and monotonic publication and D2-041's strict full export are implemented. Final root PostgreSQL integration passes 136/136 with seven opt-in tests separately passing as composed lifecycle 2/2, export/deletion 4/4 and cancellation 1/1. Logical recovery passes 44 migrations and 68 exact row sets; 296 restore-operator assertions and the full repository verifier pass. Fixed current migration expectations, startup ordering and bounded multi-page test queue inspection rather than relaxing runtime checks. Disposable resources were removed and Docker/WSL stopped. No cloud write, case decision, provider expansion, credential change or GitHub Actions edit. | D2-016, D2-020, D2-036, D2-039, D2-041 | [Refresh database regressions](../../../backend/services/jobs/src/persistence/contribution-refresh.integration.test.ts), [full export regression](../../../backend/workflows/src/candidate-deletion-restore-store.integration.test.ts), [maintained recovery command](../../../scripts/tests/d2-recovery/run.mjs), [repository verifier](../../../scripts/verify-phase0.ps1) |
 | 2026-09-09 | Final maintained infrastructure validation passes against committed source, including current 44-migration publisher/restore guards and all D2 operator/public/authenticated-runner checks. The final handoff requests only correction of the deployment skill's incompatible Terraform pin under D2-040; reviewer access and recovery-drill authority are already resolved. Local verification does not claim fresh hosted, provider, recovery or production acceptance. | D2-016, D2-038–D2-041; D2-R18 | [Maintained validation commands](../../../package.json), [effective-locking blocker](#d2-040--effective-s3-state-locking) |
 | 2026-09-09 | User approved the exact portable Terraform 1.16.2 transition. Updated the deployment skill, local constraints and operator boundaries while preserving old readers and excluded Actions. Both current/historical archives pass official signature and pinned checksum verification; the old state-290 plan reads without changing its hash. Fresh exact-account backend initialization in an isolated data directory passes encrypted S3 locking and exact identity checks; integrated tests and an actual locked plan remain next. No cloud resource apply or personal toolchain/keyring overwrite. | D2-040; D2-R18 | [Toolchain implementation and state](#d2-040--effective-s3-state-locking), [shared guard regressions](../../../scripts/tests/terraform-toolchain.tests.ps1), [composed peripheral regressions](../../../scripts/tests/peripheral-terraform-toolchain.tests.ps1) |
+| 2026-09-09 | Completed D2-040's approved toolchain transition: 441 assertions pass on both PowerShell hosts, full infrastructure/repository checks pass, and actual locked refresh-backed plans succeed. Applied only equal-value sensitivity metadata through Terraform's no-provider-update path, moving state 290 to 291; a fresh plan exits 0. Fixed the exact raw-TF_VAR boolean representation in capture helpers, with both-host regressions. D2-039 maintenance configuration adds no resources by default and passes 93 platform tests; coordinated operators remain under implementation on shared main. No budget value, application version, provider scope, reviewer role, historical artifact, GitHub Action or Docker/WSL state changed. | D2-039, D2-040; D2-R18 | [Toolchain result](#d2-040--effective-s3-state-locking), [maintenance implementation](../../../infrastructure/terraform/modules/platform/community-runtime.tf), [migration ordering](../../../infrastructure/runbooks/deployments/database-migration.md) |
+| 2026-09-09 | Finished shared-main coordinated runtime and dedicated restore-role tooling with no new branches. Runtime tests pass 171 assertions on both hosts; restore-role tests pass 210 and independent review. Native readback exposed root/module input and qualified event-mapping differences, now covered by generated regressions. The real Pause diagnostic passes exactly eight updates with no creates/deletes. Added exact generated-directory validation before migration-publisher Docker-auth cleanup; publisher tests pass on both hosts. The full infrastructure gate correctly refused the still-uncommitted Terraform source and must rerun after integration. No application, migration, role or restore apply. | D2-038, D2-039 | [Runtime operator tests](../../../scripts/tests/development-d2-runtime-release.tests.ps1), [restore-role tests](../../../scripts/tests/development-deletion-restore-role.tests.ps1), [migration publisher](../../../scripts/publish-development-migration-image.ps1) |
 
 ## Decisions and scope changes
+
+For the D2-040 follow-up on 2026-09-09, reconcile only the saved plan's sensitivity metadata after
+confirming full resource-value equality and Terraform 1.16.2's provider-call bypass for that exact
+case. Do not declassify data, ignore changes, rewrite state manually, apply the refresh-only
+diagnostic, or alter budget settings. Recognize only literal boolean/`true`/`false` representations
+for the new restore-role input because Terraform retains raw `TF_VAR` strings in plan JSON;
+all other input comparisons remain exact. The reviewed apply and zero-change readback close R18.
+
+For D2-039's coordinated rollout, prefer a default-off maintenance switch over removing runtime
+activation. This preserves queues, IAM, network, provider and reviewer settings and keeps D1/private
+capture available. Old immutable versions keep their old code and environment, so zero reservations
+must persist through the existing async-retention horizon after verified disabled-alias cutover.
+Keep this six-hour-plus-runtime fence rather than delete historical versions or assume that a
+new retry setting purges accepted work. Database changes and new artifacts may be installed while
+paused after running invocations drain; resume only the compatible release. For this rollout, run
+the migration near or after the retirement deadline so its stopped ECS task remains independently
+describable during resume; AWS guarantees that readback for at least one hour, not the full six-hour
+wait. Preserve the original pause receipt across reviewed descendant source releases; any
+out-of-band alias, trigger or reservation mutation invalidates its cutoff and requires a fresh
+full-window pause. Metrics alone cannot establish uninterrupted fencing. These are deployment
+mechanics, not a new user-facing contribution-policy renewal requirement.
 
 For D2-039 on 2026-09-09, refresh stale unpublished initial-review evidence through the existing
 bounded scheduler and append new independent provider proof. Preserve the submitted preview and
@@ -1168,10 +1248,10 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R12 | Open; hosted reviewer and appeal-decision journey acceptance pending | The private exact identity/fresh-MFA/two-scope check passes on 2026-09-08. The authorized human appeal/read assignment was deployed at state `285` with exact readback and zero drift, preserving both machine identities and the then-expired policy. All three reviewer assignments are unchanged at current state `287`; D2-033 now uses persistent development mode. The user confirms the signed-in local console successfully loads an empty appeal queue; local identity setup and read access are no longer blockers. The local-only window ended at `2026-09-08T13:38:16Z`; the assignments remain preserved at state `287`. | Product owner; platform engineering | Complete hosted reviewer and appeal-decision journey acceptance under separately scoped testing. Do not manufacture a case or submit a decision merely to test access. D2-033 separately removes contribution-policy renewal without changing reviewer authentication or roles. |
 | D2-R13 | Closed | The expired mobile-only exception blocked initial publication attempts. The exact user-approved parser patch passes 136 focused tests, independent review, frozen installation, the full repository verifier, and the dependency audit without exceptions. Two matching no-cache migration-image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings now pass; that image was published and used successfully. | Platform engineering | Maintain the exact local patch until a compatible upstream fix is verified. No mobile/public-launch acceptance is implied. |
 | D2-R14 | Closed | The user confirmed reuse of the existing encrypted agent-reviewer credential on 2026-09-08 for the remaining Phase 2 development initial/takedown work. Private current-user access, unchanged encrypted bytes, and the live exact assignment pass. The historical collection window remains unchanged; the subsequent Auth0 refusal is separately tracked as R16. | Product owner; platform engineering | Preserve the existing roles and separate human appeal reviewer. No recurring contribution-policy approval or new secret is required for this unchanged assignment; do not borrow another identity, expand roles, or submit unsupported decisions. |
-| D2-R15 | Closed | Exact development account/temporary SSO caller verification passes at `2026-09-09T13:42:25Z` after renewal. No recovery cloud mutation has run. | Product owner; platform engineering | Recheck current authority at the actual cloud operation. D2-R18, not SSO, is the present infrastructure blocker. Preserve Greenhouse-only activation and reviewer separation. |
+| D2-R15 | Closed | Exact development account/temporary SSO caller verification passes at `2026-09-09T13:42:25Z` after renewal and at the subsequent toolchain transition. No recovery cloud mutation has run. | Product owner; platform engineering | Recheck current authority at the actual cloud operation. D2-R18 is also resolved; continue coordinated release/recovery while preserving Greenhouse-only activation and reviewer separation. |
 | D2-R16 | Closed | The corrected existing Client Access grant passes exact three-scope authentication at `2026-09-09T13:44:24Z`; nine bounded requests read three initial-review cases and their evidence, with no next page or decisions. No grant, role, credential, Management API or human-session operation was performed. | Product owner; platform engineering | Keep the unchanged least-privilege assignment. D2-039 must refresh stale proof before supported review/publication; hosted and separate human appeal acceptance remain open. No further screenshot or new secret is needed for the resolved grant. |
 | D2-R17 | Closed; isolated drill authorized | The user explicitly approved the development-only recovery role, one isolated restore/replay drill and exact cleanup on 2026-09-09. No activation plan, current 42-migration cloud restore or restore-only replay has yet run; execution remains tracked by D2-038. | Product owner; platform engineering | After R15 is resolved, prepare/review/apply only the exact drill plans. Preserve the primary database, cloud document objects, completion tags, retention and Auth0. Clean up the exact temporary Lambda and restored database and deactivate drill-only permissions afterward. Do not request the same approval again or expand it to other environments or candidate mutations. |
-| D2-R18 | Open; correction authorized and installed | User approval resolves the old skill pin. Verified portable 1.16.2 and historical 1.9.8 are installed, and the isolated current development backend passes exact encrypted S3-lock configuration checks. No resource apply has run. | Platform engineering | Finish integrated operator validation and an actual fresh locked plan before closing this implementation risk. Preserve historical readers/receipts and provider locks; do not bypass locking, change GitHub Actions or request the resolved approval again. |
+| D2-R18 | Closed | Verified portable 1.16.2, historical read-only decoding, effective encrypted S3 locking, 441 two-host toolchain assertions and full infrastructure/repository checks pass. Exact sensitivity-only reconciliation advances state to 291 without resource-value changes; fresh locked planning exits 0. | Platform engineering | Use fresh source-bound handoffs for D2-039/D2-038. Preserve historical plans, provider locks and excluded Actions; no further toolchain approval is needed. |
 
 ## Completion record
 
@@ -1190,8 +1270,10 @@ These are local checks; deployed migration, human review, and publication eviden
   accepted provider basis and monotonic publication, and complete D2-041's strict candidate export.
   Full repository verification, real database regressions and current-source 44-migration logical
   recovery pass. These changes are not yet deployed. D2-033/D2-034/D2-036/D2-037 remain Complete;
-  D2-038's authorized cloud drill and D2-039's coordinated release require D2-040's effective-locking
-  toolchain correction first. Historical AWS PITR covers 39 migrations, not live 42 or new source 44.
+  D2-040's effective-locking correction is Complete: exact sensitivity metadata advances state to
+  291 with zero resource-value changes and a fresh locked zero-change plan. D2-039's maintenance
+  configuration passes 93 Terraform tests; coordinated deployment/recovery operators are being
+  integrated for D2-038/D2-039. Historical AWS PITR covers 39 migrations, not live 42 or new source 44.
 - Remaining acceptance: installed job addition is not provider/Trust approval or website publication.
   Hosted reviewer/appeal decisions, browser lifecycle, authenticated workload, accessibility,
   alarm delivery receipt, other provider/store and accountable acceptance remain open. Engineering

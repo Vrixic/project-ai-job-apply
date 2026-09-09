@@ -397,7 +397,7 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
   . (Join-Path $repositoryRoot "scripts/lib/deployment-operator-guards.ps1")
   . (Join-Path $repositoryRoot "scripts/lib/development-document-dark-guards.ps1")
   . (Join-Path $repositoryRoot "scripts/lib/development-gateway-release-guards.ps1")
-  foreach ($functionName in @("Get-GatewayCaptureSeedInputs", "Assert-GatewayCapturedSeedInputs",
+  foreach ($functionName in @("ConvertTo-GatewayCaptureRestoreFlag", "Get-GatewayCaptureSeedInputs", "Assert-GatewayCapturedSeedInputs",
       "Set-VariablesFromPlan", "Save-AndClearTerraformVariables", "Restore-TerraformVariables")) {
     $definitions = @($ast.FindAll({
           param($node)
@@ -476,7 +476,7 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
   $current.variables | Add-Member -NotePropertyName $restoreFlag -NotePropertyValue ([pscustomobject]@{ value = $false })
   Assert-GatewayCapturedSeedInputs $historical $current $declaredVariables
   foreach ($version in @("1.9.8", "1.16.2")) {
-    foreach ($enabled in @($false, $true)) {
+    foreach ($enabled in @($false, $true, "false", "true")) {
       $complete = Copy-CaptureFixture $current
       $complete.terraform_version = $version
       $complete.variables.$restoreFlag.value = $enabled
@@ -485,9 +485,18 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
       $captured = Copy-CaptureFixture $complete
       $captured.terraform_version = "1.16.2"
       Assert-GatewayCapturedSeedInputs $complete $captured $declaredVariables
+      # Native TF_VAR plans retain the raw string, even for a declared bool.
+      $captured.variables.$restoreFlag.value = ([string]$enabled).ToLowerInvariant()
+      Assert-GatewayCapturedSeedInputs $complete $captured $declaredVariables
+      $captured.variables.$restoreFlag.value = -not (ConvertTo-GatewayCaptureRestoreFlag $enabled)
+      Assert-Rejected { Assert-GatewayCapturedSeedInputs $complete $captured $declaredVariables } `
+        "A boolean representation change silently changed the effective restore flag."
     }
   }
-  foreach ($invalid in @($null, "false", "true", 0, 1, [pscustomobject]@{}, [object[]]@($false))) {
+  $rawCurrent = Copy-CaptureFixture $current
+  $rawCurrent.variables.$restoreFlag.value = "false"
+  Assert-GatewayCapturedSeedInputs $historical $rawCurrent $declaredVariables
+  foreach ($invalid in @($null, "False", "True", " false", "false ", "0", "1", "yes", "", 0, 1, [pscustomobject]@{}, [object[]]@($false))) {
     $bad = Copy-CaptureFixture $current
     $bad.variables.$restoreFlag.value = $invalid
     Assert-Rejected { Get-GatewayCaptureSeedInputs $bad $declaredVariables } "A nonboolean restore-role seed value was accepted."
@@ -521,11 +530,11 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
     Assert-Rejected { Assert-GatewayCapturedSeedInputs $historical $bad $declaredVariables } `
       "The captured baseline silently changed a retained or reconstructed input."
   }
-  foreach ($value in @($true, $null, "false", [object[]]@($false))) {
+  foreach ($value in @($true, $null, "true", "False", [object[]]@($false))) {
     $bad = Copy-CaptureFixture $current
     $bad.variables.$restoreFlag.value = $value
     Assert-Rejected { Assert-GatewayCapturedSeedInputs $historical $bad $declaredVariables } `
-      "The captured historical-upgrade baseline did not retain explicit boolean false."
+      "The captured historical-upgrade baseline did not retain exact effective boolean false."
   }
   $bad = Copy-CaptureFixture $current
   $bad.variables.PSObject.Properties.Remove($restoreFlag)

@@ -411,6 +411,15 @@ function Set-VariablesFromPlan {
     $env:TF_VAR_gateway_lambda_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
   }
 }
+function ConvertTo-GatewayCaptureRestoreFlag {
+  param([AllowNull()][object]$Value)
+  if ($Value -is [bool]) { return $Value }
+  # Terraform's plan JSON retains raw TF_VAR input strings before its declared
+  # boolean conversion. Accept only these exact representations, never truthiness.
+  if ($Value -is [string] -and $Value -ceq "false") { return $false }
+  if ($Value -is [string] -and $Value -ceq "true") { return $true }
+  throw "The retained restore role flag must be an exact boolean input."
+}
 function Get-GatewayCaptureSeedInputs {
   param([Parameter(Mandatory)][object]$Seed, [Parameter(Mandatory)][string[]]$DeclaredVariableNames)
   $restoreFlag = "candidate_deletion_restore_role_enabled"
@@ -432,9 +441,8 @@ function Get-GatewayCaptureSeedInputs {
     $defaults[$restoreFlag] = $false
   } else {
     $restoreValue = $restoreProperty.Value.PSObject.Properties["value"]
-    if ($null -eq $restoreValue -or $restoreValue.Value -isnot [bool]) {
-      throw "The retained restore role flag must be an explicit boolean."
-    }
+    if ($null -eq $restoreValue) { throw "The retained restore role flag value is missing." }
+    $null = ConvertTo-GatewayCaptureRestoreFlag $restoreValue.Value
   }
   $null = Assert-RetainedGatewayBaselinePlan $Seed $seedDeclared
   return [pscustomobject]@{ SeedDeclaredVariableNames = $seedDeclared; DefaultVariables = $defaults }
@@ -461,6 +469,10 @@ function Assert-GatewayCapturedSeedInputs {
     $capturedValue = $Captured.variables.PSObject.Properties[$name].Value.PSObject.Properties["value"]
     if ($null -eq $capturedValue) { throw "The captured baseline variable value is missing." }
     $actual = $capturedValue.Value
+    if ($name -ceq "candidate_deletion_restore_role_enabled") {
+      $expected = ConvertTo-GatewayCaptureRestoreFlag $expected
+      $actual = ConvertTo-GatewayCaptureRestoreFlag $actual
+    }
     if ((ConvertTo-GatewayCanonicalJson $actual) -cne (ConvertTo-GatewayCanonicalJson $expected)) {
       throw "The captured baseline changed a retained or reconstructed variable value."
     }
