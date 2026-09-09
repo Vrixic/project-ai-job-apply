@@ -954,7 +954,142 @@ test("persistent development processing needs no signed policy, key, or policy r
   );
 });
 
-test("development workload mode is explicit, processing-only, and exact Greenhouse scope", async () => {
+const DEVELOPMENT_SOURCES = [
+  {
+    provider: "greenhouse",
+    pageVariant: "greenhouse-board-v1",
+    sourceUrl: "https://boards.greenhouse.io/synthetic/jobs/12345",
+    externalJobId: "12345",
+  },
+  {
+    provider: "greenhouse",
+    pageVariant: "greenhouse-board-v1",
+    sourceUrl: "https://job-boards.greenhouse.io/synthetic/jobs/12345",
+    externalJobId: "12345",
+  },
+  {
+    provider: "lever",
+    pageVariant: "lever-posting-v1",
+    sourceUrl: "https://jobs.lever.co/synthetic/01234567-89ab-4cde-8fab-0123456789ab",
+    externalJobId: "01234567-89ab-4cde-8fab-0123456789ab",
+  },
+  {
+    provider: "lever",
+    pageVariant: "lever-posting-v1",
+    sourceUrl: "https://jobs.eu.lever.co/synthetic/01234567-89ab-4cde-8fab-0123456789ab",
+    externalJobId: "01234567-89ab-4cde-8fab-0123456789ab",
+  },
+  {
+    provider: "ashby",
+    pageVariant: "ashby-job-board-v1",
+    sourceUrl: "https://jobs.ashbyhq.com/synthetic/01234567-89ab-4cde-8fab-0123456789ab",
+    externalJobId: "01234567-89ab-4cde-8fab-0123456789ab",
+  },
+];
+
+function setSource(f, source) {
+  Object.assign(f.scope.preview.source, source);
+  f.scope.previewSha256 = approvedPreviewDigest(f.scope.preview);
+}
+
+test("development processing supports every exact descriptor tuple without changing cleanup or policy mode", async () => {
+  for (const source of DEVELOPMENT_SOURCES) {
+    const f = fixture({ processing: true, development: true });
+    setSource(f, source);
+    const result = await runDevelopmentD2AuthenticatedIntake(f.options, f.dependencies);
+    assert.equal(result.passed, true, source.sourceUrl);
+    assert.equal(result.processingToReviewObserved, true);
+    assert.equal(result.acknowledgedContributions, 1);
+    assert.equal(result.idempotentReplays, 1);
+    assert.equal(result.expectedConflicts, 1);
+    assert.equal(result.cleanupSucceeded, true);
+    assert.equal(result.cleanupWithdrawals, 1);
+    assert.equal(result.cleanupRevocations, 2);
+    assert.equal(result.recoveryRequired, false);
+    assert.equal(result.moderationAcceptance, false);
+    assert.equal(result.publicationAcceptance, false);
+    assert.ok(result.requests <= PROCESSING_LIMITS.maximumRequests);
+    const writes = f.calls.filter((call) => call.path === "/v1/jobs/contributions");
+    assert.ok(writes.length > 0);
+    for (const write of writes) {
+      assert.deepEqual(write.body.source, f.scope.preview.source);
+      assert.deepEqual(write.body.client, { surface: "browser_extension", version: "0.2.0" });
+    }
+    assert.equal(
+      f.calls.some(
+        (call) => call.path.includes("capability-policy") || call.path.includes("/admin/"),
+      ),
+      false,
+    );
+    const retained = JSON.stringify(result);
+    for (const forbidden of [source.sourceUrl, SUBJECT, ISSUER, ORIGIN, PUBLIC_MARKER, jwt()])
+      assert.equal(retained.includes(forbidden), false);
+  }
+});
+
+test("development descriptor mismatches and unsupported client or adapter fail before networking", async () => {
+  for (const source of DEVELOPMENT_SOURCES) {
+    for (const mutate of [
+      (scope) => {
+        scope.preview.source.provider = source.provider === "lever" ? "ashby" : "lever";
+      },
+      (scope) => {
+        scope.preview.source.provider = "unknown";
+      },
+      (scope) => {
+        scope.preview.source.pageVariant =
+          source.pageVariant === "lever-posting-v1" ? "ashby-job-board-v1" : "lever-posting-v1";
+      },
+      (scope) => {
+        const url = new URL(source.sourceUrl);
+        url.hostname = source.provider === "lever" ? "jobs.ashbyhq.com" : "jobs.lever.co";
+        scope.preview.source.sourceUrl = url.href;
+      },
+      (scope) => {
+        const url = new URL(source.sourceUrl);
+        url.hostname += ".invalid";
+        scope.preview.source.sourceUrl = url.href;
+      },
+      (scope) => {
+        scope.preview.client.version = "0.3.0";
+      },
+      (scope) => {
+        scope.preview.source.adapterVersion = "d2-job-page-v2";
+      },
+    ]) {
+      const f = fixture({ processing: true, development: true });
+      setSource(f, source);
+      mutate(f.scope);
+      f.scope.previewSha256 = approvedPreviewDigest(f.scope.preview);
+      await assert.rejects(() => runDevelopmentD2AuthenticatedIntake(f.options, f.dependencies));
+      assert.equal(f.calls.length, 0);
+    }
+  }
+});
+
+test("additional provider tuples retain exact preview approval and signed-mode policy fences", async () => {
+  for (const source of DEVELOPMENT_SOURCES.filter((value) => value.provider !== "greenhouse")) {
+    const stale = fixture({ processing: true, development: true });
+    Object.assign(stale.scope.preview.source, source);
+    await assert.rejects(() =>
+      runDevelopmentD2AuthenticatedIntake(stale.options, stale.dependencies),
+    );
+    assert.equal(stale.calls.length, 0);
+
+    const signed = fixture({ processing: true });
+    setSource(signed, source);
+    const result = await runDevelopmentD2AuthenticatedIntake(signed.options, signed.dependencies);
+    assert.equal(result.passed, false);
+    assert.equal(result.acknowledgedContributions, 0);
+    assert.ok(signed.calls.some((call) => call.path.includes("capability-policy")));
+    assert.equal(
+      signed.calls.some((call) => call.init.method !== "GET"),
+      false,
+    );
+  }
+});
+
+test("development workload mode is explicit, processing-only, and exact descriptor scope", async () => {
   for (const mutate of [
     (scope) => {
       scope.capabilityMode = "production";

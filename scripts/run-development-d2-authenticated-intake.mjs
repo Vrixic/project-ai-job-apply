@@ -4,6 +4,7 @@ import {
   evaluateContributionCapability,
   verifySignedContributionCapabilityPolicy,
 } from "../backend/services/jobs/dist/src/contribution-capability-policy.js";
+import { DEVELOPMENT_CONTRIBUTION_CAPABILITIES } from "../backend/services/jobs/dist/src/contribution-capability-source.js";
 import { compileComponentValidator } from "../packages/api-contracts/dist/src/index.js";
 import {
   expectedJobContributionApprovedFields,
@@ -250,11 +251,16 @@ function validateScope(scope, instant) {
   const input = prepareInput(scope);
   if (!validateContribution(input)) reject();
   const source = new URL(input.source.sourceUrl);
+  // A descriptor bounds this workload's input; it does not activate the provider on the server.
+  const developmentDescriptor = Object.values(DEVELOPMENT_CONTRIBUTION_CAPABILITIES).find(
+    (descriptor) => descriptor.provider === input.source.provider,
+  );
   if (
     developmentMode &&
-    (input.client.version !== "0.2.0" ||
-      input.source.provider !== "greenhouse" ||
-      input.source.pageVariant !== "greenhouse-board-v1")
+    (!developmentDescriptor ||
+      input.client.version !== developmentDescriptor.clientVersion ||
+      input.source.pageVariant !== developmentDescriptor.pageVariant ||
+      !developmentDescriptor.domains.includes(source.hostname))
   )
     reject();
   const hosts = {

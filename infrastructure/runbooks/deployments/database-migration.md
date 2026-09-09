@@ -64,12 +64,16 @@ schema-7 capture rather than relabeling either format, accepting a stale serial,
 zero-drift checks, or deploying unrelated ingestion artifacts just to regenerate old evidence.
 
 Release ordering is migration package publication and scan, verified D2 maintenance and running-work
-drain, `PlanTask`/`ApplyTask`, reviewed `PlanExecution`/single `Execute`/`Verify`, and compatible D2
-worker/Gateway upgrades while maintenance stays enabled. Schedule the migration execution near or
+drain, compatible paused Workers/Gateway artifact upgrades, a fresh final schema-7 baseline,
+`PlanTask`/`ApplyTask`, and reviewed `PlanExecution`/single `Execute`/`Verify`. The new disabled
+handlers return before D2 database work, so compatible code may precede SQL while maintenance
+stays enabled. Do not change runtime artifacts between `PlanTask` and migration `Verify`: the
+verifier reconstructs the task plan's inputs and would otherwise propose an artifact reversion.
+Schedule the migration execution near or
 after the asynchronous retirement deadline: resume independently describes the actual stopped task,
 and AWS only guarantees stopped-task visibility for [at least one hour](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DescribeTasks.html).
-Publish artifacts and prepare the reviewed release beforehand so the final task verification and
-compatible runtime transitions can finish within that window. Resume only after the verified schema,
+Publish artifacts and complete the paused runtime updates beforehand so final task verification and
+Resume can finish within that window. Resume only after the verified schema,
 artifacts and asynchronous retirement fence all pass. Other route or runtime changes require their
 own exact reviewed plan; none may enter the migration task-only replacement plan.
 
@@ -92,7 +96,14 @@ The pause receipt retains its original source and cutoff across reviewed descend
 the exact paused authority and live controls remain unchanged. Any out-of-band alias, trigger or
 reservation change invalidates that cutoff and requires a newly verified pause and full retirement
 window. Current metrics alone cannot prove uninterrupted fencing; do not rewrite an old receipt or
-claim an automatic safe resume.
+claim an automatic safe resume. Runtime Verify emits a zero-change plan with `.metadata.json`;
+use maintained Gateway `CaptureBaseline` to obtain the adjacent `.baseline.json` required by
+migration, using the exact verified document receipt. Never rename or fabricate a sidecar.
+
+The D2 runtime/Gateway update does not update all consumers of shared packages. D2-041's export
+validator is bundled into the profile-readiness activity, and D2-039's catalog writer is bundled
+into the separate ingestion runtime. Their coherent artifact releases follow verified D2 Resume,
+with ingestion still dark; those artifact pins are included in the original pause authority.
 
 When an ancestor `CompleteDark` baseline is required, derive the review value independently from
 the exact merged commits before invoking `PlanTask`. Run this from clean `main == origin/main`,

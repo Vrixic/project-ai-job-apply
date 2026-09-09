@@ -99,6 +99,13 @@ and actual reviewed-decision journeys remain open. Terraform's approved 1.16.2 t
 state to 291 through sensitivity metadata only, with a fresh locked zero-change plan and unchanged
 application versions, budget values, reviewer assignments and provider scope.
 
+The subsequent September 9 maintenance transition is verified at state 292: D2 contribution and
+review handlers, both workers and their triggers are paused, while D1/private capture remain
+available. The existing async-work retirement window ends no earlier than September 9 at
+20:11:25 America/New_York. Compatible paused artifacts and migration44 must also pass before
+resume. Separate rights/export activity and dark-ingestion updates, current recovery and the
+recorded manual acceptance gates still remain; this is not Phase 2 completion.
+
 The [admin hosting boundary](frontend/admin/README.md#vercel-hosting-boundary) records the earlier
 protected presentation preview, not hosted Auth0 moderation acceptance. Other provider activation,
 production/store distribution, and final accountable acceptance remain separate gates.

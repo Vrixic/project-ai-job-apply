@@ -15,13 +15,14 @@ workflows. There is no continuously running application service or provider fall
 
 ## Publish immutable artifacts
 
-Run the protected `Publish gateway Lambda` and `Publish workflow Lambdas` GitHub workflows for the
-selected environment and exact merged commit. Record each versioned S3 object version, source
+GitHub Actions are excluded for current development work. Use the maintained
+`operate-development-gateway-release.ps1` and `operate-development-workflow-lambda-publication.ps1`
+publication and verification actions for the exact merged commit. Record each versioned S3 object version, source
 SHA-256, and Lambda-compatible base64 SHA-256. Publication must fail on provenance mismatch,
 dependency-audit failure, or unexpected artifact contents.
 
-The database migration is separate. Publish `Dockerfile.migration` through `Publish environment
-images`, require a complete ECR scan with zero High or Critical findings, and select the exact
+The database migration is separate. Publish `Dockerfile.migration` through
+`publish-development-migration-image.ps1`, require a complete ECR scan with zero High or Critical findings, and select the exact
 `linux/amd64` digest rather than a tag.
 
 ## Plan and apply
@@ -37,6 +38,16 @@ delete RDS, backups, KMS, S3, queues/DLQs, API Gateway, identity boundaries, or 
 
 Compute the plan SHA-256, obtain explicit approval for material changes, and apply that exact file.
 Never regenerate a reviewed checksum in place.
+
+Shared package changes must reach every deployed consumer. A candidate-export domain-validator
+change requires a new profile-readiness activity artifact; the terminal handler shares that ZIP.
+An activity version change also republishes the durable version with its exact numeric activity
+ARN, updates exact invocation permission and propagates the new durable pin to callers and terminal
+handling. Inspect existing durable executions before retiring their previous permissions or event
+routing. Do not replay an initial candidate-rights activation operator for an artifact-only update.
+Use the dedicated ingestion publication/dark-release operators for a changed catalog writer while
+preserving every ingestion activation flag as false. When following a D2 maintenance migration,
+perform these separately bound releases after verified D2 Resume, not inside its original cutoff.
 
 ## Verify and recover
 

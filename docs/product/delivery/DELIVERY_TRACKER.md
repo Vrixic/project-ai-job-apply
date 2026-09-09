@@ -332,25 +332,33 @@ This is the master record for the delivery phases defined in the [product and sy
   equal-value sensitivity update advances state to 291 without calling the budget update API or
   changing application versions/settings; the fresh locked follow-up reports zero changes.
   Historical evidence, provider locks and excluded GitHub Actions remain unchanged. D2-039's new
-  retained-resource maintenance configuration passes 93 Terraform tests; coordinated operator
-  integration/deployment and D2-038's approved temporary recovery drill are next.
+  retained-resource maintenance configuration passes 93 Terraform tests; coordinated operators
+  are integrated and D2-038's approved temporary recovery drill remains separate.
 - Recovery-role rollout tooling (2026-09-09): the exact bootstrap/platform Enable/Disable operator
   passes 210 generated assertions on both PowerShell hosts and independent review. Used executors
   require original cleanup/drain evidence; genuinely unused setup has a separate rollback path.
   D2 runtime tooling also passes 178 assertions on each host and an actual eight-update/no-delete
   diagnostic Pause plan. Shared-main integration `6a65f63` passes the full repository verifier;
   native control/ingress readback and a fresh state-291 schema-7 zero-change capture pass. The
-  historical-plan scanner correction preserves old evidence; full infrastructure validation is
-  being rerun with the selected portable toolchain. No role, restore or runtime pause has been applied.
+  historical-plan scanner correction preserves old evidence; full infrastructure validation now
+  passes with the selected portable toolchain. No recovery role or restore has been applied.
+- Current maintenance checkpoint (2026-09-09): `90c5e23` applies exactly eight D2 pause updates and
+  verifies state 292/zero drift. Contribution/reviewer flags are false, both worker reservations
+  zero and schedule/mapping disabled; D1/private capture remain available. Cutoff
+  `2026-09-09T18:09:55.5195107Z` permits resume no earlier than `2026-09-10T00:11:25.5195107Z`, after
+  compatible artifacts and migration44 pass. No queue/version deletion or SQL execution. Paused
+  worker/Gateway upgrades precede the final migration baseline; separate rights/export and dark
+  ingestion releases follow verified Resume. The authenticated workload runner now supports
+  exact existing provider descriptors and passes 29 tests without activating providers.
+  [Actual pause and single release rationale](phase-2-extension-and-community.md#d2-039--fresh-review-evidence-and-monotonic-catalog-truth)
 - Implemented follow-up (2026-09-09, `fab4960`/`cc2fa23`): D2-039 adds append-only refresh for stale unpublished
   provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
   catalog updates. D2-041 corrects the strict candidate-export schema for existing contribution
   authorizations, contributions/histories, private captures and Trust evidence. Actual full-export
   assembly and the four-test seven-owner suite pass; current-source logical recovery passes all
   44 migrations and 68 exact relation row sets, including 18 nonempty D2 relations and cleanup.
-  D2-040 addresses confirmed Terraform 1.9.8 incompatibility with the configured
-  S3 state lock. No recovery activation plan/apply or new cloud resource was created; effective
-  locking and a coherent toolchain transition are required before cloud continuation. The 296
+  D2-040 resolves the confirmed Terraform 1.9.8 incompatibility with the configured
+  S3 state lock. No recovery activation plan/apply or new cloud resource was created. The 296
   restore-operator guards remain passing; no role or review fence is weakened. D2-041 is Complete
   for repository implementation, with release pending. Final root PostgreSQL integration passes
   136 tests; its seven opt-in skips pass separately as composed lifecycle 2/2, export/deletion 4/4
@@ -1081,6 +1089,8 @@ Append only material cross-delivery events.
 
 | 2026-09-09 | D2 | User approved the exact portable Terraform 1.16.2 transition and deployment-skill update. Both current/historical binaries pass official signature and pinned checksum verification without replacing the system installation; the old state-290 plan remains unchanged/readable. Fresh exact-account development backend initialization verifies encrypted S3 locking in an isolated cache. Current-only operators and explicit historical readers are being integrated and validated; a fresh locked plan is still required before D2-040/R18 closes. No resource apply, recovery executor, provider expansion or GitHub Actions change. | [Current toolchain state and single rationale](phase-2-extension-and-community.md#d2-040--effective-s3-state-locking) |
 | 2026-09-09 | D2 | D2-040/R18 are Complete/Closed after 441 two-host toolchain assertions, full infrastructure/repository checks and actual locked planning. A reviewed equal-value sensitivity-only state transition moves 290 to 291; fresh follow-up exits 0 with no resource changes. The D2-039 retained-resource maintenance configuration passes 93 Terraform tests and all three current-root validations; coordinated release/recovery operators remain under implementation. No application deployment, budget setting, provider expansion, role/grant, historical plan, Actions or Docker/WSL change. | [Toolchain result and single rationale](phase-2-extension-and-community.md#d2-040--effective-s3-state-locking), [coordinated migration](phase-2-extension-and-community.md#d2-039--fresh-review-evidence-and-monotonic-catalog-truth) |
+
+| 2026-09-09 | D2 | `90c5e23` passes full infrastructure validation and the exact eight-update maintenance Plan/Apply/Verify at state 292/zero drift. Cutoff `18:09:55.5195107Z` requires retirement through `2026-09-10T00:11:25.5195107Z`; D1/private capture remain available and no SQL or queue/version deletion occurs. The multi-provider authenticated workload runner passes 29 tests without activation. Paused artifacts, migration44, verified Resume, separate rights/export and dark-ingestion releases, recovery and manual acceptance remain. | [Actual maintenance checkpoint and remaining work](phase-2-extension-and-community.md#task-register), [single decision record](phase-2-extension-and-community.md#decisions-and-scope-changes) |
 
 ## Cross-delivery decisions and changes
 

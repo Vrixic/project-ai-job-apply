@@ -149,8 +149,9 @@ Both are included in maintained infrastructure and full repository verification.
   Existing schema-version-1 scopes also bind the signed policy and public keys. For the active
   processing profile only, schema version 2 uses `capabilityMode: "development"` instead of
   `signedPolicySha256` and `publicKeys`; it makes no policy request and is restricted to client
-  `0.2.0`, Greenhouse `greenhouse-board-v1`, and the two accepted Greenhouse hosts. The deployed
-  server must independently enable development contributions. This removes the policy preflight,
+  `0.2.0` and the server's exact fixed Greenhouse, Lever (global/EU), or Ashby provider/variant/host
+  descriptor. Descriptors do not activate a provider: the deployed server must independently
+  enable that provider and development contributions. This removes the policy preflight,
   not authentication, exact disposable-workload scope, cancellation, withdrawal, or cleanup.
   If `recoveryRequired` is true, retain the same private scope/run identity; inspect and recover
   it without creating another contribution or silently rebasing a Trust version. Mocked tests:
