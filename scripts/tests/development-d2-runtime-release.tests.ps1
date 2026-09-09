@@ -517,6 +517,30 @@ try {
   Assert-Rejected { Assert-D2ReleaseReviewedBytes } 'Late reviewed plan substitution accepted.'
   $ReviewedPlanSha256 = Get-D2ReleaseFileHash $PlanPath; $ReviewedBaselineMetadataSha256 = '7' * 64
   Assert-Rejected { Assert-D2ReleaseReviewedBytes } 'Late prerequisite substitution accepted.'
+  $originalRepositoryRoot = $repositoryRoot
+  try {
+    $repositoryRoot = $temporaryRoot
+    $sourceDirectory = Join-Path $temporaryRoot 'infrastructure/terraform/bootstrap'
+    $null = New-Item -ItemType Directory -Path $sourceDirectory -Force
+    $knownSource = New-Item -ItemType File -Path (Join-Path $sourceDirectory 'main.tf')
+    $historicalPlan = New-Item -ItemType File -Path (Join-Path $sourceDirectory 'historical-july.tfplan')
+    $historicalHash = Get-D2ReleaseFileHash $historicalPlan.FullName
+    $knownPaths = @('infrastructure/terraform/bootstrap/main.tf')
+    # The fresh fixture lives under the repository's ignored .tmp path, so real Git confirms
+    # ignored status. No nested repository, branch, worktree or historical evidence is created.
+    Assert-D2ReleaseTerraformSourceFiles $knownPaths; $passed++
+    Assert-True ((Test-Path -LiteralPath $historicalPlan.FullName) -and
+      (Get-D2ReleaseFileHash $historicalPlan.FullName) -ceq $historicalHash) 'Historical ignored plan was modified or removed.'
+    foreach ($name in @('hidden.tf','hidden.auto.tfvars','hidden.tf.json','historical.tfplan.json')) {
+      $hidden = New-Item -ItemType File -Path (Join-Path $sourceDirectory $name)
+      [IO.File]::SetAttributes($hidden.FullName,[IO.FileAttributes]::Hidden)
+      try { Assert-Rejected { Assert-D2ReleaseTerraformSourceFiles $knownPaths } 'Ignored hidden Terraform input was treated as harmless evidence.' }
+      finally { Remove-Item -LiteralPath $hidden.FullName -Force }
+    }
+    function git { $global:LASTEXITCODE = 1 }
+    try { Assert-Rejected { Assert-D2ReleaseTerraformSourceFiles $knownPaths } 'Unignored historical plan was permitted.' }
+    finally { Remove-Item Function:git }
+  } finally { $repositoryRoot = $originalRepositoryRoot }
 } finally {
   $resolvedTemporary = [IO.Path]::GetFullPath($temporaryRoot)
   $expectedPrefix = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.tmp')) + [IO.Path]::DirectorySeparatorChar

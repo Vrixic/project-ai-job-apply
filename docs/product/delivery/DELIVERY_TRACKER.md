@@ -337,9 +337,11 @@ This is the master record for the delivery phases defined in the [product and sy
 - Recovery-role rollout tooling (2026-09-09): the exact bootstrap/platform Enable/Disable operator
   passes 210 generated assertions on both PowerShell hosts and independent review. Used executors
   require original cleanup/drain evidence; genuinely unused setup has a separate rollback path.
-  D2 runtime tooling also passes 171 assertions on each host and an actual eight-update/no-delete
-  diagnostic Pause plan. No role, restore or runtime pause has been applied. Shared-main integration is next;
-  the full source-bound infrastructure check must be rerun after the shared changes are committed.
+  D2 runtime tooling also passes 178 assertions on each host and an actual eight-update/no-delete
+  diagnostic Pause plan. Shared-main integration `6a65f63` passes the full repository verifier;
+  native control/ingress readback and a fresh state-291 schema-7 zero-change capture pass. The
+  historical-plan scanner correction preserves old evidence; full infrastructure validation is
+  being rerun with the selected portable toolchain. No role, restore or runtime pause has been applied.
 - Implemented follow-up (2026-09-09, `fab4960`/`cc2fa23`): D2-039 adds append-only refresh for stale unpublished
   provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
   catalog updates. D2-041 corrects the strict candidate-export schema for existing contribution

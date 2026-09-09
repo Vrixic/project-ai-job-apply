@@ -141,17 +141,7 @@ function Assert-D2ReleaseSource {
   $tracked = @(& git -C $repositoryRoot ls-files -v -- infrastructure/terraform 2>$null)
   if ($LASTEXITCODE -ne 0 -or $tracked.Count -eq 0 -or @($tracked | Where-Object { $_ -cnotmatch '^H ' }).Count -ne 0) { throw 'D2RuntimeTerraformIndexRejected' }
   $known = @($tracked | ForEach-Object { $_.Substring(2) })
-  $pending = [Collections.Generic.Stack[string]]::new()
-  $pending.Push((Join-Path $repositoryRoot 'infrastructure/terraform'))
-  while ($pending.Count -gt 0) {
-    foreach ($item in Get-ChildItem -LiteralPath $pending.Pop() -Force) {
-      if ($item.Name -ceq '.terraform' -and $item.PSIsContainer) { continue }
-      if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'D2RuntimeTerraformReparseRejected' }
-      if ($item.PSIsContainer) { $pending.Push($item.FullName); continue }
-      $relative = $item.FullName.Substring($repositoryRoot.Length + 1).Replace('\','/')
-      if ($known -cnotcontains $relative) { throw 'D2RuntimeUntrackedTerraformInputRejected' }
-    }
-  }
+  Assert-D2ReleaseTerraformSourceFiles $known
   Assert-DeploymentTerraformCli
   $awsCommand = Get-Command aws.exe -ErrorAction Stop | Select-Object -First 1
   if ($awsCommand.CommandType -ne [Management.Automation.CommandTypes]::Application) { throw 'D2RuntimeNativeAwsRequired' }
@@ -160,6 +150,28 @@ function Assert-D2ReleaseSource {
         -not [string]::IsNullOrEmpty($entry.Value)) { throw 'D2RuntimeAwsEndpointOverrideRejected' }
   }
   $null = Resolve-D2ReleasePath $terraformDataDirectory
+}
+function Assert-D2ReleaseTerraformSourceFiles {
+  param([string[]]$KnownPaths)
+  $pending = [Collections.Generic.Stack[string]]::new()
+  $pending.Push((Join-Path $repositoryRoot 'infrastructure/terraform'))
+  while ($pending.Count -gt 0) {
+    foreach ($item in Get-ChildItem -LiteralPath $pending.Pop() -Force) {
+      if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'D2RuntimeTerraformReparseRejected' }
+      if ($item.Name -ceq '.terraform' -and $item.PSIsContainer) { continue }
+      if ($item.PSIsContainer) { $pending.Push($item.FullName); continue }
+      $relative = $item.FullName.Substring($repositoryRoot.Length + 1).Replace('\','/')
+      if ($KnownPaths -ccontains $relative) { continue }
+      # A saved binary plan is not auto-loaded Terraform configuration. Preserve ignored historical
+      # evidence, including outside .terraform, without treating it as a current apply candidate.
+      # Only the separately reviewed, hash-bound operator plan can reach saved-plan Apply.
+      if ($item.Extension -ceq '.tfplan') {
+        $null = & git -C $repositoryRoot check-ignore --quiet -- $relative 2>$null
+        if ($LASTEXITCODE -eq 0) { continue }
+      }
+      throw 'D2RuntimeUntrackedTerraformInputRejected'
+    }
+  }
 }
 function Initialize-D2ReleaseBackend {
   $caller = Invoke-D2ReleaseAws @('sts','get-caller-identity')
