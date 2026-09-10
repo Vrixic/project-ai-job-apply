@@ -29,6 +29,16 @@ its exact policy/role/endpoint effects; it must preserve maintenance, artifacts,
 configuration and all other inputs. Retain the returned plan, metadata and verification hashes
 privately. The old general bootstrap workload-boundary changeset is not this activation path.
 
+The IAM provider can report its deprecated parent-role `inline_policy` snapshot separately from
+the managed child policy. The role and canonical baseline guards accept only an empty snapshot
+becoming the exact independently checked restore-only child policy, with unchanged role identity,
+other values and configuration. The final exact platform removal instead binds the refreshed
+prior role/policy to the reviewed deletes. This is a read-only observation: original plan/state
+bytes and serial are retained, and unrelated drift still fails. Do not apply a refresh-only plan,
+broaden the generic drift allowlist or fabricate a new baseline sidecar to bypass verification.
+This compatibility is tested with generated fixtures; it does not assert that an actual newly
+created restore role has exhibited the observation or that recovery execution has passed.
+
 After this drill's exact Lambda and RDS cleanup, use the platform `Disable` transition with
 `-CleanupMode CompletedDrill`, the reviewed preparation, preserved original restore-context copy
 and cleanup journal. Verify role/function-version/restore absence, then disable the bootstrap

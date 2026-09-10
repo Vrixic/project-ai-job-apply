@@ -345,9 +345,137 @@ finally {
   }
 }
 
+function Test-WorkloadInspectorSteadyStateInputs {
+  param([Parameter(Mandatory)][string]$InspectorSource)
+
+  . (Join-Path $repositoryRoot "scripts/lib/terraform-toolchain.ps1")
+  foreach ($environmentName in @("development", "staging")) {
+    $rootVariables = Get-Content -LiteralPath (Join-Path $repositoryRoot `
+      "infrastructure/terraform/environments/$environmentName/variables.tf") -Raw
+    if ($rootVariables -cnotmatch '(?s)variable "outbox_starts_paused"\s*\{[^}]*type\s*=\s*bool[^}]*default\s*=\s*false\s*\}') {
+      throw "Historical workload inspection requires the unchanged default-false input."
+    }
+  }
+  $tokens = $null; $parseErrors = $null
+  $ast = [Management.Automation.Language.Parser]::ParseInput($InspectorSource, [ref]$tokens, [ref]$parseErrors)
+  if (@($parseErrors).Count -ne 0) { throw "The workload inspector did not parse." }
+  $assignments = @($ast.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $node.Left.Extent.Text -ceq '$allowedVariableNames'
+  }, $true))
+  if ($assignments.Count -ne 1) { throw "The runtime input allowlist is ambiguous." }
+  . ([scriptblock]::Create($assignments[0].Extent.Text))
+  if (@($allowedVariableNames | Where-Object { $_ -ceq "outbox_starts_paused" }).Count -ne 1) {
+    throw "The current runtime input allowlist must retain the exact pause input once."
+  }
+  foreach ($name in @("Assert-WorkloadSteadyStateInputs", "Read-WorkloadRuntimePlan",
+      "Assert-CallerAndTerraform", "Get-RuntimeStatus")) {
+    $definitions = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name
+    }, $true))
+    if ($definitions.Count -ne 1) { throw "The real workload function '$name' is ambiguous." }
+    . ([scriptblock]::Create($definitions[0].Extent.Text))
+  }
+  $entryStatements = @($ast.EndBlock.Statements | Where-Object {
+    $_ -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $_.Left.Extent.Text -cin @('$runtimePlan', '$identity', '$runtime')
+  })
+  if ((@($entryStatements | ForEach-Object { $_.Left.Extent.Text }) -join ",") -cne
+      '$runtimePlan,$identity,$runtime') { throw "The local plan guard must precede every cloud probe." }
+  $entry = [scriptblock]::Create((@($entryStatements | ForEach-Object { $_.Extent.Text }) -join "`n"))
+
+  # Execute the actual entry statements and plan reader. Replace only local decoder and native
+  # boundaries; a valid plan reaches the first synthetic AWS port, invalid plans must not.
+  $probe = [pscustomobject]@{ Plan = $null; AwsCalls = 0; Decodes = 0; Cases = 0 }
+  $ExpectedAccountId = "111122223333"; $StateBucket = "synthetic-workload-state"
+  $Environment = "development"
+  $terraformDirectory = Join-Path ([IO.Path]::GetTempPath()) "synthetic-workload-environment"
+  $terraformDataDirectory = Join-Path $terraformDirectory ".terraform/workload-inspection-data"
+  $RuntimePlanPath = Join-Path $terraformDirectory ".terraform/synthetic.tfplan"
+  function Test-Path { param([string]$LiteralPath, [string]$PathType) return $true }
+  function New-Item { param([string]$Path, [string]$ItemType, [switch]$Force) }
+  function Read-DeploymentTerraformPlan {
+    param([string]$Path, [string]$TerraformDirectory, [switch]$AllowHistorical)
+    if (-not $AllowHistorical) { throw "The supported read-only historical decoder was removed." }
+    $probe.Decodes += 1
+    return $probe.Plan
+  }
+  function Invoke-AwsJson {
+    param([string[]]$CommandArguments)
+    $probe.AwsCalls += 1
+    throw "SyntheticAwsBoundaryReached"
+  }
+  function New-InspectorPlan {
+    param([AllowNull()][object]$Value, [string]$Version = (Get-DeploymentTerraformVersion), [switch]$Missing)
+    $variables = [ordered]@{}
+    foreach ($name in $allowedVariableNames) { $variables[$name] = @{ value = "synthetic" } }
+    $variables.serverless_runtime_enabled = @{ value = "true" }
+    $variables.candidate_deletion_restore_role_enabled = @{ value = "true" }
+    if ($Missing) { $variables.Remove("outbox_starts_paused") }
+    else { $variables.outbox_starts_paused = @{ value = $Value } }
+    return (@{ terraform_version = $Version; variables = $variables } |
+      ConvertTo-Json -Depth 20 -Compress | ConvertFrom-Json)
+  }
+  function Assert-InspectorCase {
+    param([object]$Plan, [bool]$Accepted)
+    $probe.Plan = $Plan; $probe.AwsCalls = 0; $probe.Decodes = 0
+    $before = ConvertTo-Json -InputObject $Plan -Depth 20 -Compress
+    $failure = ""
+    try { & $entry } catch { $failure = $_.Exception.Message }
+    if ($probe.Decodes -ne 1 -or -not $failure -or
+        ($Accepted -and ($failure -cne "SyntheticAwsBoundaryReached" -or $probe.AwsCalls -ne 1)) -or
+        (-not $Accepted -and ($failure -ceq "SyntheticAwsBoundaryReached" -or $probe.AwsCalls -ne 0))) {
+      throw "The runtime input guard failed case $($probe.Cases): accepted=$Accepted decodes=$($probe.Decodes) aws=$($probe.AwsCalls) failure=$failure"
+    }
+    if ((ConvertTo-Json -InputObject $Plan -Depth 20 -Compress) -cne $before) {
+      throw "Workload inspection changed the retained runtime inputs."
+    }
+    $probe.Cases += 1
+  }
+
+  Assert-InspectorCase (New-InspectorPlan -Value $false) $true
+  Assert-InspectorCase (New-InspectorPlan -Value "false") $true
+  $absoluteTestPlanPath = $RuntimePlanPath
+  $RuntimePlanPath = ".terraform/synthetic.tfplan"
+  Assert-InspectorCase (New-InspectorPlan -Value "false") $true
+  $RuntimePlanPath = $absoluteTestPlanPath
+  Assert-InspectorCase (New-InspectorPlan -Version "1.9.8" -Missing) $true
+  Assert-InspectorCase (New-InspectorPlan -Version "1.9.8" -Value $false) $true
+  Assert-InspectorCase (New-InspectorPlan -Version "1.9.8" -Value "false") $true
+  Assert-InspectorCase (New-InspectorPlan -Missing) $false
+  foreach ($value in @($true, "true", "True", "False", "FALSE", " false", "false ", "",
+      "0", "1", 0, 1, -1, $null)) {
+    Assert-InspectorCase (New-InspectorPlan -Value $value) $false
+    Assert-InspectorCase (New-InspectorPlan -Version "1.9.8" -Value $value) $false
+  }
+  foreach ($value in @(@{ nested = $false }, [pscustomobject]@{ value = $false })) {
+    Assert-InspectorCase (New-InspectorPlan -Value $value) $false
+  }
+  Assert-InspectorCase (New-InspectorPlan -Value @($false)) $false
+  foreach ($version in @("1.16.1", "1.16.3", "1.9.7", "", "1.9.8 ")) {
+    Assert-InspectorCase (New-InspectorPlan -Version $version -Missing) $false
+  }
+  foreach ($binding in @($null, "false", @{}, @{ value = $false; extra = $false })) {
+    $invalid = New-InspectorPlan -Value $false
+    $invalid.variables.outbox_starts_paused = $binding
+    Assert-InspectorCase $invalid $false
+  }
+  $unknown = New-InspectorPlan -Value $false
+  $unknown.variables | Add-Member -NotePropertyName unexpected_runtime_input -NotePropertyValue @{ value = $false }
+  Assert-InspectorCase $unknown $false
+  $wrongCase = New-InspectorPlan -Value $false
+  $wrongCase.variables.PSObject.Properties.Remove("outbox_starts_paused")
+  $wrongCase.variables | Add-Member -NotePropertyName Outbox_starts_paused -NotePropertyValue @{ value = $false }
+  Assert-InspectorCase $wrongCase $false
+  Write-Host "Workload inspector input guards passed ($($probe.Cases) cases; no cloud calls)."
+}
+
 $operator = Get-Content -LiteralPath $operatorPath -Raw
 $developmentOperator = Get-Content -LiteralPath $developmentOperatorPath -Raw
 $inspector = Get-Content -LiteralPath $inspectorPath -Raw
+Test-WorkloadInspectorSteadyStateInputs $inspector
 if (-not $operator.Contains('return ($raw -join "`n") | ConvertFrom-D1RestoreJson')) {
   throw "The restore operator does not preserve AWS ISO timestamp strings."
 }

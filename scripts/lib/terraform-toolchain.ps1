@@ -57,7 +57,13 @@ function Invoke-DeploymentTerraformReadCommand {
 function ConvertFrom-DeploymentTerraformJson {
   param([Parameter(Mandatory)][AllowEmptyString()][string]$Json)
   try {
-    $result = ConvertFrom-Json -InputObject $Json -ErrorAction Stop
+    # Preserve provider timestamp spelling when the host supports explicit string dates.
+    $command = Get-Command ConvertFrom-Json -CommandType Cmdlet -ErrorAction Stop
+    $result = if ($command.Parameters.ContainsKey("DateKind")) {
+      ConvertFrom-Json -InputObject $Json -DateKind String -ErrorAction Stop
+    } else {
+      ConvertFrom-Json -InputObject $Json -ErrorAction Stop
+    }
     if ($null -eq $result -or $result -isnot [pscustomobject]) { throw "Rejected" }
     return $result
   } catch { throw "Terraform returned invalid JSON." }

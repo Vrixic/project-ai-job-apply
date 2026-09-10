@@ -1,6 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "terraform-toolchain.ps1")
+. (Join-Path $PSScriptRoot "development-deletion-restore-role.ps1")
 
 function Get-GatewayPlanVariableValue {
   param([Parameter(Mandatory)][object]$Variables, [Parameter(Mandatory)][string]$Name)
@@ -235,7 +236,7 @@ function Assert-AcceptedGatewayProviderDrift {
   if ($null -eq $rootModule) {
     throw "Accepted gateway provider drift requires the exact source-evaluated planned root module."
   }
-  Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift -RootModule $rootModule
+  Assert-RestoreRoleAcceptedPlanDrift -Plan $Plan
 }
 
 function Assert-RetainedGatewayBaselinePlan {

@@ -129,6 +129,140 @@ Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'accepted drift after must e
 $p=Clone $fixture.Plan;$p.resource_changes[1].change.after.role=$null;$p.resource_changes[1].change.after_unknown=Clone @{role=$true;id=$true}
 $null=Assert-RestoreRoleTransitionPlan $p $fixture.Baseline 'Platform' $true $account
 Assert-Test $true 'exact new computed role ID is allowed only until live readback'
+# BEGIN restore-role computed-policy observation regressions. Generated, never cloud evidence.
+. (Join-Path $PSScriptRoot '../lib/development-gateway-release-guards.ps1')
+function New-ObservationFixture {
+  $source=New-Fixture 'Platform' $false
+  $plan=Clone $source.Baseline
+  $plan|Add-Member -NotePropertyName applyable -NotePropertyValue $false
+  $map=Get-RestoreRoleResourceMap $plan.planned_values.root_module
+  $role=Clone $map[$roleAddress]
+  foreach($entry in @{
+    arn=$source.Boundary.RoleArn;id='ai-job-apply-development-deletion-restore';unique_id='AROASYNTHETIC000000000';
+    create_date='2026-09-10T03:00:00.000+0000';managed_policy_arns=@();inline_policy=@()
+  }.GetEnumerator()){$role|Add-Member -NotePropertyName $entry.Key -NotePropertyValue $entry.Value}
+  $role.tags=Clone @{}
+  $child=Clone $map[$policyAddress]
+  $child|Add-Member -NotePropertyName id -NotePropertyValue ($role.name+':'+$child.name)
+  $before=Clone $role
+  $role.inline_policy=@(Clone @{name=$child.name;policy=$child.policy})
+  $drift=Clone @{
+    address=$roleAddress;module_address='module.platform';mode='managed';type='aws_iam_role';name='candidate_deletion_restore';index=0;provider_name='registry.terraform.io/hashicorp/aws';
+    change=@{actions=@('update');before=$before;after=$role;after_unknown=@{};before_sensitive=@{inline_policy=@();managed_policy_arns=@();tags=@{}};after_sensitive=@{inline_policy=@(@{});managed_policy_arns=@();tags=@{}}}
+  }
+  foreach($resource in $plan.planned_values.root_module.resources){
+    if($resource.address -ceq $roleAddress){$resource.values=$role}
+    if($resource.address -ceq $policyAddress){$resource.values=$child}
+  }
+  $roleChange=Clone $drift;$roleChange.change.actions=@('no-op');$roleChange.change.before=$role
+  $roleChange.change.before_sensitive=Clone $drift.change.after_sensitive
+  $childChange=Clone $roleChange;$childChange.address=$policyAddress;$childChange.type='aws_iam_role_policy'
+  $childChange.change=Clone @{actions=@('no-op');before=$child;after=$child;after_unknown=@{};before_sensitive=@{};after_sensitive=@{}}
+  $plan.resource_changes=@($roleChange,$childChange);$plan.resource_drift=@($drift)
+  return @{Plan=$plan;Before=$before;Boundary=$source.Boundary}
+}
+$observation=New-ObservationFixture
+$originalObservation=ConvertTo-DeploymentCanonicalValue $observation.Plan
+Assert-RestoreRolePlanEnvelope $observation.Plan -ZeroDrift
+$null=Assert-RetainedGatewayBaselinePlan $observation.Plan @($observation.Plan.variables.PSObject.Properties.Name)
+$reconstructed=Get-RestoreRoleBeforeRefreshResources $observation.Plan
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $reconstructed[$roleAddress]) -ceq (ConvertTo-DeploymentCanonicalValue $observation.Before)) 'role Verify restores exact raw before-refresh role values'
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $observation.Plan) -ceq $originalObservation) 'observation never rewrites original plan or timestamp strings'
+$raw=Clone $observation.Plan;$raw.variables.candidate_deletion_restore_role_enabled.value='true'
+Assert-RestoreRolePlanEnvelope $raw -ZeroDrift
+Assert-Test $true 'native exact string true is accepted for observed enabled role'
+$same=Clone $observation.Plan
+$same.resource_drift[0].change.before_sensitive=Clone @{}
+$same.resource_drift[0].change.after_sensitive=Clone @{}
+$same.resource_changes[0].change.before_sensitive=Clone @{}
+$same.resource_changes[0].change.after_sensitive=Clone @{}
+Assert-RestoreRolePlanEnvelope $same -ZeroDrift
+Assert-Test $true 'unchanged empty sensitivity is accepted without invented metadata'
+$rdsObservation=Clone $observation.Plan
+$rdsBefore=Clone @{id='db';latest_restorable_time='2026-09-10T03:00:00Z'}
+$rdsAfter=Clone @{id='db';latest_restorable_time='2026-09-10T03:01:00Z'}
+$rdsObservation.planned_values.root_module.resources+=@(Clone @{address=$rdsAddress;mode='managed';values=$rdsAfter})
+$rdsObservation.resource_drift+=@(Clone @{address=$rdsAddress;mode='managed';type='aws_db_instance';change=@{actions=@('update');before=$rdsBefore;after=$rdsAfter;after_unknown=@{};before_sensitive=@{};after_sensitive=@{}}})
+$reconstructed=Get-RestoreRoleBeforeRefreshResources $rdsObservation
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $reconstructed[$rdsAddress]) -ceq (ConvertTo-DeploymentCanonicalValue $rdsBefore)) 'unrelated accepted RDS drift still follows unchanged generic guard'
+$mutations=@(
+  {$p.variables.candidate_deletion_restore_role_enabled.value=$false},
+  {$p.variables.candidate_deletion_restore_role_enabled.value='True'},
+  {$p.variables.candidate_deletion_restore_role_enabled.value=1},
+  {$p.variables.candidate_deletion_restore_role_enabled|Add-Member extra $true},
+  {$p.variables.PSObject.Properties.Remove('candidate_deletion_restore_role_enabled')},
+  {$p.terraform_version='1.9.8'},
+  {$p.resource_drift+=@(Clone $p.resource_drift[0])},
+  {$d.address='module.platform.aws_iam_role.other[0]'},{$d.module_address='module.other'},
+  {$d.mode='data'},{$d.type='aws_iam_role_policy'},{$d.name='other'},{$d.index='0'},{$d.index=1},
+  {$d.provider_name='other'},{$d|Add-Member previous_address 'other'},
+  {$d.change|Add-Member importing (Clone @{id='other'})},
+  {$d.change|Add-Member replace_paths @()},
+  {$d.change.actions=@('create')},{$d.change.actions='update'},{$d.change.actions=@('update','delete')},
+  {$d.change.after_unknown=Clone @{inline_policy=$true}},{$d.change.after_unknown=$false},
+  {$d.change.before.inline_policy=$null},{$d.change.before.inline_policy=@(Clone $d.change.after.inline_policy[0])},
+  {$d.change.after.inline_policy=@()},{$d.change.after.inline_policy+=@(Clone $d.change.after.inline_policy[0])},
+  {$d.change.after.inline_policy[0]|Add-Member extra 'value'},
+  {$d.change.after.inline_policy[0].name='other'},{$d.change.after.inline_policy[0].policy='{}'},
+  {$d.change.after.path='/other/'},{$d.change.after.permissions_boundary='other'},
+  {$d.change.after.unique_id='other'},{$d.change.after.create_date='2026-09-10T03:00:00Z'},
+  {$d.change.after.tags=Clone @{Other='value'}},{$d.change.after|Add-Member unexpected 'value'},
+  {$d.change.before_sensitive.inline_policy=$null},{$d.change.after_sensitive.inline_policy=@($true)},
+  {$d.change.after_sensitive.inline_policy=@(Clone @{policy=$false})},
+  {$d.change.after_sensitive.tags=Clone @{unexpected=$false}},
+  {$d.change.before_sensitive='false'},{$d.change.after_sensitive=$null},
+  {$p.resource_changes=@($p.resource_changes[0])},{$p.resource_changes+=@(Clone $p.resource_changes[1])},
+  {$p.resource_changes[1].change.actions=@('update')},
+  {$p.resource_changes[0].change.before=Clone $d.change.before},
+  {$p.resource_changes[0].change.after_unknown=Clone @{arn=$true}},
+  {$p.resource_changes[1].change.before_sensitive=Clone @{policy=$true}},
+  {$p.resource_changes[1].change.after_sensitive=Clone @{other=$false}},
+  {$p.resource_changes[1].change.after.role='other'},
+  {$p.resource_changes[0].provider_name='other'},
+  {$p.planned_values.root_module.resources=@($p.planned_values.root_module.resources|Where-Object address -CNE $policyAddress)},
+  {$p.planned_values.root_module.resources+=@(Clone @($p.planned_values.root_module.resources|Where-Object address -CEQ $policyAddress)[0])},
+  {$p.output_changes=Clone @{unexpected=@{actions=@('create')}}},
+  {$p.resource_drift+=@(Clone @{address='module.platform.aws_iam_role.outbox_starter[0]';mode='managed';type='aws_iam_role';change=$d.change})}
+)
+foreach($mutate in $mutations){
+  $p=Clone $observation.Plan;$d=$p.resource_drift[0];& $mutate
+  Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} 'restore observation rejects unrelated value, authority, action, or metadata'
+  Reject {Assert-RetainedGatewayBaselinePlan $p @($p.variables.PSObject.Properties.Name)} 'canonical baseline uses same strict observation guard'
+}
+$broadened=Clone $observation.Plan
+$badPolicy=ConvertFrom-Json $broadened.resource_drift[0].change.after.inline_policy[0].policy
+$badPolicy.Statement[0].Action=@('*');$badPolicy=$badPolicy|ConvertTo-Json -Depth 40 -Compress
+foreach($resource in $broadened.planned_values.root_module.resources){
+  if($resource.address -ceq $policyAddress){$resource.values.policy=$badPolicy}
+  if($resource.address -ceq $roleAddress){$resource.values.inline_policy[0].policy=$badPolicy}
+}
+$broadened.resource_drift[0].change.after.inline_policy[0].policy=$badPolicy
+foreach($change in $broadened.resource_changes){
+  if($change.type -ceq 'aws_iam_role_policy'){$change.change.before.policy=$badPolicy;$change.change.after.policy=$badPolicy}
+  else{$change.change.before.inline_policy[0].policy=$badPolicy;$change.change.after.inline_policy[0].policy=$badPolicy}
+}
+Reject {Assert-RestoreRolePlanEnvelope $broadened -ZeroDrift} 'matching child and echo cannot broaden the independently compiled read-only policy'
+$removal=New-Fixture 'Platform' $false
+$removal.Baseline=Clone $observation.Plan
+$removal.Plan.planned_values.root_module.resources=@($removal.Plan.planned_values.root_module.resources|Where-Object {$_.address -cnotin @($roleAddress,$policyAddress)})
+$removal.Plan|Add-Member prior_state (Clone @{values=@{root_module=$observation.Plan.planned_values.root_module}})
+$removal.Plan.resource_drift=Clone $observation.Plan.resource_drift
+foreach($index in 0..1){
+  $record=Clone $observation.Plan.resource_changes[$index]
+  $record.change.actions=@('delete');$record.change.after=$null;$record.change.after_unknown=$false;$record.change.after_sensitive=$false
+  $removal.Plan.resource_changes[$index]=$record
+}
+$null=Assert-RestoreRoleTransitionPlan $removal.Plan $removal.Baseline 'Platform' $false $account
+Assert-Test $true 'exact Platform Disable binds refreshed prior role and policy without persisting the echo'
+Reject {Assert-RestoreRolePlanEnvelope $removal.Plan} 'removal observation unavailable outside explicit Platform Disable'
+$bad=Clone $removal.Plan;$bad.resource_changes[0].change.before.unique_id='other'
+Reject {Assert-RestoreRoleTransitionPlan $bad $removal.Baseline 'Platform' $false $account} 'delete before values cannot substitute refreshed role identity'
+$bad=Clone $removal.Plan;$bad.resource_changes[1].change.actions=@('update')
+Reject {Assert-RestoreRoleTransitionPlan $bad $removal.Baseline 'Platform' $false $account} 'removal observation cannot authorize a policy update'
+$bad=Clone $removal.Plan;$bad.prior_state.values.root_module.resources=@($bad.prior_state.values.root_module.resources|Where-Object address -CNE $policyAddress)
+Reject {Assert-RestoreRoleTransitionPlan $bad $removal.Baseline 'Platform' $false $account} 'removal requires complete refreshed prior child ownership'
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $observation.Plan) -ceq $originalObservation) 'all rejection and removal checks preserve original evidence'
+# END restore-role computed-policy observation regressions.
 foreach($mutate in @(
   {$r.permissions_boundary='wrong'},{$r.path='/other/'},{$r.name='other'},{$r.force_detach_policies='false'},
   {$r.max_session_duration=7200},{$r.name_prefix='other'},{$r.tags_all.Environment='staging'},

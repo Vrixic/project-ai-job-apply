@@ -199,13 +199,117 @@ function Get-RestoreRoleVariableCanonical {
   }
   return ConvertTo-RestoreRoleCanonical $Value
 }
+function Assert-RestoreRoleObservationEqual {
+  param([AllowNull()][object]$Actual,[AllowNull()][object]$Expected)
+  # Preserve array order and timestamp strings. This is a local comparison, not a state rewrite.
+  if((ConvertTo-DeploymentCanonicalValue $Actual) -cne (ConvertTo-DeploymentCanonicalValue $Expected)){
+    throw 'RestoreRoleObservationValueChanged'
+  }
+}
+function Assert-RestoreRoleObservationMetadata {
+  param([AllowNull()][object]$Value)
+  if($Value -is [bool]){if($Value){throw 'RestoreRoleObservationSensitiveValue'};return}
+  if($Value -is [array]){foreach($item in $Value){Assert-RestoreRoleObservationMetadata $item};return}
+  if($Value -is [pscustomobject]){foreach($property in $Value.PSObject.Properties){Assert-RestoreRoleObservationMetadata $property.Value};return}
+  throw 'RestoreRoleObservationMetadataShape'
+}
+function Assert-RestoreRoleObservationRecord {
+  param([object]$Record,[ValidateSet('aws_iam_role','aws_iam_role_policy')][string]$Type,[ValidateSet('update','no-op','delete')][string]$Action)
+  Assert-ExactObjectKeys $Record @('address','module_address','mode','type','name','index','provider_name','change') 'restore observation record'
+  Assert-ExactObjectKeys $Record.change @('actions','before','after','after_unknown','before_sensitive','after_sensitive') 'restore observation change'
+  if($Record.address -cne "module.platform.$Type.candidate_deletion_restore[0]" -or
+     $Record.module_address -cne 'module.platform' -or $Record.mode -cne 'managed' -or $Record.type -cne $Type -or
+     $Record.name -cne 'candidate_deletion_restore' -or ($Record.index -isnot [int] -and $Record.index -isnot [long]) -or $Record.index -ne 0 -or
+     $Record.provider_name -cne 'registry.terraform.io/hashicorp/aws' -or $Record.change.actions -isnot [array] -or
+     $Record.change.actions.Count -ne 1 -or $Record.change.actions[0] -cne $Action){throw 'RestoreRoleObservationRecordRejected'}
+  if($Action -ceq 'delete'){
+    if($null -ne $Record.change.after -or $Record.change.after_sensitive -isnot [bool] -or $Record.change.after_sensitive){throw 'RestoreRoleObservationDeleteRejected'}
+    if(-not (($Record.change.after_unknown -is [bool] -and -not $Record.change.after_unknown) -or
+      (Test-DevelopmentDocumentEmptyObject $Record.change.after_unknown))){throw 'RestoreRoleObservationDeleteUnknown'}
+  }elseif(-not (Test-DevelopmentDocumentEmptyObject $Record.change.after_unknown)){throw 'RestoreRoleObservationUnknown'}
+  Assert-RestoreRoleObservationMetadata $Record.change.before_sensitive
+  Assert-RestoreRoleObservationMetadata $Record.change.after_sensitive
+}
+function Assert-RestoreRoleComputedPolicyObservation {
+  param([object]$Plan,[object]$Record,[switch]$Removal)
+  if($Plan.terraform_version -cne (Get-DeploymentTerraformVersion)){throw 'RestoreRoleObservationCurrentPlanRequired'}
+  $flag=Get-RestoreRoleProperty $Plan.variables 'candidate_deletion_restore_role_enabled'
+  Assert-ExactObjectKeys $flag @('value') 'restore observation flag'
+  if((ConvertTo-ExactBoolean $flag.value 'restore observation flag') -ne (-not $Removal)){throw 'RestoreRoleObservationFlagRejected'}
+  Assert-RestoreRoleObservationRecord $Record 'aws_iam_role' 'update'
+  $roleAddress='module.platform.aws_iam_role.candidate_deletion_restore[0]'
+  $policyAddress='module.platform.aws_iam_role_policy.candidate_deletion_restore[0]'
+  # Only the exact Platform Disable transition may use refreshed prior values: the two
+  # resources are then absent from planned_values and are independently checked as deletes.
+  $module=if($Removal){$Plan.prior_state.values.root_module}else{$Plan.planned_values.root_module}
+  $map=Get-RestoreRoleResourceMap $module
+  $role=Get-RestoreRoleResource $map $roleAddress
+  $policy=Get-RestoreRoleResource $map $policyAddress
+  if($role.arn -isnot [string] -or $role.arn -cnotmatch '^arn:aws:iam::([0-9]{12}):role/ai-job-apply-development-deletion-restore$'){
+    throw 'RestoreRoleObservationIdentityRejected'
+  }
+  $boundary=Get-RestoreRolePlatformBoundary $map $Matches[1]
+  $before=Copy-RestoreRoleValue $Record.change.before
+  $after=Copy-RestoreRoleValue $Record.change.after
+  if(-not (Test-DevelopmentDocumentEmptyArray $before.inline_policy) -or $after.inline_policy -isnot [array] -or
+     $after.inline_policy.Count -ne 1){throw 'RestoreRoleObservationNotEmptyToExactPolicy'}
+  Assert-ExactObjectKeys $after.inline_policy[0] @('name','policy') 'restore observation inline policy'
+  if($after.inline_policy[0].name -cne $policy.name -or $after.inline_policy[0].policy -isnot [string] -or
+     $after.inline_policy[0].policy -cne $policy.policy -or $role.id -cne $role.name -or
+     $role.unique_id -isnot [string] -or [string]::IsNullOrWhiteSpace($role.unique_id)){
+    throw 'RestoreRoleObservationChildPolicyMismatch'
+  }
+  Assert-RestoreRoleRecord $before $policy $boundary
+  Assert-RestoreRoleRecord $after $policy $boundary
+  Assert-RestoreRoleObservationEqual $after $role
+  $after.inline_policy=@()
+  Assert-RestoreRoleObservationEqual $after $before
+  Assert-RestoreRoleObservationMetadata $Record.change.before_sensitive
+  Assert-RestoreRoleObservationMetadata $Record.change.after_sensitive
+  $sensitivityBefore=Copy-RestoreRoleValue $Record.change.before_sensitive
+  $sensitivityAfter=Copy-RestoreRoleValue $Record.change.after_sensitive
+  if((ConvertTo-DeploymentCanonicalValue $sensitivityBefore) -cne (ConvertTo-DeploymentCanonicalValue $sensitivityAfter)){
+    $left=$sensitivityBefore.PSObject.Properties['inline_policy']
+    $right=$sensitivityAfter.PSObject.Properties['inline_policy']
+    if($null -eq $left -or $null -eq $right -or -not (Test-DevelopmentDocumentEmptyArray $left.Value) -or
+       $right.Value -isnot [array] -or $right.Value.Count -ne 1 -or
+       -not (Test-DevelopmentDocumentEmptyObject $right.Value[0])){throw 'RestoreRoleObservationSensitivityChanged'}
+    $sensitivityAfter.inline_policy=@()
+    Assert-RestoreRoleObservationEqual $sensitivityAfter $sensitivityBefore
+  }
+  foreach($address in @($roleAddress,$policyAddress)){
+    $changes=@($Plan.resource_changes | Where-Object address -CEQ $address)
+    if($changes.Count -ne 1){throw 'RestoreRoleObservationConfigurationMissing'}
+    $type=if($address -ceq $roleAddress){'aws_iam_role'}else{'aws_iam_role_policy'}
+    $action=if($Removal){'delete'}else{'no-op'}
+    Assert-RestoreRoleObservationRecord $changes[0] $type $action
+    Assert-RestoreRoleObservationEqual $changes[0].change.before $map[$address]
+    if(-not $Removal){
+      Assert-RestoreRoleObservationEqual $changes[0].change.after $map[$address]
+      Assert-RestoreRoleObservationEqual $changes[0].change.before_sensitive $changes[0].change.after_sensitive
+    }elseif((Get-RestoreRoleResourceMap $Plan.planned_values.root_module).ContainsKey($address)){
+      throw 'RestoreRoleObservationDeletedResourceStillPlanned'
+    }
+    if($address -ceq $roleAddress){Assert-RestoreRoleObservationEqual $changes[0].change.before_sensitive $Record.change.after_sensitive}
+  }
+}
+function Assert-RestoreRoleAcceptedPlanDrift {
+  param([object]$Plan,[switch]$Removal)
+  $drift=@(Get-RestoreRoleProperty $Plan 'resource_drift' @())
+  $roleAddress='module.platform.aws_iam_role.candidate_deletion_restore[0]'
+  $observations=@($drift | Where-Object address -CEQ $roleAddress)
+  if($observations.Count -gt 1){throw 'RestoreRoleDuplicateObservation'}
+  if($observations.Count -eq 1){Assert-RestoreRoleComputedPolicyObservation $Plan $observations[0] -Removal:$Removal}
+  $other=@($drift | Where-Object address -CNE $roleAddress)
+  if($other.Count -gt 0){Assert-DevelopmentDocumentAcceptedResourceDrift -Records $other -RootModule $Plan.planned_values.root_module}
+}
 function Assert-RestoreRolePlanEnvelope {
-  param([object]$Plan, [switch]$ZeroDrift)
+  param([object]$Plan, [switch]$ZeroDrift, [switch]$RestoreRoleRemoval)
   $errored=Get-RestoreRoleProperty $Plan 'errored';$complete=Get-RestoreRoleProperty $Plan 'complete'
   if($Plan.terraform_version -cne (Get-DeploymentTerraformVersion) -or $errored -isnot [bool] -or $errored -ne $false -or
       $complete -isnot [bool] -or $complete -ne $true -or @(Get-RestoreRoleProperty $Plan 'deferred_changes' @()).Count -ne 0) { throw 'RestoreRolePlanEnvelopeRejected' }
   $drift=@(Get-RestoreRoleProperty $Plan 'resource_drift' @())
-  if($drift.Count -gt 0){Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift -RootModule $Plan.planned_values.root_module}
+  if($drift.Count -gt 0){Assert-RestoreRoleAcceptedPlanDrift $Plan -Removal:$RestoreRoleRemoval}
   foreach($property in (Get-RestoreRoleProperty $Plan 'output_changes' ([pscustomobject]@{})).PSObject.Properties) {
     if((@($property.Value.actions)-join ',') -cne 'no-op') { throw 'RestoreRoleOutputChanged' }
   }
@@ -214,7 +318,7 @@ function Assert-RestoreRolePlanEnvelope {
 function Assert-RestoreRoleTransitionPlan {
   param([object]$Plan,[object]$Baseline,[ValidateSet('Bootstrap','Platform')][string]$Stage,[bool]$Enable,[string]$AccountId)
   Assert-RestoreRolePlanEnvelope $Baseline -ZeroDrift
-  Assert-RestoreRolePlanEnvelope $Plan
+  Assert-RestoreRolePlanEnvelope $Plan -RestoreRoleRemoval:($Stage -ceq 'Platform' -and -not $Enable)
   Assert-RestoreRoleVariables $Baseline.variables $Plan.variables $Enable
   $map=Get-RestoreRoleResourceMap $Baseline.planned_values.root_module
   $changes=@($Plan.resource_changes | Where-Object { (@($_.change.actions)-join ',') -cne 'no-op' })

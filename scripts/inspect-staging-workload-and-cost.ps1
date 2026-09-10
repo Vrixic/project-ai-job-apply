@@ -74,7 +74,7 @@ $allowedVariableNames = @(
   "deploy_gateway_lambda", "gateway_lambda_artifact_s3_key",
   "gateway_lambda_artifact_s3_object_version", "gateway_lambda_artifact_sha256",
   "gateway_lambda_artifact_base64sha256", "gateway_lambda_extension_layer_arn",
-  "gateway_lambda_reserved_concurrency", "deploy_serverless_outbox",
+  "gateway_lambda_reserved_concurrency", "deploy_serverless_outbox", "outbox_starts_paused",
   "workflow_ingress_artifact_s3_key", "workflow_ingress_artifact_s3_object_version",
   "workflow_ingress_artifact_sha256", "workflow_ingress_artifact_base64sha256",
   "workflow_ingress_lambda_extension_layer_arn", "deploy_profile_readiness_durable",
@@ -160,32 +160,51 @@ function Assert-CallerAndTerraform {
   return $identity
 }
 
-function Get-RuntimeStatus {
+function Assert-WorkloadSteadyStateInputs {
+  param([Parameter(Mandatory)][object]$Plan)
+
+  if ($null -eq $Plan.variables -or $Plan.variables -isnot [pscustomobject] -or
+      $Plan.terraform_version -cnotin @("1.9.8", (Get-DeploymentTerraformVersion))) {
+    throw "The runtime plan has an invalid input or reader-version boundary."
+  }
+  $properties = @($Plan.variables.PSObject.Properties)
+  if (@($properties | Where-Object { $_.Name -cnotin $allowedVariableNames }).Count -ne 0) {
+    throw "The applied plan contains an unapproved runtime input."
+  }
+  $pause = @($properties | Where-Object Name -CEQ "outbox_starts_paused")
+  if ($pause.Count -eq 0) {
+    # Only the explicitly supported historical reader may recover a pre-input plan.
+    # The current root default is false; no value is injected into the historical evidence.
+    if ($Plan.terraform_version -cne "1.9.8") {
+      throw "The current runtime plan must retain the outbox pause input."
+    }
+    return
+  }
+  $binding = $pause[0].Value
+  if ($binding -isnot [pscustomobject] -or
+      (@($binding.PSObject.Properties.Name) -join ",") -cne "value") {
+    throw "The runtime plan has an invalid outbox pause binding."
+  }
+  $value = $binding.value
+  if (-not (($value -is [bool] -and $value -eq $false) -or
+            ($value -is [string] -and $value -ceq "false"))) {
+    throw "Steady-state inspection requires outbox_starts_paused=false."
+  }
+}
+
+function Read-WorkloadRuntimePlan {
   if (
     $ExpectedAccountId -notmatch "^[0-9]{12}$" -or
     [string]::IsNullOrWhiteSpace($StateBucket) -or
     [string]::IsNullOrWhiteSpace($RuntimePlanPath)
   ) { throw "Runtime verification requires the exact $Environment account, state bucket, and applied plan." }
-  $identity = Invoke-AwsJson @("sts", "get-caller-identity", "--output", "json")
-  if ([string]$identity.Account -cne $ExpectedAccountId) {
-    throw "The AWS caller does not match the exact $Environment account."
-  }
-  $planPath = [IO.Path]::GetFullPath($RuntimePlanPath, $terraformDirectory)
+  $absolutePlanPath = if ([IO.Path]::IsPathRooted($RuntimePlanPath)) { $RuntimePlanPath }
+    else { Join-Path $terraformDirectory $RuntimePlanPath }
+  $planPath = [IO.Path]::GetFullPath($absolutePlanPath)
   $allowedPlanRoot = [IO.Path]::GetFullPath((Join-Path $terraformDirectory ".terraform")) + [IO.Path]::DirectorySeparatorChar
   if (-not $planPath.StartsWith($allowedPlanRoot, [StringComparison]::OrdinalIgnoreCase) -or
       -not (Test-Path -LiteralPath $planPath -PathType Leaf)) {
     throw "RuntimePlanPath must be an existing ignored plan below the selected environment .terraform directory."
-  }
-
-  $encryption = Invoke-AwsJson @("s3api", "get-bucket-encryption", "--bucket", $StateBucket, "--output", "json")
-  $rules = @($encryption.ServerSideEncryptionConfiguration.Rules | Where-Object {
-    $_.ApplyServerSideEncryptionByDefault.SSEAlgorithm -eq "aws:kms" -and
-    $_.ApplyServerSideEncryptionByDefault.KMSMasterKeyID
-  })
-  if ($rules.Count -ne 1) { throw "The state bucket does not expose one KMS default." }
-  $kmsKeyArn = [string]$rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID
-  if ($kmsKeyArn -notmatch "^arn:aws:kms:$([regex]::Escape($Region)):$ExpectedAccountId`:key/") {
-    throw "The state KMS key is outside the selected account and region."
   }
 
   $savedTerraformDataDirectory = $env:TF_DATA_DIR
@@ -199,9 +218,31 @@ function Get-RuntimeStatus {
   } finally {
     $env:TF_DATA_DIR = $savedTerraformDataDirectory
   }
-  $variableProperties = @($plan.variables.PSObject.Properties)
-  $unexpected = @($variableProperties | Where-Object { $_.Name -notin $allowedVariableNames })
-  if ($unexpected.Count -ne 0) { throw "The applied plan contains an unapproved runtime input." }
+  Assert-WorkloadSteadyStateInputs $plan
+  return $plan
+}
+
+function Get-RuntimeStatus {
+  param([Parameter(Mandatory)][object]$Plan)
+
+  Assert-WorkloadSteadyStateInputs $Plan
+  $identity = Invoke-AwsJson @("sts", "get-caller-identity", "--output", "json")
+  if ([string]$identity.Account -cne $ExpectedAccountId) {
+    throw "The AWS caller does not match the exact $Environment account."
+  }
+  $encryption = Invoke-AwsJson @("s3api", "get-bucket-encryption", "--bucket", $StateBucket, "--output", "json")
+  $rules = @($encryption.ServerSideEncryptionConfiguration.Rules | Where-Object {
+    $_.ApplyServerSideEncryptionByDefault.SSEAlgorithm -eq "aws:kms" -and
+    $_.ApplyServerSideEncryptionByDefault.KMSMasterKeyID
+  })
+  if ($rules.Count -ne 1) { throw "The state bucket does not expose one KMS default." }
+  $kmsKeyArn = [string]$rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID
+  if ($kmsKeyArn -notmatch "^arn:aws:kms:$([regex]::Escape($Region)):$ExpectedAccountId`:key/") {
+    throw "The state KMS key is outside the selected account and region."
+  }
+
+  $variableProperties = @($Plan.variables.PSObject.Properties)
+  $allowedPlanRoot = [IO.Path]::GetFullPath((Join-Path $terraformDirectory ".terraform")) + [IO.Path]::DirectorySeparatorChar
 
   $saved = @{}
   $names = New-Object Collections.Generic.List[string]
@@ -511,8 +552,9 @@ function Convert-WorkloadWindow {
   }
 }
 
+$runtimePlan = Read-WorkloadRuntimePlan
 $identity = Assert-CallerAndTerraform
-$runtime = Get-RuntimeStatus
+$runtime = Get-RuntimeStatus $runtimePlan
 
 if ($Action -eq "Status") {
   $cost = Get-MonthToDateCost

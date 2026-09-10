@@ -24,6 +24,21 @@ function Assert-Throws {
   $script:passed++
 }
 
+function Assert-PlanTimestampStrings {
+  param([object]$Plan, [string]$Reader)
+  $values = $Plan.planned_values.root_module.resources[0].values
+  $checks = @(
+    @{ Actual = $Plan.timestamp; Expected = "2026-09-10T03:06:10.000+0000"; Name = "top-level zero-offset timestamp" },
+    @{ Actual = $values.created_at; Expected = "2026-09-10T08:36:10+05:30"; Name = "positive-offset timestamp" },
+    @{ Actual = $values.updated_at; Expected = "2026-09-10T03:06:10.1234567Z"; Name = "fractional timestamp" },
+    @{ Actual = $values.nested.observations[0].captured_at; Expected = "2026-09-09T23:06:10.000-0400"; Name = "nested negative-offset timestamp" }
+  )
+  foreach ($check in $checks) {
+    Assert-Equal ($check.Actual -is [string]) $true "$Reader converted the $($check.Name) into a non-string."
+    Assert-Equal $check.Actual $check.Expected "$Reader changed the exact $($check.Name) spelling."
+  }
+}
+
 $ownedName = "ai-job-apply-toolchain-tests-" + [guid]::NewGuid().ToString("N")
 $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $ownedRoot = [IO.Path]::GetFullPath((Join-Path $temporaryRoot $ownedName))
@@ -87,8 +102,32 @@ try {
     $script:legacyVersion = '{"terraform_version":"1.9.8"}'
     $script:currentVersionExit = 0
     $script:legacyVersionExit = 0
-    $script:currentShow = '{"format_version":"1.2","terraform_version":"1.16.2","resource_changes":[]}'
-    $script:legacyShow = '{"format_version":"1.2","terraform_version":"1.9.8","resource_changes":[]}'
+    $script:currentShow = @'
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.2",
+  "resource_changes": [],
+  "timestamp": "2026-09-10T03:06:10.000+0000",
+  "planned_values": {
+    "root_module": {
+      "resources": [
+        {
+          "values": {
+            "created_at": "2026-09-10T08:36:10+05:30",
+            "updated_at": "2026-09-10T03:06:10.1234567Z",
+            "nested": {
+              "observations": [
+                { "captured_at": "2026-09-09T23:06:10.000-0400" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+'@
+    $script:legacyShow = $script:currentShow.Replace('"terraform_version": "1.16.2"', '"terraform_version": "1.9.8"')
     $script:currentShowExit = 0
     $script:legacyShowExit = 0
     $script:replacePlanOnShow = $false
@@ -253,6 +292,7 @@ try {
   $env:APPLYDASH_LEGACY_TERRAFORM = Join-Path $ownedRoot "missing-legacy/terraform.exe"
   $plan = Read-DeploymentTerraformPlan -Path $planPath -TerraformDirectory $terraformRoot -AllowHistorical
   Assert-Equal $plan.terraform_version "1.16.2" "A current plan was relabeled."
+  Assert-PlanTimestampStrings $plan "Current reader"
   Assert-Equal $nativeCalls.Count 2 "A current plan unnecessarily inspected a historical reader."
   Assert-Equal $nativeCalls[1].Operation "Show" "The current reader did not use read-only show."
   foreach ($show in @('{bad json', 'null', '[]', '{}', '{"terraform_version":"1.9.8"}',
@@ -271,6 +311,7 @@ try {
   Assert-Equal $nativeCalls.Count 2 "The default current reader invoked a historical binary."
   $plan = Read-DeploymentTerraformPlan -Path $planPath -TerraformDirectory $terraformRoot -AllowHistorical
   Assert-Equal $plan.terraform_version "1.9.8" "A historical plan was relabeled or rejected."
+  Assert-PlanTimestampStrings $plan "Historical reader"
   Assert-Equal $nativeCalls[4].Operation "Version" "The fallback omitted exact legacy version verification."
   Assert-Equal $nativeCalls[5].Executable $legacyExecutable "The fallback did not use the reviewed legacy file."
   Assert-Equal $nativeCalls[5].Operation "Show" "The legacy reader invoked a command other than show."

@@ -448,9 +448,23 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
         ForEach-Object { $_.Groups[1].Value }
     })
   if ($declaredVariables -cnotcontains $restoreFlag) { throw "The current source is missing the exact new restore flag." }
+  $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) + @($restoreFlag, "outbox_starts_paused")
+  $declaredBooleanNames = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "infrastructure/terraform/environments/development") -File -Filter "*.tf" | ForEach-Object {
+      $declarations = [regex]::Matches((Get-Content -LiteralPath $_.FullName -Raw), '(?ms)^variable\s+"([^"]+)"\s*\{(.*?)^\}')
+      foreach ($declaration in $declarations) {
+        if ($declaration.Groups[2].Value -cmatch '(?m)^\s*type\s*=\s*bool\s*$') { $declaration.Groups[1].Value }
+      }
+    })
+  if (@($booleanVariableNames | Sort-Object -Unique).Count -ne $booleanVariableNames.Count -or
+      (@($booleanVariableNames | Sort-Object) -join "|") -cne (@($declaredBooleanNames | Sort-Object) -join "|")) {
+    throw "CaptureBaseline's Boolean allowlist must match the actual declared root Boolean inputs."
+  }
   $variables = [ordered]@{}
   foreach ($name in $declaredVariables) {
-    if ($name -cne $restoreFlag) { $variables[$name] = [pscustomobject]@{ value = "synthetic-$name" } }
+    if ($name -cne $restoreFlag) {
+      $value = if ($booleanVariableNames -ccontains $name) { $false } else { "synthetic-$name" }
+      $variables[$name] = [pscustomobject]@{ value = $value }
+    }
   }
   $variables["serverless_runtime_enabled"] = [pscustomobject]@{ value = $true }
   $variables["candidate_deletion_policy_json"] = [pscustomobject]@{ value = [pscustomobject]@{ synthetic = $true; version = 1 } }
@@ -496,6 +510,83 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
   $rawCurrent = Copy-CaptureFixture $current
   $rawCurrent.variables.$restoreFlag.value = "false"
   Assert-GatewayCapturedSeedInputs $historical $rawCurrent $declaredVariables
+  # Exercise every declared root Boolean in both directions, using actual JSON roundtrips.
+  $booleanRoundTrips = 0; $booleanFlips = 0; $invalidBooleanCases = 0
+  foreach ($name in $booleanVariableNames) {
+    foreach ($value in @($false, $true, "false", "true")) {
+      $typedSeed = Copy-CaptureFixture $current
+      $typedSeed.variables.$name.value = $value
+      $captured = Copy-CaptureFixture $typedSeed
+      $captured.variables.$name.value = if ($value -is [bool]) { $value.ToString().ToLowerInvariant() }
+        else { ConvertTo-ExactBoolean $value }
+      $typedSeed = Copy-CaptureFixture $typedSeed; $captured = Copy-CaptureFixture $captured
+      $seedBefore = ConvertTo-GatewayCanonicalJson $typedSeed
+      $capturedBefore = ConvertTo-GatewayCanonicalJson $captured
+      Assert-GatewayCapturedSeedInputs $typedSeed $captured $declaredVariables
+      if ((ConvertTo-GatewayCanonicalJson $typedSeed) -cne $seedBefore -or
+          (ConvertTo-GatewayCanonicalJson $captured) -cne $capturedBefore) {
+        throw "Boolean comparison must not modify either native plan."
+      }
+      $booleanRoundTrips++
+      $captured.variables.$name.value = -not (ConvertTo-ExactBoolean $value)
+      Assert-Rejected { Assert-GatewayCapturedSeedInputs $typedSeed $captured $declaredVariables } `
+        "CaptureBaseline accepted an effective Boolean change for $name."
+      $booleanFlips++
+    }
+  }
+  $ingestionFlags = @("deploy_ingestion_runtime", "ingestion_provider_activation_allowed", "ingestion_provider_private_egress",
+    "ingestion_runtime_enabled", "ingestion_synthetic_source_enabled")
+  $invalidBooleanInputs = @($null, "False", "True", " false", "false ", "0", "1", "yes", "", 0, 1, [pscustomobject]@{}, [object[]]@($false))
+  foreach ($name in @($ingestionFlags + @($restoreFlag, "outbox_starts_paused"))) {
+    foreach ($invalid in $invalidBooleanInputs) {
+      $badSeed = Copy-CaptureFixture $current; $badSeed.variables.$name.value = $invalid
+      $badCaptured = Copy-CaptureFixture $current; $badCaptured.variables.$name.value = $invalid
+      Assert-Rejected { Assert-GatewayCapturedSeedInputs $badSeed $current $declaredVariables } `
+        "CaptureBaseline accepted a malformed retained Boolean for $name."
+      Assert-Rejected { Assert-GatewayCapturedSeedInputs $current $badCaptured $declaredVariables } `
+        "CaptureBaseline accepted a malformed captured Boolean for $name."
+      Assert-Rejected { Assert-GatewayCapturedSeedInputs $badSeed $badCaptured $declaredVariables } `
+        "Matching malformed Boolean values escaped exact conversion for $name."
+      $invalidBooleanCases += 3
+    }
+  }
+  # Reproduce the five ingestion inputs through the real capture serialization fragment.
+  $saved = Save-AndClearTerraformVariables
+  try {
+    $seed = Copy-CaptureFixture $current
+    foreach ($name in $ingestionFlags) { $seed.variables.$name.value = $name -ceq "deploy_ingestion_runtime" }
+    $seedBefore = ConvertTo-GatewayCanonicalJson $seed
+    $captureInputs = Get-GatewayCaptureSeedInputs $seed $declaredVariables
+    & $captureInputFragment
+    $captured = Copy-CaptureFixture $seed
+    foreach ($name in $ingestionFlags) {
+      $value = [Environment]::GetEnvironmentVariable("TF_VAR_$name", "Process")
+      $expectedText = if ($name -ceq "deploy_ingestion_runtime") { "true" } else { "false" }
+      if ($value -isnot [string] -or $value -cne $expectedText) { throw "The native-input regression lost the exact ingestion flag serialization." }
+      $captured.variables.$name.value = $value
+    }
+    $captured = Copy-CaptureFixture $captured
+    Assert-GatewayCapturedSeedInputs $seed $captured $declaredVariables
+    if ((ConvertTo-GatewayCanonicalJson $seed) -cne $seedBefore) { throw "CaptureBaseline altered the verified ingestion seed." }
+  } finally { Restore-TerraformVariables $saved }
+  # A Boolean-looking string, number, composite, or nested member is not a root Boolean.
+  foreach ($case in @(
+      @{ Name = "oidc_audience"; Before = "false"; After = $false },
+      @{ Name = "ingestion_synthetic_seed"; Before = "true"; After = $true },
+      @{ Name = "database_backup_retention_days"; Before = 1; After = "1" },
+      @{ Name = "candidate_document_cors_allowed_origins"; Before = @("false"); After = '["false"]' },
+      @{ Name = "d2_community_runtime"; Before = [pscustomobject]@{ maintenance_mode = $false }; After = [pscustomobject]@{ maintenance_mode = "false" } }
+    )) {
+    if ($booleanVariableNames -ccontains $case.Name -or $declaredVariables -cnotcontains $case.Name) {
+      throw "A non-Boolean regression fixture is not a declared non-Boolean input."
+    }
+    $nonBooleanSeed = Copy-CaptureFixture $current; $nonBooleanSeed.variables.($case.Name).value = $case.Before
+    $nonBooleanCaptured = Copy-CaptureFixture $nonBooleanSeed; $nonBooleanCaptured.variables.($case.Name).value = $case.After
+    Assert-Rejected { Assert-GatewayCapturedSeedInputs $nonBooleanSeed $nonBooleanCaptured $declaredVariables } `
+      "CaptureBaseline coerced an unrelated non-Boolean input."
+  }
+  Write-Output ("CaptureBaseline Boolean regressions passed: {0} declared flags, {1} representation roundtrips, {2} effective flips rejected, {3} malformed-input cases rejected, five native ingestion serializations, five strict non-Boolean cases." -f
+    $booleanVariableNames.Count, $booleanRoundTrips, $booleanFlips, $invalidBooleanCases)
   foreach ($invalid in @($null, "False", "True", " false", "false ", "0", "1", "yes", "", 0, 1, [pscustomobject]@{}, [object[]]@($false))) {
     $bad = Copy-CaptureFixture $current
     $bad.variables.$restoreFlag.value = $invalid

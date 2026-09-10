@@ -459,6 +459,10 @@ function Assert-GatewayCapturedSeedInputs {
     throw "The captured baseline must use the current Terraform version."
   }
   $null = Assert-RetainedGatewayBaselinePlan $Captured $DeclaredVariableNames
+  # Native TF_VAR serialization may retain lowercase strings for declared root booleans.
+  # Keep the shared typed inventory unchanged; these two newer root flags are local additions.
+  $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) +
+    @("candidate_deletion_restore_role_enabled", "outbox_starts_paused")
   foreach ($name in $DeclaredVariableNames) {
     if ($inputs.DefaultVariables.ContainsKey($name)) { $expected = $inputs.DefaultVariables[$name] }
     else {
@@ -469,9 +473,9 @@ function Assert-GatewayCapturedSeedInputs {
     $capturedValue = $Captured.variables.PSObject.Properties[$name].Value.PSObject.Properties["value"]
     if ($null -eq $capturedValue) { throw "The captured baseline variable value is missing." }
     $actual = $capturedValue.Value
-    if ($name -ceq "candidate_deletion_restore_role_enabled") {
-      $expected = ConvertTo-GatewayCaptureRestoreFlag $expected
-      $actual = ConvertTo-GatewayCaptureRestoreFlag $actual
+    if ($booleanVariableNames -ccontains $name) {
+      $expected = ConvertTo-ExactBoolean $expected "Retained Terraform variable $name"
+      $actual = ConvertTo-ExactBoolean $actual "Captured Terraform variable $name"
     }
     if ((ConvertTo-GatewayCanonicalJson $actual) -cne (ConvertTo-GatewayCanonicalJson $expected)) {
       throw "The captured baseline changed a retained or reconstructed variable value."
