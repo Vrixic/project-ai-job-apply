@@ -105,36 +105,33 @@ export class AwsCandidateExportArtifactStore implements CandidateExportArtifactS
   }
 
   async deleteExactVersion(objectKey: string, objectVersion: string): Promise<boolean> {
-    if (!objectKey || !objectVersion) throw new Error("CandidateExportArtifactIdentityRejected");
-    await this.client.send(
+    if (
+      typeof objectKey !== "string" ||
+      objectKey.length === 0 ||
+      typeof objectVersion !== "string" ||
+      objectVersion.length === 0 ||
+      objectVersion === "null"
+    ) {
+      throw new Error("CandidateExportArtifactIdentityRejected");
+    }
+    const result = await this.client.send(
       new DeleteObjectCommand({
         Bucket: this.bucketName,
         Key: objectKey,
         VersionId: objectVersion,
       }),
     );
-    try {
-      await this.client.send(
-        new HeadObjectCommand({
-          Bucket: this.bucketName,
-          Key: objectKey,
-          VersionId: objectVersion,
-        }),
-      );
-      return false;
-    } catch (error) {
-      if (
-        error &&
-        typeof error === "object" &&
-        (["NotFound", "NoSuchKey", "NoSuchVersion"].includes(
-          String((error as { name?: unknown }).name),
-        ) ||
-          (error as { $metadata?: { httpStatusCode?: unknown } }).$metadata?.httpStatusCode === 404)
-      ) {
-        return true;
-      }
-      throw error;
+    // Version-specific DELETE is permanent. A follow-up absence HEAD can return 403
+    // without ListBucket, so expiry requires the SDK's exact positive acknowledgment.
+    const metadata = result.$metadata as { httpStatusCode?: unknown } | undefined;
+    if (
+      metadata?.httpStatusCode !== 204 ||
+      result.VersionId !== objectVersion ||
+      (result.DeleteMarker !== undefined && result.DeleteMarker !== false)
+    ) {
+      throw new Error("CandidateExportArtifactDeletionUnconfirmed");
     }
+    return true;
   }
 }
 

@@ -11,8 +11,10 @@ param(
   [ValidatePattern("^[a-z0-9.-]+$")]
   [string]$StateBucket = "",
   [string]$RuntimePlanPath = "",
-  [ValidateSet("Phase0", "D1Read", "D1SavedJob", "D1Match", "D2Public")]
+  [ValidateSet("Phase0", "D1Read", "D1SavedJob", "D1Match", "D2Public", "D2PublicDevelopment", "D2AuthenticatedIntake", "D2Processing")]
   [string]$WorkloadProfile = "Phase0",
+  [string]$WorkloadResultPath = "",
+  [string]$WorkloadResultSha256 = "",
   [string]$AwsProfile = "",
   [string]$Region = "us-east-2",
   [switch]$Help
@@ -50,6 +52,15 @@ expected 4xx response, and D2Public requires 40 requests with 20 expected fail-c
 responses. D2Public also selects the exact Gateway plus D2 Lambda, Trust-queue, and sixteen-alarm
 boundary.
 
+D2PublicDevelopment, D2AuthenticatedIntake and D2Processing additionally require the exact
+aggregate-only runner JSON via WorkloadResultPath and its lowercase WorkloadResultSha256.
+StartTime/EndTime must equal that result. These development-only profiles corroborate observed
+metrics, not exact-owner request attribution, publication or throughput capacity. Processing
+allows transient queue activity and checks two complete post-run minutes for approximate drain.
+Run only after that interval and metric publication; this inspector does not wait or run workloads.
+Missing required metric data is inconclusive, never a manufactured zero. D2Public retains its
+historical signed-policy 40-request boundary; its floor is not lowered implicitly.
+
 Both actions are read-only. No account identifier, endpoint, resource ARN, trace, log message,
 identity, token, preference, operation identifier, or raw provider record is printed.
 "@
@@ -59,7 +70,7 @@ identity, token, preference, operation identifier, or raw provider record is pri
 if ($Region -ne "us-east-2") {
   throw "The Phase 0 $Environment environment is restricted to us-east-2."
 }
-if ($WorkloadProfile -ceq "D2Public" -and $Environment -cne "development") {
+if ($WorkloadProfile -clike "D2*" -and $Environment -cne "development") {
   throw "The D2 public-boundary workload is restricted to development."
 }
 
@@ -408,13 +419,280 @@ function Get-BillingControlCounts {
   }
 }
 
+function Assert-D2AggregateFields {
+  param([object]$Value, [string[]]$Names)
+  if ($Value -isnot [pscustomobject] -or
+      ((@($Value.PSObject.Properties.Name) | Sort-Object) -join ",") -cne (($Names | Sort-Object) -join ",")) {
+    throw "The workload aggregate has an unexpected shape."
+  }
+}
+
+function Assert-D2AggregateCount {
+  param([object]$Value, [long]$Minimum, [long]$Maximum)
+  if (($Value -isnot [int] -and $Value -isnot [long]) -or $Value -lt $Minimum -or $Value -gt $Maximum) {
+    throw "The workload aggregate has an invalid numeric count."
+  }
+}
+
+function Assert-D2AggregateFlag {
+  param([object]$Value, [bool]$Expected)
+  if ($Value -isnot [bool] -or $Value -ne $Expected) {
+    throw "The workload aggregate has an invalid disposition."
+  }
+}
+
+function ConvertTo-D2ResultTimestamp {
+  param([object]$Value)
+  $instant = [DateTimeOffset]::MinValue
+  if ($Value -isnot [string] -or
+      -not [DateTimeOffset]::TryParseExact($Value, "yyyy-MM-dd'T'HH:mm:ss.fff'Z'",
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$instant)) {
+    throw "The workload aggregate requires its original canonical UTC timestamps."
+  }
+  return $instant.UtcDateTime
+}
+
+function Assert-D2WorkloadAggregate {
+  param(
+    [object]$Result, [object]$Configuration, [string]$Profile,
+    [string]$ExpectedStart, [string]$ExpectedEnd, [DateTime]$Now = [DateTime]::UtcNow
+  )
+
+  if ($Profile -cnotin @("D2PublicDevelopment", "D2AuthenticatedIntake", "D2Processing")) {
+    throw "The result-bound workload profile is invalid."
+  }
+  $public = $Profile -ceq "D2PublicDevelopment"
+  $processing = $Profile -ceq "D2Processing"
+  $common = @("profile", "startedAt", "endedAt", "durationMs", "serverFailures")
+  $names = if ($public) {
+    $common + @("policyRequests", "capabilityMode", "policyChecksSkipped", "authenticatedThroughputValidated",
+      "unauthorizedContributionRequests", "unauthorizedResponses", "throttledResponses",
+      "unexpectedResponses", "unauthorizedLatency")
+  } else {
+    $common + @("passed", "requests", "concurrency", "acknowledgedContributions", "consentGrants",
+      "ownerReads", "idempotentReplays", "expectedConflicts", "ambiguousWrites", "cleanupAttempted",
+      "cleanupSucceeded", "cleanupCancellations", "cleanupWithdrawals", "processingToReviewObserved",
+      "processingPolls", "cleanupPolls", "cleanupRevocations", "recoveryRequired", "latency",
+      "processingAcceptance", "moderationAcceptance", "publicationAcceptance", "capacityAcceptance")
+  }
+  Assert-D2AggregateFields $Result $names
+  $expectedProfile = if ($public) { "d2_deployed_unauthenticated_contribution_boundary_v1" }
+    elseif ($processing) { "d2_deployed_disposable_processing_to_review_v1" }
+    else { "d2_deployed_disposable_authenticated_intake_v1" }
+  if ($Result.profile -isnot [string] -or $Result.profile -cne $expectedProfile) {
+    throw "The workload result does not match the selected profile."
+  }
+  $start = ConvertTo-D2ResultTimestamp $Result.startedAt
+  $end = ConvertTo-D2ResultTimestamp $Result.endedAt
+  $maximumMilliseconds = if ($processing) { 1200000 } elseif ($public) { 900000 } else { 120000 }
+  Assert-D2AggregateCount $Result.durationMs 1 $maximumMilliseconds
+  if ($ExpectedStart -cne $Result.startedAt -or $ExpectedEnd -cne $Result.endedAt -or
+      $end -le $start -or $end -gt $Now -or ($end - $start).TotalMilliseconds -gt $maximumMilliseconds -or
+      [Math]::Abs(($end - $start).TotalMilliseconds - $Result.durationMs) -gt 1000) {
+    throw "The workload result and its exact bounded observation window disagree."
+  }
+  Assert-D2AggregateCount $Result.serverFailures 0 0
+
+  if ($Configuration -isnot [pscustomobject]) { throw "The D2 runtime mode is unavailable." }
+  foreach ($name in @("deploy", "enabled", "maintenance_mode", "development_contributions_enabled")) {
+    if ($Configuration.PSObject.Properties.Name -cnotcontains $name) { throw "The D2 runtime mode is incomplete." }
+  }
+  Assert-D2AggregateFlag $Configuration.deploy $true
+  Assert-D2AggregateFlag $Configuration.enabled $true
+  Assert-D2AggregateFlag $Configuration.maintenance_mode $false
+  if ($Configuration.development_contributions_enabled -isnot [bool]) { throw "The D2 runtime mode is invalid." }
+  $developmentMode = $Configuration.development_contributions_enabled
+  if ($public -and -not $developmentMode) { throw "The development public probe requires the matching runtime mode." }
+  if (-not $public -and -not $processing -and $developmentMode) {
+    throw "The paused-intake runner does not support persistent development processing."
+  }
+  if (-not $public -and -not $developmentMode) {
+    if ($Configuration.PSObject.Properties.Name -cnotcontains "signed_policy_json" -or
+        $Configuration.signed_policy_json -isnot [string]) { throw "The signed runtime mode is unavailable." }
+    try { $policy = ConvertFrom-DeploymentTerraformJson $Configuration.signed_policy_json }
+    catch { throw "The signed runtime mode is unreadable." }
+    if ($policy -isnot [pscustomobject] -or $policy.payload -isnot [pscustomobject]) {
+      throw "The signed runtime mode is unreadable."
+    }
+    # Observe the already-configured mode only. This does not approve, sign or renew a policy.
+    Assert-D2AggregateFlag $policy.payload.intakeEnabled $true
+    Assert-D2AggregateFlag $policy.payload.processingEnabled $processing
+  }
+
+  if ($public) {
+    if ($Result.capabilityMode -isnot [string] -or $Result.capabilityMode -cne "development") { throw "The public probe mode is not explicit." }
+    Assert-D2AggregateCount $Result.policyRequests 0 0
+    Assert-D2AggregateFlag $Result.policyChecksSkipped $true
+    Assert-D2AggregateFlag $Result.authenticatedThroughputValidated $false
+    Assert-D2AggregateCount $Result.unauthorizedContributionRequests 20 20
+    foreach ($name in @("unauthorizedResponses", "throttledResponses")) {
+      Assert-D2AggregateCount $Result.$name 0 20
+    }
+    if ($Result.unauthorizedResponses + $Result.throttledResponses -ne 20) {
+      throw "The public probe did not account for every denial."
+    }
+    Assert-D2AggregateCount $Result.unexpectedResponses 0 0
+    $requests = 20
+    $conflicts = 20
+    $latency = $Result.unauthorizedLatency
+  } else {
+    foreach ($name in @("passed", "cleanupAttempted", "cleanupSucceeded")) {
+      Assert-D2AggregateFlag $Result.$name $true
+    }
+    foreach ($name in @("recoveryRequired", "processingAcceptance", "moderationAcceptance",
+        "publicationAcceptance", "capacityAcceptance")) { Assert-D2AggregateFlag $Result.$name $false }
+    foreach ($name in @("concurrency", "acknowledgedContributions", "idempotentReplays", "expectedConflicts")) {
+      Assert-D2AggregateCount $Result.$name 1 1
+    }
+    foreach ($name in @("consentGrants", "cleanupRevocations")) { Assert-D2AggregateCount $Result.$name 2 2 }
+    Assert-D2AggregateCount $Result.ownerReads 1 10
+    Assert-D2AggregateCount $Result.requests 12 $(if ($processing) { 192 } else { 36 })
+    Assert-D2AggregateCount $Result.ambiguousWrites 0 ($Result.requests - 1)
+    Assert-D2AggregateFlag $Result.processingToReviewObserved $processing
+    Assert-D2AggregateCount $Result.cleanupCancellations $(if ($processing) { 0 } else { 1 }) $(if ($processing) { 0 } else { 1 })
+    Assert-D2AggregateCount $Result.cleanupWithdrawals $(if ($processing) { 1 } else { 0 }) $(if ($processing) { 1 } else { 0 })
+    Assert-D2AggregateCount $Result.processingPolls $(if ($processing) { 1 } else { 0 }) $(if ($processing) { 48 } else { 0 })
+    Assert-D2AggregateCount $Result.cleanupPolls $(if ($processing) { 1 } else { 0 }) $(if ($processing) { 70 } else { 0 })
+    $minimum = if ($processing) {
+      9 + $Result.ownerReads + $Result.processingPolls + $Result.cleanupPolls + $(if ($developmentMode) { 0 } else { 1 })
+    } else { 11 + $Result.ownerReads }
+    if ($Result.requests -lt $minimum) { throw "The workload counters cannot describe the required lifecycle." }
+    $requests = $Result.requests
+    $conflicts = $Result.expectedConflicts
+    $latency = $Result.latency
+  }
+  Assert-D2AggregateFields $latency @("p50Ms", "p95Ms", "maxMs")
+  foreach ($name in @("p50Ms", "p95Ms", "maxMs")) { Assert-D2AggregateCount $latency.$name 0 $Result.durationMs }
+  if ($latency.p50Ms -gt $latency.p95Ms -or $latency.p95Ms -gt $latency.maxMs) {
+    throw "The workload latency summary is invalid."
+  }
+  $metricStart = [DateTime]::new($start.Year, $start.Month, $start.Day, $start.Hour, $start.Minute, 0, [DateTimeKind]::Utc)
+  $metricEnd = [DateTime]::new($end.Year, $end.Month, $end.Day, $end.Hour, $end.Minute, 0, [DateTimeKind]::Utc)
+  if ($metricEnd -lt $end) { $metricEnd = $metricEnd.AddMinutes(1) }
+  $drainEnd = $metricEnd.AddMinutes(2)
+  if ($drainEnd -gt $Now) { throw "The two-minute post-run observation interval has not completed; no requests were made." }
+  return [pscustomobject]@{
+    ResultProfile = $expectedProfile; Start = $metricStart; End = $metricEnd
+    RunnerStart = $start; RunnerEnd = $end; DrainStart = $metricEnd; DrainEnd = $drainEnd
+    MinimumRequests = $requests; MinimumExpected4xx = $conflicts
+    Processing = $processing; Public = $public; Authenticated = -not $public
+  }
+}
+
+function Read-D2WorkloadEvidence {
+  param([object]$Plan)
+  if ($WorkloadProfile -ilike "D2*" -and
+      $WorkloadProfile -cnotin @("D2Public", "D2PublicDevelopment", "D2AuthenticatedIntake", "D2Processing")) {
+    throw "The D2 workload profile requires its exact canonical spelling."
+  }
+  $boundProfile = $WorkloadProfile -cin @("D2PublicDevelopment", "D2AuthenticatedIntake", "D2Processing")
+  if (-not $boundProfile) {
+    if ($WorkloadResultPath -or $WorkloadResultSha256) { throw "This historical profile does not consume a D2 runner result." }
+    return $null
+  }
+  if ($Action -cne "Measure" -or $Environment -cne "development" -or
+      $WorkloadResultSha256 -cnotmatch "^[a-f0-9]{64}$" -or -not $WorkloadResultPath) {
+    throw "D2 corroboration requires Measure and one checksum-reviewed aggregate result."
+  }
+  try {
+    $path = [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($WorkloadResultPath)) {
+      $WorkloadResultPath
+    } else { Join-Path $repositoryRoot $WorkloadResultPath }))
+    $roots = @((Join-Path $repositoryRoot ".tmp"), (Join-Path $terraformDirectory ".terraform"))
+    $root = @($roots | Where-Object {
+      $path.StartsWith(([IO.Path]::GetFullPath($_).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar),
+        [StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($root.Count -ne 1) { throw "outside ignored roots" }
+    $entry = Get-Item -LiteralPath $path -Force
+    if ($entry.PSIsContainer -or $entry.Length -lt 2 -or $entry.Length -gt 16384) { throw "invalid aggregate file" }
+    $ancestor = $entry
+    while ($null -ne $ancestor -and $ancestor.FullName.Length -ge $root[0].Length) {
+      if (($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "linked aggregate path" }
+      $ancestor = if ($ancestor -is [IO.FileInfo]) { $ancestor.Directory } else { $ancestor.Parent }
+    }
+    $bytes = [IO.File]::ReadAllBytes($path)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $hash = [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace("-", "").ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    if ($hash -cne $WorkloadResultSha256) { throw "aggregate checksum mismatch" }
+    $json = (New-Object Text.UTF8Encoding($false, $true)).GetString($bytes).TrimStart([char]0xfeff)
+    $result = ConvertFrom-DeploymentTerraformJson $json
+    # These fixed runner aggregates contain only ASCII member names, canonical timestamps and
+    # fixed profile strings. The real runner emits no escapes; reject escaped/duplicate keys
+    # instead of permitting ConvertFrom-Json's last-property-wins behavior.
+    $members = @([regex]::Matches($json, '"([A-Za-z][A-Za-z0-9]*)"\s*:') | ForEach-Object { $_.Groups[1].Value })
+    if ($json.Contains('\') -or $members.Count -ne @($members | Select-Object -Unique).Count) {
+      throw "ambiguous aggregate members"
+    }
+  } catch { throw "The checksum-reviewed ignored workload aggregate is unavailable or invalid." }
+  $configuration = $Plan.variables.d2_community_runtime.value
+  return Assert-D2WorkloadAggregate $result $configuration $WorkloadProfile $StartTime $EndTime
+}
+
+function ConvertTo-D2MetricTimestamp {
+  param([object]$Value)
+  if ($Value -is [DateTime]) {
+    if ($Value.Kind -eq [DateTimeKind]::Unspecified) { throw "A metric timestamp must include its timezone." }
+    return $Value.ToUniversalTime()
+  }
+  if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime }
+  $instant = [DateTimeOffset]::MinValue
+  if ($Value -isnot [string] -or
+      $Value -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,7})?(Z|[+-]\d{2}:\d{2})$' -or
+      -not [DateTimeOffset]::TryParse($Value, [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::None, [ref]$instant)) {
+    throw "A metric timestamp is invalid."
+  }
+  return $instant.UtcDateTime
+}
+
+function Assert-D2MetricDatapoints {
+  param([object[]]$Points, [DateTime]$Start, [DateTime]$End)
+  $seen = @{}
+  foreach ($point in $Points) {
+    $instant = ConvertTo-D2MetricTimestamp $point.Timestamp
+    if ($instant -lt $Start -or $instant -ge $End -or $instant.Ticks % [TimeSpan]::TicksPerMinute -ne 0 -or
+        $seen.ContainsKey($instant.Ticks)) { throw "Metric datapoints are duplicated or outside the exact window." }
+    $seen[$instant.Ticks] = $true
+    foreach ($name in @("Sum", "Average", "Maximum", "SampleCount")) {
+      $value = $point.$name
+      if (($value -isnot [int] -and $value -isnot [long] -and $value -isnot [double] -and $value -isnot [decimal]) -or
+          [double]::IsNaN([double]$value) -or [double]::IsInfinity([double]$value) -or $value -lt 0) {
+        throw "A metric datapoint has an invalid statistic."
+      }
+    }
+    if ($point.SampleCount -le 0) { throw "A metric datapoint has no samples." }
+    if ($point.Average -gt $point.Maximum -or $point.Sum -lt $point.Maximum) {
+      throw "A metric datapoint has inconsistent nonnegative statistics."
+    }
+  }
+}
+
+function Assert-D2MetricCoverage {
+  param([object]$Metric, [string[]]$ExpectedTimestamps, [object]$SampleReference = $null)
+  if ($Metric.Datapoints -eq 0 -or @($ExpectedTimestamps | Where-Object { $_ -cnotin $Metric.Timestamps }).Count -ne 0) {
+    throw "Required metric coverage is incomplete; missing data is unknown, not zero."
+  }
+  if ($null -ne $SampleReference) {
+    foreach ($timestamp in $ExpectedTimestamps) {
+      if ($Metric.SampleCounts[$timestamp] -ne $SampleReference.SampleCounts[$timestamp]) {
+        throw "Required same-sample metric coverage is incomplete; partial data is unknown."
+      }
+    }
+  }
+}
+
 function Get-MetricAggregate {
   param(
     [string]$Namespace,
     [string]$MetricName,
     [string[]]$Dimensions,
     [DateTime]$WindowStart,
-    [DateTime]$WindowEnd
+    [DateTime]$WindowEnd,
+    [switch]$InspectCoverage,
+    [switch]$RequireCoverage
   )
 
   $arguments = @(
@@ -442,22 +720,37 @@ function Get-MetricAggregate {
   }
   $arguments += @("--output", "json")
   $metric = Invoke-AwsJson $arguments
-  $points = Get-Collection $metric "Datapoints"
+  $points = @(Get-Collection $metric "Datapoints")
+  if ($InspectCoverage -or $RequireCoverage) {
+    Assert-D2MetricDatapoints $points $WindowStart $WindowEnd
+    if ($RequireCoverage -and $points.Count -eq 0) {
+      throw "Required metric coverage is unavailable; missing data is unknown, not zero."
+    }
+  }
   [decimal]$sum = 0
   [decimal]$weighted = 0
   [decimal]$samples = 0
   [decimal]$maximum = 0
+  $sampleCounts = @{}
   foreach ($point in $points) {
     $sum += [decimal]$point.Sum
     $weighted += [decimal]$point.Average * [decimal]$point.SampleCount
     $samples += [decimal]$point.SampleCount
     $maximum = [Math]::Max($maximum, [decimal]$point.Maximum)
+    if ($InspectCoverage -or $RequireCoverage) {
+      $sampleCounts[(ConvertTo-D2MetricTimestamp $point.Timestamp).ToString("o")] = [decimal]$point.SampleCount
+    }
   }
   return [pscustomobject]@{
-    Sum     = [Math]::Round($sum, 2)
-    Average = if ($samples -gt 0) { [Math]::Round($weighted / $samples, 2) } else { 0 }
-    Maximum = [Math]::Round($maximum, 2)
+    Sum     = if ($InspectCoverage -and $points.Count -eq 0) { $null } else { [Math]::Round($sum, 2) }
+    Average = if ($samples -gt 0) { [Math]::Round($weighted / $samples, 2) } elseif ($InspectCoverage) { $null } else { 0 }
+    Maximum = if ($InspectCoverage -and $points.Count -eq 0) { $null } else { [Math]::Round($maximum, 2) }
     Samples = [int]$samples
+    Datapoints = $points.Count
+    SampleCounts = $sampleCounts
+    Timestamps = if ($InspectCoverage -or $RequireCoverage) {
+      @($points | ForEach-Object { (ConvertTo-D2MetricTimestamp $_.Timestamp).ToString("o") } | Sort-Object)
+    } else { @() }
   }
 }
 
@@ -552,7 +845,150 @@ function Convert-WorkloadWindow {
   }
 }
 
+function Measure-D2WorkloadCorroboration {
+  param([object]$Evidence, [string[]]$ApiDimensions, [object]$Runtime)
+  $coverage = New-Object Collections.Generic.List[object]
+  function Read-D2Metric {
+    param([string]$Label, [string]$Namespace, [string]$Name, [string[]]$Dimensions,
+      [DateTime]$Start, [DateTime]$End, [bool]$Required = $true)
+    $metric = Get-MetricAggregate $Namespace $Name $Dimensions $Start $End -InspectCoverage -RequireCoverage:$Required
+    $coverage.Add([pscustomobject]@{
+      Signal = $Label; Required = $Required; Datapoints = $metric.Datapoints
+      Availability = if ($metric.Datapoints -eq 0) { "unknown" } else { "observed" }
+    })
+    return $metric
+  }
+  function Get-MinuteTimestamps {
+    param([DateTime]$Start, [DateTime]$End)
+    for ($minute = $Start; $minute -lt $End; $minute = $minute.AddMinutes(1)) { $minute.ToString("o") }
+  }
+  $start = $Evidence.Start; $end = $Evidence.End
+  $requests = Read-D2Metric "api_requests" "AWS/ApiGateway" "Count" $ApiDimensions $start $end
+  $clientErrors = Read-D2Metric "api_4xx" "AWS/ApiGateway" "4xx" $ApiDimensions $start $end
+  $serverErrors = Read-D2Metric "api_5xx" "AWS/ApiGateway" "5xx" $ApiDimensions $start $end
+  $latency = Read-D2Metric "api_latency" "AWS/ApiGateway" "Latency" $ApiDimensions $start $end
+  # The fixed profiles issue requests throughout their run, but first-call setup and final
+  # result assembly may leave partial edge buckets empty. Require every wholly interior
+  # minute, nonempty observed data and the runner's total floor; do not invent edge traffic.
+  $fullRequestStart = $start; $fullRequestEnd = $end
+  if ($fullRequestStart -lt $Evidence.RunnerStart) { $fullRequestStart = $fullRequestStart.AddMinutes(1) }
+  if ($fullRequestEnd -gt $Evidence.RunnerEnd) { $fullRequestEnd = $fullRequestEnd.AddMinutes(-1) }
+  Assert-D2MetricCoverage $requests @(Get-MinuteTimestamps $fullRequestStart $fullRequestEnd)
+  if ($Evidence.Public) { Assert-D2MetricCoverage $clientErrors $requests.Timestamps }
+  Assert-D2MetricCoverage $serverErrors $requests.Timestamps
+  Assert-D2MetricCoverage $latency $requests.Timestamps
+  if ($requests.Sum -lt $Evidence.MinimumRequests -or $clientErrors.Sum -lt $Evidence.MinimumExpected4xx -or
+      $serverErrors.Sum -ne 0) { throw "The D2 API aggregates do not corroborate the successful workload." }
+
+  [decimal]$observedLambdaErrors = 0; [decimal]$observedThrottles = 0
+  $workerEnd = $Evidence.DrainEnd
+  foreach ($role in @("gateway", "d2-community-scheduled", "d2-trust-signal")) {
+    # An unauthenticated denial need not invoke any Lambda. Paused intake need not invoke either
+    # worker. Absent optional data stays unknown; it is not evidence of a disabled/idle worker.
+    $required = if ($role -ceq "gateway") { $Evidence.Authenticated } else { $Evidence.Processing }
+    $dimensions = @("Name=FunctionName,Value=ai-job-apply-$Environment-$role")
+    $functionEnd = if ($role -ceq "gateway") { $end } else { $workerEnd }
+    $invocations = Read-D2Metric "$role-invocations" "AWS/Lambda" "Invocations" $dimensions $start $functionEnd $required
+    # Native adverse series may be sparse. Reject every observed failure without inventing a
+    # zero datum or requiring their timestamps to equal invocation-start minutes.
+    $errors = Read-D2Metric "$role-errors" "AWS/Lambda" "Errors" $dimensions $start $functionEnd $false
+    $throttles = Read-D2Metric "$role-throttles" "AWS/Lambda" "Throttles" $dimensions $start $functionEnd $false
+    if ($required -and $invocations.Sum -le 0) { throw "An expected D2 runtime has no observed invocation." }
+    if ($null -ne $errors.Sum) { $observedLambdaErrors += $errors.Sum }
+    if ($null -ne $throttles.Sum) { $observedThrottles += $throttles.Sum }
+  }
+  if ($observedLambdaErrors -ne 0 -or $observedThrottles -ne 0) {
+    throw "The D2 runtime has observed Lambda errors or throttles in its bounded observation window."
+  }
+  $database = @("Name=DBInstanceIdentifier,Value=ai-job-apply-$Environment")
+  $databaseCpu = Read-D2Metric "database_cpu" "AWS/RDS" "CPUUtilization" $database $start $end
+  $connections = Read-D2Metric "database_connections" "AWS/RDS" "DatabaseConnections" $database $start $end
+  Assert-D2MetricCoverage $databaseCpu @(Get-MinuteTimestamps $start $end)
+  Assert-D2MetricCoverage $connections @(Get-MinuteTimestamps $start $end)
+  # Each reference and its failure fields share one actual EMF sample. Trust emits after
+  # consume completes; scheduled recovery-only invocations emit no ordinary batch sample.
+  # Observe completion through the drain interval, not by matching Lambda start minutes.
+  foreach ($group in @(
+      @{ Reference = "ScheduledBatchSucceeded"; Failures = @("JobsDead", "JobsDeliveryDead", "TrustDeliveryDead") },
+      @{ Reference = "TrustSignalRecords"; Failures = @("TrustSignalFailed") })) {
+    $reference = Read-D2Metric $group.Reference "AIJobApply/D2Community" $group.Reference @() $start $workerEnd $Evidence.Processing
+    if ($Evidence.Processing -and $reference.Sum -le 0) { throw "An expected D2 worker has no observed completed batch sample." }
+    foreach ($name in $group.Failures) {
+      $metric = Read-D2Metric $name "AIJobApply/D2Community" $name @() $start $workerEnd $Evidence.Processing
+      if ($null -ne $metric.Sum -and $metric.Sum -ne 0) { throw "The D2 observation window contains an application failure signal." }
+      if ($reference.Datapoints -gt 0) { Assert-D2MetricCoverage $metric $reference.Timestamps $reference }
+    }
+  }
+  # This signal is emitted only on failure, so its absence remains unknown rather than zero.
+  $batchFailure = Read-D2Metric "ScheduledBatchFailed" "AIJobApply/D2Community" "ScheduledBatchFailed" @() $start $workerEnd $false
+  if ($null -ne $batchFailure.Sum -and $batchFailure.Sum -ne 0) { throw "The D2 observation window contains a failed scheduled batch." }
+
+  $queue = @("Name=QueueName,Value=ai-job-apply-$Environment-d2-trust-signals")
+  $deadLetter = @("Name=QueueName,Value=ai-job-apply-$Environment-d2-trust-signals-dead-letter")
+  $queueAge = Read-D2Metric "trust_queue_age" "AWS/SQS" "ApproximateAgeOfOldestMessage" $queue $start $end
+  $queueVisible = Read-D2Metric "trust_queue_visible" "AWS/SQS" "ApproximateNumberOfMessagesVisible" $queue $start $end
+  $workloadMinutes = @(Get-MinuteTimestamps $start $end)
+  Assert-D2MetricCoverage $queueAge $workloadMinutes
+  Assert-D2MetricCoverage $queueVisible $workloadMinutes
+  # Transient queue activity is legitimate for active processing and unrelated shared-runtime
+  # work. The exact runner cleanup and this later approximate settled observation are distinct.
+  $drainMinutes = @(Get-MinuteTimestamps $Evidence.DrainStart $Evidence.DrainEnd)
+  $deadLetterMinutes = @(Get-MinuteTimestamps $start $Evidence.DrainEnd)
+  foreach ($name in @("ApproximateNumberOfMessagesVisible", "ApproximateNumberOfMessagesNotVisible",
+      "ApproximateNumberOfMessagesDelayed")) {
+    $drain = Read-D2Metric "trust_queue_drain-$name" "AWS/SQS" $name $queue $Evidence.DrainStart $Evidence.DrainEnd
+    Assert-D2MetricCoverage $drain $drainMinutes
+    if ($drain.Maximum -ne 0) { throw "The two-minute D2 approximate queue-drain observation is not empty." }
+    $dead = Read-D2Metric "trust_dlq-$name" "AWS/SQS" $name $deadLetter $start $Evidence.DrainEnd
+    Assert-D2MetricCoverage $dead $deadLetterMinutes
+    if ($dead.Maximum -ne 0) { throw "The D2 workload/drain interval contains dead-letter messages." }
+  }
+  $alarmsExpected = @(
+    "gateway-lambda-errors", "gateway-lambda-throttles", "gateway-lambda-duration",
+    "d2-scheduled-errors", "d2-scheduled-throttles", "d2-scheduled-duration",
+    "d2-trust-signal-errors", "d2-trust-signal-throttles", "d2-trust-signal-duration",
+    "d2-scheduledbatchfailed", "d2-jobsdead", "d2-jobsdeliverydead", "d2-trustdeliverydead",
+    "d2-trustsignalfailed", "d2-trust-signal-queue-age", "d2-trust-signal-dead-letter"
+  ) | ForEach-Object { "ai-job-apply-$Environment-$_" }
+  $alarms = Invoke-AwsJson (@("cloudwatch", "describe-alarms", "--alarm-names") +
+    $alarmsExpected + @("--output", "json"))
+  $actual = @(Get-Collection $alarms "MetricAlarms")
+  if ($actual.Count -ne $alarmsExpected.Count -or
+      ((@($actual.AlarmName) | Sort-Object) -join ",") -cne (($alarmsExpected | Sort-Object) -join ",") -or
+      @($actual | Where-Object {
+        $_.StateValue -cne "OK" -or $_.ActionsEnabled -isnot [bool] -or -not $_.ActionsEnabled -or
+        @($_.AlarmActions).Count -ne 1 -or @($_.OKActions).Count -ne 1
+      }).Count -ne 0) { throw "The exact D2/Gateway alarm boundary is not healthy." }
+  $logs = Get-LogAggregate $start $end
+  if ($logs.ErrorMatches -ne 0 -or $logs.ForbiddenMatches -ne 0) {
+    throw "The workload window contains application error or forbidden log-pattern matches."
+  }
+  return [pscustomobject]@{
+    Environment = $Environment; WorkloadProfile = $WorkloadProfile
+    RunnerProfile = $Evidence.ResultProfile; RunnerAggregateSha256 = $WorkloadResultSha256
+    RunnerStartedAt = $Evidence.RunnerStart.ToString("o"); RunnerEndedAt = $Evidence.RunnerEnd.ToString("o")
+    MetricStartedAt = $start.ToString("o"); MetricEndedAt = $end.ToString("o")
+    WorkerMetricStartedAt = $start.ToString("o"); WorkerMetricEndedAt = $workerEnd.ToString("o")
+    QueueDrainStartedAt = $Evidence.DrainStart.ToString("o"); QueueDrainEndedAt = $Evidence.DrainEnd.ToString("o")
+    AggregateCorroborated = $true; OwnerRequestAttribution = $false
+    PublicationAcceptance = $false; CapacityAcceptance = $false; ProcessingAcceptance = $false
+    ApiRequests = $requests.Sum; RunnerRequests = $Evidence.MinimumRequests
+    Api4xx = $clientErrors.Sum; RunnerExpected4xx = $Evidence.MinimumExpected4xx; Api5xx = $serverErrors.Sum
+    ApiLatencyAverageMs = $latency.Average; ApiLatencyMaximumMs = $latency.Maximum
+    DatabaseCpuMaxPercent = $databaseCpu.Maximum; DatabaseConnectionsMax = $connections.Maximum
+    ObservedLambdaErrors = $observedLambdaErrors; ObservedLambdaThrottles = $observedThrottles
+    UnknownOptionalMetricSeries = @($coverage | Where-Object { -not $_.Required -and $_.Availability -ceq "unknown" }).Count
+    MetricCoverage = @($coverage.ToArray()); MissingDataTreatedAsZero = $false
+    EventQueueAgeMaxSeconds = $queueAge.Maximum; EventQueueVisibleMax = $queueVisible.Maximum
+    FinalApproximateQueueDrained = $true; DeadLetterMessagesObserved = 0
+    RuntimeAlarmsOk = $actual.Count; LogEvents = $logs.Events; LogErrorMatches = 0; ForbiddenLogMatches = 0
+    EcsRuntimeIdle = $Runtime.EcsRuntimeIdle; TriggersEnabled = $Runtime.TriggersEnabled
+    TerraformDrift = 0; AwsMutation = $false
+  }
+}
+
 $runtimePlan = Read-WorkloadRuntimePlan
+$d2Evidence = Read-D2WorkloadEvidence $runtimePlan
 $identity = Assert-CallerAndTerraform
 $runtime = Get-RuntimeStatus $runtimePlan
 
@@ -575,7 +1011,7 @@ if ($Action -eq "Status") {
   exit 0
 }
 
-$window = Convert-WorkloadWindow
+$window = if ($null -ne $d2Evidence) { $d2Evidence } else { Convert-WorkloadWindow }
 $apis = Get-Collection (
   Invoke-AwsJson @("apigatewayv2", "get-apis", "--max-results", "100", "--output", "json")
 ) "Items"
@@ -584,6 +1020,10 @@ if ($apiMatches.Count -ne 1) { throw "The exact $Environment HTTP API could not 
 $apiId = [string]$apiMatches[0].ApiId
 
 $apiDimensions = @("Name=ApiId,Value=$apiId")
+if ($null -ne $d2Evidence) {
+  Measure-D2WorkloadCorroboration $d2Evidence $apiDimensions $runtime | ConvertTo-Json -Depth 6
+  exit 0
+}
 $databaseDimensions = @("Name=DBInstanceIdentifier,Value=ai-job-apply-$Environment")
 $eventQueueName = if ($WorkloadProfile -ceq "D2Public") {
   "ai-job-apply-$Environment-d2-trust-signals"

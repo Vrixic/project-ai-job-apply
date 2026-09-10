@@ -321,10 +321,23 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
+- Current recovery blocker (`2026-09-10T06:08Z`): D2-043's full committed-source verifier passes at
+  `6604aff`, with fresh bootstrap/platform zero-change baselines at states `13`/`308`. Actual
+  PITR preflight finds 43 healthy alarms of 44; recurring activity-version-12 HTTP 403 errors
+  prevent recovery. D2-044 integrates a narrow exact-version export DELETE acknowledgment fix,
+  without permissions, SQL or retention changes. A generated-object probe confirms initial and
+  repeated HTTP 204/exact-VersionId acknowledgment and complete cleanup; no candidate data was
+  touched. Deployment and normal scheduled health remain. D2-045 adds the missing matching
+  development workload-inspector profiles; no authenticated workload has run. Recovery roles,
+  PITR and replay remain unactivated; the existing application release is still `e2e730a`.
+  At `06:13:53Z`, STS reports expired SSO before the next metric read or mutation, reopening R15;
+  renewal is requested while local integration continues.
+  [Current repair and remaining gates](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry)
 - Reviewer/recovery authority checkpoint (2026-09-10): the corrected existing Client Access grant
   passes the exact three agent scopes. Three fresh evidence-bound initial decisions now read back
-  accepted/version `2`, with no roles changed, new submissions or human appeal decisions. R15/R16
-  remain Closed; recheck SSO at each actual cloud operation. R17 remains Closed: the isolated
+  accepted/version `2`, with no roles changed, new submissions or human appeal decisions. Earlier
+  authentication checks remain valid history; R16 is Closed and R15 is reopened as recorded above.
+  Recheck SSO at each actual cloud operation. R17 remains Closed: the isolated
   recovery drill is already approved, but its execution/cleanup is not yet claimed.
 - Toolchain correction completed (2026-09-09): D2-040/R18 are Closed. Verified portable Terraform
   1.16.2 and retained historical readers pass 441 assertions on each PowerShell host plus full
@@ -391,8 +404,9 @@ This is the master record for the delivery phases defined in the [product and sy
   D2-043 tracks four repairs: shared timestamp-string decoding, the inspector's current false
   outbox-pause input, exact declared-Boolean capture equality and restore-role-only computed-policy
   observations. All four are integrated on shared main with passing focused regressions on both
-  PowerShell hosts; full committed-source verification remains before recovery. The new-role cloud
-  echo is unobserved.
+  PowerShell hosts; full committed-source verification now passes at `6604aff`, completing D2-043.
+  The new-role cloud echo is unobserved. D2-044's newly observed activity error must be resolved
+  before recovery; no temporary permissions or restore have been activated.
   [Rights and consumer boundaries](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage)
 - Implemented follow-up (2026-09-09, `fab4960`/`cc2fa23`): D2-039 adds append-only refresh for stale unpublished
   provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
@@ -1141,6 +1155,8 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | Integrated numeric guards pass 228 assertions per PS5.1/7.5 host and ingestion guards pass both; local format/lint/typecheck/dependency-security/unit and 20 build tasks (18 cached) pass. Full maintained verification awaits the coherent commit, preserving its exact-source guard. Fresh reviewer inspection reads three refreshed cases, but one decision POST returns 503. Separate `01:16:14Z` readback leaves all three `needs_review`/version `1`; decision diagnosis, publication and human acceptance remain open, with no blind POST replay. | [Local verification and actual review gate](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs), [artifact follow-ups](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage) |
 
 | 2026-09-10 | D2 | Exact committed `e2e730a` passes the full maintained verifier, D2 scheduled/Trust `21`/`17` at state `297` and Gateway at state `298`. D2-042 is Complete after the actual shared-client SQL-bind repair and three fresh evidence-bound initial decisions with accepted/version-2 readbacks. Three POSTs/21 requests create no submissions, roles or appeals. This supersedes the earlier rolled-back 503 and uncommitted-source verifier stop. Post-decision aggregates record three processing completions, three copied Trust signals and 13 OK alarms, not exact owner publication. Rights reconciliation followed by the one-update mapping-only Resume verifies at state `305` with exact pins and zero changes; dark ingestion then verifies at state `308` with all four activation flags false. Final canonical capture passes at state `308` with zero changes; fresh user export/deletion acceptance remains open. Provider, owner-publication, human, recovery and other phase acceptance remain open; Phase 2 is not complete. | [Verified fix and aggregate boundary](phase-2-extension-and-community.md#d2-042--shared-client-trust-write-compatibility), [remaining work](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
+
+| 2026-09-10 | D2 | D2-043's full committed-source verifier passes at `6604aff`; states `13`/`308` are freshly zero-change. Actual activity HTTP 403 errors block recovery health. Integrated the narrow D2-044 export-delete acknowledgment fix and D2-045's matching workload-inspector profiles on shared main. Workflow 617 passed/six database opt-ins skipped, focused 104/104, typecheck and 147 two-host inspector checks plus 49 existing input guards pass. The generated S3 diagnostic object is fully removed with no candidate-data change. Full new-source verification remains. SSO expires before the next metric read at `06:13:53Z`; R15 reopened, R19 tracks activity health. No new deployment, temporary recovery permission, PITR or replay occurred. Phase 2 remains In progress. | [Expiry repair](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry), [workload tooling](phase-2-extension-and-community.md#d2-045--development-workload-corroboration) |
 
 ## Cross-delivery decisions and changes
 

@@ -198,6 +198,18 @@ Both are included in maintained infrastructure and full repository verification.
   work without retaining identifiers or candidate values.
 - `inspect-development-workload-and-cost.ps1` and `inspect-staging-workload-and-cost.ps1` — Inspect
   accepted workload windows through serverless metrics, queues, alarms, logs, and drift.
+  Development-only `D2PublicDevelopment`, `D2AuthenticatedIntake`, and `D2Processing` consume
+  the corresponding successful runner's aggregate JSON using `WorkloadResultPath` and
+  `WorkloadResultSha256`; retain it under ignored `.tmp/` or development `.terraform/`.
+  Pass its exact `startedAt`/`endedAt` as `StartTime`/`EndTime`, with the usual exact-account
+  and accepted-runtime-plan inputs. The current runtime mode must match the selected profile;
+  persistent development processing cannot use paused-intake acceptance. Inspect after the two
+  complete post-run queue-observation minutes and metric publication, not during the workload.
+  Missing required data is inconclusive; absent optional signals remain explicitly unknown.
+  Results corroborate bounded aggregates and cleanup only, not owner attribution, publication
+  or throughput capacity. Historical `D2Public` retains its signed-policy 40-request/20-denial
+  contract. Offline inspector regressions run in `pnpm test:staging-restore:ps7` and
+  `pnpm test:staging-restore:ps5`; no workload or cloud request runs from those tests.
 - `start-deployed-web-conformance.ps1 -EnableD1WorkloadConformance` — Exposes the opt-in local
   `/d1-conformance` surface after exact AWS/Auth0/API Gateway validation. Its fixed read profile
   retains aggregate timings and counts only; see the D1 workload runbook.

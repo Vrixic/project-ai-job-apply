@@ -992,3 +992,4 @@ if ($LASTEXITCODE -ne 0 -or ($helpOutput -join "`n") -notmatch "Status is read-o
 }
 
 Write-Host "Staging PostgreSQL restore verifier guard tests passed."
+& (Join-Path $PSScriptRoot "workload-inspector.tests.ps1")

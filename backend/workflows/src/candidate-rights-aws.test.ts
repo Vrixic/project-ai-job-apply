@@ -1,3 +1,4 @@
+import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { describe, expect, it, vi } from "vitest";
 import {
   AwsCandidateDocumentObjectStore,
@@ -9,6 +10,32 @@ function commandInput(command: unknown): Record<string, unknown> {
     throw new Error("Expected AWS command input");
   }
   return (command as { input: Record<string, unknown> }).input;
+}
+
+const exportKey = "candidate-data-exports/user/export.json";
+
+interface LocalS3Request {
+  method: string;
+  path: string;
+  query?: unknown;
+  body?: unknown;
+}
+
+function s3Response(statusCode: number, headers: Record<string, string> = {}) {
+  return { response: { statusCode, headers, body: new Uint8Array() } };
+}
+
+function localS3Client(
+  handle: (request: LocalS3Request) => Promise<ReturnType<typeof s3Response>>,
+) {
+  return new S3Client({
+    region: "us-east-2",
+    endpoint: "https://s3.synthetic.invalid",
+    forcePathStyle: true,
+    credentials: { accessKeyId: "synthetic-local-only", secretAccessKey: "synthetic-local-only" },
+    maxAttempts: 1,
+    requestHandler: { handle },
+  });
 }
 
 describe("candidate-rights AWS object boundaries", () => {
@@ -78,43 +105,304 @@ describe("candidate-rights AWS object boundaries", () => {
     ).resolves.toEqual({ objectVersion: "retained-version" });
   });
 
-  it("deletes and proves absence of only the expired export version", async () => {
-    const notFound = Object.assign(new Error("absent"), {
-      name: "NoSuchVersion",
-      $metadata: { httpStatusCode: 404 },
-    });
-    const send = vi.fn().mockResolvedValueOnce({}).mockRejectedValueOnce(notFound);
+  it.each([undefined, false])(
+    "accepts only an exact positive export deletion acknowledgment (%s)",
+    async (deleteMarker) => {
+      const send = vi.fn().mockResolvedValue({
+        $metadata: { httpStatusCode: 204 },
+        VersionId: "exact-expired-version",
+        ...(deleteMarker === undefined ? {} : { DeleteMarker: deleteMarker }),
+      });
+      const store = new AwsCandidateExportArtifactStore(
+        "synthetic-export-bucket",
+        "synthetic-kms-key",
+        { send },
+      );
+      await expect(store.deleteExactVersion(exportKey, "exact-expired-version")).resolves.toBe(
+        true,
+      );
+      expect(send).toHaveBeenCalledOnce();
+      expect(
+        send.mock.calls.map(([command]) => ({
+          name: (command as { constructor: { name: string } }).constructor.name,
+          input: commandInput(command),
+        })),
+      ).toEqual([
+        {
+          name: "DeleteObjectCommand",
+          input: {
+            Bucket: "synthetic-export-bucket",
+            Key: exportKey,
+            VersionId: "exact-expired-version",
+          },
+        },
+      ]);
+    },
+  );
+
+  it.each([undefined, null, "", 0, false, {}, [], new Date("2026-09-10T00:00:00.000Z")])(
+    "rejects invalid export identities before issuing a command (%j)",
+    async (invalid) => {
+      const send = vi.fn();
+      const store = new AwsCandidateExportArtifactStore(
+        "synthetic-export-bucket",
+        "synthetic-kms-key",
+        { send },
+      );
+      await expect(
+        store.deleteExactVersion(invalid as string, "exact-expired-version"),
+      ).rejects.toThrow("CandidateExportArtifactIdentityRejected");
+      await expect(store.deleteExactVersion(exportKey, invalid as string)).rejects.toThrow(
+        "CandidateExportArtifactIdentityRejected",
+      );
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects the unversioned literal null version before sending", async () => {
+    const send = vi.fn();
     const store = new AwsCandidateExportArtifactStore(
       "synthetic-export-bucket",
-      "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-0000-0000-000000000001",
+      "synthetic-kms-key",
       { send },
     );
-    await expect(
-      store.deleteExactVersion("candidate-data-exports/user/export.json", "exact-expired-version"),
-    ).resolves.toBe(true);
-    expect(
-      send.mock.calls.map(([command]) => ({
-        name: (command as { constructor: { name: string } }).constructor.name,
-        input: (command as { input: unknown }).input,
-      })),
-    ).toEqual([
-      {
-        name: "DeleteObjectCommand",
-        input: {
-          Bucket: "synthetic-export-bucket",
-          Key: "candidate-data-exports/user/export.json",
-          VersionId: "exact-expired-version",
-        },
+    await expect(store.deleteExactVersion(exportKey, "null")).rejects.toThrow(
+      "CandidateExportArtifactIdentityRejected",
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: "no acknowledgment", output: {} },
+    { label: "missing metadata", output: { VersionId: "exact-expired-version" } },
+    { label: "missing status", output: { $metadata: {}, VersionId: "exact-expired-version" } },
+    {
+      label: "string status",
+      output: { $metadata: { httpStatusCode: "204" }, VersionId: "exact-expired-version" },
+    },
+    {
+      label: "unexpected success status",
+      output: { $metadata: { httpStatusCode: 200 }, VersionId: "exact-expired-version" },
+    },
+    { label: "missing version", output: { $metadata: { httpStatusCode: 204 } } },
+    { label: "empty version", output: { $metadata: { httpStatusCode: 204 }, VersionId: "" } },
+    {
+      label: "wrong version",
+      output: { $metadata: { httpStatusCode: 204 }, VersionId: "different-version" },
+    },
+    {
+      label: "literal null version",
+      output: { $metadata: { httpStatusCode: 204 }, VersionId: "null" },
+    },
+    {
+      label: "created or deleted marker",
+      output: {
+        $metadata: { httpStatusCode: 204 },
+        VersionId: "exact-expired-version",
+        DeleteMarker: true,
       },
-      {
-        name: "HeadObjectCommand",
-        input: {
-          Bucket: "synthetic-export-bucket",
-          Key: "candidate-data-exports/user/export.json",
-          VersionId: "exact-expired-version",
-        },
+    },
+    {
+      label: "malformed marker",
+      output: {
+        $metadata: { httpStatusCode: 204 },
+        VersionId: "exact-expired-version",
+        DeleteMarker: "false",
       },
-    ]);
+    },
+    {
+      label: "null marker",
+      output: {
+        $metadata: { httpStatusCode: 204 },
+        VersionId: "exact-expired-version",
+        DeleteMarker: null,
+      },
+    },
+  ])("rejects ambiguous DELETE output: $label", async ({ output }) => {
+    const send = vi.fn().mockResolvedValue(output);
+    const store = new AwsCandidateExportArtifactStore(
+      "synthetic-export-bucket",
+      "synthetic-kms-key",
+      { send },
+    );
+    await expect(store.deleteExactVersion(exportKey, "exact-expired-version")).rejects.toThrow(
+      "CandidateExportArtifactDeletionUnconfirmed",
+    );
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { name: "AccessDenied", status: 403 },
+    { name: "UnknownError", status: 403 },
+    { name: "NotFound", status: 404 },
+    { name: "NoSuchKey", status: 404 },
+    { name: "NoSuchVersion", status: 404 },
+    { name: "InternalError", status: 500 },
+    { name: "TimeoutError", status: undefined },
+  ])("never treats a rejected DELETE as absence: $name", async ({ name, status }) => {
+    const error = Object.assign(new Error("synthetic deletion failure"), {
+      name,
+      $metadata: { httpStatusCode: status },
+    });
+    const send = vi.fn().mockRejectedValue(error);
+    const store = new AwsCandidateExportArtifactStore(
+      "synthetic-export-bucket",
+      "synthetic-kms-key",
+      { send },
+    );
+    await expect(store.deleteExactVersion(exportKey, "exact-expired-version")).rejects.toBe(error);
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("uses real SDK metadata without the HEAD that returns an ambiguous 403", async () => {
+    const version = "version/with+opaque=characters";
+    const handle = vi.fn(async (request: LocalS3Request) =>
+      request.method === "DELETE"
+        ? s3Response(204, { "x-amz-version-id": version })
+        : s3Response(403),
+    );
+    const client = localS3Client(handle);
+    try {
+      const store = new AwsCandidateExportArtifactStore(
+        "synthetic-export-bucket",
+        "synthetic-kms-key",
+        client,
+      );
+      await expect(store.deleteExactVersion(exportKey, version)).resolves.toBe(true);
+      expect(handle).toHaveBeenCalledOnce();
+      expect(handle.mock.calls[0]?.[0]).toMatchObject({
+        method: "DELETE",
+        path: `/synthetic-export-bucket/${exportKey}`,
+        query: { versionId: version },
+      });
+      expect(handle.mock.calls[0]?.[0].body).toBeUndefined();
+      // The old follow-up fails under the same local transport; it is not part of deletion.
+      await expect(
+        client.send(
+          new HeadObjectCommand({
+            Bucket: "synthetic-export-bucket",
+            Key: exportKey,
+            VersionId: version,
+          }),
+        ),
+      ).rejects.toMatchObject({ $metadata: { httpStatusCode: 403 } });
+      expect(handle).toHaveBeenCalledTimes(2);
+      expect(handle.mock.calls[1]?.[0].method).toBe("HEAD");
+    } finally {
+      client.destroy();
+    }
+  });
+
+  it("replays only the same immutable DELETE when S3 acknowledges that exact version again", async () => {
+    const version = "exact-expired-version";
+    const handle = vi.fn(async (_request: LocalS3Request) =>
+      s3Response(204, { "x-amz-version-id": version, "x-amz-delete-marker": "false" }),
+    );
+    const client = localS3Client(handle);
+    try {
+      const store = new AwsCandidateExportArtifactStore(
+        "synthetic-export-bucket",
+        "synthetic-kms-key",
+        client,
+      );
+      await expect(store.deleteExactVersion(exportKey, version)).resolves.toBe(true);
+      await expect(store.deleteExactVersion(exportKey, version)).resolves.toBe(true);
+      expect(handle).toHaveBeenCalledTimes(2);
+      for (const [request] of handle.mock.calls) {
+        expect(request).toMatchObject({
+          method: "DELETE",
+          path: `/synthetic-export-bucket/${exportKey}`,
+          query: { versionId: version },
+        });
+        expect(request.body).toBeUndefined();
+      }
+      expect(handle.mock.calls[0]?.[0].query).toEqual(handle.mock.calls[1]?.[0].query);
+    } finally {
+      client.destroy();
+    }
+  });
+
+  it.each([
+    { label: "missing version header", status: 204, headers: {} },
+    {
+      label: "wrong version header",
+      status: 204,
+      headers: { "x-amz-version-id": "other-version" },
+    },
+    {
+      label: "delete marker",
+      status: 204,
+      headers: { "x-amz-version-id": "exact-expired-version", "x-amz-delete-marker": "true" },
+    },
+    {
+      label: "wrong success status",
+      status: 202,
+      headers: { "x-amz-version-id": "exact-expired-version" },
+    },
+  ])("rejects real SDK response with $label", async ({ status, headers }) => {
+    const handle = vi.fn(async (_request: LocalS3Request) =>
+      s3Response(status, headers as Record<string, string>),
+    );
+    const client = localS3Client(handle);
+    try {
+      const store = new AwsCandidateExportArtifactStore(
+        "synthetic-export-bucket",
+        "synthetic-kms-key",
+        client,
+      );
+      await expect(store.deleteExactVersion(exportKey, "exact-expired-version")).rejects.toThrow(
+        "CandidateExportArtifactDeletionUnconfirmed",
+      );
+      expect(handle).toHaveBeenCalledOnce();
+    } finally {
+      client.destroy();
+    }
+  });
+
+  it.each([403, 404])(
+    "propagates real SDK DELETE %s errors without an absence fallback",
+    async (status) => {
+      const handle = vi.fn(async (_request: LocalS3Request) => s3Response(status));
+      const client = localS3Client(handle);
+      try {
+        const store = new AwsCandidateExportArtifactStore(
+          "synthetic-export-bucket",
+          "synthetic-kms-key",
+          client,
+        );
+        await expect(
+          store.deleteExactVersion(exportKey, "exact-expired-version"),
+        ).rejects.toMatchObject({ $metadata: { httpStatusCode: status } });
+        expect(handle).toHaveBeenCalledOnce();
+        expect(handle.mock.calls[0]?.[0].method).toBe("DELETE");
+      } finally {
+        client.destroy();
+      }
+    },
+  );
+
+  it("propagates a real SDK transport timeout without a second command", async () => {
+    const timeout = Object.assign(new Error("synthetic timeout"), {
+      name: "TimeoutError",
+      code: "ETIMEDOUT",
+    });
+    const handle = vi.fn(async (_request: LocalS3Request) => {
+      throw timeout;
+    });
+    const client = localS3Client(handle);
+    try {
+      const store = new AwsCandidateExportArtifactStore(
+        "synthetic-export-bucket",
+        "synthetic-kms-key",
+        client,
+      );
+      await expect(
+        store.deleteExactVersion(exportKey, "exact-expired-version"),
+      ).rejects.toMatchObject({ name: "TimeoutError", code: "ETIMEDOUT" });
+      expect(handle).toHaveBeenCalledOnce();
+    } finally {
+      client.destroy();
+    }
   });
 
   it("deletes exact versions and delete markers without touching prefix neighbors", async () => {
