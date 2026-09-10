@@ -332,7 +332,8 @@ This is the master record for the delivery phases defined in the [product and sy
   activates the temporary role once at Platform `316`, then verification rejects native empty-tag
   and identity metadata. No executor, PITR copy or replay ran. Exact unused cleanup now verifies
   at Platform `317` and Bootstrap `17`, zero changes and all temporary permissions removed.
-  D2-046 is reopened only for the narrow guard/tests follow-up and fresh full verification.
+  D2-046's narrow follow-up is Complete at `ca6c434`: 908 assertions pass on each PowerShell
+  host, alongside independent review, authentic-plan replay and the full verifier/all 20 builds.
   The already authorized D2-038 drill remains pending, without another application release or
   repeated approval; core runtime `31051e1` and its version-13 pins are unchanged.
   D2-045 inspector implementation is Complete; actual authenticated workload acceptance remains.
@@ -410,9 +411,9 @@ This is the master record for the delivery phases defined in the [product and sy
   observations. All four are integrated on shared main with passing focused regressions on both
   PowerShell hosts; full committed-source verification now passes at `6604aff`, completing D2-043.
   D2-044's corrective release and activity health pass at state `315`. D2-046's verified prefix
-  repair permits actual activation; a subsequent empty-tag/identity observation mismatch requires
-  a bounded follow-up. All unused authority is removed and verified at Platform `317`/Bootstrap
-  `17` before editing source. No executor, PITR copy or replay ran; the application is unchanged.
+  repair permits actual activation; the subsequent empty-tag/identity observation fix now passes
+  full verification at `ca6c434`. All unused authority was removed and verified at Platform `317`/
+  Bootstrap `17` before editing source. No executor, PITR copy or replay ran; the application is unchanged.
   [Rights and consumer boundaries](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage)
 - Implemented follow-up (2026-09-09, `fab4960`/`cc2fa23`): D2-039 adds append-only refresh for stale unpublished
   provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
@@ -1171,6 +1172,8 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | Exact operator implementation `2343514` passes the full maintained verifier and all 20 build tasks (19 cached), alongside 479 assertions on each PowerShell host and actual native-plan semantic reading. D2-046 is Complete for tooling; D2-038's already-authorized cloud drill remains. Subsequent edits affect only these two delivery documents. Continue with fresh plans and a twice-built standalone executor, preserving core runtime `31051e1` and all existing provider/reviewer boundaries. | [Verified operator](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
 
 | 2026-09-10 | D2 | Actual source `bf49c69` restore-role activation advances Platform `315` to `316` once, then strict verification rejects native empty-tag/identity metadata. Exact unused cleanup removes the role/child and restores two endpoints; fresh verification is zero-change at Platform `317`. Maintained Bootstrap cleanup verifies disabled at `17`, preserving its 17 original statements. All temporary permissions are removed before the bounded D2-046 follow-up. No executor, PITR or replay ran; original evidence and healthy application releases are unchanged. New guard/tests integration and full verification precede the already authorized drill. | [Native follow-up and verified cleanup](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
+
+| 2026-09-10 | D2 | Integrated source `ca6c434` passes the full maintained verifier and all 20 builds (19 cached), with 908 generated guard assertions on each PowerShell host and independent authentic native-plan replay. D2-046's bounded follow-up is Complete. These two delivery documents are the only post-verification changes; fresh source/state-bound recovery preparation follows without rereleasing the healthy application or claiming D2-038/human/provider/owner acceptance. | [Verified native-observation repair](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
 
 ## Cross-delivery decisions and changes
 
