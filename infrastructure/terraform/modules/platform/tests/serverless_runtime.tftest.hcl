@@ -641,6 +641,7 @@ run "enabled_runtime_couples_api_dispatch_and_workflow_triggers" {
   assert {
     condition = (
       aws_lambda_function.gateway[0].environment[0].variables.OUTBOX_DISPATCH_TARGET == "lambda_durable" &&
+      !var.outbox_starts_paused &&
       aws_lambda_event_source_mapping.outbox_starter[0].enabled &&
       aws_cloudwatch_event_rule.outbox_reconciler[0].state == "ENABLED" &&
       aws_cloudwatch_event_rule.profile_readiness_terminal[0].state == "ENABLED"
@@ -656,6 +657,132 @@ run "enabled_runtime_couples_api_dispatch_and_workflow_triggers" {
       local.profile_readiness_terminal_rule_arn
     )
     error_message = "Terminal recovery must retain one stable exact-rule ARN."
+  }
+}
+
+run "outbox_pause_preserves_candidate_rights_completion_and_queued_work" {
+  command = plan
+
+  override_resource {
+    target          = aws_sqs_queue.dead_letter
+    override_during = plan
+    values = {
+      arn = "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-dead-letter"
+    }
+  }
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    outbox_starts_paused                         = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d1-reviewed-v1"
+    candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+  }
+
+  assert {
+    condition = (
+      !aws_lambda_event_source_mapping.outbox_starter[0].enabled &&
+      aws_lambda_event_source_mapping.outbox_starter[0].batch_size == 5 &&
+      aws_lambda_event_source_mapping.outbox_starter[0].maximum_batching_window_in_seconds == 0 &&
+      toset(aws_lambda_event_source_mapping.outbox_starter[0].function_response_types) == toset(["ReportBatchItemFailures"]) &&
+      aws_lambda_function.outbox_starter[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.outbox_starter[0].timeout == 20
+    )
+    error_message = "The pause must disable only automatic starts without throttling in-flight starters or changing batch retry semantics."
+  }
+
+  assert {
+    condition = (
+      length(aws_apigatewayv2_route.gateway) == 1 &&
+      length(aws_apigatewayv2_route.gateway_lambda_public) == 2 &&
+      aws_lambda_function.gateway[0].environment[0].variables.OUTBOX_DISPATCH_TARGET == "lambda_durable" &&
+      aws_lambda_function.outbox_reconciler[0].reserved_concurrent_executions == 1 &&
+      aws_cloudwatch_event_rule.outbox_reconciler[0].state == "ENABLED" &&
+      aws_lambda_function.profile_readiness_activity[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.profile_readiness_activity[0].timeout == 300 &&
+      aws_lambda_function.profile_readiness_terminal[0].reserved_concurrent_executions == 1 &&
+      aws_cloudwatch_event_rule.profile_readiness_terminal[0].state == "ENABLED" &&
+      aws_cloudwatch_event_rule.candidate_rights_maintenance[0].state == "ENABLED"
+    )
+    error_message = "Pausing starts must preserve candidate routes, neutral nudges, existing workflow completion, terminal recovery, and export expiry."
+  }
+
+  assert {
+    condition = (
+      aws_sqs_queue.events.visibility_timeout_seconds == 120 &&
+      aws_sqs_queue.events.message_retention_seconds == 345600 &&
+      jsondecode(aws_sqs_queue.events.redrive_policy).maxReceiveCount == 5 &&
+      aws_sqs_queue.dead_letter.message_retention_seconds == 1209600 &&
+      length(aws_cloudformation_stack.profile_readiness_durable) == 1
+    )
+    error_message = "A starter pause must retain the queue, its retention/redrive settings, and the durable workflow."
+  }
+}
+
+run "outbox_resume_reenables_only_the_existing_starter_mapping" {
+  command = plan
+
+  variables {
+    serverless_runtime_enabled = true
+    outbox_starts_paused       = false
+  }
+
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.outbox_starter[0].enabled &&
+      aws_lambda_function.outbox_starter[0].reserved_concurrent_executions == 1 &&
+      aws_cloudwatch_event_rule.outbox_reconciler[0].state == "ENABLED" &&
+      aws_cloudwatch_event_rule.profile_readiness_terminal[0].state == "ENABLED" &&
+      length(aws_apigatewayv2_route.gateway) == 1
+    )
+    error_message = "Clearing the pause must restore automatic starts under the existing global runtime boundary."
+  }
+}
+
+run "outbox_pause_cannot_activate_a_dark_runtime" {
+  command = plan
+
+  variables {
+    serverless_runtime_enabled = false
+    outbox_starts_paused       = true
+  }
+
+  assert {
+    condition = (
+      !aws_lambda_event_source_mapping.outbox_starter[0].enabled &&
+      aws_cloudwatch_event_rule.outbox_reconciler[0].state == "DISABLED" &&
+      aws_cloudwatch_event_rule.profile_readiness_terminal[0].state == "DISABLED" &&
+      length(aws_apigatewayv2_route.gateway) == 0
+    )
+    error_message = "The pause preference must never override the global dark runtime boundary."
+  }
+}
+
+run "outbox_pause_does_not_deploy_an_absent_outbox" {
+  command = plan
+
+  variables {
+    deploy_serverless_outbox = false
+    outbox_starts_paused     = true
+  }
+
+  assert {
+    condition = (
+      length(aws_lambda_event_source_mapping.outbox_starter) == 0 &&
+      length(aws_lambda_function.outbox_starter) == 0 &&
+      length(aws_lambda_function.outbox_reconciler) == 0 &&
+      length(aws_cloudwatch_event_rule.outbox_reconciler) == 0
+    )
+    error_message = "A pause preference alone must not deploy outbox consumers or producers."
   }
 }
 

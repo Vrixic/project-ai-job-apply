@@ -175,6 +175,7 @@ const caseSelection = `
 `;
 
 export class PostgresTrustStore {
+  // Bind SQL timestamps as ISO strings: Profile's shared Drizzle client uses identity serializers.
   constructor(private readonly client: postgres.Sql) {}
 
   async ping(): Promise<void> {
@@ -207,7 +208,7 @@ export class PostgresTrustStore {
         ${value.appealWindowMilliseconds}, ${value.state},
         ${value.version}, ${value.appealCount}, null, null, null, null, null,
         ${transition.action}, ${transition.actorKind}, ${transition.actorId},
-        ${transition.reasonCode}, null, ${value.createdAt}, ${value.updatedAt}
+        ${transition.reasonCode}, null, ${value.createdAt.toISOString()}, ${value.updatedAt.toISOString()}
       ) ON CONFLICT (contribution_id) DO NOTHING
       RETURNING ${this.client.unsafe(caseSelection)}
     `;
@@ -358,7 +359,7 @@ export class PostgresTrustStore {
           ${input.subject.kind === "contributor" ? row.contributorUserId : null},
           ${input.subject.kind === "source" ? input.subject.sourceKeySha256 : null},
           ${input.signalCode}, ${input.referenceDigestSha256}, ${input.reviewerId},
-          ${input.occurredAt}
+          ${input.occurredAt.toISOString()}
         )
       `;
     });
@@ -418,14 +419,14 @@ export class PostgresTrustStore {
           state = ${value.state}, version = ${value.version}, appeal_count = ${value.appealCount},
           adverse_state = ${adverse?.state ?? null},
           adverse_reviewer_id = ${adverse?.reviewerId ?? null},
-          adverse_decision_at = ${adverse?.decidedAt ?? null},
-          appeal_deadline_at = ${adverse?.appealDeadlineAt ?? null},
+          adverse_decision_at = ${adverse?.decidedAt.toISOString() ?? null},
+          appeal_deadline_at = ${adverse?.appealDeadlineAt.toISOString() ?? null},
           pending_appeal_evidence_digest_sha256 = ${value.pendingAppealEvidenceDigestSha256},
           independent_evidence_digest_sha256 = ${value.independentEvidenceDigestSha256},
           last_action = ${transition.action}, last_actor_kind = ${transition.actorKind},
           last_actor_id = ${transition.actorId}, last_reason_code = ${transition.reasonCode},
           last_evidence_digest_sha256 = ${transition.evidenceDigestSha256},
-          updated_at = ${value.updatedAt}
+          updated_at = ${value.updatedAt.toISOString()}
         WHERE id = ${caseId} AND version = ${expectedVersion}
         RETURNING ${transaction.unsafe(caseSelection)}
       `;
@@ -446,7 +447,7 @@ export class PostgresTrustStore {
           ) VALUES (
             ${id}, ${value.id}, ${value.version}, ${value.contributionId}, 'contributor',
             ${value.contributorUserId}, null, ${signalCode},
-            ${transition.evidenceDigestSha256}, ${transition.actorId}, ${value.updatedAt}
+            ${transition.evidenceDigestSha256}, ${transition.actorId}, ${value.updatedAt.toISOString()}
           )
         `;
       }

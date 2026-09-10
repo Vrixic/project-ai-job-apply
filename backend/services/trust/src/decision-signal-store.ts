@@ -80,6 +80,7 @@ export class TrustDecisionDeliveryClaimLostError extends Error {
 
 /** Exact Trust-owned reader plus durable delivery ledger. It never writes a Jobs relation. */
 export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliveryStore {
+  // Keep Date-based ports, but use primitive SQL values with ordinary and shared Drizzle clients.
   constructor(private readonly client: postgres.Sql) {}
 
   async readSignal(decisionId: string): Promise<TrustDecisionSignalReference | null> {
@@ -237,15 +238,15 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
       await transaction`
         WITH expired AS (
           SELECT event_id FROM trust.contribution_decision_deliveries
-          WHERE state = 'claimed' AND claim_expires_at <= ${input.now}
+          WHERE state = 'claimed' AND claim_expires_at <= ${input.now.toISOString()}
           ORDER BY claim_expires_at, event_id
           LIMIT ${input.limit} FOR UPDATE SKIP LOCKED
         )
         UPDATE trust.contribution_decision_deliveries AS delivery SET
           state = CASE WHEN delivery.attempt >= ${input.maxAttempts} THEN 'dead' ELSE 'pending' END,
-          available_at = ${input.now}, claim_token = NULL, claimed_at = NULL,
+          available_at = ${input.now.toISOString()}, claim_token = NULL, claimed_at = NULL,
           claim_expires_at = NULL, claimed_by = NULL, last_error_code = 'lease_expired',
-          updated_at = ${input.now}
+          updated_at = ${input.now.toISOString()}
         FROM expired WHERE delivery.event_id = expired.event_id
       `;
       const candidates = await transaction<DeliveryCandidateRow[]>`
@@ -253,7 +254,7 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
           event.subject, event.data, delivery.attempt
         FROM trust.contribution_decision_deliveries AS delivery
         JOIN trust.contribution_decision_outbox AS event ON event.id = delivery.event_id
-        WHERE delivery.state = 'pending' AND delivery.available_at <= ${input.now}
+        WHERE delivery.state = 'pending' AND delivery.available_at <= ${input.now.toISOString()}
           AND delivery.attempt < ${input.maxAttempts}
         ORDER BY delivery.available_at, delivery.created_at, delivery.event_id
         LIMIT ${input.limit} FOR UPDATE OF delivery SKIP LOCKED
@@ -264,8 +265,8 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
         const [updated] = await transaction<{ attempt: number }[]>`
           UPDATE trust.contribution_decision_deliveries SET
             state = 'claimed', attempt = attempt + 1, claim_token = ${claimToken},
-            claimed_at = ${input.now}, claim_expires_at = ${input.claimExpiresAt},
-            claimed_by = ${input.workerId}, last_error_code = NULL, updated_at = ${input.now}
+            claimed_at = ${input.now.toISOString()}, claim_expires_at = ${input.claimExpiresAt.toISOString()},
+            claimed_by = ${input.workerId}, last_error_code = NULL, updated_at = ${input.now.toISOString()}
           WHERE event_id = ${candidate.eventId} AND state = 'pending'
           RETURNING attempt
         `;
@@ -297,7 +298,7 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
       const [updated] = await transaction<{ eventId: string }[]>`
         UPDATE trust.contribution_decision_deliveries SET
           state = 'published', claimed_at = NULL, claim_expires_at = NULL, claimed_by = NULL,
-          last_error_code = NULL, acknowledged_at = ${input.now}, updated_at = ${input.now}
+          last_error_code = NULL, acknowledged_at = ${input.now.toISOString()}, updated_at = ${input.now.toISOString()}
         WHERE event_id = ${input.item.event.id} AND state = 'claimed'
           AND claim_token = ${input.item.claimToken} AND claimed_by = ${input.workerId}
         RETURNING event_id AS "eventId"
@@ -309,9 +310,9 @@ export class PostgresTrustDecisionSignalStore implements TrustDecisionDeliverySt
   async retry(input: Parameters<TrustDecisionDeliveryStore["retry"]>[0]): Promise<void> {
     const [updated] = await this.client<{ eventId: string }[]>`
       UPDATE trust.contribution_decision_deliveries SET
-        state = ${input.terminal ? "dead" : "pending"}, available_at = ${input.retryAt},
+        state = ${input.terminal ? "dead" : "pending"}, available_at = ${input.retryAt.toISOString()},
         claim_token = NULL, claimed_at = NULL, claim_expires_at = NULL, claimed_by = NULL,
-        last_error_code = ${input.errorCode}, updated_at = ${input.now}
+        last_error_code = ${input.errorCode}, updated_at = ${input.now.toISOString()}
       WHERE event_id = ${input.item.event.id} AND state = 'claimed'
         AND claim_token = ${input.item.claimToken} AND claimed_by = ${input.workerId}
       RETURNING event_id AS "eventId"

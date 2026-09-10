@@ -111,6 +111,7 @@ module "platform" {
   document_processor_extension_layer_arn        = var.document_processor_extension_layer_arn
   document_parser_version                       = var.document_parser_version
   serverless_runtime_enabled                    = var.serverless_runtime_enabled
+  outbox_starts_paused                          = var.outbox_starts_paused
   d2_community_runtime                          = var.d2_community_runtime
   deploy_serverless_outbox                      = var.deploy_serverless_outbox
   workflow_ingress_artifact_s3_key              = var.workflow_ingress_artifact_s3_key

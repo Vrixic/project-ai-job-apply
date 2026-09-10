@@ -26,7 +26,9 @@ foreach ($name in @(
     "Remove-SensitiveTemporaryFile", "Assert-TerraformVersion", "Assert-IngestionMappingInventory",
     "Read-PublicationReceipt", "Get-ZipRecord", "Convert-BaselineDarkVariables", "Test-ExactFalse", "Assert-DarkVariables",
     "New-ReleaseVariables", "Get-ArtifactCoordinates", "Assert-ReleasePlan", "Get-StateResourceAttributes",
-    "Get-StateResourceInstances", "Get-IngestionNetworkBoundary", "Assert-LiveIngestionNetworkBoundary", "New-PlanReceipt",
+    "Get-StateResourceInstances", "Read-ReviewedBoolean", "Get-PlatformNetworkAttributes",
+    "Get-ReviewedSharedProviderNetwork", "Assert-LiveSharedProviderNetwork",
+    "Get-IngestionNetworkBoundary", "Assert-LiveIngestionNetworkBoundary", "New-PlanReceipt",
     "Read-PlanReceipt"
   )) { Import-OperatorFunction $name }
 
@@ -217,9 +219,14 @@ try {
 
   function New-NetworkResource([string]$Type, [string]$Name, [object[]]$Attributes) {
     return [pscustomobject]@{
-      type = $Type; name = $Name
+      type = $Type; name = $Name; module = "module.platform"; mode = "managed"
       instances = @($Attributes | ForEach-Object { [pscustomobject]@{ attributes = $_ } })
     }
+  }
+  $darkNetworkValues = [ordered]@{
+    deploy_ingestion_runtime = $true; ingestion_runtime_enabled = $false
+    ingestion_synthetic_source_enabled = $false; ingestion_provider_activation_allowed = $false
+    ingestion_provider_private_egress = $false; ingestion_provider_sources = @()
   }
   $privateSubnetIds = @("subnet-private-a", "subnet-private-b")
   $providerSubnetIds = @("subnet-provider-a", "subnet-provider-b")
@@ -234,7 +241,7 @@ try {
         (New-NetworkResource "aws_route_table" "private" @($privateRouteIds | ForEach-Object {
               [pscustomobject]@{ id = $_; route = @([pscustomobject]@{ nat_gateway_id = "nat-candidate-rights" }) }
             })),
-        (New-NetworkResource "aws_route_table" "ingestion_provider" @($providerRouteIds | ForEach-Object { [pscustomobject]@{ id = $_ } })),
+        (New-NetworkResource "aws_route_table" "ingestion_provider" @($providerRouteIds | ForEach-Object { [pscustomobject]@{ id = $_; route = @() } })),
         (New-NetworkResource "aws_route_table_association" "private" @(
             [pscustomobject]@{ subnet_id = $privateSubnetIds[0]; route_table_id = $privateRouteIds[0] },
             [pscustomobject]@{ subnet_id = $privateSubnetIds[1]; route_table_id = $privateRouteIds[1] }
@@ -245,7 +252,7 @@ try {
           )),
         (New-NetworkResource "aws_nat_gateway" "this" @([pscustomobject]@{ id = "nat-candidate-rights" }))
       ) } }
-  $network = Get-IngestionNetworkBoundary $networkSnapshot
+  $network = Get-IngestionNetworkBoundary $networkSnapshot $darkNetworkValues
   $liveActivity = [pscustomobject]@{ VpcConfig = [pscustomobject]@{ SubnetIds = $privateSubnetIds } }
   $liveRoutes = [pscustomobject]@{ RouteTables = @(
       [pscustomobject]@{ RouteTableId = $privateRouteIds[0]; Associations = @([pscustomobject]@{ SubnetId = $privateSubnetIds[0] }); Routes = @([pscustomobject]@{ GatewayId = "local" }, [pscustomobject]@{ NatGatewayId = "nat-candidate-rights" }) },
@@ -260,7 +267,7 @@ try {
       "provider-route" { @($candidate.State.resources | Where-Object name -ceq "private" | Where-Object type -ceq "aws_route_table_association")[0].instances[0].attributes.route_table_id = $providerRouteIds[0] }
       "unknown-nat" { @($candidate.State.resources | Where-Object name -ceq "private" | Where-Object type -ceq "aws_route_table")[0].instances[0].attributes.route[0].nat_gateway_id = "nat-unowned" }
     }
-    Assert-Rejected { Get-IngestionNetworkBoundary $candidate } "ingestion topology mutation '$mutation'"
+    Assert-Rejected { Get-IngestionNetworkBoundary $candidate $darkNetworkValues } "ingestion topology mutation '$mutation'"
   }
   $badLiveRoutes = $liveRoutes | ConvertTo-Json -Depth 10 | ConvertFrom-Json
   $badLiveRoutes.RouteTables[0].RouteTableId = $providerRouteIds[0]
@@ -268,6 +275,211 @@ try {
   $badLiveNat = $liveRoutes | ConvertTo-Json -Depth 10 | ConvertFrom-Json
   $badLiveNat.RouteTables[0].Routes[1].NatGatewayId = "nat-unowned"
   Assert-Rejected { Assert-LiveIngestionNetworkBoundary $network $liveActivity $badLiveNat } "live unowned NAT route"
+
+  # Synthetic state and live readbacks; never contact AWS or activate a source.
+  function New-SharedD2Fixture([bool]$HighAvailability = $false) {
+    $snapshot = $networkSnapshot | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $values = [ordered]@{}
+    foreach ($key in $darkNetworkValues.Keys) { $values[$key] = $darkNetworkValues[$key] }
+    $values.deploy_applications = "true"
+    $values.serverless_runtime_enabled = "true"
+    $values.deploy_gateway_lambda = "true"
+    $values.high_availability = if ($HighAvailability) { "true" } else { "false" }
+    $values.d2_community_runtime = [pscustomobject]@{
+      deploy = $true; enabled = $true; maintenance_mode = $false
+      provider_activation_allowed = $true; provider_private_egress = $true
+      provider_sources_json = '[{"provider":"greenhouse","sourceId":"greenhouse-synthetic","enabled":true}]'
+      provider_verification_registrations_json = '[{"provider":"greenhouse","sourceId":"greenhouse-synthetic"}]'
+      artifact_sha256 = "7" * 64; artifact_base64sha256 = ("G" * 43) + "="
+    }
+    $vpcId = "vpc-platform"; $vpcCidr = "10.20.0.0/16"; $group = "sg-application"
+    $publicIds = @("subnet-public-a", "subnet-public-b")
+    $publicSubnets = @()
+    for ($index = 0; $index -lt 2; $index++) {
+      $az = "us-east-2" + [char](97 + $index)
+      $publicSubnets += [pscustomobject]@{ id = $publicIds[$index]; vpc_id = $vpcId; availability_zone = $az }
+      $providerSubnet = @($snapshot.State.resources | Where-Object { $_.type -ceq "aws_subnet" -and $_.name -ceq "ingestion_provider" })[0].instances[$index].attributes
+      $providerSubnet | Add-Member NoteProperty vpc_id $vpcId
+      $providerSubnet | Add-Member NoteProperty availability_zone $az
+    }
+    $natCount = if ($HighAvailability) { 2 } else { 1 }
+    $natAttributes = @(); $eipAttributes = @(); $liveNats = @()
+    for ($index = 0; $index -lt $natCount; $index++) {
+      $natId = "nat-d2-$index"; $allocation = "eipalloc-d2-$index"
+      $natAttributes += [pscustomobject]@{
+        id = $natId; vpc_id = $vpcId; subnet_id = $publicIds[$index]
+        allocation_id = $allocation; connectivity_type = "public"
+      }
+      $eipAttributes += [pscustomobject]@{ id = $allocation; domain = "vpc" }
+      $liveNats += [pscustomobject]@{
+        NatGatewayId = $natId; VpcId = $vpcId; SubnetId = $publicIds[$index]; State = "available"
+        ConnectivityType = "public"; NatGatewayAddresses = @([pscustomobject]@{ AllocationId = $allocation })
+      }
+    }
+    $liveProviderRoutes = @()
+    for ($index = 0; $index -lt 2; $index++) {
+      $natId = if ($HighAvailability) { "nat-d2-$index" } else { "nat-d2-0" }
+      $route = @($snapshot.State.resources | Where-Object { $_.type -ceq "aws_route_table" -and $_.name -ceq "ingestion_provider" })[0].instances[$index].attributes
+      $route | Add-Member NoteProperty vpc_id $vpcId
+      $route.route = @([pscustomobject]@{ cidr_block = "0.0.0.0/0"; nat_gateway_id = $natId })
+      $liveProviderRoutes += [pscustomobject]@{
+        RouteTableId = $providerRouteIds[$index]; VpcId = $vpcId
+        Associations = @([pscustomobject]@{ SubnetId = $providerSubnetIds[$index] })
+        Routes = @(
+          [pscustomobject]@{ GatewayId = "local"; DestinationCidrBlock = $vpcCidr; State = "active" },
+          [pscustomobject]@{ NatGatewayId = $natId; DestinationCidrBlock = "0.0.0.0/0"; State = "active" }
+        )
+      }
+    }
+    $d2Name = "ai-job-apply-development-d2-community-scheduled"
+    $d2Arn = "arn:aws:lambda:{0}:{1}:function:{2}" -f $Region, $ExpectedAccountId, $d2Name
+    $d2Environment = [pscustomobject]@{
+      D2_COMMUNITY_RUNTIME_ENABLED = "true"; D2_COMMUNITY_PROVIDER_ACTIVATION_ALLOWED = "true"
+      D2_COMMUNITY_PROVIDER_SOURCES_JSON = $values.d2_community_runtime.provider_sources_json
+      D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON = $values.d2_community_runtime.provider_verification_registrations_json
+      RELEASE_SHA = $values.d2_community_runtime.artifact_sha256
+    }
+    $scheduled = [pscustomobject]@{
+      function_name = $d2Name; arn = $d2Arn; version = "19"
+      source_code_hash = $values.d2_community_runtime.artifact_base64sha256
+      environment = @([pscustomobject]@{ variables = $d2Environment })
+      vpc_config = @([pscustomobject]@{ subnet_ids = $providerSubnetIds; security_group_ids = @($group) })
+    }
+    $alias = [pscustomobject]@{ function_name = $d2Name; name = "development"; function_version = "19"; routing_config = @() }
+    $snapshot.State.resources += @(
+      (New-NetworkResource "aws_vpc" "this" @([pscustomobject]@{ id = $vpcId; cidr_block = $vpcCidr })),
+      (New-NetworkResource "aws_subnet" "public" $publicSubnets),
+      (New-NetworkResource "aws_security_group" "application" @([pscustomobject]@{ id = $group })),
+      (New-NetworkResource "aws_nat_gateway" "ingestion_provider" $natAttributes),
+      (New-NetworkResource "aws_eip" "ingestion_provider_nat" $eipAttributes),
+      (New-NetworkResource "aws_lambda_function" "d2_community_scheduled" @($scheduled)),
+      (New-NetworkResource "aws_lambda_alias" "d2_community_scheduled" @($alias))
+    )
+    return [pscustomobject]@{
+      Snapshot = $snapshot; Values = $values
+      Alias = [pscustomobject]@{ Name = "development"; AliasArn = $d2Arn + ":development"; FunctionVersion = "19" }
+      Configuration = [pscustomobject]@{
+        FunctionArn = $d2Arn + ":19"; CodeSha256 = $values.d2_community_runtime.artifact_base64sha256
+        State = "Active"; LastUpdateStatus = "Successful"; Environment = [pscustomobject]@{ Variables = $d2Environment }
+        VpcConfig = [pscustomobject]@{ VpcId = $vpcId; SubnetIds = $providerSubnetIds; SecurityGroupIds = @($group) }
+      }
+      NatGateways = [pscustomobject]@{ NatGateways = $liveNats }
+      RouteTables = [pscustomobject]@{ RouteTables = $liveProviderRoutes }
+    }
+  }
+  function Get-SyntheticSharedResource($Fixture, [string]$Type, [string]$Name) {
+    return @($Fixture.Snapshot.State.resources | Where-Object { $_.type -ceq $Type -and $_.name -ceq $Name })[0]
+  }
+  foreach ($ha in @($false, $true)) {
+    $fixture = New-SharedD2Fixture $ha
+    $sharedNetwork = Get-IngestionNetworkBoundary $fixture.Snapshot $fixture.Values
+    if ($null -eq $sharedNetwork.SharedProviderNetwork -or
+      @($sharedNetwork.SharedProviderNetwork.Nats).Count -ne $(if ($ha) { 2 } else { 1 })) {
+      throw "The exact D2-owned shared provider NAT topology was not accepted."
+    }
+    Assert-LiveIngestionNetworkBoundary $sharedNetwork $liveActivity $liveRoutes
+    Assert-LiveSharedProviderNetwork $sharedNetwork.SharedProviderNetwork $fixture.Alias $fixture.Configuration $fixture.NatGateways $fixture.RouteTables
+  }
+  foreach ($gate in $darkBooleanVariables) {
+    $fixture = New-SharedD2Fixture
+    $fixture.Values[$gate] = $true
+    Assert-Rejected { Get-IngestionNetworkBoundary $fixture.Snapshot $fixture.Values } "enabled ingestion gate with a D2-owned NAT"
+  }
+  $fixture = New-SharedD2Fixture
+  $fixture.Values.d2_community_runtime = $fixture.Values.d2_community_runtime | ConvertTo-Json -Compress -Depth 10
+  $null = Get-IngestionNetworkBoundary $fixture.Snapshot $fixture.Values
+  $explicitDarkValues = [ordered]@{}
+  foreach ($key in $darkNetworkValues.Keys) { $explicitDarkValues[$key] = $darkNetworkValues[$key] }
+  $explicitDarkValues.d2_community_runtime = [pscustomobject]@{ provider_private_egress = $false }
+  $explicitDarkNetwork = Get-IngestionNetworkBoundary $networkSnapshot $explicitDarkValues
+  if ($null -ne $explicitDarkNetwork.SharedProviderNetwork) { throw "Disabled D2 gained a shared provider network." }
+  foreach ($mutation in @(
+      "d2-deploy", "d2-enabled", "d2-provider", "d2-egress", "d2-maintenance", "global-disabled",
+      "d2-string-boolean", "global-noncanonical", "d2-invalid-json", "ingestion-source",
+      "provider-source-empty", "verification-empty", "foreign-owner", "nat-missing", "nat-duplicate",
+      "nat-vpc", "nat-subnet", "nat-allocation", "nat-private", "nat-application",
+      "provider-route-nat", "provider-route-association", "provider-route-vpc", "d2-missing",
+      "d2-code", "d2-version", "d2-weighted", "d2-subnets", "d2-source-environment", "d2-runtime-disabled"
+    )) {
+    $fixture = New-SharedD2Fixture
+    switch ($mutation) {
+      "d2-deploy" { $fixture.Values.d2_community_runtime.deploy = $false }
+      "d2-enabled" { $fixture.Values.d2_community_runtime.enabled = $false }
+      "d2-provider" { $fixture.Values.d2_community_runtime.provider_activation_allowed = $false }
+      "d2-egress" { $fixture.Values.d2_community_runtime.provider_private_egress = $false }
+      "d2-maintenance" { $fixture.Values.d2_community_runtime.maintenance_mode = $true }
+      "global-disabled" { $fixture.Values.serverless_runtime_enabled = "false" }
+      "d2-string-boolean" { $fixture.Values.d2_community_runtime.enabled = "true" }
+      "global-noncanonical" { $fixture.Values.serverless_runtime_enabled = "TRUE" }
+      "d2-invalid-json" { $fixture.Values.d2_community_runtime = '{"broken":' }
+      "ingestion-source" { $fixture.Values.ingestion_provider_sources = @([pscustomobject]@{ enabled = $true }) }
+      "provider-source-empty" { $fixture.Values.d2_community_runtime.provider_sources_json = "[]" }
+      "verification-empty" { $fixture.Values.d2_community_runtime.provider_verification_registrations_json = "{}" }
+      "foreign-owner" { (Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider").module = "module.unrelated" }
+      "nat-missing" { (Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider").instances = @() }
+      "nat-duplicate" { $resource = Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider"; $resource.instances += $resource.instances[0] }
+      "nat-vpc" { (Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider").instances[0].attributes.vpc_id = "vpc-other" }
+      "nat-subnet" { (Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider").instances[0].attributes.subnet_id = "subnet-provider-a" }
+      "nat-allocation" { (Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider").instances[0].attributes.allocation_id = "eipalloc-other" }
+      "nat-private" { (Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider").instances[0].attributes.connectivity_type = "private" }
+      "nat-application" { (Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider").instances[0].attributes.id = "nat-candidate-rights" }
+      "provider-route-nat" { (Get-SyntheticSharedResource $fixture "aws_route_table" "ingestion_provider").instances[0].attributes.route[0].nat_gateway_id = "nat-unowned" }
+      "provider-route-association" { (Get-SyntheticSharedResource $fixture "aws_route_table_association" "ingestion_provider").instances[0].attributes.subnet_id = "subnet-private-a" }
+      "provider-route-vpc" { (Get-SyntheticSharedResource $fixture "aws_route_table" "ingestion_provider").instances[0].attributes.vpc_id = "vpc-other" }
+      "d2-missing" { (Get-SyntheticSharedResource $fixture "aws_lambda_function" "d2_community_scheduled").instances = @() }
+      "d2-code" { (Get-SyntheticSharedResource $fixture "aws_lambda_function" "d2_community_scheduled").instances[0].attributes.source_code_hash = ("A" * 43) + "=" }
+      "d2-version" { (Get-SyntheticSharedResource $fixture "aws_lambda_alias" "d2_community_scheduled").instances[0].attributes.function_version = "20" }
+      "d2-weighted" { (Get-SyntheticSharedResource $fixture "aws_lambda_alias" "d2_community_scheduled").instances[0].attributes.routing_config = @([pscustomobject]@{ additional_version_weights = [pscustomobject]@{ "18" = 0.1 } }) }
+      "d2-subnets" { (Get-SyntheticSharedResource $fixture "aws_lambda_function" "d2_community_scheduled").instances[0].attributes.vpc_config[0].subnet_ids = $privateSubnetIds }
+      "d2-source-environment" { (Get-SyntheticSharedResource $fixture "aws_lambda_function" "d2_community_scheduled").instances[0].attributes.environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON = "[]" }
+      "d2-runtime-disabled" { (Get-SyntheticSharedResource $fixture "aws_lambda_function" "d2_community_scheduled").instances[0].attributes.environment[0].variables.D2_COMMUNITY_RUNTIME_ENABLED = "false" }
+    }
+    Assert-Rejected { Get-IngestionNetworkBoundary $fixture.Snapshot $fixture.Values } "D2 shared provider state mutation '$mutation'"
+  }
+  foreach ($mutation in @("zone", "allocation", "missing-nat")) {
+    $fixture = New-SharedD2Fixture $true
+    switch ($mutation) {
+      "zone" { (Get-SyntheticSharedResource $fixture "aws_subnet" "public").instances[1].attributes.availability_zone = "us-east-2a" }
+      "allocation" { (Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider").instances[1].attributes.allocation_id = "eipalloc-d2-0" }
+      "missing-nat" { $resource = Get-SyntheticSharedResource $fixture "aws_nat_gateway" "ingestion_provider"; $resource.instances = @($resource.instances[0]) }
+    }
+    Assert-Rejected { Get-IngestionNetworkBoundary $fixture.Snapshot $fixture.Values } "high-availability shared NAT mutation '$mutation'"
+  }
+  $fixture = New-SharedD2Fixture
+  $sharedNetwork = (Get-IngestionNetworkBoundary $fixture.Snapshot $fixture.Values).SharedProviderNetwork
+  foreach ($mutation in @(
+      "alias-version", "alias-weighted", "function-family", "code", "runtime-disabled", "provider-config",
+      "activity-subnets", "vpc", "security-group", "nat-missing", "nat-health", "nat-private",
+      "nat-allocation", "nat-subnet", "nat-vpc", "route-nat", "route-extra", "route-cidr",
+      "route-blackhole", "route-association"
+    )) {
+    $candidate = New-SharedD2Fixture
+    switch ($mutation) {
+      "alias-version" { $candidate.Alias.FunctionVersion = "20" }
+      "alias-weighted" { $candidate.Alias | Add-Member NoteProperty RoutingConfig ([pscustomobject]@{ AdditionalVersionWeights = [pscustomobject]@{ "18" = 0.1 } }) }
+      "function-family" { $candidate.Configuration.FunctionArn += "-other" }
+      "code" { $candidate.Configuration.CodeSha256 = ("A" * 43) + "=" }
+      "runtime-disabled" { $candidate.Configuration.Environment.Variables.D2_COMMUNITY_RUNTIME_ENABLED = "false" }
+      "provider-config" { $candidate.Configuration.Environment.Variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON = "[]" }
+      "activity-subnets" { $candidate.Configuration.VpcConfig.SubnetIds = $privateSubnetIds }
+      "vpc" { $candidate.Configuration.VpcConfig.VpcId = "vpc-other" }
+      "security-group" { $candidate.Configuration.VpcConfig.SecurityGroupIds = @("sg-other") }
+      "nat-missing" { $candidate.NatGateways.NatGateways = @() }
+      "nat-health" { $candidate.NatGateways.NatGateways[0].State = "failed" }
+      "nat-private" { $candidate.NatGateways.NatGateways[0].ConnectivityType = "private" }
+      "nat-allocation" { $candidate.NatGateways.NatGateways[0].NatGatewayAddresses[0].AllocationId = "eipalloc-other" }
+      "nat-subnet" { $candidate.NatGateways.NatGateways[0].SubnetId = "subnet-other" }
+      "nat-vpc" { $candidate.NatGateways.NatGateways[0].VpcId = "vpc-other" }
+      "route-nat" { $candidate.RouteTables.RouteTables[0].Routes[1].NatGatewayId = "nat-other" }
+      "route-extra" { $candidate.RouteTables.RouteTables[0].Routes += [pscustomobject]@{ GatewayId = "igw-unreviewed"; DestinationCidrBlock = "0.0.0.0/0"; State = "active" } }
+      "route-cidr" { $candidate.RouteTables.RouteTables[0].Routes[1].DestinationCidrBlock = "0.0.0.0/1" }
+      "route-blackhole" { $candidate.RouteTables.RouteTables[0].Routes[1].State = "blackhole" }
+      "route-association" { $candidate.RouteTables.RouteTables[0].Associations[0].SubnetId = "subnet-private-a" }
+    }
+    Assert-Rejected {
+      Assert-LiveSharedProviderNetwork $sharedNetwork $candidate.Alias $candidate.Configuration $candidate.NatGateways $candidate.RouteTables
+    } "live shared provider mutation '$mutation'"
+  }
 
   $baselineValues = [ordered]@{
     deploy_ingestion_runtime = $true
@@ -383,7 +595,14 @@ try {
     throw "The plan receipt does not bind the exact dark summary."
   }
 } finally {
-  if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
+  if (Test-Path -LiteralPath $testRoot) {
+    $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)
+    $expectedTestPrefix = [IO.Path]::GetFullPath($terraformDataRoot).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar + "development-ingestion-dark-release-test-"
+    if (-not $resolvedTestRoot.StartsWith($expectedTestPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+      throw "The disposable test directory is outside the exact development test boundary."
+    }
+    Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force
+  }
 }
 
 Write-Output "Development ingestion dark-release operator tests passed."

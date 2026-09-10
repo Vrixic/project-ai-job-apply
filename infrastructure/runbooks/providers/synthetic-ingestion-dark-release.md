@@ -7,8 +7,10 @@ does not itself authorize AWS mutation or source activation.
 
 ## Invariants
 
-- The reviewed migration composition is exactly 5 owners, 8 owned schemas, 42 regular relations,
-  and 19 migrations. The empty-table `jobs_public` schema is still verified explicitly.
+- The initial D1 packet below used 5 owners, 8 owned schemas, 42 regular relations and 19
+  migrations. That is historical scope, not the current database boundary. The D2 artifact patch
+  follows the current six-owner, ten-schema, 68-relation, 44-migration rollout and verified D2
+  Resume; it runs no migration. The empty-table `jobs_public` schema remains explicitly verified.
 - The dark runtime artifact contains the generated-synthetic adapter and bounded public GET
   adapters for Greenhouse, Lever, and Ashby. Dark deployment supplies an empty provider-source
   list, keeps provider activation authority false, and therefore performs no provider request.
@@ -24,10 +26,10 @@ does not itself authorize AWS mutation or source activation.
   provider-fetch activity moves onto those subnets. With provider egress false, the activity remains
   on the shared application private subnets and their Terraform-owned private route tables. Those
   shared routes may independently use candidate-rights application NAT and are not evidence of
-  ingestion-provider activation. Provider restoration deletes only the ingestion-provider
-  NAT/EIP/default routes while retaining the dedicated subnets and route tables, because immutable
-  Lambda versions retain their exact VPC attachment. Provider configuration alone never enables a
-  schedule or queue mapping.
+  ingestion-provider activation. Provider restoration removes NAT/EIP/default routes only when
+  neither ingestion nor D2 retains provider-egress authority. Dedicated subnets and route tables
+  remain because immutable Lambda versions retain their exact VPC attachment. Provider configuration
+  alone never enables a schedule or queue mapping.
 - The dispatch queue mapping, five-minute reconciliation rule, and terminal rule remain disabled
   until an approved activation record exists. The coordinator derives one idempotent occurrence
   per canonical UTC hour, so reconciliation cadence does not multiply source polling. An exact
@@ -126,7 +128,7 @@ Terraform artifact coordinates for the two ZIPs and reasserts the dark gates abo
 eight coordinates are retained as explicit rollback coordinates. This does not authorize rollback;
 a rollback requires its own reviewed plan and receipt.
 
-Terraform 1.9.8 may serialize the five baseline deploy/dark input booleans as exact lowercase
+Terraform's saved-plan projection may serialize the five baseline deploy/dark input booleans as exact lowercase
 `true`/`false` strings in `terraform show -json`. The operator normalizes only those baseline
 values before validating and copying them. Other strings, casing, or value types fail closed, and
 the generated release variables plus the saved release plan must contain native JSON booleans.
@@ -135,6 +137,17 @@ Before using AWS, use a clean `main` checkout exactly equal to `origin/main` and
 SHA. Use a fresh temporary IAM Identity Center session in the exact development account and
 `us-east-2`. Supply the customer-KMS, versioned, public-blocked Terraform state bucket and the exact
 reviewed state lineage and serial.
+
+Use portable Terraform 1.16.2 in every operator shell. The publisher owns a separate
+`TF_DATA_DIR`; this release operator instead requires the development environment's default
+`.terraform` data directory. Start a fresh shell, dot-source
+`scripts/use-deployment-terraform.ps1`, and verify that exact default backend before Plan.
+If its retained metadata is historical, reinitialize that same local directory with the reviewed
+development state bucket, `platform.tfstate`, `us-east-2`, exact state KMS key ARN,
+`encrypt=true`, `use_lockfile=true`, and `-lockfile=readonly`. Do not copy another operator's backend
+metadata, substitute its data directory, or weaken the backend guard. A new current-source,
+refresh-backed zero-change baseline must retain all existing D2, rights, migration and provider
+inputs; no schema-specific metadata sidecar is required by this ingestion operator.
 
 Validate the local receipt and baseline without AWS mutation:
 
@@ -191,19 +204,30 @@ Verify after a successful apply:
 
 Verify requires exact published code hashes, active numeric versions, unweighted development
 aliases, a complete durable CloudFormation stack, disabled schedule and terminal rules, one disabled
-dispatch mapping, empty dispatch and dead-letter queues, and zero running ECS tasks or services.
+dispatch mapping, zero observed dispatch/dead-letter queue counters, and zero running ECS tasks or
+services. Queue counters are approximate observations, not proof that all historical work is absent.
 State and live Lambda/EC2 evidence must prove that the activity uses the exact two shared-application
 private subnets and their exact route tables, disjoint from the dedicated provider subnet/route
-topology, with no ingestion-provider NAT resource. Account-wide NAT absence is neither required nor
-claimed, and this topology proof does not claim that the shared application subnets lack internet
-egress capability. No-provider-request acceptance instead depends on provider authority false, an
-empty provider-source inventory, disabled triggers, and the fixed local generated-synthetic fixture
-path failing before any adapter. Terraform outputs must still prove the deployed runtime and all
+topology. Ingestion provider egress remains false.
+
+The provider NAT resource is shared with independently activated D2 community processing.
+Its existence is accepted only after D2 Resume, with exact reviewed D2 deploy/enabled/provider
+authority, a healthy unweighted numeric scheduled version matching the reviewed artifact and
+provider configuration, and Terraform/live bindings for each platform VPC, public subnet, EIP,
+NAT, provider subnet association and NAT default route. No unknown NAT, cross-bound subnet/route,
+extra route, changed D2 identity/configuration or enabled ingestion gate is accepted. Without that
+specific D2 authority the original no-provider-NAT requirement remains. This changes only the
+release verifier; it neither enables ingestion nor modifies D2 networking.
+
+Account-wide NAT absence is neither required nor claimed, and this topology proof does not claim
+that the shared application subnets lack internet egress capability. No-provider-request acceptance
+instead depends on provider authority false, an empty provider-source inventory, disabled triggers,
+and the fixed local generated-synthetic fixture path failing before any adapter. Terraform outputs must still prove the deployed runtime and all
 four dark gates with zero provider sources. It then creates a new `-refresh=true -detailed-exitcode`
 Terraform plan from the applied variables and accepts only zero resource and output changes. The
 exclusive private verification receipt retains release and rollback coordinates, exact activity
 subnet/route-table counts, the accepted application-NAT count, the narrow
-`providerDedicatedTopologyUsed=false` result, plus the fresh
+`providerDedicatedTopologyUsed=false` result and separately observed D2-owned shared NAT count, plus the fresh
 zero-drift plan checksum. No step invokes a provider or processes candidate/job data.
 
 Run the pure offline contract suite in both supported PowerShell hosts before credentials are used:

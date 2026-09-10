@@ -1202,6 +1202,50 @@ run "d2_maintenance_keeps_live_d1_routes_and_workflow_triggers_available" {
   }
 }
 
+run "outbox_pause_keeps_d2_routes_and_community_workers_available" {
+  command = plan
+
+  variables {
+    serverless_runtime_enabled                            = true
+    outbox_starts_paused                                  = true
+    deploy_serverless_outbox                              = true
+    workflow_ingress_artifact_s3_key                      = "lambda/workflow-ingress.zip"
+    workflow_ingress_artifact_s3_object_version           = "ingress-version"
+    workflow_ingress_artifact_sha256                      = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    workflow_ingress_artifact_base64sha256                = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+    workflow_ingress_lambda_extension_layer_arn           = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+    deploy_profile_readiness_durable                      = true
+    profile_readiness_durable_artifact_s3_key             = "lambda/profile/durable.zip"
+    profile_readiness_durable_artifact_s3_object_version  = "durable-version"
+    profile_readiness_durable_artifact_sha256             = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    profile_readiness_durable_artifact_base64sha256       = "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
+    profile_readiness_activity_artifact_s3_key            = "lambda/profile/activity.zip"
+    profile_readiness_activity_artifact_s3_object_version = "activity-version"
+    profile_readiness_activity_artifact_sha256            = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    profile_readiness_activity_artifact_base64sha256      = "ZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGQ="
+    profile_readiness_lambda_extension_layer_arn          = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+    d2_community_runtime                                  = var.d2_active_runtime_fixture
+  }
+
+  assert {
+    condition = (
+      !aws_lambda_event_source_mapping.outbox_starter[0].enabled &&
+      local.d2_community_operational &&
+      length(aws_apigatewayv2_route.gateway) == 1 &&
+      length(aws_apigatewayv2_route.d2_community_protected) > 0 &&
+      length(aws_apigatewayv2_route.d2_contribution_policy) == 1 &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_PRIVATE_CAPTURE_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ROUTES_ENABLED == "true" &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2 &&
+      aws_cloudwatch_event_rule.d2_community_schedule[0].state == "ENABLED" &&
+      aws_lambda_event_source_mapping.d2_trust_signal[0].enabled
+    )
+    error_message = "A profile-workflow starter pause must not put D2 into maintenance or disable its independent routes and workers."
+  }
+}
+
 run "d2_maintenance_still_rejects_invalid_configured_signal_concurrency" {
   command = plan
   variables {

@@ -557,6 +557,12 @@ variable "serverless_runtime_enabled" {
   }
 }
 
+variable "outbox_starts_paused" {
+  description = "Pause only the automatic SQS outbox starter for a reviewed workflow release; preserve queued work, neutral reconciliation, candidate routes, and completion handlers. Disabled mapping readback and in-flight execution drain are separate release prerequisites."
+  type        = bool
+  default     = false
+}
+
 variable "d2_community_runtime" {
   description = "Independent default-off Phase 2 community deployment and activation boundary. Empty values are deliberate: Terraform selects no artifact, authority, timing, policy, route budget, or alarm threshold."
   type = object({

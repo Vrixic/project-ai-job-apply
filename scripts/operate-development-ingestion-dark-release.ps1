@@ -453,8 +453,207 @@ function Get-StateResourceInstances {
   return @($matches[0].instances | ForEach-Object { $_.attributes })
 }
 
+function Read-ReviewedBoolean {
+  param([AllowNull()][object]$Value, [Parameter(Mandatory)][string]$Name)
+  if ($Value -is [bool]) { return $Value }
+  if ($Value -is [string] -and $Value -ceq "true") { return $true }
+  if ($Value -is [string] -and $Value -ceq "false") { return $false }
+  throw "The reviewed $Name value is not a canonical Terraform boolean."
+}
+
+function Get-PlatformNetworkAttributes {
+  param([Parameter(Mandatory)][object]$Snapshot, [string]$Type, [string]$Name, [switch]$Optional)
+  $matches = @($Snapshot.State.resources | Where-Object { [string]$_.type -ceq $Type -and [string]$_.name -ceq $Name })
+  if ($matches.Count -eq 0 -and $Optional) { return @() }
+  if ($matches.Count -ne 1 -or [string](Get-OptionalProperty $matches[0] "module") -cne "module.platform" -or
+    [string](Get-OptionalProperty $matches[0] "mode") -cne "managed") {
+    throw "The shared provider topology is not owned by the exact platform resource."
+  }
+  return @($matches[0].instances | ForEach-Object { $_.attributes })
+}
+
+function Get-ReviewedSharedProviderNetwork {
+  param([Parameter(Mandatory)][object]$Snapshot, [Parameter(Mandatory)][object]$ReleaseValues,
+    [Parameter(Mandatory)][object]$Network)
+  Assert-DarkVariables $ReleaseValues
+  $nats = @(Get-PlatformNetworkAttributes $Snapshot "aws_nat_gateway" "ingestion_provider" -Optional)
+  $eips = @(Get-PlatformNetworkAttributes $Snapshot "aws_eip" "ingestion_provider_nat" -Optional)
+  $routes = @(Get-PlatformNetworkAttributes $Snapshot "aws_route_table" "ingestion_provider")
+  $d2 = Get-OptionalProperty $ReleaseValues "d2_community_runtime"
+  # Only this declared object input can use Terraform's raw TF_VAR JSON representation.
+  if ($d2 -is [string]) { $d2 = ConvertFrom-OperatorJson $d2 "Reviewed D2 runtime" }
+  $egress = Get-OptionalProperty $d2 "provider_private_egress"
+  if ($null -ne $egress -and $egress -isnot [bool]) { throw "The reviewed D2 egress authority is not a native boolean." }
+  if ($null -eq $egress -or -not $egress) {
+    if ($nats.Count -ne 0 -or $eips.Count -ne 0 -or
+      @($routes | ForEach-Object { @($_.route) } | Where-Object {
+          [string](Get-OptionalProperty $_ "gateway_id") -cne "local"
+        }).Count -ne 0) {
+      throw "A shared provider NAT or route exists without reviewed D2 egress authority."
+    }
+    return $null
+  }
+  foreach ($name in @("deploy", "enabled", "provider_activation_allowed", "provider_private_egress")) {
+    $flag = Get-OptionalProperty $d2 $name
+    if ($flag -isnot [bool] -or -not $flag) { throw "Shared provider NAT requires exact active D2 authority." }
+  }
+  if (-not (Test-ExactFalse (Get-OptionalProperty $d2 "maintenance_mode"))) {
+    throw "The shared provider NAT release must follow verified D2 resume."
+  }
+  foreach ($name in @("deploy_applications", "serverless_runtime_enabled", "deploy_gateway_lambda")) {
+    if (-not (Read-ReviewedBoolean (Get-OptionalProperty $ReleaseValues $name) $name)) {
+      throw "The shared provider NAT release requires the exact active development boundary."
+    }
+  }
+  $highAvailability = Read-ReviewedBoolean (Get-OptionalProperty $ReleaseValues "high_availability") "high_availability"
+  $expectedNatCount = if ($highAvailability) { 2 } else { 1 }
+  $vpcs = @(Get-PlatformNetworkAttributes $Snapshot "aws_vpc" "this")
+  $publicSubnets = @(Get-PlatformNetworkAttributes $Snapshot "aws_subnet" "public")
+  $providerSubnets = @(Get-PlatformNetworkAttributes $Snapshot "aws_subnet" "ingestion_provider")
+  $associations = @(Get-PlatformNetworkAttributes $Snapshot "aws_route_table_association" "ingestion_provider")
+  $scheduled = @(Get-PlatformNetworkAttributes $Snapshot "aws_lambda_function" "d2_community_scheduled")
+  $aliases = @(Get-PlatformNetworkAttributes $Snapshot "aws_lambda_alias" "d2_community_scheduled")
+  $securityGroups = @(Get-PlatformNetworkAttributes $Snapshot "aws_security_group" "application")
+  if ($vpcs.Count -ne 1 -or $publicSubnets.Count -ne 2 -or $providerSubnets.Count -ne 2 -or
+    $associations.Count -ne 2 -or $routes.Count -ne 2 -or $scheduled.Count -ne 1 -or $aliases.Count -ne 1 -or
+    $securityGroups.Count -ne 1 -or $nats.Count -ne $expectedNatCount -or $eips.Count -ne $expectedNatCount) {
+    throw "The D2-owned shared provider topology has an unexpected resource count."
+  }
+  $vpcId = [string]$vpcs[0].id
+  $publicIds = @($publicSubnets | ForEach-Object { [string]$_.id } | Sort-Object -Unique)
+  if ($publicIds.Count -ne 2 -or @($publicIds | Where-Object { $_ -in @($Network.ActivitySubnetIds) + @($Network.ProviderSubnetIds) }).Count -ne 0 -or
+    @($publicSubnets + $providerSubnets | Where-Object { [string]$_.vpc_id -cne $vpcId }).Count -ne 0 -or
+    @($routes | Where-Object { [string]$_.vpc_id -cne $vpcId }).Count -ne 0) {
+    throw "The shared provider NAT subnets and routes are not in the exact platform VPC."
+  }
+  $expectedNats = @()
+  for ($index = 0; $index -lt $expectedNatCount; $index++) {
+    $nat = $nats[$index]
+    if ([string]$nat.vpc_id -cne $vpcId -or [string]$nat.subnet_id -cne [string]$publicSubnets[$index].id -or
+      [string]$nat.connectivity_type -cne "public" -or [string]$nat.allocation_id -cne [string]$eips[$index].id -or
+      [string]$eips[$index].domain -cne "vpc" -or [string]::IsNullOrEmpty([string]$nat.id) -or
+      [string]$nat.id -in @($Network.ApplicationNatGatewayIds)) {
+      throw "A shared provider NAT is not bound to its exact platform EIP and public subnet."
+    }
+    $expectedNats += [pscustomobject]@{
+      Id = [string]$nat.id; VpcId = $vpcId; SubnetId = [string]$nat.subnet_id; AllocationId = [string]$nat.allocation_id
+    }
+  }
+  if (@($expectedNats.Id | Sort-Object -Unique).Count -ne $expectedNatCount) { throw "A shared provider NAT identity is duplicated." }
+  $expectedRoutes = @()
+  foreach ($route in $routes) {
+    $association = @($associations | Where-Object { [string]$_.route_table_id -ceq [string]$route.id })
+    if ($association.Count -ne 1) { throw "A provider route table has no exact subnet association." }
+    $providerSubnet = @($providerSubnets | Where-Object { [string]$_.id -ceq [string]$association[0].subnet_id })
+    if ($providerSubnet.Count -ne 1) { throw "A provider route is associated with an unrelated subnet." }
+    $natIndex = 0
+    if ($highAvailability) {
+      $matchingPublic = @($publicSubnets | Where-Object { [string]$_.availability_zone -ceq [string]$providerSubnet[0].availability_zone })
+      if ($matchingPublic.Count -ne 1) { throw "The provider NAT availability-zone binding is ambiguous." }
+      $natIndex = [array]::IndexOf($publicSubnets, $matchingPublic[0])
+    }
+    $defaultRoutes = @($route.route | Where-Object { [string](Get-OptionalProperty $_ "gateway_id") -cne "local" })
+    if ($defaultRoutes.Count -ne 1 -or [string]$defaultRoutes[0].cidr_block -cne "0.0.0.0/0" -or
+      [string]$defaultRoutes[0].nat_gateway_id -cne $expectedNats[$natIndex].Id) {
+      throw "A provider route does not use the exact D2-owned shared NAT."
+    }
+    $expectedRoutes += [pscustomobject]@{
+      Id = [string]$route.id; SubnetId = [string]$providerSubnet[0].id; NatGatewayId = $expectedNats[$natIndex].Id
+    }
+  }
+  $expectedName = "ai-job-apply-development-d2-community-scheduled"
+  $expectedArn = "arn:aws:lambda:{0}:{1}:function:{2}" -f $Region, $ExpectedAccountId, $expectedName
+  $configuration = $scheduled[0]
+  $alias = $aliases[0]
+  $expectedEnvironment = [ordered]@{
+    D2_COMMUNITY_RUNTIME_ENABLED = "true"
+    D2_COMMUNITY_PROVIDER_ACTIVATION_ALLOWED = "true"
+    D2_COMMUNITY_PROVIDER_SOURCES_JSON = [string](Get-OptionalProperty $d2 "provider_sources_json")
+    D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON = [string](Get-OptionalProperty $d2 "provider_verification_registrations_json")
+    RELEASE_SHA = [string](Get-OptionalProperty $d2 "artifact_sha256")
+  }
+  foreach ($name in @("D2_COMMUNITY_PROVIDER_SOURCES_JSON", "D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON")) {
+    $parsed = @(ConvertFrom-OperatorJson $expectedEnvironment[$name] "Reviewed D2 provider inventory")
+    if (-not $expectedEnvironment[$name].TrimStart().StartsWith("[") -or $parsed.Count -lt 1 -or $parsed.Count -gt 8 -or
+      @($parsed | Where-Object { $_ -isnot [pscustomobject] }).Count -ne 0) {
+      throw "The D2-owned shared NAT requires nonempty reviewed provider inventories."
+    }
+  }
+  if ([string]$configuration.function_name -cne $expectedName -or [string]$configuration.arn -cne $expectedArn -or
+    [string]$configuration.version -cnotmatch '^[1-9][0-9]*$' -or [string]$alias.function_name -cne $expectedName -or
+    [string]$alias.name -cne "development" -or [string]$alias.function_version -cne [string]$configuration.version -or
+    @($alias.routing_config).Count -ne 0 -or [string]$configuration.source_code_hash -cne [string]$d2.artifact_base64sha256 -or
+    @($configuration.environment).Count -ne 1 -or @($configuration.vpc_config).Count -ne 1 -or
+    (@($configuration.vpc_config[0].subnet_ids | Sort-Object -Unique) -join "|") -cne (@($Network.ProviderSubnetIds) -join "|") -or
+    (@($configuration.vpc_config[0].security_group_ids) -join "|") -cne [string]$securityGroups[0].id) {
+    throw "The shared provider network is not bound to the exact reviewed D2 scheduled version."
+  }
+  foreach ($name in $expectedEnvironment.Keys) {
+    if ([string](Get-OptionalProperty $configuration.environment[0].variables $name) -cne $expectedEnvironment[$name]) {
+      throw "The D2 scheduled environment differs from its reviewed shared-egress authority."
+    }
+  }
+  return [pscustomobject]@{
+    FunctionName = $expectedName; FunctionArn = $expectedArn; Version = [string]$configuration.version
+    CodeSha256 = [string]$d2.artifact_base64sha256; Environment = $expectedEnvironment
+    VpcId = $vpcId; VpcCidr = [string]$vpcs[0].cidr_block; SecurityGroupId = [string]$securityGroups[0].id
+    ProviderSubnetIds = @($Network.ProviderSubnetIds); Nats = $expectedNats; Routes = $expectedRoutes
+  }
+}
+
+function Assert-LiveSharedProviderNetwork {
+  param([Parameter(Mandatory)][object]$Network, [Parameter(Mandatory)][object]$Alias,
+    [Parameter(Mandatory)][object]$Configuration, [Parameter(Mandatory)][object]$NatGateways,
+    [Parameter(Mandatory)][object]$RouteTables)
+  $weights = Get-OptionalProperty (Get-OptionalProperty $Alias "RoutingConfig") "AdditionalVersionWeights"
+  if ([string]$Alias.FunctionVersion -cne $Network.Version -or [string]$Alias.Name -cne "development" -or
+    [string]$Alias.AliasArn -cne ($Network.FunctionArn + ":development") -or
+    ($null -ne $weights -and @($weights.PSObject.Properties).Count -ne 0) -or
+    [string]$Configuration.FunctionArn -cne ($Network.FunctionArn + ":" + $Network.Version) -or
+    [string]$Configuration.CodeSha256 -cne $Network.CodeSha256 -or [string]$Configuration.State -cne "Active" -or
+    [string]$Configuration.LastUpdateStatus -cne "Successful" -or [string]$Configuration.VpcConfig.VpcId -cne $Network.VpcId -or
+    (@($Configuration.VpcConfig.SubnetIds | Sort-Object -Unique) -join "|") -cne (@($Network.ProviderSubnetIds) -join "|") -or
+    (@($Configuration.VpcConfig.SecurityGroupIds) -join "|") -cne $Network.SecurityGroupId) {
+    throw "Live D2 shared-egress ownership does not match the reviewed numeric version and provider subnets."
+  }
+  foreach ($name in $Network.Environment.Keys) {
+    if ([string](Get-OptionalProperty $Configuration.Environment.Variables $name) -cne $Network.Environment[$name]) {
+      throw "Live D2 shared-egress environment changed after review."
+    }
+  }
+  if (@($NatGateways.NatGateways).Count -ne @($Network.Nats).Count -or @($RouteTables.RouteTables).Count -ne 2) {
+    throw "The live shared provider topology has an unexpected resource count."
+  }
+  foreach ($expected in $Network.Nats) {
+    $nat = @($NatGateways.NatGateways | Where-Object { [string]$_.NatGatewayId -ceq $expected.Id })
+    if ($nat.Count -ne 1 -or [string]$nat[0].State -cne "available" -or
+      [string]$nat[0].ConnectivityType -cne "public" -or [string]$nat[0].VpcId -cne $expected.VpcId -or
+      [string]$nat[0].SubnetId -cne $expected.SubnetId -or @($nat[0].NatGatewayAddresses).Count -ne 1 -or
+      [string]$nat[0].NatGatewayAddresses[0].AllocationId -cne $expected.AllocationId) {
+      throw "A live shared provider NAT changed its exact VPC, public subnet, allocation or health."
+    }
+  }
+  foreach ($expected in $Network.Routes) {
+    $table = @($RouteTables.RouteTables | Where-Object { [string]$_.RouteTableId -ceq $expected.Id })
+    if ($table.Count -ne 1 -or [string]$table[0].VpcId -cne $Network.VpcId) { throw "A live provider route table changed identity." }
+    $associations = @($table[0].Associations | Where-Object { -not [string]::IsNullOrEmpty([string](Get-OptionalProperty $_ "SubnetId")) })
+    $local = @($table[0].Routes | Where-Object {
+        [string](Get-OptionalProperty $_ "GatewayId") -ceq "local" -and
+        [string](Get-OptionalProperty $_ "DestinationCidrBlock") -ceq $Network.VpcCidr -and [string]$_.State -ceq "active"
+      })
+    $defaults = @($table[0].Routes | Where-Object {
+        [string](Get-OptionalProperty $_ "NatGatewayId") -ceq $expected.NatGatewayId -and
+        [string](Get-OptionalProperty $_ "DestinationCidrBlock") -ceq "0.0.0.0/0" -and [string]$_.State -ceq "active"
+      })
+    if ($associations.Count -ne 1 -or [string]$associations[0].SubnetId -cne $expected.SubnetId -or
+      @($table[0].Routes).Count -ne 2 -or $local.Count -ne 1 -or $defaults.Count -ne 1) {
+      throw "A live provider route changed its exact subnet, local route or D2 NAT default."
+    }
+  }
+}
+
 function Get-IngestionNetworkBoundary {
-  param([Parameter(Mandatory)][object]$Snapshot)
+  param([Parameter(Mandatory)][object]$Snapshot, [Parameter(Mandatory)][object]$ReleaseValues)
   $activity = Get-StateResourceAttributes $Snapshot "aws_lambda_function" "ingestion_activity"
   $privateSubnets = @(Get-StateResourceInstances $Snapshot "aws_subnet" "private")
   $providerSubnets = @(Get-StateResourceInstances $Snapshot "aws_subnet" "ingestion_provider")
@@ -464,9 +663,6 @@ function Get-IngestionNetworkBoundary {
   $providerAssociations = @(Get-StateResourceInstances $Snapshot "aws_route_table_association" "ingestion_provider")
   $applicationNats = @($Snapshot.State.resources | Where-Object {
       [string]$_.type -ceq "aws_nat_gateway" -and [string]$_.name -ceq "this"
-    } | ForEach-Object { @($_.instances) })
-  $providerNats = @($Snapshot.State.resources | Where-Object {
-      [string]$_.type -ceq "aws_nat_gateway" -and [string]$_.name -ceq "ingestion_provider"
     } | ForEach-Object { @($_.instances) })
   $privateSubnetIds = @($privateSubnets | ForEach-Object { [string]$_.id } | Sort-Object -Unique)
   $providerSubnetIds = @($providerSubnets | ForEach-Object { [string]$_.id } | Sort-Object -Unique)
@@ -478,7 +674,7 @@ function Get-IngestionNetworkBoundary {
     } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
   $activitySubnetIds = @($activity.vpc_config[0].subnet_ids | ForEach-Object { [string]$_ } | Sort-Object -Unique)
   if ($privateSubnetIds.Count -ne 2 -or $providerSubnetIds.Count -ne 2 -or $privateRouteIds.Count -ne 2 -or
-    $providerRouteIds.Count -ne 2 -or @($activity.vpc_config).Count -ne 1 -or $providerNats.Count -ne 0 -or
+    $providerRouteIds.Count -ne 2 -or @($activity.vpc_config).Count -ne 1 -or
     (@($privateSubnetIds | Where-Object { $_ -in $providerSubnetIds }).Count -ne 0) -or
     ($activitySubnetIds -join "|") -cne ($privateSubnetIds -join "|") -or
     (@($privateAssociations | ForEach-Object { [string]$_.subnet_id } | Sort-Object) -join "|") -cne ($privateSubnetIds -join "|") -or
@@ -488,11 +684,14 @@ function Get-IngestionNetworkBoundary {
     @($activityNatIds | Where-Object { $_ -notin $applicationNatIds }).Count -ne 0) {
     throw "Terraform state does not bind ingestion activity to the exact non-provider subnet and route topology."
   }
-  return [pscustomobject]@{
+  $network = [pscustomobject]@{
     ActivitySubnetIds = $privateSubnetIds; ActivityRouteTableIds = $privateRouteIds
     ProviderSubnetIds = $providerSubnetIds; ProviderRouteTableIds = $providerRouteIds
     ApplicationNatGatewayIds = $applicationNatIds; ActivityNatGatewayIds = $activityNatIds
   }
+  $shared = Get-ReviewedSharedProviderNetwork $Snapshot $ReleaseValues $network
+  $network | Add-Member NoteProperty SharedProviderNetwork $shared
+  return $network
 }
 
 function Assert-LiveIngestionNetworkBoundary {
@@ -593,7 +792,7 @@ function Read-PlanReceipt {
 
 function Assert-LiveDarkRelease {
   param([Parameter(Mandatory)][object]$ReleaseValues, [Parameter(Mandatory)][object]$StateSnapshot)
-  $network = Get-IngestionNetworkBoundary $StateSnapshot
+  $network = Get-IngestionNetworkBoundary $StateSnapshot $ReleaseValues
   $outputs = Invoke-TerraformJson @("output", "-json") "Terraform output inspection"
   foreach ($name in $darkBooleanVariables) {
     if ($outputs.$name.value -isnot [bool] -or [bool]$outputs.$name.value) { throw "Terraform output $name is not exact false." }
@@ -660,6 +859,16 @@ function Assert-LiveDarkRelease {
   $routeArguments = @("ec2", "describe-route-tables", "--route-table-ids") + @($network.ActivityRouteTableIds) + @("--output", "json")
   $routeTables = Invoke-AwsJson $routeArguments "Ingestion route topology validation"
   Assert-LiveIngestionNetworkBoundary $network $configurations.activity $routeTables
+  if ($null -ne $network.SharedProviderNetwork) {
+    $shared = $network.SharedProviderNetwork
+    $d2Alias = Invoke-AwsJson @("lambda", "get-alias", "--function-name", $shared.FunctionName, "--name", "development", "--output", "json") "D2 shared-egress alias validation"
+    $d2Configuration = Invoke-AwsJson @("lambda", "get-function-configuration", "--function-name", $shared.FunctionName, "--qualifier", $shared.Version, "--output", "json") "D2 shared-egress version validation"
+    $natArguments = @("ec2", "describe-nat-gateways", "--nat-gateway-ids") + @($shared.Nats.Id) + @("--output", "json")
+    $providerNats = Invoke-AwsJson $natArguments "D2 shared provider NAT validation"
+    $providerRouteArguments = @("ec2", "describe-route-tables", "--route-table-ids") + @($shared.Routes.Id) + @("--output", "json")
+    $providerRoutes = Invoke-AwsJson $providerRouteArguments "D2 shared provider route validation"
+    Assert-LiveSharedProviderNetwork $shared $d2Alias $d2Configuration $providerNats $providerRoutes
+  }
   $tasks = Invoke-AwsJson @("ecs", "list-tasks", "--cluster", "ai-job-apply-development", "--desired-status", "RUNNING", "--output", "json") "ECS task validation"
   $services = Invoke-AwsJson @("ecs", "list-services", "--cluster", "ai-job-apply-development", "--output", "json") "ECS service validation"
   if (@($tasks.taskArns).Count -ne 0 -or @($services.serviceArns).Count -ne 0) { throw "The retained ECS cluster is not idle." }
@@ -767,6 +976,7 @@ $verification = [ordered]@{
   defaultDark = $true; emptyQueueCount = 2; activitySubnetCount = @($live.Network.ActivitySubnetIds).Count
   activityRouteTableCount = @($live.Network.ActivityRouteTableIds).Count
   applicationNatGatewayCount = @($live.Network.ActivityNatGatewayIds).Count; providerDedicatedTopologyUsed = $false
+  d2OwnedSharedProviderNatCount = if ($null -eq $live.Network.SharedProviderNetwork) { 0 } else { @($live.Network.SharedProviderNetwork.Nats).Count }
   activeEcsTaskCount = 0; continuousEcsServiceCount = 0
   zeroDriftPlanPath = $zeroDrift.Path; zeroDriftPlanSha256 = $zeroDrift.Sha256; verifiedAt = [DateTimeOffset]::UtcNow.ToString("o")
 }

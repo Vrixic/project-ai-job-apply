@@ -425,9 +425,18 @@ $migrationReceipt = [pscustomobject]@{ schemaVersion = 2; kind = 'development-do
   taskPlanSha256 = $digest; taskPlanMetadataSha256 = $digest; executionPlanSha256 = $digest; executionClaimKey = 'synthetic-claim'
   executionClaimVersion = 'synthetic-version'; executionClaimChecksumSHA256 = $base64; taskArn = $taskArn; phase = 'verified'; exitCode = 0
   submittedAt = $now.AddHours(6).AddSeconds(5).ToString('o'); stoppedAt = $now.AddHours(6).AddMinutes(2).ToString('o') }
+# Exercise the same JSON parser as Read-D2ReleaseEvidence: PS5.1 returns Int32 for zero,
+# while PS7.5 returns Int64. A literal PowerShell receipt misses that compatibility boundary.
+$migrationReceiptJson = $migrationReceipt | ConvertTo-Json -Depth 20 -Compress
+Assert-True ([regex]::Matches($migrationReceiptJson, '"exitCode":0(?=[,}])').Count -eq 1) 'Synthetic receipt has an ambiguous exit-code field.'
+$migrationReceipt = ConvertFrom-D2RuntimeJson $migrationReceiptJson
+Assert-True (($migrationReceipt.exitCode -is [int] -or $migrationReceipt.exitCode -is [long]) -and
+  $migrationReceipt.exitCode -eq 0) 'Successful JSON receipt did not retain an integral zero.'
 $script:migrationMutation = $null
+$script:migrationReadCalls = 0
 function Invoke-D2ReleaseAws {
   param([string[]]$Arguments,[switch]$AllowNotFound)
+  $script:migrationReadCalls++
   $operation = ($Arguments | Select-Object -First 2) -join ' '
   $result = switch ($operation) {
     'ecs describe-tasks' { $script:taskResponse }
@@ -440,6 +449,30 @@ function Invoke-D2ReleaseAws {
   return $result
 }
 Assert-D2ReleaseMigration $migrationReceipt $liveState $migrationVariables $pause; $passed++
+foreach ($typedZero in @([int]0,[long]0)) {
+  $typedReceipt = Copy-D2RuntimeValue $migrationReceipt
+  $typedReceipt.exitCode = $typedZero
+  Assert-D2ReleaseMigration $typedReceipt $liveState $migrationVariables $pause; $passed++
+}
+foreach ($exitCodeJson in @('"0"','""','true','false','0.0','0e0','-0.0','1','-1','2147483648','null','[]','{}')) {
+  $badReceipt = ConvertFrom-D2RuntimeJson ($migrationReceiptJson.Replace('"exitCode":0', '"exitCode":' + $exitCodeJson))
+  $beforeReads = $script:migrationReadCalls
+  $rejectedByExitCodeGuard = $false
+  try { Assert-D2ReleaseMigration $badReceipt $liveState $migrationVariables $pause }
+  catch { $rejectedByExitCodeGuard = $_.Exception.Message -ceq 'D2RuntimeMigrationReceiptRejected' }
+  Assert-True $rejectedByExitCodeGuard 'A noncanonical JSON exit code bypassed the migration receipt guard.'
+  Assert-True ($script:migrationReadCalls -eq $beforeReads) 'Invalid JSON exit code reached the AWS read port.'
+}
+foreach ($typedExitCode in @([double]0,[single]0,[decimal]0,[System.Int16]0,[uint32]0,[uint64]0,[int]1,[long]1,[long]-1,$null)) {
+  $badReceipt = Copy-D2RuntimeValue $migrationReceipt
+  $badReceipt.exitCode = $typedExitCode
+  $beforeReads = $script:migrationReadCalls
+  $rejectedByExitCodeGuard = $false
+  try { Assert-D2ReleaseMigration $badReceipt $liveState $migrationVariables $pause }
+  catch { $rejectedByExitCodeGuard = $_.Exception.Message -ceq 'D2RuntimeMigrationReceiptRejected' }
+  Assert-True $rejectedByExitCodeGuard 'An unsupported CLR exit-code type bypassed the migration receipt guard.'
+  Assert-True ($script:migrationReadCalls -eq $beforeReads) 'Invalid CLR exit code reached the AWS read port.'
+}
 foreach ($mutation in @(
     { param($op,$x) if ($op -ceq 'ecs describe-tasks') { $x.tasks = @() }; return $x },
     { param($op,$x) if ($op -ceq 'ecs describe-tasks') { $x.tasks[0].lastStatus = 'RUNNING' }; return $x },

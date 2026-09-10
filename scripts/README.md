@@ -65,7 +65,9 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
 - `operate-development-ingestion-dark-release.ps1` — Plans, applies, and verifies only the
   checksum-reviewed ingestion durable/runtime artifact update while preserving disabled sources,
   provider authority, private egress, schedules, and queue mapping. Verification requires exact
-  numeric unweighted versions, empty queues, idle ECS, no NAT, and fresh zero drift. See
+  numeric unweighted versions, zero observed queue counters, idle ECS, exact application-subnet
+  binding and fresh zero drift. Any shared provider NAT requires independent, unchanged D2
+  authority plus exact state/live version and topology checks; ingestion remains default-dark. See
   `infrastructure/runbooks/providers/synthetic-ingestion-dark-release.md`.
 - `operate-development-public-job-lambda-publication.ps1` — Publishes and exact-version verifies
   the separate anonymous edge and private projection artifacts from clean, exact merged source.

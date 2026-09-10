@@ -339,7 +339,7 @@ function Assert-D2ReleaseMigration {
       $Receipt.environment -cne 'development' -or $Receipt.accountId -cne $ExpectedAccountId -or
       $Receipt.stateBucket -cne $StateBucket -or $Receipt.sourceSha -cne $SourceSha -or
       $Receipt.operatorSourceSha -cne $SourceSha -or $Receipt.phase -cne 'verified' -or
-      $Receipt.exitCode -isnot [int] -or $Receipt.exitCode -ne 0 -or
+      ($Receipt.exitCode -isnot [int] -and $Receipt.exitCode -isnot [long]) -or $Receipt.exitCode -ne 0 -or
       $Receipt.migrationImage -cne $Variables.migration_image.value -or
       $Receipt.migrationImage -cnotmatch "^$ExpectedAccountId\.dkr\.ecr\.us-east-2\.amazonaws\.com/ai-job-apply/migration@sha256:[a-f0-9]{64}$") {
     throw 'D2RuntimeMigrationReceiptRejected'

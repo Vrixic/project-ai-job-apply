@@ -182,7 +182,14 @@ export function createDurableTerminalHandler(
 function isCandidateRightsMaintenanceEvent(value: unknown, expectedRuleArn: string): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const event = value as Record<string, unknown>;
+  const rule =
+    /^arn:(aws|aws-us-gov|aws-cn):events:([a-z]{2}(?:-[a-z]+)+-[0-9]):([0-9]{12}):rule\/[A-Za-z0-9._/-]+$/u.exec(
+      expectedRuleArn,
+    );
   return (
+    rule !== null &&
+    event.account === rule[3] &&
+    event.region === rule[2] &&
     event.source === "aws.events" &&
     event["detail-type"] === "Scheduled Event" &&
     Array.isArray(event.resources) &&
@@ -266,10 +273,28 @@ async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRights
 
 export const activity: Handler<
   unknown,
-  ProfileReadinessActivityResultV1 | CandidateRightsActivityResultV1
+  | ProfileReadinessActivityResultV1
+  | CandidateRightsActivityResultV1
+  | CandidateRightsMaintenanceResult
 > = async (event) => {
+  // Terraform supplies this exact rule only while candidate rights are enabled.
+  const maintenanceRuleArn = process.env.CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN;
+  if (maintenanceRuleArn && isCandidateRightsMaintenanceEvent(event, maintenanceRuleArn)) {
+    return createCandidateRightsMaintenanceHandler(
+      await getRuntimeCandidateRightsStore(),
+      maintenanceRuleArn,
+    )(event);
+  }
   if (validateCandidateRightsActivityInput(event)) {
     return createCandidateRightsActivityHandler(await getRuntimeCandidateRightsStore())(event);
+  }
+  if (!validateProfileReadinessActivityInput(event)) {
+    return {
+      schemaVersion: 1,
+      action: "mark_running",
+      outcome: "non_retryable_failure",
+      errorCode: "ActivityInputRejected",
+    };
   }
   return createProfileReadinessActivityHandler(await getRuntimeStore())(event);
 };
@@ -285,6 +310,9 @@ export const terminal: Handler<unknown, { handled: boolean }> = async (event) =>
 export const maintenance: Handler<unknown, CandidateRightsMaintenanceResult> = async (event) => {
   const ruleArn = process.env.CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN;
   if (!ruleArn) throw new Error("CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN is required");
+  if (!isCandidateRightsMaintenanceEvent(event, ruleArn)) {
+    throw new Error("CandidateRightsMaintenanceEventRejected");
+  }
   return createCandidateRightsMaintenanceHandler(
     await getRuntimeCandidateRightsStore(),
     ruleArn,

@@ -70,9 +70,10 @@ Forward migration `0022_development_contribution_provider_leases` preserves the 
 descriptor and adds only the fixed Lever/Ashby version/digest pairs. Preparation and renewal also
 bind the persisted provider, variant, client, and source host; mismatched descriptors cannot renew
 across providers. The same 60-second duration, marker, chronology, immutable identity/evidence, and
-terminal-state guards apply. Deploy `0022` before enabling a new provider; the verified development
-release covers 42 migrations and 68 relations across six owners and ten schemas. Current source
-adds Jobs `0023` and Trust `0004`; their migration, release and recovery evidence are separate.
+terminal-state guards apply. Deploy `0022` before enabling a new provider. The historical
+2026-09-08 `42b9686` release verified 42 migrations and 68 relations across six owners and ten
+schemas at state 290, with Gateway/scheduled/Trust versions 55/17/13. That checkpoint is superseded
+by the coordinated 44-migration release below; it did not activate Lever/Ashby.
 
 `0023_contribution_verification_refresh` adds append-only independent proof generations and an
 explicit accepted provider-proof binding. The existing scheduler can reclaim stale unpublished
@@ -84,10 +85,25 @@ redecided or rebound. These finite source-freshness controls do not renew develo
 Independent provider proof is distinct from a reviewer's appeal evidence. Trust `0004` records
 that separate immutable acceptance basis, and only the exact accepted basis can publish.
 
-This source boundary contains 44 migrations and the same 68 relations. Quiesce contribution
-processing and reviewer decisions before applying Jobs `0023` and Trust `0004`, then deploy
-the coordinated Gateway and workers before resuming. The prior singleton verification writer
-cannot run on `0023`; rollback must keep contributions disabled or use a compatible binary.
+The September 10 coordinated development checkpoint used source
+`2dd3aa21d2991bc97caebc3e90e785654eb9fb1e`; the Phase 2 register owns subsequent release updates.
+Migration revision 51 ran exactly once on 2026-09-10 with exit `0` and seven exact aggregate success
+messages, verifying 44 migrations and the same 68 relations across six owners and ten schemas.
+Contribution processing and reviewer decisions stayed quiesced until the compatible Gateway,
+workers and Jobs `0023`/Trust `0004` migrations were verified. Resume Apply advanced state 295
+to 296 at `00:50:58Z`; maintained Verify and the `01:09:09Z` readback confirm resumed
+Gateway/scheduled/Trust versions 58/20/16, reservations 2/1/2, no active ECS compute, and a
+non-applyable plan with zero resource or output changes. Greenhouse-only development is unchanged;
+Lever/Ashby and production/store remain dark.
+
+Fresh reviewer inspection at `01:13:53Z` reads three initial cases with fresh provider proof, but
+one delegated initial decision POST returned `503`. The independent `01:16:14Z` readback confirms
+all three remain `needs_review`, version `1`; no successful decision or publication is claimed.
+Separate dark-ingestion and rights/export artifact releases and current-schema cloud recovery
+remain open; the historical cloud PITR covers 39 migrations, not 44. The prior singleton
+verification writer cannot run on `0023`; rollback must keep contributions disabled or use
+a compatible binary. See the [Phase 2 register](../../../docs/product/delivery/phase-2-extension-and-community.md)
+for the exact release and remaining acceptance.
 
 Exact catalog observations are monotonic: later arrival does not mean newer source truth. Older
 observations cannot regress canonical/source fields or undo newer withdrawal/expiry. Exact tied

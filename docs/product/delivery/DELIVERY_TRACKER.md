@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-09
+Last updated: 2026-09-10
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -325,7 +325,7 @@ This is the master record for the delivery phases defined in the [product and sy
   Auth0 Client Access grant passes exact three-scope authentication at `13:44:24Z`. R15/R16 are
   Closed. Nine bounded requests read three existing initial-review cases, with no next page,
   role changes or decisions. R17 remains Closed: the isolated recovery drill is already approved.
-  Fresh artifact/environment/role health matches state 290 and all 13 D2 alarms are OK.
+  The pre-pause artifact/environment/role health check matched state 290 with all 13 D2 alarms OK.
 - Toolchain correction completed (2026-09-09): D2-040/R18 are Closed. Verified portable Terraform
   1.16.2 and retained historical readers pass 441 assertions on each PowerShell host plus full
   maintained infrastructure/repository checks. Actual encrypted S3-locked plans succeed. One exact
@@ -342,15 +342,45 @@ This is the master record for the delivery phases defined in the [product and sy
   native control/ingress readback and a fresh state-291 schema-7 zero-change capture pass. The
   historical-plan scanner correction preserves old evidence; full infrastructure validation now
   passes with the selected portable toolchain. No recovery role or restore has been applied.
-- Current maintenance checkpoint (2026-09-09): `90c5e23` applies exactly eight D2 pause updates and
-  verifies state 292/zero drift. Contribution/reviewer flags are false, both worker reservations
-  zero and schedule/mapping disabled; D1/private capture remain available. Cutoff
-  `2026-09-09T18:09:55.5195107Z` permits resume no earlier than `2026-09-10T00:11:25.5195107Z`, after
-  compatible artifacts and migration44 pass. No queue/version deletion or SQL execution. Paused
-  worker/Gateway upgrades precede the final migration baseline; separate rights/export and dark
-  ingestion releases follow verified Resume. The authenticated workload runner now supports
-  exact existing provider descriptors and passes 29 tests without activating providers.
-  [Actual pause and single release rationale](phase-2-extension-and-community.md#d2-039--fresh-review-evidence-and-monotonic-catalog-truth)
+- Current resumed-release checkpoint (`2026-09-10T01:09Z`): exact `2dd3aa2` Gateway/scheduled/Trust
+  versions `58`/`20`/`16` and concurrency `2`/`1`/`2` verify at state 296. Revision-51 migration
+  ran exactly once, exited 0 with seven success messages and verified 44 migrations/68 relations,
+  six migration owners, ten schemas and zero active ECS compute. Resume Apply completed at
+  `00:50:58Z` after the original retirement horizon; maintained Verify exited 0. Native readback
+  confirms zero resource/output changes and a non-applyable baseline. D2 handlers and original
+  schedule/mapping are resumed; D1/private capture remain available. The public headers-only
+  live/ready 200 and entitlements 401 check is not authenticated acceptance. No operator queue
+  purge, historical-version deletion or provider expansion occurred. Subsequent reviewer Inspect
+  at `01:13:53Z` reads three existing cases with fresh `00:55:39Z` provider proof and exact agent
+  scopes, without role changes. One exact delegated decision POST returned 503 (six total requests);
+  separate `01:16:14Z` readback leaves all three cases `needs_review`/version `1`. No successful
+  decision/publication or blind POST replay is claimed; the write-path cause is now reproduced.
+  D2-042 tracks the shared Profile/Drizzle-client Trust write-path regression and correction;
+  isolated real PostgreSQL reproduces `ERR_INVALID_ARG_TYPE` on raw Date SQL bindings only with
+  that deployed client composition; the ordinary client accepts the same review. The failed
+  transaction remains unchanged. Primitive ISO bindings now pass the maintained real-PostgreSQL
+  dual-client regression 6/6 (the original shared client failed 3/3), existing Trust integration
+  7/7, Trust unit 62/62 and configured Gateway unit 4/4, plus build/typecheck/scoped formatting.
+  Compatible Gateway and D2 worker artifact releases and fresh live review remain pending; no
+  additional migration or D2 retirement pause is needed. Exact generated databases/container are
+  removed and Docker/WSL stopped.
+  [Actual rollout and handoff](phase-2-extension-and-community.md#d2-039--fresh-review-evidence-and-monotonic-catalog-truth)
+- Post-Resume follow-ups: four reviewed patches are integrated on shared main with full verification
+  pending: rights maintenance dispatch, default-off mapping-only outbox pause, exact shared-D2-NAT
+  guard and numeric-zero receipt/JSON-roundtrip repair. The supported PS5.1/portable Terraform
+  1.16.2 path completed Resume against unchanged evidence after PS7's Int64/Int32 preflight refusal.
+  Integrated numeric guards pass 228 assertions on each explicit PS5.1/7.5 host; ingestion guards
+  pass both. Format/lint/typecheck/dependency-security/unit gates and all 20 build tasks (18 cached)
+  pass, including 579 workflow tests with six database opt-ins skipped. Offline Terraform checks
+  pass 47 community and 45 serverless tests plus development/staging validation and formatting,
+  preserving dependency locks. The full verifier correctly stopped at its exact-HEAD Terraform-source precondition on
+  uncommitted edits; commit coherently and rerun it without bypass.
+  Next release coherent rights activity/terminal/durable and still-dark ingestion artifacts before
+  the approved isolated current-schema recovery; no recovery role or restore exists yet.
+  Source-only comparison of `42b9686..2dd3aa2` finds unchanged web/admin transport validators and
+  no required hosted bundle release: the expanded export-document validator belongs to the rights
+  activity. Hosted reviewer, human appeal and other Phase 2 acceptance remain distinct and open.
+  [Rights and consumer boundaries](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage)
 - Implemented follow-up (2026-09-09, `fab4960`/`cc2fa23`): D2-039 adds append-only refresh for stale unpublished
   provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
   catalog updates. D2-041 corrects the strict candidate-export schema for existing contribution
@@ -367,7 +397,7 @@ This is the master record for the delivery phases defined in the [product and sy
   migration/publication/restore and D2 operator guards. Fresh-database ordering and queue-backlog
   regression fixes are included. All
   agent work is integrated on shared `main`, with no new branches; Docker/WSL stopped after cleanup.
-- Current release checkpoint (2026-09-08, 23:53Z): exact `42b9686` closes D2-037. Existing
+- Preceding release checkpoint (2026-09-08, 23:53Z): exact `42b9686` closed D2-037. Existing
   candidate/admin Vercel targets are READY; the candidate route boundary passes, while the
   protected admin preview remains identity-dark. One migration task succeeds with seven log
   records, bringing development to 42 migrations/68 relations. State 290 runs verified
@@ -1091,6 +1121,10 @@ Append only material cross-delivery events.
 | 2026-09-09 | D2 | D2-040/R18 are Complete/Closed after 441 two-host toolchain assertions, full infrastructure/repository checks and actual locked planning. A reviewed equal-value sensitivity-only state transition moves 290 to 291; fresh follow-up exits 0 with no resource changes. The D2-039 retained-resource maintenance configuration passes 93 Terraform tests and all three current-root validations; coordinated release/recovery operators remain under implementation. No application deployment, budget setting, provider expansion, role/grant, historical plan, Actions or Docker/WSL change. | [Toolchain result and single rationale](phase-2-extension-and-community.md#d2-040--effective-s3-state-locking), [coordinated migration](phase-2-extension-and-community.md#d2-039--fresh-review-evidence-and-monotonic-catalog-truth) |
 
 | 2026-09-09 | D2 | `90c5e23` passes full infrastructure validation and the exact eight-update maintenance Plan/Apply/Verify at state 292/zero drift. Cutoff `18:09:55.5195107Z` requires retirement through `2026-09-10T00:11:25.5195107Z`; D1/private capture remain available and no SQL or queue/version deletion occurs. The multi-provider authenticated workload runner passes 29 tests without activation. Paused artifacts, migration44, verified Resume, separate rights/export and dark-ingestion releases, recovery and manual acceptance remain. | [Actual maintenance checkpoint and remaining work](phase-2-extension-and-community.md#task-register), [single decision record](phase-2-extension-and-community.md#decisions-and-scope-changes) |
+
+| 2026-09-10 | D2 | Exact `2dd3aa2` Gateway/workers and one schema44 migration execution pass; maintained Resume Apply/Verify advances 295 to 296 after retirement. Native readback confirms Gateway/scheduled/Trust `58`/`20`/`16`, concurrency `2`/`1`/`2` and zero resource/output changes. Public headers-only health/authentication checks are not authenticated acceptance. Four reviewed follow-up guard fixes are integrated with validation pending; no extra web/admin compatibility release is required. Rights/dark-ingestion releases, authorized current-schema recovery and human acceptance remain. No queue/version deletion, decision or provider expansion. | [Verified resumed rollout](phase-2-extension-and-community.md#d2-039--fresh-review-evidence-and-monotonic-catalog-truth), [separate artifact/consumer boundary](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage) |
+
+| 2026-09-10 | D2 | Integrated numeric guards pass 228 assertions per PS5.1/7.5 host and ingestion guards pass both; local format/lint/typecheck/dependency-security/unit and 20 build tasks (18 cached) pass. Full maintained verification awaits the coherent commit, preserving its exact-source guard. Fresh reviewer inspection reads three refreshed cases, but one decision POST returns 503. Separate `01:16:14Z` readback leaves all three `needs_review`/version `1`; decision diagnosis, publication and human acceptance remain open, with no blind POST replay. | [Local verification and actual review gate](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs), [artifact follow-ups](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage) |
 
 ## Cross-delivery decisions and changes
 

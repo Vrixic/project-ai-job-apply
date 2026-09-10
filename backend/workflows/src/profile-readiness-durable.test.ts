@@ -379,6 +379,8 @@ describe("profile readiness activity and terminal boundaries", () => {
       handler({
         source: "aws.events",
         "detail-type": "Scheduled Event",
+        account: "123456789012",
+        region: "us-east-2",
         resources: [ruleArn],
         detail: {},
       }),
@@ -387,6 +389,8 @@ describe("profile readiness activity and terminal boundaries", () => {
       handler({
         source: "aws.events",
         "detail-type": "Scheduled Event",
+        account: "123456789012",
+        region: "us-east-2",
         resources: [`${ruleArn}-other`],
         detail: {},
       }),

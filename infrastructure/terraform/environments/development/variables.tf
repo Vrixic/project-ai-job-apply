@@ -287,6 +287,12 @@ variable "serverless_runtime_enabled" {
   default = false
 }
 
+variable "outbox_starts_paused" {
+  description = "Pause only automatic outbox starts during a reviewed workflow release; does not drain already-started work."
+  type        = bool
+  default     = false
+}
+
 variable "d2_community_runtime" {
   description = "Complete Phase 2 deploy/activation input passed to the platform module. The default creates and activates nothing."
   type        = any

@@ -2749,7 +2749,7 @@ resource "aws_lambda_event_source_mapping" "outbox_starter" {
   count                              = var.deploy_serverless_outbox ? 1 : 0
   event_source_arn                   = aws_sqs_queue.events.arn
   function_name                      = aws_lambda_alias.outbox_starter[0].arn
-  enabled                            = var.serverless_runtime_enabled
+  enabled                            = var.serverless_runtime_enabled && !var.outbox_starts_paused
   batch_size                         = 5
   maximum_batching_window_in_seconds = 0
   function_response_types            = ["ReportBatchItemFailures"]

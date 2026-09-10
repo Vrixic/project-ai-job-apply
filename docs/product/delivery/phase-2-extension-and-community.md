@@ -4,7 +4,7 @@
 - Start: 2026-09-01
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-09-09
+- Last updated: 2026-09-10
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d2--extension-and-community-loop)
 
 ## Objective
@@ -44,13 +44,41 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
-Current maintenance checkpoint: source `90c5e23` has applied and verified the exact eight-update
-D2 pause at development state `292`. Contribution/reviewer handler flags are false, both worker
-reservations are zero, and the schedule/mapping are disabled; D1 and private capture remain
-available. The verified cutoff is `2026-09-09T18:09:55.5195107Z`; earliest safe resume is
-`2026-09-10T00:11:25.5195107Z` (September 9, 20:11:25 America/New_York), only after the compatible
-runtime and 44 migrations also pass. No queue record, historical version, or artifact was deleted.
-The database still has 42 migrations; no recovery role or restore has been created.
+Current resumed-release checkpoint (`2026-09-10T01:09Z`): exact source
+`2dd3aa21d2991bc97caebc3e90e785654eb9fb1e` verifies development state `296`, with
+Gateway/scheduled/Trust versions `58`/`20`/`16` and reserved concurrency `2`/`1`/`2`.
+Migration task revision `51` ran exactly once, exited 0 and verified 44 migrations/68 relations,
+six migration owners and ten schemas, with zero active ECS compute. Resume Apply completed at
+`00:50:58Z` after the original retirement horizon; maintained Verify passed. Native readback at
+`01:09:09Z` confirms zero resource and output changes and a non-applyable baseline. D2 handlers
+and the original schedule/mapping are resumed; D1/private capture remain available. No operator
+queue purge, historical-version deletion, reviewer reassignment or provider expansion occurred.
+Greenhouse-only development and production/store-dark scope persist; no current cloud restore is claimed.
+
+The `01:01:18Z` headers-only check returned `200` for liveness/readiness and `401` for
+unauthenticated entitlements. This is a public/authentication boundary check, not an authenticated
+owner, reviewer, workload or publication acceptance.
+
+Read-only reviewer Inspect at `01:13:53Z` passes the exact three agent scopes and reads three
+existing `needs_review` cases with fresh provider proof from `00:55:39Z` and matching reviewed
+public job content. The first exact delegated decision returned `503` after one POST (six total
+requests). Separate readback at `01:16:14Z` confirms all three cases still `needs_review`, version
+`1`; no successful decision or publication is claimed. Diagnose the failure before another POST.
+No roles changed and no job resubmission is required.
+
+D2-042's isolated synthetic PostgreSQL reproduction confirms the write-path cause: the same
+configured initial review succeeds with the ordinary client (`accepted`/version `2`) but fails
+with the deployed Profile/Drizzle shared client (`ERR_INVALID_ARG_TYPE` for a `Date` SQL bind).
+The failed transaction retains `needs_review`/version `1`. Trust now binds SQL timestamps as ISO
+strings while retaining the Date-valued domain API, atomic transition and existing authorization.
+The maintained real-PostgreSQL regression reproduces three shared-client failures before the fix
+and passes all six ordinary/shared-client cases after it; existing Trust integration 7/7, Trust
+unit 62/62 and configured Gateway unit 4/4 also pass. Build, gateway typecheck and scoped formatting
+pass. The regression requires an explicitly supplied disposable loopback PostgreSQL server; all
+test-created databases and the exact disposable container were removed, and Docker/WSL stopped.
+Release the compatible Gateway artifact and the shared D2 worker artifact (scheduled processor
+and Trust-signal handler); no SQL migration or coordinated D2 retirement pause is needed. Live
+decision/publication acceptance remains pending the release and a fresh case/evidence readback.
 
 Latest verified application release before maintenance: source `42b96861c1ad61a85d7b66a67b19065b338e9666`
 ran at state `291` after the toolchain-only reconciliation, with Gateway/scheduled/Trust `55`/`17`/`13`, Jobs `0022`, 42 migrations,
@@ -70,10 +98,12 @@ checks pass, and actual refresh-backed S3-locked plans run successfully. State a
 only to retain a sensitivity mark, with no resource-value change and a fresh zero-change plan.
 D2-039's maintenance configuration passes 93 Terraform tests; its coordinated operator passes 178
 assertions on both PowerShell hosts and the reviewed eight-update pause. Shared-main integration,
-full infrastructure validation and the actual pause verification pass. Paused artifact releases,
-migration execution near the retirement deadline, and verified resume are next. Separate rights
-activity and dark ingestion updates are also needed after resume. Installed
-sign-in/job-add acceptance remains distinct from publication.
+full infrastructure validation, paused artifact releases, the single 44-migration execution and
+maintained Resume Apply/Verify now pass. The four post-Resume maintenance-dispatch, outbox-start
+pause, shared-NAT and numeric-receipt guard fixes are integrated on shared main. Format, lint,
+typecheck, dependency-security, unit and build gates pass; the full exact-HEAD verifier must rerun
+after commit. Separate rights/dark-ingestion releases and the approved isolated recovery remain.
+Installed sign-in/job-add acceptance remains distinct from publication.
 
 Preceding controlled-development release history (2026-09-05 through the 2026-09-08 reviewer
 assignment): D2-024–D2-029 are merged in `main`.
@@ -137,11 +167,11 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-013 | Complete the D2 data-flow, threat, privacy, authorization, retention, subprocessor, and aggregate-telemetry delta. | In progress | Platform engineering; product owner; accountable reviewers | ADR-028; ADR-029; concrete implementation | The engineering delta is recorded; accountable security/privacy and legal dispositions remain D2-010. [D2 security/privacy delta](../../security/d2-extension-ugc-security-privacy.md) |
 | D2-014 | Implement independent client-version, provider-variant, and domain kill switches without affecting web/catalog availability. | Implemented; controlled development | Platform engineering | D2-001, D2-002, D2-006 | Explicit development mode independently enforces exact client `0.2.0`, Greenhouse, `greenhouse-board-v1`, and the two reviewed hosts in the extension, intake, and processing runtime, without signing, fetching, or renewing a policy. Independent detector configuration and existing runtime/provider disable controls remain; there is no new remote development policy service. Default/non-development signed-mode dimension and signature/freshness checks remain intact. Invalid, absent, or out-of-scope configuration denies without affecting web/catalog availability. |
 | D2-015 | Complete accessibility, malicious-UGC, cross-user, offline/restart, permission, and installed-browser end-to-end assurance. | In progress | QA/automation; security engineering | D2-001–D2-008 | Automated source assurance covers storage isolation, accessibility structure, malicious text/URL handling, account fencing, offline/restart, permissions, deterministic packaging, and zero telemetry. The installed Edge and Google Chrome for Testing matrix proves MV3 loading, loopback-only fixtures, denied provider permission, semantic controls, visible keyboard focus, 320/360/480-pixel layouts, 200% reflow, field/control geometry, long/missing values, delivery gating, progressive disclosure, zero axe WCAG 2.0/2.1 A/AA violations, and no retained sensitive fixture marker or allowed external request. Manual retry bypasses only scheduled backoff; pending local authentication/policy gates are stated explicitly; and account-fenced items are counted separately from retryable terminal items. Real branded-Chrome/Edge auth and lifecycle journeys, enabled-detector/browser contribution flow, and human assistive-technology evidence remain required. |
-| D2-016 | Complete default-dark migration/release, alarms, rollback, restore, load/abuse, and activation-gate evidence. | In progress; D2 maintenance verified | Platform engineering; security/operations reviewers | D2-001–D2-015 | The prior `42b9686` application release verifies 42 migrations/68 relations, seven success records and all three reviewer assignments. D2-040 is resolved. Source `90c5e23` applies the exact eight-update maintenance pause at state 292 with zero drift, disabled D2 handlers/triggers and worker reservations zero; D1/private capture remain available. Compatible paused artifacts, migration44, deadline-bound resume, separate rights/ingestion releases, current cloud recovery, installed lifecycle, authenticated workload, ALARM/OK confirmation and accountable production/store acceptance remain open. Greenhouse-only registrations and production/store-dark scope are unchanged. Historical recovery is not current-schema evidence. |
+| D2-016 | Complete default-dark migration/release, alarms, rollback, restore, load/abuse, and activation-gate evidence. | In progress; D2 resume verified | Platform engineering; security/operations reviewers | D2-001–D2-015 | Source `2dd3aa2` verifies resumed Gateway/scheduled/Trust `58`/`20`/`16`, one successful migration execution, 44 migrations/68 relations and state 296/zero drift. The four follow-up guard fixes are integrated with validation pending. Separate rights/ingestion releases, current cloud recovery, installed lifecycle, authenticated workload, ALARM/OK confirmation and accountable production/store acceptance remain open. Reviewer assignments, Greenhouse-only registrations and production/store-dark scope are unchanged. Historical recovery is not current-schema evidence. |
 | D2-017 | Expose the Profile-owned immutable contribution-authorization lifecycle and bind the exact approved preview through Gateway, Jobs, and the extension. | Implemented; controlled development | Platform engineering | D2-003, D2-005, D2-006 | The versioned v1 Profile grant/revoke API retains its `consent` contract name, shared digest vectors, exact real verifier injection, and replay-safe grant-then-contribute flow from `b7a386b`. Under ADR-029 the add-button click is the explicit command and the immutable record is an internal authorization receipt; no redundant checkbox is shown. The JWT routes are enabled only in the controlled development activation. |
 | D2-018 | Implement Matching-owned private saved-page capture and later canonical-job resolution independently of public contribution. | Implemented; not surfaced by the extension | Platform engineering | D1 saved jobs | Owner-scoped immutable persistence, verified resolution, candidate export/deletion, the versioned owner API, real active-account authority, and backward-compatible transport landed in `750b2d9` and `d3e8220`. Its owner-scoped JWT routes are available in development, but ADR-029 removes the private-save control from this public-add-only extension candidate; the transport remains independent and retains its rights obligations. |
 | D2-019 | Implement durable contribution normalization, independent verification, deduplication, provenance reconciliation, and owner-visible processing state. | Implemented; controlled development | Platform engineering | D2-006, D2-007, D2-011 | The durable queue, bounded normalization, independent provider verification, exact identity reuse/new provider-truth publication, probable-duplicate parking, Trust wake-up, later decision/removal reconciliation, owner receipts, and refresh/withdraw/appeal controls are implemented and deployed for Greenhouse only. Source `3f20462` includes the exact generated page/API representation correction. Both unchanged mismatch-held submissions were requeued and claimed/parked once; a fresh aggregate inspection finds zero provider-pending holds. Neither completed nor published in that batch. The precise new owner-visible processing/Trust state still needs an authenticated refresh; these aggregate counts alone do not establish accepted review or publication. Immutable submissions and complete provider truth were not rewritten. |
-| D2-020 | Extend candidate export, deletion, withdrawal, migration replay, restore inventory, and evidence across consent, contribution, Trust, and private-capture data. | Implemented; controlled development | Platform engineering; privacy/security reviewers | D2-006–D2-019; D1 candidate rights | The seven-owner rights boundary includes Trust; the deployed six-migration-owner package at `42b9686` verifies 42 migrations, ten schemas and 68 relations. Historical AWS PITR covers 39. D2-039 adds forward Jobs `0023`/Trust `0004`; current-source logical recovery passes all 44 migrations and 68 row sets, and D2-041's real seven-owner export assembly passes. A separately reviewed release and D2-038's isolated cloud replay remain pending. Do not relabel historical or local recovery as current cloud acceptance. |
+| D2-020 | Extend candidate export, deletion, withdrawal, migration replay, restore inventory, and evidence across consent, contribution, Trust, and private-capture data. | Implemented; controlled development | Platform engineering; privacy/security reviewers | D2-006–D2-019; D1 candidate rights | The seven-owner rights boundary includes Trust. The single `2dd3aa2` migration execution/Verify now covers 44 migrations, six migration owners, ten schemas and 68 relations. Current-source logical recovery and D2-041's real seven-owner export assembly pass locally. D2 Resume is verified; the separate rights activity release and D2-038's isolated cloud replay remain pending. Historical AWS PITR covers 39; neither it nor local recovery is current cloud acceptance. |
 | D2-021 | Implement independently enforceable global, client-version, provider, variant, and domain gates for intake and processing. | Implemented; controlled development | Platform engineering | D2-014, D2-019 | The explicit development flag selects fixed, independently enforced client/provider/variant/domain constraints for intake and pre-reconciliation processing. Development requires no signed envelope, key, remote policy fetch, expiry, or renewal. Signed enforcement and the public policy contract remain implemented for default/non-development compatibility; missing/malformed/stale/future/unknown/forked/rollback signed policy still denies there. Production/store and unsupported providers remain dark. |
 | D2-022 | Integrate Trust through owner/reviewer APIs, reviewer authorization, admin surfaces, withdrawal/takedown/appeal workflows, and Jobs-owned reconciliation. | Implemented; controlled case opening | Platform engineering; accountable reviewers | D2-007, D2-019 | Default-deny orchestration, owner/reviewer APIs, deterministic ambiguity-safe case opening, explicit OIDC reviewer assignments, strict admin BFF, accessible review console, durable identifier-only decision delivery, exact owner-bound reads, Jobs reconciliation, contributor reputation, and real lazy queue/scheduler composition are implemented. Development retains three distinct assignments: workflow case opener, delegated agent read/initial/takedown, and human read/appeal. They were preserved byte-for-byte through state `287`; hosted reviewer and real decision-journey acceptance remain open. |
 | D2-023 | Redesign and verify the installed extension's preview, action, and delivery-state experience before Phase 2 acceptance. | Implemented; automated acceptance passed | Product design; platform engineering; QA/automation | D2-003, D2-009, D2-015 | The redesign uses an explicit 448-pixel popup—twice the original 224-pixel target—while the separate side-panel output reflows at 320 pixels and 200% zoom. Grounded location/work-type separation, the one-step public-add workflow, fail-closed delivery readiness, automated Edge/Google Chrome for Testing geometry/state parity, and two-surface axe acceptance are implemented. Human assistive-technology and real authenticated lifecycle acceptance remain open under D2-015; see the [installed narrow-layout acceptance](#d2-023-installed-narrow-layout-acceptance). |
@@ -160,14 +190,15 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-036 | Add repeatable current-schema logical backup/restore coverage with nonempty D2 data. | Complete | Platform engineering | D2-020, D2-035 | Completed 2026-09-08 at 42 migrations; rerun successfully on September 9 against D2-039's 44-migration source. The generated-only command performs real dump/restore, matches all 68 relation row sets including 18 nonempty D2 relations, and verifies restored owner/lease/publication/authorization behavior with exact disposable-container cleanup. This is local logical recovery, not cloud restore or provider acceptance. See details below. |
 | D2-037 | Patch release-blocking dependency advisories surfaced by the current registry audit. | Complete | Platform engineering | D2-016, D2-035 | Compatible dependency repairs and exact Vercel patch packaging pass the full repository verifier and focused guards. Exact source `42b9686` is released to the existing candidate/admin Vercel targets and development AWS migration/Gateway/D2 workers. Migration exits 0 with seven success records; state 290 runs Gateway/scheduled/Trust 55/17/13 with zero drift, 13 healthy alarms and unchanged development scope. No audit exemptions or production/store activation. |
 | D2-038 | Bind candidate-deletion replay to an authenticated, isolated AWS restore target. | Implemented; cloud validation pending | Platform engineering | D2-020, D2-036 | Temporary private Lambda, dedicated default-off read-only cloud role, complete historical-marker/restored-owner/document preflight and restored-only reconciliation are implemented. The new internal schema binds the PowerShell operator and runtime; the old unsafe direct-URL/per-marker path is removed. Focused tests and real seven-owner PostgreSQL replay pass. Exact IAM activation, current structural PITR and cloud replay/cleanup remain separate; no primary database, cloud document, completion tag or Auth0 mutation is permitted in this drill. |
-| D2-039 | Refresh stale unpublished contribution evidence and prevent out-of-order catalog regression. | In progress; locally verified, release pending | Platform engineering | D2-006, D2-007, D2-019, D2-020 | Implemented in `fab4960`, with deterministic database-fixture follow-up `cc2fa23`: append-only verification generations, bounded pending-review recovery, exact decision/evidence binding, server freshness checks and monotonic canonical/source updates. Full repository verification and real PostgreSQL checks pass, including 91 Jobs tests, seven Trust tests and composed review/publication/appeal/withdrawal. Original submissions, evidence and reviewer separation remain intact; no resubmission or automatic case decision. D2-040 is resolved; coordinated migration/runtime release and live fresh-evidence acceptance are next. |
+| D2-039 | Refresh stale unpublished contribution evidence and prevent out-of-order catalog regression. | In progress; resumed, live acceptance pending | Platform engineering | D2-006, D2-007, D2-019, D2-020 | Append-only verification generations, bounded pending-review recovery, exact evidence binding, server freshness and monotonic catalog updates pass repository and real PostgreSQL checks. Exact source `2dd3aa2` Gateway/workers and all 44 migrations now verify resumed at state 296. The separately bundled dark-ingestion update and live fresh-evidence acceptance remain. Original submissions, evidence and reviewer separation stay intact; no resubmission or automatic case decision. |
 | D2-040 | Correct the deployment toolchain's remote-state locking incompatibility. | Complete | Platform engineering; product owner | D2-016, D2-038 | Verified portable 1.16.2/current and 1.9.8/historical readers, exact encrypted S3 lock checks and 441 toolchain assertions on both PowerShell hosts pass. Full infrastructure/repository validation passes. Actual locked plans succeed; one exact equal-value sensitivity-only apply advances state 290 to 291, followed by zero changes. Application versions, budget values, provider locks, old evidence and excluded Actions are unchanged. D2-039's coordinated deployment and D2-038's approved drill remain separate. |
 | D2-041 | Include all implemented D2 owner data in the strict candidate-export contract. | Complete | Platform engineering | D2-017, D2-018, D2-020, D2-039 | Repository implementation completed 2026-09-09 in `fab4960`. Strict optional v1 sections include authorizations, contribution histories, private captures and Trust evidence while preserving older D1 exports. Real seven-owner assembly, idempotency, isolation, redaction and full repository checks pass. The changed domain validator is bundled into the profile-readiness activity, not deployed by a D2/Gateway release. A separate coherent activity/terminal/durable release after D2 resume remains under D2-016; no deployed export acceptance is claimed. No additional SQL beyond D2-039. |
+| D2-042 | Repair Trust writes through the deployed Gateway's shared Profile/Drizzle PostgreSQL client and complete the initial-decision path. | Implemented; deployment and live acceptance pending | Platform engineering | D2-022, D2-030, D2-039 | The first post-Resume decision returned 503 and independent readback confirmed all three cases remain at version 1. Primitive ISO SQL bindings preserve API/schema/authority. The [actual-client regression](../../../backend/gateway/src/d2-trust-runtime.integration.test.ts) reproduces 3/3 shared-client failures before the fix and passes all 6 cases after it; existing Trust integration 7/7, Trust unit 62/62 and configured Gateway unit 4/4 pass. Release compatible Gateway and D2 worker artifacts, then recheck exact case/evidence before another decision. No blind replay or publication claim. |
 
 ### D2-039 — Fresh review evidence and monotonic catalog truth
 
-Started on shared `main` on 2026-09-09 after authenticated review became available. The deployed
-`42b9686` worker fetches provider evidence only once and permits only one proof per contribution.
+Started on shared `main` on 2026-09-09 after authenticated review became available. The then-deployed
+`42b9686` worker fetched provider evidence only once and permitted only one proof per contribution.
 Requeueing a previously verified case would therefore reuse stale evidence. Its Gateway checks
 only digest existence, so another reviewer client could bypass the private helper's 24-hour
 limit. Its exact duplicate publication also unconditionally overwrites canonical fields with the incoming
@@ -194,10 +225,11 @@ and the original queue lease binding. Actual Trust UUIDv8 decision identifiers a
 Quiesce contribution processing and reviewer decisions before applying these migrations, then
 release the coordinated Gateway/workers before resuming. Jobs `0023` removes the old singleton
 conflict target, so the previous verification writer cannot be rolled back onto this schema.
-Keep contributions disabled or use a forward-compatible binary. The database remains at 42
-migrations; the verified maintenance transition advances state to 292 using existing application
-artifacts and new disabled configuration versions. No new application artifact, SQL execution or
-case decision is claimed.
+Keep contributions disabled or use a forward-compatible binary. The original maintenance transition
+verified state 292 using the old artifacts. Exact-source `2dd3aa2` Gateway/workers were then
+released while paused, and one successful task applied Jobs `0023`/Trust `0004`. Separate migration
+Verify confirmed state 295, all 44 migrations and zero drift; maintained Resume Apply/Verify now
+confirms state 296 with compatible versions. No case decision is claimed.
 
 The new default-false `d2_community_runtime.maintenance_mode` is implemented and passes all 93
 platform Terraform tests, including nine new pause/resume/default/negative cases. It retains D2
@@ -219,14 +251,22 @@ Plan/Apply/Verify now passes at state 292. Saved plan SHA-256 is
 maximum timeout plus 60-second margin and 21,600-second async horizon gives the exact cutoff and
 earliest resume time above. Both observed queue counts are zero, not proof that queues are empty.
 
-Complete the paused Workers and Gateway artifact updates before capturing the final migration
-baseline: migration Verify reconstructs its task-plan inputs and must not revert an intervening
-runtime update. Use maintained Gateway CaptureBaseline to bridge runtime Verify's `.metadata.json`
-output to the migration consumer's required `.baseline.json`; never fabricate a sidecar. Run the
-single migration near or after the retirement deadline so Resume can still describe the stopped
-task. After verified Resume, separately update the dark ingestion runtime, which also bundles the
-changed `PostgresJobCatalog`, and the rights activity described under D2-041. Their pins are part of
-the pause authority and must not be changed inside this cutoff.
+The completed paused Workers/Gateway releases preceded the final migration baseline, preserving
+their pins through migration Verify. The single revision-51 task ran from
+`2026-09-10T00:13:19.8966013Z` to `00:14:11.647Z`, exited 0 and emitted all seven exact aggregate
+success messages. Separate Verify passed with 44 migrations/68 relations and zero active ECS
+compute. Its verified execution receipt SHA-256 is
+`ebbf93b0fa5713ee85780cc94046f54a5fe50b8e73d60004432ffff5a617b5fb`; do not rerun the task.
+
+Maintained Resume Apply completed at `2026-09-10T00:50:58.8373269Z`, advancing state 295 to 296
+after the original retirement horizon. Resume Verify exited 0. The exact saved plan SHA-256 is
+`0552a5a1256d76a3aa40a4353bf748c915296c64e3c578c6e8d9523993ac4957`, applied receipt is
+`e3a4195260e40e3a2747fe5db2277473dbaf84915d473e9d895c85ad279e741b`, and genuine verified baseline is
+`65887eb2e2747f61c4b1fed520017e60c51fdf70f7f3f71419f90b7086987c10`
+(metadata `797d4844b2f1d57c9dd5f82c9d93151a5ac3ad31dbaa730850943b1c4153c445`).
+Native readback at `01:09:09Z` confirms Gateway/scheduled/Trust `58`/`20`/`16`, reservations
+`2`/`1`/`2`, zero resource/output changes and a non-applyable baseline. Rights and dark-ingestion
+pins were preserved through Resume; their separately reviewed releases and cloud recovery remain.
 
 All 178 generated operator assertions pass on both PowerShell hosts, and independent review passes.
 The real diagnostic Pause plan contains exactly eight updates, no creation/deletion and no changed
@@ -317,11 +357,36 @@ and redaction checks. No real identity, cloud upload, raw artifact, or external 
 used. The existing six-owner SQL exporters are unchanged except Trust's D2-039 additive basis.
 
 Deployment remains separate from repository completion. `candidate-rights-activities.ts` consumes
-the domain validator inside `profile-readiness-activity-lambda`; the preserved activity artifact
-still has the old strict schema. Publish the maintained CoreWorkflow artifact family and deploy
-the activity plus its shared terminal code, coherent numeric durable/activity binding and exact
-caller/permission references after D2 Resume. Check existing durable executions before retiring
-their bindings. The D2 community ZIP and Gateway alone do not deploy this fix.
+the domain validator inside `profile-readiness-activity-lambda`; that activity still has the old
+strict schema after the verified D2 Resume. Next publish the maintained CoreWorkflow artifact
+family and release the activity/shared terminal code with coherent numeric durable/activity
+bindings and exact caller/permission references. Check existing durable executions before
+retiring their bindings. The D2 community ZIP and Gateway alone do not deploy this fix.
+
+The four reviewed post-Resume patches are now integrated on shared main: exact maintenance-event
+dispatch in the rights activity, a default-off mapping-only outbox-start pause, the ingestion
+operator's exact shared-D2-NAT guard, and the Resume receipt's numeric-zero/JSON-roundtrip repair.
+Integrated numeric-guard regressions pass 228 assertions on each explicit PowerShell 5.1/7.5 host;
+the ingestion guard suite also passes on both. Format, lint, typecheck, dependency-security and
+unit gates pass, including 579 workflow tests (six explicit database opt-ins skipped), with the
+new 42-test deployed-entrypoint suite and existing 17-test durable suite. All 20 build tasks
+(18 cached) pass. Portable Terraform 1.16.2 independently passes the 47 community and 45
+serverless tests, recursive formatting and development/staging validation with unchanged locks
+and no cloud calls. Full maintained verification reached the
+migration operator's exact-HEAD Terraform check and correctly refused the uncommitted source.
+No check is bypassed: commit coherently and rerun the full verifier.
+No follow-up activity release is claimed. Preserve reconciliation/completion handlers while pausing
+automatic starts and draining existing work. Keep all four ingestion activation flags false
+and distinct workload/network ownership intact.
+
+A source-only `42b9686..2dd3aa2` consumer check found no required web/admin compatibility release:
+their trees and runtime OpenAPI validators are unchanged. Web validates export status/access
+metadata and downloads the artifact without parsing it; admin uses explicit case/evidence projections.
+The domain export validator is consumed by the rights activity, not either hosted frontend.
+See [web download boundary](../../../frontend/web/app/candidate-rights-panel.tsx),
+[strict admin BFF](../../../frontend/admin/lib/trust-bff.ts), and
+[Gateway projections](../../../backend/gateway/src/app.module.ts). This does not establish hosted
+reviewer, human appeal or export acceptance.
 
 ### D2-037 — Release-candidate dependency remediation
 
@@ -728,8 +793,8 @@ narrowing, not a role grant, a substitute for server authorization, or evidence 
 MFA, 15-minute reauthentication, one-hour absolute sessions, evidence requirements, and the
 independent-reviewer guard are unchanged. The local setup helper accepts
 `-AuthorizationProfile appeals`; never broaden the human grant to accommodate the standard UI.
-The appeal-only source is not yet deployed to the protected admin preview or configured with
-the product owner's dedicated admin client. Local admin tests (40 in seven files), typecheck,
+At that setup checkpoint, the appeal-only source had not yet been deployed to the protected
+admin preview or configured with the product owner's dedicated client. Local admin tests (40 in seven files), typecheck,
 production build, and five isolated setup cases on both Windows PowerShell 5.1 and PowerShell 7
 pass. The full repository verifier passes 33 typecheck, 34 unit-test, and 20 build tasks; 30
 database-gated tests remain skipped in this unit run, not new PostgreSQL acceptance evidence.
@@ -917,11 +982,14 @@ restore or executor was created. Preserve the earlier records as history, not cu
 
 The subsequent approved toolchain transition completes D2-040/R18 at state `291`, with actual
 locked planning, an equal-value sensitivity-only state update and a fresh zero-change plan.
-No new reviewer grant or toolchain approval is needed. D2-039's coordinated 44-migration deployment
-is now in verified maintenance at state 292, with earliest resume at `2026-09-10T00:11:25.5195107Z`.
-Compatible artifact deployment and migration remain; the separate rights activity/dark ingestion
-updates and D2-038's exact temporary-role activation/recovery/cleanup follow. No fresh signing
-policy or repeated recovery approval is needed.
+No new reviewer grant or toolchain approval is needed. D2-039's exact Gateway/workers and the
+single 44-migration execution now have a maintained resumed state-296/zero-drift verification.
+The four dispatch/outbox/NAT/receipt guard fixes are integrated and pass local code gates;
+full maintained verification awaits the coherent commit. The first decision returned `503`;
+fresh readback leaves all three cases at `needs_review`/version `1`, so diagnose before replay.
+Separate rights activity/dark-ingestion releases and D2-038's temporary-role activation,
+current-schema recovery and exact cleanup remain. No fresh signing policy or repeated recovery
+approval is needed.
 
 Independent read-only release preparation confirms state `287`, exact Gateway/scheduled/Trust
 versions `54`/`16`/`12`, unchanged Greenhouse-only source/verification registrations and all three
@@ -938,11 +1006,11 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
-| Owner processing state through website publication | The last active `42b9686` release is now paused at state 292; all reviewer assignments remain preserved. The prior owner-processing snapshot cleared provider-verification holds and recorded parked/unpublished items, not fresh authenticated owner state. | After D2-039's verified resume, refresh the existing owner receipt's Processing and Trust state, then review fresh independently verified cases through the separate delegated initial/takedown agent and human appeal reviewer. Hosted reviewer and appeal-decision journeys remain open under D2-030. Do not infer Trust status from parking counts, resubmit acknowledged jobs, delete account-held items or bypass Trust. |
-| Delegated initial/takedown review and human appeal acceptance | All three server-side assignments remain unchanged through state 292; decision handlers are temporarily paused. Exact three-scope agent authentication and the three-case read pass on September 9, closing R16. Human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue passed on September 8. | Complete D2-039, obtain fresh independent evidence for existing cases and make only supported version-bound decisions. Then complete hosted reviewer and separate human appeal acceptance. Do not manufacture a case, resubmit a contribution, borrow the human session or accept stale evidence. |
+| Owner processing state through website publication | Compatible `2dd3aa2` Gateway/workers and 44 migrations verify resumed at state 296. Three cases have fresh provider proof, but the first decision POST returned 503; separate readback leaves all three at `needs_review`/version `1`. | Diagnose the decision failure before another exact version-bound POST. Keep owner refresh, supported publication and hosted reviewer/appeal journeys open under D2-030/D2-039. Do not resubmit acknowledged jobs, delete account-held items or bypass Trust. |
+| Delegated initial/takedown review and human appeal acceptance | All three assignments remain unchanged through the resumed release. Exact three-scope agent authentication and three-case read pass; human identity/MFA/two-scope checks and the user-confirmed empty local appeal queue passed previously. | Obtain fresh independent evidence and make only supported version-bound decisions. Complete hosted reviewer and separate human appeal acceptance. Do not manufacture a case, borrow the human session or accept stale evidence. |
 | Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. Both providers remain disabled in development. | Acquire representative provider-derived fixtures, complete sanitization/scanning and separate QA acceptance, then activate exact development registrations. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
-| Current-schema deployed recovery | Historical AWS PITR covers 39 migrations; development remains at 42/68. D2-036 proves current-source local logical recovery at 44/68; D2-038's executor passes real seven-owner replay locally and its development drill is authorized. D2-040's locking correction is complete. | Complete D2-039's coordinated migration, capture a fresh current-source baseline, and activate only the approved temporary role/endpoint scope. Run structural PITR and marker/owner-bound replay against the actually deployed boundary, then remove exact temporary resources and restore-role authority. Writes remain confined to restored rows. |
-| Candidate-rights and dark ingestion artifact follow-ups | D2-041's domain validator is bundled into the rights activity; D2-039's catalog writer is also bundled into the ingestion activity. Their existing artifacts remain unchanged by the D2 pause/worker/Gateway release. | After verified D2 Resume, use the maintained immutable publishers and separately reviewed release plans to update the coherent rights activity/terminal/durable bindings and the ingestion artifacts with all ingestion activation flags still false. Verify actual versions, bindings and zero drift; do not invalidate the original pause authority by inserting these releases before resume. |
+| Current-schema deployed recovery | Development now verifies 44 migrations/68 relations with D2 resumed; historical AWS PITR covers 39. D2-036 proves local 44/68 logical recovery, and D2-038's seven-owner replay/drill tooling is implemented and authorized. | After the required activity releases, capture a fresh baseline and activate only the approved temporary role/endpoint. Run structural PITR and exact marker/owner-bound replay, then remove temporary resources and drill-only authority. Writes remain confined to restored rows. |
+| Candidate-rights and dark ingestion artifact follow-ups | D2-041's export validator and D2-039's catalog writer are separately bundled in rights and ingestion activities. The four rights-dispatch, mapping-only outbox-pause, shared-NAT and numeric-receipt guard fixes are integrated; validation is pending. | Complete integrated verification, then use maintained publishers/reviewed plans for coherent rights activity/terminal/durable bindings and ingestion artifacts. Keep all four ingestion activation flags false; verify actual bindings and zero drift. Preserve queued work, drain existing executions and retain reconciliation/completion paths. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
 | Authenticated load and abuse acceptance | Paced public-policy and unauthenticated-boundary workload passed. The separate paused-intake and active-processing-to-review runners pass 29 synthetic regressions, with exact provider tuples, cancellation/withdrawal/revocation and explicit ambiguous recovery. | Use explicitly scoped disposable authenticated candidates for a bounded development workload and exact-window server aggregates. The active runner follows the existing five-minute schedule, never approves a case, and is not throughput/publication acceptance. No production traffic, raw tokens, personal payloads, or invented provider truth. |
@@ -1110,7 +1178,23 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | 2026-09-09 | Source `90c5e23` passes full maintained infrastructure validation and a current state-291 zero-change capture. The reviewed Pause plan applies exactly eight updates and verifies state 292/zero drift with disabled D2 handlers, worker reservations zero and schedule/mapping disabled. D1/private capture remain available; no artifact, SQL, role, restore, queue deletion or case decision. Cutoff `18:09:55.5195107Z` requires retirement through `2026-09-10T00:11:25.5195107Z`. Independent handoff review fixes release ordering without changing runtime authority. The authenticated runner's Greenhouse-only development restriction is replaced by existing exact descriptors: all 29 tests pass, including five host tuples and 35 negative cases, without provider activation. All edits remain on shared main. | D2-016, D2-028, D2-039, D2-041 | [Pause operator](../../../scripts/operate-development-d2-runtime-release.ps1), [workload regressions](../../../scripts/tests/development-d2-authenticated-intake.test.mjs), [migration handoff](../../../infrastructure/runbooks/deployments/database-migration.md) |
 
+| 2026-09-10 | Exact `2dd3aa2` Gateway/workers first verified paused at `57`/`19`/`15`; one revision-51 migration task exited 0 with seven success messages and all 44 migrations/68 relations. Maintained Resume Apply/Verify advanced 295 to 296 after retirement; native readback confirms `58`/`20`/`16`, concurrency `2`/`1`/`2` and zero resource/output changes. Headers-only live/ready 200 and entitlements 401 do not establish authenticated acceptance. The four follow-up guard fixes are integrated with validation pending. Source-only consumer review requires no additional web/admin bundle; rights/dark-ingestion releases, recovery and human gates remain. No queue/version deletion, case decision or provider expansion. | D2-016, D2-020, D2-039, D2-041 | [Verified rollout handoff](#d2-039--fresh-review-evidence-and-monotonic-catalog-truth), [separate rights and consumer boundaries](#d2-041--complete-candidate-data-export-coverage) |
+
+| 2026-09-10 | Integrated numeric guards pass 228 assertions on each explicit PS5.1/7.5 host, and ingestion guards pass both. Format/lint/typecheck/dependency-security/unit gates and 20 build tasks (18 cached) pass; the full verifier must rerun after the coherent commit because its exact-HEAD Terraform precondition correctly refuses uncommitted edits. Reviewer Inspect reads three cases with fresh `00:55:39Z` provider proof. One exact delegated decision POST returns 503; independent `01:16:14Z` readback confirms all three remain `needs_review`/version `1`. No successful decision/publication or blind POST replay is claimed. | D2-016, D2-030, D2-039, D2-041 | [Integrated guard boundary](#d2-041--complete-candidate-data-export-coverage), [remaining review gate](#remaining-acceptance-and-operator-inputs) |
+
 ## Decisions and scope changes
+
+For the `2026-09-10` Resume, preserve the original verified receipt and source when PowerShell 7
+deserializes JSON exit code zero as `Int64` rather than the frozen guard's `Int32`. Its failed
+preflight created no saved plan or Apply. The already-supported Windows PowerShell 5.1 path
+with portable Terraform 1.16.2 completed Resume Plan/Apply/Verify against the unchanged evidence.
+The narrow integral-zero repair and actual JSON-roundtrip regressions are now integrated and
+pass 228 assertions on each explicit host; full committed-source verification remains pending.
+Never alter evidence to satisfy a host-specific
+CLR type check or relax another binding. The default-off outbox-start pause and exact maintenance
+dispatch permit a controlled rights release while preserving queued work and completion paths;
+the shared-NAT guard accepts only the separate active D2 topology with all ingestion flags false.
+These follow-ups do not activate providers or authorize new candidate/reviewer actions.
 
 For the September 9 coordinated release, keep the verified pause cutoff intact while deploying
 compatible D2 workers and Gateway before the final migration baseline. Disabled handlers make
@@ -1301,33 +1385,26 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R14 | Closed | The user confirmed reuse of the existing encrypted agent-reviewer credential on 2026-09-08 for the remaining Phase 2 development initial/takedown work. Private current-user access, unchanged encrypted bytes, and the live exact assignment pass. The historical collection window remains unchanged; the subsequent Auth0 refusal is separately tracked as R16. | Product owner; platform engineering | Preserve the existing roles and separate human appeal reviewer. No recurring contribution-policy approval or new secret is required for this unchanged assignment; do not borrow another identity, expand roles, or submit unsupported decisions. |
 | D2-R15 | Closed | Exact development account/temporary SSO caller verification passes at `2026-09-09T13:42:25Z` after renewal and at the subsequent toolchain transition. No recovery cloud mutation has run. | Product owner; platform engineering | Recheck current authority at the actual cloud operation. D2-R18 is also resolved; continue coordinated release/recovery while preserving Greenhouse-only activation and reviewer separation. |
 | D2-R16 | Closed | The corrected existing Client Access grant passes exact three-scope authentication at `2026-09-09T13:44:24Z`; nine bounded requests read three initial-review cases and their evidence, with no next page or decisions. No grant, role, credential, Management API or human-session operation was performed. | Product owner; platform engineering | Keep the unchanged least-privilege assignment. D2-039 must refresh stale proof before supported review/publication; hosted and separate human appeal acceptance remain open. No further screenshot or new secret is needed for the resolved grant. |
-| D2-R17 | Closed; isolated drill authorized | The user explicitly approved the development-only recovery role, one isolated restore/replay drill and exact cleanup on 2026-09-09. No activation plan, current 42-migration cloud restore or restore-only replay has yet run; execution remains tracked by D2-038. | Product owner; platform engineering | After R15 is resolved, prepare/review/apply only the exact drill plans. Preserve the primary database, cloud document objects, completion tags, retention and Auth0. Clean up the exact temporary Lambda and restored database and deactivate drill-only permissions afterward. Do not request the same approval again or expand it to other environments or candidate mutations. |
+| D2-R17 | Closed; isolated drill authorized | The user approved the development-only recovery role, one isolated restore/replay drill and exact cleanup on 2026-09-09. D2 Resume now verifies 44 migrations, but no current-schema cloud restore or restore-only replay has run; execution remains tracked by D2-038. | Product owner; platform engineering | After the required activity releases, prepare/review/apply only the exact drill plans. Preserve the primary database, cloud document objects, completion tags, retention and Auth0. Remove exact temporary resources and drill-only permissions afterward. Do not request the same approval again or expand its scope. |
 | D2-R18 | Closed | Verified portable 1.16.2, historical read-only decoding, effective encrypted S3 locking, 441 two-host toolchain assertions and full infrastructure/repository checks pass. Exact sensitivity-only reconciliation advances state to 291 without resource-value changes; fresh locked planning exits 0. | Platform engineering | Use fresh source-bound handoffs for D2-039/D2-038. Preserve historical plans, provider locks and excluded Actions; no further toolchain approval is needed. |
 
 ## Completion record
 
 - Completion date: Not completed
 - Exit review: Not performed
-- Release/evidence summary: Exact source `42b96861c1ad61a85d7b66a67b19065b338e9666` is deployed
-  at state `290`, with Gateway/scheduled/Trust `55/17/13`, 42 applied migrations/68 relations,
-  seven migration success records and verified artifact/environment bindings. Candidate/admin
-  Vercel targets are READY; candidate route/security/cache checks pass, while admin remains a
-  protected identity-dark preview. Final zero-drift plan SHA-256 is
-  `66eb4747de80b18d3d213104b0bb7c3bbccb5ee8d823323dbda70128551296fd`.
-  September 9 health at `13:44:17Z` preserves 13 alarms OK, approximately empty Trust queues,
-  exact artifact/environment/role bindings and Greenhouse-only scope. The corrected reviewer grant
-  passes exact three-scope authentication and a three-case read; zero decisions were submitted.
-- New repository checkpoint: `fab4960`/`cc2fa23` implement D2-039's stale-proof refresh, explicit
-  accepted provider basis and monotonic publication, and complete D2-041's strict candidate export.
-  Full repository verification, real database regressions and current-source 44-migration logical
-  recovery pass. These changes are not yet deployed. D2-033/D2-034/D2-036/D2-037 remain Complete;
-  D2-040's effective-locking correction is Complete: exact sensitivity metadata advances state to
-  291 with zero resource-value changes and a fresh locked zero-change plan. D2-039's maintenance
-  configuration passes 93 Terraform tests. The integrated runtime operator passes 178 two-host
-  assertions and the exact Pause is verified at state 292, with a six-hour retirement fence before
-  schema44 resume. The provider workload runner passes 29 tests. Compatible D2 artifacts, SQL,
-  separate rights/dark-ingestion releases and recovery remain. Historical AWS PITR covers 39
-  migrations, not live 42 or new source 44.
+- Current release/evidence summary (`2026-09-10T01:09Z`): exact source `2dd3aa2` verifies resumed
+  Gateway/scheduled/Trust `58`/`20`/`16`, concurrency `2`/`1`/`2`, one successful migration execution,
+  44 migrations/68 relations and state 296/zero drift. Prior hosted candidate/admin source
+  `42b9686` remains compatible without a new bundle; its READY/route checks and the latest public
+  headers-only probe do not prove authenticated or human reviewer acceptance. Three reviewer
+  assignments and Greenhouse-only/production-store-dark scope remain unchanged. No case decision
+  or current-schema cloud restore is claimed.
+- Repository/follow-up checkpoint: full pre-release verification, real database regressions and
+  local 44-migration recovery pass. D2-033/D2-034/D2-036/D2-037/D2-040 remain Complete. The four
+  post-Resume rights-dispatch, outbox-pause, shared-NAT and numeric-receipt guard fixes are integrated
+  with validation pending. Release coherent rights and still-dark ingestion artifacts, then
+  complete authorized recovery. D2-041's changed export validator is not deployed by Gateway/workers.
+  Historical AWS PITR covers 39 migrations, not the now-deployed 44.
 - Remaining acceptance: installed job addition is not provider/Trust approval or website publication.
   Hosted reviewer/appeal decisions, browser lifecycle, authenticated workload, accessibility,
   alarm delivery receipt, other provider/store and accountable acceptance remain open. Engineering

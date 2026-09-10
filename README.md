@@ -74,14 +74,21 @@ Phase 2's extension and community backend are implemented in controlled Greenhou
 development. The [Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md)
 owns the exact release evidence and remaining acceptance; Phase 2 is still In progress.
 
-The verified 2026-09-08 rollout deploys persistent opt-in development contributions without
-signing, remote policy fetching, expiry, or renewal. Authentication, exact client/provider/host
-scope, independent provider verification, and Trust review remain enforced. The subsequent exact
-`42b9686` release applies Jobs `0022`, verifying 42 migrations and 68 relations across six migration
-contributors and ten schemas. State 290 runs Gateway/scheduled/Trust versions 55/17/13 with zero
-drift and 13 healthy D2 alarms; both existing Vercel targets are READY. The dependency/packaging
-repairs are complete (D2-034/D2-037). Historical cloud PITR covers 39 migrations, not this release;
-D2-038 adds a separate default-off isolated deletion-replay executor with local seven-owner tests.
+The 2026-09-08 rollout introduced persistent opt-in development contributions without signing,
+remote policy fetching, expiry, or renewal. Authentication, exact client/provider/host scope,
+independent provider verification, and Trust review remain enforced. The historical `42b9686`
+release applied Jobs `0022`, verifying 42 migrations and 68 relations across six migration owners
+and ten schemas at state 290, with Gateway/scheduled/Trust versions 55/17/13. The dependency and
+packaging repairs are complete (D2-034/D2-037).
+
+The September 10 coordinated development checkpoint used source
+`2dd3aa21d2991bc97caebc3e90e785654eb9fb1e`; the Phase 2 register owns subsequent release updates.
+Its revision-51 migration ran exactly once on 2026-09-10 with exit `0` and seven exact aggregate
+success messages, verifying 44 migrations, 68 relations, six migration owners and ten schemas,
+including Jobs `0023` and Trust `0004`. After the maintenance retirement window, Resume Apply
+advanced state 295 to 296 at `00:50:58Z`; maintained Verify and the `01:09:09Z` readback confirm
+Gateway/scheduled/Trust versions 58/20/16, reservations 2/1/2, resumed D2 handlers and triggers,
+and a non-applyable plan with zero resource or output changes. No ECS compute remains active.
 
 The user confirms reloading the rebuilt development extension, signing in, and adding a job
 successfully on 2026-09-08, completing D2-033 and closing D2-R11. This is user-confirmed installed
@@ -92,19 +99,20 @@ the prior processing snapshot is not a current owner-state observation.
 All three reviewer assignments are bound: the workflow is case-opener-only, the distinct delegated
 agent can read and make initial/takedown decisions, and the separate human can read and resolve
 appeals. Exact human identity/MFA/scope checks and the user-confirmed empty local appeal-queue read
-pass. The corrected agent Client Access grant also passes on 2026-09-09: nine bounded authenticated
-requests read three initial-review cases with zero decisions. D2-039 implements fresh provider-proof
-refresh and monotonic publication; its coordinated 44-migration deployment is next. Hosted reviewer
-and actual reviewed-decision journeys remain open. Terraform's approved 1.16.2 transition advances
-state to 291 through sensitivity metadata only, with a fresh locked zero-change plan and unchanged
-application versions, budget values, reviewer assignments and provider scope.
+pass. The September 10 `01:13:53Z` reviewer inspection passes the exact three agent scopes without
+role changes; all three initial cases have fresh independent provider proof. One delegated initial
+decision POST returned `503`. A separate `01:16:14Z` readback confirms all three remain
+`needs_review`, version `1`; no successful decision, Trust acceptance, or publication is claimed.
+Hosted reviewer and actual reviewed-decision journeys remain open. The prior state-292 pause and
+retirement window are historical maintenance evidence, not the current runtime state.
 
-The subsequent September 9 maintenance transition is verified at state 292: D2 contribution and
-review handlers, both workers and their triggers are paused, while D1/private capture remain
-available. The existing async-work retirement window ends no earlier than September 9 at
-20:11:25 America/New_York. Compatible paused artifacts and migration44 must also pass before
-resume. Separate rights/export activity and dark-ingestion updates, current recovery and the
-recorded manual acceptance gates still remain; this is not Phase 2 completion.
+Separate rights/export activity and dark-ingestion artifact releases, current-schema cloud recovery,
+and the recorded owner, fixture and human/browser acceptance gates remain. Historical cloud PITR
+covers 39 migrations, not the current 44-migration schema. D2-038's isolated deletion-replay executor
+remains a separate default-off recovery boundary. The D2-039/041 source delta requires no additional
+hosted web/admin bundle for contract compatibility; that does not establish hosted acceptance.
+The old singleton Jobs verification writer cannot run against `0023`; rollback must keep
+contributions disabled or use a compatible binary. This is not Phase 2 completion.
 
 The [admin hosting boundary](frontend/admin/README.md#vercel-hosting-boundary) records the earlier
 protected presentation preview, not hosted Auth0 moderation acceptance. Other provider activation,

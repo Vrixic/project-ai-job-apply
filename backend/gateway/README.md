@@ -20,14 +20,22 @@ and independently gated Terraform routes. Repository defaults remain dark; the c
 Greenhouse-only development exception is recorded in the
 [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md).
 
-The latest verified development release on 2026-09-08 is application source `90f3740`, state `287`,
-with immutable Gateway/scheduled/Trust versions `54`/`16`/`12`. Exact artifacts/environments,
-the 18 JWT-protected D2 routes, preserved reviewer assignments, and zero Terraform drift pass.
-Jobs `0021` completed once with exit `0` and seven exact aggregate success events, verifying
-41 migrations across six owners and 68 relations. The historical 39-migration PITR is not a
-restore of that later schema. The subsequent source-only Jobs `0022` and Lever/Ashby pairing
-changes remain undeployed; use the phase register for their separate acceptance and activation.
-The Trust consumer and mapping retain concurrency two.
+The September 10 coordinated development checkpoint used source
+`2dd3aa21d2991bc97caebc3e90e785654eb9fb1e`; the Phase 2 register owns subsequent release updates.
+On 2026-09-10, migration revision 51 ran exactly once with exit `0` and seven exact aggregate
+success messages, verifying 44 migrations and 68 relations across six owners and ten schemas,
+including Jobs `0023` and Trust `0004`. Resume Apply advanced state 295 to 296 at `00:50:58Z`;
+maintained Verify and the `01:09:09Z` readback confirm Gateway/scheduled/Trust versions `58`/`20`/`16`,
+reservations `2`/`1`/`2`, resumed D2 handlers and triggers, and a non-applyable plan with zero
+resource or output changes. No ECS compute remains active. Reviewer assignments and the
+Greenhouse-only development boundary are preserved; Lever/Ashby and production/store remain dark.
+
+Historical release checkpoints on 2026-09-08 were `90f3740` (state `287`, versions `54`/`16`/`12`,
+41 migrations) and `42b9686` (state `290`, versions `55`/`17`/`13`, 42 migrations). The historical
+39-migration PITR does not establish recovery of the current schema. Separate rights/export and
+dark-ingestion artifact releases and current-schema cloud recovery remain open. The old singleton
+Jobs verification writer cannot run on `0023`; rollback must keep contributions disabled or use
+a compatible binary.
 
 Explicit development contribution mode no longer requires signing, remote policy fetching,
 expiry, or renewal. Authentication, preview authorization, independent provider verification,
@@ -56,8 +64,12 @@ assignments plus route-specific scopes; ordinary admin sessions do not receive t
 verified-requester takedown scope. Responses are redacted and `no-store`. Case opening is
 deterministic and retry-safe, and Trust has no direct Jobs mutation. Missing assignments, policy,
 evidence, or dependencies fail closed. Development retains the workflow `case_opener` and now binds
-a distinct delegated agent for `case_reader`, `initial_reviewer`, and `takedown_reviewer`. Eight
-pre-deployment and ten post-deployment access/contract checks pass, with no valid case decision.
+a distinct delegated agent for `case_reader`, `initial_reviewer`, and `takedown_reviewer`. The prior
+eight pre-deployment and ten post-deployment access/contract checks passed. A fresh September 10
+`01:13:53Z` inspection passes the exact three agent scopes without role changes and reads three
+initial cases with fresh provider proof. One delegated initial decision POST returned `503`;
+the separate `01:16:14Z` readback confirms all three remain `needs_review`, version `1`.
+No successful decision, Trust acceptance, or publication is claimed.
 The distinct human appeal/read assignment and exact identity/MFA/scope setup check also pass;
 the user confirms an authenticated empty appeal-queue read from the local console. Hosted review
 and actual decision journeys remain open. The bounded queue and Jobs-owned sanitized evidence projection are implemented,

@@ -20,12 +20,22 @@ the scheduler, and the alias-targeted SQS consumer are deployed. The receive-onl
 awaits batch records sequentially with one shared database connection per invocation; the SQS
 mapping maximum and Lambda reservation remain aligned at two.
 
-The `42b9686` release ran Jobs `0022` with exit `0` and seven exact aggregate success logs,
-verifying 42 migrations and 68 relations across six owners and ten schemas. State 290 runs
-Gateway/scheduled/Trust 55/17/13 with exact runtime readback and a no-change plan. Fresh September 9
-health and exact three-scope agent authentication pass; three initial cases are readable and no
-decision has been submitted. Historical point-in-time restore evidence covers 39 migrations,
-not this boundary. Current-source Jobs `0023` and Trust `0004` remain undeployed.
+The historical 2026-09-08 `42b9686` release ran Jobs `0022`, verifying 42 migrations and 68 relations
+across six owners and ten schemas at state 290 with Gateway/scheduled/Trust versions 55/17/13.
+The September 10 coordinated development checkpoint used source
+`2dd3aa21d2991bc97caebc3e90e785654eb9fb1e`; the Phase 2 register owns subsequent release updates.
+On 2026-09-10, revision-51 migration ran exactly once with exit `0` and seven exact aggregate
+success messages, verifying 44 migrations and 68 relations across six owners and ten schemas,
+including Jobs `0023` and Trust `0004`. Resume Apply advanced state 295 to 296 at `00:50:58Z`;
+maintained Verify and the `01:09:09Z` readback confirm resumed Gateway/scheduled/Trust versions
+58/20/16, reservations 2/1/2, no active ECS compute, and a non-applyable plan with zero resource or
+output changes. Historical cloud PITR covers 39 migrations, not this schema; current-schema cloud
+recovery and the separate rights/export and dark-ingestion artifact releases remain open.
+
+The `01:13:53Z` reviewer inspection passes the exact three agent scopes without role changes;
+all three initial cases have fresh independent provider proof. One delegated initial decision
+POST returned `503`. A separate `01:16:14Z` readback confirms all three remain `needs_review`,
+version `1`; no successful decision, Trust acceptance, or publication is claimed.
 The dependency/image blocker is closed under D2-034/D2-R13. The user confirms extension reload,
 sign-in, and successful job addition, closing D2-033/D2-R11; that does not establish processing,
 Trust acceptance, or publication. Exact human identity/MFA/scope checks and the user-confirmed
@@ -40,7 +50,8 @@ empty local appeal-queue read pass. Hosted reviewer and actual decision journeys
   historical missing bases stay null. Initial review binds the reviewed digest, while an appeal
   reversal retains its separate approved appeal digest. A nonaccepting transition cannot create
   or substitute a basis, and withdrawal clears the active basis. Jobs still rechecks freshness
-  and the exact binding before publication. These changes are not deployed yet.
+  and the exact binding before publication. These changes are deployed in the resumed development
+  release; successful decision and publication acceptance remain open.
 - An adverse decision can receive at most one evidence-bound appeal. The appeal decision must be
   made by a reviewer other than the adverse-decision reviewer.
 - Each case binds an injected policy version and appeal-window duration. The repository does **not**
@@ -117,9 +128,10 @@ unauthorized and cross-owner deletion denial, transactional child-first candidat
 absence of Trust-to-Jobs database dependencies. Candidate deletion is the only context in which
 the protected history may be removed.
 
-Quiesce contribution processing and reviewer decisions before deploying Jobs `0023` and Trust
-`0004`, then release the coordinated Gateway and workers before resuming. The old singleton Jobs
-verification writer is not compatible with `0023`; do not roll it back onto the new schema.
+The coordinated Jobs `0023`/Trust `0004` release quiesced contribution processing and reviewer
+decisions, then verified compatible Gateway/worker artifacts and migrations before resuming.
+The old singleton Jobs verification writer is not compatible with `0023`; do not roll it back
+onto the new schema. Rollback must keep contributions disabled or use a compatible binary.
 
 ## Remaining authority and acceptance
 
