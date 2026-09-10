@@ -46,8 +46,8 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 Current recovery checkpoint (`2026-09-10T23:13:34Z`): actual `9b608ac` preparation and Create pass
 with two matching standalone builds and independent packet review. Its single Inspect refuses at
-`store_preflight` with the branded `CompletionCollision` reason. The connection, read-only
-transaction and four initial SQL reads succeeded; the exact conflicting timestamp/state predicate
+`store_preflight` with the branded `CompletionCollision` reason. The database connection and
+read-only transaction opened, and four initial SQL reads completed; the exact conflicting predicate
 and whether either D2-051 defect caused it remain unknown. No validated inspection or Replay exists.
 Maintained Cleanup `88848` confirms the exact executor absent after its full 330-second drain;
 its immutable artifact and five byte-identical local files are preserved. The same verified private
