@@ -321,14 +321,15 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Current recovery blocker (`2026-09-10T06:08Z`): D2-043's full committed-source verifier passes at
+- Current recovery blocker (`2026-09-10`): D2-043's full committed-source verifier passes at
   `6604aff`, with fresh bootstrap/platform zero-change baselines at states `13`/`308`. Actual
   PITR preflight finds 43 healthy alarms of 44; recurring activity-version-12 HTTP 403 errors
   prevent recovery. D2-044 integrates a narrow exact-version export DELETE acknowledgment fix,
   without permissions, SQL or retention changes. A generated-object probe confirms initial and
   repeated HTTP 204/exact-VersionId acknowledgment and complete cleanup; no candidate data was
-  touched. Deployment and normal scheduled health remain. D2-045 adds the missing matching
-  development workload-inspector profiles; no authenticated workload has run. Recovery roles,
+  touched. Exact committed `e2714ca` then passes the full maintained verifier and all 20 build
+  tasks and is pushed to main. D2-045's matching inspector implementation is Complete;
+  deployment, normal scheduled health and authenticated workload acceptance remain. Recovery roles,
   PITR and replay remain unactivated; the existing application release is still `e2e730a`.
   At `06:13:53Z`, STS reports expired SSO before the next metric read or mutation, reopening R15;
   renewal is requested while local integration continues.
@@ -1157,6 +1158,8 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | Exact committed `e2e730a` passes the full maintained verifier, D2 scheduled/Trust `21`/`17` at state `297` and Gateway at state `298`. D2-042 is Complete after the actual shared-client SQL-bind repair and three fresh evidence-bound initial decisions with accepted/version-2 readbacks. Three POSTs/21 requests create no submissions, roles or appeals. This supersedes the earlier rolled-back 503 and uncommitted-source verifier stop. Post-decision aggregates record three processing completions, three copied Trust signals and 13 OK alarms, not exact owner publication. Rights reconciliation followed by the one-update mapping-only Resume verifies at state `305` with exact pins and zero changes; dark ingestion then verifies at state `308` with all four activation flags false. Final canonical capture passes at state `308` with zero changes; fresh user export/deletion acceptance remains open. Provider, owner-publication, human, recovery and other phase acceptance remain open; Phase 2 is not complete. | [Verified fix and aggregate boundary](phase-2-extension-and-community.md#d2-042--shared-client-trust-write-compatibility), [remaining work](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 
 | 2026-09-10 | D2 | D2-043's full committed-source verifier passes at `6604aff`; states `13`/`308` are freshly zero-change. Actual activity HTTP 403 errors block recovery health. Integrated the narrow D2-044 export-delete acknowledgment fix and D2-045's matching workload-inspector profiles on shared main. Workflow 617 passed/six database opt-ins skipped, focused 104/104, typecheck and 147 two-host inspector checks plus 49 existing input guards pass. The generated S3 diagnostic object is fully removed with no candidate-data change. Full new-source verification remains. SSO expires before the next metric read at `06:13:53Z`; R15 reopened, R19 tracks activity health. No new deployment, temporary recovery permission, PITR or replay occurred. Phase 2 remains In progress. | [Expiry repair](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry), [workload tooling](phase-2-extension-and-community.md#d2-045--development-workload-corroboration) |
+
+| 2026-09-10 | D2 | Combined implementation `e2714ca3753c40746944978c1ad858271f3a4d5f` passes the full maintained verifier and all 20 build tasks, then is pushed to shared main with Actions skipped. D2-045 is Complete for inspector tooling; D2-044's locally verified export-expiry repair awaits new immutable publication/release and scheduled health after SSO renewal. All agent work is integrated without new branches. No new deployment, recovery resource, permission, retention, provider or reviewer change occurred; Phase 2 remains In progress behind its documented gates. | [Verified repair](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry), [completed inspector](phase-2-extension-and-community.md#d2-045--development-workload-corroboration) |
 
 ## Cross-delivery decisions and changes
 
