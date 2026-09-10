@@ -328,12 +328,13 @@ This is the master record for the delivery phases defined in the [product and sy
   has four positive invocations with explicit zero errors/throttles; all 57 managed alarms are
   OK (44 core plus 13 D2), with matching configuration and enabled actions. R15/R19 are Closed.
   Gateway, D2 workers and dark ingestion retain their compatible `e2e730a` releases.
-  The next Platform Enable plan refuses computed prefix metadata before applying. D2-046's
-  narrow operator repair is Complete at `2343514`: both hosts pass 479 assertions, actual native
-  plan reading and the full repository verifier/all 20 builds pass. The unused bootstrap
-  allowance was removed and verified at state
-  `15`, zero changes. No Platform role, executor, PITR copy or replay was created. The already
-  authorized D2-038 drill remains pending, without another application release or approval.
+  D2-046's prefix repair passes full verification at `2343514`. Subsequent source `bf49c69`
+  activates the temporary role once at Platform `316`, then verification rejects native empty-tag
+  and identity metadata. No executor, PITR copy or replay ran. Exact unused cleanup now verifies
+  at Platform `317` and Bootstrap `17`, zero changes and all temporary permissions removed.
+  D2-046 is reopened only for the narrow guard/tests follow-up and fresh full verification.
+  The already authorized D2-038 drill remains pending, without another application release or
+  repeated approval; core runtime `31051e1` and its version-13 pins are unchanged.
   D2-045 inspector implementation is Complete; actual authenticated workload acceptance remains.
   [Current repair and remaining gates](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry)
 - Reviewer/recovery authority checkpoint (2026-09-10): the corrected existing Client Access grant
@@ -408,9 +409,10 @@ This is the master record for the delivery phases defined in the [product and sy
   outbox-pause input, exact declared-Boolean capture equality and restore-role-only computed-policy
   observations. All four are integrated on shared main with passing focused regressions on both
   PowerShell hosts; full committed-source verification now passes at `6604aff`, completing D2-043.
-  The new-role cloud echo is unobserved. D2-044's corrective release and activity health now pass
-  at state `315`, and D2-046's operator repair is verified. The unused bootstrap allowance was
-  enabled then removed and verified at state `15`; no Platform role, PITR copy or replay exists.
+  D2-044's corrective release and activity health pass at state `315`. D2-046's verified prefix
+  repair permits actual activation; a subsequent empty-tag/identity observation mismatch requires
+  a bounded follow-up. All unused authority is removed and verified at Platform `317`/Bootstrap
+  `17` before editing source. No executor, PITR copy or replay ran; the application is unchanged.
   [Rights and consumer boundaries](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage)
 - Implemented follow-up (2026-09-09, `fab4960`/`cc2fa23`): D2-039 adds append-only refresh for stale unpublished
   provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
@@ -1167,6 +1169,8 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | Corrective core source `31051e1` is immutably published, released and resumed at state `315`, durable/activity/terminal `13`, zero changes. Positive normal activity health records `4/0/0`; all 57 managed alarms are OK. D2-044/R15/R19 are closed. The next restore-role plan refuses native computed-prefix/omitted-binding metadata before Platform Apply; the unused bootstrap allowance is removed and verified at state `15`. D2-046's narrow guard and generated tests are integrated directly, and the actual diagnostic plan passes offline without making it applyable. Committed-source verification and authorized current-schema recovery remain; no role, executor, PITR copy, replay, provider expansion or human acceptance is claimed. | [Deployed repair](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry), [operator correction](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
 
 | 2026-09-10 | D2 | Exact operator implementation `2343514` passes the full maintained verifier and all 20 build tasks (19 cached), alongside 479 assertions on each PowerShell host and actual native-plan semantic reading. D2-046 is Complete for tooling; D2-038's already-authorized cloud drill remains. Subsequent edits affect only these two delivery documents. Continue with fresh plans and a twice-built standalone executor, preserving core runtime `31051e1` and all existing provider/reviewer boundaries. | [Verified operator](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
+
+| 2026-09-10 | D2 | Actual source `bf49c69` restore-role activation advances Platform `315` to `316` once, then strict verification rejects native empty-tag/identity metadata. Exact unused cleanup removes the role/child and restores two endpoints; fresh verification is zero-change at Platform `317`. Maintained Bootstrap cleanup verifies disabled at `17`, preserving its 17 original statements. All temporary permissions are removed before the bounded D2-046 follow-up. No executor, PITR or replay ran; original evidence and healthy application releases are unchanged. New guard/tests integration and full verification precede the already authorized drill. | [Native follow-up and verified cleanup](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
 
 ## Cross-delivery decisions and changes
 

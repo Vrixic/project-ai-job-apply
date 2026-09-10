@@ -220,14 +220,41 @@ function Assert-RestoreRoleObservationMetadata {
   throw 'RestoreRoleObservationMetadataShape'
 }
 function Assert-RestoreRoleObservationRecord {
-  param([object]$Record,[ValidateSet('aws_iam_role','aws_iam_role_policy')][string]$Type,[ValidateSet('update','no-op','delete')][string]$Action)
-  Assert-ExactObjectKeys $Record @('address','module_address','mode','type','name','index','provider_name','change') 'restore observation record'
-  Assert-ExactObjectKeys $Record.change @('actions','before','after','after_unknown','before_sensitive','after_sensitive') 'restore observation change'
+  param([object]$Record,[ValidateSet('aws_iam_role','aws_iam_role_policy')][string]$Type,[ValidateSet('update','no-op','delete')][string]$Action,[string]$AccountId='')
+  $recordKeys=@('address','module_address','mode','type','name','index','provider_name','change')
+  $changeKeys=@('actions','before','after','after_unknown','before_sensitive','after_sensitive')
+  $beforeIdentity=$Record.change.PSObject.Properties['before_identity']
+  $afterIdentity=$Record.change.PSObject.Properties['after_identity']
+  $actionReason=$Record.PSObject.Properties['action_reason']
+  $noOpIdentity=$Action -ceq 'no-op' -and ($null -ne $beforeIdentity -or $null -ne $afterIdentity)
+  $deleteIdentity=$Action -ceq 'delete' -and ($null -ne $beforeIdentity -or $null -ne $afterIdentity -or $null -ne $actionReason)
+  if($noOpIdentity){$changeKeys+=@('before_identity','after_identity')}
+  if($deleteIdentity){$recordKeys+=@('action_reason');$changeKeys+=@('before_identity')}
+  Assert-ExactObjectKeys $Record $recordKeys 'restore observation record'
+  Assert-ExactObjectKeys $Record.change $changeKeys 'restore observation change'
   if($Record.address -cne "module.platform.$Type.candidate_deletion_restore[0]" -or
      $Record.module_address -cne 'module.platform' -or $Record.mode -cne 'managed' -or $Record.type -cne $Type -or
      $Record.name -cne 'candidate_deletion_restore' -or ($Record.index -isnot [int] -and $Record.index -isnot [long]) -or $Record.index -ne 0 -or
      $Record.provider_name -cne 'registry.terraform.io/hashicorp/aws' -or $Record.change.actions -isnot [array] -or
      $Record.change.actions.Count -ne 1 -or $Record.change.actions[0] -cne $Action){throw 'RestoreRoleObservationRecordRejected'}
+  # No-op identity is an equal pair. The observed count-index delete carries only
+  # before_identity, coupled to its exact reason; neither form extends drift records.
+  if($deleteIdentity -and ($actionReason.Value -isnot [string] -or $actionReason.Value -cne 'delete_because_count_index')){throw 'RestoreRoleObservationDeleteReasonRejected'}
+  if($noOpIdentity -or $deleteIdentity){
+    if($AccountId -cnotmatch '^[0-9]{12}$' -or $beforeIdentity.Value -isnot [pscustomobject]){throw 'RestoreRoleObservationIdentityRejected'}
+    $identityKeys=@('account_id','name')
+    $identityName=if($Type -ceq 'aws_iam_role'){'ai-job-apply-development-deletion-restore'}else{'candidate-deletion-restore-read-only'}
+    if($Type -ceq 'aws_iam_role_policy'){$identityKeys+=@('role')}
+    Assert-ExactObjectKeys $beforeIdentity.Value $identityKeys 'restore observation identity'
+    if($beforeIdentity.Value.account_id -isnot [string] -or $beforeIdentity.Value.account_id -cne $AccountId -or
+       $beforeIdentity.Value.name -isnot [string] -or $beforeIdentity.Value.name -cne $identityName -or
+       ($Type -ceq 'aws_iam_role_policy' -and ($beforeIdentity.Value.role -isnot [string] -or
+         $beforeIdentity.Value.role -cne 'ai-job-apply-development-deletion-restore'))){throw 'RestoreRoleObservationIdentityRejected'}
+    if($noOpIdentity){
+      if($afterIdentity.Value -isnot [pscustomobject]){throw 'RestoreRoleObservationIdentityRejected'}
+      Assert-RestoreRoleObservationEqual $afterIdentity.Value $beforeIdentity.Value
+    }
+  }
   if($Action -ceq 'delete'){
     if($null -ne $Record.change.after -or $Record.change.after_sensitive -isnot [bool] -or $Record.change.after_sensitive){throw 'RestoreRoleObservationDeleteRejected'}
     if(-not (($Record.change.after_unknown -is [bool] -and -not $Record.change.after_unknown) -or
@@ -254,9 +281,26 @@ function Assert-RestoreRoleComputedPolicyObservation {
   if($role.arn -isnot [string] -or $role.arn -cnotmatch '^arn:aws:iam::([0-9]{12}):role/ai-job-apply-development-deletion-restore$'){
     throw 'RestoreRoleObservationIdentityRejected'
   }
-  $boundary=Get-RestoreRolePlatformBoundary $map $Matches[1]
+  $observationAccountId=$Matches[1]
+  $boundary=Get-RestoreRolePlatformBoundary $map $observationAccountId
   $before=Copy-RestoreRoleValue $Record.change.before
   $after=Copy-RestoreRoleValue $Record.change.after
+  $sensitivityBefore=Copy-RestoreRoleValue $Record.change.before_sensitive
+  $sensitivityAfter=Copy-RestoreRoleValue $Record.change.after_sensitive
+  # Native refresh pairs absent sensitivity with null -> empty explicit tags. Compare
+  # that exact observation only on clones; preserve the original before-refresh state.
+  $beforeTags=$before.PSObject.Properties['tags']
+  $afterTags=$after.PSObject.Properties['tags']
+  if($null -ne $beforeTags -and $null -eq $beforeTags.Value -and $null -ne $afterTags -and
+     (Test-DevelopmentDocumentEmptyObject $afterTags.Value)){
+    $beforeTagSensitivity=$sensitivityBefore.PSObject.Properties['tags']
+    $afterTagSensitivity=$sensitivityAfter.PSObject.Properties['tags']
+    if($sensitivityBefore -isnot [pscustomobject] -or $sensitivityAfter -isnot [pscustomobject] -or
+       $null -ne $beforeTagSensitivity -or $null -eq $afterTagSensitivity -or
+       -not (Test-DevelopmentDocumentEmptyObject $afterTagSensitivity.Value)){throw 'RestoreRoleObservationTagsMetadataRejected'}
+    $before.tags=[pscustomobject]@{}
+    $sensitivityBefore|Add-Member -NotePropertyName tags -NotePropertyValue ([pscustomobject]@{})
+  }
   if(-not (Test-DevelopmentDocumentEmptyArray $before.inline_policy) -or $after.inline_policy -isnot [array] -or
      $after.inline_policy.Count -ne 1){throw 'RestoreRoleObservationNotEmptyToExactPolicy'}
   Assert-ExactObjectKeys $after.inline_policy[0] @('name','policy') 'restore observation inline policy'
@@ -272,8 +316,6 @@ function Assert-RestoreRoleComputedPolicyObservation {
   Assert-RestoreRoleObservationEqual $after $before
   Assert-RestoreRoleObservationMetadata $Record.change.before_sensitive
   Assert-RestoreRoleObservationMetadata $Record.change.after_sensitive
-  $sensitivityBefore=Copy-RestoreRoleValue $Record.change.before_sensitive
-  $sensitivityAfter=Copy-RestoreRoleValue $Record.change.after_sensitive
   if((ConvertTo-DeploymentCanonicalValue $sensitivityBefore) -cne (ConvertTo-DeploymentCanonicalValue $sensitivityAfter)){
     $left=$sensitivityBefore.PSObject.Properties['inline_policy']
     $right=$sensitivityAfter.PSObject.Properties['inline_policy']
@@ -288,7 +330,7 @@ function Assert-RestoreRoleComputedPolicyObservation {
     if($changes.Count -ne 1){throw 'RestoreRoleObservationConfigurationMissing'}
     $type=if($address -ceq $roleAddress){'aws_iam_role'}else{'aws_iam_role_policy'}
     $action=if($Removal){'delete'}else{'no-op'}
-    Assert-RestoreRoleObservationRecord $changes[0] $type $action
+    Assert-RestoreRoleObservationRecord $changes[0] $type $action $observationAccountId
     Assert-RestoreRoleObservationEqual $changes[0].change.before $map[$address]
     if(-not $Removal){
       Assert-RestoreRoleObservationEqual $changes[0].change.after $map[$address]

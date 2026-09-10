@@ -407,6 +407,153 @@ $bad=Clone $removal.Plan;$bad.prior_state.values.root_module.resources=@($bad.pr
 Reject {Assert-RestoreRoleTransitionPlan $bad $removal.Baseline 'Platform' $false $account} 'removal requires complete refreshed prior child ownership'
 Assert-Test ((ConvertTo-DeploymentCanonicalValue $observation.Plan) -ceq $originalObservation) 'all rejection and removal checks preserve original evidence'
 # END restore-role computed-policy observation regressions.
+# Native tag/identity metadata shapes, generated without embedding any account or plan evidence.
+function New-NativeObservationPlan {
+  $fixture=New-ObservationFixture
+  $plan=Clone $fixture.Plan
+  $plan.resource_drift[0].change.before.tags=$null
+  $plan.resource_drift[0].change.before_sensitive.PSObject.Properties.Remove('tags')
+  foreach($index in 0..1){
+    $identity=Clone @{account_id=$account;name=$(if($index -eq 0){'ai-job-apply-development-deletion-restore'}else{'candidate-deletion-restore-read-only'})}
+    if($index -eq 1){$identity|Add-Member -NotePropertyName role -NotePropertyValue 'ai-job-apply-development-deletion-restore'}
+    $plan.resource_changes[$index].change|Add-Member -NotePropertyName before_identity -NotePropertyValue (Clone $identity)
+    $plan.resource_changes[$index].change|Add-Member -NotePropertyName after_identity -NotePropertyValue (Clone $identity)
+  }
+  return $plan
+}
+$native=New-NativeObservationPlan
+$nativeOriginal=ConvertTo-DeploymentCanonicalValue $native
+$nativeBefore=ConvertTo-DeploymentCanonicalValue $native.resource_drift[0].change.before
+Assert-RestoreRolePlanEnvelope $native -ZeroDrift
+$null=Assert-RetainedGatewayBaselinePlan $native @($native.variables.PSObject.Properties.Name)
+$nativeReconstructed=Get-RestoreRoleBeforeRefreshResources $native
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $nativeReconstructed[$roleAddress]) -ceq $nativeBefore) 'native observation preserves original raw before-state including null tags'
+Assert-Test ($null -ne $nativeReconstructed[$roleAddress].PSObject.Properties['tags'] -and $null -eq $nativeReconstructed[$roleAddress].tags) 'reconstructed null tag property is not replaced or omitted'
+Assert-Test ($null -eq $native.resource_drift[0].change.before_sensitive.PSObject.Properties['tags']) 'native omitted sensitivity is not invented in original evidence'
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $native) -ceq $nativeOriginal) 'native validation preserves every original value and metadata field'
+$noIdentity=Clone $native
+foreach($index in 0..1){foreach($field in @('before_identity','after_identity')){$noIdentity.resource_changes[$index].change.PSObject.Properties.Remove($field)}}
+Assert-RestoreRolePlanEnvelope $noIdentity -ZeroDrift
+Assert-Test $true 'observed tags remain optional and independent of optional identity metadata'
+$identityOnly=Clone $native
+$identityOnly.resource_drift[0].change.before.tags=[pscustomobject]@{}
+$identityOnly.resource_drift[0].change.before_sensitive|Add-Member -NotePropertyName tags -NotePropertyValue ([pscustomobject]@{})
+Assert-RestoreRolePlanEnvelope $identityOnly -ZeroDrift
+Assert-Test $true 'exact native identities also preserve the unchanged empty-tags observation'
+$nativeMutations=@(
+  {$d.change.before.PSObject.Properties.Remove('tags')},
+  {$d.change.before.tags=@()},{$d.change.before.tags=@($null)},{$d.change.before.tags=$false},{$d.change.before.tags=0},{$d.change.before.tags=''},
+  {$d.change.after.tags=$null},{$d.change.after.tags=@()},{$d.change.after.tags=$false},{$d.change.after.tags=0},{$d.change.after.tags=''},
+  {$d.change.after.tags=Clone @{unexpected='value'}},
+  {$d.change.before_sensitive|Add-Member -NotePropertyName tags -NotePropertyValue ([pscustomobject]@{})},
+  {$d.change.before_sensitive|Add-Member -NotePropertyName tags -NotePropertyValue $null},
+  {$d.change.before_sensitive|Add-Member -NotePropertyName tags -NotePropertyValue $false},
+  {$d.change.before_sensitive|Add-Member -NotePropertyName tags -NotePropertyValue @()},
+  {$d.change.before_sensitive=$false},{$d.change.before_sensitive=@()},
+  {$d.change.after_sensitive.PSObject.Properties.Remove('tags')},
+  {$d.change.after_sensitive.tags=$null},{$d.change.after_sensitive.tags=$false},{$d.change.after_sensitive.tags=@()},
+  {$d.change.after_sensitive.tags=Clone @{unexpected=$false}},
+  {$d.change.after_unknown=Clone @{tags=$true}},
+  {$d.change|Add-Member -NotePropertyName before_identity -NotePropertyValue (Clone $p.resource_changes[0].change.before_identity)},
+  {$d.change|Add-Member -NotePropertyName after_identity -NotePropertyValue (Clone $p.resource_changes[0].change.after_identity)},
+  {$d|Add-Member -NotePropertyName action_reason -NotePropertyValue 'delete_because_count_index'}
+)
+foreach($mutate in $nativeMutations){
+  $p=Clone $native;$d=$p.resource_drift[0];& $mutate
+  $rejectedOriginal=ConvertTo-DeploymentCanonicalValue $p
+  Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} 'native tag observation remains exact and paired'
+  Reject {Assert-RetainedGatewayBaselinePlan $p @($p.variables.PSObject.Properties.Name)} 'canonical baseline preserves strict native observation metadata'
+  Assert-Test ((ConvertTo-DeploymentCanonicalValue $p) -ceq $rejectedOriginal) 'rejected native metadata never rewrites evidence'
+}
+$invalidIdentityValues=@(
+  @{name='null';value=$null},@{name='false';value=$false},@{name='true';value=$true},
+  @{name='number';value=123456789012},@{name='empty string';value=''},@{name='wrong string';value='other'},
+  @{name='wrong account';value='999999999999'},@{name='empty object';value=[pscustomobject]@{}},
+  @{name='empty array';value=@()},@{name='null array';value=@($null)},@{name='singleton string array';value=@('123456789012')}
+)
+foreach($index in 0..1){
+  foreach($side in @('before_identity','after_identity')){
+    $p=Clone $native;$p.resource_changes[$index].change.PSObject.Properties.Remove($side)
+    Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} 'identity metadata cannot omit one half'
+    foreach($case in $invalidIdentityValues){
+      $p=Clone $native;$p.resource_changes[$index].change.$side=$case.value
+      Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} "native resource $index $side rejects malformed identity: $($case.name)"
+    }
+    foreach($field in $(if($index -eq 0){@('account_id','name')}else{@('account_id','name','role')})){
+      $p=Clone $native;$p.resource_changes[$index].change.$side.PSObject.Properties.Remove($field)
+      Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} 'native identity has exact key inventory'
+      foreach($case in $invalidIdentityValues){
+        $p=Clone $native;$p.resource_changes[$index].change.$side.$field=$case.value
+        Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} "native identity $field is a fixed typed string: $($case.name)"
+      }
+    }
+    $p=Clone $native;$p.resource_changes[$index].change.$side|Add-Member -NotePropertyName unexpected -NotePropertyValue 'value'
+    Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} 'native identity has no unreviewed key'
+  }
+  $p=Clone $native;$p.resource_changes[$index]|Add-Member -NotePropertyName action_reason -NotePropertyValue 'delete_because_count_index'
+  Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} 'no-op cannot carry a deletion action reason'
+  $p=Clone $native;$p.resource_changes[$index].change.before_identity.name=$p.resource_changes[$index].change.before_identity.name.ToUpperInvariant()
+  $p.resource_changes[$index].change.after_identity=Clone $p.resource_changes[$index].change.before_identity
+  Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} 'even equal identities cannot change fixed-name case'
+  $p=Clone $native;$p.resource_changes[$index].change.before_identity.account_id='999999999999'
+  $p.resource_changes[$index].change.after_identity=Clone $p.resource_changes[$index].change.before_identity
+  Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift} 'even equal identities bind the account from the exact role ARN'
+}
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $native) -ceq $nativeOriginal) 'all native cases preserve the original generated plan'
+function New-NativeRemovalFixture {
+  $fixture=New-Fixture 'Platform' $false
+  $fixture.Baseline=New-NativeObservationPlan
+  $fixture.Plan.planned_values.root_module.resources=@($fixture.Plan.planned_values.root_module.resources|Where-Object {$_.address -cnotin @($roleAddress,$policyAddress)})
+  $fixture.Plan|Add-Member -NotePropertyName prior_state -NotePropertyValue (Clone @{values=@{root_module=$fixture.Baseline.planned_values.root_module}})
+  $fixture.Plan.resource_drift=Clone $fixture.Baseline.resource_drift
+  foreach($index in 0..1){
+    $record=Clone $fixture.Baseline.resource_changes[$index]
+    $record|Add-Member -NotePropertyName action_reason -NotePropertyValue 'delete_because_count_index'
+    $record.change.actions=@('delete');$record.change.after=$null;$record.change.after_unknown=$false;$record.change.after_sensitive=$false
+    $record.change.PSObject.Properties.Remove('after_identity')
+    $fixture.Plan.resource_changes[$index]=$record
+  }
+  return $fixture
+}
+$nativeRemoval=New-NativeRemovalFixture
+$nativeRemovalOriginal=ConvertTo-DeploymentCanonicalValue $nativeRemoval.Plan
+$null=Assert-RestoreRoleTransitionPlan $nativeRemoval.Plan $nativeRemoval.Baseline 'Platform' $false $account
+Assert-Test $true 'native Disable accepts only the observed count-index reason and before-only identity tuple'
+Reject {Assert-RestoreRolePlanEnvelope $nativeRemoval.Plan} 'native delete metadata does not authorize removal outside the explicit Disable context'
+foreach($index in 0..1){
+  foreach($mutate in @(
+    {$record.PSObject.Properties.Remove('action_reason')},
+    {$record.change.PSObject.Properties.Remove('before_identity')},
+    {$record.change|Add-Member -NotePropertyName after_identity -NotePropertyValue $null},
+    {$record.change|Add-Member -NotePropertyName after_identity -NotePropertyValue (Clone $record.change.before_identity)},
+    {$record.action_reason='delete_because_no_resource_config'},{$record.action_reason='DELETE_BECAUSE_COUNT_INDEX'},
+    {$record.action_reason=$null},{$record.action_reason=$false},{$record.action_reason=@('delete_because_count_index')},
+    {$record.action_reason=@()},{$record.action_reason=Clone @{}},
+    {$record.change.after=Clone @{}},{$record.change.after_unknown=Clone @{name=$true}},
+    {$record.change.after_sensitive=Clone @{}},{$record.change.after_sensitive=$null},{$record.change.after_sensitive=$true},
+    {$record.change.before_identity=Clone @{}},{$record.change.before_identity=$null},
+    {$record.change.before_identity.account_id='999999999999'},
+    {$record.change.before_identity.name='other'},
+    {$record.change.before_identity|Add-Member -NotePropertyName unexpected -NotePropertyValue 'value'},
+    {$record|Add-Member -NotePropertyName previous_address -NotePropertyValue 'other'},
+    {$record.change|Add-Member -NotePropertyName importing -NotePropertyValue (Clone @{id='other'})},
+    {$record.change.actions=@('delete','create')},{$record.change.actions=@('no-op')}
+  )){
+    $p=Clone $nativeRemoval.Plan;$record=$p.resource_changes[$index];& $mutate
+    $rejectedOriginal=ConvertTo-DeploymentCanonicalValue $p
+    Reject {Assert-RestoreRoleTransitionPlan $p $nativeRemoval.Baseline 'Platform' $false $account} 'native Disable metadata is one exact observed tuple'
+    Assert-Test ((ConvertTo-DeploymentCanonicalValue $p) -ceq $rejectedOriginal) 'rejected native Disable preserves original evidence'
+  }
+  foreach($field in $(if($index -eq 0){@('account_id','name')}else{@('account_id','name','role')})){
+    $p=Clone $nativeRemoval.Plan;$p.resource_changes[$index].change.before_identity.PSObject.Properties.Remove($field)
+    Reject {Assert-RestoreRoleTransitionPlan $p $nativeRemoval.Baseline 'Platform' $false $account} 'native Disable identity requires all exact keys'
+    foreach($case in $invalidIdentityValues){
+      $p=Clone $nativeRemoval.Plan;$p.resource_changes[$index].change.before_identity.$field=$case.value
+      Reject {Assert-RestoreRoleTransitionPlan $p $nativeRemoval.Baseline 'Platform' $false $account} 'native Disable identity values are fixed typed strings'
+    }
+  }
+}
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $nativeRemoval.Plan) -ceq $nativeRemovalOriginal) 'native Disable never mutates the reviewed generated plan'
 foreach($mutate in @(
   {$r.permissions_boundary='wrong'},{$r.path='/other/'},{$r.name='other'},{$r.force_detach_policies='false'},
   {$r.max_session_duration=7200},{$r.name_prefix='other'},{$r.tags_all.Environment='staging'},

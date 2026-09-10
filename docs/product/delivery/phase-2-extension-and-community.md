@@ -52,11 +52,13 @@ configuration changes. The normal activity records four invocations with explici
 and throttles; all 57 managed alarms are OK (44 core plus 13 D2). D2-R15/R19 are Closed.
 Gateway, D2 workers and dark-ingestion retain their compatible `e2e730a` releases.
 
-Recovery next exposed a native computed `name_prefix` mismatch before the Platform Enable plan
-could be accepted. No restore role, executor, PITR copy or replay was created. The unused bootstrap
-allowance was removed and verified at state `15`, zero changes, before editing source. D2-046's
-narrow maintained-operator fix is Complete at `2343514`, including the full repository verifier
-and all 20 build tasks; the already authorized D2-038 drill remains pending.
+Recovery first exposed a native computed `name_prefix` mismatch, repaired and fully verified at
+`2343514`. The subsequent exact `bf49c69` activation created only the temporary role and endpoint
+access at Platform state `316`; verification then rejected native empty-tag and identity metadata.
+No executor, PITR copy or replay ran. Exact unused-role cleanup now verifies at Platform `317`
+and Bootstrap `17`, both with zero changes and all temporary permissions removed. D2-046 is
+reopened only for the narrow native-observation follow-up; the already authorized D2-038 drill
+remains pending. Core runtime `31051e1` and its version-13 pins remain unchanged.
 D2-045 is Complete for inspector implementation, not authenticated workload acceptance.
 
 Current engineering/review checkpoint (`2026-09-10T02:55Z`): exact source
@@ -113,8 +115,8 @@ pause, shared-NAT and numeric-receipt guard fixes are committed in `e2e730a` wit
 The full exact-HEAD verifier passes, including infrastructure, format, lint, typecheck,
 dependency-security, unit and build gates. Separate rights and dark-ingestion releases now verify;
 the final canonical handoff passes. D2-043's full verification passes at `6604aff`; D2-044's
-subsequent corrective release and activity health pass at state `315`. D2-046's operator repair
-is also verified; approved isolated recovery is next.
+subsequent corrective release and activity health pass at state `315`. D2-046's prefix repair
+is verified; its newly observed empty-tag/identity follow-up precedes approved isolated recovery.
 Installed sign-in/job-add acceptance remains distinct from publication.
 
 Preceding controlled-development release history (2026-09-05 through the 2026-09-08 reviewer
@@ -209,7 +211,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-043 | Correct native Terraform value handling and restore-only observation guards before recovery. | Complete | Platform engineering | D2-016, D2-038 | Completed 2026-09-10 at `6604aff`: timestamp-string preservation, current false outbox-pause input, declared-Boolean capture equality and exact restore-role computed-policy observation guards pass focused PowerShell 7.5/5.1 regressions and the full committed-source verifier. Fresh bootstrap/platform baselines are zero-change at states `13`/`308`. Preserve original evidence, exact input types, the nine-statement read-only role policy and historical-reader boundaries. The new-role cloud echo remains unobserved; generated compatibility fixtures do not claim role activation or recovery. |
 | D2-044 | Repair exact-version export expiry acknowledgment and restore healthy activity maintenance. | Complete | Platform engineering | D2-016, D2-038, D2-041 | Completed 2026-09-10: focused 104/104, workflow 617 passed/six explicit database opt-ins skipped and full verification pass. Exact `31051e1` publication, guarded release, state-only reconciliation and Resume verify at state `315`, starts unpaused and durable/activity/terminal `13`. Ordinary activity records four invocations with explicit zero errors/throttles; all 57 managed alarms are OK. Permissions, SQL ordering, retention and failed-delete refusal are preserved. This is deployed health acceptance, not fresh candidate-rights or isolated recovery acceptance. See [repair and limits](#d2-044--exact-version-export-expiry). |
 | D2-045 | Implement inspector corroboration for existing development public, authenticated-intake and processing workload aggregates. | Complete | Platform engineering | D2-016, D2-028, D2-033 | Completed 2026-09-10 in `e2714ca`: three explicit development profiles and strict checksum-bound aggregates are integrated. Historical D2Public remains 40 requests/20 denials; unknown data, custom-emission timing/sample completeness and settled queues are handled explicitly. Root and independent review pass 147 checks on each PowerShell host, plus 49 existing input guards and the complete restore-verifier suite. Full committed-source verification passes. This completes tooling, not a candidate workload, throughput, attribution or publication acceptance. See [implementation boundary](#d2-045--development-workload-corroboration). |
-| D2-046 | Handle native computed prefix metadata for exact fixed-name temporary recovery IAM resources. | Complete | Platform engineering | D2-038, D2-043 | Completed 2026-09-10 at `2343514`: narrow typed metadata handling, clone-only pending binding projection and 479 assertions on each PowerShell host pass independent review; the actual native plan passes offline. Full committed-source verification and all 20 builds pass. The unused bootstrap allowance was removed at state `15` before this fix. Fresh source-bound activation and recovery remain under D2-038; no application runtime re-release is needed. See [bounded repair](#d2-046--fixed-name-restore-role-metadata). |
+| D2-046 | Handle native computed prefix and observation metadata for exact fixed-name temporary recovery IAM resources. | In progress | Platform engineering | D2-038, D2-043 | The prefix/binding repair at `2343514` passes full verification and 479 assertions on each host. Subsequent real activation exposes exact empty-tag/sensitivity and identity metadata. Its unused permissions are removed and verified at Platform `317`/Bootstrap `17` before editing source. The narrow follow-up and generated native-shape regressions are being integrated; new committed-source verification remains. No executor, PITR or replay ran, and no application rerelease is needed. See [bounded repair](#d2-046--fixed-name-restore-role-metadata). |
 
 ### D2-039 — Fresh review evidence and monotonic catalog truth
 
@@ -554,8 +556,35 @@ All 479 assertions pass independently on PowerShell 7 and Windows PowerShell 5.1
 whitespace, formatting/lint and independent source review pass. Full committed-source verification
 passes at `2343514860a6a74cb1437c2137897d10e2b921e4`, including all 20 build tasks (19 cached).
 The ignored verification log is `.tmp/d2-reviewer/d2-2343514-phase0-verification.log`.
-D2-046 is Complete for implementation; a fresh source-bound drill continues under D2-038.
-Historical rejected plans must not be applied.
+That prefix repair completed implementation at `2343514`; the next actual activation exposed a
+second native-observation incompatibility. Historical rejected plans must not be applied.
+
+Follow-up checkpoint (`2026-09-10T16:53Z`): exact source `bf49c69` passed fresh Bootstrap Enable
+verification at state `16`. The reviewed Platform Enable applied once, advancing `315` to `316`.
+Its fresh verification plan had zero configuration changes but represented empty role tags as
+null-to-empty-object, paired with omitted-to-empty-object sensitivity metadata, and included
+account/name-bound no-op identities. The strict reader rejected that shape; the successful Apply
+was not repeated and no normal Enable-verification receipt was fabricated.
+
+Before changing the bound source, a one-use unused-applied-role cleanup removed exactly the role
+and inline policy and restored the two endpoint policies. Independent actual-plan review checked
+all 306 managed resources, 103 flag-only inputs and 21 file bindings. The saved state object was
+bound by its immutable S3 version; reserialized `check_results` array order was not mistaken for
+resource drift. Cleanup applied once and verified zero changes at Platform `317`; its genuine
+receipt SHA-256 is `a3d2db0cd809715231614702200ca70d3d5735fe89f3cbe95813e5762605e477`.
+The maintained Bootstrap `UnusedRole` Disable then removed only the two temporary statements,
+preserved all 17 original statements, and verified disabled with zero changes at state `17`.
+Its verification SHA-256 is `05bdbc66b538eefbd8045db18112ce47af411ccf11be8ac3efb3c5e85cc983ed`.
+No executor, PITR copy or replay was created; all unused permissions are off.
+
+The permanent follow-up is confined to the existing guard and regression suite. It validates
+only the exact paired tag/sensitivity representation on a clone and account/name/role-bound
+native identities. Exact count-index deletion permits only the observed before-only identity
+and literal action reason. Extra properties, conflicting types, unknowns, sensitivity changes,
+wrong identities or unrelated resource drift still fail. Original native plans remain unchanged.
+Implementation integration and fresh committed-source verification are in progress. After they
+pass, regenerate current-state/source baselines and only the standalone replay artifact; the
+application remains on its healthy existing release. D2-038 execution/cleanup is still pending.
 
 ### D2-042 — Shared-client Trust write compatibility
 
@@ -1224,7 +1253,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. Both providers remain disabled in development. | Acquire representative provider-derived fixtures, complete sanitization/scanning and separate QA acceptance, then activate exact development registrations. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
 | Current-schema deployed recovery | Development verifies 44 migrations/68 relations with D2 resumed; historical AWS PITR covers 39. D2-044's activity release and health now pass. D2-038's seven-owner replay/drill tooling is implemented and authorized. | After D2-046 verification, capture fresh source/state-bound plans and activate only the approved temporary role/endpoint. Run structural PITR and exact marker/owner-bound replay, then remove temporary resources and drill-only authority. Writes remain confined to restored rows. |
 | Fresh candidate-rights acceptance | Corrective core source `31051e1` is released and resumed at state `315`, with exact version-13 pins, zero changes and positive scheduled activity health. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance without relabelling deployment as that acceptance or isolated recovery. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
-| Recovery operator compatibility | D2-043 and D2-046 are Complete. D2-046 passes 479 assertions on each PowerShell host, actual native-plan semantic reading and full committed-source verification at `2343514`. Unused bootstrap permission was removed and verified at state `15`. | Regenerate current-source baselines and only the standalone replay artifact. No application rerelease, repeated recovery approval or generic drift exemption is needed. Actual role activation and recovery remain under D2-038. |
+| Recovery operator compatibility | D2-043 and the original D2-046 prefix repair are verified. D2-046's follow-up handles actual empty-tag/sensitivity and identity metadata. Unused permissions are removed and verified at Platform `317`/Bootstrap `17`; no executor, PITR or replay ran. | Finish the bounded guard/tests follow-up and committed-source verification, then regenerate current-state/source baselines and only the standalone replay artifact. No application rerelease, repeated recovery approval or generic drift exemption is needed. Recovery remains under D2-038. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
 | Authenticated load and abuse acceptance | Paced public-policy and unauthenticated-boundary workload passed. Separate paused-intake and active-processing-to-review runners pass 29 synthetic regressions. D2-045's matching inspector profiles are implemented and verified, including strict aggregates, metric coverage and settled queues. | Use explicitly scoped disposable authenticated candidates for a bounded development workload and matching server aggregates. The active runner follows the existing five-minute schedule, never approves a case, and is not throughput/publication acceptance. No production traffic, raw tokens, personal payloads, or invented provider truth. |
@@ -1408,6 +1437,8 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | 2026-09-10 | Exact committed `2343514860a6a74cb1437c2137897d10e2b921e4` passes the full maintained repository verifier and all 20 build tasks (19 cached). D2-046 is Complete for operator implementation. Two-host 479-assertion regressions and the actual native diagnostic plan pass without changing original evidence. Only documentation changes follow this verified code. Proceed with fresh plans and a twice-built standalone replay artifact; do not republish the unchanged application runtimes. | D2-046; D2-038 | [Operator fix](#d2-046--fixed-name-restore-role-metadata), [remaining acceptance](#remaining-acceptance-and-operator-inputs) |
 
+| 2026-09-10 | Fresh `bf49c69` activation applied the temporary role once at Platform `316`, then verification rejected native empty-tag/identity metadata despite zero configuration changes. Preserved the original successful Apply and failed verification. Exact unused cleanup removed the role/child and restored two endpoints, verifying Platform `317`; maintained Bootstrap cleanup verifies `17`, with all temporary permissions off. No executor, PITR or replay ran. Reopened D2-046 only for the bounded maintained guard/tests follow-up before regenerating source-bound recovery evidence. Core runtime and provider/reviewer scope are unchanged. | D2-046; D2-038 | [Native follow-up and verified cleanup](#d2-046--fixed-name-restore-role-metadata) |
+
 ## Decisions and scope changes
 
 For D2-046 on 2026-09-10, handle Terraform's computed prefix as typed metadata, not naming
@@ -1416,6 +1447,14 @@ and accept Boolean prefix masks only on the two new resources. Reject malformed 
 metadata. Remove unused temporary permissions before changing source, then regenerate the plans
 and standalone replay artifact; no application rerelease is needed for this operator-only fix.
 This keeps the correction maintainable and bounded to the actual native plan incompatibility.
+
+The D2-046 follow-up treats exact empty-tag/sensitivity pairs and account/name/role-bound
+identities as native provider metadata, not a permission to ignore drift. Normalize only a
+validation copy; preserve every original plan and receipt. Remove successfully applied but
+unused authority before editing source, using a distinct cleanup result rather than inventing a
+normal activation verification. Bind the immutable state-object version and actual managed values,
+not arbitrary serialization order. This fixes the observed incompatibility without adding a
+generic approval framework, widening IAM or rereleasing the application.
 
 For D2-044 on 2026-09-10, use S3's positive exact-version DELETE acknowledgment to complete
 export expiry. The follow-up absence HEAD is incompatible with the existing least-privilege
