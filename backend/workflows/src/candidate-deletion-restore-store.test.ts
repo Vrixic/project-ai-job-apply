@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
-import type { DatabaseHandle } from "@ai-job-apply/profile-service";
+import { Socket } from "node:net";
+import { createDatabase, type DatabaseHandle } from "@ai-job-apply/profile-service";
 import { describe, expect, it, vi } from "vitest";
 import {
   ACCEPTED_CANDIDATE_DELETION_POLICIES,
   RESTORED_CANDIDATE_RIGHTS_OWNERS,
 } from "./candidate-deletion-restore-policy.js";
-import { PostgresCandidateDeletionRestoreStore } from "./candidate-deletion-restore-store.js";
+import {
+  PostgresCandidateDeletionRestoreStore,
+  readCandidateDeletionRestoreStoreFailure,
+} from "./candidate-deletion-restore-store.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
 
 type Row = Record<string, unknown>;
@@ -173,6 +177,116 @@ function completedFixture(state: "completed" | "backup_expired" = "completed") {
 }
 
 describe("restore-only whole-set database preflight", () => {
+  it("brands only its own unchanged refusal without reading error properties or prototypes", async () => {
+    const value = fixture();
+    const db = database([value]);
+    const failure = await new PostgresCandidateDeletionRestoreStore(db.handle)
+      .preflight([value.entry], AbortSignal.abort())
+      .catch((error: unknown) => error);
+    if (!(failure instanceof Error)) throw new Error("SyntheticStoreRefusalMissing");
+    expect(failure.message).toBe("CandidateDeletionRestoreAborted");
+    expect(Object.keys(failure)).toEqual([]);
+    const accessed = vi.fn(() => {
+      throw new Error("PRIVATE thrown value accessed");
+    });
+    for (const key of ["name", "message", "stack", "code", "cause", "toJSON"])
+      Object.defineProperty(failure, key, { configurable: true, get: accessed });
+    Object.setPrototypeOf(failure, null);
+    expect(readCandidateDeletionRestoreStoreFailure(failure)).toBe("Aborted");
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    for (const unowned of [
+      undefined,
+      null,
+      "CandidateDeletionRestoreAborted",
+      1,
+      true,
+      Symbol("Aborted"),
+      () => undefined,
+      new Error("CandidateDeletionRestoreAborted"),
+      { storeFailure: "Aborted", message: "CandidateDeletionRestoreAborted" },
+      Object.create(failure),
+      new Proxy(failure, { get: accessed, ownKeys: accessed, getPrototypeOf: accessed }),
+      revoked.proxy,
+    ])
+      expect(readCandidateDeletionRestoreStoreFailure(unowned)).toBeUndefined();
+    expect(accessed).not.toHaveBeenCalled();
+    expect(db.writes()).toHaveLength(0);
+  });
+
+  it.each(["valid", "double_encoded_result", "string_owner_counts"] as const)(
+    "preserves preflight semantics with the installed Profile/Drizzle parsers: %s",
+    async (mode) => {
+      const connect = vi.spyOn(Socket.prototype, "connect").mockImplementation(() => {
+        throw new Error("SyntheticUnexpectedNetwork");
+      });
+      const actual = createDatabase(
+        "postgres://platform:synthetic@127.0.0.1:1/ai_job_apply?sslmode=require",
+        { maxConnections: 1 },
+      );
+      try {
+        // The pool stays unopened; only its actual installed parsers/transforms are used.
+        const { parsers, transform } = actual.client.options;
+        const columnFrom = transform.column.from;
+        const valueFrom = transform.value.from;
+        if (!columnFrom || !valueFrom) throw new Error("SyntheticParserMissing");
+        const types: Record<string, number> = {
+          version: 23,
+          createdAt: 1184,
+          quarantinedAt: 1184,
+          requestedAt: 1184,
+          confirmedAt: 1184,
+          backupExpiresAt: 1184,
+          completedAt: 1184,
+          backupExpiredAt: 1184,
+          result: 3802,
+          ownerInventory: 3802,
+          subprocessorInventory: 3802,
+          ownerCounts: 3802,
+        };
+        const fromWire = (row: Row): Row =>
+          Object.fromEntries(
+            Object.entries(row).map(([name, value]) => {
+              const type = types[name] ?? 25;
+              const encoded = type === 3802 ? JSON.stringify(value) : String(value);
+              const parser = parsers[type];
+              const parsed = value === null ? null : parser ? parser(encoded) : encoded;
+              return [columnFrom(name), valueFrom(parsed, { name, type, table: 0, number: 0 })];
+            }),
+          );
+        const value = completedFixture();
+        if (mode === "double_encoded_result" && value.operations[0])
+          value.operations[0].result = JSON.stringify(value.operations[0].result);
+        if (mode === "string_owner_counts") value.counts.identity = "0";
+        if (value.user) value.user = fromWire(value.user);
+        value.requests = value.requests.map(fromWire);
+        value.operations = value.operations.map(fromWire);
+        value.ledgers = value.ledgers.map(fromWire);
+        value.counts = fromWire({ ownerCounts: value.counts }).ownerCounts as Row;
+        expect(typeof value.user?.createdAt).toBe("string");
+        expect(typeof value.requests[0]?.version).toBe("number");
+        expect(typeof value.ledgers[0]?.ownerInventory).toBe("object");
+        const db = database([value]);
+        const preflight = new PostgresCandidateDeletionRestoreStore(db.handle).preflight([
+          value.entry,
+        ]);
+        if (mode === "valid") {
+          await expect(preflight).resolves.toMatchObject({ restoredSubjectsPresent: 1 });
+        } else {
+          const failure = await preflight.catch((error: unknown) => error);
+          expect(readCandidateDeletionRestoreStoreFailure(failure)).toBe(
+            mode === "double_encoded_result" ? "OperationCollision" : "OwnerInventoryRejected",
+          );
+        }
+        expect(db.writes()).toHaveLength(0);
+        expect(connect).not.toHaveBeenCalled();
+      } finally {
+        await actual.client.end();
+        connect.mockRestore();
+      }
+    },
+  );
+
   it("accepts only the independently inspectable canonical normalized-document key shape", async () => {
     const value = fixture();
     const document = value.documents[0];

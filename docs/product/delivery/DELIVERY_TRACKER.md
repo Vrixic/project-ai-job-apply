@@ -338,16 +338,22 @@ This is the master record for the delivery phases defined in the [product and sy
   strict SDK-secret-envelope compatibility passes 115 tests and independent review, with nine
   expected original-source failures. Exact `37ea0ff` passes the full verifier, 697 workflow tests
   (six explicit database opt-ins skipped) and all 20 builds (18 cached); both final standalone
-  builds match. New preparation fails before packet/executor creation, and the `21:29:40Z`
-  caller check confirms expired AWS SSO. D2-R15 is reopened; renew the same development profile
-  before private-cloud inspection. SDK compatibility is not yet confirmed as the live cause.
+  builds match. The earlier `21:29:40Z` SSO expiry is resolved by the user's `21:53:41Z` renewal.
+  Actual `01732ad` Create succeeds, but Inspect refuses at `store_preflight`; no Replay.
+  Maintained Cleanup `57506` drains and removes the exact function before edits. R15 is Closed.
+  D2-050's private fixed-reason diagnostics and D2-051's deletion-retry timestamp fixes are
+  integrated: 95 diagnostic tests and 30 retry tests pass, with 13 expected original-source
+  failures. All five actual isolated PostgreSQL restore/export/rollback tests pass after rebuilding
+  11 workflow dependency workspaces. Full committed-source verification and deployment remain.
+  Neither SDK compatibility nor the timestamp defects are confirmed as the live refusal's cause.
   Reuse the same verified
   RDS copy, without repeating PITR or renewing an old packet. Temporary permissions remain enabled
   until final drill cleanup; no live
   database, cloud document or Auth0 mutation is permitted. Phase 2 remains In progress.
   [Website detail](phase-2-extension-and-community.md#d2-047--authenticated-website-job-details),
   [executor repair and recovery](phase-2-extension-and-community.md#d2-049--recovery-executor-metadata),
-  [runtime diagnosis](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility)
+  [runtime diagnosis](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility),
+  [retry timestamps](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps)
 - Earlier recovery checkpoint (`2026-09-10`, superseded by D2-050 above): D2-044 is Complete. Renewed exact-account SSO
   passes at `13:23:50Z`. Core source `31051e1` is immutably published and released through
   pause/drain, exact state-only reconciliation and mapping-only Resume. Platform state `315`
@@ -1206,6 +1212,7 @@ Append only material cross-delivery events.
 |---|---|---|---|
 | 2026-09-10 | D2 | Metadata repair `92c1fc2` passes the full verifier, 448/908 executor/role assertions and matching standalone builds; corrected private Create succeeds. Its first Inspect fails without a validated receipt and no Replay runs. Bounded service metadata places the refusal inside/after database opening, with offline request and bounded live marker-metadata checks passing. Maintained Cleanup fully drains and removes the exact executor before edits, preserving the same verified 44-migration/68-relation RDS copy and original artifact. D2-049 is Complete; D2-050's closed-stage diagnostics pass 60 tests/typecheck/formatting. Resolver compatibility, cloud replay and final permission/resource cleanup remain. | [Runtime repair and remaining recovery](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility) |
 | 2026-09-10 | D2 | Exact `37ea0ff` passes full maintained verification, 697 workflow tests/six explicit database opt-ins skipped and all 20 builds/18 cached, then is pushed to shared main. Both standalone builds match without changing 47 other Lambda artifacts or ten archived files. New preparation fails before creating a packet/executor, and independent STS confirms expired AWS SSO at `21:29:40Z`. Reopened D2-R15; the same verified private restore and temporary `320`/`20` permissions remain pending session renewal, corrected-source inspection and exact cleanup. No Replay, repeated PITR or healthy-application release occurs. | [Implementation evidence and credential blocker](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility) |
+| 2026-09-10 | D2 | User renewal closes R15. Actual `01732ad` Create passes; Inspect refuses at `store_preflight` without Replay. Maintained Cleanup `57506` removes the exact executor after full drain. Integrated D2-050's branded fixed diagnostics and D2-051's confirmation/completion retry repairs: 95 and 30 focused tests pass, with 13 original-source failures. Actual isolated PostgreSQL passes 5/5 restore/export/rollback tests; same cloud copy and `320`/`20` temporary permissions remain. Full committed-source verification, corrected cloud inspection and final cleanup are next. No historical live marker repair or ordinary application deployment occurred. | [Diagnosis](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility), [retry fixes](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps) |
 
 ## Cross-delivery decisions and changes
 

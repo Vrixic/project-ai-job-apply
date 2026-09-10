@@ -56,8 +56,39 @@ const deletionStates = new Set([
 const MAX_DOCUMENTS_PER_OWNER = 1_000;
 const MAX_DOCUMENTS = 10_000;
 
-function rejected(code: string): never {
-  throw new Error(`CandidateDeletionRestore${code}`);
+export type CandidateDeletionRestoreStoreFailure =
+  | "Aborted"
+  | "AbsentIdentityHasOwnedData"
+  | "BindingCollision"
+  | "CompletionCollision"
+  | "DatabaseDateRejected"
+  | "DocumentInventoryLimit"
+  | "DocumentInventoryRejected"
+  | "ExpiredRestoreStateConflict"
+  | "IdentityCollision"
+  | "IdentityInventoryLimit"
+  | "LedgerCollision"
+  | "OperationCollision"
+  | "OwnerDataRemains"
+  | "OwnerDeletionRejected"
+  | "OwnerInventoryRejected"
+  | "PreflightBindingRejected"
+  | "PreflightChanged"
+  | "RequestCollision";
+
+const storeFailures = new WeakMap<object, CandidateDeletionRestoreStoreFailure>();
+
+/** Read only module-owned identity; arbitrary thrown values and their properties stay unread. */
+export function readCandidateDeletionRestoreStoreFailure(
+  value: unknown,
+): CandidateDeletionRestoreStoreFailure | undefined {
+  return typeof value === "object" && value !== null ? storeFailures.get(value) : undefined;
+}
+
+function rejected(code: CandidateDeletionRestoreStoreFailure): never {
+  const error = new Error(`CandidateDeletionRestore${code}`);
+  storeFailures.set(error, code);
+  throw error;
 }
 
 function checkSignal(signal?: AbortSignal): void {

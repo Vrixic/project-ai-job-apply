@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { DatabaseHandle } from "@ai-job-apply/profile-service";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type CandidateDeletionRestoreContext,
@@ -7,6 +8,7 @@ import {
   createCandidateDeletionRestoreHandler,
 } from "./candidate-deletion-restore-lambda.js";
 import { ACCEPTED_CANDIDATE_DELETION_POLICIES } from "./candidate-deletion-restore-policy.js";
+import { PostgresCandidateDeletionRestoreStore } from "./candidate-deletion-restore-store.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
 
 const fixture = JSON.parse(
@@ -136,7 +138,103 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+async function ownedStorePreflightFailure(entries: readonly CandidateDeletionRecoveryEntry[]) {
+  const unsafe = (query: string) =>
+    Object.assign(
+      Promise.resolve(query.includes("FROM platform.operations") ? [{ id: "wrong" }] : []),
+      { cancel: vi.fn() },
+    );
+  const database = {
+    client: {
+      begin: async (_mode: string, run: (sql: { unsafe: typeof unsafe }) => Promise<unknown>) =>
+        run({ unsafe }),
+    },
+  } as unknown as DatabaseHandle;
+  try {
+    await new PostgresCandidateDeletionRestoreStore(database).preflight(entries);
+  } catch (failure) {
+    return failure;
+  }
+  throw new Error("SyntheticStoreRefusalMissing");
+}
+
 describe("private isolated deletion restore Lambda", () => {
+  it("adds only the privately branded reason from an actual refused store preflight", async () => {
+    const h = harness();
+    h.store.preflight.mockRejectedValue(await ownedStorePreflightFailure(h.snapshot.entries));
+    await expect(h.run(fixture.inspect, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(h.logger.error).toHaveBeenCalledExactlyOnceWith({
+      event: "candidate_deletion_restore_rejected",
+      action: "inspect",
+      stage: "store_preflight",
+      storeFailure: "OperationCollision",
+    });
+    expect(h.close).toHaveBeenCalledOnce();
+    expect(h.store.reconcile).not.toHaveBeenCalled();
+    expect(h.documents.inspectExpectedAbsentDocuments).not.toHaveBeenCalled();
+  });
+
+  it.each(["lookalike_error", "lookalike_fields", "primitive", "hostile", "revoked"] as const)(
+    "does not classify or inspect an unowned thrown value: %s",
+    async (kind) => {
+      const h = harness();
+      const accessed = vi.fn(() => {
+        throw new Error("PRIVATE thrown value accessed");
+      });
+      const revoked = Proxy.revocable({}, {});
+      revoked.revoke();
+      const values = {
+        lookalike_error: new Error("CandidateDeletionRestoreOperationCollision"),
+        lookalike_fields: {
+          message: "CandidateDeletionRestoreOperationCollision",
+          storeFailure: "OperationCollision",
+          code: "OperationCollision",
+        },
+        primitive: "CandidateDeletionRestoreOperationCollision",
+        hostile: new Proxy({}, { get: accessed, ownKeys: accessed, getPrototypeOf: accessed }),
+        revoked: revoked.proxy,
+      };
+      h.store.preflight.mockRejectedValue(values[kind]);
+      await expect(h.run(fixture.inspect, h.context)).rejects.toThrow(
+        /^CandidateDeletionRestoreRejected$/u,
+      );
+      expect(accessed).not.toHaveBeenCalled();
+      expect(h.logger.error).toHaveBeenCalledExactlyOnceWith({
+        event: "candidate_deletion_restore_rejected",
+        action: "inspect",
+        stage: "store_preflight",
+      });
+      expect(h.close).toHaveBeenCalledOnce();
+      expect(h.store.reconcile).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["throw", "reject"] as const)(
+    "a logger %s remains harmless when a branded store reason is present",
+    async (failure) => {
+      const h = harness();
+      h.store.preflight.mockRejectedValue(await ownedStorePreflightFailure(h.snapshot.entries));
+      h.logger.error.mockImplementation(() => {
+        const secret = new Error("PRIVATE logger failure");
+        if (failure === "throw") throw secret;
+        return Promise.reject(secret);
+      });
+      await expect(h.run(fixture.inspect, h.context)).rejects.toThrow(
+        /^CandidateDeletionRestoreRejected$/u,
+      );
+      expect(h.logger.error).toHaveBeenCalledExactlyOnceWith({
+        event: "candidate_deletion_restore_rejected",
+        action: "inspect",
+        stage: "store_preflight",
+        storeFailure: "OperationCollision",
+      });
+      expect(h.close).toHaveBeenCalledOnce();
+      expect(h.store.reconcile).not.toHaveBeenCalled();
+    },
+  );
+
   it("inspects both historical policies and returns only schema-bound aggregates without writes", async () => {
     const h = harness();
     const result = await h.run(fixture.inspect, h.context);

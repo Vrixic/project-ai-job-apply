@@ -72,6 +72,7 @@ interface WorkflowContext {
   policyVersion: string;
   state: string;
   confirmedAt?: Date;
+  completedAt?: Date;
   backupExpiresAt?: Date;
   subjectDigest?: string;
 }
@@ -178,6 +179,9 @@ function exactContext(
     ...(row.confirmedAt === undefined || row.confirmedAt === null
       ? {}
       : { confirmedAt: normalizeDatabaseDate(row.confirmedAt) }),
+    ...(row.completedAt === undefined || row.completedAt === null
+      ? {}
+      : { completedAt: normalizeDatabaseDate(row.completedAt) }),
     ...(row.backupExpiresAt === undefined || row.backupExpiresAt === null
       ? {}
       : { backupExpiresAt: normalizeDatabaseDate(row.backupExpiresAt) }),
@@ -275,6 +279,7 @@ export class PostgresCandidateRightsActivityStore {
       SELECT request.user_id AS "userId", request.id AS "resourceId",
              request.operation_id AS "operationId", request.policy_version AS "policyVersion",
              request.state, request.confirmed_at AS "confirmedAt",
+             request.completed_at AS "completedAt",
              request.backup_expires_at AS "backupExpiresAt",
              ledger.subject_digest AS "subjectDigest"
       FROM profile.account_deletion_requests AS request
@@ -556,10 +561,10 @@ export class PostgresCandidateRightsActivityStore {
   async completeDeletion(input: CandidateRightsActivityInputV1): Promise<void> {
     const context = await this.deletionContext(input);
     if (["completed", "backup_expired"].includes(context.state)) {
-      await this.dependencies.recoveryLedger.markCompleted(
-        input.resourceId,
-        context.confirmedAt ?? this.clock(),
-      );
+      if (!context.completedAt) {
+        throw new CandidateRightsActivityRejected("CandidateRightsContextDateRejected");
+      }
+      await this.dependencies.recoveryLedger.markCompleted(input.resourceId, context.completedAt);
       return;
     }
     if (context.state !== "subprocessors_pending") {
@@ -585,7 +590,17 @@ export class PostgresCandidateRightsActivityStore {
         WHERE id = ${input.operationId}::uuid AND kind = 'account_deletion'
       `;
     });
-    await this.dependencies.recoveryLedger.markCompleted(input.resourceId, new Date(now));
+    const completedContext = await this.deletionContext(input);
+    if (
+      !["completed", "backup_expired"].includes(completedContext.state) ||
+      !completedContext.completedAt
+    ) {
+      throw new CandidateRightsActivityRejected("CandidateRightsContextDateRejected");
+    }
+    await this.dependencies.recoveryLedger.markCompleted(
+      input.resourceId,
+      completedContext.completedAt,
+    );
   }
 
   async expireDueExports(limit = 25): Promise<{ scanned: number; expired: number }> {

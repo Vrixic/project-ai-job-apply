@@ -22,7 +22,11 @@ import {
   CURRENT_CANDIDATE_DELETION_RESTORE_POLICY_VERSION,
   validateHistoricalRecoveryEntries,
 } from "./candidate-deletion-restore-policy.js";
-import { PostgresCandidateDeletionRestoreStore } from "./candidate-deletion-restore-store.js";
+import {
+  type CandidateDeletionRestoreStoreFailure,
+  PostgresCandidateDeletionRestoreStore,
+  readCandidateDeletionRestoreStoreFailure,
+} from "./candidate-deletion-restore-store.js";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 type Ledger = Pick<
@@ -58,6 +62,7 @@ export interface CandidateDeletionRestoreFailureDiagnostic {
   readonly event: "candidate_deletion_restore_rejected";
   readonly action: "unvalidated" | "inspect" | "replay";
   readonly stage: RestoreFailureStage;
+  readonly storeFailure?: CandidateDeletionRestoreStoreFailure;
 }
 
 interface RestoreFailureLogger {
@@ -139,14 +144,16 @@ export function createCandidateDeletionRestoreHandler(
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stage: RestoreFailureStage = "environment";
     let action: CandidateDeletionRestoreFailureDiagnostic["action"] = "unvalidated";
-    // Classify the attempted boundary, not an inferred cause. Never inspect the thrown value.
-    const logFailure = (failedStage: RestoreFailureStage) => {
+    // Classify the attempted boundary; only a module-owned store error adds its fixed reason.
+    const logFailure = (failedStage: RestoreFailureStage, failure?: unknown) => {
       try {
+        const storeFailure = readCandidateDeletionRestoreStoreFailure(failure);
         void Promise.resolve(
           (dependencies.logger ?? defaultFailureLogger).error({
             event: "candidate_deletion_restore_rejected",
             action,
             stage: failedStage,
+            ...(storeFailure === undefined ? {} : { storeFailure }),
           }),
         ).catch(() => undefined);
       } catch {
@@ -323,16 +330,16 @@ export function createCandidateDeletionRestoreHandler(
         rejected();
       active();
       return result;
-    } catch {
-      logFailure(stage);
+    } catch (failure) {
+      logFailure(stage, failure);
       return rejected();
     } finally {
       if (timer !== undefined) clearTimeout(timer);
       controller.abort();
       try {
         await opened?.close();
-      } catch {
-        logFailure("store_close");
+      } catch (failure) {
+        logFailure("store_close", failure);
         rejected();
       }
     }

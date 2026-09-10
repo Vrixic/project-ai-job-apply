@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { describe, expect, it, vi } from "vitest";
 import {
   type AccountDeletionRecord,
   advanceAccountDeletion,
@@ -18,6 +20,19 @@ import {
   loadCandidateRightsPolicyIfConfigured,
   markAccountDeletionBackupExpired,
 } from "./candidate-rights.js";
+import {
+  type CandidateDeletionConfirmationJournalEntry,
+  type DatabaseHandle,
+  PostgresProfileStore,
+} from "./index.js";
+import {
+  accountDeletionRequests,
+  auditEvents,
+  idempotencyKeys,
+  operations,
+  outboxEvents,
+  users,
+} from "./schema.js";
 
 const now = new Date("2026-08-25T15:00:00.000Z");
 const policyEnvironment = {
@@ -58,6 +73,222 @@ function requestedDeletion(): AccountDeletionRecord {
     updatedAt: now,
   };
 }
+
+function confirmationRetryFixture() {
+  type Row = Record<string, unknown>;
+  const request = requestedDeletion();
+  const firstAt = new Date(now.getTime() + 1_000);
+  const retryAt = new Date(now.getTime() + 31_000);
+  const clock = vi.fn(() => firstAt);
+  let committed = {
+    request: {
+      ...request,
+      operationId: null,
+      confirmedAt: null,
+      completedAt: null,
+      backupExpiresAt: null,
+      backupExpiredAt: null,
+    } as Row,
+    quarantine: undefined as Row | undefined,
+    ledger: undefined as Row | undefined,
+    receipt: undefined as Row | undefined,
+    inserts: [] as Array<{ kind: string; value: Row }>,
+  };
+  let rejectCommit = true;
+  const dialect = new PgDialect();
+  // This in-memory transaction seam tests binding/rollback decisions only. Real PostgreSQL
+  // transaction and migration evidence remains a separate integration gate.
+  const transaction = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => {
+    const next = structuredClone(committed);
+    const tx = {
+      execute: async (statement: SQL) => {
+        const query = dialect.sqlToQuery(statement);
+        if (query.sql.includes("INSERT INTO privacy.account_deletion_ledger")) {
+          const [
+            requestId,
+            subjectDigest,
+            policyVersion,
+            policySha256,
+            owners,
+            subprocessors,
+            confirmedAt,
+            backupExpiresAt,
+            updatedAt,
+          ] = query.params;
+          next.ledger = {
+            requestId,
+            subjectDigest,
+            policyVersion,
+            policySha256,
+            owners,
+            subprocessors,
+            confirmedAt,
+            backupExpiresAt,
+            updatedAt,
+          };
+        }
+        return [];
+      },
+      select: () => ({
+        from: (table: unknown) => ({
+          where: () => ({
+            limit: async () => {
+              if (table === idempotencyKeys) return next.receipt ? [next.receipt] : [];
+              if (table === accountDeletionRequests) return [next.request];
+              throw new Error("SyntheticUnexpectedRead");
+            },
+          }),
+        }),
+      }),
+      insert: (table: unknown) => ({
+        values: async (value: Row) => {
+          const kind =
+            table === operations
+              ? "operation"
+              : table === outboxEvents
+                ? "outbox"
+                : table === auditEvents
+                  ? "audit"
+                  : table === idempotencyKeys
+                    ? "receipt"
+                    : "unexpected";
+          if (kind === "unexpected") throw new Error("SyntheticUnexpectedInsert");
+          next.inserts.push({ kind, value });
+          if (table === idempotencyKeys) next.receipt = value;
+        },
+      }),
+      update: (table: unknown) => ({
+        set: (value: Row) => ({
+          where: () => {
+            if (table === accountDeletionRequests) {
+              next.request = { ...next.request, ...value };
+              return { returning: async () => [next.request] };
+            }
+            if (table === users) {
+              next.quarantine = value;
+              return {};
+            }
+            throw new Error("SyntheticUnexpectedUpdate");
+          },
+        }),
+      }),
+    };
+    const result = await run(tx);
+    if (rejectCommit) {
+      rejectCommit = false;
+      throw new Error("SyntheticCommitFailure");
+    }
+    committed = next;
+    return result;
+  });
+  let journaled: CandidateDeletionConfirmationJournalEntry | undefined;
+  const recordConfirmed = vi.fn(async (entry: CandidateDeletionConfirmationJournalEntry) => {
+    journaled ??= structuredClone(entry);
+    return structuredClone(journaled);
+  });
+  const store = new PostgresProfileStore({ db: { transaction } } as unknown as DatabaseHandle, {
+    candidateRightsPolicy: policy(),
+    candidateDeletionConfirmationJournal: { recordConfirmed },
+    clock,
+  });
+  const principal = {
+    issuer: "https://retry-fixture.example.test/",
+    subject: "generated-confirmation-retry",
+    audience: ["ai-job-apply-api"],
+    scopes: ["profile:write"],
+    authenticatedAt: Math.floor(firstAt.getTime() / 1_000),
+    authenticationMethods: ["pwd", "mfa"],
+  };
+  const confirm = () =>
+    store.confirmAccountDeletionRequest(
+      principal,
+      request.userId,
+      request.id,
+      request.version,
+      "synthetic-retry-key",
+      "synthetic-trace",
+    );
+  return {
+    confirm,
+    recordConfirmed,
+    transaction,
+    clock,
+    firstAt,
+    retryAt,
+    state: () => committed,
+    journal: () => journaled,
+  };
+}
+
+describe("account deletion confirmation journal replay", () => {
+  it.each(["request", "quarantine", "ledger"] as const)(
+    "retains the journaled %s confirmation time after a SQL rollback",
+    async (boundary) => {
+      const fixture = confirmationRetryFixture();
+      await expect(fixture.confirm()).rejects.toThrow("SyntheticCommitFailure");
+      expect(fixture.journal()?.confirmedAt).toEqual(fixture.firstAt);
+      expect(fixture.state().request.state).toBe("requested");
+      expect(fixture.state().inserts).toEqual([]);
+      fixture.clock.mockReturnValue(fixture.retryAt);
+      const result = await fixture.confirm();
+      expect(result?.confirmedAt).toBe(fixture.firstAt.toISOString());
+      const state = fixture.state();
+      const confirmation =
+        boundary === "request"
+          ? state.request.confirmedAt
+          : boundary === "quarantine"
+            ? state.quarantine?.quarantinedAt
+            : state.ledger?.confirmedAt;
+      expect(confirmation).toEqual(
+        boundary === "ledger" ? fixture.firstAt.toISOString() : fixture.firstAt,
+      );
+      expect(state.request.updatedAt).toEqual(fixture.retryAt);
+      expect(state.ledger?.updatedAt).toBe(fixture.retryAt.toISOString());
+      expect(state.request.operationId).toBe(fixture.journal()?.operationId);
+      expect(state.request.backupExpiresAt).toEqual(fixture.journal()?.backupExpiresAt);
+      expect(state.ledger?.backupExpiresAt).toBe(fixture.journal()?.backupExpiresAt.toISOString());
+      expect(state.quarantine?.accountState).toBe("quarantined");
+      expect(state.inserts.map(({ kind }) => kind)).toEqual([
+        "operation",
+        "outbox",
+        "receipt",
+        "audit",
+      ]);
+      expect(state.inserts.find(({ kind }) => kind === "operation")?.value.createdAt).toEqual(
+        fixture.retryAt,
+      );
+      expect(state.inserts.find(({ kind }) => kind === "audit")?.value.occurredAt).toEqual(
+        fixture.retryAt,
+      );
+    },
+  );
+
+  it("returns the committed confirmation receipt without journaling or publishing again", async () => {
+    const fixture = confirmationRetryFixture();
+    await expect(fixture.confirm()).rejects.toThrow("SyntheticCommitFailure");
+    fixture.clock.mockReturnValue(fixture.retryAt);
+    const result = await fixture.confirm();
+    const before = structuredClone(fixture.state());
+    expect(await fixture.confirm()).toEqual(result);
+    expect(fixture.recordConfirmed).toHaveBeenCalledTimes(2);
+    expect(fixture.state()).toEqual(before);
+  });
+
+  it.each(["userId", "requestId", "policySha256", "subjectDigest"] as const)(
+    "refuses a replayed journal with changed %s before committing owner state",
+    async (field) => {
+      const fixture = confirmationRetryFixture();
+      await expect(fixture.confirm()).rejects.toThrow("SyntheticCommitFailure");
+      const journaled = fixture.journal();
+      if (!journaled) throw new Error("SyntheticJournalMissing");
+      fixture.recordConfirmed.mockResolvedValueOnce({ ...journaled, [field]: "wrong-binding" });
+      fixture.clock.mockReturnValue(fixture.retryAt);
+      await expect(fixture.confirm()).rejects.toThrow(CandidateRightsTransitionError);
+      expect(fixture.state().request.state).toBe("requested");
+      expect(fixture.state().inserts).toEqual([]);
+    },
+  );
+});
 
 describe("candidate rights policy", () => {
   it("requires every activation input and the exact current owner inventory", () => {

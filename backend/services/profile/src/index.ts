@@ -1601,7 +1601,7 @@ export class PostgresProfileStore implements ProfileStore {
       if (!saved) throw new CandidateRightsTransitionError();
       await tx
         .update(users)
-        .set({ accountState: "quarantined", quarantinedAt: now })
+        .set({ accountState: "quarantined", quarantinedAt: journaled.confirmedAt })
         .where(and(eq(users.id, userId), eq(users.accountState, "active")));
 
       const ownerInventory = Object.fromEntries(
@@ -1618,7 +1618,7 @@ export class PostgresProfileStore implements ProfileStore {
           ${requestId}, ${subjectDigest}, ${policy.version}, ${policy.accountablePolicySha256},
           'quarantined', ${JSON.stringify(ownerInventory)}::jsonb,
           ${JSON.stringify(subprocessorInventory)}::jsonb,
-          ${now.toISOString()}::timestamptz,
+          ${journaled.confirmedAt.toISOString()}::timestamptz,
           ${confirmed.backupExpiresAt.toISOString()}::timestamptz,
           ${now.toISOString()}::timestamptz
         )

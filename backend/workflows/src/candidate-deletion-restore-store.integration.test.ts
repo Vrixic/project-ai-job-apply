@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { validateCandidateDataExportV1 } from "@ai-job-apply/domain";
 import { createJobCatalogDatabase } from "@ai-job-apply/jobs-service";
 import {
+  type CandidateDeletionConfirmationJournalEntry,
   createDatabase,
   type DatabaseHandle,
   PostgresProfileStore,
@@ -148,6 +149,213 @@ describe.skipIf(!requested)("isolated restored PostgreSQL seven-owner deletion r
     await database.client`DELETE FROM privacy.account_deletion_ledger WHERE request_id = ${entry.requestId}`;
     await database.client`DELETE FROM identity.users WHERE id = ${entry.userId}`;
   }
+
+  it("persists journaled confirmation and completion times across real SQL rollback and marker retries", async () => {
+    const userId = uuidv7();
+    const subject = `generated-retry-${userId}`;
+    const requestedAt = new Date(Date.now() - 60_000);
+    const confirmedAt = new Date(requestedAt.getTime() + 1_000);
+    const retryAt = new Date(requestedAt.getTime() + 2_000);
+    const completedAt = new Date(requestedAt.getTime() + 3_000);
+    const accepted = ACCEPTED_CANDIDATE_DELETION_POLICIES[1];
+    if (!accepted) throw new Error("SyntheticPolicyMissing");
+    const policy: CandidateRightsPolicy = {
+      version: accepted.version,
+      accountablePolicySha256: accepted.sha256,
+      exportArtifactLifetimeSeconds: 3_600,
+      downloadGrantLifetimeSeconds: 300,
+      backupRetentionDays: accepted.backupRetentionDays,
+      recentAuthenticationMaxAgeSeconds: 300,
+      ownerInventory: RESTORED_CANDIDATE_RIGHTS_OWNERS,
+      subprocessorInventory: [],
+    };
+    let at = requestedAt;
+    let journaled: CandidateDeletionConfirmationJournalEntry | undefined;
+    let journalCalls = 0;
+    const journal = {
+      recordConfirmed: async (entry: CandidateDeletionConfirmationJournalEntry) => {
+        journalCalls += 1;
+        journaled ??= structuredClone(entry);
+        return structuredClone(journaled);
+      },
+    };
+    let rollback = true;
+    const rollbackDatabase: DatabaseHandle = {
+      client: database.client,
+      db: new Proxy(database.db, {
+        get(target, property, receiver) {
+          if (property !== "transaction") return Reflect.get(target, property, receiver);
+          return (run: Parameters<DatabaseHandle["db"]["transaction"]>[0]) =>
+            target.transaction(async (transaction) => {
+              const result = await run(transaction);
+              if (rollback) {
+                rollback = false;
+                // Throw after all real SQL ran: PostgreSQL must roll back the request,
+                // quarantine, ledger, operation, receipt, audit and outbox together.
+                throw new Error("SyntheticConfirmationCommitFailure");
+              }
+              return result;
+            });
+        },
+      }),
+    };
+    const options = {
+      candidateRightsPolicy: policy,
+      candidateDeletionConfirmationJournal: journal,
+      clock: () => at,
+    };
+    const profile = new PostgresProfileStore(database, options);
+    const retryingProfile = new PostgresProfileStore(rollbackDatabase, options);
+    const principal = {
+      issuer,
+      subject,
+      audience: ["synthetic-deletion-retry"],
+      scopes: ["profile:write"],
+      authenticatedAt: Math.floor(requestedAt.getTime() / 1_000),
+      authenticationMethods: ["pwd", "mfa"],
+    };
+    let requestId: string | undefined;
+    const iso = (value: unknown) =>
+      value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString();
+    try {
+      await database.client`INSERT INTO identity.users (id, created_at) VALUES (${userId}, ${requestedAt.toISOString()}::timestamptz)`;
+      await database.client`INSERT INTO identity.external_identities (issuer, subject, user_id) VALUES (${issuer}, ${subject}, ${userId})`;
+      const request = await profile.createAccountDeletionRequest(
+        principal,
+        userId,
+        "synthetic-retry-request",
+        "synthetic-retry-trace",
+      );
+      requestId = request.id;
+      at = confirmedAt;
+      const confirm = () =>
+        retryingProfile.confirmAccountDeletionRequest(
+          principal,
+          userId,
+          request.id,
+          request.version,
+          "synthetic-retry-confirm",
+          "synthetic-retry-trace",
+        );
+      await expect(confirm()).rejects.toThrow("SyntheticConfirmationCommitFailure");
+      const [rolledBack] = await database.client<Record<string, unknown>[]>`
+        SELECT request.state, candidate.account_state,
+          (SELECT count(*)::int FROM privacy.account_deletion_ledger WHERE request_id = ${request.id}) AS ledger_count,
+          (SELECT count(*)::int FROM platform.operations WHERE user_id = ${userId}) AS operation_count,
+          (SELECT count(*)::int FROM platform.outbox_events WHERE data ->> 'deletionRequestId' = ${request.id}) AS event_count
+        FROM profile.account_deletion_requests request JOIN identity.users candidate ON candidate.id = request.user_id
+        WHERE request.id = ${request.id}
+      `;
+      expect(rolledBack).toMatchObject({
+        state: "requested",
+        accountState: "active",
+        ledgerCount: 0,
+        operationCount: 0,
+        eventCount: 0,
+      });
+      at = retryAt;
+      const confirmed = await confirm();
+      expect(await confirm()).toEqual(confirmed);
+      expect(journalCalls).toBe(2);
+      if (!journaled) throw new Error("SyntheticJournalMissing");
+      const [persisted] = await database.client<Record<string, unknown>[]>`
+        SELECT request.confirmed_at AS request_confirmed_at, ledger.confirmed_at AS ledger_confirmed_at,
+          candidate.quarantined_at, request.updated_at AS request_updated_at,
+          ledger.updated_at AS ledger_updated_at
+        FROM profile.account_deletion_requests request
+        JOIN privacy.account_deletion_ledger ledger ON ledger.request_id = request.id
+        JOIN identity.users candidate ON candidate.id = request.user_id
+        WHERE request.id = ${request.id}
+      `;
+      expect(iso(persisted?.requestConfirmedAt)).toBe(confirmedAt.toISOString());
+      expect(iso(persisted?.ledgerConfirmedAt)).toBe(confirmedAt.toISOString());
+      expect(iso(persisted?.quarantinedAt)).toBe(confirmedAt.toISOString());
+      expect(iso(persisted?.requestUpdatedAt)).toBe(retryAt.toISOString());
+      expect(iso(persisted?.ledgerUpdatedAt)).toBe(retryAt.toISOString());
+      at = completedAt;
+      const tags: Date[] = [];
+      const activities = new PostgresCandidateRightsActivityStore({
+        database,
+        policy,
+        clock: () => at,
+        artifactStore: {
+          putIfAbsent: async () => {
+            throw new Error("SyntheticUnexpectedExport");
+          },
+        },
+        documentObjectStore: {
+          deleteAllVersionsAndMarkers: async (objects) => {
+            expect(objects).toEqual([]);
+            return { exactInventoryEmpty: true };
+          },
+        },
+        identityProvider: {
+          revokeAndDelete: async (identities) => {
+            expect(identities).toEqual([{ issuer, subject }]);
+          },
+        },
+        subprocessors: [],
+        recoveryLedger: {
+          recordConfirmed: async (entry) => entry,
+          markCompleted: async (id, persistedCompletion) => {
+            expect(id).toBe(request.id);
+            tags.push(new Date(persistedCompletion));
+            if (tags.length === 1) throw new Error("SyntheticMarkerTagFailure");
+          },
+        },
+      });
+      const input: CandidateRightsActivityInputV1 = {
+        schemaVersion: 1,
+        workflowDefinitionVersion: 1,
+        action: "deletion_delete_active_systems",
+        eventId: uuidv7(),
+        resourceId: request.id,
+        operationId: journaled.operationId,
+        policyVersion: policy.version,
+      };
+      await activities.deleteActiveSystems(input);
+      await activities.reconcileSubprocessors({
+        ...input,
+        action: "deletion_reconcile_subprocessors",
+      });
+      const completion = { ...input, action: "deletion_complete" as const };
+      await expect(activities.completeDeletion(completion)).rejects.toThrow(
+        "SyntheticMarkerTagFailure",
+      );
+      const [beforeRetry] = await database.client<Record<string, unknown>[]>`
+        SELECT request.state, request.completed_at, request.version, ledger.completed_at AS ledger_completed_at
+        FROM profile.account_deletion_requests request JOIN privacy.account_deletion_ledger ledger ON ledger.request_id = request.id
+        WHERE request.id = ${request.id}
+      `;
+      at = new Date(completedAt.getTime() + 1_000);
+      await activities.completeDeletion(completion);
+      const [afterRetry] = await database.client<Record<string, unknown>[]>`
+        SELECT request.state, request.completed_at, request.version, ledger.completed_at AS ledger_completed_at
+        FROM profile.account_deletion_requests request JOIN privacy.account_deletion_ledger ledger ON ledger.request_id = request.id
+        WHERE request.id = ${request.id}
+      `;
+      expect(beforeRetry).toEqual(afterRetry);
+      expect(beforeRetry?.state).toBe("completed");
+      expect(iso(beforeRetry?.completedAt)).toBe(completedAt.toISOString());
+      expect(iso(beforeRetry?.ledgerCompletedAt)).toBe(completedAt.toISOString());
+      expect(tags).toEqual([completedAt, completedAt]);
+      const entry = { ...journaled, completedAt };
+      const preflight = await store.preflight([entry]);
+      expect(await store.reconcile([entry], preflight)).toEqual({
+        restoredUsersReconciled: 0,
+        restoredUsersAbsent: 0,
+        restoredUsersAlreadyReconciled: 1,
+      });
+    } finally {
+      // Only these generated rows are removed; no database or external object is deleted.
+      if (requestId) {
+        await database.client`DELETE FROM privacy.account_deletion_ledger WHERE request_id = ${requestId}`;
+        await database.client`DELETE FROM platform.outbox_events WHERE data ->> 'deletionRequestId' = ${requestId}`;
+      }
+      await database.client`DELETE FROM platform.audit_events WHERE user_id = ${userId}`;
+      await database.client`DELETE FROM identity.users WHERE id = ${userId}`;
+    }
+  }, 60_000);
 
   it("assembles a schema-valid owner-isolated export from all current nonempty PostgreSQL D2 owners", async () => {
     const first = await seed(1);
