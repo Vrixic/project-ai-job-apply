@@ -2,6 +2,7 @@
 
 import type { CanonicalJobSummary, JobSearchPage } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { JobDetailPanel } from "./job-detail-panel";
 import { JobReportControl } from "./job-report-control";
 import {
   appendJobSearchPage,
@@ -493,6 +494,7 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
                 >
                   {savingJobId === job.id ? "Saving…" : "Save job"}
                 </button>
+                <JobDetailPanel jobId={job.id} authenticated={authenticated} />
                 <JobReportControl jobId={job.id} />
                 <MatchAssessmentPanel jobId={job.id} />
               </article>

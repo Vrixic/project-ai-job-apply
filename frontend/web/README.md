@@ -115,6 +115,17 @@ only in a bounded JSON body to a narrow server-side BFF. Auth0 tokens remain ser
 strings are rejected, and pagination uses the API's opaque cursor. Results are explicitly
 non-personalized and do not use profile facts.
 
+Each active result also offers `View details and sources`. This explicit, on-demand read uses the
+bodyless `GET /api/platform/jobs/[jobId]` BFF, the server-held session's existing `jobs:read`
+permission, and the existing `CanonicalJobDetail` projection. Reversible aliases may resolve to a
+different canonical identifier. The panel renders the description as plain text and shows source
+provenance and observation times with validated HTTPS links that suppress referrers; it never
+automatically fetches a provider page. Loading, fixed error copy, manual retry, close/Escape focus
+restoration, and abort/generation fencing cover request and authentication transitions. Search
+ordering, Save, Report, and match-evidence behavior remain unchanged. This source and local-test
+surface does not claim hosted deployment, managed-OIDC acceptance, or provider acceptance, and
+does not enable the separately gated anonymous projection or public indexing.
+
 Active search results expose a candidate report control backed by the existing authenticated
 `jobs:write` report contract. The web boundary permits only six fixed catalog-issue reasons, keeps
 candidate identity server-side, authenticates before consuming a timeout- and size-bounded
@@ -149,15 +160,18 @@ currently contain the same four core capabilities. It has no upgrade, price, quo
 payment-provider, or paid-feature behavior. Source composition and local tests are not an Auth0,
 Terraform, image-publication, AWS deployment, real-browser, or live-entitlement claim.
 
-The source-only `/jobs/{lowercase-uuidv7}` page reads the dedicated anonymous public projection
+The source-only `/jobs/{jobId}` page reads the dedicated anonymous public projection
 without cookies or authorization, redirects reversible aliases temporarily to the current
 canonical identifier, and renders the employer description as plain text. Canonical metadata uses
-only the configured trusted application origin. Crawlers are denied globally by default; an exact
+only the configured trusted application origin. The page conditionally emits escaped `JobPosting`
+JSON-LD when the projection contains the required truthful posting, location, and application
+fields, and an employer-site application link only when an application URL is present. The
+anonymous API remains separately gated. Crawlers are denied globally by default; an exact
 gate may allow only `/jobs/` after separate publication review. The generated sitemap remains
 empty without reading the API while that gate is false. When deliberately enabled, it reads only
 the strict bounded public feed, follows at most 500 cursor pages/50,000 identifiers, emits URLs
 only beneath the configured canonical application origin, and fails closed on unavailable,
-malformed, duplicated, unordered, or looping data. No Indexing API, application action, or
+malformed, duplicated, unordered, or looping data. No Indexing API, automated submission, or
 search-engine eligibility is claimed. No route, Lambda artifact, database identity, bootstrap
 boundary, Terraform change, or crawler policy is deployed by these source bytes.
 

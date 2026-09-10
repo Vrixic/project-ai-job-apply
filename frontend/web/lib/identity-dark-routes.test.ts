@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GET as getEntitlements } from "../app/api/platform/entitlements/route";
 import { POST as postJobReport } from "../app/api/platform/jobs/[jobId]/reports/route";
+import { GET as getJobDetail } from "../app/api/platform/jobs/[jobId]/route";
 
 const mocks = vi.hoisted(() => ({
   getAccessToken: vi.fn(async () => ({ token: "must-not-be-used" })),
@@ -21,6 +22,19 @@ afterEach(() => {
 });
 
 describe("identity-dark candidate routes", () => {
+  it("keeps the authenticated job-detail route identity-dark without using a token", async () => {
+    const jobId = "018f92b0-4ad7-7b1d-8f44-b7ae694c85d1";
+    const response = await getJobDetail(
+      new Request(`https://candidate.example.test/api/platform/jobs/${jobId}`),
+      { params: Promise.resolve({ jobId }) },
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).not.toContain("private identity-dark configuration detail");
+    expect(mocks.getAccessToken).not.toHaveBeenCalled();
+  });
+
   it("returns a sanitized non-cacheable 503 from the entitlement BFF", async () => {
     const response = await getEntitlements(
       new Request("https://candidate.example.test/api/platform/entitlements"),

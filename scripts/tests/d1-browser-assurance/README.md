@@ -19,6 +19,15 @@ gate/reason language, explicit score/rank/eligibility/outcome nonclaim, bounded 
 loading announcement, and stale job-identity fencing. Both surfaces receive keyboard/focus and
 automated WCAG A/AA coverage in installed Chrome.
 
+The job-detail scenarios use the existing candidate catalog and production `JobSearchForm`. They
+exercise an explicit bodyless, queryless detail read, a different canonical identifier for an
+alias, literal script-shaped description text, source provenance, and HTTPS/new-tab/no-referrer
+link attributes. They cover keyboard activation, loading and result focus, Escape/close focus
+restoration, fixed failure copy, manual retry, stale sign-out fencing, unchanged search ordering
+and existing result controls, and automated WCAG A/AA rules. Source URLs are inspected without
+navigating to a provider. These generated-synthetic scenarios are local assurance only, not
+managed-OIDC, hosted BFF, or provider acceptance.
+
 The entitlement scenario mounts the production provider-neutral access status inside the candidate
 catalog. A generated-synthetic private upstream failure must collapse to fixed unavailable copy and
 must not retry until the candidate activates the keyboard-focusable retry control. The exact retry

@@ -44,6 +44,19 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Current implementation checkpoint (`2026-09-10`): D2-046 now passes actual native Enable
+verification at Platform `318`. The next recovery preflight exposed a separate reproducible
+PowerShell 7.5 cleanup bug: absent Terraform inputs become present-empty between two inspections.
+Both attempts failed before any restore or executor existed. Exact unused-role cleanup is verified
+at Platform `319` and Bootstrap `19`, with zero drift and all temporary permissions removed.
+D2-048 repairs that narrow environment-restoration defect; D2-047 adds the missing authenticated
+website description/source view. Both are integrated on shared main after cleanup. Local web
+verification passes 629 tests, final focused UI 38/38, both browser suites, production build,
+typecheck, formatting and lint (nine pre-existing warnings). The integrated inspector passes
+266/260 assertions on PowerShell 7.5/5.1. Full committed-source verification and candidate-only
+deployment remain next. Core `31051e1`, Gateway/D2/dark-ingestion `e2e730a`, provider scope and reviewer roles
+are unchanged. The authorized D2-038 current-schema recovery still remains to execute.
+
 Current recovery/repair checkpoint (`2026-09-10`): D2-044 is Complete. Renewed exact-account
 SSO passes at `13:23:50Z`; source `31051e1e9e2855cc390c40d172327bfbb6e1c67a` is immutably
 published and released through pause/drain, exact state-only reconciliation and mapping-only
@@ -213,6 +226,59 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-044 | Repair exact-version export expiry acknowledgment and restore healthy activity maintenance. | Complete | Platform engineering | D2-016, D2-038, D2-041 | Completed 2026-09-10: focused 104/104, workflow 617 passed/six explicit database opt-ins skipped and full verification pass. Exact `31051e1` publication, guarded release, state-only reconciliation and Resume verify at state `315`, starts unpaused and durable/activity/terminal `13`. Ordinary activity records four invocations with explicit zero errors/throttles; all 57 managed alarms are OK. Permissions, SQL ordering, retention and failed-delete refusal are preserved. This is deployed health acceptance, not fresh candidate-rights or isolated recovery acceptance. See [repair and limits](#d2-044--exact-version-export-expiry). |
 | D2-045 | Implement inspector corroboration for existing development public, authenticated-intake and processing workload aggregates. | Complete | Platform engineering | D2-016, D2-028, D2-033 | Completed 2026-09-10 in `e2714ca`: three explicit development profiles and strict checksum-bound aggregates are integrated. Historical D2Public remains 40 requests/20 denials; unknown data, custom-emission timing/sample completeness and settled queues are handled explicitly. Root and independent review pass 147 checks on each PowerShell host, plus 49 existing input guards and the complete restore-verifier suite. Full committed-source verification passes. This completes tooling, not a candidate workload, throughput, attribution or publication acceptance. See [implementation boundary](#d2-045--development-workload-corroboration). |
 | D2-046 | Handle native computed prefix and observation metadata for exact fixed-name temporary recovery IAM resources. | Complete | Platform engineering | D2-038, D2-043 | Completed 2026-09-10 at `ca6c434`, extending the verified `2343514` prefix repair with exact native empty-tag/sensitivity and identity handling. Both PowerShell hosts pass 908 assertions; independent review, authentic native-plan replay, full committed-source verification and all 20 builds pass. Unused permissions were removed and verified at Platform `317`/Bootstrap `17` before editing source. No executor, PITR or replay ran; the authorized drill remains under D2-038 and needs no application rerelease. See [bounded repair](#d2-046--fixed-name-restore-role-metadata). |
+| D2-047 | Expose full descriptions and independently verified source links from authenticated website search. | Implemented; locally verified | Platform engineering; QA/automation | D2-019; D1 catalog search | Started/integrated 2026-09-10 after verified recovery-permission cleanup. The on-demand panel and narrow BFF reuse `jobs:read`, canonical aliases and bounded no-store detail. Web 629 tests, final UI 38/38, eleven Chrome scenarios, the public-page regression suite, production build, typecheck and independent review pass. Full committed-source verification and candidate-only hosted release remain. No anonymous publication, provider expansion or new permission is implied. See [scope and verification](#d2-047--authenticated-website-job-details). |
+| D2-048 | Preserve absent process inputs between nested workload/recovery inspections. | Implemented; locally verified | Platform engineering | D2-038; D2-045 | Started/integrated 2026-09-10 after Platform `319`/Bootstrap `19` cleanup. Original PowerShell 7.5 reproduces the absent-to-empty failure; integrated exact-cleanup-AST regressions pass independently with 266 assertions on 7.5 and 260 on Windows PowerShell 5.1. Present-empty, composite, unrelated and `TF_DATA_DIR` inputs remain intact; no blanket purge or decoder relaxation. Full committed-source verification and actual recovery remain. See [cause and repair](#d2-048--runtime-inspection-environment-restoration). |
+
+### D2-047 — Authenticated website job details
+
+The signed-in search cards expose summaries and save/report/match controls, but not the full
+description or source navigation. The existing anonymous `/jobs/[jobId]` page uses a separately
+disabled public API and is not an appropriate authenticated-detail dependency. The Gateway already
+serves active canonical detail through `GET /jobs/:jobId` under `jobs:read`.
+
+Add an explicit `View details and sources` action using that existing contract through a narrow
+candidate BFF. Keep access tokens server-held, accept only a bodyless/queryless UUIDv7 read, bound
+response size/time, validate the existing schema and safe source URLs, and emit no-store results
+with fixed error messages. Render descriptions literally, show source provenance and verification
+dates, and open source links only on explicit navigation with no referrer. Preserve canonical
+alias resolution, loading/error/retry states, keyboard focus and cancellation across job/session
+changes. Extend the existing local browser harness rather than creating another UI or test system.
+Anonymous routes, indexing, provider registrations, database schemas and reviewer grants do not change.
+
+Integrated checks pass 70 BFF/parser/identity-dark tests and the web suite's 629 tests in 47 files.
+The final UI bytes separately pass all 38 panel/search tests and actual web typecheck. The existing
+Chrome harness passes all eleven scenarios, including two new detail/source/alias/session cases;
+the production public-page suite also passes its five result groups after three build tasks
+(two cached). Both runners close their local servers. Formatting and lint pass with only nine
+pre-existing unrelated warnings; independent source review finds no issue. These checks are not
+hosted, authenticated owner-publication or human accessibility acceptance. Full committed-source
+verification remains next. The candidate web is the only application that needs a release for
+this change; the healthy AWS applications must not be rereleased.
+
+### D2-048 — Runtime inspection environment restoration
+
+The maintained recovery Start invokes the shared runtime inspector twice before the source
+database verifier. On PowerShell 7.5.4, its cleanup passes saved null values to
+`Environment.SetEnvironmentVariable`, which leaves present-empty inputs. The same immutable
+native plan decodes before cleanup, fails with missing Terraform expressions afterward, and
+decodes again after exact absence restoration. This explains why a single Status succeeds while
+Start fails. Neither failed preflight created a restore context, target, executor or replay.
+
+Restore originally absent touched names with exact `Env:` removal, and restore non-null strings
+unchanged. Do not purge unrelated variables, alter `TF_DATA_DIR` handling, relax saved-plan guards,
+or change application/IAM configuration. The regression executes the actual cleanup AST through
+12 sequential nested/pipelined success/failure cycles with generated variable names. The original
+7.5 inspector fails the new absent-state assertion; the draft passes 266 assertions on 7.5 and
+260 on Windows PowerShell 5.1, independently reproduced. The actual integrated maintained tests
+repeat both passing counts; parser and whitespace checks pass. Full committed-source verification
+remains next.
+
+Before source integration, genuine unused cleanup verifies zero changes at Platform `319`
+(SHA-256 `04133d96ade927622adf53c83cc0cb3c6a333ff0b629d9d963179d68e2c47081`) and Bootstrap `19`
+(SHA-256 `4e3e250d15b2838360f47aafad948b39b4a4d954a9ef316e4a70c16c8fc86bdd`). Every successful
+Apply ran once, all 17 original bootstrap statements remain, and all temporary permissions are off.
+After verification, regenerate current-source/state-bound baselines and the standalone executor
+for the already authorized drill. No repeated approval or application rerelease is needed.
 
 ### D2-039 — Fresh review evidence and monotonic catalog truth
 
@@ -1259,7 +1325,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. Both providers remain disabled in development. | Acquire representative provider-derived fixtures, complete sanitization/scanning and separate QA acceptance, then activate exact development registrations. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
 | Current-schema deployed recovery | Development verifies 44 migrations/68 relations with D2 resumed; historical AWS PITR covers 39. D2-044's activity release and health now pass. D2-038's seven-owner replay/drill tooling is implemented and authorized. | After D2-046 verification, capture fresh source/state-bound plans and activate only the approved temporary role/endpoint. Run structural PITR and exact marker/owner-bound replay, then remove temporary resources and drill-only authority. Writes remain confined to restored rows. |
 | Fresh candidate-rights acceptance | Corrective core source `31051e1` is released and resumed at state `315`, with exact version-13 pins, zero changes and positive scheduled activity health. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance without relabelling deployment as that acceptance or isolated recovery. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
-| Recovery operator compatibility | D2-043/D2-046 are Complete. The native-observation follow-up at `ca6c434` passes 908 assertions per host, independent review, authentic-plan replay and full committed-source verification. Unused permissions are removed and verified at Platform `317`/Bootstrap `17`; no executor, PITR or replay ran. | Regenerate current-state/source baselines and only the standalone replay artifact. No application rerelease, repeated recovery approval or generic drift exemption is needed. Recovery remains under D2-038. |
+| Recovery operator compatibility | D2-043/D2-046 are Complete; actual native Enable verification now passes at `318`. D2-048's separate absent-input restoration defect is integrated and passes 266/260 two-host assertions. Unused permissions are removed and verified at Platform `319`/Bootstrap `19`; no executor, PITR or replay ran. | Complete the new committed-source verification, then regenerate current-state/source baselines and only the standalone replay artifact. No application rerelease, repeated recovery approval or generic drift exemption is needed. Recovery remains under D2-038. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
 | Authenticated load and abuse acceptance | Paced public-policy and unauthenticated-boundary workload passed. Separate paused-intake and active-processing-to-review runners pass 29 synthetic regressions. D2-045's matching inspector profiles are implemented and verified, including strict aggregates, metric coverage and settled queues. | Use explicitly scoped disposable authenticated candidates for a bounded development workload and matching server aggregates. The active runner follows the existing five-minute schedule, never approves a case, and is not throughput/publication acceptance. No production traffic, raw tokens, personal payloads, or invented provider truth. |
@@ -1271,6 +1337,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-10 | Actual `dda6003` native restore-role Enable verifies at Platform `318`. A separately reproduced PowerShell 7.5 cleanup defect stops recovery before any target/executor exists; exact unused cleanup verifies Platform `319`/Bootstrap `19`, all temporary authority off. D2-047 authenticated website details and D2-048 exact environment restoration are integrated directly on shared main. Web 629 tests, final UI 38/38, eleven Chrome scenarios, five public-page result groups, production build/typecheck and integrated 266/260 inspector assertions pass. Full committed-source verification, candidate-only release and authorized recovery follow. No new branch, provider, reviewer or human acceptance claim. | D2-047; D2-048; D2-038 | [Website implementation](#d2-047--authenticated-website-job-details), [reproduced cause and cleanup](#d2-048--runtime-inspection-environment-restoration) |
 | 2026-09-01 | Started Phase 2 from clean checkpoint branch `phase-2-extension-and-community`. The primary worktree was clean; the stale ignored Phase 0 extension bundle was removed, and an ancestry/patch-equivalence audit began for the separately registered historical Phase 1 worktrees and branches before any cleanup. Docker Desktop and its remaining WSL engine were stopped because the initial contract, extension, and governance work does not require them. Read-only architecture and gap audits confirmed that the inherited extension is only a fail-closed Auth0 shell and that the Jobs contribution API is D2-owned work not yet implemented. Public contribution, provider detector activation, and store distribution remain default-off behind D2-010/D2-011. | D2-001, D2-002, D2-003, D2-004, D2-005, D2-006, D2-011 | [Extension boundary](../../../frontend/extension/README.md), [UGC lifecycle](../../adr/005-ugc-lifecycle.md), [Phase 2 tasks](phase-2-extension-and-community.md) |
 | 2026-09-01 | Landed the default-dark MV3 extension shell, exact synthetic-only detectors, explicit field preview, bounded offline queue, version/provider/domain controls, and release-source assurance. The extension still cannot submit a contribution because the versioned consent and exact server request seam is intentionally unresolved and all delivery switches remain off. | D2-001–D2-005, D2-014, D2-015, D2-017 | Commits `d2f2fc0`, `de021bd`; [extension README](../../../frontend/extension/README.md) |
 | 2026-09-01 | Landed the Trust state-machine/PostgreSQL foundation and Profile-owned immutable contribution-consent persistence. Trust remains isolated from Jobs catalog mutation, and consent has no public API or extension binding yet. Focused unit, type, build, migration replay, and PostgreSQL integration suites passed. | D2-006, D2-007, D2-013, D2-017, D2-022 | Commits `8880d0d`, `b92b7ea`; [ADR-028](../../adr/028-extension-ugc-ownership-and-processing.md) |
@@ -1448,6 +1515,18 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-10 | Exact integrated `ca6c434d4b02561a67aa3929ad308fbffc71c666` passes the full maintained verifier and all 20 build tasks (19 cached). Both PowerShell hosts pass 908 generated assertions; independent review and actual zero/Disable native-plan replay preserve original state/evidence. D2-046 is Complete for tooling. Only these two delivery documents change after verification; proceed with fresh source/state-bound baselines and the standalone replay artifact. D2-038's actual cloud drill and remaining human/provider/owner gates are still open. | D2-046; D2-038 | [Verified follow-up](#d2-046--fixed-name-restore-role-metadata), [remaining gates](#remaining-acceptance-and-operator-inputs) |
 
 ## Decisions and scope changes
+
+For D2-047 on 2026-09-10, make full job detail an explicit authenticated search action over the
+existing Jobs API. Do not depend on anonymous publication or automatically fetch employer pages.
+This closes a real candidate navigation gap while keeping public indexing and provider scope
+unchanged. Reuse the existing contract, BFF/session conventions and browser harness; descriptions
+remain plain text and verification timestamps are historical observations, not live guarantees.
+
+For D2-048 on 2026-09-10, preserve process-variable absence explicitly instead of treating null
+and empty as interchangeable. Only the inspector's touched variables may change during cleanup.
+Test the actual cleanup code on both supported PowerShell hosts, and remove unused recovery
+authority before integrating the repair. This resolves the reproduced preflight failure without
+loosening Terraform checks, adding permissions or rereleasing healthy application artifacts.
 
 For D2-046 on 2026-09-10, handle Terraform's computed prefix as typed metadata, not naming
 authority: preserve exact fixed IAM names, permit only omitted/null or empty-string observations,

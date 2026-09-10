@@ -509,6 +509,56 @@ aside {
   text-transform: uppercase;
 }
 
+.job-detail {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e0e8e3;
+}
+
+.job-detail-content {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f4f8f5;
+}
+
+.job-detail-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.job-detail-heading h4 {
+  margin: 0;
+}
+
+.job-detail-content h5 {
+  margin: 16px 0 8px;
+  font-size: 1rem;
+}
+
+.job-detail-description,
+.job-detail-sources a {
+  overflow-wrap: anywhere;
+}
+
+.job-detail-description {
+  white-space: pre-wrap;
+}
+
+.job-detail-sources {
+  display: grid;
+  gap: 14px;
+  padding-left: 20px;
+}
+
+.job-detail-sources a {
+  color: #14633e;
+}
+
 .entitlement-summary {
   padding: 18px;
   border: 1px solid #cedbd3;

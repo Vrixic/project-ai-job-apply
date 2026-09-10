@@ -130,6 +130,98 @@ describe("JobSearchForm", () => {
     vi.unstubAllGlobals();
   });
 
+  it("offers explicit details per result without changing order, saving, reports, or match requests", async () => {
+    const details = {
+      ...restartedJob,
+      id: firstJob.id,
+      description: "Synthetic canonical description from an alias.",
+      sources: [
+        {
+          provider: "greenhouse",
+          provenance: "authorized_fixture",
+          canonicalUrl: "https://jobs.synthetic.example/alias-target",
+          firstObservedAt: restartedJob.firstObservedAt,
+          lastVerifiedAt: restartedJob.lastVerifiedAt,
+        },
+      ],
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob, restartedJob] }))
+      .mockResolvedValueOnce(jsonResponse(details));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const controls = Array.from(container.querySelectorAll("button")).filter(
+      (entry) => entry.textContent === "View details and sources",
+    );
+    expect(controls).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const ordering = Array.from(
+      container.querySelectorAll(".job-results article > h3"),
+      (entry) => entry.textContent,
+    );
+    await act(async () => controls[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(`/api/platform/jobs/${restartedJob.id}`);
+    expect(container.querySelectorAll(".job-detail-description")).toHaveLength(1);
+    expect(container.textContent).toContain(details.description);
+    expect(
+      Array.from(
+        container.querySelectorAll(".job-results article > h3"),
+        (entry) => entry.textContent,
+      ),
+    ).toEqual(ordering);
+    expect(
+      Array.from(container.querySelectorAll("button")).filter(
+        (entry) => entry.textContent === "Save job",
+      ),
+    ).toHaveLength(2);
+    expect(
+      Array.from(container.querySelectorAll("button")).filter(
+        (entry) => entry.textContent === "Check match evidence",
+      ),
+    ).toHaveLength(2);
+    expect(container.querySelectorAll(".job-report-control")).toHaveLength(2);
+    expect(container.querySelectorAll('a[href^="/jobs/"]')).toHaveLength(0);
+    await act(async () => root.render(<JobSearchForm authenticated={false} />));
+    expect(container.textContent).not.toContain(details.description);
+    expect(container.querySelector(".job-detail")).toBeNull();
+  });
+
+  it("unmounts and aborts a pending detail read on candidate sign-out", async () => {
+    const pending = deferredResponse();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+      .mockImplementationOnce(() => pending.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobSearchForm authenticated />));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    const control = Array.from(container.querySelectorAll("button")).find(
+      (entry) => entry.textContent === "View details and sources",
+    );
+    await act(async () => control?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const signal = fetchMock.mock.calls[1]?.[1]?.signal;
+    await act(async () => root.render(<JobSearchForm authenticated={false} />));
+    expect(signal?.aborted).toBe(true);
+    await act(async () =>
+      pending.resolve(
+        jsonResponse({ ...firstJob, description: "stale-detail-canary", sources: [] }),
+      ),
+    );
+    expect(container.textContent).not.toContain("stale-detail-canary");
+    expect(container.querySelector(".job-detail")).toBeNull();
+  });
+
   it("keeps rapid initial search activation single-flight and cleans up its deadline", async () => {
     vi.useFakeTimers();
     const pending = deferredResponse();

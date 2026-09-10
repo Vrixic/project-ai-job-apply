@@ -17,6 +17,16 @@ personalized-match claim. Each result composes the existing owner-self match-evi
 does not request private evidence until the candidate explicitly selects `Check match evidence`.
 The panel does not automatically filter or reorder results, produce a score, or gate saving.
 
+The explicit `View details and sources` control reads `api/platform/jobs/[jobId]` on demand through
+the server-held session and existing `jobs:read` permission. It accepts the existing canonical
+detail projection, including an alias resolving to a different canonical identifier. Descriptions
+render literally, while provenance and observation times accompany validated HTTPS source links
+with no referrer; rendering never fetches a provider page. The disclosure has loading and fixed
+error states, manual retry, close/Escape focus restoration, and abort/generation fencing across
+job, authentication, and unmount transitions. It does not change search ordering, saving, reports,
+or match evidence. These source and local-test changes do not establish hosted or managed-OIDC
+acceptance or activate the separate anonymous API and indexing gates.
+
 Each active search result also offers an authenticated fixed-reason report control through
 `api/platform/jobs/[jobId]/reports`. The BFF accepts only the existing exact report contract,
 authenticates the server-held session before reading a bounded streaming body, keeps one
@@ -51,7 +61,10 @@ claims only, not deployment or real-browser acceptance.
 
 `jobs/[jobId]` is a dynamic anonymous read-only page over the strict public Jobs projection. It
 uses generic not-found and outage states, a temporary canonical-alias redirect, trusted-origin
-canonical metadata, default `noindex`, and React text rendering. It contains no JSON-LD or apply
-action. The dynamically evaluated `robots.ts` denies the entire candidate application and, only
-behind the exact reviewed server-only indexing gate, adds a narrower `/jobs/` allow rule;
-authenticated and BFF paths remain denied.
+canonical metadata, default `noindex`, and React text rendering. It conditionally emits escaped
+`JobPosting` JSON-LD only when the projection supplies a posting date, application URL, structured
+locations, and an on-site or hybrid work mode; an employer-site application link appears only when
+the projection supplies an application URL. This is not an automated submission action. The
+anonymous API remains separately gated. The dynamically evaluated `robots.ts` denies the entire
+candidate application and, only behind the exact reviewed server-only indexing gate, adds a
+narrower `/jobs/` allow rule; authenticated and BFF paths remain denied.

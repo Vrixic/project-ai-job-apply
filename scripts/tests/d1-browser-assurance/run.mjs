@@ -1706,6 +1706,229 @@ async function runMatchAssessmentScenario(browser, origin) {
   }
 }
 
+function syntheticJobDetail(overrides = {}) {
+  return {
+    ...syntheticJob,
+    description:
+      "Synthetic employer description.\n<script>synthetic-untrusted-description</script>",
+    sources: [
+      {
+        provider: "greenhouse",
+        provenance: "authorized_fixture",
+        canonicalUrl: "https://jobs.synthetic.example/positions/one",
+        firstObservedAt: syntheticJob.firstObservedAt,
+        lastVerifiedAt: syntheticJob.lastVerifiedAt,
+        validThrough: syntheticJob.expiresAt,
+      },
+      {
+        provider: "ugc",
+        provenance: "explicit_ugc",
+        canonicalUrl: "https://careers.synthetic.example/positions/one",
+        firstObservedAt: syntheticJob.firstObservedAt,
+        lastVerifiedAt: syntheticJob.lastVerifiedAt,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+async function installSyntheticJobDetailBff(page, responses) {
+  const catalog = await installSyntheticBff(page);
+  const detailRequests = [];
+  await page.route("**/api/platform/jobs/*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (!/^\/api\/platform\/jobs\/[a-f0-9-]{36}$/.test(url.pathname)) {
+      await route.fallback();
+      return;
+    }
+    detailRequests.push({
+      body: request.postData(),
+      headers: request.headers(),
+      method: request.method(),
+      url: request.url(),
+    });
+    const response = responses[detailRequests.length - 1];
+    assert(response, "Unexpected generated job detail request");
+    if (response.gate) {
+      response.gate.markStarted();
+      await withTimeout(response.gate.gate, "deferred job detail response release");
+    }
+    try {
+      await route.fulfill({
+        status: response.status ?? 200,
+        headers: {
+          "cache-control": "no-store",
+          "content-type":
+            response.status && response.status >= 400
+              ? "application/problem+json; charset=utf-8"
+              : "application/json; charset=utf-8",
+        },
+        json: response.body,
+      });
+    } catch (error) {
+      if (!response.allowAborted) throw error;
+    } finally {
+      response.gate?.markCompleted();
+    }
+  });
+  return { ...catalog, detailRequests };
+}
+
+async function runJobDetailDisclosureScenario(browser, origin) {
+  const context = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    const page = await context.newPage();
+    const loading = createGate();
+    const requests = await installSyntheticJobDetailBff(page, [
+      { gate: loading, body: syntheticJobDetail({ id: SECOND_SYNTHETIC_JOB_ID }) },
+      {
+        status: 503,
+        body: { title: PRIVATE_CANARY, detail: PRIVATE_CANARY, code: PRIVATE_CANARY },
+      },
+      { body: syntheticJobDetail() },
+    ]);
+    const component = await mountCandidateCatalog(page, origin);
+    await component.getByRole("searchbox", { name: /^Keywords/ }).press("Enter");
+    await component.getByRole("heading", { name: syntheticJob.title }).waitFor();
+    const ordering = await component.locator(".job-results article > h3").allTextContents();
+    const trigger = component.getByRole("button", {
+      name: "View details and sources",
+      exact: true,
+    });
+    assert.equal(requests.detailRequests.length, 0);
+    await assertVisibleFocus(trigger);
+    await trigger.press("Enter");
+    await withTimeout(loading.started, "job detail request start");
+    const panel = component.getByRole("region", { name: "Job details and sources", exact: true });
+    await panel
+      .getByRole("status")
+      .getByText("Loading job details and sources…", { exact: true })
+      .waitFor();
+    await settleBrowserRender(page);
+    assert(
+      await panel
+        .getByRole("heading", { name: "Job details and sources" })
+        .evaluate((element) => document.activeElement === element),
+    );
+    assert.equal(await trigger.getAttribute("aria-expanded"), "true");
+    assert(await trigger.isDisabled());
+    loading.release();
+    await withTimeout(loading.completed, "job detail response completion");
+    await panel.getByText("Job details loaded.", { exact: true }).waitFor();
+    assert.equal(
+      await panel.locator(".job-detail-description").textContent(),
+      syntheticJobDetail().description,
+    );
+    assert.equal(await panel.locator("script").count(), 0);
+    assert.equal(await panel.locator("a").count(), 2);
+    assert.equal(await panel.getByText("Authorized test fixture", { exact: true }).count(), 1);
+    assert.equal(await panel.getByText("Community contribution", { exact: true }).count(), 1);
+    for (const link of await panel.locator("a").all()) {
+      assert((await link.getAttribute("href")).startsWith("https://"));
+      assert.equal(await link.getAttribute("target"), "_blank");
+      assert.equal(await link.getAttribute("rel"), "noopener noreferrer");
+      assert.equal(await link.getAttribute("referrerpolicy"), "no-referrer");
+      assert((await link.textContent()).includes("opens in a new tab"));
+    }
+    assert.equal(requests.detailRequests.length, 1);
+    const request = requests.detailRequests[0];
+    assert.equal(new URL(request.url).pathname, `/api/platform/jobs/${SYNTHETIC_JOB_ID}`);
+    assert.equal(new URL(request.url).search, "");
+    assert.equal(request.method, "GET");
+    assert.equal(request.body, null);
+    assert.equal(request.headers.authorization, undefined);
+    assert.equal(request.headers.referer, undefined);
+    assert.deepEqual(
+      await component.locator(".job-results article > h3").allTextContents(),
+      ordering,
+    );
+    assert.equal(await component.getByRole("button", { name: "Save job", exact: true }).count(), 1);
+    assert.equal(
+      await component.getByRole("button", { name: "Check match evidence", exact: true }).count(),
+      1,
+    );
+    assert.equal(await component.locator('a[href^="/jobs/"]').count(), 0);
+    await assertNoWcagViolations(page);
+
+    await panel.getByRole("button", { name: "Close details", exact: true }).press("Escape");
+    await settleBrowserRender(page);
+    assert.equal(await panel.count(), 0);
+    assert(await trigger.evaluate((element) => document.activeElement === element));
+    assert.equal(await trigger.getAttribute("aria-expanded"), "false");
+    await trigger.press("Enter");
+    await panel
+      .getByRole("alert")
+      .getByText("Job details are temporarily unavailable. Try again.", { exact: true })
+      .waitFor();
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+    assert.equal(requests.detailRequests.length, 2);
+    const retry = panel.getByRole("button", { name: "Retry details", exact: true });
+    await assertVisibleFocus(retry);
+    await retry.press("Enter");
+    await panel.getByText("Job details loaded.", { exact: true }).waitFor();
+    assert.equal(requests.detailRequests.length, 3);
+    assert.deepEqual(
+      await component.locator(".job-results article > h3").allTextContents(),
+      ordering,
+    );
+    await assertNoWcagViolations(page);
+  } finally {
+    await context.close();
+  }
+}
+
+async function runJobDetailSessionScenario(browser, origin) {
+  const context = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    const page = await context.newPage();
+    const stale = createGate();
+    const requests = await installSyntheticJobDetailBff(page, [
+      {
+        gate: stale,
+        allowAborted: true,
+        body: syntheticJobDetail({ description: PRIVATE_CANARY }),
+      },
+      { body: syntheticJobDetail({ id: SECOND_SYNTHETIC_JOB_ID }) },
+    ]);
+    const component = await mountCandidateCatalog(page, origin);
+    await component.getByRole("searchbox", { name: /^Keywords/ }).press("Enter");
+    await component
+      .getByRole("button", { name: "View details and sources", exact: true })
+      .press("Enter");
+    await withTimeout(stale.started, "stale job detail request start");
+    await page.evaluate(() =>
+      window.mount({
+        story: "d1-candidate-surfaces/CandidateCatalog",
+        props: { authenticated: false },
+      }),
+    );
+    await component.getByText("Sign in to search the candidate job catalog.").waitFor();
+    assert.equal(await component.locator(".job-detail").count(), 0);
+    stale.release();
+    await withTimeout(stale.completed, "stale job detail response completion");
+    await settleBrowserRender(page);
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+    assert.equal(requests.detailRequests.length, 1);
+    await page.evaluate(() =>
+      window.mount({
+        story: "d1-candidate-surfaces/CandidateCatalog",
+        props: { authenticated: true },
+      }),
+    );
+    await component.getByRole("searchbox", { name: /^Keywords/ }).press("Enter");
+    await component
+      .getByRole("button", { name: "View details and sources", exact: true })
+      .press("Enter");
+    await component.getByText("Job details loaded.", { exact: true }).waitFor();
+    assert.equal(requests.detailRequests.length, 2);
+    assert(!(await component.textContent()).includes(PRIVATE_CANARY));
+    await assertNoWcagViolations(page);
+  } finally {
+    await context.close();
+  }
+}
+
 await assertProductionBoundary();
 const chromePath = await findSystemChrome();
 const server = await startBrowserAssuranceServer({
@@ -1733,6 +1956,10 @@ try {
   process.stdout.write("PASS report/retry/redaction/session-fencing/WCAG scenario\n");
   await runMatchAssessmentScenario(browser, server.origin);
   process.stdout.write("PASS match-evidence/copy/redaction/job-fencing/WCAG scenario\n");
+  await runJobDetailDisclosureScenario(browser, server.origin);
+  process.stdout.write("PASS job-details/alias/plain-text/sources/keyboard/retry/WCAG scenario\n");
+  await runJobDetailSessionScenario(browser, server.origin);
+  process.stdout.write("PASS job-details/session-abort/stale-response/WCAG scenario\n");
 } finally {
   try {
     await browser?.close();

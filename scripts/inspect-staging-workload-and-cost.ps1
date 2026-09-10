@@ -336,7 +336,15 @@ function Get-RuntimeStatus {
   } finally {
     if (Test-Path -LiteralPath $temporaryPlan) { Remove-Item -LiteralPath $temporaryPlan -Force }
     foreach ($name in $names) {
-      [Environment]::SetEnvironmentVariable($name, $saved[$name], "Process")
+      # PowerShell 7.5 can bind saved null as a present empty environment value.
+      # Restore only touched names; an absent input is distinct from an empty input.
+      if ($null -eq $saved[$name]) {
+        if (Test-Path -LiteralPath "Env:$name") {
+          Remove-Item -LiteralPath "Env:$name"
+        }
+      } else {
+        [Environment]::SetEnvironmentVariable($name, $saved[$name], "Process")
+      }
     }
     $env:TF_DATA_DIR = $saved["TF_DATA_DIR"]
   }

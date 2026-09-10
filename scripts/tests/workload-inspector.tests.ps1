@@ -41,6 +41,107 @@ foreach ($name in @("Assert-D2AggregateFields", "Assert-D2AggregateCount", "Asse
 }
 function aws { throw "Real AWS calls are forbidden in this offline test." }
 function terraform { throw "Real Terraform calls are forbidden in this offline test." }
+
+# Execute the exact inspector cleanup with synthetic process variables only. The native
+# ports above remain fail-closed; this fixture creates no plan, receipt, or deployment state.
+$environmentFunctions = @($ast.FindAll({
+  param($node)
+  $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq "Get-RuntimeStatus"
+}, $false))
+Assert-Test ($environmentFunctions.Count -eq 1) "The actual runtime cleanup owner must be unique."
+$environmentTryNodes = @($environmentFunctions[0].Body.FindAll({
+  param($node)
+  $node -is [Management.Automation.Language.TryStatementAst] -and $null -ne $node.Finally
+}, $false))
+Assert-Test ($environmentTryNodes.Count -eq 1) "The actual runtime cleanup finally must be unique."
+$environmentCleanup = [scriptblock]::Create((@($environmentTryNodes[0].Finally.Statements |
+  ForEach-Object { $_.Extent.Text }) -join [Environment]::NewLine))
+$environmentProbePrefix = "TF_VAR_codex_inspector_cleanup_" + [Guid]::NewGuid().ToString("N") + "_"
+$environmentProbeNames = @(
+  ($environmentProbePrefix + "absent"),
+  ($environmentProbePrefix + "empty"),
+  ($environmentProbePrefix + "composite"),
+  ($environmentProbePrefix + "already_removed"),
+  ($environmentProbePrefix + "unrelated")
+)
+foreach ($probeName in $environmentProbeNames) {
+  Assert-Test (-not (Test-Path -LiteralPath ("Env:" + $probeName))) "A synthetic environment name must not overwrite a caller entry."
+}
+$originalDataPresent = Test-Path -LiteralPath "Env:TF_DATA_DIR"
+$originalDataValue = [Environment]::GetEnvironmentVariable("TF_DATA_DIR", "Process")
+$environmentSentinel = Join-Path ([IO.Path]::GetTempPath()) ("inspector-env-never-created-" + [Guid]::NewGuid().ToString("N") + ".tfplan")
+Assert-Test (-not (Test-Path -LiteralPath $environmentSentinel)) "The cleanup sentinel must not name an existing file."
+
+function Invoke-InspectorEnvironmentRegressionCycle([bool]$FailBody) {
+  $names = @($environmentProbeNames[0], $environmentProbeNames[1], $environmentProbeNames[2], $environmentProbeNames[3])
+  $saved = @{}
+  foreach ($probeName in $names) {
+    $saved[$probeName] = [Environment]::GetEnvironmentVariable($probeName, "Process")
+  }
+  $saved["TF_DATA_DIR"] = $env:TF_DATA_DIR
+  $expectedEmptyPresent = Test-Path -LiteralPath ("Env:" + $environmentProbeNames[1])
+  $expectedEmptyValue = [Environment]::GetEnvironmentVariable($environmentProbeNames[1], "Process")
+  $expectedDataPresent = Test-Path -LiteralPath "Env:TF_DATA_DIR"
+  $expectedDataValue = [Environment]::GetEnvironmentVariable("TF_DATA_DIR", "Process")
+  $temporaryPlan = $environmentSentinel
+  $bodyFailureObserved = $false
+  try {
+    try {
+      foreach ($probeName in $names) {
+        [Environment]::SetEnvironmentVariable($probeName, "synthetic-temporary-input", "Process")
+      }
+      $env:TF_DATA_DIR = "synthetic-temporary-data"
+      Remove-Item -LiteralPath ("Env:" + $environmentProbeNames[3])
+      if ($FailBody) { throw "SyntheticInspectorBodyFailure" }
+    } finally {
+      . $environmentCleanup
+    }
+  } catch {
+    if ($_.Exception.Message -cne "SyntheticInspectorBodyFailure") { throw }
+    $bodyFailureObserved = $true
+  }
+  Assert-Test (-not (Test-Path -LiteralPath ("Env:" + $environmentProbeNames[0]))) "The inspector must restore an originally absent input to absence."
+  Assert-Test ((Test-Path -LiteralPath ("Env:" + $environmentProbeNames[1])) -eq $expectedEmptyPresent) "Cleanup must preserve the original presence of an empty input."
+  Assert-Test ([Environment]::GetEnvironmentVariable($environmentProbeNames[1], "Process") -ceq $expectedEmptyValue) "Cleanup must preserve the exact empty input value."
+  Assert-Test ([Environment]::GetEnvironmentVariable($environmentProbeNames[2], "Process") -ceq '{"synthetic":["exact"]}') "Cleanup must restore a composite string byte-for-byte."
+  Assert-Test (-not (Test-Path -LiteralPath ("Env:" + $environmentProbeNames[3]))) "Cleanup must tolerate an absent input already removed by the body."
+  Assert-Test ([Environment]::GetEnvironmentVariable($environmentProbeNames[4], "Process") -ceq "caller-unrelated-sentinel") "Cleanup must not purge unrelated caller Terraform variables."
+  Assert-Test ((Test-Path -LiteralPath "Env:TF_DATA_DIR") -eq $expectedDataPresent) "Cleanup must preserve original Terraform data-directory presence."
+  Assert-Test ([Environment]::GetEnvironmentVariable("TF_DATA_DIR", "Process") -ceq $expectedDataValue) "Cleanup must preserve the exact Terraform data-directory value."
+  Assert-Test ($bodyFailureObserved -eq $FailBody) "The body exception must propagate after cleanup."
+  return [pscustomobject]@{ Restored = $true; BodyFailureObserved = $bodyFailureObserved }
+}
+
+try {
+  foreach ($dataMode in @("absent", "empty", "value")) {
+    foreach ($bodyFails in @($false, $true)) {
+      foreach ($probeName in $environmentProbeNames) {
+        if (Test-Path -LiteralPath ("Env:" + $probeName)) { Remove-Item -LiteralPath ("Env:" + $probeName) }
+      }
+      [Environment]::SetEnvironmentVariable($environmentProbeNames[1], "", "Process")
+      [Environment]::SetEnvironmentVariable($environmentProbeNames[2], '{"synthetic":["exact"]}', "Process")
+      [Environment]::SetEnvironmentVariable($environmentProbeNames[4], "caller-unrelated-sentinel", "Process")
+      if ($PSVersionTable.PSVersion -ge [Version]"7.5") {
+        Assert-Test (Test-Path -LiteralPath ("Env:" + $environmentProbeNames[1])) "PowerShell 7.5 must exercise present-empty input restoration."
+      }
+      if ($dataMode -ceq "absent") {
+        if (Test-Path -LiteralPath "Env:TF_DATA_DIR") { Remove-Item -LiteralPath "Env:TF_DATA_DIR" }
+      } elseif ($dataMode -ceq "empty") { $env:TF_DATA_DIR = "" }
+      else { $env:TF_DATA_DIR = "synthetic-original-data" }
+      # Two sequential nested/pipelined cycles reproduce the Start versus Status boundary.
+      $null = Invoke-InspectorEnvironmentRegressionCycle $bodyFails | ConvertTo-Json -Compress
+      $null = Invoke-InspectorEnvironmentRegressionCycle $bodyFails | ConvertTo-Json -Compress
+    }
+  }
+} finally {
+  foreach ($probeName in $environmentProbeNames) {
+    if (Test-Path -LiteralPath ("Env:" + $probeName)) { Remove-Item -LiteralPath ("Env:" + $probeName) }
+  }
+  if ($originalDataPresent) {
+    [Environment]::SetEnvironmentVariable("TF_DATA_DIR", $originalDataValue, "Process")
+  } elseif (Test-Path -LiteralPath "Env:TF_DATA_DIR") { Remove-Item -LiteralPath "Env:TF_DATA_DIR" }
+}
+
 $wrapper = Get-Content -LiteralPath $DevelopmentInspectorPath -Raw
 $null = [Management.Automation.Language.Parser]::ParseInput($wrapper, [ref]$tokens, [ref]$errors)
 Assert-Test (@($errors).Count -eq 0) "The development wrapper must parse."
