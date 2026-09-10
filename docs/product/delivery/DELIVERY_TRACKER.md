@@ -336,15 +336,19 @@ This is the master record for the delivery phases defined in the [product and sy
   and retained-marker metadata checks pass. Maintained Cleanup drains and removes that exact
   executor before source edits. Closed-stage diagnostics pass 60 tests/typecheck/formatting;
   strict SDK-secret-envelope compatibility passes 115 tests and independent review, with nine
-  expected original-source failures. Full committed-source verification and private-cloud inspection
-  remain; SDK compatibility is not yet confirmed as the live cause. Reuse the same verified
+  expected original-source failures. Exact `37ea0ff` passes the full verifier, 697 workflow tests
+  (six explicit database opt-ins skipped) and all 20 builds (18 cached); both final standalone
+  builds match. New preparation fails before packet/executor creation, and the `21:29:40Z`
+  caller check confirms expired AWS SSO. D2-R15 is reopened; renew the same development profile
+  before private-cloud inspection. SDK compatibility is not yet confirmed as the live cause.
+  Reuse the same verified
   RDS copy, without repeating PITR or renewing an old packet. Temporary permissions remain enabled
   until final drill cleanup; no live
   database, cloud document or Auth0 mutation is permitted. Phase 2 remains In progress.
   [Website detail](phase-2-extension-and-community.md#d2-047--authenticated-website-job-details),
   [executor repair and recovery](phase-2-extension-and-community.md#d2-049--recovery-executor-metadata),
   [runtime diagnosis](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility)
-- Current recovery checkpoint (`2026-09-10`): D2-044 is Complete. Renewed exact-account SSO
+- Earlier recovery checkpoint (`2026-09-10`, superseded by D2-050 above): D2-044 is Complete. Renewed exact-account SSO
   passes at `13:23:50Z`. Core source `31051e1` is immutably published and released through
   pause/drain, exact state-only reconciliation and mapping-only Resume. Platform state `315`
   verifies starts unpaused, durable/activity/terminal `13` and zero changes. Ordinary activity
@@ -360,11 +364,11 @@ This is the master record for the delivery phases defined in the [product and sy
   The already authorized D2-038 drill remains pending, without another application release or
   repeated approval; core runtime `31051e1` and its version-13 pins are unchanged.
   D2-045 inspector implementation is Complete; actual authenticated workload acceptance remains.
-  [Current repair and remaining gates](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry)
-- Reviewer/recovery authority checkpoint (2026-09-10): the corrected existing Client Access grant
+  [Earlier repair evidence](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry)
+- Earlier reviewer/recovery authority checkpoint (2026-09-10): the corrected existing Client Access grant
   passes the exact three agent scopes. Three fresh evidence-bound initial decisions now read back
   accepted/version `2`, with no roles changed, new submissions or human appeal decisions. Earlier
-  authentication checks remain valid history; R16 and the renewed-session R15 are Closed.
+  authentication checks remain valid history; R16 is Closed and R15 was then Closed (now reopened).
   Recheck SSO at each actual cloud operation. R17 remains Closed: the isolated
   recovery drill is already approved, but its execution/cleanup is not yet claimed.
 - Toolchain correction completed (2026-09-09): D2-040/R18 are Closed. Verified portable Terraform
@@ -383,7 +387,7 @@ This is the master record for the delivery phases defined in the [product and sy
   native control/ingress readback and a fresh state-291 schema-7 zero-change capture pass. The
   historical-plan scanner correction preserves old evidence; full infrastructure validation now
   passes with the selected portable toolchain. No recovery role or restore has been applied.
-- Current engineering/review checkpoint (`2026-09-10T02:55Z`): exact source
+- Earlier engineering/review checkpoint (`2026-09-10T02:55Z`): exact source
   `e2e730a1416f4c0490edab0446bfc5e37373c685` passes the full maintained repository verifier.
   D2 scheduled/Trust workers `21`/`17` verify at state `297`, and the compatible Gateway release
   verifies at state `298`. The earlier single revision-51 migration/Resume remains the verified
@@ -1201,6 +1205,7 @@ Append only material cross-delivery events.
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
 | 2026-09-10 | D2 | Metadata repair `92c1fc2` passes the full verifier, 448/908 executor/role assertions and matching standalone builds; corrected private Create succeeds. Its first Inspect fails without a validated receipt and no Replay runs. Bounded service metadata places the refusal inside/after database opening, with offline request and bounded live marker-metadata checks passing. Maintained Cleanup fully drains and removes the exact executor before edits, preserving the same verified 44-migration/68-relation RDS copy and original artifact. D2-049 is Complete; D2-050's closed-stage diagnostics pass 60 tests/typecheck/formatting. Resolver compatibility, cloud replay and final permission/resource cleanup remain. | [Runtime repair and remaining recovery](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility) |
+| 2026-09-10 | D2 | Exact `37ea0ff` passes full maintained verification, 697 workflow tests/six explicit database opt-ins skipped and all 20 builds/18 cached, then is pushed to shared main. Both standalone builds match without changing 47 other Lambda artifacts or ten archived files. New preparation fails before creating a packet/executor, and independent STS confirms expired AWS SSO at `21:29:40Z`. Reopened D2-R15; the same verified private restore and temporary `320`/`20` permissions remain pending session renewal, corrected-source inspection and exact cleanup. No Replay, repeated PITR or healthy-application release occurs. | [Implementation evidence and credential blocker](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility) |
 
 ## Cross-delivery decisions and changes
 

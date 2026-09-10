@@ -59,13 +59,17 @@ Create succeeds. Its first Inspect then rejects at runtime under D2-050; no Repl
 Positive read-only service evidence places that refusal inside or after database setup, while
 offline request validation and retained-marker metadata checks pass. The exact executor is
 disabled, drained for the full 330 seconds and removed by maintained Cleanup before source edits.
-Its original packet/artifact and the same verified RDS copy are preserved. Add private closed-stage
-diagnostics and test SDK-serialized secret metadata compatibility before another separately
-reviewed corrected-source inspection. Do not repeat PITR or renew an old packet.
+Its original packet/artifact and the same verified RDS copy are preserved. Private closed-stage
+diagnostics and strict SDK-serialized secret metadata compatibility now pass full committed-source
+verification at `37ea0ff`: 697 workflow tests pass, six explicit database opt-ins remain skipped,
+and all 20 builds pass (18 unchanged cached tasks). The two final standalone builds match.
+At `21:28:46Z`, new preparation fails before creating an executor; the independent caller check
+confirms expired AWS SSO at `21:29:40Z`. D2-R15 is reopened. Renew the same development session,
+then separately prepare/review/inspect the corrected executor. Do not repeat PITR or renew an old packet.
 Core `31051e1`, Gateway/D2/dark-ingestion `e2e730a`, provider scope and reviewer roles are unchanged.
 Temporary drill permissions remain enabled until the final resource/permission cleanup.
 
-Current recovery/repair checkpoint (`2026-09-10`): D2-044 is Complete. Renewed exact-account
+Earlier recovery/repair checkpoint (`2026-09-10`, before D2-050): D2-044 is Complete. Renewed exact-account
 SSO passes at `13:23:50Z`; source `31051e1e9e2855cc390c40d172327bfbb6e1c67a` is immutably
 published and released through pause/drain, exact state-only reconciliation and mapping-only
 Resume. Platform state `315` has starts unpaused, durable/activity/terminal `13`, and zero
@@ -83,7 +87,7 @@ authentic native-plan replay and full repository verification/all 20 builds pass
 authorized D2-038 drill remains pending. Core runtime `31051e1` and its version-13 pins are unchanged.
 D2-045 is Complete for inspector implementation, not authenticated workload acceptance.
 
-Current engineering/review checkpoint (`2026-09-10T02:55Z`): exact source
+Earlier engineering/review checkpoint (`2026-09-10T02:55Z`): exact source
 `e2e730a1416f4c0490edab0446bfc5e37373c685` passes the full maintained repository verifier.
 Its D2 scheduled/Trust workers `21`/`17` verify at state `297`; the compatible Gateway release
 verifies at state `298`. The earlier successful, single revision-51 migration and maintained
@@ -237,7 +241,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-047 | Expose full descriptions and independently verified source links from authenticated website search. | Complete | Platform engineering; QA/automation | D2-019; D1 catalog search | Completed 2026-09-10: the on-demand panel and narrow BFF reuse `jobs:read`, canonical aliases and bounded no-store detail. Web 629 tests, final UI 38/38, eleven Chrome scenarios, public-page regression, production build, typecheck and independent review pass. Full committed-source verification passes at `c9351e2`; candidate-only source `7bf510e` is READY at the existing stable Vercel origin, with five credentialless HTTP checks passing. Separate authenticated owner/human acceptance remains under D2-019/D2-039. No anonymous publication, provider expansion, paid deployment-protection acceptance or new permission is implied. See [scope and verification](#d2-047--authenticated-website-job-details). |
 | D2-048 | Preserve absent process inputs between nested workload/recovery inspections. | Complete | Platform engineering | D2-038; D2-045 | Completed 2026-09-10 at `c9351e2` after Platform `319`/Bootstrap `19` cleanup. Original PowerShell 7.5 reproduces the absent-to-empty failure; integrated exact-cleanup-AST regressions pass independently with 266 assertions on 7.5 and 260 on Windows PowerShell 5.1, plus the full committed-source verifier/all 20 builds. Present-empty, composite, unrelated and `TF_DATA_DIR` inputs remain intact; no blanket purge or decoder relaxation. Actual recovery remains under D2-038. See [cause and repair](#d2-048--runtime-inspection-environment-restoration). |
 | D2-049 | Read actual function-level tags and optional concurrency metadata for the exact numeric recovery executor. | Complete | Platform engineering | D2-038; D2-048 | Completed 2026-09-10 at `92c1fc2`: actual 448 executor/908 role assertions, independent review and full committed-source verification pass. Both standalone builds match, and the corrected maintained Create produces its genuine numeric-version receipt. Subsequent maintained cleanup also succeeds without the earlier bridge. The independent runtime inspection failure is D2-050, not a metadata-check failure or successful replay. See [repair and recovery boundary](#d2-049--recovery-executor-metadata). |
-| D2-050 | Diagnose and repair the private restore executor's database-opening/runtime inspection rejection without exposing secrets. | In progress | Platform engineering | D2-038; D2-049 | Started 2026-09-10 after the first corrected-source Inspect refuses at runtime. No Replay is issued. Bounded live marker-metadata checks and offline request bindings pass; positive secret/decrypt calls narrow the failure to database opening or subsequent preflight. The executor is fully drained and removed before edits. Integrated closed-stage diagnostics pass 60 tests; strict SDK-serialized secret metadata compatibility passes 115 resolver tests and independent review, with nine expected failures against the original resolver. Full committed-source verification and exact private-cloud inspection remain; SDK compatibility is not yet confirmed as the live cause. See [runtime repair](#d2-050--private-restore-runtime-compatibility). |
+| D2-050 | Diagnose and repair the private restore executor's database-opening/runtime inspection rejection without exposing secrets. | In progress | Platform engineering | D2-038; D2-049 | Exact `37ea0ff` implements private closed-stage diagnostics and strict SDK-secret-envelope compatibility. All 198 focused tests, independent review, full maintained verification (697 workflow tests; six explicit DB opt-ins skipped) and 20 builds pass. Both final standalone builds match. New preparation stops before executor creation when AWS SSO expires; exact private-cloud Inspect/Replay and final cleanup remain under D2-R15/D2-038. SDK compatibility is not yet confirmed as the original live cause. See [runtime repair](#d2-050--private-restore-runtime-compatibility). |
 
 ### D2-050 — Private restore runtime compatibility
 
@@ -274,12 +278,24 @@ identity/current version, target-host substitution, size/deadline limits and unk
 are unchanged. The maintained resolver suite passes 115 tests; nine new cases fail against the old
 source (three isolated fields and six complete synthetic envelopes), while 106 still pass.
 Independent review and scoped formatting pass. This proves the compatibility gap, not that the
-failed live response had that shape. Full committed-source verification and a new private inspection
-remain before claiming the runtime refusal repaired.
+failed live response had that shape. Full committed-source verification now passes; a new private
+inspection remains before claiming the runtime refusal repaired.
 
 The integrated handler/resolver/store suite passes all 198 tests across three files; workflow
 no-emit typecheck, four-file Biome checks and whitespace validation pass. No database schema,
 shared API, live secret, credential, deployment layer or application permission changes.
+
+Exact `37ea0fff93cdf918a1023a7b62c841e06c090dc3` passes the full maintained verifier at
+`21:23:11Z`: 697 workflow tests pass, six explicit database opt-ins remain skipped, and all 20 build
+tasks pass (18 cached). Shared main is pushed. Two subsequent standalone builds match all five
+outputs: 441,096 ZIP bytes, 35 components, and unchanged 47 other Lambda artifacts/10 archived files.
+New preparation then fails on its initial AWS operation at `21:28:46Z`; a separate bounded caller
+check confirms SSO expiry at `21:29:40Z`. It creates no preparation packet or executor, and no
+Replay has run. The existing private verified RDS copy and temporary Platform `320`/Bootstrap `20`
+permissions remain until credentials permit continuation and exact cleanup. Preserve existing
+packets/artifacts; after documentation-only updates, build the standalone artifact from the actual
+clean merged HEAD rather than relabeling the verified `37ea0ff` bytes. No repeated PITR or healthy
+application release is needed.
 
 ### D2-049 — Recovery executor metadata
 
@@ -1628,6 +1644,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Date | Work completed | Tasks | Evidence |
 |---|---|---|---|
 | 2026-09-10 | Exact `92c1fc2` passes full committed-source verification, all 20 builds and the maintained 448/908 executor/role assertions. Two standalone builds match, and corrected Create returns a genuine receipt. The first Inspect then refuses at runtime; no Replay is issued. Positive exact-role decrypt/secret calls narrow the failure, while offline contracts and bounded retained-marker metadata checks pass. Maintained Cleanup drains and removes the exact executor before source edits; the same verified RDS copy and original artifacts remain. D2-049 is Complete; D2-050 adds private closed-stage diagnostics, with 60 tests/typecheck/formatting passing, and investigates SDK-envelope compatibility. | D2-049; D2-050; D2-038 | [Runtime failure and limits](#d2-050--private-restore-runtime-compatibility), [handler tests](../../../backend/workflows/src/candidate-deletion-restore-lambda.test.ts) |
+| 2026-09-10 | Exact `37ea0ff` passes the full maintained verifier, 697 workflow tests (six explicit database opt-ins skipped) and all 20 builds (18 cached), then is pushed to shared main. Both final standalone builds match; 47 unrelated Lambda artifacts and ten archived files remain unchanged. New preparation fails before packet/executor creation; an independent STS check confirms expired AWS SSO. No Replay runs. Preserve the same verified private restore and temporary permissions pending renewed session, corrected-source inspection and exact cleanup. Reopened D2-R15; only the existing two delivery documents change after verification. | D2-050; D2-038; D2-R15 | [Verified implementation and resume point](#d2-050--private-restore-runtime-compatibility) |
 
 ## Decisions and scope changes
 
@@ -1899,7 +1916,7 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R12 | Open; hosted reviewer and appeal-decision journey acceptance pending | The September 8 exact human identity/fresh-MFA/two-scope check, state-285 assignment and user-confirmed empty local appeal queue pass; the local-only window ended at `2026-09-08T13:38:16Z`. All three assignments remain unchanged through state `298`. D2-042's three initial decisions are delegated-agent acceptance, not a human appeal or hosted-console journey. | Product owner; platform engineering | Complete hosted reviewer and separate human appeal acceptance under scoped testing. Do not manufacture a case or submit a decision merely to test access; preserve exact reviewer authentication and roles. |
 | D2-R13 | Closed | The expired mobile-only exception blocked initial publication attempts. The exact user-approved parser patch passes 136 focused tests, independent review, frozen installation, the full repository verifier, and the dependency audit without exceptions. Two matching no-cache migration-image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings now pass; that image was published and used successfully. | Platform engineering | Maintain the exact local patch until a compatible upstream fix is verified. No mobile/public-launch acceptance is implied. |
 | D2-R14 | Closed | The user confirmed reuse of the existing encrypted agent-reviewer credential on 2026-09-08 for the remaining Phase 2 development initial/takedown work. Private current-user access, unchanged encrypted bytes, and the live exact assignment pass. The historical collection window remains unchanged; the subsequent Auth0 refusal is separately tracked as R16. | Product owner; platform engineering | Preserve the existing roles and separate human appeal reviewer. No recurring contribution-policy approval or new secret is required for this unchanged assignment; do not borrow another identity, expand roles, or submit unsupported decisions. |
-| D2-R15 | Closed | Renewed exact development STS passes at `2026-09-10T13:23:50Z`; the corrective release and unused-role permission cleanup are now verified. The earlier expiry remains historical. | Product owner; platform engineering | Continue checking the session and exact account/region at each actual cloud operation; no renewed input is currently needed. Preserve Greenhouse-only activation and reviewer separation. |
+| D2-R15 | Blocked | Reopened 2026-09-10: actual STS still passed at `21:18Z`, but new executor preparation fails at `21:28:46Z` and the independent caller check confirms SSO expiry at `21:29:40Z`. No new packet or executor is created. Earlier corrective release, exact executor cleanup and current-schema structural restore remain valid history. | Product owner; platform engineering | Run `aws sso login --profile ai-job-apply-development-admin`, then resume the same verified private restore. Keep temporary Platform `320`/Bootstrap `20` permissions only until the already-authorized drill and exact cleanup can finish. No renewed recovery approval, provider expansion or reviewer change is required. |
 | D2-R16 | Closed | The corrected existing Client Access grant passes exact three-scope authentication. The September 9 read-only access check and September 10 fresh-evidence/three accepted initial-decision readbacks pass without grant, role, credential or human-session changes. | Product owner; platform engineering | Keep the unchanged least-privilege assignment and evidence/version binding. Hosted/human appeal and exact owner-publication acceptance remain open; no further screenshot or new secret is needed for this resolved grant. |
 | D2-R17 | Closed; isolated drill authorized | The user approved the development-only recovery role, one isolated restore/replay drill and exact cleanup on 2026-09-09. The September 10 current-schema cloud restore passes 44 migrations/68 relations. D2-049's corrected Create now passes; D2-050 tracks the separate first-Inspect runtime refusal before any Replay. Its exact executor is drained and removed. Remaining replay/final cleanup stays under D2-038. | Product owner; platform engineering | Reuse the same verified private copy with a reviewed corrected-source executor. Preserve the primary database, cloud document objects, completion tags, retention and Auth0. Remove exact temporary resources and drill-only permissions afterward. Do not request the same approval again or expand its scope. |
 | D2-R18 | Closed | Verified portable 1.16.2, historical read-only decoding, effective encrypted S3 locking, 441 two-host toolchain assertions and full infrastructure/repository checks pass. Exact sensitivity-only reconciliation advances state to 291 without resource-value changes; fresh locked planning exits 0. | Platform engineering | Use fresh source-bound handoffs for D2-039/D2-038. Preserve historical plans, provider locks and excluded Actions; no further toolchain approval is needed. |
@@ -1909,27 +1926,36 @@ These are local checks; deployed migration, human review, and publication eviden
 
 - Completion date: Not completed
 - Exit review: Not performed
-- Current release/evidence summary (`2026-09-10T04:55:39Z`): exact `e2e730a` passes the full verifier,
+- Current recovery summary (`2026-09-10T21:29:40Z`): implementation `37ea0ff` is verified and merged;
+  697 workflow tests pass with six explicit database opt-ins skipped, all 20 builds pass, and both
+  standalone artifact builds match. One private cloud restore verifies 44 migrations/68 relations;
+  its temporary permissions remain enabled at Platform `320`/Bootstrap `20`. The last executor is
+  fully drained and removed. No Replay has run; new preparation creates no packet/executor when
+  SSO expires. R15 is Blocked pending renewed login; R17's existing recovery authority is unchanged.
+  Reuse the same verified copy, finish corrected-source Inspect/Replay, and remove temporary
+  resources/permissions. The earlier checkpoints below are history, not current cleanup status.
+- Earlier application-release summary (`2026-09-10T04:55:39Z`): exact `e2e730a` passes the full verifier,
   D2 workers `21`/`17` at state `297` and Gateway release at state `298`. The earlier single
   migration/Resume verifies 44 migrations/68 relations. D2-042 is Complete: three supported initial
   decisions read back accepted/version `2`, with fresh evidence and no role changes/new submissions.
   Subsequent processing/Trust health aggregates pass their bounded checks but do not identify exact
   owner/catalog publication. Greenhouse-only/production-store-dark scope is unchanged; hosted
-  reviewer and human appeal acceptance remain separate. No current-schema cloud restore is claimed.
-- Repository/follow-up checkpoint: full verification, real database regressions and local
+  reviewer and human appeal acceptance remain separate. Cloud recovery had not run at that checkpoint.
+- Earlier repository/follow-up history: full verification, real database regressions and local
   44-migration recovery pass. D2-033/D2-034/D2-036/D2-037/D2-040/D2-041/D2-042/D2-043 are Complete for their
   recorded task boundaries, not the phase. The separate rights release/Resume verifies at state
   `305` with exact pins, starts unpaused and a genuine zero-change baseline. Fresh user export/deletion
   acceptance remains open. Dark ingestion and final canonical capture verify at state `308` without
   activation or further changes. D2-043 full verification passes at `6604aff`. Historical AWS
-  PITR covers 39 migrations, not the now-deployed 44. Gateway/D2 artifacts alone do not deploy the
+  PITR covered 39 migrations before the later verified 44-migration restore above. Gateway/D2 artifacts alone do not deploy the
   separately bundled export validator.
   D2-044 is now Complete: corrective core source `31051e1` verifies at state `315`, unpaused,
   durable/activity/terminal `13`, zero changes, positive `4/0/0` activity health and 57 OK alarms.
-  Renewed SSO closes R15 and the deployed repair closes R19. D2-045 is Complete for inspector
+  Renewed SSO initially closed R15 (now reopened); the deployed repair closes R19. D2-045 is Complete for inspector
   tooling, not authenticated workload acceptance. D2-046 addresses the native prefix metadata
   refusal; the unused bootstrap allowance was removed and verified at state `15`. No Platform
-  recovery role, executor, PITR copy or replay was created. The authorized drill remains pending.
+  recovery role, executor, PITR copy or replay existed at that earlier checkpoint; today's partial
+  drill and credential blocker are recorded above.
 - Remaining acceptance: installed job addition is not provider/Trust approval or website publication.
   Hosted reviewer/appeal decisions, browser lifecycle, authenticated workload, accessibility,
   alarm delivery receipt, other provider/store and accountable acceptance remain open. Engineering
