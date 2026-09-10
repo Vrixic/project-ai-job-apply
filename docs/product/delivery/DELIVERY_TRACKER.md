@@ -321,7 +321,19 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Latest implementation checkpoint (`2026-09-10`): D2-047 is Complete for bounded website delivery.
+- Latest recovery checkpoint (`2026-09-10T23:13:34Z`): exact `9b608ac` matching artifacts,
+  preparation and temporary Create pass. Its single Inspect reports the private store's
+  `CompletionCollision` after connection and four initial SQL reads, with no validated receipt
+  or Replay. The exact conflicting predicate, incorrect value and relation to either retry bug
+  remain unknown. Maintained Cleanup `88848` removes the exact executor after its full 330-second
+  drain; immutable artifact and local byte-identical archive are preserved. The same verified
+  44-migration/68-relation private RDS copy and Platform `320`/Bootstrap `20` permissions remain.
+  D2-052/D2-R20 now require a separate conditional historical completion-tag correction decision;
+  existing drill authority is not expanded. No database, tag, marker-body, document, retention,
+  Auth0 or ordinary application-release change occurs. D2-051's tested future-writer fixes still
+  need Gateway/core releases. Phase 2 remains In progress.
+  [Historical completion blocker](phase-2-extension-and-community.md#d2-052--historical-completion-consistency)
+- Earlier implementation checkpoint (`2026-09-10`, before the specific completion diagnosis): D2-047 is Complete for bounded website delivery.
   Candidate-only source `7bf510e` is READY at the existing stable Vercel origin; all five
   credentialless HTTP checks and expected security/crawler headers pass. The verified `c9351e2`
   code passes the full repository verifier, web 629 tests, focused UI 38/38, both browser suites
@@ -1217,6 +1229,7 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | Exact `37ea0ff` passes full maintained verification, 697 workflow tests/six explicit database opt-ins skipped and all 20 builds/18 cached, then is pushed to shared main. Both standalone builds match without changing 47 other Lambda artifacts or ten archived files. New preparation fails before creating a packet/executor, and independent STS confirms expired AWS SSO at `21:29:40Z`. Reopened D2-R15; the same verified private restore and temporary `320`/`20` permissions remain pending session renewal, corrected-source inspection and exact cleanup. No Replay, repeated PITR or healthy-application release occurs. | [Implementation evidence and credential blocker](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility) |
 | 2026-09-10 | D2 | User renewal closes R15. Actual `01732ad` Create passes; Inspect refuses at `store_preflight` without Replay. Maintained Cleanup `57506` removes the exact executor after full drain. Integrated D2-050's branded fixed diagnostics and D2-051's confirmation/completion retry repairs: 95 and 30 focused tests pass, with 13 original-source failures. Actual isolated PostgreSQL passes 5/5 restore/export/rollback tests; same cloud copy and `320`/`20` temporary permissions remain. Full committed-source verification, corrected cloud inspection and final cleanup are next. No historical live marker repair or ordinary application deployment occurred. | [Diagnosis](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility), [retry fixes](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps) |
 | 2026-09-10 | D2 | Exact `fa01d53` passes full maintained verification, 721 workflow tests/seven explicit DB opt-ins skipped and all 20 builds/17 cached. Separate fresh PostgreSQL acceptance passes 5/5. Generated tmpfs cleanup leaves no test container or persistent volume; Docker/WSL are stopped. Only the existing two delivery documents change afterward. D2-050/051 cloud continuation, corrective Gateway/core releases and final cleanup remain; neither historical marker repair nor Phase 2 completion is claimed. | [Verified retry repair](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps) |
+| 2026-09-10 | D2 | Exact `9b608ac` matching artifacts, reviewed preparation and Create pass. Its single Inspect reports fixed `store_preflight` / `CompletionCollision` after initial SQL reads; precise predicate/incorrect value and retry-bug causality remain unknown. No validated inspection, Replay or historical mutation runs. Maintained Cleanup `88848` removes the exact executor after full drain, preserving immutable/local artifacts and the same verified private RDS copy with `320`/`20` permissions. D2-052/R20 track conditional exact-version historical correction authority; future-writer Gateway/core releases and final recovery/cleanup remain. Phase 2 is not complete. | [Historical completion blocker](phase-2-extension-and-community.md#d2-052--historical-completion-consistency) |
 
 ## Cross-delivery decisions and changes
 
