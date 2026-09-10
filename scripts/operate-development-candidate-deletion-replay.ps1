@@ -169,16 +169,42 @@ function Assert-ReplayCurrentBoundary([object]$Preparation, [switch]$Cleanup) {
 }
 
 function Assert-ReplayNoEntrypoints([string]$Name, [string]$Version) {
-  if (@((Invoke-ReplayAws @('lambda','list-aliases','--function-name',$Name)).Aliases).Count -ne 0 -or @((Invoke-ReplayAws @('lambda','list-event-source-mappings','--function-name',$Name)).EventSourceMappings).Count -ne 0 -or $null -ne (Invoke-ReplayAws @('lambda','get-function-url-config','--function-name',$Name) -AllowNotFound) -or $null -ne (Invoke-ReplayAws @('lambda','get-policy','--function-name',$Name) -AllowNotFound) -or $null -ne (Invoke-ReplayAws @('lambda','get-policy','--function-name',$Name,'--qualifier',$Version) -AllowNotFound)) { throw 'DeletionReplayUnexpectedEntrypoint' }
+  if (@((Invoke-ReplayAws @('lambda','list-aliases','--function-name',$Name)).Aliases).Count -ne 0 -or @((Invoke-ReplayAws @('lambda','list-event-source-mappings','--function-name',$Name)).EventSourceMappings).Count -ne 0 -or @((Invoke-ReplayAws @('lambda','list-event-source-mappings','--function-name',"${Name}:$Version")).EventSourceMappings).Count -ne 0 -or $null -ne (Invoke-ReplayAws @('lambda','get-function-url-config','--function-name',$Name) -AllowNotFound) -or $null -ne (Invoke-ReplayAws @('lambda','get-policy','--function-name',$Name) -AllowNotFound) -or $null -ne (Invoke-ReplayAws @('lambda','get-policy','--function-name',$Name,'--qualifier',$Version) -AllowNotFound)) { throw 'DeletionReplayUnexpectedEntrypoint' }
   $versions = @((Invoke-ReplayAws @('lambda','list-versions-by-function','--function-name',$Name)).Versions.Version)
   if (($versions | Sort-Object) -join ',' -cne ((@('$LATEST',$Version) | Sort-Object) -join ',')) { throw 'DeletionReplayUnexpectedFunctionVersions' }
 }
 
 function Get-ReplayFunction([object]$Preparation, [string]$Version, [switch]$Cleanup) {
   $name = $Preparation.createRequest.FunctionName
+  if ($Preparation.accountId -isnot [string] -or $Preparation.accountId -cnotmatch '^[0-9]{12}$' -or $name -isnot [string] -or $name -cnotmatch '^ai-job-apply-development-replay-[a-f0-9]{32}$' -or $Version -cnotmatch '^[1-9][0-9]{0,9}$') { throw 'DeletionReplayFunctionIdentityChanged' }
   $function = Invoke-ReplayAws @('lambda','get-function','--function-name',$name,'--qualifier',$Version)
+  $functionArn = "arn:aws:lambda:us-east-2:$($Preparation.accountId):function:$name"
+  $identity = $function.Configuration
+  if ($identity -isnot [pscustomobject] -or $identity.FunctionName -isnot [string] -or $identity.FunctionName -cne $name -or $identity.FunctionArn -isnot [string] -or $identity.FunctionArn -cne "$functionArn`:$Version" -or $identity.Version -isnot [string] -or $identity.Version -cne $Version) { throw 'DeletionReplayFunctionIdentityChanged' }
+  # Qualified GetFunction can omit function-level tags. Read the bound unqualified resource;
+  # an optional embedded map must agree with the independent readback, never stand in for it.
+  $tagResponse = Invoke-ReplayAws @('lambda','list-tags','--resource',$functionArn)
+  if ($tagResponse -isnot [pscustomobject]) { throw 'DeletionReplayFunctionTagsInvalid' }
+  Assert-D1RestoreExactObjectKeys $tagResponse @('Tags') 'DeletionReplayFunctionTagReadback'
+  if ($tagResponse.Tags -isnot [pscustomobject]) { throw 'DeletionReplayFunctionTagsInvalid' }
+  foreach ($tag in $tagResponse.Tags.PSObject.Properties) {
+    if ($tag.Value -isnot [string]) { throw 'DeletionReplayFunctionTagsInvalid' }
+  }
+  $embeddedTags = $function.PSObject.Properties['Tags']
+  if ($null -ne $embeddedTags -and (ConvertTo-DeletionReplayCanonicalJson $embeddedTags.Value) -cne (ConvertTo-DeletionReplayCanonicalJson $tagResponse.Tags)) { throw 'DeletionReplayFunctionTagsConflict' }
+  $function = ConvertFrom-D1RestoreJson (ConvertTo-Json -InputObject $function -Depth 80 -Compress)
+  $function | Add-Member -NotePropertyName Tags -NotePropertyValue $tagResponse.Tags -Force
   $concurrency = Invoke-ReplayAws @('lambda','get-function-concurrency','--function-name',$name)
-  $reserved = if ($concurrency.PSObject.Properties.Name -contains 'ReservedConcurrentExecutions') { [int]$concurrency.ReservedConcurrentExecutions } else { -1 }
+  if ($concurrency -isnot [pscustomobject]) { throw 'DeletionReplayConcurrencyChanged' }
+  $reservedProperty = $concurrency.PSObject.Properties['ReservedConcurrentExecutions']
+  if ($null -eq $reservedProperty) {
+    if (@($concurrency.PSObject.Properties).Count -ne 0) { throw 'DeletionReplayConcurrencyChanged' }
+    $reserved = -1
+  } else {
+    Assert-D1RestoreExactObjectKeys $concurrency @('ReservedConcurrentExecutions') 'DeletionReplayFunctionConcurrency'
+    if (-not (Test-D1RestoreBoundedInteger $reservedProperty.Value)) { throw 'DeletionReplayConcurrencyChanged' }
+    $reserved = [int]$reservedProperty.Value
+  }
   if (-not $Cleanup -and $reserved -ne 1) { throw 'DeletionReplayConcurrencyChanged' }
   Assert-DeletionReplayFunction $function $Preparation $Version $reserved -AllowUnready:$Cleanup
   Assert-ReplayNoEntrypoints $name $Version

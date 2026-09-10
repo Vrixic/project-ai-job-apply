@@ -376,4 +376,202 @@ Assert ($inspector -match '"candidate_deletion_restore_role_enabled"') 'current 
     Assert ($failure -cmatch '^DeletionReplay(RoleIdentityChanged|RolePoliciesUnexpected|RolePolicyChanged|BoundaryCapabilityMissing|EndpointCapabilityChanged)$') "real operator rejects $case through its strict boundary"
   }
 }
+# Exercise the actual qualified function reader and entrypoint checks, not a copied adapter.
+# AWS JSON responses are the only stubs; no cloud command or operator top-level action runs.
+& {
+  $functionAst = [Management.Automation.Language.Parser]::ParseFile($operatorPath,[ref]$tokens,[ref]$errors)
+  foreach ($name in @('Get-ReplayFunction','Assert-ReplayNoEntrypoints')) {
+    $definitions = @($functionAst.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
+    Assert ($definitions.Count -eq 1) "real operator $name found exactly once"
+    . ([scriptblock]::Create($definitions[0].Extent.Text))
+  }
+  $functionName = $create.FunctionName
+  $functionVersion = $fixture.inspect.functionVersion
+  $unqualifiedArn = "arn:aws:lambda:us-east-2:$($preparation.accountId):function:$functionName"
+  $baseFunction = Clone $function
+  $baseFunction.PSObject.Properties.Remove('Tags')
+  $baseCloud = Clone @{
+    function=$baseFunction;tags=@{Tags=$create.Tags};concurrency=@{ReservedConcurrentExecutions=1}
+    aliases=@{Aliases=@()};mappings=@{EventSourceMappings=@()};qualifiedMappings=@{EventSourceMappings=@()};url=$null;policy=$null;qualifiedPolicy=$null
+    versions=@{Versions=@(@{Version='$LATEST'},@{Version=$functionVersion})}
+  }
+  $calls = [Collections.Generic.List[string]]::new()
+  $tagReadFails = $false
+  function Invoke-ReplayAws([string[]]$Arguments,[switch]$AllowNotFound) {
+    $request = $Arguments -join ' '
+    $calls.Add($request)
+    switch -CaseSensitive ($request) {
+      "lambda get-function --function-name $functionName --qualifier $functionVersion" { return $cloud.function }
+      "lambda list-tags --resource $unqualifiedArn" {
+        if ($tagReadFails) { throw 'SyntheticTagReadFailed' }
+        return $cloud.tags
+      }
+      "lambda get-function-concurrency --function-name $functionName" { return ,$cloud.concurrency }
+      "lambda list-aliases --function-name $functionName" { return $cloud.aliases }
+      "lambda list-event-source-mappings --function-name $functionName" { return $cloud.mappings }
+      "lambda list-event-source-mappings --function-name ${functionName}:$functionVersion" { return $cloud.qualifiedMappings }
+      "lambda get-function-url-config --function-name $functionName" { return $cloud.url }
+      "lambda get-policy --function-name $functionName" { return $cloud.policy }
+      "lambda get-policy --function-name $functionName --qualifier $functionVersion" { return $cloud.qualifiedPolicy }
+      "lambda list-versions-by-function --function-name $functionName" { return $cloud.versions }
+      default { throw 'UnexpectedSyntheticFunctionReadbackRequest' }
+    }
+  }
+
+  $cloud = Clone $baseCloud
+  $result = Get-ReplayFunction $preparation $functionVersion
+  Assert ((ConvertTo-DeletionReplayCanonicalJson $result.Tags) -ceq (ConvertTo-DeletionReplayCanonicalJson $create.Tags)) 'qualified readback with omitted Tags uses actual function-level tags'
+  Assert ($null -eq $cloud.function.PSObject.Properties['Tags']) 'raw qualified readback is not rewritten by tag projection'
+  Assert ($calls.Count -eq 10 -and $calls[0] -ceq "lambda get-function --function-name $functionName --qualifier $functionVersion" -and $calls[1] -ceq "lambda list-tags --resource $unqualifiedArn") 'numeric identity is read before one fixed unqualified tag query'
+  Assert ($calls[9] -ceq "lambda list-versions-by-function --function-name $functionName") 'real no-entrypoint checks still complete before returning'
+  Assert ($calls[4] -ceq "lambda list-event-source-mappings --function-name $functionName" -and $calls[5] -ceq "lambda list-event-source-mappings --function-name ${functionName}:$functionVersion") 'mapping checks cover both exact bare name and numeric-qualified target'
+
+  $cloud = Clone $baseCloud
+  $calls.Clear()
+  $orderedTags = [ordered]@{}
+  foreach ($key in @($create.Tags.PSObject.Properties.Name | Sort-Object -Descending)) { $orderedTags[$key]=$create.Tags.$key }
+  $cloud.function | Add-Member -NotePropertyName Tags -NotePropertyValue ([pscustomobject]$orderedTags)
+  $orderedEnvironment = [ordered]@{}
+  foreach ($key in @($create.Environment.Variables.PSObject.Properties.Name | Sort-Object -Descending)) { $orderedEnvironment[$key]=$create.Environment.Variables.$key }
+  $cloud.function.Configuration.Environment.Variables=[pscustomobject]$orderedEnvironment
+  $null = Get-ReplayFunction $preparation $functionVersion
+  Assert ($calls.Count -eq 10) 'equal embedded tags and environment accept JSON property reordering'
+  Assert (@($calls | Where-Object { $_ -ceq "lambda list-tags --resource $unqualifiedArn" }).Count -eq 1) 'embedded tags never bypass independent list-tags'
+
+  foreach ($case in @('null-response','scalar-response','missing-map','extra-response-key','null-map','array-map','scalar-map','empty-map','missing-required-tag','wrong-required-tag','numeric-tag','array-tag','null-tag','tag-read-failure')) {
+    $cloud = Clone $baseCloud
+    $calls.Clear()
+    $tagReadFails = $false
+    switch ($case) {
+      'null-response' { $cloud.tags=$null }
+      'scalar-response' { $cloud.tags='invalid' }
+      'missing-map' { $cloud.tags=[pscustomobject]@{} }
+      'extra-response-key' { $cloud.tags | Add-Member -NotePropertyName Unexpected -NotePropertyValue $true }
+      'null-map' { $cloud.tags.Tags=$null }
+      'array-map' { $cloud.tags.Tags=@($cloud.tags.Tags) }
+      'scalar-map' { $cloud.tags.Tags='invalid' }
+      'empty-map' { $cloud.tags.Tags=[pscustomobject]@{} }
+      'missing-required-tag' { $cloud.tags.Tags.PSObject.Properties.Remove('RunId') }
+      'wrong-required-tag' { $cloud.tags.Tags.Purpose='other' }
+      'numeric-tag' { $cloud.tags.Tags.RunId=1 }
+      'array-tag' { $cloud.tags.Tags.RunId=@($create.Tags.RunId) }
+      'null-tag' { $cloud.tags.Tags.RunId=$null }
+      'tag-read-failure' { $tagReadFails=$true }
+    }
+    Reject { Get-ReplayFunction $preparation $functionVersion } "real function reader rejects $case"
+    Assert (@($calls | Where-Object { $_ -like 'lambda list-aliases *' }).Count -eq 0) "$case never reaches successful entrypoint validation"
+  }
+  $tagReadFails = $false
+
+  foreach ($case in @('conflicting-value','null-embedded-map','array-embedded-map','scalar-embedded-map','missing-embedded-tag','extra-embedded-tag')) {
+    $cloud = Clone $baseCloud
+    $calls.Clear()
+    $embedded = Clone $create.Tags
+    switch ($case) {
+      'conflicting-value' { $embedded.RunId='other' }
+      'null-embedded-map' { $embedded=$null }
+      'array-embedded-map' { $embedded=@($embedded) }
+      'scalar-embedded-map' { $embedded='invalid' }
+      'missing-embedded-tag' { $embedded.PSObject.Properties.Remove('RunId') }
+      'extra-embedded-tag' { $embedded | Add-Member -NotePropertyName Unexpected -NotePropertyValue 'extra' }
+    }
+    $cloud.function | Add-Member -NotePropertyName Tags -NotePropertyValue $embedded
+    $failure=''
+    try { $null = Get-ReplayFunction $preparation $functionVersion } catch { $failure=$_.Exception.Message }
+    Assert ($failure -ceq 'DeletionReplayFunctionTagsConflict') "real function reader rejects $case without replacing conflicting evidence"
+    Assert (@($calls | Where-Object { $_ -like 'lambda get-function-concurrency *' }).Count -eq 0) "$case fails before other readbacks"
+  }
+
+  foreach ($case in @('wrong-function-name','wrong-function-account','unqualified-arn','wrong-numeric-version','array-function-name','array-function-arn','numeric-version','missing-identity')) {
+    $cloud = Clone $baseCloud
+    $calls.Clear()
+    switch ($case) {
+      'wrong-function-name' { $cloud.function.Configuration.FunctionName='other' }
+      'wrong-function-account' { $cloud.function.Configuration.FunctionArn=$fixture.invokedFunctionArn.Replace($preparation.accountId,'999900001111') }
+      'unqualified-arn' { $cloud.function.Configuration.FunctionArn=$unqualifiedArn }
+      'wrong-numeric-version' { $cloud.function.Configuration.Version='2' }
+      'array-function-name' { $cloud.function.Configuration.FunctionName=@($functionName) }
+      'array-function-arn' { $cloud.function.Configuration.FunctionArn=@($fixture.invokedFunctionArn) }
+      'numeric-version' { $cloud.function.Configuration.Version=1 }
+      'missing-identity' { $cloud.function.PSObject.Properties.Remove('Configuration') }
+    }
+    Reject { Get-ReplayFunction $preparation $functionVersion } "real function reader rejects $case"
+    Assert ($calls.Count -eq 1) "$case cannot direct a function-level tag query"
+  }
+  foreach ($badVersion in @('$LATEST','0','alias','1:other')) {
+    $cloud = Clone $baseCloud
+    $calls.Clear()
+    Reject { Get-ReplayFunction $preparation $badVersion } 'invalid requested qualifier rejected before readback'
+    Assert ($calls.Count -eq 0) 'invalid requested qualifier makes no AWS boundary call'
+  }
+
+  foreach ($case in @('code','role','environment','layers','network','logging','concurrency')) {
+    $cloud = Clone $baseCloud
+    $calls.Clear()
+    switch ($case) {
+      'code' { $cloud.function.Configuration.CodeSha256='wrong' }
+      'role' { $cloud.function.Configuration.Role=$create.Role + '-other' }
+      'environment' { $cloud.function.Configuration.Environment.Variables.NODE_ENV='development' }
+      'layers' { $cloud.function.Configuration.Layers=@() }
+      'network' { $cloud.function.Configuration.VpcConfig.SecurityGroupIds=@('sg-other') }
+      'logging' { $cloud.function.Configuration.LoggingConfig.LogGroup='/other' }
+      'concurrency' { $cloud.concurrency.ReservedConcurrentExecutions=2 }
+    }
+    Reject { Get-ReplayFunction $preparation $functionVersion } "tag readback retains exact $case guard"
+  }
+  foreach ($case in @('aliases','mappings','qualifiedMappings','url','policy','qualifiedPolicy','versions')) {
+    $cloud = Clone $baseCloud
+    $calls.Clear()
+    switch ($case) {
+      'aliases' { $cloud.aliases.Aliases=@(@{Name='unexpected'}) }
+      'mappings' { $cloud.mappings.EventSourceMappings=@(@{UUID='unexpected'}) }
+      'qualifiedMappings' { $cloud.qualifiedMappings.EventSourceMappings=@(@{UUID='unexpected'}) }
+      'url' { $cloud.url=[pscustomobject]@{FunctionUrl='https://synthetic.invalid'} }
+      'policy' { $cloud.policy=[pscustomobject]@{Policy='unexpected'} }
+      'qualifiedPolicy' { $cloud.qualifiedPolicy=[pscustomobject]@{Policy='unexpected'} }
+      'versions' { $cloud.versions.Versions+=@(@{Version='2'}) }
+    }
+    Reject { Get-ReplayFunction $preparation $functionVersion } "real function reader still refuses $case"
+  }
+  foreach ($reserved in @(-1,0,1)) {
+    $cloud = Clone $baseCloud
+    $calls.Clear()
+    $cloud.function.Configuration.State='Failed'
+    $cloud.function.Configuration.LastUpdateStatus='Failed'
+    $cloud.concurrency=if($reserved -eq -1){[pscustomobject]@{}}else{[pscustomobject]@{ReservedConcurrentExecutions=$reserved}}
+    $null = Get-ReplayFunction $preparation $functionVersion -Cleanup
+    Assert ($calls.Count -eq 10) "cleanup retains exact failed numeric version and $reserved concurrency handling with omitted Tags"
+    $cloud.tags.Tags.RunId='other'
+    Reject { Get-ReplayFunction $preparation $functionVersion -Cleanup } 'cleanup never bypasses required real tags'
+  }
+  $cloud = Clone $baseCloud
+  $cloud.concurrency=[pscustomobject]@{}
+  Reject { Get-ReplayFunction $preparation $functionVersion } 'normal operation rejects genuinely unset concurrency'
+  foreach ($case in @('null-response','number-response','string-response','bool-response','array-response','unknown-field','extra-field','null-value','string-value','bool-value','array-value','object-value','fractional-value','negative-value','overflow-value')) {
+    $cloud = Clone $baseCloud
+    $calls.Clear()
+    switch ($case) {
+      'null-response' { $cloud.concurrency=$null }
+      'number-response' { $cloud.concurrency=1 }
+      'string-response' { $cloud.concurrency='1' }
+      'bool-response' { $cloud.concurrency=$true }
+      'array-response' { $cloud.concurrency=@($cloud.concurrency) }
+      'unknown-field' { $cloud.concurrency=[pscustomobject]@{Unexpected=1} }
+      'extra-field' { $cloud.concurrency | Add-Member -NotePropertyName Unexpected -NotePropertyValue 1 }
+      'null-value' { $cloud.concurrency.ReservedConcurrentExecutions=$null }
+      'string-value' { $cloud.concurrency.ReservedConcurrentExecutions='1' }
+      'bool-value' { $cloud.concurrency.ReservedConcurrentExecutions=$true }
+      'array-value' { $cloud.concurrency.ReservedConcurrentExecutions=@(1) }
+      'object-value' { $cloud.concurrency.ReservedConcurrentExecutions=[pscustomobject]@{} }
+      'fractional-value' { $cloud.concurrency.ReservedConcurrentExecutions=1.5 }
+      'negative-value' { $cloud.concurrency.ReservedConcurrentExecutions=-1 }
+      'overflow-value' { $cloud.concurrency.ReservedConcurrentExecutions=[long]2147483648 }
+    }
+    foreach ($cleanup in @($false,$true)) {
+      Reject { Get-ReplayFunction $preparation $functionVersion -Cleanup:$cleanup } "malformed concurrency $case refused for cleanup=$cleanup"
+    }
+    Assert (@($calls | Where-Object { $_ -like 'lambda list-aliases *' }).Count -eq 0) "$case never reaches successful entrypoint validation"
+  }
+}
+
 [pscustomobject]@{suite='candidate-deletion-replay-generated-boundaries';checksPassed=$script:checks;cloudCalls=0;candidateDataRetained=$false} | ConvertTo-Json -Compress

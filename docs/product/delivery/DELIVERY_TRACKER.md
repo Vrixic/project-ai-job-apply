@@ -321,19 +321,23 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Latest implementation checkpoint (`2026-09-10`): actual D2-046 native Enable verification passes
-  at Platform `318`. The next recovery preflight exposes a reproduced PowerShell absent-to-empty
-  input cleanup defect before any restore/executor exists. All unused permissions are now removed
-  and verified at Platform `319`/Bootstrap `19`, both zero drift. D2-048 starts the narrow two-host
-  regression-backed repair; D2-047 adds the missing authenticated description/source view over the
-  existing Jobs API. Both are integrated on shared main: web 629 tests, final UI 38/38, eleven
-  Chrome scenarios, public-page regression, production build/typecheck and 266/260 two-host
-  inspector assertions pass. Full committed-source verification passes at `c9351e2` with all 20
-  build tasks (19 cached), completing D2-048 tooling. Candidate-only deployment and authorized
-  recovery remain. Only these two delivery documents change after verification. Core/AWS releases, provider scope and reviewer roles
-  stay unchanged. Current-schema recovery and the recorded owner/human gates remain open.
+- Latest implementation checkpoint (`2026-09-10`): D2-047 is Complete for bounded website delivery.
+  Candidate-only source `7bf510e` is READY at the existing stable Vercel origin; all five
+  credentialless HTTP checks and expected security/crawler headers pass. The verified `c9351e2`
+  code passes the full repository verifier, web 629 tests, focused UI 38/38, both browser suites
+  and 266/260 inspector assertions. Authenticated owner publication and human acceptance remain
+  separate. Core/AWS releases, provider scope and reviewer roles stay unchanged.
+  D2-038's approved permissions now verify at Platform `320`/Bootstrap `20`, and one private
+  current-schema AWS PITR passes all 44 migrations/68 relations, six contributors and the exact
+  aggregate digest. D2-049 repairs an actual qualified-Lambda metadata omission that stops Create
+  after the function exists but before inspection/replay. The original unused executor is now
+  disabled, drained for 330 seconds and deleted, with original evidence/artifact retained.
+  The repair passes 448 assertions independently; committed-source verification and corrected
+  executor execution remain. Reuse the same verified RDS copy, without repeating PITR or renewing
+  the old packet. Temporary permissions remain enabled until final drill cleanup; no live
+  database, cloud document or Auth0 mutation is permitted. Phase 2 remains In progress.
   [Website detail](phase-2-extension-and-community.md#d2-047--authenticated-website-job-details),
-  [inspection repair and cleanup](phase-2-extension-and-community.md#d2-048--runtime-inspection-environment-restoration)
+  [executor repair and recovery](phase-2-extension-and-community.md#d2-049--recovery-executor-metadata)
 - Current recovery checkpoint (`2026-09-10`): D2-044 is Complete. Renewed exact-account SSO
   passes at `13:23:50Z`. Core source `31051e1` is immutably published and released through
   pause/drain, exact state-only reconciliation and mapping-only Resume. Platform state `315`
