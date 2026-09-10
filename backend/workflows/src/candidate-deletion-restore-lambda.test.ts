@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type CandidateDeletionRestoreContext,
   type CandidateDeletionRestoreDependencies,
+  type CandidateDeletionRestoreFailureDiagnostic,
   createCandidateDeletionRestoreHandler,
 } from "./candidate-deletion-restore-lambda.js";
 import { ACCEPTED_CANDIDATE_DELETION_POLICIES } from "./candidate-deletion-restore-policy.js";
@@ -96,7 +97,11 @@ function harness() {
     ...fixture.environment,
     AWS_LAMBDA_FUNCTION_VERSION: "1",
   };
+  const logger = {
+    error: vi.fn<(diagnostic: CandidateDeletionRestoreFailureDiagnostic) => void | Promise<void>>(),
+  };
   const dependencies: CandidateDeletionRestoreDependencies = {
+    logger,
     environment: () => environment,
     now: () => new Date(fixture.now),
     ledger: () => ledger,
@@ -122,10 +127,14 @@ function harness() {
     close,
     openStore,
     calls,
+    logger,
   };
 }
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("private isolated deletion restore Lambda", () => {
   it("inspects both historical policies and returns only schema-bound aggregates without writes", async () => {
@@ -143,6 +152,7 @@ describe("private isolated deletion restore Lambda", () => {
       inspectionSha256: fixture.inspectionSha256,
     });
     expect(h.store.reconcile).not.toHaveBeenCalled();
+    expect(h.logger.error).not.toHaveBeenCalled();
     expect(h.calls).toEqual([
       "markers",
       "open",
@@ -187,6 +197,7 @@ describe("private isolated deletion restore Lambda", () => {
       h.preflight,
       expect.any(AbortSignal),
     );
+    expect(h.logger.error).not.toHaveBeenCalled();
   });
 
   it("reports already reconciled tombstones separately from physically absent users", async () => {
@@ -372,5 +383,222 @@ describe("private isolated deletion restore Lambda", () => {
     await result;
     expect(h.openStore).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
+    expect(h.logger.error).toHaveBeenCalledExactlyOnceWith({
+      event: "candidate_deletion_restore_rejected",
+      action: "inspect",
+      stage: "marker_snapshot",
+    });
+  });
+
+  it.each([
+    "environment",
+    "request",
+    "version",
+    "budget",
+    "ledger_client",
+    "documents_client",
+    "marker_snapshot",
+    "marker_policy",
+    "store_open",
+    "store_preflight",
+    "document_preflight",
+    "inspection_result",
+    "inspection_binding",
+    "ledger_recheck",
+    "document_recheck",
+    "reconcile",
+    "post_reconcile_ledger",
+    "post_reconcile_documents",
+    "replay_result",
+    "store_close",
+  ] as const)("reports only closed classifications for the %s boundary", async (stage) => {
+    const h = harness();
+    const secret = new Error(
+      JSON.stringify({
+        sentinel: "PRIVATE_RESTORE_DIAGNOSTIC_CANARY",
+        sql: "SELECT private_candidate_data FROM restored_owner",
+        locator: h.preflight.documentObjects,
+        request: fixture.replay,
+        environment: h.environment,
+      }),
+    );
+    let request = { ...fixture.replay };
+    switch (stage) {
+      case "environment":
+        h.dependencies.environment = () => {
+          throw secret;
+        };
+        break;
+      case "request":
+        request = { ...request, action: "PRIVATE_RESTORE_DIAGNOSTIC_CANARY" };
+        break;
+      case "version":
+        h.context.functionVersion = "2";
+        break;
+      case "budget":
+        h.context.getRemainingTimeInMillis = () => 0;
+        break;
+      case "ledger_client":
+        h.dependencies.ledger = () => {
+          throw secret;
+        };
+        break;
+      case "documents_client":
+        h.dependencies.documents = () => {
+          throw secret;
+        };
+        break;
+      case "marker_snapshot":
+        h.ledger.inspectCompletedMarkers.mockRejectedValue(secret);
+        break;
+      case "marker_policy":
+        h.snapshot.currentPolicyMarkers = 2;
+        break;
+      case "store_open":
+        h.openStore.mockRejectedValue(secret);
+        break;
+      case "store_preflight":
+        h.store.preflight.mockRejectedValue(secret);
+        break;
+      case "document_preflight":
+        h.documents.inspectExpectedAbsentDocuments.mockRejectedValueOnce(secret);
+        break;
+      case "inspection_result":
+        h.preflight.sha256 = "invalid";
+        break;
+      case "inspection_binding":
+        request = { ...request, reviewedInspectionSha256: "0".repeat(64) };
+        break;
+      case "ledger_recheck":
+        h.ledger.assertUnchanged.mockRejectedValueOnce(secret);
+        break;
+      case "document_recheck":
+        h.documents.inspectExpectedAbsentDocuments
+          .mockResolvedValueOnce(h.absent)
+          .mockRejectedValueOnce(secret);
+        break;
+      case "reconcile":
+        h.store.reconcile.mockRejectedValue(secret);
+        break;
+      case "post_reconcile_ledger":
+        h.ledger.assertUnchanged.mockResolvedValueOnce(undefined).mockRejectedValueOnce(secret);
+        break;
+      case "post_reconcile_documents":
+        h.documents.inspectExpectedAbsentDocuments
+          .mockResolvedValueOnce(h.absent)
+          .mockResolvedValueOnce(h.absent)
+          .mockRejectedValueOnce(secret);
+        break;
+      case "replay_result":
+        h.store.reconcile.mockResolvedValue({
+          restoredUsersAbsent: 0,
+          restoredUsersReconciled: 2,
+          restoredUsersAlreadyReconciled: 0,
+        });
+        break;
+      case "store_close":
+        h.close.mockRejectedValue(secret);
+        break;
+    }
+    await expect(h.run(request, h.context)).rejects.toThrow(/^CandidateDeletionRestoreRejected$/u);
+    expect(h.logger.error).toHaveBeenCalledExactlyOnceWith({
+      event: "candidate_deletion_restore_rejected",
+      action: stage === "environment" || stage === "request" ? "unvalidated" : "replay",
+      stage,
+    });
+    const diagnostic = JSON.stringify(h.logger.error.mock.calls);
+    for (const forbidden of [
+      "PRIVATE_RESTORE_DIAGNOSTIC_CANARY",
+      "SELECT",
+      "quarantine/",
+      fixture.configuration.accountId,
+      fixture.configuration.runId,
+      fixture.configuration.sourceSha,
+      fixture.configuration.sourceHostname,
+      fixture.configuration.targetHostname,
+      fixture.configurationSha256,
+      h.snapshot.entries[0]?.userId,
+      h.environment.DATABASE_SECRET_ID,
+    ]) {
+      if (forbidden) expect(diagnostic).not.toContain(forbidden);
+    }
+  });
+
+  it("records both the original failed boundary and cleanup refusal without losing either", async () => {
+    const h = harness();
+    h.store.preflight.mockRejectedValue(new Error("PRIVATE preflight"));
+    h.close.mockRejectedValue(new Error("PRIVATE close"));
+    await expect(h.run(fixture.inspect, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(h.logger.error.mock.calls).toEqual([
+      [
+        {
+          event: "candidate_deletion_restore_rejected",
+          action: "inspect",
+          stage: "store_preflight",
+        },
+      ],
+      [{ event: "candidate_deletion_restore_rejected", action: "inspect", stage: "store_close" }],
+    ]);
+    expect(h.close).toHaveBeenCalledOnce();
+    expect(h.store.reconcile).not.toHaveBeenCalled();
+  });
+
+  it.each(["throw", "reject"] as const)(
+    "logger %s cannot replace the original refusal or prevent cleanup",
+    async (failure) => {
+      const h = harness();
+      h.store.preflight.mockRejectedValue(new Error("PRIVATE original SQL"));
+      h.logger.error.mockImplementation(() => {
+        const secret = new Error("PRIVATE logger failure");
+        if (failure === "throw") throw secret;
+        return Promise.reject(secret);
+      });
+      await expect(h.run(fixture.inspect, h.context)).rejects.toThrow(
+        /^CandidateDeletionRestoreRejected$/u,
+      );
+      expect(h.close).toHaveBeenCalledOnce();
+      expect(h.store.reconcile).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not read thrown messages, stacks, codes, or serialization hooks", async () => {
+    const h = harness();
+    const inspectThrown = vi.fn(() => {
+      throw new Error("PRIVATE diagnostic object accessed");
+    });
+    const secret = new Proxy({}, { get: inspectThrown, ownKeys: inspectThrown });
+    h.store.preflight.mockRejectedValue(secret);
+    await expect(h.run(fixture.inspect, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(inspectThrown).not.toHaveBeenCalled();
+    expect(h.logger.error).toHaveBeenCalledExactlyOnceWith({
+      event: "candidate_deletion_restore_rejected",
+      action: "inspect",
+      stage: "store_preflight",
+    });
+  });
+
+  it("defaults to a single structured JSON classification without exception or request data", async () => {
+    const h = harness();
+    delete h.dependencies.logger;
+    const output = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    h.store.preflight.mockRejectedValue(
+      new Error(
+        `PRIVATE ${h.environment.DATABASE_SECRET_ID} ${h.preflight.documentObjects[0]?.userId}`,
+      ),
+    );
+    await expect(h.run(fixture.inspect, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(output).toHaveBeenCalledExactlyOnceWith(
+      JSON.stringify({
+        event: "candidate_deletion_restore_rejected",
+        action: "inspect",
+        stage: "store_preflight",
+      }),
+    );
   });
 });

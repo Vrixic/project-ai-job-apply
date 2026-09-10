@@ -32,6 +32,42 @@ type Ledger = Pick<
 type Documents = Pick<AwsReadOnlyCandidateRestoreDocuments, "inspectExpectedAbsentDocuments">;
 type Store = Pick<PostgresCandidateDeletionRestoreStore, "preflight" | "reconcile">;
 
+type RestoreFailureStage =
+  | "environment"
+  | "request"
+  | "version"
+  | "budget"
+  | "ledger_client"
+  | "documents_client"
+  | "marker_snapshot"
+  | "marker_policy"
+  | "store_open"
+  | "store_preflight"
+  | "document_preflight"
+  | "inspection_result"
+  | "inspection_binding"
+  | "ledger_recheck"
+  | "document_recheck"
+  | "reconcile"
+  | "post_reconcile_ledger"
+  | "post_reconcile_documents"
+  | "replay_result"
+  | "store_close";
+
+export interface CandidateDeletionRestoreFailureDiagnostic {
+  readonly event: "candidate_deletion_restore_rejected";
+  readonly action: "unvalidated" | "inspect" | "replay";
+  readonly stage: RestoreFailureStage;
+}
+
+interface RestoreFailureLogger {
+  error(diagnostic: CandidateDeletionRestoreFailureDiagnostic): void | Promise<void>;
+}
+
+const defaultFailureLogger: RestoreFailureLogger = {
+  error: (diagnostic) => console.error(JSON.stringify(diagnostic)),
+};
+
 export interface CandidateDeletionRestoreContext {
   invokedFunctionArn: string;
   functionVersion: string;
@@ -39,6 +75,7 @@ export interface CandidateDeletionRestoreContext {
 }
 
 export interface CandidateDeletionRestoreDependencies {
+  logger?: RestoreFailureLogger;
   environment(): Environment;
   now(): Date;
   ledger(configuration: CandidateDeletionRestoreConfiguration, environment: Environment): Ledger;
@@ -100,6 +137,22 @@ export function createCandidateDeletionRestoreHandler(
     let opened: Awaited<ReturnType<CandidateDeletionRestoreDependencies["openStore"]>> | undefined;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let stage: RestoreFailureStage = "environment";
+    let action: CandidateDeletionRestoreFailureDiagnostic["action"] = "unvalidated";
+    // Classify the attempted boundary, not an inferred cause. Never inspect the thrown value.
+    const logFailure = (failedStage: RestoreFailureStage) => {
+      try {
+        void Promise.resolve(
+          (dependencies.logger ?? defaultFailureLogger).error({
+            event: "candidate_deletion_restore_rejected",
+            action,
+            stage: failedStage,
+          }),
+        ).catch(() => undefined);
+      } catch {
+        // Diagnostics must not replace the original generic refusal or prevent cleanup.
+      }
+    };
     try {
       const environment = Object.freeze({ ...dependencies.environment() });
       const { configuration, configurationSha256 } = loadRestoreEnvironment(
@@ -107,18 +160,22 @@ export function createCandidateDeletionRestoreHandler(
         ACCEPTED_CANDIDATE_DELETION_POLICY_CATALOG_SHA256,
         dependencies.now(),
       );
+      stage = "request";
       const request = validateRestoreRequest(
         event,
         configuration,
         configurationSha256,
         context.invokedFunctionArn,
       );
+      action = request.action === "inspect" ? "inspect" : "replay";
+      stage = "version";
       if (
         context.functionVersion !== request.functionVersion ||
         (environment.AWS_LAMBDA_FUNCTION_VERSION !== undefined &&
           environment.AWS_LAMBDA_FUNCTION_VERSION !== request.functionVersion)
       )
         rejected();
+      stage = "budget";
       const remainingMs = context.getRemainingTimeInMillis();
       if (
         !Number.isFinite(remainingMs) ||
@@ -138,10 +195,14 @@ export function createCandidateDeletionRestoreHandler(
           rejected();
         return now;
       };
+      stage = "ledger_client";
       const ledger = dependencies.ledger(configuration, environment);
+      stage = "documents_client";
       const documents = dependencies.documents(configuration, environment);
+      stage = "marker_snapshot";
       const snapshot = await ledger.inspectCompletedMarkers(active(), controller.signal);
       // Whole-set validation precedes even opening the restored database connection.
+      stage = "marker_policy";
       const entries = validateHistoricalRecoveryEntries(snapshot.entries, active());
       const currentPolicyMarkers = entries.filter(
         (entry) => entry.policyVersion === CURRENT_CANDIDATE_DELETION_RESTORE_POLICY_VERSION,
@@ -151,15 +212,19 @@ export function createCandidateDeletionRestoreHandler(
         snapshot.historicalPolicyMarkers !== entries.length - currentPolicyMarkers
       )
         rejected();
+      stage = "store_open";
       opened = await dependencies.openStore(configuration, environment, controller.signal);
       active();
+      stage = "store_preflight";
       const preflight = await opened.store.preflight(entries, controller.signal);
       active();
+      stage = "document_preflight";
       const absent = await documents.inspectExpectedAbsentDocuments(
         preflight.documentObjects,
         controller.signal,
       );
       active();
+      stage = "inspection_result";
       if (
         ![preflight.sha256, absent.sha256].every(
           (sha) => /^[a-f0-9]{64}$/u.test(sha) && sha.length === 64,
@@ -199,13 +264,16 @@ export function createCandidateDeletionRestoreHandler(
         inspection.restoredSubjectsPresent + inspection.restoredSubjectsAbsent !== entries.length
       )
         rejected();
+      stage = "inspection_binding";
       if (
         request.action === "replay" &&
         request.reviewedInspectionSha256 !== inspection.inspectionSha256
       )
         rejected();
       // Re-read immutable cloud authority immediately before any restored SQL writes.
+      stage = "ledger_recheck";
       await ledger.assertUnchanged(snapshot, active(), controller.signal);
+      stage = "document_recheck";
       const rechecked = await documents.inspectExpectedAbsentDocuments(
         preflight.documentObjects,
         controller.signal,
@@ -220,9 +288,12 @@ export function createCandidateDeletionRestoreHandler(
       if (request.action === "inspect") return inspection;
       // Store revalidates the entire preflight under one serializable transaction
       // before invoking any of the seven authoritative owner deletion boundaries.
+      stage = "reconcile";
       const reconciliation = await opened.store.reconcile(entries, preflight, controller.signal);
       active();
+      stage = "post_reconcile_ledger";
       await ledger.assertUnchanged(snapshot, active(), controller.signal);
+      stage = "post_reconcile_documents";
       const after = await documents.inspectExpectedAbsentDocuments(
         preflight.documentObjects,
         controller.signal,
@@ -233,6 +304,7 @@ export function createCandidateDeletionRestoreHandler(
         after.documentKeysChecked !== absent.documentKeysChecked
       )
         rejected();
+      stage = "replay_result";
       const result: CandidateDeletionRestoreReplayResult = {
         ...inspection,
         action: "replay",
@@ -252,6 +324,7 @@ export function createCandidateDeletionRestoreHandler(
       active();
       return result;
     } catch {
+      logFailure(stage);
       return rejected();
     } finally {
       if (timer !== undefined) clearTimeout(timer);
@@ -259,6 +332,7 @@ export function createCandidateDeletionRestoreHandler(
       try {
         await opened?.close();
       } catch {
+        logFailure("store_close");
         rejected();
       }
     }

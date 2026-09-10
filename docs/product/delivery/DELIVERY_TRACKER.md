@@ -329,15 +329,21 @@ This is the master record for the delivery phases defined in the [product and sy
   separate. Core/AWS releases, provider scope and reviewer roles stay unchanged.
   D2-038's approved permissions now verify at Platform `320`/Bootstrap `20`, and one private
   current-schema AWS PITR passes all 44 migrations/68 relations, six contributors and the exact
-  aggregate digest. D2-049 repairs an actual qualified-Lambda metadata omission that stops Create
-  after the function exists but before inspection/replay. The original unused executor is now
-  disabled, drained for 330 seconds and deleted, with original evidence/artifact retained.
-  The repair passes 448 assertions independently; committed-source verification and corrected
-  executor execution remain. Reuse the same verified RDS copy, without repeating PITR or renewing
-  the old packet. Temporary permissions remain enabled until final drill cleanup; no live
+  aggregate digest. D2-049 is Complete at `92c1fc2`: full committed-source verification, actual
+  448/908 executor/role assertions, matching standalone builds and genuine corrected Create pass.
+  The first Inspect then refuses at runtime under D2-050; no Replay runs. Exact service-call
+  evidence narrows the failure to database opening or subsequent preflight, while offline request
+  and retained-marker metadata checks pass. Maintained Cleanup drains and removes that exact
+  executor before source edits. Closed-stage diagnostics pass 60 tests/typecheck/formatting;
+  strict SDK-secret-envelope compatibility passes 115 tests and independent review, with nine
+  expected original-source failures. Full committed-source verification and private-cloud inspection
+  remain; SDK compatibility is not yet confirmed as the live cause. Reuse the same verified
+  RDS copy, without repeating PITR or renewing an old packet. Temporary permissions remain enabled
+  until final drill cleanup; no live
   database, cloud document or Auth0 mutation is permitted. Phase 2 remains In progress.
   [Website detail](phase-2-extension-and-community.md#d2-047--authenticated-website-job-details),
-  [executor repair and recovery](phase-2-extension-and-community.md#d2-049--recovery-executor-metadata)
+  [executor repair and recovery](phase-2-extension-and-community.md#d2-049--recovery-executor-metadata),
+  [runtime diagnosis](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility)
 - Current recovery checkpoint (`2026-09-10`): D2-044 is Complete. Renewed exact-account SSO
   passes at `13:23:50Z`. Core source `31051e1` is immutably published and released through
   pause/drain, exact state-only reconciliation and mapping-only Resume. Platform state `315`
@@ -1191,6 +1197,10 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | Actual source `bf49c69` restore-role activation advances Platform `315` to `316` once, then strict verification rejects native empty-tag/identity metadata. Exact unused cleanup removes the role/child and restores two endpoints; fresh verification is zero-change at Platform `317`. Maintained Bootstrap cleanup verifies disabled at `17`, preserving its 17 original statements. All temporary permissions are removed before the bounded D2-046 follow-up. No executor, PITR or replay ran; original evidence and healthy application releases are unchanged. New guard/tests integration and full verification precede the already authorized drill. | [Native follow-up and verified cleanup](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
 
 | 2026-09-10 | D2 | Integrated source `ca6c434` passes the full maintained verifier and all 20 builds (19 cached), with 908 generated guard assertions on each PowerShell host and independent authentic native-plan replay. D2-046's bounded follow-up is Complete. These two delivery documents are the only post-verification changes; fresh source/state-bound recovery preparation follows without rereleasing the healthy application or claiming D2-038/human/provider/owner acceptance. | [Verified native-observation repair](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
+
+| Date | Delivery | Update | Evidence |
+|---|---|---|---|
+| 2026-09-10 | D2 | Metadata repair `92c1fc2` passes the full verifier, 448/908 executor/role assertions and matching standalone builds; corrected private Create succeeds. Its first Inspect fails without a validated receipt and no Replay runs. Bounded service metadata places the refusal inside/after database opening, with offline request and bounded live marker-metadata checks passing. Maintained Cleanup fully drains and removes the exact executor before edits, preserving the same verified 44-migration/68-relation RDS copy and original artifact. D2-049 is Complete; D2-050's closed-stage diagnostics pass 60 tests/typecheck/formatting. Resolver compatibility, cloud replay and final permission/resource cleanup remain. | [Runtime repair and remaining recovery](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility) |
 
 ## Cross-delivery decisions and changes
 

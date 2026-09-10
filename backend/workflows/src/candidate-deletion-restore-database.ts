@@ -9,11 +9,29 @@ const ENVELOPE_KEYS = new Set([
   "VersionStages",
   "CreatedDate",
   "SecretString",
+  "SecretBinary",
+  "ResultMetadata",
 ]);
 
 function rejected(): never {
   // No original error/cause, URL, password, secret body or extension token is exposed.
   throw new Error("CandidateDeletionRestoreDatabaseResolutionRejected");
+}
+
+function validCreatedDate(value: unknown): boolean {
+  if (typeof value === "number") return Number.isFinite(value) && value > 0;
+  // The Go SDK's time.Time JSON uses RFC3339 with up to nanosecond precision.
+  if (
+    typeof value !== "string" ||
+    !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z$/u.test(value)
+  )
+    return false;
+  const milliseconds = Date.parse(value);
+  return (
+    Number.isFinite(milliseconds) &&
+    milliseconds > 0 &&
+    new Date(milliseconds).toISOString().slice(0, 19) === value.slice(0, 19)
+  );
 }
 
 async function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -174,10 +192,13 @@ export async function resolveRestoredDatabaseUrl(
         (!Array.isArray(envelope.VersionStages) ||
           envelope.VersionStages.length !== 1 ||
           envelope.VersionStages[0] !== "AWSCURRENT")) ||
-      (envelope.CreatedDate !== undefined &&
-        (typeof envelope.CreatedDate !== "number" ||
-          !Number.isFinite(envelope.CreatedDate) ||
-          envelope.CreatedDate <= 0))
+      (envelope.CreatedDate !== undefined && !validCreatedDate(envelope.CreatedDate)) ||
+      (envelope.SecretBinary !== undefined && envelope.SecretBinary !== null) ||
+      (envelope.ResultMetadata !== undefined &&
+        (envelope.ResultMetadata === null ||
+          typeof envelope.ResultMetadata !== "object" ||
+          Array.isArray(envelope.ResultMetadata) ||
+          Object.keys(envelope.ResultMetadata).length !== 0))
     )
       rejected();
     // Terraform stores the URL itself, not a JSON object containing a URL.

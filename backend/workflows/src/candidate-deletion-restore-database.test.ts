@@ -58,6 +58,133 @@ describe("restore-only database secret resolver", () => {
     ).resolves.toContain(configuration.targetHostname);
   });
 
+  const sdkEnvelope = {
+    ARN: environment.DATABASE_SECRET_ID,
+    Name: "ai-job-apply/development/database-url",
+    VersionId: "a".repeat(32),
+    VersionStages: ["AWSCURRENT"],
+    CreatedDate: "2026-05-28T20:26:40.671Z",
+    SecretBinary: null,
+    SecretString: secret,
+    ResultMetadata: {},
+  };
+
+  it.each([
+    { CreatedDate: sdkEnvelope.CreatedDate },
+    { SecretBinary: null },
+    { ResultMetadata: {} },
+  ])("accepts each bounded Go SDK JSON metadata representation independently", async (metadata) => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(response({ SecretString: secret, ...metadata }));
+    await expect(
+      resolveRestoredDatabaseUrl(configuration, environment, signal(), fetcher),
+    ).resolves.toBe(secret.replace(configuration.sourceHostname, configuration.targetHostname));
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    "2026-05-28T20:26:40Z",
+    "2026-05-28T20:26:40.1Z",
+    "2026-05-28T20:26:40.671Z",
+    "2026-05-28T20:26:40.123456Z",
+    "2026-05-28T20:26:40.123456789Z",
+    "2024-02-29T20:26:40Z",
+  ])("accepts the fully bound Go SDK JSON envelope with UTC timestamp %s", async (CreatedDate) => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(response({ ...sdkEnvelope, CreatedDate }));
+    await expect(
+      resolveRestoredDatabaseUrl(configuration, environment, signal(), fetcher),
+    ).resolves.toBe(secret.replace(configuration.sourceHostname, configuration.targetHostname));
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    null,
+    false,
+    0,
+    -1,
+    {},
+    [],
+    "",
+    "1780000000",
+    "2026-05-28",
+    "2026-05-28T20:26:40",
+    "2026-05-28T20:26:40+00:00",
+    "2026-05-28T20:26:40z",
+    "2026-05-28t20:26:40Z",
+    "2026-05-28 20:26:40Z",
+    "2026-05-28T20:26:40.Z",
+    "2026-05-28T20:26:40.1234567890Z",
+    "2026-02-29T20:26:40Z",
+    "2026-04-31T20:26:40Z",
+    "2026-13-01T20:26:40Z",
+    "2026-05-28T24:00:00Z",
+    "2026-05-28T20:60:40Z",
+    "2026-05-28T20:26:60Z",
+    "1970-01-01T00:00:00Z",
+    "1969-12-31T23:59:59Z",
+    " 2026-05-28T20:26:40Z",
+    "2026-05-28T20:26:40Z\n",
+  ])("rejects malformed or non-UTC SDK timestamps", async (CreatedDate) => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(response({ ...sdkEnvelope, CreatedDate }));
+    await expect(
+      resolveRestoredDatabaseUrl(configuration, environment, signal(), fetcher),
+    ).rejects.toThrow(error);
+  });
+
+  it.each(["", "YmluYXJ5", 0, false, [], {}])(
+    "rejects every non-null SDK binary representation",
+    async (SecretBinary) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(response({ ...sdkEnvelope, SecretBinary }));
+      await expect(
+        resolveRestoredDatabaseUrl(configuration, environment, signal(), fetcher),
+      ).rejects.toThrow(error);
+    },
+  );
+
+  it.each([
+    null,
+    "",
+    0,
+    false,
+    [],
+    { requestId: "synthetic" },
+    { __proto__: null, unexpected: true },
+  ])("rejects result metadata other than an empty JSON object", async (ResultMetadata) => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(response({ ...sdkEnvelope, ResultMetadata }));
+    await expect(
+      resolveRestoredDatabaseUrl(configuration, environment, signal(), fetcher),
+    ).rejects.toThrow(error);
+  });
+
+  it.each([
+    { ARN: "wrong-secret" },
+    { Name: "another-secret" },
+    { VersionId: "short" },
+    { VersionStages: ["AWSPREVIOUS"] },
+    { VersionStages: ["AWSCURRENT", "AWSCURRENT"] },
+    { SecretString: secret.replace(configuration.sourceHostname, configuration.targetHostname) },
+    { unexpected: null },
+  ])(
+    "keeps exact secret bindings and unknown-key rejection for the SDK envelope",
+    async (mutation) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(response({ ...sdkEnvelope, ...mutation }));
+      await expect(
+        resolveRestoredDatabaseUrl(configuration, environment, signal(), fetcher),
+      ).rejects.toThrow(error);
+    },
+  );
+
   it.each([
     "DATABASE_URL",
     "DATABASE_OTHER",
