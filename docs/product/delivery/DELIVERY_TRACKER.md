@@ -328,8 +328,10 @@ This is the master record for the delivery phases defined in the [product and sy
   has four positive invocations with explicit zero errors/throttles; all 57 managed alarms are
   OK (44 core plus 13 D2), with matching configuration and enabled actions. R15/R19 are Closed.
   Gateway, D2 workers and dark ingestion retain their compatible `e2e730a` releases.
-  The next Platform Enable plan refuses computed prefix metadata before applying. D2-046 tracks
-  the narrow operator repair; the unused bootstrap allowance was removed and verified at state
+  The next Platform Enable plan refuses computed prefix metadata before applying. D2-046's
+  narrow operator repair is Complete at `2343514`: both hosts pass 479 assertions, actual native
+  plan reading and the full repository verifier/all 20 builds pass. The unused bootstrap
+  allowance was removed and verified at state
   `15`, zero changes. No Platform role, executor, PITR copy or replay was created. The already
   authorized D2-038 drill remains pending, without another application release or approval.
   D2-045 inspector implementation is Complete; actual authenticated workload acceptance remains.
@@ -1162,6 +1164,8 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | Combined implementation `e2714ca3753c40746944978c1ad858271f3a4d5f` passes the full maintained verifier and all 20 build tasks, then is pushed to shared main with Actions skipped. D2-045 is Complete for inspector tooling; D2-044's locally verified export-expiry repair awaits new immutable publication/release and scheduled health after SSO renewal. All agent work is integrated without new branches. No new deployment, recovery resource, permission, retention, provider or reviewer change occurred; Phase 2 remains In progress behind its documented gates. | [Verified repair](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry), [completed inspector](phase-2-extension-and-community.md#d2-045--development-workload-corroboration) |
 
 | 2026-09-10 | D2 | Corrective core source `31051e1` is immutably published, released and resumed at state `315`, durable/activity/terminal `13`, zero changes. Positive normal activity health records `4/0/0`; all 57 managed alarms are OK. D2-044/R15/R19 are closed. The next restore-role plan refuses native computed-prefix/omitted-binding metadata before Platform Apply; the unused bootstrap allowance is removed and verified at state `15`. D2-046's narrow guard and generated tests are integrated directly, and the actual diagnostic plan passes offline without making it applyable. Committed-source verification and authorized current-schema recovery remain; no role, executor, PITR copy, replay, provider expansion or human acceptance is claimed. | [Deployed repair](phase-2-extension-and-community.md#d2-044--exact-version-export-expiry), [operator correction](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
+
+| 2026-09-10 | D2 | Exact operator implementation `2343514` passes the full maintained verifier and all 20 build tasks (19 cached), alongside 479 assertions on each PowerShell host and actual native-plan semantic reading. D2-046 is Complete for tooling; D2-038's already-authorized cloud drill remains. Subsequent edits affect only these two delivery documents. Continue with fresh plans and a twice-built standalone executor, preserving core runtime `31051e1` and all existing provider/reviewer boundaries. | [Verified operator](phase-2-extension-and-community.md#d2-046--fixed-name-restore-role-metadata) |
 
 ## Cross-delivery decisions and changes
 
