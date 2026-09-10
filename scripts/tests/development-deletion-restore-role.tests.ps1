@@ -129,6 +129,144 @@ Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'accepted drift after must e
 $p=Clone $fixture.Plan;$p.resource_changes[1].change.after.role=$null;$p.resource_changes[1].change.after_unknown=Clone @{role=$true;id=$true}
 $null=Assert-RestoreRoleTransitionPlan $p $fixture.Baseline 'Platform' $true $account
 Assert-Test $true 'exact new computed role ID is allowed only until live readback'
+# Generated fixed-name IAM prefix metadata. No native plan or account values are embedded.
+function Reject-RestorePrefix([scriptblock]$Action,[string]$Classification,[string]$Name){
+  $actual=$null;try{$null=& $Action}catch{$actual=$_.Exception.Message}
+  Assert-Test ($actual -ceq $Classification) $Name
+}
+$nativePrefix=New-Fixture 'Platform' $true
+$nativePrefix.Plan.resource_changes[0].change.after.PSObject.Properties.Remove('name_prefix')
+$nativePrefix.Plan.resource_changes[0].change.after_unknown=Clone @{
+  arn=$true;create_date=$true;id=$true;inline_policy=$true;managed_policy_arns=$true;name_prefix=$true;unique_id=$true
+}
+$nativePrefix.Plan.resource_changes[1].change.after.PSObject.Properties.Remove('name_prefix')
+$nativePrefix.Plan.resource_changes[1].change.after.PSObject.Properties.Remove('role')
+$nativePrefix.Plan.resource_changes[1].change.after_unknown=Clone @{id=$true;name_prefix=$true;role=$true}
+$nativePrefixOriginal=ConvertTo-DeploymentCanonicalValue $nativePrefix.Plan
+$null=Assert-RestoreRoleTransitionPlan $nativePrefix.Plan $nativePrefix.Baseline 'Platform' $true $account
+Assert-Test $true 'native create masks permit only the exact pending fixed-name prefixes and existing computed fields'
+Assert-Test ($null -eq $nativePrefix.Plan.resource_changes[1].change.after.PSObject.Properties['role']) 'pending role projection changes only the validation clone, never the original missing field'
+$nullRoleBinding=Clone $nativePrefix.Plan
+$nullRoleBinding.resource_changes[1].change.after|Add-Member -NotePropertyName role -NotePropertyValue $null
+$null=Assert-RestoreRoleTransitionPlan $nullRoleBinding $nativePrefix.Baseline 'Platform' $true $account
+Assert-Test ($null -eq $nullRoleBinding.resource_changes[1].change.after.role) 'explicit null binding with a literal true mask remains valid and unmodified'
+$invalidRoleMasks=@(
+  @{name='missing';present=$false;value=$null},@{name='false';present=$true;value=$false},
+  @{name='null';present=$true;value=$null},@{name='string true';present=$true;value='true'},
+  @{name='string false';present=$true;value='false'},@{name='empty string';present=$true;value=''},
+  @{name='integer zero';present=$true;value=0},@{name='integer one';present=$true;value=1},
+  @{name='empty object';present=$true;value=[pscustomobject]@{}},
+  @{name='nested object';present=$true;value=[pscustomobject]@{value=$true}},
+  @{name='empty array';present=$true;value=@()},@{name='null singleton array';present=$true;value=@($null)},
+  @{name='true singleton array';present=$true;value=@($true)},@{name='false singleton array';present=$true;value=@($false)},
+  @{name='mixed array';present=$true;value=@($true,$false)}
+)
+foreach($bindingShape in @('missing','null')){
+  foreach($case in $invalidRoleMasks){
+    $p=Clone $nativePrefix.Plan
+    if($bindingShape -ceq 'null'){$p.resource_changes[1].change.after|Add-Member -NotePropertyName role -NotePropertyValue $null}
+    if($case.present){$p.resource_changes[1].change.after_unknown.role=$case.value}
+    else{$p.resource_changes[1].change.after_unknown.PSObject.Properties.Remove('role')}
+    Reject {
+      Assert-RestoreRoleTransitionPlan $p $nativePrefix.Baseline 'Platform' $true $account
+    } "$bindingShape policy binding rejects $($case.name) mask instead of projecting a role"
+  }
+}
+$wrongRoleBinding=Clone $nativePrefix.Plan
+$wrongRoleBinding.resource_changes[1].change.after|Add-Member -NotePropertyName role -NotePropertyValue 'other'
+Reject {Assert-RestoreRoleTransitionPlan $wrongRoleBinding $nativePrefix.Baseline 'Platform' $true $account} 'true role mask cannot replace a concrete wrong binding with the fixed role name'
+foreach($index in 0..1){
+  $p=Clone $nativePrefix.Plan
+  $p.resource_changes[$index].change.after|Add-Member -NotePropertyName name_prefix -NotePropertyValue $null
+  $null=Assert-RestoreRoleTransitionPlan $p $nativePrefix.Baseline 'Platform' $true $account
+  Assert-Test $true 'literal pending prefix accepts null as well as omitted native after value'
+}
+$resolvedPrefix=New-Fixture 'Platform' $true
+foreach($index in 0..1){
+  $resolvedPrefix.Plan.resource_changes[$index].change.after.name_prefix=''
+  $resolvedPrefix.Plan.resource_changes[$index].change.after_unknown=Clone @{name_prefix=$false}
+}
+Assert-RestoreRoleRecord $resolvedPrefix.Plan.resource_changes[0].change.after $resolvedPrefix.Plan.resource_changes[1].change.after $resolvedPrefix.Boundary
+Assert-Test $true 'record validation accepts only typed empty resolved fixed-name prefixes'
+$null=Assert-RestoreRoleTransitionPlan $resolvedPrefix.Plan $resolvedPrefix.Baseline 'Platform' $true $account
+Assert-Test $true 'explicit false prefix masks accompany known empty prefixes'
+$missingPrefix=New-Fixture 'Platform' $true
+foreach($index in 0..1){$missingPrefix.Plan.resource_changes[$index].change.after.PSObject.Properties.Remove('name_prefix')}
+$null=Assert-RestoreRoleTransitionPlan $missingPrefix.Plan $missingPrefix.Baseline 'Platform' $true $account
+Assert-Test $true 'omitted record prefix and omitted unknown mask remain valid for exact fixed names'
+$invalidPrefixes=@(
+  @{name='nonempty';value='other'},@{name='space';value=' '},@{name='tab';value="`t"},
+  @{name='role name is not a prefix';value='ai-job-apply-development-deletion-restore'},
+  @{name='policy name is not a prefix';value='candidate-deletion-restore-read-only'},
+  @{name='false Boolean';value=$false},@{name='true Boolean';value=$true},
+  @{name='integer zero';value=0},@{name='integer one';value=1},@{name='decimal zero';value=0.0},
+  @{name='empty object';value=[pscustomobject]@{}},@{name='nested object';value=[pscustomobject]@{value=''}},
+  @{name='empty array';value=@()},@{name='null singleton array';value=@($null)},
+  @{name='empty-string singleton array';value=@('')},@{name='mixed array';value=@('',$null)}
+)
+foreach($index in 0..1){
+  foreach($case in $invalidPrefixes){
+    $p=Clone $resolvedPrefix.Plan
+    # Assign the property directly: a helper's pipeline output would erase empty/singleton array types.
+    $p.resource_changes[$index].change.after.name_prefix=$case.value
+    Reject-RestorePrefix {
+      Assert-RestoreRoleRecord $p.resource_changes[0].change.after $p.resource_changes[1].change.after $resolvedPrefix.Boundary
+    } 'RestoreRoleRecordRejected' "record rejects $($case.name) prefix on resource $index"
+    Reject-RestorePrefix {
+      Assert-RestoreRoleTransitionPlan $p $resolvedPrefix.Baseline 'Platform' $true $account
+    } 'RestoreRoleRecordRejected' "transition rejects $($case.name) prefix on resource $index"
+  }
+}
+$invalidPrefixMasks=@(
+  @{name='null';value=$null},@{name='string true';value='true'},@{name='string false';value='false'},
+  @{name='empty string';value=''},@{name='integer zero';value=0},@{name='integer one';value=1},
+  @{name='empty object';value=[pscustomobject]@{}},@{name='nested object';value=[pscustomobject]@{value=$true}},
+  @{name='empty array';value=@()},@{name='null singleton array';value=@($null)},
+  @{name='true singleton array';value=@($true)},@{name='mixed array';value=@($true,$false)}
+)
+foreach($index in 0..1){
+  foreach($case in $invalidPrefixMasks){
+    $p=Clone $nativePrefix.Plan
+    $p.resource_changes[$index].change.after_unknown.name_prefix=$case.value
+    Reject-RestorePrefix {
+      Assert-RestoreRoleTransitionPlan $p $nativePrefix.Baseline 'Platform' $true $account
+    } 'RestoreRolePrefixMetadataRejected' "prefix unknown mask rejects $($case.name) on resource $index"
+  }
+  $p=Clone $nativePrefix.Plan
+  $p.resource_changes[$index].change.after|Add-Member -NotePropertyName name_prefix -NotePropertyValue ''
+  Reject-RestorePrefix {
+    Assert-RestoreRoleTransitionPlan $p $nativePrefix.Baseline 'Platform' $true $account
+  } 'RestoreRolePrefixMetadataRejected' 'literal unknown prefix cannot simultaneously contain a concrete value'
+  foreach($field in $(if($index -eq 0){@('name','assume_role_policy','permissions_boundary','tags_all','unexpected')}else{@('name','policy','unexpected')})){
+    $p=Clone $nativePrefix.Plan
+    $p.resource_changes[$index].change.after_unknown|Add-Member -NotePropertyName $field -NotePropertyValue $true
+    Reject-RestorePrefix {
+      Assert-RestoreRoleTransitionPlan $p $nativePrefix.Baseline 'Platform' $true $account
+    } 'RestoreRoleUnexpectedUnknown' 'new prefix compatibility does not allow another unknown field'
+  }
+  foreach($nested in @([pscustomobject]@{name_prefix=$true},@([pscustomobject]@{name_prefix=$true}))){
+    $p=Clone $nativePrefix.Plan
+    $p.resource_changes[$index].change.after_unknown|Add-Member -NotePropertyName nested -NotePropertyValue $nested
+    Reject-RestorePrefix {
+      Assert-RestoreRoleTransitionPlan $p $nativePrefix.Baseline 'Platform' $true $account
+    } 'RestoreRoleUnexpectedUnknown' 'a nested prefix path is not the exact permitted computed field'
+  }
+}
+foreach($index in 2..3){
+  $p=Clone $nativePrefix.Plan
+  $p.resource_changes[$index].change.after_unknown=Clone @{name_prefix=$true}
+  Reject-RestorePrefix {
+    Assert-RestoreRoleTransitionPlan $p $nativePrefix.Baseline 'Platform' $true $account
+  } 'RestoreRoleUnexpectedUnknown' 'endpoint updates receive no prefix unknown allowance'
+}
+foreach($stageValue in @('Bootstrap','Platform')){
+  $prefixDisable=New-Fixture $stageValue $false
+  $prefixDisable.Plan.resource_changes[0].change.after_unknown=Clone @{name_prefix=$true}
+  Reject-RestorePrefix {
+    Assert-RestoreRoleTransitionPlan $prefixDisable.Plan $prefixDisable.Baseline $stageValue $false $account
+  } 'RestoreRoleUnexpectedUnknown' 'Disable receives no prefix unknown allowance'
+}
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $nativePrefix.Plan) -ceq $nativePrefixOriginal) 'prefix validation never rewrites the original generated native plan'
 # BEGIN restore-role computed-policy observation regressions. Generated, never cloud evidence.
 . (Join-Path $PSScriptRoot '../lib/development-gateway-release-guards.ps1')
 function New-ObservationFixture {
@@ -137,12 +275,14 @@ function New-ObservationFixture {
   $plan|Add-Member -NotePropertyName applyable -NotePropertyValue $false
   $map=Get-RestoreRoleResourceMap $plan.planned_values.root_module
   $role=Clone $map[$roleAddress]
+  $role.name_prefix=''
   foreach($entry in @{
     arn=$source.Boundary.RoleArn;id='ai-job-apply-development-deletion-restore';unique_id='AROASYNTHETIC000000000';
     create_date='2026-09-10T03:00:00.000+0000';managed_policy_arns=@();inline_policy=@()
   }.GetEnumerator()){$role|Add-Member -NotePropertyName $entry.Key -NotePropertyValue $entry.Value}
   $role.tags=Clone @{}
   $child=Clone $map[$policyAddress]
+  $child.name_prefix=''
   $child|Add-Member -NotePropertyName id -NotePropertyValue ($role.name+':'+$child.name)
   $before=Clone $role
   $role.inline_policy=@(Clone @{name=$child.name;policy=$child.policy})
@@ -254,6 +394,10 @@ foreach($index in 0..1){
 }
 $null=Assert-RestoreRoleTransitionPlan $removal.Plan $removal.Baseline 'Platform' $false $account
 Assert-Test $true 'exact Platform Disable binds refreshed prior role and policy without persisting the echo'
+Assert-Test ($removal.Plan.resource_changes[0].change.before.name_prefix -is [string] -and
+  $removal.Plan.resource_changes[0].change.before.name_prefix.Length -eq 0 -and
+  $removal.Plan.resource_changes[1].change.before.name_prefix -is [string] -and
+  $removal.Plan.resource_changes[1].change.before.name_prefix.Length -eq 0) 'Verify observation and exact Disable retain both resolved empty prefixes'
 Reject {Assert-RestoreRolePlanEnvelope $removal.Plan} 'removal observation unavailable outside explicit Platform Disable'
 $bad=Clone $removal.Plan;$bad.resource_changes[0].change.before.unique_id='other'
 Reject {Assert-RestoreRoleTransitionPlan $bad $removal.Baseline 'Platform' $false $account} 'delete before values cannot substitute refreshed role identity'

@@ -139,9 +139,15 @@ function Assert-RestoreRoleRecord {
   foreach($property in $Policy.PSObject.Properties){
     if($property.Name -cnotin @('id','name','name_prefix','role','policy')){throw 'RestoreRoleUnexpectedPolicyAttribute'}
   }
+  # Fixed-name IAM resources resolve the provider's computed prefix to an empty string.
+  # Read the property directly: a function return would enumerate arrays and lose their type.
+  foreach($record in @($Role,$Policy)){
+    $prefix=$record.PSObject.Properties['name_prefix']
+    if($null -ne $prefix -and $null -ne $prefix.Value -and
+      ($prefix.Value -isnot [string] -or $prefix.Value.Length -ne 0)){throw 'RestoreRoleRecordRejected'}
+  }
   if ($Role.name -cne 'ai-job-apply-development-deletion-restore' -or $Role.permissions_boundary -cne $Boundary.BoundaryArn -or
       $Role.path -cne '/' -or $Role.max_session_duration -ne 3600 -or $Role.force_detach_policies -isnot [bool] -or $Role.force_detach_policies -ne $false -or
-      $null -ne (Get-RestoreRoleProperty $Role 'name_prefix') -or $null -ne (Get-RestoreRoleProperty $Policy 'name_prefix') -or
       -not [string]::IsNullOrEmpty([string](Get-RestoreRoleProperty $Role 'description')) -or
       @((Get-RestoreRoleProperty $Role 'managed_policy_arns' @())).Count -ne 0 -or
       $Policy.name -cne 'candidate-deletion-restore-read-only' -or $Policy.role -cne $Role.name) { throw 'RestoreRoleRecordRejected' }
@@ -352,14 +358,29 @@ function Assert-RestoreRoleTransitionPlan {
       }
     }
     if($Enable) {
-      Assert-RestoreRoleUnknowns $roleChange.change.after_unknown @('arn','id','create_date','unique_id','inline_policy','managed_policy_arns')
-      Assert-RestoreRoleUnknowns $policyChange.change.after_unknown @('id','role')
+      foreach($change in @($roleChange,$policyChange)){
+        $prefixMask=$change.change.after_unknown.PSObject.Properties['name_prefix']
+        if($null -ne $prefixMask){
+          if($prefixMask.Value -isnot [bool]){throw 'RestoreRolePrefixMetadataRejected'}
+          $prefix=$change.change.after.PSObject.Properties['name_prefix']
+          if($prefixMask.Value -and $null -ne $prefix -and $null -ne $prefix.Value){throw 'RestoreRolePrefixMetadataRejected'}
+        }
+      }
+      Assert-RestoreRoleUnknowns $roleChange.change.after_unknown @('arn','id','create_date','unique_id','inline_policy','managed_policy_arns','name_prefix')
+      Assert-RestoreRoleUnknowns $policyChange.change.after_unknown @('id','role','name_prefix')
     }
     $role=if($Enable){$roleChange.change.after}else{$roleChange.change.before}
     $policy=Copy-RestoreRoleValue $(if($Enable){$policyChange.change.after}else{$policyChange.change.before})
     # Terraform binds the inline policy through the new role's computed id. Only that exact
     # pending role binding may be projected to its fixed name for pre-apply validation.
-    if($Enable -and $null -eq $policy.role -and (Get-RestoreRoleProperty $policyChange.change.after_unknown 'role') -ceq $true){$policy.role=$role.name}
+    if($Enable){
+      $roleBinding=$policy.PSObject.Properties['role']
+      $roleMask=$policyChange.change.after_unknown.PSObject.Properties['role']
+      if(($null -eq $roleBinding -or $null -eq $roleBinding.Value) -and
+        $null -ne $roleMask -and $roleMask.Value -is [bool] -and $roleMask.Value){
+        $policy|Add-Member -NotePropertyName role -NotePropertyValue $role.name -Force
+      }
+    }
     Assert-RestoreRoleRecord $role $policy $boundary
     foreach($address in $addresses[2..3]) {
       $change=@($changes|Where-Object address -CEQ $address)[0]
