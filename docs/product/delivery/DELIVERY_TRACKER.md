@@ -408,8 +408,9 @@ This is the master record for the delivery phases defined in the [product and sy
   outbox-pause input, exact declared-Boolean capture equality and restore-role-only computed-policy
   observations. All four are integrated on shared main with passing focused regressions on both
   PowerShell hosts; full committed-source verification now passes at `6604aff`, completing D2-043.
-  The new-role cloud echo is unobserved. D2-044's newly observed activity error must be resolved
-  before recovery; no temporary permissions or restore have been activated.
+  The new-role cloud echo is unobserved. D2-044's corrective release and activity health now pass
+  at state `315`, and D2-046's operator repair is verified. The unused bootstrap allowance was
+  enabled then removed and verified at state `15`; no Platform role, PITR copy or replay exists.
   [Rights and consumer boundaries](phase-2-extension-and-community.md#d2-041--complete-candidate-data-export-coverage)
 - Implemented follow-up (2026-09-09, `fab4960`/`cc2fa23`): D2-039 adds append-only refresh for stale unpublished
   provider evidence, exact decision/evidence binding, server freshness enforcement and monotonic
