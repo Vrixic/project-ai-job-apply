@@ -328,8 +328,9 @@ This is the master record for the delivery phases defined in the [product and sy
   regression-backed repair; D2-047 adds the missing authenticated description/source view over the
   existing Jobs API. Both are integrated on shared main: web 629 tests, final UI 38/38, eleven
   Chrome scenarios, public-page regression, production build/typecheck and 266/260 two-host
-  inspector assertions pass. Full committed-source verification and candidate-only deployment
-  remain. Core/AWS releases, provider scope and reviewer roles
+  inspector assertions pass. Full committed-source verification passes at `c9351e2` with all 20
+  build tasks (19 cached), completing D2-048 tooling. Candidate-only deployment and authorized
+  recovery remain. Only these two delivery documents change after verification. Core/AWS releases, provider scope and reviewer roles
   stay unchanged. Current-schema recovery and the recorded owner/human gates remain open.
   [Website detail](phase-2-extension-and-community.md#d2-047--authenticated-website-job-details),
   [inspection repair and cleanup](phase-2-extension-and-community.md#d2-048--runtime-inspection-environment-restoration)
