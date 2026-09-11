@@ -1,9 +1,21 @@
 import { createDatabase } from "@ai-job-apply/profile-service";
 import {
+  diagnoseHistoricalCompletion,
+  type HistoricalCompletionEvidence,
+  historicalCompletionEvidenceSha256,
+  historicalCompletionRepairCandidateSha256,
+  readHistoricalCompletionRepairCandidate,
+} from "./candidate-deletion-completion-diagnosis.js";
+import {
+  collectHistoricalCompletionEvidence,
+  type HistoricalCompletionEvidenceTarget,
+} from "./candidate-deletion-completion-evidence.js";
+import {
   AwsReadOnlyCandidateDeletionRestoreLedger,
   AwsReadOnlyCandidateRestoreDocuments,
 } from "./candidate-deletion-restore-aws.js";
 import {
+  type CandidateDeletionRestoreCompletionDiagnosis,
   type CandidateDeletionRestoreConfiguration,
   type CandidateDeletionRestoreInspection,
   type CandidateDeletionRestoreReplayResult,
@@ -12,6 +24,7 @@ import {
   RESTORE_RESULT_RESERVE_MS,
   restoreDigest,
   restoreInspectionSha256,
+  validateRestoreCompletionDiagnosisResult,
   validateRestoreInspectionResult,
   validateRestoreReplayResult,
   validateRestoreRequest,
@@ -31,7 +44,7 @@ import {
 type Environment = Readonly<Record<string, string | undefined>>;
 type Ledger = Pick<
   AwsReadOnlyCandidateDeletionRestoreLedger,
-  "inspectCompletedMarkers" | "assertUnchanged"
+  "inspectCompletedMarkers" | "assertUnchanged" | "inspectCompletionEvidence"
 >;
 type Documents = Pick<AwsReadOnlyCandidateRestoreDocuments, "inspectExpectedAbsentDocuments">;
 type Store = Pick<PostgresCandidateDeletionRestoreStore, "preflight" | "reconcile">;
@@ -47,6 +60,10 @@ type RestoreFailureStage =
   | "marker_policy"
   | "store_open"
   | "store_preflight"
+  | "completion_marker"
+  | "completion_evidence"
+  | "completion_diagnosis"
+  | "completion_result"
   | "document_preflight"
   | "inspection_result"
   | "inspection_binding"
@@ -60,7 +77,7 @@ type RestoreFailureStage =
 
 export interface CandidateDeletionRestoreFailureDiagnostic {
   readonly event: "candidate_deletion_restore_rejected";
-  readonly action: "unvalidated" | "inspect" | "replay";
+  readonly action: "unvalidated" | "inspect" | "replay" | "diagnose_completion";
   readonly stage: RestoreFailureStage;
   readonly storeFailure?: CandidateDeletionRestoreStoreFailure;
 }
@@ -94,6 +111,10 @@ export interface CandidateDeletionRestoreDependencies {
     signal: AbortSignal,
   ): Promise<{
     store: Store;
+    collectCompletionEvidence(
+      target: HistoricalCompletionEvidenceTarget,
+      signal: AbortSignal,
+    ): Promise<HistoricalCompletionEvidence>;
     close(): Promise<void>;
   }>;
 }
@@ -124,6 +145,8 @@ const defaults: CandidateDeletionRestoreDependencies = {
     const database = createDatabase(restoredUrl, { maxConnections: 1 });
     return {
       store: new PostgresCandidateDeletionRestoreStore(database),
+      collectCompletionEvidence: (target, signal) =>
+        collectHistoricalCompletionEvidence(database, target, signal),
       close: async () => {
         await database.client.end({ timeout: 5 });
       },
@@ -138,7 +161,11 @@ export function createCandidateDeletionRestoreHandler(
   return async function run(
     event: unknown,
     context: CandidateDeletionRestoreContext,
-  ): Promise<CandidateDeletionRestoreInspection | CandidateDeletionRestoreReplayResult> {
+  ): Promise<
+    | CandidateDeletionRestoreInspection
+    | CandidateDeletionRestoreReplayResult
+    | CandidateDeletionRestoreCompletionDiagnosis
+  > {
     let opened: Awaited<ReturnType<CandidateDeletionRestoreDependencies["openStore"]>> | undefined;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -174,7 +201,7 @@ export function createCandidateDeletionRestoreHandler(
         configurationSha256,
         context.invokedFunctionArn,
       );
-      action = request.action === "inspect" ? "inspect" : "replay";
+      action = request.action;
       stage = "version";
       if (
         context.functionVersion !== request.functionVersion ||
@@ -205,7 +232,10 @@ export function createCandidateDeletionRestoreHandler(
       stage = "ledger_client";
       const ledger = dependencies.ledger(configuration, environment);
       stage = "documents_client";
-      const documents = dependencies.documents(configuration, environment);
+      const documents =
+        request.action === "diagnose_completion"
+          ? undefined
+          : dependencies.documents(configuration, environment);
       stage = "marker_snapshot";
       const snapshot = await ledger.inspectCompletedMarkers(active(), controller.signal);
       // Whole-set validation precedes even opening the restored database connection.
@@ -219,6 +249,88 @@ export function createCandidateDeletionRestoreHandler(
         snapshot.historicalPolicyMarkers !== entries.length - currentPolicyMarkers
       )
         rejected();
+      if (request.action === "diagnose_completion") {
+        if (entries.length !== 1) rejected();
+        stage = "completion_marker";
+        const marker = await ledger.inspectCompletionEvidence(
+          snapshot,
+          active(),
+          controller.signal,
+        );
+        const target: HistoricalCompletionEvidenceTarget = {
+          sourceSha: configuration.sourceSha,
+          restoreContextSha256: configuration.restoreContextSha256,
+          configurationSha256,
+          markerSnapshotSha256: snapshot.sha256,
+          marker,
+        };
+        stage = "store_open";
+        opened = await dependencies.openStore(configuration, environment, controller.signal);
+        active();
+        stage = "completion_evidence";
+        const evidence = await opened.collectCompletionEvidence(target, controller.signal);
+        const evidenceSha256 = historicalCompletionEvidenceSha256(evidence);
+        if (
+          !evidenceSha256 ||
+          evidence.sourceSha !== target.sourceSha ||
+          evidence.restoreContextSha256 !== target.restoreContextSha256 ||
+          evidence.configurationSha256 !== target.configurationSha256 ||
+          evidence.markerSnapshotSha256 !== target.markerSnapshotSha256 ||
+          historicalCompletionEvidenceSha256(evidence.marker) !==
+            historicalCompletionEvidenceSha256(marker) ||
+          evidence.durable !== null
+        )
+          rejected();
+        stage = "completion_diagnosis";
+        const diagnosis = diagnoseHistoricalCompletion(evidence, evidenceSha256, active());
+        const candidate = readHistoricalCompletionRepairCandidate(diagnosis);
+        const candidateSha256 = candidate
+          ? historicalCompletionRepairCandidateSha256(candidate)
+          : undefined;
+        if (diagnosis.outcome === "persisted_candidate" && (!candidate || !candidateSha256))
+          rejected();
+        stage = "ledger_recheck";
+        await ledger.assertUnchanged(snapshot, active(), controller.signal);
+        const result: CandidateDeletionRestoreCompletionDiagnosis = {
+          schemaVersion: 1,
+          action: "diagnose_completion",
+          outcome: diagnosis.outcome,
+          runId: configuration.runId,
+          sourceSha: configuration.sourceSha,
+          configurationSha256,
+          functionVersion: request.functionVersion,
+          expiresAt: configuration.expiresAt,
+          markerSnapshotSha256: snapshot.sha256,
+          markersValidated: 1,
+          comparison: diagnosis.comparison
+            ? {
+                ...diagnosis.comparison,
+                completionCollisions: [...diagnosis.comparison.completionCollisions].sort(),
+              }
+            : null,
+          reason: diagnosis.outcome === "refused" ? diagnosis.reason : null,
+          corroboration:
+            diagnosis.outcome === "persisted_candidate" ? diagnosis.corroboration : null,
+          dispatchEvidence: diagnosis.dispatchEvidence,
+          candidate:
+            candidate && candidateSha256
+              ? {
+                  correctedCompletedAt: candidate.correctedCompletedAt,
+                  evidenceSha256,
+                  candidateSha256,
+                }
+              : null,
+          databaseWrites: 0,
+          s3Writes: 0,
+          recoveryLedgerWrites: 0,
+          identityProviderCalls: 0,
+        };
+        stage = "completion_result";
+        if (!validateRestoreCompletionDiagnosisResult(result)) rejected();
+        active();
+        return result;
+      }
+      if (!documents) rejected();
       stage = "store_open";
       opened = await dependencies.openStore(configuration, environment, controller.signal);
       active();

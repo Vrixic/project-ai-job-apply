@@ -1,7 +1,7 @@
 #Requires -Version 7.4
 [CmdletBinding()]
 param(
-  [ValidateSet('Prepare','Create','Inspect','Replay','Cleanup')][string]$Action = 'Prepare',
+  [ValidateSet('Prepare','Create','Inspect','Replay','DiagnoseCompletion','Cleanup')][string]$Action = 'Prepare',
   [string]$AwsProfile = 'ai-job-apply-development-admin',
   [ValidatePattern('^[0-9]{12}$')][string]$ExpectedAccountId = '',
   [string]$StateBucket = '',
@@ -24,7 +24,7 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 if ($Help) {
   @'
-Development restore-only deletion replay: Prepare / Create / Inspect / Replay / Cleanup.
+Development restore-only deletion replay: Prepare / Create / Inspect / Replay / DiagnoseCompletion / Cleanup.
 Prepare is read-only in AWS and writes a private review packet. It requires a clean source-bound
 Lambda artifact, the reviewed current no-drift runtime plan, and verified current-schema PITR
 context. It cannot create or enable the separately reviewed default-off IAM role.
@@ -32,10 +32,16 @@ Create requires -Execute and the packet checksum. Inspect invokes only the numer
 performs no database writes. Replay additionally requires -Execute and an exact reviewed inspection
 receipt. Cleanup requires -Execute and removes only the exact temporary Lambda, after a full
 in-flight timeout window; run the maintained PostgreSQL restore Cleanup separately afterward.
+DiagnoseCompletion is a separate read-only diagnosis before normal preflight. Its protected receipt
+contains only fixed comparisons, timestamps and opaque fingerprints, not an inspection approval or
+permission to change a marker. An ambiguous diagnosis is never retried automatically; review its
+started journal before a new explicit read. Cleanup includes every diagnosis invocation window.
+Optional historical dispatch counts, timestamps and opaque bindings stay in that protected receipt.
+They are not writer-exclusion proof: fresh execution retirement and verified PITR-cutoff joins are local.
 All non-Prepare actions require -PreparationPath and -ReviewedPreparationSha256. A started replay
 is never retried automatically. After an ambiguous result, inspect again and review recovery.
 Only aggregates, checksums, and private receipt paths are printed. No credentials are read by this
-operator. Candidate-bearing data never enters requests or operator receipts.
+operator. Candidate locators and raw records never enter requests or operator receipts.
 '@
   exit 0
 }
@@ -211,6 +217,31 @@ function Get-ReplayFunction([object]$Preparation, [string]$Version, [switch]$Cle
   return $function
 }
 
+
+function Get-ReplayDiagnosisCleanupReadyAt([string]$RunDirectory, [object]$Preparation, [string]$PreparationSha256, [datetimeoffset]$ReadyAt, [datetimeoffset]$Now = [datetimeoffset]::UtcNow) {
+  $journals = @(Get-ChildItem -LiteralPath $RunDirectory -Filter 'diagnose-*-started.json' -File)
+  if ($journals.Count -gt 100) { throw 'DeletionReplayDiagnosisJournalInventoryRejected' }
+  foreach ($file in $journals) {
+    if ($file.Name -cnotmatch '^diagnose-[a-f0-9]{32}-started\.json$') { throw 'DeletionReplayDiagnosisJournalRejected' }
+    $path = Resolve-DeletionReplayPrivatePath $file.FullName $RunDirectory -MustExist
+    $journal = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($path))
+    Assert-D1RestoreExactObjectKeys $journal @('schemaVersion','action','status','startedAt','preparationSha256','requestSha256') 'DeletionReplayDiagnosisJournal'
+    foreach ($key in @('action','status','startedAt','preparationSha256','requestSha256')) { if ($journal.$key -isnot [string]) { throw 'DeletionReplayDiagnosisJournalRejected' } }
+    if (-not (Test-D1RestoreBoundedInteger $journal.schemaVersion) -or $journal.schemaVersion -ne 1 -or $journal.action -cne 'diagnose_completion' -or $journal.status -cnotin @('started','completed','ambiguous') -or $journal.preparationSha256 -cne $PreparationSha256 -or $journal.startedAt -isnot [string] -or $journal.startedAt -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{7}\+00:00$') { throw 'DeletionReplayDiagnosisJournalRejected' }
+    $started = [datetimeoffset]::ParseExact($journal.startedAt,'o',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None)
+    if ($started -gt $Now) { throw 'DeletionReplayDiagnosisJournalRejected' }
+    $requestPath = Resolve-DeletionReplayPrivatePath ($path.Replace('-started.json','-request.json')) $RunDirectory -MustExist
+    Assert-DeletionReplayHash $requestPath $journal.requestSha256
+    $request = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($requestPath))
+    Assert-D1RestoreExactObjectKeys $request @('schemaVersion','action','runId','configurationSha256','functionVersion') 'DeletionReplayDiagnosisJournalRequest'
+    foreach ($key in @('action','runId','configurationSha256','functionVersion')) { if ($request.$key -isnot [string]) { throw 'DeletionReplayDiagnosisJournalRejected' } }
+    if (-not (Test-D1RestoreBoundedInteger $request.schemaVersion) -or $request.schemaVersion -ne 1 -or $request.action -cne 'diagnose_completion' -or $request.runId -cne $Preparation.runId -or $request.configurationSha256 -cne $Preparation.configurationSha256 -or $request.functionVersion -cne '1') { throw 'DeletionReplayDiagnosisJournalRejected' }
+    $invocationReady = Get-DeletionReplayCleanupReadyAt $journal
+    if ($invocationReady -gt $ReadyAt) { $ReadyAt = $invocationReady }
+  }
+  return $ReadyAt
+}
+
 function Write-ReplayOutput([object]$Value) { $Value | ConvertTo-Json -Depth 8 -Compress }
 
 try {
@@ -339,12 +370,15 @@ try {
     $disabled = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($disabledPath))
     if ($disabled.preparationSha256 -cne $ReviewedPreparationSha256) { throw 'DeletionReplayCleanupJournalChanged' }
     $ready = Get-DeletionReplayCleanupReadyAt $disabled
+    $ready = Get-ReplayDiagnosisCleanupReadyAt $runDirectory $preparation $ReviewedPreparationSha256 $ready
     if ([datetimeoffset]::UtcNow -lt $ready) { Write-ReplayOutput @{stage='cleanup-waiting';earliestDeletionAt=$ready.ToString('o');disabledReceiptPath=$disabledPath;disabledReceiptSha256=$ReviewedCleanupDisabledSha256;concurrency=0;temporaryFunctionDeleted=$false}; exit 0 }
     $live = Get-ReplayFunction $preparation '1' -Cleanup
     $concurrency = Invoke-ReplayAws @('lambda','get-function-concurrency','--function-name',$name)
     if ($concurrency.ReservedConcurrentExecutions -ne 0) { throw 'DeletionReplayCleanupDrainInvalidated' }
     Assert-ReplayReviewedFiles $preparation
     Assert-DeletionReplayHash $disabledPath $ReviewedCleanupDisabledSha256
+    $ready = Get-ReplayDiagnosisCleanupReadyAt $runDirectory $preparation $ReviewedPreparationSha256 $ready
+    if ([datetimeoffset]::UtcNow -lt $ready) { throw 'DeletionReplayCleanupDrainInvalidated' }
     $null = Invoke-ReplayAws @('lambda','delete-function','--function-name',$name)
     if ($null -ne (Invoke-ReplayAws @('lambda','get-function','--function-name',$name) -AllowNotFound)) { throw 'DeletionReplayCleanupNotComplete' }
     Write-ReplayOutput @{stage='cleanup-complete';temporaryFunctionAbsent=$true;restoredDatabaseDeleted=$false;immutableArtifactRetained=$true}
@@ -359,7 +393,7 @@ try {
   $artifactReadback = Invoke-ReplayAws @('s3api','head-object','--bucket',$preparation.artifactBucket,'--key',$preparation.artifactKey,'--version-id',$created.artifactVersionId,'--checksum-mode','ENABLED','--expected-bucket-owner',$ExpectedAccountId)
   if ($artifactReadback.VersionId -cne $created.artifactVersionId -or $artifactReadback.ChecksumSHA256 -cne $preparation.artifactBase64Sha256 -or $artifactReadback.ServerSideEncryption -cne 'aws:kms' -or $artifactReadback.SSEKMSKeyId -cne $preparation.createRequest.Environment.Variables.CANDIDATE_DELETION_RECOVERY_KMS_KEY_ARN) { throw 'DeletionReplayArtifactReadbackChanged' }
   $null = Get-ReplayFunction $preparation $created.version
-  $request = [ordered]@{schemaVersion=1;action=$Action.ToLowerInvariant();runId=$preparation.runId;configurationSha256=$preparation.configurationSha256;functionVersion=$created.version}
+  $request = [ordered]@{schemaVersion=1;action=(Get-DeletionReplayInvocationAction $Action);runId=$preparation.runId;configurationSha256=$preparation.configurationSha256;functionVersion=$created.version}
   if ($Action -ceq 'Replay') {
     $InspectionPath = Resolve-DeletionReplayPrivatePath $InspectionPath $runDirectory -MustExist
     Assert-DeletionReplayHash $InspectionPath $ReviewedInspectionReceiptSha256
@@ -369,6 +403,8 @@ try {
     $request.reviewedInspectionSha256 = $inspection.inspectionSha256
     $journalPath = Join-Path $runDirectory 'replay-started.json'
     if (Test-Path -LiteralPath $journalPath) { throw 'DeletionReplayAlreadyAttemptedInspectAndReviewRecovery' }
+  } elseif ($Action -ceq 'DiagnoseCompletion') {
+    $journalPath = Join-Path $runDirectory ("diagnose-" + [guid]::NewGuid().ToString('N') + '-started.json')
   } else { $journalPath = Join-Path $runDirectory ("inspect-" + [guid]::NewGuid().ToString('N') + '-started.json') }
   $requestPath = $journalPath.Replace('-started.json','-request.json')
   $responsePath = $journalPath.Replace('-started.json','-response.json')
@@ -379,19 +415,32 @@ try {
   Assert-DeletionReplayHash $createdPath $createdHash
   Assert-DeletionReplayHash $requestPath $requestHash
   if ($Action -ceq 'Replay') { Assert-DeletionReplayHash $InspectionPath $ReviewedInspectionReceiptSha256 }
-  Write-DeletionReplayPrivateJson $journalPath @{schemaVersion=1;status='started';startedAt=[datetimeoffset]::UtcNow.ToString('o');preparationSha256=$ReviewedPreparationSha256;requestSha256=$requestHash}
+  $journal = [ordered]@{schemaVersion=1;status='started';startedAt=[datetimeoffset]::UtcNow.ToString('o');preparationSha256=$ReviewedPreparationSha256;requestSha256=$requestHash}
+  if ($Action -ceq 'DiagnoseCompletion') { $journal.action = 'diagnose_completion' }
+  Write-DeletionReplayPrivateJson $journalPath $journal
   $oldAttempts = [Environment]::GetEnvironmentVariable('AWS_MAX_ATTEMPTS','Process')
   try {
     $env:AWS_MAX_ATTEMPTS = '1'
     $invocation = Invoke-ReplayAws @('lambda','invoke','--function-name',$name,'--qualifier',$created.version,'--invocation-type','RequestResponse','--log-type','None','--cli-connect-timeout','10','--cli-read-timeout','330','--payload',"fileb://$requestPath",$temporaryResponsePath)
     if ($invocation.StatusCode -ne 200 -or $invocation.ExecutedVersion -cne $created.version -or $invocation.PSObject.Properties.Name -contains 'FunctionError' -or (Get-Item -LiteralPath $temporaryResponsePath).Length -gt 8192) { throw 'DeletionReplayInvocationAmbiguousInspectBeforeRecovery' }
     $response = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($temporaryResponsePath))
-    Assert-DeletionReplayAggregate $response ([pscustomobject]$request) (ConvertFrom-D1RestoreJson $preparation.createRequest.Environment.Variables.RESTORE_REPLAY_CONFIG_JSON)
+    if ($Action -ceq 'DiagnoseCompletion') {
+      Assert-DeletionReplayCompletionDiagnosis $response ([pscustomobject]$request) (ConvertFrom-D1RestoreJson $preparation.createRequest.Environment.Variables.RESTORE_REPLAY_CONFIG_JSON)
+    } else {
+      Assert-DeletionReplayAggregate $response ([pscustomobject]$request) (ConvertFrom-D1RestoreJson $preparation.createRequest.Environment.Variables.RESTORE_REPLAY_CONFIG_JSON)
+    }
     Assert-ReplayReviewedFiles $preparation
     Assert-DeletionReplayHash $createdPath $createdHash
     if ($Action -ceq 'Replay') { Assert-DeletionReplayHash $InspectionPath $ReviewedInspectionReceiptSha256 }
     Write-DeletionReplayPrivateJson $responsePath $response
-    Write-ReplayOutput @{stage=$response.outcome;responsePath=$responsePath;responseSha256=(Get-D1RestoreFileSha256 $responsePath);markersValidated=$response.markersValidated;documentVersionsObserved=0;publicEntrypoints=0}
+    if ($Action -ceq 'DiagnoseCompletion') {
+      Write-ReplayOutput @{stage='diagnosed';outcome=$response.outcome;reason=$response.reason;responsePath=$responsePath;responseSha256=(Get-D1RestoreFileSha256 $responsePath);markersValidated=1;inspectionApproval=$false;automaticRetry=$false;publicEntrypoints=0}
+    } else {
+      Write-ReplayOutput @{stage=$response.outcome;responsePath=$responsePath;responseSha256=(Get-D1RestoreFileSha256 $responsePath);markersValidated=$response.markersValidated;documentVersionsObserved=0;publicEntrypoints=0}
+    }
+  } catch {
+    if ($Action -ceq 'DiagnoseCompletion') { throw 'DeletionReplayDiagnosisAmbiguousReviewBeforeRetry' }
+    throw
   } finally {
     [Environment]::SetEnvironmentVariable('AWS_MAX_ATTEMPTS',$oldAttempts,'Process')
     if (Test-Path -LiteralPath $temporaryResponsePath) { Remove-Item -LiteralPath (Resolve-DeletionReplayPrivatePath $temporaryResponsePath $runDirectory -MustExist) -Force }

@@ -14,6 +14,7 @@ import {
   restoreDigest,
   restoreInspectionSha256,
   serializeRestoreConfiguration,
+  validateRestoreCompletionDiagnosisResult,
   validateRestoreConfiguration,
   validateRestoreInspectionResult,
   validateRestoreReplayResult,
@@ -739,5 +740,484 @@ describe("restore inspection digest and aggregate response schemas", () => {
     expect(validateRestoreReplayResult({ ...replayResult(), [key]: `${source[key]}\n` })).toBe(
       false,
     );
+  });
+});
+
+describe("private completion diagnosis transport", () => {
+  function request() {
+    return { ...fixture.inspect, action: "diagnose_completion" };
+  }
+  function result() {
+    return {
+      schemaVersion: 1,
+      action: "diagnose_completion",
+      outcome: "persisted_candidate",
+      runId: fixture.configuration.runId,
+      sourceSha: fixture.configuration.sourceSha,
+      configurationSha256: fixture.configurationSha256,
+      functionVersion: "1",
+      expiresAt: fixture.configuration.expiresAt,
+      markerSnapshotSha256: fixture.markerSnapshotSha256,
+      markersValidated: 1,
+      comparison: {
+        requestMatchesTag: false,
+        ledgerMatchesTag: false,
+        persistedPairAgrees: true,
+        completionCollisions: ["request_completion_mismatch", "ledger_completion_mismatch"],
+      },
+      reason: null,
+      corroboration: "persisted_transaction",
+      candidate: {
+        correctedCompletedAt: fixture.configuration.issuedAt,
+        evidenceSha256: "a".repeat(64),
+        candidateSha256: "b".repeat(64),
+      },
+      dispatchEvidence: null,
+      databaseWrites: 0,
+      s3Writes: 0,
+      recoveryLedgerWrites: 0,
+      identityProviderCalls: 0,
+    };
+  }
+
+  it("uses the exact existing five request bindings and numeric invocation identity", () => {
+    const value = validateRestoreRequest(
+      request(),
+      configuration(),
+      fixture.configurationSha256,
+      fixture.invokedFunctionArn,
+    );
+    expect(value).toEqual(request());
+    expect(Object.isFrozen(value)).toBe(true);
+    for (const key of Object.keys(request())) {
+      const changed: Record<string, unknown> = request();
+      delete changed[key];
+      expect(() =>
+        validateRestoreRequest(
+          changed,
+          configuration(),
+          fixture.configurationSha256,
+          fixture.invokedFunctionArn,
+        ),
+      ).toThrow(requestError);
+    }
+    for (const arn of [
+      fixture.invokedFunctionArn.replace(/:1$/u, ""),
+      fixture.invokedFunctionArn.replace(/:1$/u, ":2"),
+      fixture.invokedFunctionArn.replace("us-east-2", "us-east-1"),
+    ]) {
+      expect(() =>
+        validateRestoreRequest(request(), configuration(), fixture.configurationSha256, arn),
+      ).toThrow(requestError);
+    }
+  });
+
+  function dispatchEvidence(attemptCount = 1) {
+    return {
+      status: "acknowledged_unclaimed",
+      attemptCount,
+      bindingSha256: ["c".repeat(64), "d".repeat(64), "e".repeat(64)].slice(0, attemptCount),
+      latestCreatedAt: fixture.configuration.issuedAt.replace(/Z$/u, "000Z"),
+      latestAcknowledgedAt: fixture.configuration.issuedAt.replace(/Z$/u, "000Z"),
+    };
+  }
+
+  it.each([1, 2, 3])(
+    "accepts only %i opaque acknowledged dispatch bindings, never approval",
+    (count) => {
+      const response = { ...result(), dispatchEvidence: dispatchEvidence(count) };
+      expect(validateRestoreCompletionDiagnosisResult(response)).toBe(true);
+      expect(validateRestoreInspectionResult(response)).toBe(false);
+      expect(validateRestoreReplayResult(response)).toBe(false);
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...response,
+          outcome: "consistent",
+          candidate: null,
+          corroboration: null,
+          comparison: {
+            requestMatchesTag: true,
+            ledgerMatchesTag: true,
+            persistedPairAgrees: true,
+            completionCollisions: [],
+          },
+        }),
+      ).toBe(true);
+    },
+  );
+
+  it("keeps unavailable dispatch evidence null and never attaches it to a refusal", () => {
+    expect(validateRestoreCompletionDiagnosisResult(result())).toBe(true);
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        outcome: "refused",
+        candidate: null,
+        corroboration: null,
+        reason: "dispatch_corroboration_missing",
+        dispatchEvidence: dispatchEvidence(),
+      }),
+    ).toBe(false);
+    for (const dispatch of [undefined, [], {}, false, 0, "synthetic-secret-sentinel"]) {
+      expect(
+        validateRestoreCompletionDiagnosisResult({ ...result(), dispatchEvidence: dispatch }),
+      ).toBe(false);
+    }
+  });
+
+  it("requires every exact dispatch field and rejects execution locators, rows and raw proof", () => {
+    for (const key of Object.keys(dispatchEvidence())) {
+      const dispatch: Record<string, unknown> = dispatchEvidence();
+      delete dispatch[key];
+      expect(
+        validateRestoreCompletionDiagnosisResult({ ...result(), dispatchEvidence: dispatch }),
+      ).toBe(false);
+    }
+    for (const key of [
+      "executionName",
+      "executionArn",
+      "operationId",
+      "eventId",
+      "rows",
+      "sql",
+      "credentials",
+      "writerExclusionProof",
+      "restoreTime",
+    ]) {
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...result(),
+          dispatchEvidence: { ...dispatchEvidence(), [key]: "synthetic-secret-sentinel" },
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("rejects untyped, out-of-range, duplicate, unordered and mismatched dispatch inventories", () => {
+    for (const attemptCount of [-1, 0, 4, 1.5, "1", true, null, [], {}]) {
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...result(),
+          dispatchEvidence: { ...dispatchEvidence(), attemptCount },
+        }),
+      ).toBe(false);
+    }
+    for (const bindingSha256 of [
+      [],
+      null,
+      "c".repeat(64),
+      ["c".repeat(64), "d".repeat(64)],
+      ["C".repeat(64)],
+      ["c".repeat(63)],
+      [`${"c".repeat(64)}\n`],
+      [null],
+      [{}],
+      [["c".repeat(64)]],
+      ["synthetic-secret-sentinel"],
+    ]) {
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...result(),
+          dispatchEvidence: { ...dispatchEvidence(), bindingSha256 },
+        }),
+      ).toBe(false);
+    }
+    for (const bindingSha256 of [
+      ["c".repeat(64), "c".repeat(64)],
+      ["d".repeat(64), "c".repeat(64)],
+    ]) {
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...result(),
+          dispatchEvidence: { ...dispatchEvidence(2), bindingSha256 },
+        }),
+      ).toBe(false);
+    }
+    for (const status of [
+      "pending",
+      "acknowledged_unclaimed\n",
+      "synthetic-secret-sentinel",
+      null,
+      [],
+    ]) {
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...result(),
+          dispatchEvidence: { ...dispatchEvidence(), status },
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("preserves canonical microsecond dispatch clocks without truncation or invented cutoff", () => {
+    for (const key of ["latestCreatedAt", "latestAcknowledgedAt"]) {
+      for (const value of [
+        "2026-02-30T00:00:00.000000Z",
+        "2026-09-08T00:00:00Z",
+        "2026-09-08T00:00:00.000Z",
+        "2026-09-08T00:00:00.0000001Z",
+        "2026-09-08T00:00:00.000000+00:00",
+        "2026-09-08T00:00:00.000000Z\n",
+        "0000-01-01T00:00:00.000000Z",
+        "2099-01-01T00:00:00.000000Z",
+        null,
+        [],
+        {},
+      ]) {
+        expect(
+          validateRestoreCompletionDiagnosisResult({
+            ...result(),
+            dispatchEvidence: { ...dispatchEvidence(), [key]: value },
+          }),
+        ).toBe(false);
+      }
+    }
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        dispatchEvidence: {
+          ...dispatchEvidence(),
+          latestCreatedAt: fixture.configuration.expiresAt.replace(/Z$/u, "000Z"),
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        dispatchEvidence: {
+          ...dispatchEvidence(),
+          latestAcknowledgedAt: fixture.configuration.expiresAt.replace(/Z$/u, "000Z"),
+        },
+      }),
+    ).toBe(true);
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        dispatchEvidence: {
+          ...dispatchEvidence(),
+          latestCreatedAt: fixture.configuration.issuedAt.replace(/Z$/u, "123Z"),
+          latestAcknowledgedAt: fixture.configuration.issuedAt.replace(/Z$/u, "456Z"),
+        },
+      }),
+    ).toBe(true);
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        dispatchEvidence: {
+          ...dispatchEvidence(),
+          latestCreatedAt: fixture.configuration.issuedAt.replace(/Z$/u, "001Z"),
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        dispatchEvidence: {
+          ...dispatchEvidence(),
+          latestAcknowledgedAt: fixture.configuration.expiresAt.replace(/Z$/u, "001Z"),
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it.each([
+    "userId",
+    "requestId",
+    "key",
+    "versionId",
+    "sql",
+    "targetHostname",
+    "reviewedInspectionSha256",
+  ])("rejects diagnostic request extra %s", (key) => {
+    expect(() =>
+      validateRestoreRequest(
+        { ...request(), [key]: "synthetic-secret-sentinel" },
+        configuration(),
+        fixture.configurationSha256,
+        fixture.invokedFunctionArn,
+      ),
+    ).toThrow(requestError);
+  });
+
+  it("accepts fixed candidate, consistent and early refusal shapes separately from Inspect/Replay", () => {
+    expect(validateRestoreCompletionDiagnosisResult(result())).toBe(true);
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        outcome: "consistent",
+        candidate: null,
+        corroboration: null,
+        comparison: {
+          requestMatchesTag: true,
+          ledgerMatchesTag: true,
+          persistedPairAgrees: true,
+          completionCollisions: [],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        outcome: "refused",
+        candidate: null,
+        corroboration: null,
+        comparison: null,
+        reason: "row_cardinality",
+      }),
+    ).toBe(true);
+    expect(validateRestoreInspectionResult(result())).toBe(false);
+    expect(validateRestoreReplayResult(result())).toBe(false);
+    expect(validateRestoreCompletionDiagnosisResult(inspection())).toBe(false);
+    expect(validateRestoreCompletionDiagnosisResult(replayResult())).toBe(false);
+  });
+
+  it("requires every result and candidate field and rejects all locator/row/secret additions", () => {
+    for (const key of Object.keys(result())) {
+      const changed: Record<string, unknown> = result();
+      delete changed[key];
+      expect(validateRestoreCompletionDiagnosisResult(changed)).toBe(false);
+    }
+    for (const key of Object.keys(result().candidate)) {
+      const candidate: Record<string, unknown> = { ...result().candidate };
+      delete candidate[key];
+      expect(validateRestoreCompletionDiagnosisResult({ ...result(), candidate })).toBe(false);
+    }
+    for (const key of [
+      "bucketName",
+      "key",
+      "versionId",
+      "userId",
+      "rows",
+      "sql",
+      "credentials",
+      "inspectionSha256",
+    ]) {
+      const secret = "synthetic-secret-sentinel";
+      expect(validateRestoreCompletionDiagnosisResult({ ...result(), [key]: secret })).toBe(false);
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...result(),
+          candidate: { ...result().candidate, [key]: secret },
+        }),
+      ).toBe(false);
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...result(),
+          comparison: { ...result().comparison, [key]: secret },
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("requires exactly one marker and zero writes with real scalar numeric types", () => {
+    for (const key of [
+      "markersValidated",
+      "databaseWrites",
+      "s3Writes",
+      "recoveryLedgerWrites",
+      "identityProviderCalls",
+    ]) {
+      for (const bad of [-1, 2, 1.5, "0", null, [], {}]) {
+        expect(validateRestoreCompletionDiagnosisResult({ ...result(), [key]: bad })).toBe(false);
+      }
+    }
+    expect(validateRestoreCompletionDiagnosisResult({ ...result(), markersValidated: 0 })).toBe(
+      false,
+    );
+  });
+
+  it("rejects contradictory outcomes, nonboolean comparisons, duplicates and untrusted enum strings", () => {
+    for (const candidate of [null, [], "synthetic-secret-sentinel", {}]) {
+      expect(validateRestoreCompletionDiagnosisResult({ ...result(), candidate })).toBe(false);
+    }
+    for (const comparison of [
+      null,
+      [],
+      {},
+      {
+        ...result().comparison,
+        completionCollisions: ["request_completion_mismatch", "request_completion_mismatch"],
+      },
+      { ...result().comparison, completionCollisions: ["synthetic-secret-sentinel"] },
+    ]) {
+      expect(validateRestoreCompletionDiagnosisResult({ ...result(), comparison })).toBe(false);
+    }
+    for (const key of ["requestMatchesTag", "ledgerMatchesTag", "persistedPairAgrees"]) {
+      for (const bad of [null, "false", 0, [], {}]) {
+        expect(
+          validateRestoreCompletionDiagnosisResult({
+            ...result(),
+            comparison: { ...result().comparison, [key]: bad },
+          }),
+        ).toBe(false);
+      }
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...result(),
+          comparison: {
+            ...result().comparison,
+            [key]:
+              !result().comparison[
+                key as "requestMatchesTag" | "ledgerMatchesTag" | "persistedPairAgrees"
+              ],
+          },
+        }),
+      ).toBe(false);
+    }
+    for (const outcome of ["refused", "consistent", "replayed", "synthetic-secret-sentinel"]) {
+      expect(validateRestoreCompletionDiagnosisResult({ ...result(), outcome })).toBe(false);
+    }
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        reason: "synthetic-secret-sentinel",
+      }),
+    ).toBe(false);
+    expect(
+      validateRestoreCompletionDiagnosisResult({ ...result(), corroboration: "operator_claim" }),
+    ).toBe(false);
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        outcome: "refused",
+        candidate: null,
+        corroboration: null,
+        reason: "synthetic-secret-sentinel",
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects malformed proof digests and noncanonical, impossible or later-than-expiry timestamps", () => {
+    for (const key of ["evidenceSha256", "candidateSha256"]) {
+      for (const value of ["", "A".repeat(64), "a".repeat(63), `${"a".repeat(64)}\n`, null, []]) {
+        expect(
+          validateRestoreCompletionDiagnosisResult({
+            ...result(),
+            candidate: { ...result().candidate, [key]: value },
+          }),
+        ).toBe(false);
+      }
+    }
+    for (const correctedCompletedAt of [
+      "2026-02-30T00:00:00.000Z",
+      "2026-09-08T00:00:00Z",
+      "2026-09-08T00:00:00.000+00:00",
+      "2099-01-01T00:00:00.000Z",
+      "synthetic-secret-sentinel",
+      null,
+    ]) {
+      expect(
+        validateRestoreCompletionDiagnosisResult({
+          ...result(),
+          candidate: { ...result().candidate, correctedCompletedAt },
+        }),
+      ).toBe(false);
+    }
+    expect(
+      validateRestoreCompletionDiagnosisResult({
+        ...result(),
+        expiresAt: "2026-02-30T00:00:00.000Z",
+      }),
+    ).toBe(false);
   });
 });

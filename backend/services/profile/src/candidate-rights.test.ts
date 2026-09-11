@@ -465,3 +465,214 @@ describe("account deletion transitions", () => {
     );
   });
 });
+
+type TerminalRetryState = "queued" | "running" | "retryable_failure" | "succeeded" | "failed";
+type TerminalRetryKind = "deletion" | "export";
+
+function terminalRetryFixture(
+  kind: TerminalRetryKind,
+  initialState: TerminalRetryState | undefined,
+  options: {
+    pending?: boolean;
+    attempts?: number;
+    concurrentCompletion?: boolean;
+    failInsert?: boolean;
+    invalidEvent?: boolean;
+    duplicateEvent?: boolean;
+  } = {},
+) {
+  const operationId = "019d04cf-1f80-7000-8000-000000000092";
+  const eventId = "019d04cf-1f80-7000-8000-000000000093";
+  const resourceId = "019d04cf-1f80-7000-8000-000000000094";
+  const event = {
+    id: eventId,
+    type:
+      kind === "deletion"
+        ? "profile.account-deletion.confirmed.v1"
+        : "profile.data-export.requested.v1",
+    source: "urn:ai-job-apply:profile-service",
+    subject: (kind === "deletion" ? "account-deletion-request/" : "data-export/") + resourceId,
+    dataSchema:
+      "https://schemas.ai-job-apply.internal/events/profile." +
+      (kind === "deletion" ? "account-deletion.confirmed" : "data-export.requested") +
+      ".v1.json",
+    data: {
+      ...(kind === "deletion" ? { deletionRequestId: resourceId } : { dataExportId: resourceId }),
+      operationId,
+      policyVersion: "d1-synthetic-v1",
+    },
+    traceparent: null,
+  };
+  let committed = {
+    state: initialState,
+    attempts: options.attempts ?? 1,
+    pending: options.pending ?? false,
+    inserts: [] as unknown[][],
+  };
+  const calls: Array<{ sql: string; values: unknown[] }> = [];
+  // This seam models conditional-row results and transaction rollback. It is not evidence of
+  // real PostgreSQL row locking; the maintained database integration remains a separate gate.
+  const begin = vi.fn(async (run: (tx: unknown) => Promise<void>) => {
+    const next = structuredClone(committed);
+    const transaction = async (parts: TemplateStringsArray, ...values: unknown[]) => {
+      const statement = parts.join("?").replace(/\s+/gu, " ").trim();
+      calls.push({ sql: statement, values });
+      if (
+        statement.startsWith("SELECT id, type, source, subject, data_schema") &&
+        statement.includes("WHERE durable_execution_name =")
+      ) {
+        expect(values).toEqual(["outbox-" + eventId]);
+        const selected = options.invalidEvent ? { ...event, data: {} } : event;
+        return options.duplicateEvent ? [selected, selected] : [selected];
+      }
+      if (statement.startsWith("SELECT pg_advisory_xact_lock")) {
+        expect(values).toEqual([operationId]);
+        return [];
+      }
+      if (statement.startsWith("SELECT EXISTS")) {
+        expect(values).toEqual([event.type, operationId, eventId]);
+        return [{ present: next.pending }];
+      }
+      if (statement.startsWith("SELECT count(*)::int")) {
+        expect(values).toEqual([event.type, operationId]);
+        return [{ count: next.attempts }];
+      }
+      if (statement.startsWith("UPDATE platform.operations SET state = 'retryable_failure'")) {
+        expect(values).toEqual(["WorkflowFailed", operationId]);
+        expect(statement).toContain("state IN ('queued', 'running', 'retryable_failure')");
+        if (options.concurrentCompletion) next.state = "succeeded";
+        const changed = ["queued", "running", "retryable_failure"].includes(next.state ?? "");
+        if (changed) next.state = "retryable_failure";
+        return changed && statement.endsWith("RETURNING id") ? [{ id: operationId }] : [];
+      }
+      if (statement.startsWith("INSERT INTO platform.outbox_events")) {
+        if (options.failInsert) throw new Error("SyntheticTerminalRetryInsertFailed");
+        expect(values).toEqual([
+          expect.stringMatching(/^[a-f0-9-]{36}$/u),
+          event.type,
+          event.source,
+          event.subject,
+          event.dataSchema,
+          JSON.stringify(event.data),
+          event.traceparent,
+        ]);
+        next.inserts.push(values);
+        next.attempts += 1;
+        next.pending = true;
+        return [];
+      }
+      if (statement.startsWith("UPDATE profile.candidate_data_exports SET state = 'failed'")) {
+        expect(kind).toBe("export");
+        expect(values).toEqual([resourceId, operationId]);
+        return [];
+      }
+      if (statement.startsWith("UPDATE platform.operations SET state = 'failed'")) {
+        expect(kind).toBe("export");
+        expect(values).toEqual(["WorkflowFailed", operationId]);
+        if (["queued", "running", "retryable_failure"].includes(next.state ?? "")) {
+          next.state = "failed";
+        }
+        return [];
+      }
+      throw new Error("SyntheticTerminalRetryUnexpectedQuery");
+    };
+    await run(transaction);
+    committed = next;
+  });
+  const store = new PostgresProfileStore({ client: { begin } } as unknown as DatabaseHandle);
+  return {
+    invoke: () => store.reconcileDurableOperationFailure("outbox-" + eventId, "WorkflowFailed"),
+    state: () => structuredClone(committed),
+    calls,
+    begin,
+  };
+}
+
+describe.each(["deletion", "export"] as const)("%s terminal retry transition", (kind) => {
+  it.each(["succeeded", "failed", undefined] as const)(
+    "does not enqueue after a zero-row transition for %s",
+    async (state) => {
+      const fixture = terminalRetryFixture(kind, state);
+      const before = fixture.state();
+      await fixture.invoke();
+      expect(fixture.state()).toEqual(before);
+      expect(fixture.calls.some(({ sql: statement }) => statement.startsWith("INSERT"))).toBe(
+        false,
+      );
+    },
+  );
+
+  it.each(["queued", "running", "retryable_failure"] as const)(
+    "keeps one bounded retry for a %s operation",
+    async (state) => {
+      const fixture = terminalRetryFixture(kind, state);
+      await fixture.invoke();
+      expect(fixture.state()).toMatchObject({
+        state: "retryable_failure",
+        attempts: 2,
+        pending: true,
+      });
+      expect(fixture.state().inserts).toHaveLength(1);
+    },
+  );
+
+  it("does not enqueue when completion wins the conditional transition", async () => {
+    const fixture = terminalRetryFixture(kind, "running", { concurrentCompletion: true });
+    await fixture.invoke();
+    expect(fixture.state()).toEqual({
+      state: "succeeded",
+      attempts: 1,
+      pending: false,
+      inserts: [],
+    });
+  });
+
+  it("keeps the pending-event guard before any operation update", async () => {
+    const fixture = terminalRetryFixture(kind, "running", { pending: true });
+    const before = fixture.state();
+    await fixture.invoke();
+    expect(fixture.state()).toEqual(before);
+    expect(fixture.calls.some(({ sql: statement }) => statement.startsWith("UPDATE"))).toBe(false);
+  });
+
+  it("does not duplicate the retry while its new event is unpublished", async () => {
+    const fixture = terminalRetryFixture(kind, "running");
+    await fixture.invoke();
+    const afterFirst = fixture.state();
+    await fixture.invoke();
+    expect(fixture.state()).toEqual(afterFirst);
+    expect(fixture.begin).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves the existing three-attempt exhaustion without new events", async () => {
+    const fixture = terminalRetryFixture(kind, "running", { attempts: 3 });
+    await fixture.invoke();
+    expect(fixture.state()).toEqual({
+      state: kind === "export" ? "failed" : "retryable_failure",
+      attempts: 3,
+      pending: false,
+      inserts: [],
+    });
+  });
+
+  it("rolls back the operation transition when the new event insert fails", async () => {
+    const fixture = terminalRetryFixture(kind, "running", { failInsert: true });
+    const before = fixture.state();
+    await expect(fixture.invoke()).rejects.toThrow("SyntheticTerminalRetryInsertFailed");
+    expect(fixture.state()).toEqual(before);
+  });
+
+  it("keeps malformed input rejected before updates", async () => {
+    const fixture = terminalRetryFixture(kind, "running", { invalidEvent: true });
+    await expect(fixture.invoke()).rejects.toThrow("DurableTerminalInputRejected");
+    expect(fixture.calls).toHaveLength(1);
+    expect(fixture.state().inserts).toEqual([]);
+  });
+
+  it("keeps ambiguous event identity rejected before updates", async () => {
+    const fixture = terminalRetryFixture(kind, "running", { duplicateEvent: true });
+    await expect(fixture.invoke()).rejects.toThrow("DurableTerminalInputNotFound");
+    expect(fixture.calls).toHaveLength(1);
+    expect(fixture.state().inserts).toEqual([]);
+  });
+});

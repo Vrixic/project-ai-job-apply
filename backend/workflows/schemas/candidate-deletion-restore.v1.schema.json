@@ -178,6 +178,37 @@
               "pattern": "^[a-f0-9]{64}$"
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "action",
+            "runId",
+            "configurationSha256",
+            "functionVersion"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": 1
+            },
+            "action": {
+              "const": "diagnose_completion"
+            },
+            "runId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            },
+            "configurationSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "functionVersion": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,9}$"
+            }
+          }
         }
       ]
     },
@@ -410,6 +441,388 @@
           "const": 0
         }
       }
+    },
+    "completionDiagnosis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "action",
+        "outcome",
+        "runId",
+        "sourceSha",
+        "configurationSha256",
+        "functionVersion",
+        "expiresAt",
+        "markerSnapshotSha256",
+        "markersValidated",
+        "comparison",
+        "reason",
+        "corroboration",
+        "candidate",
+        "dispatchEvidence",
+        "databaseWrites",
+        "s3Writes",
+        "recoveryLedgerWrites",
+        "identityProviderCalls"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "diagnose_completion"
+        },
+        "outcome": {
+          "enum": ["refused", "consistent", "persisted_candidate"]
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "sourceSha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "configurationSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "functionVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,9}$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "markerSnapshotSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "markersValidated": {
+          "const": 1
+        },
+        "comparison": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "requestMatchesTag",
+                "ledgerMatchesTag",
+                "persistedPairAgrees",
+                "completionCollisions"
+              ],
+              "properties": {
+                "requestMatchesTag": {
+                  "type": "boolean"
+                },
+                "ledgerMatchesTag": {
+                  "type": "boolean"
+                },
+                "persistedPairAgrees": {
+                  "type": "boolean"
+                },
+                "completionCollisions": {
+                  "type": "array",
+                  "maxItems": 5,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": [
+                      "request_completion_mismatch",
+                      "request_timestamp_state_conflict",
+                      "ledger_completion_mismatch",
+                      "ledger_timestamp_state_conflict",
+                      "backup_expiry_conflict"
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "input_invalid",
+                "proof_binding_mismatch",
+                "proof_expired",
+                "marker_invalid",
+                "row_cardinality",
+                "identity_binding_mismatch",
+                "historical_policy_mismatch",
+                "timestamp_invalid",
+                "timestamp_chronology",
+                "completion_state_conflict",
+                "persisted_completion_disagreement",
+                "nonterminal_state",
+                "owner_inventory_incomplete",
+                "operation_corroboration_missing",
+                "dispatch_corroboration_missing",
+                "durable_evidence_insufficient",
+                "retention_expired"
+              ]
+            }
+          ]
+        },
+        "corroboration": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "persisted_transaction",
+                "persisted_transaction_and_dispatch",
+                "persisted_transaction_and_durable"
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["correctedCompletedAt", "evidenceSha256", "candidateSha256"],
+              "properties": {
+                "correctedCompletedAt": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+                },
+                "evidenceSha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "candidateSha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            }
+          ]
+        },
+        "dispatchEvidence": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "attemptCount",
+                "bindingSha256",
+                "latestCreatedAt",
+                "latestAcknowledgedAt"
+              ],
+              "properties": {
+                "status": {
+                  "const": "acknowledged_unclaimed"
+                },
+                "attemptCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3
+                },
+                "bindingSha256": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 3,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64,
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "latestCreatedAt": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"
+                },
+                "latestAcknowledgedAt": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"
+                }
+              },
+              "oneOf": [
+                {
+                  "properties": {
+                    "attemptCount": { "const": 1 },
+                    "bindingSha256": { "type": "array", "minItems": 1, "maxItems": 1 }
+                  }
+                },
+                {
+                  "properties": {
+                    "attemptCount": { "const": 2 },
+                    "bindingSha256": { "type": "array", "minItems": 2, "maxItems": 2 }
+                  }
+                },
+                {
+                  "properties": {
+                    "attemptCount": { "const": 3 },
+                    "bindingSha256": { "type": "array", "minItems": 3, "maxItems": 3 }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "databaseWrites": {
+          "const": 0
+        },
+        "s3Writes": {
+          "const": 0
+        },
+        "recoveryLedgerWrites": {
+          "const": 0
+        },
+        "identityProviderCalls": {
+          "const": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "refused"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "input_invalid",
+                  "proof_binding_mismatch",
+                  "proof_expired",
+                  "marker_invalid",
+                  "row_cardinality",
+                  "identity_binding_mismatch",
+                  "historical_policy_mismatch",
+                  "timestamp_invalid",
+                  "timestamp_chronology",
+                  "completion_state_conflict",
+                  "persisted_completion_disagreement",
+                  "nonterminal_state",
+                  "owner_inventory_incomplete",
+                  "operation_corroboration_missing",
+                  "dispatch_corroboration_missing",
+                  "durable_evidence_insufficient",
+                  "retention_expired"
+                ]
+              },
+              "corroboration": {
+                "const": null
+              },
+              "candidate": {
+                "const": null
+              },
+              "dispatchEvidence": {
+                "const": null
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "consistent"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "const": null
+              },
+              "corroboration": {
+                "const": null
+              },
+              "candidate": {
+                "const": null
+              },
+              "comparison": {
+                "type": "object",
+                "properties": {
+                  "requestMatchesTag": {
+                    "const": true
+                  },
+                  "ledgerMatchesTag": {
+                    "const": true
+                  },
+                  "persistedPairAgrees": {
+                    "const": true
+                  },
+                  "completionCollisions": {
+                    "type": "array",
+                    "maxItems": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "persisted_candidate"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "const": null
+              },
+              "corroboration": {
+                "type": "string"
+              },
+              "candidate": {
+                "type": "object"
+              },
+              "comparison": {
+                "type": "object",
+                "properties": {
+                  "requestMatchesTag": {
+                    "const": false
+                  },
+                  "ledgerMatchesTag": {
+                    "const": false
+                  },
+                  "persistedPairAgrees": {
+                    "const": true
+                  },
+                  "completionCollisions": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "enum": ["request_completion_mismatch", "ledger_completion_mismatch"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

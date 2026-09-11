@@ -116,6 +116,31 @@ and obsolete per-marker loop are removed.
 
 ## Failure handling and aggregate meaning
 
+### Read-only historical completion diagnosis
+
+For a retained `CompletionCollision`, `DiagnoseCompletion` uses the same fresh preparation and
+version-qualified executor. It is a separate diagnostic, not a successful `Inspect` or permission
+to run `Replay`. It requires one exact completed marker, verifies its body and version-bound
+metadata, and reads the matching identity, request, operation, ledger and bounded dispatch set in
+one read-only repeatable-read transaction. No document, Auth0, SQL or cloud-object write runs.
+
+The fixed response distinguishes refusal, consistency and a corroborated persisted candidate.
+Only agreeing persisted completion timestamps can produce a candidate; a later attempt clock
+cannot. Dispatch timestamps preserve PostgreSQL microseconds and report acknowledged/unclaimed
+bindings only. They do not prove that old executions, retries or delayed writers have retired.
+The response contains comparisons, opaque digests and bounded times, never rows or locators.
+
+The operator journals this action even when its response is ambiguous. Keep the original packet
+and observe the full 330-second cleanup drain; never renew it or bypass the ordinary preflight.
+Any separately approved exact-version tag correction remains outside this executor and its IAM
+role. It needs authenticated diagnostic provenance, independent writer-exclusion evidence and
+unchanged version/body/metadata/retention/tag preconditions. Preserve the complete preimage and
+reserve a stable durable one-attempt journal before writing; uncertainty permits readback only,
+not another write or rollback. A candidate digest alone grants no authority. Afterwards use the
+unchanged `Inspect` and `Replay` path on the same verified restore.
+
+### Ordinary inspection and replay
+
 A malformed or incomplete marker, unexpected version/delete marker, unknown historical policy,
 locator/owner collision, nonempty document namespace, changed inspection, expired configuration,
 or failed owner boundary stops the operation. Retained cloud objects, Object Lock retention,

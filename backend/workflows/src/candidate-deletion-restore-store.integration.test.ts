@@ -14,6 +14,15 @@ import type { CandidateRightsPolicy } from "@ai-job-apply/profile-service/candid
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  diagnoseHistoricalCompletion,
+  historicalCompletionEvidenceSha256,
+  readHistoricalCompletionRepairCandidate,
+} from "./candidate-deletion-completion-diagnosis.js";
+import {
+  collectHistoricalCompletionEvidence,
+  type HistoricalCompletionEvidenceTarget,
+} from "./candidate-deletion-completion-evidence.js";
+import {
   ACCEPTED_CANDIDATE_DELETION_POLICIES,
   RESTORED_CANDIDATE_RIGHTS_OWNERS,
 } from "./candidate-deletion-restore-policy.js";
@@ -593,6 +602,206 @@ describe.skipIf(!requested)("isolated restored PostgreSQL seven-owner deletion r
     },
     60_000,
   );
+
+  it("diagnoses a synthetic historical completion mismatch in a real read-only snapshot without row changes", async () => {
+    const generated = await seed(0);
+    const entry = generated.entry;
+    if (!entry.completedAt) throw new Error("SyntheticCompletionMissing");
+    const persistedCompletion = entry.completedAt.toISOString();
+    const eventId = uuidv7();
+    const executionName = "outbox-" + eventId;
+    const executionArn =
+      "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-profile-readiness-durable:12/durable-execution/" +
+      executionName +
+      "/synthetic-execution";
+    let conflictingLedger = false;
+    const modes: { readOnly: string; isolation: string }[] = [];
+    const readOnlyDatabase: DatabaseHandle = {
+      ...database,
+      client: new Proxy(database.client, {
+        get(target, property, receiver) {
+          if (property !== "begin") return Reflect.get(target, property, receiver);
+          return (
+            mode: string,
+            run: (sql: Pick<DatabaseHandle["client"], "unsafe">) => Promise<unknown>,
+          ) =>
+            target.begin(mode, async (transaction) => {
+              // Test observation only; the collector retains four LIMIT 2 selectors,
+              // one exact-operation LIMIT 4 selector and no writable transaction mode.
+              const [settings] = await transaction<{ readOnly: string; isolation: string }[]>`
+              SELECT current_setting('transaction_read_only') AS "readOnly",
+                     current_setting('transaction_isolation') AS isolation
+            `;
+              if (!settings) throw new Error("SyntheticTransactionSettingsMissing");
+              modes.push({ readOnly: settings.readOnly, isolation: settings.isolation });
+              return run(transaction);
+            });
+        },
+      }),
+    };
+    const snapshotRows = async () => {
+      const [observed] = await database.client<{ snapshot: unknown }[]>`
+        SELECT jsonb_build_object(
+          'user', (SELECT jsonb_build_object('row', to_jsonb(candidate), 'xmin', candidate.xmin::text)
+                   FROM identity.users candidate WHERE candidate.id = ${entry.userId}),
+          'request', (SELECT jsonb_build_object('row', to_jsonb(request), 'xmin', request.xmin::text)
+                      FROM profile.account_deletion_requests request WHERE request.id = ${entry.requestId}),
+          'operation', (SELECT jsonb_build_object('row', to_jsonb(operation), 'xmin', operation.xmin::text)
+                        FROM platform.operations operation WHERE operation.id = ${entry.operationId}),
+          'ledger', (SELECT jsonb_build_object('row', to_jsonb(ledger), 'xmin', ledger.xmin::text)
+                     FROM privacy.account_deletion_ledger ledger WHERE ledger.request_id = ${entry.requestId}),
+          'dispatch', (SELECT jsonb_build_object('row', to_jsonb(event), 'xmin', event.xmin::text)
+                       FROM platform.outbox_events event WHERE event.id = ${eventId})
+        ) AS snapshot
+      `;
+      if (!observed) throw new Error("SyntheticRowSnapshotMissing");
+      return observed.snapshot;
+    };
+    try {
+      // Existing generated seven-owner fixture and maintained restore ports seed
+      // a coherent terminal request/ledger/operation, without any external adapter.
+      await store.reconcile([entry], await store.preflight([entry]));
+      // Synthetic persisted acknowledgment with deliberate nonzero microseconds.
+      // A retained retry schedule is legitimate after publication; it is not a claim.
+      await database.client`
+        INSERT INTO platform.outbox_events
+          (id, type, source, subject, data_schema, data, dispatch_target,
+           created_at, published_at, durable_started_at, nudge_claimed_at,
+           nudge_next_attempt_at, durable_execution_name, durable_execution_arn)
+        VALUES
+          (${eventId}, 'profile.account-deletion.confirmed.v1', 'urn:ai-job-apply:profile-service',
+           ${"account-deletion-request/" + entry.requestId},
+           'https://schemas.ai-job-apply.internal/events/profile.account-deletion.confirmed.v1.json',
+           ${JSON.stringify({ deletionRequestId: entry.requestId, operationId: entry.operationId, policyVersion: entry.policyVersion })}::text::jsonb,
+           'lambda_durable',
+           ${persistedCompletion}::timestamptz + interval '123 microseconds',
+           ${persistedCompletion}::timestamptz + interval '456 microseconds',
+           ${persistedCompletion}::timestamptz + interval '789 microseconds',
+           NULL, now() + interval '1 day', ${executionName}, ${executionArn})
+      `;
+      const wrongTag = new Date(entry.completedAt.getTime() + 1).toISOString();
+      const target: HistoricalCompletionEvidenceTarget = {
+        sourceSha: "a".repeat(40),
+        restoreContextSha256: "b".repeat(64),
+        configurationSha256: "c".repeat(64),
+        markerSnapshotSha256: "d".repeat(64),
+        marker: {
+          bucketName: "synthetic-completion-integration",
+          expectedBucketOwner: "123456789012",
+          key: "candidate-deletion-recovery/" + entry.requestId + ".json",
+          versionId: "synthetic-retained-completion-version",
+          etag: '"synthetic-etag"',
+          contentLength: 1024,
+          lastModified: entry.confirmedAt.toISOString(),
+          bodySha256: "1".repeat(64),
+          checksumSha256: "1".repeat(64),
+          metadataSha256: "2".repeat(64),
+          encryptionSha256: "3".repeat(64),
+          retentionSha256: "4".repeat(64),
+          versionInventorySha256: "5".repeat(64),
+          oldTagSet: [
+            { Key: "state", Value: "completed" },
+            { Key: "completed-at", Value: wrongTag },
+          ],
+          entry: {
+            ...entry,
+            confirmedAt: entry.confirmedAt.toISOString(),
+            backupExpiresAt: entry.backupExpiresAt.toISOString(),
+            completedAt: wrongTag,
+          },
+        },
+      };
+      await expect(
+        store.preflight([{ ...entry, completedAt: new Date(wrongTag) }]),
+      ).rejects.toThrow("CompletionCollision");
+      const before = await snapshotRows();
+      const beforeCounts = await counts(entry.userId);
+      const evidence = await collectHistoricalCompletionEvidence(
+        readOnlyDatabase,
+        target,
+        new AbortController().signal,
+      );
+      expect(evidence.requestRows[0]?.completedAt).toBe(persistedCompletion.slice(0, -1) + "000Z");
+      expect(evidence.ledgerRows[0]?.completedAt).toBe(evidence.requestRows[0]?.completedAt);
+      expect(evidence.operationRows[0]?.updatedAt).toBe(evidence.requestRows[0]?.completedAt);
+      const diagnosis = diagnoseHistoricalCompletion(
+        evidence,
+        historicalCompletionEvidenceSha256(evidence) ?? "",
+        new Date(),
+      );
+      expect(diagnosis.outcome).toBe("persisted_candidate");
+      expect(diagnosis.dispatchEvidence).toEqual({
+        status: "acknowledged_unclaimed",
+        attemptCount: 1,
+        bindingSha256: [expect.stringMatching(/^[a-f0-9]{64}$/u)],
+        latestCreatedAt: persistedCompletion.slice(0, -1) + "123Z",
+        latestAcknowledgedAt: persistedCompletion.slice(0, -1) + "789Z",
+      });
+      expect(readHistoricalCompletionRepairCandidate(diagnosis)?.correctedCompletedAt).toBe(
+        persistedCompletion,
+      );
+      expect(modes).toEqual([{ readOnly: "on", isolation: "repeatable read" }]);
+      expect(await snapshotRows()).toEqual(before);
+      expect(await counts(entry.userId)).toEqual(beforeCounts);
+
+      // The actual terminal UPDATE ... RETURNING must produce no retry event.
+      // This proves the already-terminal path, not a synthetic concurrent lock race.
+      const [dispatchBefore] = await database.client<{ count: number }[]>`
+        SELECT count(*)::int AS count FROM platform.outbox_events
+        WHERE data ->> 'operationId' = ${entry.operationId}
+      `;
+      expect(dispatchBefore?.count).toBe(1);
+      await new PostgresProfileStore(database).reconcileDurableOperationFailure(
+        executionName,
+        "WorkflowFailed",
+      );
+      const [dispatchAfter] = await database.client<{ count: number }[]>`
+        SELECT count(*)::int AS count FROM platform.outbox_events
+        WHERE data ->> 'operationId' = ${entry.operationId}
+      `;
+      expect(dispatchAfter?.count).toBe(1);
+      expect(await snapshotRows()).toEqual(before);
+
+      // A controlled conflicting *synthetic* ledger proves the reader does not
+      // select a timestamp or silently repair rows when persisted authorities differ.
+      await database.client`
+        UPDATE privacy.account_deletion_ledger
+        SET completed_at = ${persistedCompletion}::timestamptz + interval '2 milliseconds',
+            updated_at = ${persistedCompletion}::timestamptz + interval '2 milliseconds'
+        WHERE request_id = ${entry.requestId}
+      `;
+      conflictingLedger = true;
+      const conflictBefore = await snapshotRows();
+      const conflictEvidence = await collectHistoricalCompletionEvidence(
+        readOnlyDatabase,
+        target,
+        new AbortController().signal,
+      );
+      const refused = diagnoseHistoricalCompletion(
+        conflictEvidence,
+        historicalCompletionEvidenceSha256(conflictEvidence) ?? "",
+        new Date(),
+      );
+      expect(refused).toMatchObject({
+        outcome: "refused",
+        reason: "persisted_completion_disagreement",
+      });
+      expect(readHistoricalCompletionRepairCandidate(refused)).toBeUndefined();
+      expect(modes[1]).toEqual({ readOnly: "on", isolation: "repeatable read" });
+      expect(await snapshotRows()).toEqual(conflictBefore);
+    } finally {
+      await database.client`DELETE FROM platform.outbox_events WHERE id = ${eventId} AND data ->> 'operationId' = ${entry.operationId}`;
+      if (conflictingLedger) {
+        await database.client`
+          UPDATE privacy.account_deletion_ledger
+          SET completed_at = ${persistedCompletion}::timestamptz,
+              updated_at = ${persistedCompletion}::timestamptz
+          WHERE request_id = ${entry.requestId}
+        `;
+      }
+      await finishAndRemove(entry);
+    }
+  }, 60_000);
 
   it("rejects a later operation-owner collision without quarantining an earlier valid restored account", async () => {
     const first = await seed(0);

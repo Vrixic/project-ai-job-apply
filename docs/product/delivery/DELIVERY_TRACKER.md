@@ -321,12 +321,25 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Latest authority checkpoint (`2026-09-11` UTC): the user grants D2-052's conditional diagnosis
+- Latest engineering checkpoint (`2026-09-11` UTC): Gateway `423d63b` is deployed and verified,
+  with zero drift at `321`. Core Pause verifies at `322`; versions remain `13`, and starts remain
+  disabled pending the combined timestamp/late-terminal retry release. The added enqueue guard
+  passes 41 Profile unit tests and typecheck, with eight expected original-source failures; real
+  concurrent SQL verification is separate. The integrated diagnostic/helpers/contracts pass 785
+  focused tests, 697 operator assertions and the workflow build. Six real PostgreSQL tests pass,
+  including read-only diagnosis and the completed-operation no-extra-outbox path. Full verification
+  passes with 1,146 workflow tests and all 20 builds (17 unchanged cached tasks); eight explicit
+  database opt-ins remain skipped in that ordinary suite. The combined core release remains.
+  The superseded, un-applied release plan and artifacts
+  are retained unchanged. Cloud diagnosis, conditional historical correction, unchanged replay,
+  final cleanup and broader Phase 2 acceptance remain. No historical tag or SQL mutation ran.
+  [Current Phase 2 work](phase-2-extension-and-community.md#task-register)
+- Authority checkpoint (`2026-09-11` UTC): the user grants D2-052's conditional diagnosis
   and exact-version completion-time tag correction only if corroborated retained evidence proves
   the tag wrong. D2-R20's approval gate is closed. Require agreeing persisted request/ledger
   completion evidence, retired old writers and unchanged exact-version preconditions; no other
   tag, SQL, marker-body, confirmation, retention, document or Auth0 change is authorized. Diagnosis,
-  Gateway/core future-writer releases and any correction remain unperformed. Keep the restore
+  core future-writer release and any correction remain, with Gateway complete above. Keep the restore
   executor read-only in AWS, reuse the same verified private copy, then finish unchanged replay
   checks and exact cleanup. Phase 2 is not complete.
   [Conditional historical correction](phase-2-extension-and-community.md#d2-052--historical-completion-consistency)

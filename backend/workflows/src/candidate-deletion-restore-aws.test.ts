@@ -850,3 +850,136 @@ describe("restore cloud adapter configuration", () => {
     ).toThrow(error);
   });
 });
+
+function diagnosticSetup(fixtures = [fixture(1, true)]) {
+  const state = setup(fixtures);
+  for (const name of ["GetObjectCommand", "GetObjectRetentionCommand", "GetObjectTaggingCommand"]) {
+    state.overrides[name] = (output) => ({ ...output, $metadata: { httpStatusCode: 200 } });
+  }
+  return state;
+}
+
+describe("read-only exact snapshot completion evidence accessor", () => {
+  it("derives only the private exact-version metadata from independently body-verified reads", async () => {
+    const state = diagnosticSetup();
+    const snapshot = await state.ledger.inspectCompletedMarkers(now);
+    const marker = await state.ledger.inspectCompletionEvidence(snapshot, now);
+    const selected = state.fixtures[0];
+    if (!selected) throw new Error("SyntheticMarkerMissing");
+    expect(marker).toMatchObject({
+      bucketName,
+      expectedBucketOwner,
+      key: selected.key,
+      versionId: selected.versionId,
+      bodySha256: createHash("sha256").update(selected.bytes()).digest("hex"),
+      checksumSha256: createHash("sha256").update(selected.bytes()).digest("hex"),
+      etag: '"synthetic-etag"',
+      contentLength: selected.bytes().length,
+      lastModified: confirmedAt.toISOString(),
+      oldTagSet: [
+        { Key: "completed-at", Value: completedAt.toISOString() },
+        { Key: "state", Value: "completed" },
+      ],
+      entry: {
+        requestId: selected.body.requestId,
+        userId: selected.userId,
+        completedAt: completedAt.toISOString(),
+      },
+    });
+    for (const key of [
+      "metadataSha256",
+      "encryptionSha256",
+      "retentionSha256",
+      "versionInventorySha256",
+    ] as const)
+      expect(marker[key]).toMatch(/^[a-f0-9]{64}$/u);
+    expect(Object.isFrozen(marker)).toBe(true);
+    expect(Object.isFrozen(marker.entry)).toBe(true);
+    expect(Object.isFrozen(marker.oldTagSet)).toBe(true);
+    expect(Object.keys(snapshot).sort()).toEqual([
+      "currentPolicyMarkers",
+      "entries",
+      "historicalPolicyMarkers",
+      "sha256",
+    ]);
+    expect(
+      state.send.mock.calls.filter(
+        ([command]) => (command as Command).constructor.name === "GetObjectCommand",
+      ),
+    ).toHaveLength(2);
+    for (const [command] of state.send.mock.calls)
+      expect((command as Command).constructor.name).not.toMatch(/Put|Delete|Create|Update/u);
+  });
+  it("refuses forged/copy snapshots and snapshots minted by another reader before cloud reads", async () => {
+    const state = diagnosticSetup();
+    const other = diagnosticSetup();
+    const snapshot = await state.ledger.inspectCompletedMarkers(now);
+    const foreign = await other.ledger.inspectCompletedMarkers(now);
+    for (const candidate of [{ ...snapshot }, structuredClone(snapshot), foreign]) {
+      const before = state.send.mock.calls.length;
+      await expect(state.ledger.inspectCompletionEvidence(candidate, now)).rejects.toThrow(error);
+      expect(state.send.mock.calls).toHaveLength(before);
+    }
+  });
+  it("detects mutation of a nominally frozen Date in the public snapshot", async () => {
+    const state = diagnosticSetup();
+    const snapshot = await state.ledger.inspectCompletedMarkers(now);
+    snapshot.entries[0]?.completedAt?.setTime(now.getTime());
+    await expect(state.ledger.inspectCompletionEvidence(snapshot, now)).rejects.toThrow(error);
+  });
+  it.each([0, 2])("rejects a %i-marker snapshot without selecting a target", async (count) => {
+    const state = diagnosticSetup(Array.from({ length: count }, (_, i) => fixture(i + 1, true)));
+    const snapshot = await state.ledger.inspectCompletedMarkers(now);
+    const before = state.send.mock.calls.length;
+    await expect(state.ledger.inspectCompletionEvidence(snapshot, now)).rejects.toThrow(error);
+    expect(state.send.mock.calls).toHaveLength(before);
+  });
+  it("rechecks the entire marker set and rejects a newly added unrelated marker", async () => {
+    const state = diagnosticSetup();
+    const snapshot = await state.ledger.inspectCompletedMarkers(now);
+    state.fixtures.push(fixture(2, true));
+    await expect(state.ledger.inspectCompletionEvidence(snapshot, now)).rejects.toThrow(error);
+  });
+  it("refuses changed completion tags instead of minting a candidate against stale tags", async () => {
+    const state = diagnosticSetup();
+    const snapshot = await state.ledger.inspectCompletedMarkers(now);
+    state.overrides.GetObjectTaggingCommand = (output) => ({
+      ...output,
+      $metadata: { httpStatusCode: 200 },
+      TagSet: [
+        { Key: "state", Value: "completed" },
+        { Key: "completed-at", Value: "2026-09-01T12:06:00.000Z" },
+      ],
+    });
+    await expect(state.ledger.inspectCompletionEvidence(snapshot, now)).rejects.toThrow(error);
+  });
+  it("preserves optional protocol checksum omission without claiming FULL_OBJECT", async () => {
+    const state = diagnosticSetup();
+    state.overrides.GetObjectCommand = (output) => {
+      const result: Row = { ...output, $metadata: { httpStatusCode: 200 } };
+      delete result.ChecksumType;
+      return result;
+    };
+    const snapshot = await state.ledger.inspectCompletedMarkers(now);
+    const marker = await state.ledger.inspectCompletionEvidence(snapshot, now);
+    expect(marker.checksumSha256).toBe(marker.bodySha256);
+  });
+  it("keeps stricter diagnostic metadata availability isolated from original Inspect/Replay", async () => {
+    const state = setup([fixture(1, true)]);
+    const snapshot = await state.ledger.inspectCompletedMarkers(now);
+    await expect(state.ledger.assertUnchanged(snapshot, now)).resolves.toBeUndefined();
+    await expect(state.ledger.inspectCompletionEvidence(snapshot, now)).rejects.toThrow(error);
+    await expect(state.ledger.assertUnchanged(snapshot, now)).resolves.toBeUndefined();
+  });
+  it("honors a cancelled accessor without starting another cloud request", async () => {
+    const state = diagnosticSetup();
+    const snapshot = await state.ledger.inspectCompletedMarkers(now);
+    const controller = new AbortController();
+    controller.abort();
+    const before = state.send.mock.calls.length;
+    await expect(
+      state.ledger.inspectCompletionEvidence(snapshot, now, controller.signal),
+    ).rejects.toThrow(error);
+    expect(state.send.mock.calls).toHaveLength(before);
+  });
+});

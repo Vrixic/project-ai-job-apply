@@ -574,4 +574,204 @@ Assert ($inspector -match '"candidate_deletion_restore_role_enabled"') 'current 
   }
 }
 
+
+# Explicit private diagnosis is neither inspection approval nor marker repair authority.
+$diagnosisRequest = Clone $fixture.inspect
+$diagnosisRequest.action = 'diagnose_completion'
+$diagnosis = Clone @{
+  schemaVersion=1;action='diagnose_completion';outcome='persisted_candidate'
+  runId=$fixture.configuration.runId;sourceSha=$fixture.configuration.sourceSha;configurationSha256=$fixture.configurationSha256
+  functionVersion='1';expiresAt=$fixture.configuration.expiresAt;markerSnapshotSha256=$fixture.markerSnapshotSha256;markersValidated=1
+  comparison=@{requestMatchesTag=$false;ledgerMatchesTag=$false;persistedPairAgrees=$true;completionCollisions=@('request_completion_mismatch','ledger_completion_mismatch')}
+  reason=$null;corroboration='persisted_transaction'
+  candidate=@{correctedCompletedAt=$fixture.configuration.issuedAt;evidenceSha256=('a'*64);candidateSha256=('b'*64)}
+  dispatchEvidence=$null
+  databaseWrites=0;s3Writes=0;recoveryLedgerWrites=0;identityProviderCalls=0
+}
+Assert-DeletionReplayCompletionDiagnosis $diagnosis $diagnosisRequest $fixture.configuration
+Assert $true 'strict minimal diagnostic candidate accepted'
+$consistent = Clone $diagnosis
+$consistent.outcome='consistent';$consistent.candidate=$null;$consistent.corroboration=$null
+$consistent.comparison.requestMatchesTag=$true;$consistent.comparison.ledgerMatchesTag=$true;$consistent.comparison.completionCollisions=@()
+Assert-DeletionReplayCompletionDiagnosis $consistent $diagnosisRequest $fixture.configuration
+Assert $true 'consistent is not a repair candidate'
+$refusal = Clone $diagnosis
+$refusal.outcome='refused';$refusal.candidate=$null;$refusal.corroboration=$null;$refusal.comparison=$null;$refusal.reason='row_cardinality'
+Assert-DeletionReplayCompletionDiagnosis $refusal $diagnosisRequest $fixture.configuration
+Assert $true 'closed early refusal carries no invented comparison'
+$dispatchFixture = Clone @{
+  status='acknowledged_unclaimed';attemptCount=1;bindingSha256=@('c'*64)
+  latestCreatedAt=$fixture.configuration.issuedAt.Replace('Z','000Z');latestAcknowledgedAt=$fixture.configuration.issuedAt.Replace('Z','000Z')
+}
+foreach ($count in @(1,2,3)) {
+  $changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture
+  $changed.dispatchEvidence.attemptCount=$count
+  $changed.dispatchEvidence.bindingSha256=@(@(('c'*64),('d'*64),('e'*64)) | Select-Object -First $count)
+  Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration
+  Assert $true "exact $count opaque dispatch bindings accepted privately"
+  Reject { Assert-DeletionReplayAggregate $changed $fixture.inspect $fixture.configuration } 'dispatch evidence never becomes inspection approval'
+  Reject { Assert-DeletionReplayAggregate $changed $fixture.replay $fixture.configuration } 'dispatch evidence never becomes replay approval'
+  $observedConsistent=Clone $consistent;$observedConsistent.dispatchEvidence=Clone $changed.dispatchEvidence
+  Assert-DeletionReplayCompletionDiagnosis $observedConsistent $diagnosisRequest $fixture.configuration
+  Assert $true 'consistent diagnostic may retain non-authoritative dispatch summary'
+}
+$changed=Clone $refusal;$changed.dispatchEvidence=Clone $dispatchFixture
+Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'refusal must not carry dispatch proof'
+foreach ($bad in @(@(),[pscustomobject]@{},$false,0,'synthetic-secret-sentinel')) {
+  $changed=Clone $diagnosis;$changed.dispatchEvidence=$bad
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'dispatch summary is null or exact object only'
+}
+foreach ($key in $dispatchFixture.PSObject.Properties.Name) {
+  $changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture
+  $changed.dispatchEvidence.PSObject.Properties.Remove($key)
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "missing dispatch field $key"
+}
+foreach ($key in @('executionName','executionArn','operationId','eventId','rows','sql','credentials','writerExclusionProof','restoreTime')) {
+  $changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture
+  $changed.dispatchEvidence | Add-Member -NotePropertyName $key -NotePropertyValue 'synthetic-secret-sentinel'
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "dispatch refuses private locator or invented proof $key"
+}
+foreach ($bad in @(-1,0,4,1.5,'1',$true,$null,@(),[pscustomobject]@{})) {
+  $changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture;$changed.dispatchEvidence.attemptCount=$bad
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'dispatch exact bounded numeric attempt count'
+}
+foreach ($bad in @(@(),$null,('c'*64),@(('c'*64),('d'*64)),@('C'*64),@('c'*63),@(('c'*64)+"`n"),@($null),@([pscustomobject]@{}),@('synthetic-secret-sentinel'))) {
+  $changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture;$changed.dispatchEvidence.bindingSha256=$bad
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'dispatch exact array of scalar opaque hashes'
+}
+foreach ($bad in @(@(('c'*64),('c'*64)),@(('d'*64),('c'*64)))) {
+  $changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture;$changed.dispatchEvidence.attemptCount=2;$changed.dispatchEvidence.bindingSha256=$bad
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'dispatch hashes are unique and sorted'
+}
+foreach ($bad in @('pending',"acknowledged_unclaimed`n",'synthetic-secret-sentinel',$null,@())) {
+  $changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture;$changed.dispatchEvidence.status=$bad
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'dispatch status is one literal only'
+}
+foreach ($key in @('latestCreatedAt','latestAcknowledgedAt')) {
+  foreach ($bad in @('2026-02-30T00:00:00.000000Z','2026-09-08T00:00:00Z','2026-09-08T00:00:00.000Z','2026-09-08T00:00:00.0000001Z','2026-09-08T00:00:00.000000+00:00',"2026-09-08T00:00:00.000000Z`n",'0000-01-01T00:00:00.000000Z','2099-01-01T00:00:00.000000Z',$null,@(),[pscustomobject]@{})) {
+    $changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture;$changed.dispatchEvidence.$key=$bad
+    Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "dispatch canonical bounded timestamp $key"
+  }
+}
+$changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture;$changed.dispatchEvidence.latestCreatedAt=$fixture.configuration.expiresAt.Replace('Z','000Z')
+Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'dispatch creation cannot follow acknowledgment'
+$changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture;$changed.dispatchEvidence.latestAcknowledgedAt=$fixture.configuration.expiresAt.Replace('Z','000Z')
+Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration
+Assert $true 'transport does not invent a PITR cutoff or reject exact expiry equality'
+$changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture
+$changed.dispatchEvidence.latestCreatedAt=$fixture.configuration.issuedAt.Replace('Z','123Z');$changed.dispatchEvidence.latestAcknowledgedAt=$fixture.configuration.issuedAt.Replace('Z','456Z')
+Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration
+Assert $true 'real SQL microseconds remain valid and are not rounded'
+$changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture;$changed.dispatchEvidence.latestCreatedAt=$fixture.configuration.issuedAt.Replace('Z','001Z')
+Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'one-microsecond creation-after-acknowledgment is not hidden by millisecond truncation'
+$changed=Clone $diagnosis;$changed.dispatchEvidence=Clone $dispatchFixture;$changed.dispatchEvidence.latestAcknowledgedAt=$fixture.configuration.expiresAt.Replace('Z','001Z')
+Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'one-microsecond expiry excess is refused exactly'
+Assert ($operator -match 'fresh execution retirement and verified PITR-cutoff joins are local') 'dispatch summary is not standalone writer exclusion'
+Reject { Assert-DeletionReplayAggregate $diagnosis $fixture.inspect $fixture.configuration } 'diagnosis cannot approve inspection'
+Reject { Assert-DeletionReplayAggregate $diagnosis $fixture.replay $fixture.configuration } 'diagnosis cannot approve replay'
+Reject { Assert-DeletionReplayCompletionDiagnosis $aggregate $diagnosisRequest $fixture.configuration } 'inspection cannot impersonate diagnosis'
+foreach ($key in $diagnosis.PSObject.Properties.Name) {
+  $changed = Clone $diagnosis; $changed.PSObject.Properties.Remove($key)
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "missing diagnostic field $key"
+}
+foreach ($key in @('userId','requestId','bucketName','key','versionId','rows','sql','credentials','inspectionSha256')) {
+  foreach ($scope in @('response','candidate','comparison')) {
+    $changed=Clone $diagnosis
+    $node=if($scope -ceq 'response'){$changed}else{$changed.$scope}
+    $node | Add-Member -NotePropertyName $key -NotePropertyValue 'synthetic-secret-sentinel'
+    Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "forbidden $scope diagnostic field $key"
+  }
+  $changed=Clone $diagnosisRequest
+  $changed | Add-Member -NotePropertyName $key -NotePropertyValue 'synthetic-secret-sentinel'
+  Reject { Assert-DeletionReplayCompletionDiagnosis $diagnosis $changed $fixture.configuration } "diagnosis request forbids $key"
+}
+foreach ($key in @('runId','sourceSha','configurationSha256','functionVersion','expiresAt','markerSnapshotSha256')) {
+  $changed=Clone $diagnosis;$changed.$key='changed'
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "diagnosis binds $key"
+}
+foreach ($key in @('markersValidated','databaseWrites','s3Writes','recoveryLedgerWrites','identityProviderCalls')) {
+  foreach ($bad in @(-1,2,1.5,'0',$null,@(),[pscustomobject]@{})) {
+    $changed=Clone $diagnosis;$changed.$key=$bad
+    Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "diagnosis exact numeric $key"
+  }
+}
+foreach ($key in @('requestMatchesTag','ledgerMatchesTag','persistedPairAgrees')) {
+  foreach ($bad in @('false',0,$null,@($false),[pscustomobject]@{})) {
+    $changed=Clone $diagnosis;$changed.comparison.$key=$bad
+    Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "diagnosis typed comparison $key"
+  }
+  $changed=Clone $diagnosis;$changed.comparison.$key=-not $changed.comparison.$key
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "candidate comparison contradiction $key"
+}
+foreach ($bad in @(@(),@('request_completion_mismatch'),@('request_completion_mismatch','request_completion_mismatch'),@('request_completion_mismatch','synthetic-secret-sentinel'),'request_completion_mismatch',$null)) {
+  $changed=Clone $diagnosis;$changed.comparison.completionCollisions=$bad
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'candidate requires exact two unique collision predicates'
+}
+foreach ($key in @('correctedCompletedAt','evidenceSha256','candidateSha256')) {
+  $changed=Clone $diagnosis;$changed.candidate.PSObject.Properties.Remove($key)
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "candidate requires $key"
+  $changed=Clone $diagnosis;$changed.candidate.$key=@($diagnosis.candidate.$key)
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } "candidate scalar $key"
+}
+foreach ($bad in @('2026-02-30T00:00:00.000Z','2026-09-08T00:00:00Z','2026-09-08T00:00:00.000+00:00','2099-01-01T00:00:00.000Z','synthetic-secret-sentinel')) {
+  $changed=Clone $diagnosis;$changed.candidate.correctedCompletedAt=$bad
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'candidate canonical bounded timestamp'
+}
+foreach ($outcome in @('refused','consistent','replayed','synthetic-secret-sentinel')) {
+  $changed=Clone $diagnosis;$changed.outcome=$outcome
+  Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'outcome cannot carry contradictory proof'
+}
+$changed=Clone $refusal;$changed.reason='synthetic-secret-sentinel'
+Reject { Assert-DeletionReplayCompletionDiagnosis $changed $diagnosisRequest $fixture.configuration } 'refusal never reflects an untrusted message'
+Assert ((Get-DeletionReplayInvocationAction 'DiagnoseCompletion') -ceq 'diagnose_completion') 'diagnosis has explicit snake-case action'
+Assert ((Get-DeletionReplayInvocationAction 'Inspect') -ceq 'inspect') 'original inspection mapping unchanged'
+Assert ((Get-DeletionReplayInvocationAction 'Replay') -ceq 'replay') 'original replay mapping unchanged'
+Reject { Get-DeletionReplayInvocationAction 'Cleanup' } 'no other operator stage becomes an invocation'
+Assert ($operator -match 'DeletionReplayDiagnosisAmbiguousReviewBeforeRetry' -and $operator -match 'inspectionApproval=\$false') 'ambiguous diagnosis has fixed refusal and never creates approval'
+Assert (@([regex]::Matches($operator,'Get-ReplayDiagnosisCleanupReadyAt \$runDirectory')).Count -eq 2) 'cleanup checks diagnosis windows before waiting and immediately before delete'
+
+# Execute only the real local journal reader; all files contain generated fixture data.
+& {
+  $journalAst=[Management.Automation.Language.Parser]::ParseFile($operatorPath,[ref]$tokens,[ref]$errors)
+  $definition=@($journalAst.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-ReplayDiagnosisCleanupReadyAt'},$true))
+  Assert ($definition.Count -eq 1) 'real diagnostic cleanup reader found once'
+  . ([scriptblock]::Create($definition[0].Extent.Text))
+  $journalRoot=Join-Path ([IO.Path]::GetTempPath()) ('ai-job-apply-diagnosis-journal-tests-'+[guid]::NewGuid().ToString('N'))
+  $null=New-Item -ItemType Directory -Path $journalRoot
+  try {
+    $preparationSha='c'*64
+    $ready=$now.AddSeconds(330)
+    Assert ((Get-ReplayDiagnosisCleanupReadyAt $journalRoot $preparation $preparationSha $ready $now) -eq $ready) 'no diagnostic journal preserves original disable timeout'
+    $requestPath=Join-Path $journalRoot ('diagnose-'+('d'*32)+'-request.json')
+    $journalPath=Join-Path $journalRoot ('diagnose-'+('d'*32)+'-started.json')
+    Write-DeletionReplayPrivateJson $requestPath $diagnosisRequest
+    $journal=Clone @{schemaVersion=1;action='diagnose_completion';status='started';startedAt=$now.AddSeconds(30).ToString('o');preparationSha256=$preparationSha;requestSha256=(Get-D1RestoreFileSha256 $requestPath)}
+    foreach ($status in @('started','completed','ambiguous')) {
+      $journal.status=$status
+      Write-DeletionReplayPrivateJson $journalPath $journal -Replace
+      Assert ((Get-ReplayDiagnosisCleanupReadyAt $journalRoot $preparation $preparationSha $ready $now.AddSeconds(60)) -eq $now.AddSeconds(360)) "full 330-second window for $status diagnosis"
+    }
+    foreach ($key in @('action','preparationSha256','requestSha256','startedAt','status')) {
+      $changed=Clone $journal;$changed.$key='synthetic-secret-sentinel'
+      Write-DeletionReplayPrivateJson $journalPath $changed -Replace
+      Reject { Get-ReplayDiagnosisCleanupReadyAt $journalRoot $preparation $preparationSha $ready $now.AddSeconds(60) } "cleanup refuses changed diagnosis journal $key"
+    }
+    Write-DeletionReplayPrivateJson $journalPath $journal -Replace
+    $changed=Clone $diagnosisRequest;$changed.functionVersion='2'
+    Write-DeletionReplayPrivateJson $requestPath $changed -Replace
+    Reject { Get-ReplayDiagnosisCleanupReadyAt $journalRoot $preparation $preparationSha $ready $now.AddSeconds(60) } 'cleanup retains exact request checksum'
+    foreach ($key in @('action','runId','configurationSha256','functionVersion')) {
+      $changed=Clone $diagnosisRequest;$changed.$key=@($diagnosisRequest.$key)
+      Write-DeletionReplayPrivateJson $requestPath $changed -Replace
+      $journal.requestSha256=Get-D1RestoreFileSha256 $requestPath
+      Write-DeletionReplayPrivateJson $journalPath $journal -Replace
+      Reject { Get-ReplayDiagnosisCleanupReadyAt $journalRoot $preparation $preparationSha $ready $now.AddSeconds(60) } "cleanup preserves request scalar type $key"
+    }
+  } finally {
+    $resolved=[IO.Path]::GetFullPath($journalRoot)
+    if ($resolved -cnotmatch 'ai-job-apply-diagnosis-journal-tests-[a-f0-9]{32}$' -or -not $resolved.StartsWith([IO.Path]::GetTempPath(),[StringComparison]::OrdinalIgnoreCase)) { throw 'Synthetic cleanup target invalid' }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+  }
+}
+
 [pscustomobject]@{suite='candidate-deletion-replay-generated-boundaries';checksPassed=$script:checks;cloudCalls=0;candidateDataRetained=$false} | ConvertTo-Json -Compress

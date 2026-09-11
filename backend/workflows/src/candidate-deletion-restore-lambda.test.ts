@@ -1,6 +1,13 @@
 import { readFileSync } from "node:fs";
 import type { DatabaseHandle } from "@ai-job-apply/profile-service";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { HistoricalCompletionEvidence } from "./candidate-deletion-completion-diagnosis.js";
+import type { HistoricalCompletionEvidenceTarget } from "./candidate-deletion-completion-evidence.js";
+import {
+  validateRestoreCompletionDiagnosisResult,
+  validateRestoreInspectionResult,
+  validateRestoreReplayResult,
+} from "./candidate-deletion-restore-contract.js";
 import {
   type CandidateDeletionRestoreContext,
   type CandidateDeletionRestoreDependencies,
@@ -60,6 +67,10 @@ function harness() {
     documentVersionsObserved: 0 as const,
   };
   const ledger = {
+    inspectCompletionEvidence: vi.fn(async (): Promise<HistoricalCompletionEvidence["marker"]> => {
+      calls.push("completion-marker");
+      throw new Error("SyntheticCompletionMarkerNotConfigured");
+    }),
     inspectCompletedMarkers: vi.fn(async () => {
       calls.push("markers");
       return snapshot;
@@ -91,9 +102,18 @@ function harness() {
   const close = vi.fn(async () => {
     calls.push("close");
   });
+  const collectCompletionEvidence = vi.fn(
+    async (
+      _target: HistoricalCompletionEvidenceTarget,
+      _signal: AbortSignal,
+    ): Promise<HistoricalCompletionEvidence> => {
+      calls.push("completion-evidence");
+      throw new Error("SyntheticCompletionEvidenceNotConfigured");
+    },
+  );
   const openStore = vi.fn(async () => {
     calls.push("open");
-    return { store, close };
+    return { store, close, collectCompletionEvidence };
   });
   const environment: Record<string, string> = {
     ...fixture.environment,
@@ -130,6 +150,7 @@ function harness() {
     openStore,
     calls,
     logger,
+    collectCompletionEvidence,
   };
 }
 
@@ -698,5 +719,459 @@ describe("private isolated deletion restore Lambda", () => {
         stage: "store_preflight",
       }),
     );
+  });
+});
+
+function diagnosticHarness() {
+  const h = harness();
+  h.snapshot.entries.splice(1);
+  h.snapshot.currentPolicyMarkers = 0;
+  const entry = h.snapshot.entries[0];
+  if (!entry?.completedAt) throw new Error("SyntheticCompletionEntryMissing");
+  const marker: HistoricalCompletionEvidence["marker"] = {
+    bucketName: h.environment.CANDIDATE_DELETION_RECOVERY_BUCKET ?? "",
+    expectedBucketOwner: fixture.configuration.accountId,
+    key: "candidate-deletion-recovery/" + entry.requestId + ".json",
+    versionId: "synthetic-exact-completion-version",
+    etag: '"synthetic-etag"',
+    contentLength: 1024,
+    lastModified: entry.confirmedAt.toISOString(),
+    bodySha256: "1".repeat(64),
+    checksumSha256: "1".repeat(64),
+    metadataSha256: "2".repeat(64),
+    encryptionSha256: "3".repeat(64),
+    retentionSha256: "4".repeat(64),
+    versionInventorySha256: "5".repeat(64),
+    oldTagSet: [
+      { Key: "state", Value: "completed" },
+      { Key: "completed-at", Value: entry.completedAt.toISOString() },
+    ],
+    entry: {
+      ...entry,
+      confirmedAt: entry.confirmedAt.toISOString(),
+      completedAt: entry.completedAt.toISOString(),
+      backupExpiresAt: entry.backupExpiresAt.toISOString(),
+    },
+  };
+  const completedAt = "2026-09-01T00:00:30.000000Z";
+  const rows = {
+    dispatchRows: [] as Array<HistoricalCompletionEvidence["dispatchRows"][number]>,
+    userRows: [
+      {
+        id: entry.userId,
+        accountState: "quarantined",
+        createdAt: "2026-08-01T00:00:00.000000Z",
+        quarantinedAt: "2026-09-01T00:00:00.000000Z",
+      },
+    ],
+    requestRows: [
+      {
+        id: entry.requestId,
+        userId: entry.userId,
+        operationId: entry.operationId,
+        policyVersion: entry.policyVersion,
+        state: "completed",
+        version: 5,
+        requestedAt: "2026-08-31T23:59:00.000000Z",
+        updatedAt: completedAt,
+        confirmedAt: entry.confirmedAt.toISOString(),
+        backupExpiresAt: entry.backupExpiresAt.toISOString(),
+        completedAt: completedAt as string | null,
+        backupExpiredAt: null as string | null,
+      },
+    ],
+    ledgerRows: [
+      {
+        requestId: entry.requestId,
+        subjectDigest: entry.subjectDigest,
+        policyVersion: entry.policyVersion,
+        policySha256: entry.policySha256,
+        state: "completed",
+        ownerInventory: {
+          identity: "completed",
+          profile: "completed",
+          documents: "completed",
+          jobs: "completed",
+          matching: "completed",
+          billing: "completed",
+        },
+        subprocessorInventory: {},
+        confirmedAt: entry.confirmedAt.toISOString(),
+        backupExpiresAt: entry.backupExpiresAt.toISOString(),
+        completedAt: completedAt as string | null,
+        backupExpiredAt: null as string | null,
+        updatedAt: completedAt,
+      },
+    ],
+    operationRows: [
+      {
+        id: entry.operationId,
+        userId: entry.userId,
+        kind: "account_deletion",
+        state: "succeeded",
+        result: { resourceId: entry.requestId, resourceType: "account_deletion_request" },
+        errorCode: null,
+        createdAt: entry.confirmedAt.toISOString(),
+        updatedAt: completedAt,
+      },
+    ],
+  };
+  h.ledger.inspectCompletionEvidence.mockImplementation(async () => {
+    h.calls.push("completion-marker");
+    return marker;
+  });
+  h.collectCompletionEvidence.mockImplementation(async (target) => {
+    h.calls.push("completion-evidence");
+    return {
+      schemaVersion: 1,
+      ...target,
+      observedAt: fixture.now,
+      ...structuredClone(rows),
+      durable: null,
+    };
+  });
+  const request = { ...fixture.inspect, action: "diagnose_completion" as const };
+  return { ...h, rows, marker, entry, request };
+}
+
+describe("private read-only completion diagnosis handler branch", () => {
+  it("returns only the fixed receipt and timestamp/checksums after bound read-only corroboration", async () => {
+    const h = diagnosticHarness();
+    h.store.preflight.mockRejectedValue(new Error("CandidateDeletionRestoreCompletionCollision"));
+    const result = await h.run(h.request, h.context);
+    expect(validateRestoreCompletionDiagnosisResult(result)).toBe(true);
+    expect(result).toMatchObject({
+      action: "diagnose_completion",
+      outcome: "persisted_candidate",
+      markersValidated: 1,
+      corroboration: "persisted_transaction",
+      dispatchEvidence: null,
+      reason: null,
+      comparison: {
+        requestMatchesTag: false,
+        ledgerMatchesTag: false,
+        persistedPairAgrees: true,
+        completionCollisions: ["ledger_completion_mismatch", "request_completion_mismatch"],
+      },
+      candidate: {
+        correctedCompletedAt: "2026-09-01T00:00:30.000Z",
+        candidateSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+        evidenceSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      },
+      databaseWrites: 0,
+      s3Writes: 0,
+      recoveryLedgerWrites: 0,
+      identityProviderCalls: 0,
+    });
+    expect(h.calls).toEqual([
+      "markers",
+      "completion-marker",
+      "open",
+      "completion-evidence",
+      "markers-unchanged",
+      "close",
+    ]);
+    expect(h.store.preflight).not.toHaveBeenCalled();
+    expect(h.store.reconcile).not.toHaveBeenCalled();
+    expect(h.documents.inspectExpectedAbsentDocuments).not.toHaveBeenCalled();
+    expect(h.logger.error).not.toHaveBeenCalled();
+    for (const value of [
+      h.entry.requestId,
+      h.entry.operationId,
+      h.entry.userId,
+      h.entry.subjectDigest,
+      h.marker.versionId,
+      h.marker.key,
+      h.marker.bucketName,
+    ])
+      expect(JSON.stringify(result)).not.toContain(value);
+    expect(validateRestoreInspectionResult(result)).toBe(false);
+    expect(validateRestoreReplayResult(result)).toBe(false);
+  });
+  it("keeps an already consistent tag diagnostic-only, with no candidate", async () => {
+    const h = diagnosticHarness();
+    const completion = h.entry.completedAt?.toISOString() ?? "";
+    for (const row of h.rows.requestRows) row.completedAt = completion;
+    for (const row of h.rows.ledgerRows) row.completedAt = completion;
+    for (const row of [...h.rows.requestRows, ...h.rows.ledgerRows, ...h.rows.operationRows])
+      row.updatedAt = completion;
+    const result = await h.run(h.request, h.context);
+    expect(result).toMatchObject({
+      outcome: "consistent",
+      candidate: null,
+      reason: null,
+      corroboration: null,
+    });
+    expect(validateRestoreCompletionDiagnosisResult(result)).toBe(true);
+  });
+  it("returns only opaque acknowledged dispatch bindings from the exact-operation SQL projection", async () => {
+    const h = diagnosticHarness();
+    const eventId = "019c2b89-79b2-7000-8000-000000000099";
+    const executionName = "outbox-" + eventId;
+    const executionArn =
+      "arn:aws:lambda:us-east-2:" +
+      h.marker.expectedBucketOwner +
+      ":function:ai-job-apply-development-profile-readiness-durable:12/durable-execution/" +
+      executionName +
+      "/synthetic-execution";
+    h.rows.dispatchRows.push({
+      id: eventId,
+      type: "profile.account-deletion.confirmed.v1",
+      source: "urn:ai-job-apply:profile-service",
+      subject: "account-deletion-request/" + h.entry.requestId,
+      dataSchema:
+        "https://schemas.ai-job-apply.internal/events/profile.account-deletion.confirmed.v1.json",
+      data: {
+        deletionRequestId: h.entry.requestId,
+        operationId: h.entry.operationId,
+        policyVersion: h.entry.policyVersion,
+      },
+      dispatchTarget: "lambda_durable",
+      createdAt: "2026-09-01T00:00:01.000000Z",
+      publishedAt: "2026-09-01T00:00:02.001000Z",
+      durableStartedAt: "2026-09-01T00:00:02.002000Z",
+      nudgeClaimedAt: null,
+      durableExecutionName: executionName,
+      durableExecutionArn: executionArn,
+    });
+    const result = await h.run(h.request, h.context);
+    expect(validateRestoreCompletionDiagnosisResult(result)).toBe(true);
+    expect(result).toMatchObject({
+      outcome: "persisted_candidate",
+      corroboration: "persisted_transaction_and_dispatch",
+      dispatchEvidence: {
+        status: "acknowledged_unclaimed",
+        attemptCount: 1,
+        bindingSha256: [expect.stringMatching(/^[a-f0-9]{64}$/u)],
+        latestCreatedAt: "2026-09-01T00:00:01.000000Z",
+        latestAcknowledgedAt: "2026-09-01T00:00:02.002000Z",
+      },
+    });
+    for (const privateValue of [
+      eventId,
+      executionName,
+      executionArn,
+      h.entry.requestId,
+      h.entry.operationId,
+    ])
+      expect(JSON.stringify(result)).not.toContain(privateValue);
+    expect(h.store.preflight).not.toHaveBeenCalled();
+    expect(h.store.reconcile).not.toHaveBeenCalled();
+    expect(h.ledger.assertUnchanged).toHaveBeenCalledOnce();
+    expect(h.close).toHaveBeenCalledOnce();
+  });
+  it("returns a fixed refusal instead of discarding a malformed additional operation attempt", async () => {
+    const h = diagnosticHarness();
+    h.rows.dispatchRows.push({
+      data: { operationId: h.entry.operationId },
+    } as HistoricalCompletionEvidence["dispatchRows"][number]);
+    const result = await h.run(h.request, h.context);
+    expect(validateRestoreCompletionDiagnosisResult(result)).toBe(true);
+    expect(result).toMatchObject({
+      outcome: "refused",
+      reason: "dispatch_corroboration_missing",
+      dispatchEvidence: null,
+      candidate: null,
+    });
+    expect(h.store.preflight).not.toHaveBeenCalled();
+    expect(h.store.reconcile).not.toHaveBeenCalled();
+    expect(h.logger.error).not.toHaveBeenCalled();
+  });
+  it.each([
+    [
+      "request_completion_mismatch",
+      (h: ReturnType<typeof diagnosticHarness>) => {
+        const row = h.rows.ledgerRows[0];
+        if (row) row.completedAt = h.entry.completedAt?.toISOString() ?? "";
+      },
+    ],
+    [
+      "ledger_completion_mismatch",
+      (h: ReturnType<typeof diagnosticHarness>) => {
+        const row = h.rows.requestRows[0];
+        if (row) row.completedAt = h.entry.completedAt?.toISOString() ?? "";
+      },
+    ],
+    [
+      "request_timestamp_state_conflict",
+      (h: ReturnType<typeof diagnosticHarness>) => {
+        const row = h.rows.requestRows[0];
+        if (row) row.backupExpiredAt = "2026-09-01T00:00:00.000000Z";
+      },
+    ],
+    [
+      "ledger_timestamp_state_conflict",
+      (h: ReturnType<typeof diagnosticHarness>) => {
+        const row = h.rows.ledgerRows[0];
+        if (row) row.backupExpiredAt = "2026-09-01T00:00:00.000000Z";
+      },
+    ],
+    [
+      "backup_expiry_conflict",
+      (h: ReturnType<typeof diagnosticHarness>) => {
+        for (const row of [...h.rows.requestRows, ...h.rows.ledgerRows]) {
+          row.state = "backup_expired";
+          row.backupExpiredAt = "2026-09-01T00:00:00.000000Z";
+        }
+      },
+    ],
+  ] as const)("reports fixed %s only, with no correction candidate", async (predicate, change) => {
+    const h = diagnosticHarness();
+    change(h);
+    const result = await h.run(h.request, h.context);
+    expect(validateRestoreCompletionDiagnosisResult(result)).toBe(true);
+    if (result.action !== "diagnose_completion") throw new Error("SyntheticWrongAction");
+    expect(result.outcome).toBe("refused");
+    expect(result.candidate).toBeNull();
+    expect(result.comparison?.completionCollisions).toContain(predicate);
+    expect(h.store.reconcile).not.toHaveBeenCalled();
+  });
+  it("returns fixed cardinality refusal without disclosing absent source rows", async () => {
+    const h = diagnosticHarness();
+    h.rows.requestRows.splice(0);
+    const result = await h.run(h.request, h.context);
+    expect(result).toMatchObject({
+      outcome: "refused",
+      reason: "row_cardinality",
+      candidate: null,
+      comparison: null,
+    });
+    expect(validateRestoreCompletionDiagnosisResult(result)).toBe(true);
+  });
+  it("refuses common microseconds not representable by the authorized tag format", async () => {
+    const h = diagnosticHarness();
+    for (const row of [...h.rows.requestRows, ...h.rows.ledgerRows])
+      row.completedAt = "2026-09-01T00:00:30.000001Z";
+    const result = await h.run(h.request, h.context);
+    expect(result).toMatchObject({
+      outcome: "refused",
+      reason: "timestamp_chronology",
+      candidate: null,
+    });
+  });
+  it.each([0, 2])("refuses %i markers before opening the restored store", async (count) => {
+    const h = diagnosticHarness();
+    h.snapshot.entries.splice(0);
+    if (count === 2) h.snapshot.entries.push({ ...h.entry }, { ...h.entry });
+    h.snapshot.historicalPolicyMarkers = count;
+    await expect(h.run(h.request, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(h.openStore).not.toHaveBeenCalled();
+  });
+  it("rejects a forged snapshot/accessor failure before connecting", async () => {
+    const h = diagnosticHarness();
+    h.ledger.inspectCompletionEvidence.mockRejectedValue(new Error("PRIVATE marker"));
+    await expect(h.run(h.request, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(h.openStore).not.toHaveBeenCalled();
+    expect(h.logger.error).toHaveBeenCalledExactlyOnceWith({
+      event: "candidate_deletion_restore_rejected",
+      action: "diagnose_completion",
+      stage: "completion_marker",
+    });
+  });
+  it("rechecks the whole ledger after SQL reads and rejects any drift", async () => {
+    const h = diagnosticHarness();
+    h.ledger.assertUnchanged.mockRejectedValue(new Error("PRIVATE drift"));
+    await expect(h.run(h.request, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(h.close).toHaveBeenCalledOnce();
+    expect(h.store.reconcile).not.toHaveBeenCalled();
+  });
+  it.each([
+    "sourceSha",
+    "restoreContextSha256",
+    "configurationSha256",
+    "markerSnapshotSha256",
+  ] as const)("rejects collector proof bound to a different %s", async (key) => {
+    const h = diagnosticHarness();
+    const original = h.collectCompletionEvidence.getMockImplementation();
+    h.collectCompletionEvidence.mockImplementation(async (target, signal) => {
+      if (!original) throw new Error("SyntheticMissingImplementation");
+      return {
+        ...(await original(target, signal)),
+        [key]: key === "sourceSha" ? "0".repeat(40) : "0".repeat(64),
+      };
+    });
+    await expect(h.run(h.request, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(h.close).toHaveBeenCalledOnce();
+  });
+  it("rejects a substituted marker/version in the private collector result", async () => {
+    const h = diagnosticHarness();
+    const original = h.collectCompletionEvidence.getMockImplementation();
+    h.collectCompletionEvidence.mockImplementation(async (target, signal) => {
+      if (!original) throw new Error("SyntheticMissingImplementation");
+      const result = await original(target, signal);
+      return { ...result, marker: { ...result.marker, versionId: "different-version" } };
+    });
+    await expect(h.run(h.request, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+  });
+  it("does not log or inspect an arbitrary hostile SQL failure", async () => {
+    const h = diagnosticHarness();
+    const accessed = vi.fn(() => {
+      throw new Error("PRIVATE getter");
+    });
+    h.collectCompletionEvidence.mockRejectedValue(
+      new Proxy({}, { get: accessed, ownKeys: accessed, getPrototypeOf: accessed }),
+    );
+    await expect(h.run(h.request, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(accessed).not.toHaveBeenCalled();
+    expect(h.logger.error).toHaveBeenCalledExactlyOnceWith({
+      event: "candidate_deletion_restore_rejected",
+      action: "diagnose_completion",
+      stage: "completion_evidence",
+    });
+    expect(h.close).toHaveBeenCalledOnce();
+  });
+  it("retains the abort/deadline and close boundary during diagnosis", async () => {
+    const h = diagnosticHarness();
+    const original = h.collectCompletionEvidence.getMockImplementation();
+    h.collectCompletionEvidence.mockImplementation(async (target, signal) => {
+      if (!original) throw new Error("SyntheticMissingImplementation");
+      const result = await original(target, signal);
+      h.context.getRemainingTimeInMillis = () => 10_000;
+      return result;
+    });
+    await expect(h.run(h.request, h.context)).rejects.toThrow(
+      /^CandidateDeletionRestoreRejected$/u,
+    );
+    expect(h.close).toHaveBeenCalledOnce();
+    expect(h.ledger.assertUnchanged).not.toHaveBeenCalled();
+  });
+  it("never accepts extra target fields or an inspection digest on the diagnostic request", async () => {
+    for (const extra of [
+      { key: "other" },
+      { reviewedInspectionSha256: fixture.inspectionSha256 },
+    ]) {
+      const h = diagnosticHarness();
+      await expect(h.run({ ...h.request, ...extra }, h.context)).rejects.toThrow(
+        /^CandidateDeletionRestoreRejected$/u,
+      );
+      expect(h.openStore).not.toHaveBeenCalled();
+    }
+  });
+  it("does not enable Replay with a diagnosis checksum", async () => {
+    const h = diagnosticHarness();
+    const result = await h.run(h.request, h.context);
+    if (result.action !== "diagnose_completion" || !result.candidate)
+      throw new Error("SyntheticMissingCandidate");
+    h.store.preflight.mockRejectedValue(new Error("CandidateDeletionRestoreCompletionCollision"));
+    await expect(
+      h.run(
+        { ...fixture.replay, reviewedInspectionSha256: result.candidate.candidateSha256 },
+        h.context,
+      ),
+    ).rejects.toThrow(/^CandidateDeletionRestoreRejected$/u);
+    expect(h.store.preflight).toHaveBeenCalledOnce();
+    expect(h.store.reconcile).not.toHaveBeenCalled();
   });
 });

@@ -44,10 +44,33 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
-Current authority checkpoint (`2026-09-11` UTC): the user approves D2-052's conditional diagnosis
+Current engineering checkpoint (`2026-09-11` UTC): Gateway `423d63b` is deployed and verified;
+the fresh canonical baseline has zero drift at Platform `321`. Core workflow starts are then
+paused and verified at `322`, with durable/activity/terminal versions still `13`. The first
+complete metadata inventory observes 23 retained executions (six succeeded, 17 failed), none
+running and no start/end in the previous 24 hours. Queue counts are approximately zero; missing
+terminal metrics are unknown, not a successful workload or proof of historical writer exclusion.
+The un-applied `423d63b` core release plan is superseded to include a newly demonstrated late-event
+retry defect in the same next deployment. Its original artifacts and plan remain unchanged.
+The conditional operation update now gates retry enqueueing; 41 actual Profile unit tests and
+typecheck pass, including eight regressions that fail against the original source. These are
+generated transaction-seam tests, not real PostgreSQL concurrency evidence. The integrated
+read-only diagnostic, exact-version repair helpers and internal contracts pass 785 focused tests,
+697 operator assertions and the actual workflow build. All six real isolated PostgreSQL cases
+pass, including unchanged-row diagnosis with microsecond dispatch evidence and the already-terminal
+no-extra-outbox path; this does not claim a concurrent lock race. Full repository verification
+passes: 1,146 workflow tests, eight explicit database opt-in skips, 697 executor/908 role
+assertions and all 20 builds (17 unchanged cached tasks). The six real database cases above ran
+separately. Nine pre-existing nonfatal lint warnings remain. Fresh current-source publication,
+paused baseline/drain, reviewed core Release/Resume and cloud diagnosis remain.
+No historical tag, SQL row, marker body, confirmation, retention, document or Auth0 value changed.
+The same verified PITR copy and temporary permissions remain; no executor is currently live.
+
+Authority checkpoint (`2026-09-11` UTC): the user approves D2-052's conditional diagnosis
 and exact-object-version completion-time tag correction only if corroborated retained evidence
-proves that tag wrong. D2-R20's authority gate is closed; diagnosis, future-writer releases and any
-correction remain unperformed. Require matching persisted request/ledger completion evidence,
+proves that tag wrong. D2-R20's authority gate is closed; cloud diagnosis and any correction remain
+unperformed. Gateway is released; the core release is pending as qualified above. Require matching
+persisted request/ledger completion evidence,
 retire old workflow writers, preserve the complete preimage, and change no other tag or data.
 If these conditions fail, stop without writing. The original D2-R17 drill boundary is unchanged;
 the separate correction does not grant the restore executor cloud-write permissions. Reuse the
@@ -271,7 +294,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-048 | Preserve absent process inputs between nested workload/recovery inspections. | Complete | Platform engineering | D2-038; D2-045 | Completed 2026-09-10 at `c9351e2` after Platform `319`/Bootstrap `19` cleanup. Original PowerShell 7.5 reproduces the absent-to-empty failure; integrated exact-cleanup-AST regressions pass independently with 266 assertions on 7.5 and 260 on Windows PowerShell 5.1, plus the full committed-source verifier/all 20 builds. Present-empty, composite, unrelated and `TF_DATA_DIR` inputs remain intact; no blanket purge or decoder relaxation. Actual recovery remains under D2-038. See [cause and repair](#d2-048--runtime-inspection-environment-restoration). |
 | D2-049 | Read actual function-level tags and optional concurrency metadata for the exact numeric recovery executor. | Complete | Platform engineering | D2-038; D2-048 | Completed 2026-09-10 at `92c1fc2`: actual 448 executor/908 role assertions, independent review and full committed-source verification pass. Both standalone builds match, and the corrected maintained Create produces its genuine numeric-version receipt. Subsequent maintained cleanup also succeeds without the earlier bridge. The independent runtime inspection failure is D2-050, not a metadata-check failure or successful replay. See [repair and recovery boundary](#d2-049--recovery-executor-metadata). |
 | D2-050 | Diagnose and repair the private restore executor's database-opening/runtime inspection rejection without exposing secrets. | In progress | Platform engineering | D2-038; D2-049; D2-052 | Branded diagnostics at `fa01d53` pass 95 focused tests, independent review, full verification (721 workflow tests; seven explicit DB opt-ins skipped) and 20 builds. Actual `9b608ac` Inspect confirms connection and four SQL reads before `CompletionCollision`; the precise historical predicate/cause remains unknown under D2-052. No Replay; exact executor cleanup passes. Full cloud inspection/replay and final cleanup remain. SDK compatibility is not retroactively claimed as the earlier cause. See [runtime repair](#d2-050--private-restore-runtime-compatibility). |
-| D2-051 | Preserve authoritative deletion confirmation/completion timestamps across rollback, duplicate delivery and concurrent completion retries. | In progress | Platform engineering | D2-020; D2-038 | Fixes at `fa01d53` pass 30 focused tests while original-source tests produce 13 expected failures. Actual isolated PostgreSQL passes all five restore/export tests, including journal-success/SQL-rollback and completion-tag retry. Independent review, both typechecks, formatting, full committed-source verification and 20 builds pass. Required Gateway/core releases remain; no historical live marker repair is authorized. See [retry timestamps](#d2-051--deletion-retry-timestamps). |
+| D2-051 | Preserve authoritative deletion timestamps and prevent late terminal events from enqueueing another completed-operation retry. | In progress | Platform engineering | D2-020; D2-038 | Timestamp fixes pass 30 focused tests, 13 expected original-source failures, five real PostgreSQL tests and full verification. Gateway `423d63b` is deployed/verified; core Pause verifies at `322`, with old versions `13` pending replacement. The additional conditional-update/enqueue fix passes 41 Profile unit tests, eight expected original-source failures and typecheck; real concurrent SQL verification remains separate. Fresh combined core publication/release/resume remains. Historical correction requires D2-052's separate conditional authority. See [retry timestamps](#d2-051--deletion-retry-timestamps). |
 | D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | In progress | Product owner; platform engineering | D2-038; D2-050; D2-051 | User grants separate conditional exact-version completion-tag repair authority on 2026-09-11 UTC. Actual `9b608ac` Inspect proves only `CompletionCollision`; the precise predicate and correct value are still unestablished. No Replay or historical write runs. Require matching persisted request/ledger evidence, retired writers and unchanged exact-version preconditions; otherwise stop without writing. Future-writer releases, diagnosis, any proven one-tag correction, unchanged reinspection/replay and final cleanup remain. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
 
 ### D2-050 — Private restore runtime compatibility
@@ -385,9 +408,34 @@ command, and all 20 builds pass (17 cached). The separate five-test PostgreSQL e
 fresh, not inferred from those skips. The verifier retains nine pre-existing non-failing lint
 warnings. Docker and WSL are stopped after exact synthetic-container removal; no user data or
 persistent volumes were removed. Only the two existing delivery documents change after this
-verification. Gateway/core workflow corrective releases remain separate and unperformed.
+verification. The subsequent `2026-09-11` Gateway `423d63b` release verifies at `321`; core Pause
+verifies at `322`, with versions `13` still active and starts disabled pending replacement.
+
+A further source defect is confirmed: `reconcileDurableOperationFailure` could insert a retry
+outbox row even when its conditional nonterminal operation update changed zero rows. A late
+failure event could therefore enqueue a new attempt for an already succeeded/failed operation.
+The minimal fix uses `UPDATE ... RETURNING id` and inserts only after exactly one row transitions,
+within the existing transaction. It preserves the pending-event and three-attempt limits and does
+not delete already queued work. The actual 41-test Profile suite and typecheck pass; the same suite
+against the original implementation has eight expected failures. These generated query/rollback
+seams do not establish real row-lock concurrency. Include this fix in the next core release;
+retain the earlier, un-applied `423d63b` release plan as superseded evidence.
 
 ### D2-052 — Historical completion consistency
+
+Local implementation checkpoint (`2026-09-11` UTC): the separately journaled `DiagnoseCompletion`
+action is integrated without changing normal Inspect/Replay approval or cloud-write permissions.
+It validates the exact singleton marker and reads five bounded selectors in one read-only
+repeatable-read transaction. Fixed comparisons distinguish refusal, consistency and agreeing
+persisted request/ledger/operation completion evidence. Dispatch clocks retain all six SQL
+fractional digits; pending, claimed, malformed or conflicting dispatches are not filtered away.
+The local exact-version tag adapter preserves body/metadata/retention and all other tags, reserves
+a stable durable one-attempt journal, and permits only readback after an uncertain result.
+Authenticated diagnostic provenance and independent old-writer exclusion remain separate
+requirements; a checksum or an empty queue is not sufficient. Integrated checks pass 785 focused
+tests, 697 operator assertions, the workflow build and all six real PostgreSQL tests. The full
+repository verifier also passes with 1,146 workflow tests and all 20 builds. No cloud diagnosis
+or correction has run; clean-source publication and the combined core release are next.
 
 The current-source isolated inspection demonstrates a real `CompletionCollision`, not a generic
 database or SDK failure. Its five store guards cover request/ledger completion versus the retained
@@ -1763,8 +1811,17 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-10 | Renewed SSO closes R15. Actual `01732ad` Create succeeds, but the single Inspect refuses at `store_preflight`; no Replay. Maintained Cleanup `57506` fully drains/removes the exact executor, retaining the same verified copy. Before builds, five original artifacts are archived owner-only without changing other artifacts. Integrated D2-050's fixed branded reasons (95 tests) and D2-051's authoritative retry timestamps (30 tests; 13 expected original-source failures). The actual isolated PostgreSQL restore/export/rollback suite passes 5/5 after rebuilding 11 dependency workspaces. No live database, document, marker, Auth0 or ordinary application release is changed. Full committed-source verification and cloud continuation remain. | D2-050; D2-051; D2-038 | [Private diagnosis](#d2-050--private-restore-runtime-compatibility), [retry regression](../../../backend/workflows/src/candidate-deletion-restore-store.integration.test.ts) |
 | 2026-09-10 | Exact `fa01d53` passes the full maintained verifier, 721 workflow tests (seven explicit database opt-ins skipped) and all 20 build tasks (17 cached). The separate actual PostgreSQL run passes 5/5. Exact generated tmpfs container cleanup and Docker/WSL shutdown complete without user-data/volume removal. D2-050 and D2-051 implementation is verified; cloud diagnosis/replay, corrective Gateway/core releases and final cleanup remain. Only the two existing delivery MDs change after verification; no new branches or GitHub Actions changes. | D2-050; D2-051; D2-038 | [Runtime diagnosis](#d2-050--private-restore-runtime-compatibility), [verified retry fixes](#d2-051--deletion-retry-timestamps), [maintained verifier](../../../scripts/verify-phase0.ps1) |
 | 2026-09-10 | Actual `9b608ac` has matching standalone artifacts, independently reviewed preparation and successful Create. Single Inspect `24050` refuses; bounded diagnostic `666332` identifies `store_preflight` / `CompletionCollision` after connection and initial SQL reads. The exact failing comparison is unknown; no Replay or historical mutation runs. Cleanup `88848` confirms the exact executor absent after full drain. Its immutable artifact and five byte-identical private files are retained with the same verified RDS copy and `320`/`20` permissions. D2-052/D2-R20 record the new conditional historical correction decision; D2-051 future-writer releases remain separate. Docker/WSL are confirmed off and the PC stays running. | D2-038; D2-050; D2-051; D2-052 | [Historical completion blocker](#d2-052--historical-completion-consistency), [fixed store guards](../../../backend/workflows/src/candidate-deletion-restore-store.ts), [maintained cleanup](../../../scripts/operate-development-candidate-deletion-replay.ps1) |
+| 2026-09-11 | Gateway `423d63b` is published, applied and verified with zero drift at `321`. Core mapping-only Pause applies/verifies at `322`; first metadata inventory has 23 historical executions, none running and no start/end in 24 hours. Approximate empty queues and absent metrics are not business recovery or writer-exclusion proof. The un-applied core release plan is retained as superseded to include the newly confirmed late-terminal enqueue fix; actual Profile tests pass 41/41 and typecheck passes, with eight expected original-source failures. No historical tag correction, SQL/body/document/Auth0 write, Replay or repeat PITR runs. The read-only diagnostic, exact-version helpers and internal contracts now pass 785 focused tests/697 operator assertions; six real PostgreSQL cases prove unchanged-row diagnosis and completed-operation no-extra-outbox. Full maintained verification passes 1,146 workflow tests/eight explicit DB skips and 20 builds/17 cached. Generated tmpfs data/container are removed; no user volumes touched, Docker/WSL stopped. Fresh combined release, diagnosis and cleanup remain. | D2-051; D2-052; D2-038 | [Retry fixes](#d2-051--deletion-retry-timestamps), [historical diagnosis](#d2-052--historical-completion-consistency) |
 
 ## Decisions and scope changes
+
+For D2-051/D2-052 on 2026-09-11 UTC, keep the verified mapping-only pause while integrating the
+newly demonstrated late-terminal enqueue fix. The existing baseline-capture operator accepts the
+unchanged earlier-source zero-drift seed and binds a fresh baseline to the next clean merged
+source, retaining every input and actual state. Use a new source-bound publication and reviewed
+release plan; never rewrite or apply the superseded plan. This includes both workflow fixes in
+one deployment without relaxing source, artifact, state or drain checks. Diagnostic transport
+remains distinct from inspection approval and does not add cloud-write permissions to replay.
 
 For D2-052 on 2026-09-11 UTC, accept the user's conditional exact-version historical tag repair
 approval. The reason is to correct proven historical metadata while preserving the strict restore
@@ -2066,10 +2123,19 @@ These are local checks; deployed migration, human review, and publication eviden
 
 - Completion date: Not completed
 - Exit review: Not performed
-- Current authority summary (`2026-09-11` UTC): the user grants D2-052's conditional exact-version
+- Current engineering summary (`2026-09-11` UTC): Gateway `423d63b` is deployed and verified.
+  Core Pause is verified at `322`; versions remain `13` and starts remain disabled pending the
+  combined timestamp/late-terminal retry release. Forty-one Profile unit tests and typecheck
+  pass for the added enqueue guard. Diagnostic/helpers/contracts pass 785 focused tests and six
+  real PostgreSQL cases; the full verifier passes 1,146 workflow tests and all 20 builds.
+  Cloud diagnosis, any proven one-tag correction, unchanged
+  inspection/replay and exact temporary resource/permission cleanup remain. No historical write
+  or Replay has run; Phase 2 is not complete.
+- Authority summary (`2026-09-11` UTC): the user grants D2-052's conditional exact-version
   completion-tag correction authority. D2-R20 is closed for approval only; positive diagnosis,
   future-writer releases, any proven correction, unchanged inspection/replay and exact temporary
-  resource/permission cleanup remain. No historical mutation or new deployment has run yet.
+  resource/permission cleanup remain, with the Gateway release and core pause qualified above.
+  No historical mutation has run.
 - Earlier recovery summary (`2026-09-10T23:13:34Z`): actual `9b608ac` Create passes, but Inspect
   reports the store's `CompletionCollision` after initial SQL reads. No validated inspection or
   Replay. Cleanup `88848` removes the exact temporary function after its full drain; the same

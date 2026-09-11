@@ -209,3 +209,68 @@ function Assert-DeletionReplayAggregate([object]$Response, [object]$Request, [ob
   if ($Response.inspectionSha256 -cne $digest -or $Response.documentVersionsObserved -ne 0 -or ([long]$Response.historicalPolicyMarkers + [long]$Response.currentPolicyMarkers) -ne $Response.markersValidated -or ([long]$Response.restoredSubjectsPresent + [long]$Response.restoredSubjectsAbsent) -ne $Response.markersValidated) { throw 'DeletionReplayAggregateAlgebraRejected' }
   if ($Request.action -ceq 'replay' -and ($Response.s3Writes -ne 0 -or $Response.recoveryLedgerWrites -ne 0 -or $Response.identityProviderCalls -ne 0 -or $Response.inspectionSha256 -cne $Request.reviewedInspectionSha256 -or ([long]$Response.restoredUsersReconciled + [long]$Response.restoredUsersAlreadyReconciled) -ne $Response.restoredSubjectsPresent -or $Response.restoredUsersAbsent -ne $Response.restoredSubjectsAbsent)) { throw 'DeletionReplaySideEffectsOrInspectionMismatch' }
 }
+
+# This diagnostic result is not compatible with an Inspect/Replay approval receipt.
+function Assert-DeletionReplayCompletionDiagnosis([object]$Response, [object]$Request, [object]$Config) {
+  Assert-D1RestoreExactObjectKeys $Request @('schemaVersion','action','runId','configurationSha256','functionVersion') 'DeletionReplayDiagnosisRequest'
+  Assert-D1RestoreExactObjectKeys $Response @('schemaVersion','action','outcome','runId','sourceSha','configurationSha256','functionVersion','expiresAt','markerSnapshotSha256','markersValidated','comparison','reason','corroboration','candidate','dispatchEvidence','databaseWrites','s3Writes','recoveryLedgerWrites','identityProviderCalls') 'DeletionReplayDiagnosisResponse'
+  foreach ($key in @('action','runId','configurationSha256','functionVersion')) { if ($Request.$key -isnot [string]) { throw 'DeletionReplayDiagnosisRequestRejected' } }
+  if ($Request.configurationSha256 -cnotmatch '^[a-f0-9]{64}$' -or $Request.functionVersion -cnotmatch '^[1-9][0-9]{0,9}$') { throw 'DeletionReplayDiagnosisRequestRejected' }
+  if ($Request.action -cne 'diagnose_completion' -or -not (Test-D1RestoreBoundedInteger $Request.schemaVersion) -or $Request.schemaVersion -ne 1 -or $Request.runId -cne $Config.runId) { throw 'DeletionReplayDiagnosisRequestRejected' }
+  foreach ($key in @('action','outcome','runId','sourceSha','configurationSha256','functionVersion','expiresAt','markerSnapshotSha256')) { if ($Response.$key -isnot [string]) { throw 'DeletionReplayDiagnosisResponseRejected' } }
+  if (-not (Test-D1RestoreBoundedInteger $Response.schemaVersion) -or $Response.schemaVersion -ne 1 -or $Response.action -cne 'diagnose_completion' -or $Response.outcome -cnotin @('refused','consistent','persisted_candidate') -or $Response.runId -cne $Config.runId -or $Response.sourceSha -cne $Config.sourceSha -or $Response.configurationSha256 -cne $Request.configurationSha256 -or $Response.functionVersion -cne $Request.functionVersion -or $Response.expiresAt -cne $Config.expiresAt -or $Response.markerSnapshotSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'DeletionReplayDiagnosisResponseRejected' }
+  foreach ($key in @('markersValidated','databaseWrites','s3Writes','recoveryLedgerWrites','identityProviderCalls')) {
+    $expected = if ($key -ceq 'markersValidated') { 1 } else { 0 }
+    if (-not (Test-D1RestoreBoundedInteger $Response.$key) -or $Response.$key -ne $expected) { throw 'DeletionReplayDiagnosisCountRejected' }
+  }
+  $format = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'"
+  if ($Response.expiresAt -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') { throw 'DeletionReplayDiagnosisClockRejected' }
+  $expires = [datetimeoffset]::ParseExact($Response.expiresAt,$format,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
+  if ($null -ne $Response.dispatchEvidence) {
+    $dispatch = $Response.dispatchEvidence
+    Assert-D1RestoreExactObjectKeys $dispatch @('status','attemptCount','bindingSha256','latestCreatedAt','latestAcknowledgedAt') 'DeletionReplayDiagnosisDispatch'
+    if ($dispatch.status -isnot [string] -or $dispatch.status -cne 'acknowledged_unclaimed' -or -not (Test-D1RestoreBoundedInteger $dispatch.attemptCount) -or $dispatch.attemptCount -lt 1 -or $dispatch.attemptCount -gt 3 -or $dispatch.bindingSha256 -isnot [array] -or $dispatch.bindingSha256.Count -ne $dispatch.attemptCount) { throw 'DeletionReplayDiagnosisDispatchRejected' }
+    for ($index = 0; $index -lt $dispatch.bindingSha256.Count; $index++) {
+      $binding = $dispatch.bindingSha256[$index]
+      if ($binding -isnot [string] -or $binding -cnotmatch '^[a-f0-9]{64}\z' -or ($index -gt 0 -and [string]::CompareOrdinal($dispatch.bindingSha256[$index - 1],$binding) -ge 0)) { throw 'DeletionReplayDiagnosisDispatchRejected' }
+    }
+    foreach ($key in @('latestCreatedAt','latestAcknowledgedAt')) { if ($dispatch.$key -isnot [string] -or $dispatch.$key -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z\z') { throw 'DeletionReplayDiagnosisDispatchRejected' } }
+    $sqlFormat = "yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'"
+    $created = [datetimeoffset]::ParseExact($dispatch.latestCreatedAt,$sqlFormat,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
+    $acknowledged = [datetimeoffset]::ParseExact($dispatch.latestAcknowledgedAt,$sqlFormat,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
+    if ($created -gt $acknowledged -or $acknowledged -gt $expires) { throw 'DeletionReplayDiagnosisDispatchRejected' }
+  }
+  if ($null -ne $Response.comparison) {
+    Assert-D1RestoreExactObjectKeys $Response.comparison @('requestMatchesTag','ledgerMatchesTag','persistedPairAgrees','completionCollisions') 'DeletionReplayDiagnosisComparison'
+    foreach ($key in @('requestMatchesTag','ledgerMatchesTag','persistedPairAgrees')) { if ($Response.comparison.$key -isnot [bool]) { throw 'DeletionReplayDiagnosisComparisonRejected' } }
+    $predicates = $Response.comparison.completionCollisions
+    if ($predicates -isnot [array] -or $predicates.Count -gt 5) { throw 'DeletionReplayDiagnosisComparisonRejected' }
+    foreach ($predicate in $predicates) { if ($predicate -isnot [string] -or $predicate -cnotin @('request_completion_mismatch','request_timestamp_state_conflict','ledger_completion_mismatch','ledger_timestamp_state_conflict','backup_expiry_conflict')) { throw 'DeletionReplayDiagnosisComparisonRejected' } }
+    if (@($predicates | Select-Object -Unique).Count -ne $predicates.Count) { throw 'DeletionReplayDiagnosisComparisonRejected' }
+  }
+  switch -CaseSensitive ($Response.outcome) {
+    'refused' {
+      if ($Response.reason -isnot [string] -or $Response.reason -cnotin @('input_invalid','proof_binding_mismatch','proof_expired','marker_invalid','row_cardinality','identity_binding_mismatch','historical_policy_mismatch','timestamp_invalid','timestamp_chronology','completion_state_conflict','persisted_completion_disagreement','nonterminal_state','owner_inventory_incomplete','operation_corroboration_missing','dispatch_corroboration_missing','durable_evidence_insufficient','retention_expired') -or $null -ne $Response.candidate -or $null -ne $Response.corroboration -or $null -ne $Response.dispatchEvidence) { throw 'DeletionReplayDiagnosisOutcomeRejected' }
+    }
+    'consistent' {
+      if ($null -ne $Response.reason -or $null -ne $Response.candidate -or $null -ne $Response.corroboration -or $null -eq $Response.comparison -or -not $Response.comparison.requestMatchesTag -or -not $Response.comparison.ledgerMatchesTag -or -not $Response.comparison.persistedPairAgrees -or $Response.comparison.completionCollisions.Count -ne 0) { throw 'DeletionReplayDiagnosisOutcomeRejected' }
+    }
+    'persisted_candidate' {
+      if ($null -ne $Response.reason -or $Response.corroboration -isnot [string] -or $Response.corroboration -cnotin @('persisted_transaction','persisted_transaction_and_dispatch','persisted_transaction_and_durable') -or $null -eq $Response.comparison -or $Response.comparison.requestMatchesTag -or $Response.comparison.ledgerMatchesTag -or -not $Response.comparison.persistedPairAgrees -or (@($Response.comparison.completionCollisions | Sort-Object -CaseSensitive) -join ',') -cne 'ledger_completion_mismatch,request_completion_mismatch') { throw 'DeletionReplayDiagnosisOutcomeRejected' }
+      Assert-D1RestoreExactObjectKeys $Response.candidate @('correctedCompletedAt','evidenceSha256','candidateSha256') 'DeletionReplayDiagnosisCandidate'
+      foreach ($key in @('evidenceSha256','candidateSha256')) { if ($Response.candidate.$key -isnot [string] -or $Response.candidate.$key -cnotmatch '^[a-f0-9]{64}$') { throw 'DeletionReplayDiagnosisCandidateRejected' } }
+      if ($Response.candidate.correctedCompletedAt -isnot [string] -or $Response.candidate.correctedCompletedAt -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') { throw 'DeletionReplayDiagnosisCandidateRejected' }
+      $completed = [datetimeoffset]::ParseExact($Response.candidate.correctedCompletedAt,$format,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
+      if ($completed -gt $expires) { throw 'DeletionReplayDiagnosisClockRejected' }
+    }
+  }
+}
+
+function Get-DeletionReplayInvocationAction([string]$Action) {
+  switch -CaseSensitive ($Action) {
+    'Inspect' { return 'inspect' }
+    'Replay' { return 'replay' }
+    'DiagnoseCompletion' { return 'diagnose_completion' }
+    default { throw 'DeletionReplayInvocationActionRejected' }
+  }
+}

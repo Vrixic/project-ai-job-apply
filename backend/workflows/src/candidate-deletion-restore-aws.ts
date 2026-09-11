@@ -7,6 +7,8 @@ import {
   ListObjectVersionsCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import type { HistoricalCompletionEvidence } from "./candidate-deletion-completion-diagnosis.js";
+import { completionMarkerObservationFromAws } from "./candidate-deletion-completion-marker-evidence.js";
 import {
   ACCEPTED_CANDIDATE_DELETION_POLICY_CATALOG_SHA256,
   CURRENT_CANDIDATE_DELETION_RESTORE_POLICY_VERSION,
@@ -396,16 +398,36 @@ export class AwsReadOnlyCandidateDeletionRestoreLedger {
     if (snapshotFingerprint(current) !== original) rejected();
   }
 
+  /** Private singleton accessor. A forged or mutated public snapshot never chooses a key. */
+  async inspectCompletionEvidence(
+    snapshot: CandidateDeletionRestoreLedgerSnapshot,
+    now: Date,
+    signal?: AbortSignal,
+  ): Promise<HistoricalCompletionEvidence["marker"]> {
+    const original = this.snapshots.get(snapshot);
+    if (!original || snapshotFingerprint(snapshot) !== original || snapshot.entries.length !== 1)
+      rejected();
+    let marker: HistoricalCompletionEvidence["marker"] | undefined;
+    const current = await this.inspect(now, signal, (observed) => {
+      marker = observed;
+    });
+    if (!marker || snapshotFingerprint(current) !== original) rejected();
+    return marker;
+  }
+
   private async inspect(
     now: Date,
     signal?: AbortSignal,
+    completionEvidence?: (marker: HistoricalCompletionEvidence["marker"]) => void,
   ): Promise<CandidateDeletionRestoreLedgerSnapshot> {
     now = new Date(date(now));
     const deadline = new Deadline(this.timeoutMs, signal);
     try {
       const versions = await listMarkers(this.s3, this.options, deadline);
+      if (completionEvidence && versions.length !== 1) rejected();
       const entries: CandidateDeletionRecoveryEntry[] = [];
       const records: unknown[] = [];
+      let completionMarker: HistoricalCompletionEvidence["marker"] | undefined;
       for (const version of versions) {
         const request = {
           Bucket: this.options.bucketName,
@@ -469,9 +491,11 @@ export class AwsReadOnlyCandidateDeletionRestoreLedger {
         const confirmedAt = storedDate(body.confirmedAt);
         const backupExpiresAt = storedDate(body.backupExpiresAt);
         if (date(object.ObjectLockRetainUntilDate) !== date(backupExpiresAt)) rejected();
-        const retention = record(
-          (await deadline.send(this.s3, new GetObjectRetentionCommand(request))).Retention,
+        const retentionResponse = await deadline.send(
+          this.s3,
+          new GetObjectRetentionCommand(request),
         );
+        const retention = record(retentionResponse.Retention);
         exactKeys(retention, ["Mode", "RetainUntilDate"]);
         if (
           retention.Mode !== "COMPLIANCE" ||
@@ -531,6 +555,39 @@ export class AwsReadOnlyCandidateDeletionRestoreLedger {
           backupExpiresAt,
           completedAt,
         });
+        if (completionEvidence) {
+          const observation = completionMarkerObservationFromAws({
+            target: {
+              bucketName: this.options.bucketName,
+              expectedBucketOwner: this.options.expectedBucketOwner,
+              key: version.key,
+              versionId: version.versionId,
+            },
+            expectedKmsKeyArn: this.options.kmsKeyArn,
+            object,
+            tagging: tagged,
+            retention: retentionResponse,
+            // listMarkers has already rejected every other checksum representation.
+            version,
+          });
+          if (observation.bodySha256 !== bodySha256) rejected();
+          const { tagSet, ...immutable } = observation;
+          completionMarker = Object.freeze({
+            ...immutable,
+            oldTagSet: tagSet,
+            entry: Object.freeze({
+              requestId: body.requestId as string,
+              operationId: body.operationId,
+              userId,
+              policyVersion: body.policyVersion,
+              policySha256: body.policySha256,
+              subjectDigest: body.subjectDigest,
+              confirmedAt: date(confirmedAt),
+              backupExpiresAt: date(backupExpiresAt),
+              completedAt: date(completedAt),
+            }),
+          });
+        }
         records.push({
           version,
           bodySha256,
@@ -560,6 +617,10 @@ export class AwsReadOnlyCandidateDeletionRestoreLedger {
         (entry) => entry.policyVersion === CURRENT_CANDIDATE_DELETION_RESTORE_POLICY_VERSION,
       ).length;
       deadline.assertActive();
+      if (completionEvidence) {
+        if (!completionMarker) rejected();
+        completionEvidence(completionMarker);
+      }
       return Object.freeze({
         entries: accepted,
         sha256: hash({

@@ -2076,11 +2076,15 @@ export class PostgresProfileStore implements ProfileStore {
       `;
       if (pending[0]?.present) return;
       if ((attempts[0]?.count ?? 0) < 3) {
-        await transaction`
+        const retried = await transaction<Array<{ id: string }>>`
           UPDATE platform.operations SET state = 'retryable_failure', error_code = ${code},
             updated_at = now()
           WHERE id = ${operationId}::uuid AND state IN ('queued', 'running', 'retryable_failure')
+          RETURNING id
         `;
+        // The conditional UPDATE owns the row lock. A terminal operation, including completion
+        // that won a concurrent update, must not produce another automatic workflow attempt.
+        if (retried.length !== 1) return;
         await transaction`
           INSERT INTO platform.outbox_events (
             id, type, source, subject, data_schema, data, traceparent, dispatch_target

@@ -12,6 +12,9 @@ export const validateRestoreInspectionResult = validator.compile({
 export const validateRestoreReplayResult = validator.compile({
   $ref: `${schema.$id}#/$defs/replayResult`,
 });
+const completionDiagnosisSchema = validator.compile({
+  $ref: `${schema.$id}#/$defs/completionDiagnosis`,
+});
 
 /** Operator-only transport. Never accepts candidate locators, database URLs or SQL. */
 export const RESTORE_CONFIGURATION_KEYS = [
@@ -91,6 +94,7 @@ interface RestoreRequestBase {
 }
 export type CandidateDeletionRestoreRequest =
   | (RestoreRequestBase & { action: "inspect" })
+  | (RestoreRequestBase & { action: "diagnose_completion" })
   | (RestoreRequestBase & { action: "replay"; reviewedInspectionSha256: string });
 
 export interface CandidateDeletionRestoreInspection {
@@ -128,6 +132,109 @@ export type CandidateDeletionRestoreReplayResult = Omit<
   identityProviderCalls: 0;
 };
 
+/** Historical dispatch bindings only; fresh execution retirement and PITR checks remain local. */
+export interface CandidateDeletionRestoreCompletionDispatchEvidence {
+  status: "acknowledged_unclaimed";
+  attemptCount: 1 | 2 | 3;
+  bindingSha256: readonly string[];
+  latestCreatedAt: string;
+  latestAcknowledgedAt: string;
+}
+
+/** Private diagnostic transport only. This is never an inspection approval or write authority. */
+export interface CandidateDeletionRestoreCompletionDiagnosis {
+  schemaVersion: 1;
+  action: "diagnose_completion";
+  outcome: "refused" | "consistent" | "persisted_candidate";
+  runId: string;
+  sourceSha: string;
+  configurationSha256: string;
+  functionVersion: string;
+  expiresAt: string;
+  markerSnapshotSha256: string;
+  markersValidated: 1;
+  comparison: {
+    requestMatchesTag: boolean;
+    ledgerMatchesTag: boolean;
+    persistedPairAgrees: boolean;
+    completionCollisions: readonly (
+      | "request_completion_mismatch"
+      | "request_timestamp_state_conflict"
+      | "ledger_completion_mismatch"
+      | "ledger_timestamp_state_conflict"
+      | "backup_expiry_conflict"
+    )[];
+  } | null;
+  reason:
+    | "input_invalid"
+    | "proof_binding_mismatch"
+    | "proof_expired"
+    | "marker_invalid"
+    | "row_cardinality"
+    | "identity_binding_mismatch"
+    | "historical_policy_mismatch"
+    | "timestamp_invalid"
+    | "timestamp_chronology"
+    | "completion_state_conflict"
+    | "persisted_completion_disagreement"
+    | "nonterminal_state"
+    | "owner_inventory_incomplete"
+    | "operation_corroboration_missing"
+    | "dispatch_corroboration_missing"
+    | "durable_evidence_insufficient"
+    | "retention_expired"
+    | null;
+  corroboration:
+    | "persisted_transaction"
+    | "persisted_transaction_and_dispatch"
+    | "persisted_transaction_and_durable"
+    | null;
+  candidate: {
+    correctedCompletedAt: string;
+    evidenceSha256: string;
+    candidateSha256: string;
+  } | null;
+  dispatchEvidence: CandidateDeletionRestoreCompletionDispatchEvidence | null;
+  databaseWrites: 0;
+  s3Writes: 0;
+  recoveryLedgerWrites: 0;
+  identityProviderCalls: 0;
+}
+
+export function validateRestoreCompletionDiagnosisResult(
+  value: unknown,
+): value is CandidateDeletionRestoreCompletionDiagnosis {
+  if (!completionDiagnosisSchema(value) || !isRestoreRecord(value)) return false;
+  if (!canonicalDate(value.expiresAt)) return false;
+  if (isRestoreRecord(value.dispatchEvidence)) {
+    const dispatch = value.dispatchEvidence;
+    const bindings = dispatch.bindingSha256;
+    if (
+      !Array.isArray(bindings) ||
+      bindings.length !== dispatch.attemptCount ||
+      bindings.some(
+        (binding, index) =>
+          typeof binding !== "string" ||
+          binding.length !== 64 ||
+          !SHA.test(binding) ||
+          (index > 0 && binding <= bindings[index - 1]),
+      ) ||
+      !canonicalSqlDate(dispatch.latestCreatedAt) ||
+      !canonicalSqlDate(dispatch.latestAcknowledgedAt) ||
+      dispatch.latestCreatedAt > dispatch.latestAcknowledgedAt ||
+      dispatch.latestAcknowledgedAt > `${value.expiresAt.slice(0, -1)}000Z`
+    )
+      return false;
+  }
+  if (isRestoreRecord(value.candidate)) {
+    return (
+      canonicalDate(value.candidate.correctedCompletedAt) &&
+      Date.parse(value.candidate.correctedCompletedAt) <= Date.parse(value.expiresAt)
+    );
+  }
+  return true;
+}
+
 export function restoreDigest(domain: string, value: unknown): string {
   return createHash("sha256")
     .update(`${domain}\n${JSON.stringify(value)}\n`, "utf8")
@@ -148,6 +255,17 @@ function canonicalDate(value: unknown): value is string {
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value) &&
     Number.isFinite(Date.parse(value)) &&
     new Date(value).toISOString() === value
+  );
+}
+
+/** Keep every SQL microsecond; the millisecond projection only validates calendar components. */
+function canonicalSqlDate(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length === 27 &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u.test(value) &&
+    !value.startsWith("0000-") &&
+    canonicalDate(`${value.slice(0, 23)}Z`)
   );
 }
 
@@ -338,7 +456,7 @@ export function validateRestoreRequest(
   if (
     !requestSchema(value) ||
     !isRestoreRecord(value) ||
-    !["inspect", "replay"].includes(String(value.action))
+    !["inspect", "replay", "diagnose_completion"].includes(String(value.action))
   )
     return reject();
   const keys = ["schemaVersion", "action", "runId", "configurationSha256", "functionVersion"];
