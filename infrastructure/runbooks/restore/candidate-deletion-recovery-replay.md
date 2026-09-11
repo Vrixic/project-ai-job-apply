@@ -139,6 +139,28 @@ reserve a stable durable one-attempt journal before writing; uncertainty permits
 not another write or rollback. A candidate digest alone grants no authority. Afterwards use the
 unchanged `Inspect` and `Replay` path on the same verified restore.
 
+### Separately authorized recovery of a proven pre-dispatch refusal
+
+The ordinary repair entrypoint never reopens its original reservation. A separate
+`createHistoricalCompletionPreDispatchRecovery` entrypoint is limited to a finished original
+execution whose authenticated result and reviewed execution code establish that no write was
+dispatched. Unchanged tags, a zero-shaped JSON field, a file hash, or an expired diagnostic alone
+do not establish that fact. The composition must also authenticate explicit recovery authority.
+
+Preserve the original journal bytes and validate its decision against the original diagnostic.
+Obtain a fresh authenticated diagnostic for the same version, complete immutable preimage,
+original tags and intended correction; only source/evidence provenance may renew. The recovery
+uses one fixed, protected `<scope>.pre-dispatch-recovery.json` companion beside `<scope>.json`.
+It must be exclusively created, durably flushed and read back before constructing the write
+client. Preserve and recheck the original file, require two fresh unchanged writer-exclusion
+passes and exact object preconditions, and retain the existing single-send deadline and endpoint,
+owner, version and checksum bindings.
+
+An existing, partial, conflicting or uncertain companion permits no further write. There is no
+recovery-of-recovery, alternate namespace, journal reset or automatic retry. An ambiguous write
+still permits only exact intended-state readback. This local recovery path adds no executor IAM
+permission and does not bypass ordinary `Inspect`, `Replay` or cleanup on the same verified PITR.
+
 ### Ordinary inspection and replay
 
 A malformed or incomplete marker, unexpected version/delete marker, unknown historical policy,

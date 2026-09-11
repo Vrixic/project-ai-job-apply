@@ -157,6 +157,61 @@ export interface CompletionRepairPorts {
   report?(result: CompletionRepairResult): void | Promise<void>;
 }
 
+/**
+ * PRIVATE authenticated provenance, not a schema-only authorization envelope. The trust port
+ * must verify the FINISHED original execution, its exact source/result, its original raw journal
+ * bytes and the user's separate explicit recovery authority before returning this value. None
+ * of the digests or result-shaped JSON below independently establishes that trust.
+ */
+export interface CompletionPreDispatchRecoveryProof {
+  readonly schemaVersion: 1;
+  readonly kind: "historical-completion-tag-repair-pre-dispatch-recovery-proof";
+  readonly originalCandidate: HistoricalCompletionRepairCandidate;
+  readonly originalAttemptSha256: string;
+  readonly originalExecutionSha256: string;
+  readonly originalResultSha256: string;
+  readonly originalResult: CompletionRepairResult;
+  readonly authoritySha256: string;
+  readonly scopeSha256: string;
+  readonly sourceSha: string;
+  readonly evidenceSha256: string;
+  readonly observedAt: string;
+  readonly expiresAt: string;
+}
+
+/** The hash and attempt must come from the SAME authenticated immutable original file read. */
+export interface CompletionPreDispatchRecoveryOriginalJournal {
+  read(scopeSha256: string): Promise<unknown | undefined>;
+}
+
+/** A separately named private record; the original CompletionRepairAttempt is never replaced. */
+export interface CompletionPreDispatchRecoveryAttempt {
+  readonly schemaVersion: 1;
+  readonly kind: "historical-completion-tag-repair-pre-dispatch-recovery-attempt";
+  readonly scopeSha256: string;
+  readonly originalAttemptSha256: string;
+  readonly originalDecisionSha256: string;
+  readonly authoritySha256: string;
+  readonly recoveryProofSha256: string;
+  readonly recoveryCandidate: HistoricalCompletionRepairCandidate;
+  readonly repairAttempt: CompletionRepairAttempt;
+}
+
+export interface CompletionPreDispatchRecoveryCompanionJournal {
+  /** Exactly <scope>.pre-dispatch-recovery.json beside the protected original, across all runs. */
+  read(scopeSha256: string): Promise<unknown | undefined>;
+  /** Atomic, non-overwriting and durable before true; no reset, alternative path or new scope. */
+  createOnce(scopeSha256: string, attempt: CompletionPreDispatchRecoveryAttempt): Promise<boolean>;
+}
+
+export interface CompletionPreDispatchRecoveryPorts extends Omit<CompletionRepairPorts, "journal"> {
+  /** Authenticates separate user authority AND genuine original no-dispatch evidence. */
+  readAuthenticatedPreDispatchRecoveryProof(authorityToken: unknown): Promise<unknown | undefined>;
+  /** Returns { sha256, attempt }; sha256 is the original raw-file hash, not reserialization. */
+  originalJournal: CompletionPreDispatchRecoveryOriginalJournal;
+  companionJournal: CompletionPreDispatchRecoveryCompanionJournal;
+}
+
 const SHA256 = /^[a-f0-9]{64}$/u;
 const SOURCE_SHA = /^[a-f0-9]{40}$/u;
 const KEY =
@@ -214,7 +269,7 @@ function iso(value: unknown): string {
   return value;
 }
 
-function clock(ports: CompletionRepairPorts): string {
+function clock(ports: Pick<CompletionRepairPorts, "now">): string {
   const value = ports.now();
   if (!(value instanceof Date) || !Number.isFinite(Date.prototype.getTime.call(value))) reject();
   return Date.prototype.toISOString.call(value);
@@ -403,6 +458,413 @@ function validateAttempt(
   });
 }
 
+/** The default path and explicit recovery share exactly one bounded, non-retrying transport. */
+async function putExactCompletionTags(
+  sdk: CompletionRepairSdk,
+  exactTarget: CompletionRepairTarget,
+  intended: CompletionRepairObservation,
+  onDispatch: () => void,
+): Promise<boolean> {
+  const client = new sdk.S3Client(COMPLETION_REPAIR_S3_CONFIGURATION);
+  let acknowledged = false;
+  try {
+    const command = new sdk.PutObjectTaggingCommand({
+      Bucket: exactTarget.bucketName,
+      ExpectedBucketOwner: exactTarget.expectedBucketOwner,
+      Key: exactTarget.key,
+      VersionId: exactTarget.versionId,
+      ChecksumAlgorithm: "SHA256",
+      Tagging: { TagSet: intended.tagSet.map((tag) => ({ ...tag })) },
+    });
+    onDispatch();
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const rawResponse = await new Promise<unknown>((resolve, rejectDeadline) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          rejectDeadline(new Error("HistoricalCompletionTagRepairDeadline"));
+        }, COMPLETION_REPAIR_WRITE_TIMEOUT_MS);
+        Promise.resolve(client.send(command, { abortSignal: controller.signal })).then(
+          resolve,
+          rejectDeadline,
+        );
+      });
+      const response = record(rawResponse, ["VersionId", "$metadata"]);
+      const metadata = response.$metadata;
+      acknowledged =
+        response.VersionId === exactTarget.versionId &&
+        !!metadata &&
+        typeof metadata === "object" &&
+        Object.getOwnPropertyDescriptor(metadata, "httpStatusCode")?.value === 200;
+    } catch {
+      /* A thrown/rejected/malformed response is ambiguous, never permission to retry. */
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      controller.abort();
+    }
+  } finally {
+    try {
+      client.destroy();
+    } catch {
+      /* Resource cleanup must not replace exact readback. */
+    }
+  }
+  return acknowledged;
+}
+
+function sameCorrection(
+  original: HistoricalCompletionRepairCandidate,
+  fresh: HistoricalCompletionRepairCandidate,
+): void {
+  // The source and evidence provenance may renew; no target, tag or immutable value may change.
+  if (
+    digest(expectedObservation(original, false)) !== digest(expectedObservation(fresh, false)) ||
+    digest(expectedObservation(original, true)) !== digest(expectedObservation(fresh, true))
+  )
+    reject();
+}
+
+function recoveryProof(
+  value: unknown,
+  scope: string,
+  decision: HistoricalCompletionRepairCandidate,
+  now: string,
+  requireFresh: boolean,
+): CompletionPreDispatchRecoveryProof {
+  const row = record(value, [
+    "schemaVersion",
+    "kind",
+    "originalCandidate",
+    "originalAttemptSha256",
+    "originalExecutionSha256",
+    "originalResultSha256",
+    "originalResult",
+    "authoritySha256",
+    "scopeSha256",
+    "sourceSha",
+    "evidenceSha256",
+    "observedAt",
+    "expiresAt",
+  ]);
+  const originalResult = record(row.originalResult, [
+    "schemaVersion",
+    "outcome",
+    "reason",
+    "writeAttemptsThisCall",
+    "effect",
+  ]);
+  if (
+    row.schemaVersion !== 1 ||
+    row.kind !== "historical-completion-tag-repair-pre-dispatch-recovery-proof" ||
+    row.scopeSha256 !== scope ||
+    row.sourceSha !== decision.sourceSha ||
+    row.evidenceSha256 !== decision.evidenceSha256 ||
+    originalResult.schemaVersion !== 1 ||
+    originalResult.outcome !== "unresolved" ||
+    originalResult.reason !== "late_precondition_changed" ||
+    originalResult.writeAttemptsThisCall !== 0 ||
+    originalResult.effect !== "unknown"
+  )
+    reject();
+  const originalCandidate = candidate(row.originalCandidate);
+  sameCorrection(originalCandidate, decision);
+  const observedAt = iso(row.observedAt);
+  const expiresAt = iso(row.expiresAt);
+  if (
+    observedAt >= expiresAt ||
+    observedAt > now ||
+    Date.parse(expiresAt) - Date.parse(observedAt) > 300_000 ||
+    (requireFresh && expiresAt <= now)
+  )
+    reject();
+  return Object.freeze({
+    schemaVersion: 1,
+    kind: "historical-completion-tag-repair-pre-dispatch-recovery-proof",
+    originalCandidate,
+    originalAttemptSha256: text(row.originalAttemptSha256, SHA256),
+    originalExecutionSha256: text(row.originalExecutionSha256, SHA256),
+    originalResultSha256: text(row.originalResultSha256, SHA256),
+    originalResult: Object.freeze({
+      schemaVersion: 1,
+      outcome: "unresolved",
+      reason: "late_precondition_changed",
+      writeAttemptsThisCall: 0,
+      effect: "unknown",
+    }),
+    authoritySha256: text(row.authoritySha256, SHA256),
+    scopeSha256: scope,
+    sourceSha: decision.sourceSha,
+    evidenceSha256: decision.evidenceSha256,
+    observedAt,
+    expiresAt,
+  });
+}
+
+function originalRecoveryJournal(
+  value: unknown,
+  authorization: CompletionPreDispatchRecoveryProof,
+  now: string,
+): CompletionRepairAttempt {
+  const row = record(value, ["sha256", "attempt"]);
+  if (row.sha256 !== authorization.originalAttemptSha256) reject();
+  return validateAttempt(
+    row.attempt,
+    authorization.scopeSha256,
+    authorization.originalCandidate,
+    now,
+  );
+}
+
+function recoveryAttempt(
+  value: unknown,
+  authorization: CompletionPreDispatchRecoveryProof,
+  decision: HistoricalCompletionRepairCandidate,
+  original: CompletionRepairAttempt,
+  now: string,
+): CompletionPreDispatchRecoveryAttempt {
+  const row = record(value, [
+    "schemaVersion",
+    "kind",
+    "scopeSha256",
+    "originalAttemptSha256",
+    "originalDecisionSha256",
+    "authoritySha256",
+    "recoveryProofSha256",
+    "recoveryCandidate",
+    "repairAttempt",
+  ]);
+  const recoveryCandidate = candidate(row.recoveryCandidate);
+  const repairAttempt = validateAttempt(row.repairAttempt, original.scopeSha256, decision, now);
+  if (
+    row.schemaVersion !== 1 ||
+    row.kind !== "historical-completion-tag-repair-pre-dispatch-recovery-attempt" ||
+    row.scopeSha256 !== original.scopeSha256 ||
+    row.originalAttemptSha256 !== authorization.originalAttemptSha256 ||
+    row.originalDecisionSha256 !== original.decisionSha256 ||
+    row.authoritySha256 !== authorization.authoritySha256 ||
+    row.recoveryProofSha256 !== digest(authorization) ||
+    digest(recoveryCandidate) !== digest(decision) ||
+    repairAttempt.attemptedAt < original.attemptedAt ||
+    repairAttempt.attemptedAt < authorization.observedAt ||
+    repairAttempt.attemptedAt >= authorization.expiresAt
+  )
+    reject();
+  return Object.freeze({
+    schemaVersion: 1,
+    kind: "historical-completion-tag-repair-pre-dispatch-recovery-attempt",
+    scopeSha256: original.scopeSha256,
+    originalAttemptSha256: authorization.originalAttemptSha256,
+    originalDecisionSha256: original.decisionSha256,
+    authoritySha256: authorization.authoritySha256,
+    recoveryProofSha256: digest(authorization),
+    recoveryCandidate,
+    repairAttempt,
+  });
+}
+
+/**
+ * Explicit, separately authorized recovery of ONE proven pre-dispatch refusal. This is not an
+ * option on the default repair path. Original evidence stays read-only; the sole fixed companion
+ * slot is consumed before any client exists, including on ambiguous persistence or late refusal.
+ * The trusted provenance port, not these closed shapes/digests, authenticates the finished prior
+ * execution and user authority. A companion can never be used as an original attempt.
+ */
+export function createHistoricalCompletionPreDispatchRecovery(
+  ports: CompletionPreDispatchRecoveryPorts,
+) {
+  const attemptedScopes = new Set<string>();
+  return async function recover(
+    diagnosis: unknown,
+    recoveryAuthority: unknown,
+  ): Promise<CompletionRepairResult> {
+    const dispatch: { attempts: 0 | 1 } = { attempts: 0 };
+    let companionReserved = false;
+    let stage: CompletionRepairReason = "decision_rejected";
+    const finish = (
+      outcome: CompletionRepairResult["outcome"],
+      reason: CompletionRepairReason,
+      effect: CompletionRepairResult["effect"],
+    ): CompletionRepairResult => {
+      const result = Object.freeze({
+        schemaVersion: 1 as const,
+        outcome,
+        reason,
+        writeAttemptsThisCall: dispatch.attempts,
+        effect,
+      });
+      try {
+        void Promise.resolve(ports.report?.(result)).catch(() => undefined);
+      } catch {
+        /* No candidate, provenance, journal or exception values enter aggregate diagnostics. */
+      }
+      return result;
+    };
+    try {
+      const decision = candidate(ports.readHistoricalCompletionRepairCandidate(diagnosis));
+      const exactTarget = target(decision as unknown as Record<string, unknown>);
+      const scope = completionRepairScopeSha256(exactTarget);
+      const preimage = expectedObservation(decision, false);
+      const intended = expectedObservation(decision, true);
+      const authorization = recoveryProof(
+        await ports.readAuthenticatedPreDispatchRecoveryProof(recoveryAuthority),
+        scope,
+        decision,
+        clock(ports),
+        false,
+      );
+      stage = "journal_rejected";
+      const original = originalRecoveryJournal(
+        await ports.originalJournal.read(scope),
+        authorization,
+        clock(ports),
+      );
+      const assertOriginalUnchanged = async (): Promise<void> => {
+        const reread = originalRecoveryJournal(
+          await ports.originalJournal.read(scope),
+          authorization,
+          clock(ports),
+        );
+        if (digest(reread) !== digest(original)) reject();
+      };
+      const assertAuthorizationUnchanged = async (): Promise<void> => {
+        const reread = recoveryProof(
+          await ports.readAuthenticatedPreDispatchRecoveryProof(recoveryAuthority),
+          scope,
+          decision,
+          clock(ports),
+          true,
+        );
+        if (digest(reread) !== digest(authorization)) reject();
+      };
+      const saved = await ports.companionJournal.read(scope);
+      if (saved !== undefined) {
+        companionReserved = true;
+        recoveryAttempt(saved, authorization, decision, original, clock(ports));
+        // An existing companion is always readback-only, even after its original lease expires.
+        stage = "readback_unavailable";
+        const current = observation(await ports.readExactVersion(exactTarget));
+        await assertOriginalUnchanged();
+        return digest(current) === digest(intended)
+          ? finish("verified_prior_attempt", "verified", "intended_state_verified")
+          : finish("unresolved", "attempt_unresolved", "unknown");
+      }
+      if (attemptedScopes.has(scope)) return finish("unresolved", "journal_ambiguous", "unknown");
+      stage = "decision_rejected";
+      recoveryProof(authorization, scope, decision, clock(ports), true);
+      stage = "writer_exclusion_unproven";
+      const readFreshWriterProof = (value: unknown): CompletionRepairWriterProof => {
+        const fresh = proof(
+          value,
+          scope,
+          decision.sourceSha,
+          decision.correctedCompletedAt,
+          clock(ports),
+          true,
+        );
+        if (Date.parse(fresh.expiresAt) - Date.parse(fresh.observedAt) > 300_000) reject();
+        return fresh;
+      };
+      const retired = readFreshWriterProof(
+        await ports.readWriterExclusion(
+          exactTarget,
+          decision.sourceSha,
+          decision.correctedCompletedAt,
+        ),
+      );
+      stage = "precondition_changed";
+      const before = observation(await ports.readExactVersion(exactTarget));
+      await assertOriginalUnchanged();
+      await assertAuthorizationUnchanged();
+      if (digest(before) === digest(intended))
+        return finish("already_correct", "verified", "intended_state_verified");
+      if (digest(before) !== digest(preimage)) reject();
+      readFreshWriterProof(retired);
+      const repairAttempt: CompletionRepairAttempt = Object.freeze({
+        schemaVersion: 1,
+        kind: "historical-completion-tag-repair-attempt",
+        scopeSha256: scope,
+        decisionSha256: digest(decision),
+        preimage,
+        intended,
+        writerRetirement: retired,
+        attemptedAt: clock(ports),
+      });
+      const linked = recoveryAttempt(
+        {
+          schemaVersion: 1,
+          kind: "historical-completion-tag-repair-pre-dispatch-recovery-attempt",
+          scopeSha256: scope,
+          originalAttemptSha256: authorization.originalAttemptSha256,
+          originalDecisionSha256: original.decisionSha256,
+          authoritySha256: authorization.authoritySha256,
+          recoveryProofSha256: digest(authorization),
+          recoveryCandidate: decision,
+          repairAttempt,
+        },
+        authorization,
+        decision,
+        original,
+        clock(ports),
+      );
+      // A failed create/readback consumes this call's fixed slot; it is never reopened or renamed.
+      attemptedScopes.add(scope);
+      companionReserved = true;
+      stage = "journal_ambiguous";
+      if ((await ports.companionJournal.createOnce(scope, linked)) !== true)
+        return finish("unresolved", "journal_ambiguous", "unknown");
+      if (
+        digest(
+          recoveryAttempt(
+            await ports.companionJournal.read(scope),
+            authorization,
+            decision,
+            original,
+            clock(ports),
+          ),
+        ) !== digest(linked)
+      )
+        reject();
+      stage = "late_precondition_changed";
+      await assertOriginalUnchanged();
+      const retiredAgain = readFreshWriterProof(
+        await ports.readWriterExclusion(
+          exactTarget,
+          decision.sourceSha,
+          decision.correctedCompletedAt,
+        ),
+      );
+      if (digest(retiredAgain) !== digest(retired)) reject();
+      // Read the exact preimage AFTER the second potentially long metadata collection.
+      if (digest(observation(await ports.readExactVersion(exactTarget))) !== digest(preimage))
+        reject();
+      await assertOriginalUnchanged();
+      await assertAuthorizationUnchanged();
+      await assertOriginalUnchanged();
+      readFreshWriterProof(retired);
+      recoveryProof(authorization, scope, decision, clock(ports), true);
+      const acknowledged = await putExactCompletionTags(ports.sdk, exactTarget, intended, () => {
+        dispatch.attempts = 1;
+      });
+      stage = "readback_unavailable";
+      const after = observation(await ports.readExactVersion(exactTarget));
+      if (digest(after) !== digest(intended))
+        return finish("unresolved", "readback_changed", "unknown");
+      return finish(
+        acknowledged ? "repaired" : "recovered_after_ambiguous_write",
+        "verified",
+        "intended_state_verified",
+      );
+    } catch {
+      return finish(
+        dispatch.attempts === 1 || companionReserved ? "unresolved" : "refused",
+        stage,
+        dispatch.attempts === 1 || companionReserved ? "unknown" : "none_attempted_this_call",
+      );
+    }
+  };
+}
+
 /**
  * No SQL, bodies, credentials, retention writes, rollback, retry, or ordinary ledger writer.
  * Journal and read-only evidence ports are separately trusted composition boundaries.
@@ -410,7 +872,7 @@ function validateAttempt(
 export function createHistoricalCompletionTagRepair(ports: CompletionRepairPorts) {
   const attemptedScopes = new Set<string>();
   return async function repair(diagnosis: unknown): Promise<CompletionRepairResult> {
-    let writeAttemptsThisCall: 0 | 1 = 0;
+    const dispatch: { attempts: 0 | 1 } = { attempts: 0 };
     let priorAttempt = false;
     let stage: CompletionRepairReason = "decision_rejected";
     const finish = (
@@ -422,7 +884,7 @@ export function createHistoricalCompletionTagRepair(ports: CompletionRepairPorts
         schemaVersion: 1 as const,
         outcome,
         reason,
-        writeAttemptsThisCall,
+        writeAttemptsThisCall: dispatch.attempts,
         effect,
       });
       try {
@@ -510,51 +972,9 @@ export function createHistoricalCompletionTagRepair(ports: CompletionRepairPorts
         ) !== digest(retired)
       )
         reject();
-      const client = new ports.sdk.S3Client(COMPLETION_REPAIR_S3_CONFIGURATION);
-      let acknowledged = false;
-      try {
-        const command = new ports.sdk.PutObjectTaggingCommand({
-          Bucket: exactTarget.bucketName,
-          ExpectedBucketOwner: exactTarget.expectedBucketOwner,
-          Key: exactTarget.key,
-          VersionId: exactTarget.versionId,
-          ChecksumAlgorithm: "SHA256",
-          Tagging: { TagSet: intended.tagSet.map((tag) => ({ ...tag })) },
-        });
-        writeAttemptsThisCall = 1;
-        const controller = new AbortController();
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        try {
-          const rawResponse = await new Promise<unknown>((resolve, rejectDeadline) => {
-            timer = setTimeout(() => {
-              controller.abort();
-              rejectDeadline(new Error("HistoricalCompletionTagRepairDeadline"));
-            }, COMPLETION_REPAIR_WRITE_TIMEOUT_MS);
-            Promise.resolve(client.send(command, { abortSignal: controller.signal })).then(
-              resolve,
-              rejectDeadline,
-            );
-          });
-          const response = record(rawResponse, ["VersionId", "$metadata"]);
-          const metadata = response.$metadata;
-          acknowledged =
-            response.VersionId === exactTarget.versionId &&
-            !!metadata &&
-            typeof metadata === "object" &&
-            Object.getOwnPropertyDescriptor(metadata, "httpStatusCode")?.value === 200;
-        } catch {
-          /* A thrown/rejected/malformed response is ambiguous, never permission to retry. */
-        } finally {
-          if (timer !== undefined) clearTimeout(timer);
-          controller.abort();
-        }
-      } finally {
-        try {
-          client.destroy();
-        } catch {
-          /* Resource cleanup must not replace exact readback. */
-        }
-      }
+      const acknowledged = await putExactCompletionTags(ports.sdk, exactTarget, intended, () => {
+        dispatch.attempts = 1;
+      });
       stage = "readback_unavailable";
       const after = observation(await ports.readExactVersion(exactTarget));
       if (digest(after) !== digest(intended))
@@ -566,9 +986,9 @@ export function createHistoricalCompletionTagRepair(ports: CompletionRepairPorts
       );
     } catch {
       return finish(
-        writeAttemptsThisCall === 1 || priorAttempt ? "unresolved" : "refused",
+        dispatch.attempts === 1 || priorAttempt ? "unresolved" : "refused",
         stage,
-        writeAttemptsThisCall === 1 || priorAttempt ? "unknown" : "none_attempted_this_call",
+        dispatch.attempts === 1 || priorAttempt ? "unknown" : "none_attempted_this_call",
       );
     }
   };

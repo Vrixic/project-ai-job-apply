@@ -321,7 +321,22 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Latest engineering checkpoint (`2026-09-11` UTC): Gateway `423d63b` and combined core `2ff32ef`
+- Current continuation (`2026-09-11` UTC): the user approves D2-053's narrowly scoped recovery
+  from the proven pre-dispatch refusal. R21 is closed for authority and D2-053 is In progress.
+  Preserve the original journal, authenticate the completed zero-dispatch execution, require
+  the same original/current preimage and intended tag, and bind one fixed linked recovery
+  reservation to two fresh writer checks and at most one tag send. No reset, new PITR or wider
+  data/IAM scope is authorized. Fresh development SSO passes. The explicit recovery entrypoint
+  passes 199 existing/new repair tests, workflow no-emit and targeted lint; protected companion
+  storage passes 119 checks, including 13 actual generated Windows filesystem cases. Original
+  evidence remains unchanged, with ten artifact/code files additionally preserved in owner-only
+  copies. Full repository verification passes (`25821` / `a32df3`, exit `0`, all 20 builds), as
+  do 274 explicit operator/runtime source-binding checks. The corrected deployed runtime remains
+  `2ff32ef`/version `14`; source integration, fresh standalone artifacts and actual same-copy
+  recovery/inspection/replay/cleanup are next. No historical correction or normal Inspect/Replay
+  has run.
+  [Recovery decision](phase-2-extension-and-community.md#decisions-and-scope-changes)
+- Previous engineering checkpoint (`2026-09-11` UTC, before recovery authorization): Gateway `423d63b` and combined core `2ff32ef`
   are deployed and verified. Core `14` is resumed at Platform `328` with zero drift, completing
   D2-051 for code/deployment without claiming a real concurrent SQL lock race or fresh rights
   acceptance. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass:
