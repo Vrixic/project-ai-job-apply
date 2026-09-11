@@ -322,8 +322,11 @@ This is the master record for the delivery phases defined in the [product and sy
 - Start: 2026-09-01
 - Completion: Not completed
 - Current owner checkpoint (`2026-09-11`): the user confirms website search visibility after
-  extension Processing `published` and Trust `accepted`, but View details and sources fails.
-  D2-055 repairs the reproduced backend timestamp mismatch and implements the user-authorized
+  extension Processing `published` and Trust `accepted`, then confirms successful `View details
+  and sources` after the corrective deployment. D2-019/D2-039 are Complete for their controlled
+  Greenhouse implementation/deployment scope. This is the reported job's user-confirmed browser
+  journey, not independent all-job or cross-browser acceptance. D2-055 repairs the reproduced
+  backend timestamp mismatch and implements the user-authorized
   retirement of exact generated synthetic fixtures, preserving real contributions, saved
   associations and history. Read-only deployed version-60 probe returns search 200 and three
   detail 500s. The fix is now deployed as Gateway `985f5312`/version `61`: reviewed two-resource
@@ -333,9 +336,10 @@ This is the master record for the delivery phases defined in the [product and sy
   no cleanup task, migration, catalog mutation or deletion ran. Corrective source `dc855732` passes
   full repository verification; 98/98 Jobs PostgreSQL tests and 261 operator checks per PowerShell
   host also pass. Published cleanup artifacts are retained unused. Docker/WSL are stopped.
-  D2-019/D2-039 stay In progress for browser/remaining acceptance. Refresh the website; no
-  resubmission, client rebuild or new reviewer authority is needed.
-  [Next website check](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
+  Do not repeat the completed website check. Hosted reviewer/takedown/appeal, other providers,
+  fresh rights, installed lifecycle, accessibility, workload, alarm receipt and production/store
+  acceptance remain separate; Phase 2 stays In progress.
+  [Remaining Phase 2 acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
 - Current local continuation (`2026-09-11` UTC): D2-054 is Complete for source/local verification
   at `dd2d560`. Reproduced extension session/dispatch races and stale reviewer drafts are fixed;
   extension 258/258 and admin 174/174 tests, both no-emit checks and source/document review pass.
@@ -977,6 +981,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-11 | D2 | User confirms successful `View details and sources` after refreshing the corrected website. Earlier published/accepted and search confirmations plus this reported-job browser check close D2-019/D2-039 for controlled Greenhouse implementation/deployment. The website check is removed from outstanding acceptance; no all-job browser, external-link navigation, cross-browser, human/provider or full Phase 2 acceptance is claimed. Documentation only; no cloud, identity, database or runtime change. | User confirmation in this conversation; [owner follow-up](phase-2-extension-and-community.md#d2-055--catalog-details-and-synthetic-fixture-retirement), [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | D2 | User reports extension Processing `published` and Trust `accepted`, satisfying owner-status readback for the reported result. Only fixed statuses are retained; no contribution count or website visibility is inferred. D2-019/D2-039 advance but remain In progress pending signed-in candidate search/detail and remaining acceptance. No new submission, decision, cloud operation or authority. | User confirmation in this conversation; [next website check](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | D2 | Completed D2-054 source/local fixes at `dd2d560`: extension session/dispatch isolation, ordered logout cleanup, monotonic receipts and case-scoped reviewer decisions. Extension 258/258, admin 174/174 and full maintained verifier pass, including all 34 test tasks and 20 builds. Both frontend bundles rebuilt; installed lifecycle and hosted admin rollout/acceptance remain open. Stale onboarding summaries corrected; completed AWS recovery is untouched. No new branches, cloud writes, provider activation or authority expansion. Phase 2 remains In progress. | [Client state fixes](phase-2-extension-and-community.md#d2-054--session-and-reviewer-state-transitions), [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | D2 | Completed D2-038/050/052/053 under operator/artifact `6eb7a86`, leaving normal runtime `2ff32ef`/version `14` unchanged. Recovery `8649` / `7d6e48` verifies one exact completion-tag Put with both linked journals preserved. Fresh same-copy Inspect `70881` and Replay `87268` pass: one historical marker/one already-reconciled restored subject, no documents or new reconciliation, zero S3/recovery-ledger writes and identity-provider calls. Final executor `9634`, PITR `62815` and Platform `329`/Bootstrap `21` cleanup verify absence/removal and zero drift; protected context/artifacts remain retained. This is not fresh nonempty deletion or Phase 2 completion. Owner refresh needs user help because browser control is unavailable; no resubmission or login-expiry claim. | [Final recovery evidence](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery), [remaining gates](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
