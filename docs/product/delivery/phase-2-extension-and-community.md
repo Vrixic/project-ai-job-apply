@@ -54,9 +54,12 @@ associations. No new submission, sign-out, private identifier or renewed reviewe
 
 Current deployed correction (`2026-09-11`): Gateway `985f5312`/version `61` fixes the detail failure.
 Its exact reviewed two-resource apply, authenticated search boundary and zero-drift verification
-pass. Three real-provider detail reads now return 200 with valid detail/source contracts instead
-of the reproduced 500s. Synthetic retirement is still pending; a read-only native preflight found
-and tested a one-line task-metadata normalization correction before any task or catalog write.
+pass. A complete read-only inventory now validates all 33 jobs and their detail/source contracts
+across both catalog pages: 33 verified-provider jobs, zero generated or other authorized fixtures,
+and zero unclassified jobs. D2-055 is Complete for the deployed fix and visible-catalog cleanup
+check; there are no visible synthetic jobs to retire. No cleanup task or catalog mutation ran.
+Refresh the existing website; authenticated browser readback remains distinct from API verification.
+The full corrective repository verifier passes, and Docker/WSL are stopped.
 
 Current local continuation (`2026-09-11` UTC): D2-054 is Complete for implementation and local
 verification at `dd2d560`. Session/dispatch fencing, ordered logout cleanup, monotonic receipt
@@ -371,7 +374,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | Complete | Product owner; platform engineering | D2-038; D2-050; D2-051; D2-053 | Completed 2026-09-11: corroborated persisted request/ledger/operation evidence and three acknowledged/unclaimed dispatches support the exact historical correction. Separately authorized recovery `8649` / `7d6e48` sends one exact-version completion-tag Put and verifies intended state, preserving all other protected data and original evidence. Unchanged same-copy Inspect/Replay and final cleanup pass. No fresh nonempty deletion is claimed. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
 | D2-053 | Define and verify one-shot pre-dispatch recovery for the consumed historical completion-repair reservation. | Complete | Platform engineering; product owner | D2-052; D2-R21 | Completed 2026-09-11: 199 repair tests, 119 protected-storage checks, 274 two-source checks and full verification pass. Actual `6eb7a86` recovery `8649` / `7d6e48` verifies the intended single-tag correction after fresh checks, preserving the original journal and fixed companion. Default repair remains readback-only; neither journal may be reset or used to resend. Normal runtime `2ff32ef`/version `14` is unchanged. Same-copy strict Inspect/Replay and all temporary cleanup pass. |
 | D2-054 | Fence asynchronous extension identity/delivery and reviewer decision state across transitions. | Complete | Platform engineering; QA/automation | D2-007; D2-012; D2-015; D2-022 | Completed 2026-09-11 at `dd2d560` for source/local verification: extension 258/258 and admin 174/174 tests, both no-emit checks, source/document review and full maintained verification pass, including all 20 builds. Configured extension and local admin bundle are rebuilt; installed reload/lifecycle and hosted admin rollout/acceptance remain separate. No cloud or authority changes. See [scope and evidence](#d2-054--session-and-reviewer-state-transitions). |
-| D2-055 | Repair deployed catalog details and retire exact generated synthetic development fixtures. | In progress | Platform engineering | D2-019; D2-039; D2-047 | Details fixed in deployed Gateway `985f5312`/61: reviewed two-resource apply, authenticated boundary, zero drift and three real-provider detail/source contract reads pass. AWS SSO renewed. Jobs PostgreSQL 98/98 passes; the cleanup command's native-state normalization correction passes 261 offline checks on both PowerShell hosts and a 39-read live preflight. Corrected cleanup release/execution remain pending; no catalog mutation yet. |
+| D2-055 | Repair deployed catalog details and retire exact generated synthetic development fixtures when present. | Complete | Platform engineering | D2-019; D2-039; D2-047 | Completed 2026-09-11: Gateway `985f5312`/61 is deployed with authenticated boundary and zero drift verified. Complete two-page inventory validates all 33 detail/source contracts: 33 verified-provider jobs, zero fixtures or unclassified jobs. Retirement is unnecessary and was not executed; no catalog rows changed or were deleted. Jobs PostgreSQL 98/98, 261 operator checks on each PowerShell host, and full corrective verification at `dc855732` pass. Docker/WSL stopped; separate browser acceptance remains with D2-019/D2-039. |
 
 ### D2-055 — Catalog details and synthetic fixture retirement
 
@@ -422,7 +425,8 @@ deployment and cleanup. The owner has been asked to run
 `aws sso login --profile ai-job-apply-development-admin`; no credentials or tokens are requested.
 That sign-in blocker was resolved by the owner's subsequent confirmation and exact-account STS
 readback (`3624ae`). Gateway publication and deployed verification below are complete; catalog
-retirement remains pending its corrected operator release.
+retirement was initially pending its corrected operator release, then proved unnecessary by the
+complete visible-catalog inventory below.
 
 Gateway release evidence (`2026-09-11`): fresh baseline capture `feeb85` has zero meaningful
 changes at state 329, plan SHA `da6891f2bca0bd387d4f77712fee65ae0d80bf4101fc665cde6a3717d9299a9e`
@@ -450,6 +454,24 @@ corrected generated checks pass 261 assertions on each PowerShell host, and read
 `e634d9` passes all boundaries with 39 metadata reads and zero cloud writes/tasks. This requires a
 new clean source-bound cleanup release, not a Gateway redeployment or changed image label.
 The original artifact is retained, and Docker/WSL are stopped after its build (`1d9ba8`).
+
+Final disposition (`2026-09-11`): corrected source `dc855732` passes the full maintained verifier
+(`b02efc`, exit 0): 33 typecheck tasks, 34 test tasks and all 20 builds (19 cached), alongside
+the operator, formatting, dependency-security and product-scope checks. Its cleanup image finishes
+publication (`de40f9`) with two deterministic builds, runtime smoke verification and a COMPLETE
+scan with zero High/Critical findings; receipt SHA
+`df5d5018bc1a9513fb21e30357819467e9c2448a6ffc216113275b9254f2bf99` is retained. Both cleanup
+artifacts remain unused: no task registration/run, migration or catalog mutation was performed.
+
+Complete read-only inventory `986e2d` follows both authentic search pages and validates all 33
+detail/source responses against the deployed contract. Aggregate results are 33 verified-provider
+jobs, zero generated source-neutral jobs, zero other authorized fixtures, zero unclassified jobs
+and zero mutation requests. This establishes that no synthetic jobs are currently visible, not
+that historical fixture records have been deleted. No retirement execution is necessary, and
+hidden history is left intact. D2-055 is Complete for this request; the owner can refresh the
+website without resubmitting a job or rebuilding a client. Browser acceptance and the remaining
+Phase 2 gates stay separate. Docker Desktop and WSL are stopped (`ee47e8`), with zero Docker
+processes and no running WSL distribution confirmed (`8248ed`).
 
 ### D2-054 — Session and reviewer state transitions
 
@@ -1880,7 +1902,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
-| Signed-in website visibility after owner publication status | User confirms extension Processing `published`, Trust `accepted`, and website search visibility on September 11. D2-055's deployed Gateway version 61 fixes the reproduced detail 500: three real-provider detail/source contract reads now pass. This is not authenticated browser acceptance for every historical contribution. Anonymous public-job routes remain disabled. | Finish exact synthetic retirement, then refresh the existing website and confirm its posting's description and source load. No resubmission, token, identifier, reviewer scope, new decision, or client rebuild is needed. |
+| Signed-in website visibility after owner publication status | User confirms extension Processing `published`, Trust `accepted`, and website search visibility on September 11. D2-055 is Complete: deployed Gateway version 61 fixes the detail 500, and all 33 detail/source contracts pass across the complete two-page catalog. No synthetic jobs are visible, so no retirement or deletion ran. This is not authenticated browser acceptance for every historical contribution. Anonymous public-job routes remain disabled. | Refresh the existing website and confirm its posting's description and source load. No resubmission, token, identifier, reviewer scope, new decision, or client rebuild is needed. |
 | Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three actual initial decisions now pass. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Complete the hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case, borrow the human session or treat machine initial-decision success as human acceptance. |
 | Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. Both providers remain disabled in development. | Acquire representative provider-derived fixtures, complete sanitization/scanning and separate QA acceptance, then activate exact development registrations. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
 | Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
@@ -1895,6 +1917,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-11 | Completed D2-055: full live two-page inventory validates all 33 detail/source contracts, with 33 verified-provider jobs and zero fixtures or unclassified jobs. No visible synthetic targets exist, so no cleanup task, migration, catalog mutation or deletion ran. Corrective source `dc855732` passes the full verifier; its deterministic cleanup artifact finishes publication and is retained unused. Docker/WSL are stopped. Refreshing the website needs no client rebuild; remaining Phase 2 browser/human acceptance is unchanged. | D2-055; D2-019; D2-039 | Inventory `986e2d`; full verification `b02efc`; publication `de40f9`; runtime shutdown `ee47e8`/`8248ed`; [final disposition](#d2-055--catalog-details-and-synthetic-fixture-retirement) |
 | 2026-09-11 | Renewed AWS SSO and deployed Gateway `985f5312`/61 through the reviewed two-resource plan. Immutable alias, authenticated boundary and zero drift pass; three real-provider detail/source contracts return 200 instead of 500. Cleanup preflight found only a state/native default-metadata mismatch; symmetric strict normalization passes 261 assertions per PowerShell host and 39 read-only native checks. Original cleanup image is retained but unused; corrected source-bound cleanup release is next. No catalog mutation or client rebuild. | D2-055; D2-019; D2-039 | Apply `3d263d`; detail probe `32a955`; native preflight `e634d9`; [deployed correction](#d2-055--catalog-details-and-synthetic-fixture-retirement) |
 | 2026-09-11 | User confirms website jobs are visible, reports the fixed detail-unavailable error and authorizes synthetic-job removal. Read-only Gateway version 60 probe reproduces search 200 and three detail 500s; independent source reproduction identifies shared-client timestamp normalization. Started D2-055 fix and exact generated-fixture retirement; real contributions and saved associations remain protected. No catalog mutation or deployment yet. | D2-055; D2-019; D2-039 | User report; aggregate probe `e5f47b`; [implementation boundary](#d2-055--catalog-details-and-synthetic-fixture-retirement) |
 | 2026-09-11 | User reports extension Processing `published` and Trust `accepted`. Recorded only those fixed statuses; no contribution count, token, identifier, independently inspected backend row or website visibility is inferred. This satisfies extension owner-status readback for the reported result and advances D2-019/D2-039; signed-in candidate search/detail is next. No new submission, review decision, cloud operation or activation. Phase 2 remains In progress. | D2-019; D2-039 | User confirmation in this conversation; [remaining website check](#remaining-acceptance-and-operator-inputs) |
@@ -2097,11 +2120,15 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 ## Decisions and scope changes
 
 For D2-055 on 2026-09-11, normalize persistence timestamps at the Jobs read boundary, retaining
-the strict canonical API and frontend validator. Remove exact generated development fixtures
+the strict canonical API and frontend validator. When present, remove exact generated development fixtures
 from active catalog visibility with a fixed synthetic-retirement reason, retaining stored rows
 and audit history. This satisfies cleanup without breaking saved associations or erasing evidence;
 unknown/mixed/real provenance must fail closed. There is no title-based deletion, new moderation
 authority, provider activation, or automatic rollback/restore claim.
+The subsequent complete visible-catalog inventory contains only verified-provider jobs and no
+synthetic fixtures. Treat cleanup as a verified no-op: do not run a mutation or purge hidden
+historical records merely to produce a removal count. Retain the tested exact-fixture tool and
+immutable unused artifacts for a future explicitly scoped need; no removal is claimed here.
 
 For D2-054 on 2026-09-11, treat asynchronous client results as valid only for their originating
 session or reviewed case. Logout/new login invalidates pending credential and delivery commits;
@@ -2516,8 +2543,9 @@ These are local checks; deployed migration, human review, and publication eviden
   recovery role, executor, PITR copy or replay existed at that earlier checkpoint; today's partial
   drill and credential blocker are recorded above.
 - Remaining acceptance: the user confirms Processing `published`, Trust `accepted`, and website
-  search visibility. D2-055's deployed detail correction passes three real-provider description/source
-  contract reads; exact synthetic retirement and authenticated browser confirmation remain open.
+  search visibility. D2-055 is Complete: the deployed detail correction passes all 33 detail/source
+  contract reads across the complete catalog, with no visible synthetic jobs to retire. No database
+  cleanup was needed or executed. Authenticated browser confirmation remains open.
   Do not repeat the completed owner refresh. Hosted
   reviewer/appeal decisions, fresh rights, browser lifecycle, authenticated workload, human
   accessibility, alarm delivery receipt, other provider/store and accountable acceptance remain
