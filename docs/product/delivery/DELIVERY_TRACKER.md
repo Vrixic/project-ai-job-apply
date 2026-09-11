@@ -338,22 +338,31 @@ This is the master record for the delivery phases defined in the [product and sy
   `dab84ac` passes the earlier full maintained verifier. D2-035's new current-domain restriction
   passes 107 config, 97 focused Jobs and 70 mocked community Terraform tests without changing
   immutable descriptors or migrations. Domain-aware source `3552f23` passes full maintained
-  verification and is deployed as Gateway/scheduled/Trust `62`/`22`/`18` at state `332`, with
-  authenticated search and zero drift. All 13 D2 alarms are OK; approximate visible/in-flight/
-  delayed counts are zero in both Trust queues. Existing Greenhouse-only inputs, authority,
-  concurrency, schedules and mappings are unchanged. Global Lever remains disabled pending
-  scoped server configuration activation, independent local extension provider/detector changes,
-  rebuild/reload and installed acceptance. No EU/Ashby, production or store activation is included.
+  verification. The user's separate activation/local-extension approval is now implemented:
+  configuration-only Apply `5dfd93` and Verify `c5fad6` establish Gateway/scheduled/Trust
+  `63`/`23`/`18`, state `333`, with zero meaningful changes and unchanged `3552f23` artifact code.
+  Operator `acf0320` changes exactly four configuration resources, preserving 300 no-ops and
+  Greenhouse records. Global-host Lever intake is enabled; only Supermove is independently
+  registered. Exactly three hosts are allowed; EU/Ashby remain disabled. Trust authority,
+  concurrency, schedules, mappings, database and migrations are unchanged. Independent readback
+  `17e079` matches the exact runtime/aliases and passes `200/200/401` live/ready/anonymous-boundary
+  probes. Health `098e91` confirms 13 D2 alarms OK and both Trust queues approximately `0/0/0`.
+  Extension 306 tests/27 suites, 77 focused tests and typecheck pass. Authorized local configuration
+  preserves unrelated settings; build `72e7b6` and artifact readback `d118da` verify Greenhouse/global
+  Lever, exactly three hosts and unchanged permissions. Reload the existing unpacked installation
+  and try the supplied Supermove posting once; no installed Lever success is claimed.
   Actual API preflight passes global Lever (one observation/11,984 bytes), but the supplied Ashby
   board exceeds the unchanged 1,000,000-byte cap. D2-R22 records that distinct activation blocker;
-  it is not another fixture-review request. Prepare Lever separately and keep Ashby disabled.
+  it is not another fixture-review request. Keep Ashby disabled; global Lever is separately activated.
   An initial configuration-planning refusal is traced to the new checker's incorrect assumption
   about the existing worker build-marker format; the artifact/source/deployment checks remain
   intact. The correction passes 407 generated assertions and both exact local ZIP checks. Its
-  rationale lives in the Phase 2 decision record, not a new document; no provider is activated.
+  rationale lives in the Phase 2 decision record, not a new document. That refusal preceded the
+  successful configuration rollout above.
   Hosted Auth0/fresh MFA and a newly authorized disposable
   candidate remain necessary for live acceptance.
-  No case decision, provider activation, candidate-data mutation or Docker/WSL start.
+  No case decision, candidate-data mutation, EU/Ashby activation, production/store release or
+  Docker/WSL start is claimed. D2-035 and Phase 2 remain In progress.
 - Current owner checkpoint (`2026-09-11`): the user confirms website search visibility after
   extension Processing `published` and Trust `accepted`, then confirms successful `View details
   and sources` after the corrective deployment. D2-019/D2-039 are Complete for their controlled
@@ -1014,6 +1023,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-11 | D2 | The owner approves global-Lever server activation and local extension configuration. Reviewed four-resource Apply `5dfd93` and Verify `c5fad6` establish state `333`, Gateway/scheduled/Trust `63`/`23`/`18`, with zero meaningful changes and unchanged `3552f23` code. Greenhouse records remain; global-host intake adds Lever with only Supermove independently registered. EU/Ashby and production/store stay disabled; authority, triggers and migrations are unchanged. Independent runtime/boundary and health checks pass: 13 D2 alarms OK, both Trust queues approximately empty. Extension 306 tests/27 suites, 77 focused tests, typecheck, configured build and artifact readback pass. Reload the existing unpacked extension and try the supplied posting once; installed acceptance, Ashby R22 and broader Phase 2 gates remain. | [Actual activation and next step](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions); readback `17e079`; health `098e91`; build `72e7b6`; artifact `d118da` |
 | 2026-09-11 | D2 | The approved global Lever/hosted Ashby fixtures and domain restriction are integrated in `3552f23`; the full maintained verifier passes. Reproducible publications and reviewed artifact-only Gateway/worker applies verify at state `332`, aliases `62`/`22`/`18`, with zero drift and 13 healthy D2 alarms. Greenhouse and all authority/triggers/migrations remain unchanged. Global Lever needs scoped server/client activation and installed acceptance; Ashby stays disabled under R22's board-acquisition bound. No new branches or Docker/WSL start; Phase 2 remains In progress. | [Release and remaining scope](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions), [single decision record](phase-2-extension-and-community.md#decisions-and-scope-changes) |
 | 2026-09-11 | D2 | User confirms successful `View details and sources` after refreshing the corrected website. Earlier published/accepted and search confirmations plus this reported-job browser check close D2-019/D2-039 for controlled Greenhouse implementation/deployment. The website check is removed from outstanding acceptance; no all-job browser, external-link navigation, cross-browser, human/provider or full Phase 2 acceptance is claimed. Documentation only; no cloud, identity, database or runtime change. | User confirmation in this conversation; [owner follow-up](phase-2-extension-and-community.md#d2-055--catalog-details-and-synthetic-fixture-retirement), [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | D2 | User reports extension Processing `published` and Trust `accepted`, satisfying owner-status readback for the reported result. Only fixed statuses are retained; no contribution count or website visibility is inferred. D2-019/D2-039 advance but remain In progress pending signed-in candidate search/detail and remaining acceptance. No new submission, decision, cloud operation or authority. | User confirmation in this conversation; [next website check](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
