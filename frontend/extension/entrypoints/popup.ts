@@ -176,16 +176,20 @@ function renderSessionStatus(status: AuthStatus): void {
   authStatus.textContent = status.configured
     ? status.authenticated
       ? "Signed in"
-      : "Signed out"
+      : status.refreshAvailable
+        ? "Session expired"
+        : "Signed out"
     : "Identity configuration required";
   loginButton.hidden = status.authenticated || !status.configured;
-  refreshButton.hidden = !status.authenticated || !status.refreshAvailable;
-  logoutButton.hidden = !status.authenticated;
+  refreshButton.hidden = !status.configured || !status.refreshAvailable;
+  logoutButton.hidden = !status.configured || (!status.authenticated && !status.refreshAvailable);
 
   if (!status.configured) {
     detail.textContent = "Inspection is ready. Add public Auth0 settings to enable shared jobs.";
   } else if (!status.authenticated) {
-    detail.textContent = "Inspection is ready. Sign in before adding a shared job.";
+    detail.textContent = status.refreshAvailable
+      ? "Refresh your session or sign in again before adding a shared job. Sign out to clear the retained session."
+      : "Inspection is ready. Sign in before adding a shared job.";
   } else if (!status.apiConfigured) {
     detail.textContent = "Inspection is ready. Configure the API origin to enable shared jobs.";
   } else {

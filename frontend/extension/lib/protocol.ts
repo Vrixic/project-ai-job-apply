@@ -5,6 +5,8 @@ import { pkceChallenge, randomBase64Url, validateAuthorizationCallback } from ".
 const SESSION_KEY = "auth0Session";
 const REQUIRED_SCOPE =
   "openid profile email offline_access profile:read profile:write jobs:read jobs:write jobs:contribute";
+const AUTH_REQUEST_TIMEOUT_MILLISECONDS = 10_000;
+const MAXIMUM_TOKEN_RESPONSE_BYTES = 65_536;
 
 interface StoredSession {
   accessToken: string;
@@ -52,22 +54,108 @@ function configured() {
   }
 }
 
-async function tokenRequest(parameters: URLSearchParams): Promise<StoredSession> {
-  const response = await fetch(endpoint("/oauth/token"), {
-    body: parameters,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    method: "POST",
-  });
-  if (!response.ok) {
-    throw new Error("token_request_failed");
+async function oauthPost(
+  action: "token" | "revoke",
+  parameters: URLSearchParams,
+): Promise<unknown> {
+  const failure = action === "token" ? "token_request_failed" : "revocation_failed";
+  const controller = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let responseBody: ReadableStream<Uint8Array> | null | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const work = async (): Promise<unknown> => {
+    let response: Response;
+    try {
+      response = await fetch(endpoint(`/oauth/${action}`), {
+        body: parameters,
+        cache: "no-store",
+        credentials: "omit",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        method: "POST",
+        redirect: "error",
+        signal: controller.signal,
+      });
+    } catch {
+      throw new Error(failure);
+    }
+    responseBody = response.body;
+    if (controller.signal.aborted) {
+      void responseBody?.cancel().catch(() => undefined);
+      throw new Error(failure);
+    }
+    if (!response.ok || response.redirected) throw new Error(failure);
+    if (action === "revoke") return undefined;
+    try {
+      if (
+        response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
+          "application/json" ||
+        !responseBody
+      ) {
+        throw new Error("invalid_token_response");
+      }
+      reader = responseBody.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      while (true) {
+        const next = await reader.read();
+        if (controller.signal.aborted) throw new Error(failure);
+        if (next.done) break;
+        total += next.value.byteLength;
+        if (total > MAXIMUM_TOKEN_RESPONSE_BYTES) throw new Error("invalid_token_response");
+        chunks.push(next.value);
+      }
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
+    } catch {
+      throw new Error(controller.signal.aborted ? failure : "invalid_token_response");
+    } finally {
+      reader?.releaseLock();
+      reader = undefined;
+    }
+  };
+  try {
+    // Race the entire body read as well as fetch. A late transport result cannot reach storage.
+    return await Promise.race([
+      work(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error(failure));
+        }, AUTH_REQUEST_TIMEOUT_MILLISECONDS);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    controller.abort();
+    if (reader) void reader.cancel().catch(() => undefined);
+    else if (responseBody) void responseBody.cancel().catch(() => undefined);
   }
-  const body = (await response.json()) as TokenResponse;
+}
+
+async function tokenRequest(parameters: URLSearchParams): Promise<StoredSession> {
+  const value = await oauthPost("token", parameters);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("invalid_token_response");
+  }
+  const body = value as TokenResponse;
+  const expiresAt =
+    typeof body.expires_in === "number" ? Date.now() + body.expires_in * 1_000 : Number.NaN;
   if (
     typeof body.access_token !== "string" ||
     body.access_token.length === 0 ||
     body.token_type !== "Bearer" ||
     typeof body.expires_in !== "number" ||
-    body.expires_in <= 0
+    body.expires_in <= 0 ||
+    !Number.isFinite(expiresAt) ||
+    (body.refresh_token !== undefined &&
+      (typeof body.refresh_token !== "string" ||
+        body.refresh_token.length === 0 ||
+        body.refresh_token.length > 4_096))
   ) {
     throw new Error("invalid_token_response");
   }
@@ -88,7 +176,7 @@ async function tokenRequest(parameters: URLSearchParams): Promise<StoredSession>
   });
   return {
     accessToken: body.access_token,
-    expiresAt: Date.now() + body.expires_in * 1_000,
+    expiresAt,
     identityFence,
     identityFenceVersion: ACCOUNT_FENCE_VERSION,
     ...(typeof body.refresh_token === "string" && body.refresh_token.length > 0
@@ -288,18 +376,14 @@ export async function logout(): Promise<void> {
     const current = await cleared;
     assertSessionGeneration(generation, true);
     if (current?.refreshToken) {
-      const revocationResponse = await fetch(endpoint("/oauth/revoke"), {
-        body: new URLSearchParams({
+      await oauthPost(
+        "revoke",
+        new URLSearchParams({
           client_id: extensionConfiguration.clientId,
           token: current.refreshToken,
           token_type_hint: "refresh_token",
         }),
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        method: "POST",
-      });
-      if (!revocationResponse.ok) {
-        throw new Error("revocation_failed");
-      }
+      );
     }
     assertSessionGeneration(generation, true);
     const returnTo = chrome.identity.getRedirectURL("auth0");

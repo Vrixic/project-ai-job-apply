@@ -20,6 +20,7 @@ Invoke-CheckedCommand "Deployment operator guard validation" { & scripts/tests/d
 Invoke-CheckedCommand "Isolated deletion restore contract/operator validation" { pnpm test:deletion-restore }
 Invoke-CheckedCommand "Coordinated D2 maintenance and runtime release validation" { pnpm test:d2-runtime-release }
 Invoke-CheckedCommand "Generated synthetic catalog retirement operator validation" { pnpm test:synthetic-catalog-retirement }
+Invoke-CheckedCommand "Candidate rights prerequisites and export validation" { pnpm test:candidate-rights-acceptance }
 Invoke-CheckedCommand "Development document dark guard validation" { & scripts/tests/development-document-dark-guards.tests.ps1 }
 Invoke-CheckedCommand "Development document dark operator validation" { & scripts/tests/development-document-dark-operator.tests.ps1 }
 Invoke-CheckedCommand "Development document migration operator path validation" { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/development-document-migration-operator.tests.ps1 }

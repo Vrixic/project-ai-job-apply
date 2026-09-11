@@ -321,6 +321,15 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
+- Current implementation continuation (`2026-09-11`): D2-054's admin presentation is now deployed
+  from `b3da818` to the existing protected identity-dark preview; 174 tests/typecheck, a 128-file
+  allowed-source upload, exact source/project/region and three protected no-store HTTP checks pass.
+  Hosted Auth0 is still unconfigured (zero project environment variables). D2-056 addresses
+  unbounded extension OAuth requests and hidden expired-session controls; D2-057 addresses late
+  rights prerequisites and missing export-content validation. Both are In progress on the shared
+  worktree with focused agent ownership and no new branches. Lever/Ashby representative fixture
+  inputs are requested; their existing focused source tests pass 218/218. No case decision,
+  provider activation, candidate-data mutation or Docker/WSL start.
 - Current owner checkpoint (`2026-09-11`): the user confirms website search visibility after
   extension Processing `published` and Trust `accepted`, then confirms successful `View details
   and sources` after the corrective deployment. D2-019/D2-039 are Complete for their controlled

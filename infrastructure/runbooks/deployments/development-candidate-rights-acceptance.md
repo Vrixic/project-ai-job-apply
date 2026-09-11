@@ -124,7 +124,8 @@ Stop before planning unless all of these are independently available:
 - accountable product/security/privacy ownership of the exact policy and backup inventory. A local
   checksum or repository author is not external approval.
 
-The operator reads the API token only from `CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN`, the signed
+For `Plan` and `Execute`, the operator reads the API token only from
+`CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN`, the signed
 recent-MFA proof only from `CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN`, and the attestation path only from
 `CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH`. Never place any of these values on the
 command line, in shell history, source, a Terraform value, or evidence. The attestation is a
@@ -148,6 +149,28 @@ token and ID token immediately before `Execute`; the ID-token proof must remain 
 recent-auth window after the signed-grant expiry wait. If it becomes stale, execution stops before
 creating the final deletion request.
 
+`Execute` additionally requires `CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN` for that same
+disposable candidate web session and `CANDIDATE_RIGHTS_ACCEPTANCE_CLIENT_SECRET` for the exact
+candidate web application. Supply both through the approved protected, process-local handoff,
+never command arguments, shell history or retained evidence. Do not substitute the deletion M2M
+client or a reviewer client. The refresh token must be nonblank and client authentication must be
+nonblank and at least 16 characters. The operator rejects missing prerequisites before its first
+candidate API write and checks them again before refresh. This is presence/shape validation, not
+proof that Auth0 will accept the refresh. `Plan` remains read-only and does not need either value.
+
+The fixed sequence renews the access token after the download-grant wait. It retains the original
+signed ID token: refresh is not a new MFA transaction and does not renew `auth_time`. Complete the
+fresh sign-in close enough to execution for the same ID-token proof to remain valid at the final
+check; no stale-MFA bypass or silent identity substitution is permitted.
+
+The installed Node runtime and current repository dependencies must also be ready. Before the
+first candidate API write, `Execute` runs the fixed
+[`candidate-rights-export.mjs`](../../../scripts/lib/candidate-rights-export.mjs) readiness check,
+which compiles the existing domain-owned source schema without requiring a new artifact build.
+The export body and expected export/policy bindings are passed to that helper only over bounded
+UTF-8 stdin, never command arguments or files. A missing helper/dependency stops before export
+creation; invalid downloaded content stops before any deletion request.
+
 ## Local fail-closed gate
 
 Run the pure operator suite in both supported shells. It makes no AWS, identity, database, Docker,
@@ -156,11 +179,15 @@ WSL, Vercel, browser, or GitHub Actions change.
 ```powershell
 pwsh -NoProfile -File scripts/tests/development-candidate-rights-acceptance-operator.tests.ps1
 powershell.exe -NoProfile -File scripts/tests/development-candidate-rights-acceptance-operator.tests.ps1
+node --test scripts/tests/candidate-rights-export.test.mjs
 ```
 
 The suite fixes the public parameter surface, policy and owner inventories, generated-synthetic
 attestation, recent MFA, non-Zach authority, unweighted artifacts, the 15-step lifecycle, replay
-receipt shape, aggregate-only evidence, and prohibited control paths.
+receipt shape, aggregate-only evidence, pre-write refresh prerequisites with zero network calls on
+refusal, and prohibited control paths. Generated streams prove the header/body deadline and
+disposal on empty, oversized, rejected and stalled downloads. Generated child processes prove
+bounded stdin/output, refusal redaction and termination, including a child that stops reading.
 
 ## Status and plan
 
@@ -215,9 +242,11 @@ no token, subject, owner name, secret, account ID, bucket, ARN, URL, identity va
 
 ## Execute once
 
-Mint or refresh the same generated-synthetic identity's access and recent-MFA ID tokens immediately
-before execution, update only the two fixed token environment variables, and consume the exact
-reviewed plan. Do not edit or rehash the descriptor.
+Reauthenticate the same generated-synthetic identity immediately before execution and supply the
+fresh access token, signed recent-MFA ID token, session refresh token and exact web-client
+authentication through the fixed process-local inputs above. Preserve the reviewed attestation
+and consume the exact reviewed plan. Do not edit or rehash the descriptor. A refresh-token exchange
+alone cannot establish fresh MFA.
 
 ```powershell
 pwsh -NoProfile -File scripts/operate-development-candidate-rights-acceptance.ps1 `
@@ -231,14 +260,17 @@ The fixed sequence does the following:
 
 1. creates one portable export and proves exact idempotent replay;
 2. polls only bounded status until ready;
-3. validates one exact-version HTTPS signed grant, streams and discards at most 1 MiB of the
-   generated-synthetic artifact, and proves the grant no longer returns the object after expiry;
+3. validates one exact-version HTTPS signed grant and downloads a nonempty artifact of at most
+   1 MiB under a 20-second header-plus-body deadline; validates strict UTF-8 JSON, the existing
+   export schema and the exact requested export/policy bindings in memory; discards the body and
+   proves the grant no longer returns the object after expiry. The validator child has its own
+   30-second whole-operation deadline, at most 8 KiB of fixed aggregate output, and no raw stderr;
 4. creates/replays/cancels one deletion request;
 5. revalidates the same subject, fresh `auth_time`, MFA, scope, and attestation before making the
    irreversible request;
 6. creates and confirms one final deletion request, requiring immediate quarantine;
 7. waits for the exact independently encrypted, Object-Locked recovery marker to carry the reviewed
-   policy/subject hashes and the durable `completed` tag. Completion is downstream of all five
+   policy/subject hashes and the durable `completed` tag. Completion is downstream of all seven
    owner deletions, exact export/document-version cleanup, the configured subprocessors, and Auth0
    session/refresh-token/user reconciliation; and
 8. repeats empty-queue, healthy-alarm, and zero-compute checks.
@@ -248,6 +280,25 @@ and zero-drift checksum. It contains no token, subject, request/export/operation
 version, URL, provider response, identity, user value, or artifact content. A failure or ambiguous
 run is not acceptance evidence. Never retry confirmation blindly and never delete or edit a
 recovery marker.
+
+`Execute` additionally returns `ExportCoverage` as separate aggregate output, without changing
+the persisted lifecycle or historical recovery receipt schemas: `consentCount`,
+`contributionApprovalCount`, `contributionCount`, `privateCaptureCount`, `trustCaseCount`, and
+`trustCaseEventCount`. The approval count is the required approval record on each exported
+contribution, not a separate authorization store. For `d2-development-synthetic-v1`, all existing
+D2 export sections must be present. Zero counts remain zero; valid empty sections do not prove
+fresh nonempty D2 acceptance.
+
+For that separate D2-020 acceptance, first select a freshly authorized disposable generated-only
+candidate and prepare the reviewed nonempty scope through existing candidate/extension commands:
+Profile consent history, a contribution with its approval and bounded processing/Trust history,
+and a private saved-page capture. Exercise the applicable withdrawal history within that scope.
+Do not seed live SQL, borrow a reviewer/real contributor account, publish or decide a case merely
+to create test data, or treat a local generated fixture as live evidence. Reauthenticate that same
+candidate with MFA immediately before the reviewed lifecycle. Record the actual coverage counts
+and any unexercised owner data explicitly; local seven-owner tests and completed historical
+restore replay remain separate evidence. No current disposable identity or recent-MFA authority
+is established by an old acceptance plan, receipt or encrypted reviewer credential.
 
 ## Recovery replay and verification
 

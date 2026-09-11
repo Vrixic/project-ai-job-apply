@@ -20,6 +20,11 @@ release, and browser-store distribution are not approved. See the current
   generations and ordered storage commits reject obsolete responses. Explicit logout clears prior
   credentials before network completion, even if a newer sign-in is cancelled, without clearing
   a newer successful login.
+- OAuth token and revocation requests refuse redirects and browser cookies, bypass caches, and
+  have a ten-second whole-request deadline. Token bodies must be bounded UTF-8 JSON (64 KiB).
+  An expired but refreshable session keeps its Refresh and Sign out controls visible; this never
+  enables contribution delivery until authentication succeeds. Failures expose fixed messages,
+  not token/provider bodies.
 - Explicit `activeTab` inspection through `chrome.scripting.executeScript`; there are no persistent
   content scripts or provider host grants.
 - Exact provider-domain adapters for Greenhouse, Lever, and Ashby behind a separate reviewed

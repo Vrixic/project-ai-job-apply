@@ -192,6 +192,10 @@ Both are included in maintained infrastructure and full repository verification.
   one generated-synthetic candidate export/deletion lifecycle only after exact policy, backup,
   Auth0, identity, runtime, and zero-drift prerequisites pass. See
   `infrastructure/runbooks/deployments/development-candidate-rights-acceptance.md`.
+  `pnpm test:candidate-rights-acceptance` runs the offline operator and strict downloaded-export
+  regressions; `pnpm test:candidate-rights-export` runs only the latter. Both use generated data
+  without executing candidate rights or contacting a provider. The complete `pnpm check` and
+  maintained repository verifier include this boundary.
 
 - `start-deployed-web-conformance.ps1` — Validates the selected steady-state API Gateway/Lambda
   runtime, Auth0 alignment, durable triggers, empty ECS application boundary, and `200/200/401`,

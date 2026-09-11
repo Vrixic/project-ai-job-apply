@@ -44,6 +44,17 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Current completion continuation (`2026-09-11`): the owner requests continued full Phase 2
+implementation. The D2-054 admin presentation is now deployed from `b3da818` to the existing
+protected preview project; source/region/project readback and three protected HTTP checks pass.
+It remains identity-dark: the project has no configured environment variables, so hosted appeal
+sign-in still needs exact-host Auth0 and server-only configuration. No paid protection or new
+reviewer authority was added. New concrete gaps are tracked as D2-056 (bounded extension OAuth
+transport and expired-session controls) and D2-057 (early rights prerequisites and strict export
+download validation). Agents work directly in the shared worktree without branches; Docker/WSL
+remain stopped. Provider source tests pass; exact Lever/Ashby fixture inputs are requested while
+the other implementation continues.
+
 Current owner checkpoint (`2026-09-11`): the user confirms jobs appear on the website after
 extension Processing `published` and Trust `accepted`. Following D2-055's deployed correction,
 the user confirms that refreshing the website and using `View details and sources` now succeeds.
@@ -68,8 +79,9 @@ updates and case-scoped reviewer drafts fix the reproduced client races. Extensi
 admin 174/174 tests pass, including 55 extension and 32 reviewer focused cases. Source/document
 review and the full maintained verifier pass: 34 test tasks and all 20 builds; database opt-ins
 remain explicitly skipped. The configured unpacked extension and local admin production bundle
-are rebuilt. Reload the extension to use its fix; the admin presentation still needs a fresh
-hosted rollout and acceptance. No cloud, account, provider or reviewer-authority change occurred.
+are rebuilt. Reload the extension to use its fix; the admin presentation's later protected rollout
+is recorded above, without hosted sign-in or human decision acceptance. The original source-only
+checkpoint made no cloud, account, provider or reviewer-authority change.
 Phase 2 remains In progress behind the owner and human acceptance below.
 
 Completed recovery checkpoint (`2026-09-11` UTC): D2-038/D2-050/D2-052/D2-053 are Complete for their
@@ -374,8 +386,51 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-051 | Preserve authoritative deletion timestamps and prevent late terminal events from enqueueing another completed-operation retry. | Complete | Platform engineering | D2-020; D2-038 | Completed 2026-09-11 for code/deployment: Gateway `423d63b` and combined core `2ff32ef` are verified, with core `14` resumed at state `328` and zero drift. Timestamp tests pass 30 cases/13 original-source failures; the enqueue guard passes 41 Profile cases/eight original-source failures, and real PostgreSQL covers rollback, persisted timestamps and the already-terminal no-extra-outbox path. Full verification passes. Generated concurrency seams do not establish a real concurrent row-lock race; fresh rights acceptance and historical repair remain separate. See [retry timestamps](#d2-051--deletion-retry-timestamps). |
 | D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | Complete | Product owner; platform engineering | D2-038; D2-050; D2-051; D2-053 | Completed 2026-09-11: corroborated persisted request/ledger/operation evidence and three acknowledged/unclaimed dispatches support the exact historical correction. Separately authorized recovery `8649` / `7d6e48` sends one exact-version completion-tag Put and verifies intended state, preserving all other protected data and original evidence. Unchanged same-copy Inspect/Replay and final cleanup pass. No fresh nonempty deletion is claimed. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
 | D2-053 | Define and verify one-shot pre-dispatch recovery for the consumed historical completion-repair reservation. | Complete | Platform engineering; product owner | D2-052; D2-R21 | Completed 2026-09-11: 199 repair tests, 119 protected-storage checks, 274 two-source checks and full verification pass. Actual `6eb7a86` recovery `8649` / `7d6e48` verifies the intended single-tag correction after fresh checks, preserving the original journal and fixed companion. Default repair remains readback-only; neither journal may be reset or used to resend. Normal runtime `2ff32ef`/version `14` is unchanged. Same-copy strict Inspect/Replay and all temporary cleanup pass. |
-| D2-054 | Fence asynchronous extension identity/delivery and reviewer decision state across transitions. | Complete | Platform engineering; QA/automation | D2-007; D2-012; D2-015; D2-022 | Completed 2026-09-11 at `dd2d560` for source/local verification: extension 258/258 and admin 174/174 tests, both no-emit checks, source/document review and full maintained verification pass, including all 20 builds. Configured extension and local admin bundle are rebuilt; installed reload/lifecycle and hosted admin rollout/acceptance remain separate. No cloud or authority changes. See [scope and evidence](#d2-054--session-and-reviewer-state-transitions). |
+| D2-054 | Fence asynchronous extension identity/delivery and reviewer decision state across transitions. | Complete | Platform engineering; QA/automation | D2-007; D2-012; D2-015; D2-022 | Completed 2026-09-11 at `dd2d560` for source/local verification: extension 258/258 and admin 174/174 tests, both no-emit checks, source/document review and full maintained verification pass, including all 20 builds. Configured extension rebuilt; the admin presentation subsequently deploys at `b3da818` to the protected identity-dark preview with 174 tests/typecheck and source/region/HTTP checks passing. Installed lifecycle and hosted sign-in/human acceptance remain separate. No role, grant or provider changes. See [scope and evidence](#d2-054--session-and-reviewer-state-transitions). |
 | D2-055 | Repair deployed catalog details and retire exact generated synthetic development fixtures when present. | Complete | Platform engineering | D2-019; D2-039; D2-047 | Completed 2026-09-11: Gateway `985f5312`/61 is deployed with authenticated boundary and zero drift verified. Complete two-page inventory validates all 33 detail/source contracts: 33 verified-provider jobs, zero fixtures or unclassified jobs. Retirement is unnecessary and was not executed; no catalog rows changed or were deleted. Jobs PostgreSQL 98/98, 261 operator checks on each PowerShell host, and full corrective verification at `dc855732` pass. The user subsequently confirms the reported job's browser details/source display. Docker/WSL stopped; wider Phase 2 acceptance stays separate. |
+| D2-056 | Bound extension OAuth transport and retain expired-session refresh/sign-out controls. | In progress | Platform engineering; QA/automation | D2-012; D2-015; D2-054 | Source inspection finds unbounded token/revocation fetches and expired-session controls hidden despite retained refresh credentials. Implement redirect refusal, response/body timeout and size bounds, fixed errors, and visible recovery/clearing controls without changing scopes or account-transition fences. Focused regressions and integration pending. |
+| D2-057 | Fail candidate-rights acceptance before writes on missing prerequisites and validate downloaded export content. | In progress | Platform engineering; QA/automation | D2-020; D2-041 | The old fixed lifecycle reaches its first write without the required refresh inputs; a generated no-network negative control reproduces this. Early prerequisite checks pass 33 new assertions per PowerShell host. Strict bounded UTF-8/schema/export-ID/policy validation and honest D2 section counts are in progress; the previous downloader accepted any bounded HTTP 200 body. No fresh candidate, export/deletion, cloud or recovery execution occurred. |
+
+### D2-056 — Bounded OAuth and expired-session controls
+
+The extension's token and revocation requests now refuse redirects, omit cookies and caching,
+and have one ten-second deadline covering both the request and response-body consumption.
+Token responses require bounded strict UTF-8 JSON (maximum 65,536 bytes), object shape, valid
+expiry and bounded refresh credentials. Failures expose fixed codes, not provider bodies.
+Late responses cannot reach session storage; D2-054's generation/account fences remain intact.
+
+The popup labels a retained expired session honestly and keeps Refresh and Sign out available.
+This restores recovery and local clearing without permitting authenticated delivery while expired.
+The new DOM test uses an explicit package-local dependency on the already-pinned jsdom version.
+
+Focused original-source regression has 24 failures before the fixes. Final extension tests pass
+288/288 across 26 files, including 97 focused checks; no-emit and scoped Biome pass. The configured
+unpacked extension is rebuilt. Source assurance and the isolated Edge/Chrome-for-Testing matrix
+pass (`5085` / `170b9b`), with a 448-pixel popup, four reflow profiles, zero axe/geometry failures,
+zero allowed external requests and no retained sensitive artifacts. Generated browser checks do
+not establish real Auth0 rotation/replay, cross-account/offline parity or human accessibility.
+Full maintained repository verification and coherent source integration follow.
+
+### D2-057 — Candidate-rights prerequisites and export validation
+
+The acceptance operator previously reached its first candidate write before checking the refresh
+credentials needed later, and treated any bounded HTTP 200 download as an accepted export. Early
+prerequisite checks now run before lifecycle writes without changing the read-only Plan contract.
+The new source-schema helper accepts artifacts through bounded stdin only and returns fixed
+aggregate counts; tokens, exported values and IDs never enter arguments, files or error output.
+
+Validation requires nonempty strict UTF-8 JSON, no duplicate decoded keys, the current domain
+schema and exact export-ID/policy binding. The current D2 policy also requires all D2 sections.
+Consent, contribution approval, contribution, private capture, Trust case and case-event counts
+are reported honestly: zero is valid empty content, not fresh nonempty D2 acceptance. The helper
+passes 83 generated tests (`e1a074`) and independent source review. Both PowerShell 7 and Windows
+PowerShell 5.1 pass the existing operator suite plus 33 prerequisite and 85 export assertions.
+The checks cover real Node stdin round-trips, stalled headers/body/child processes, bounded output,
+redacted refusal and confirmed child cleanup. Downloads have a twenty-second whole-transfer
+deadline and the child has a separate thirty-second bound. The new aggregate-only checks are
+included in `pnpm check` and the maintained repository verifier. Full integration follows.
+Existing persisted lifecycle/recovery receipt schemas stay unchanged. No candidate export,
+deletion, account creation, database or cloud action is part of this local tooling change.
 
 ### D2-055 — Catalog details and synthetic fixture retirement
 
@@ -482,6 +537,19 @@ not establish all-job browser coverage, external source navigation, other-provid
 human accessibility, fresh rights or Phase 2 completion. No further refresh is requested.
 
 ### D2-054 — Session and reviewer state transitions
+
+Hosted presentation follow-through (`2026-09-11`): exact clean `b3da818` passes the maintained
+Vercel preflight, prior-approved owner and isolated project checks. All 128 dry-run files match
+tracked allowed source and local digests, with no credential, untracked or unrelated upload.
+The admin's 174 tests and typecheck pass. Deployment `dpl_9pXDi2EQHWU4RCW7YdALwvD8x2va` is READY
+in `iad1`, Node 24, in the existing admin project, with matching Git source readback. The
+[protected preview](https://ai-job-apply-admin-5lytaj3kw-applydash2026-5637.vercel.app) returns
+Vercel protection `302`/`no-store` for root, a fixed unknown route and the Trust queue route.
+These three credentialless probes retain no body/cookie and prove protection, not application
+or authenticated reviewer acceptance. The project has zero environment variables; no Auth0
+configuration, reviewer grant, production alias, AWS state or provider setting changed. Executions
+`17d36f`, `9c78fb`, `08bb4a` and `71a2e2` record local checks, preflight/upload, deployment and
+independent readback respectively. Exact stable-host appeal configuration remains a separate input.
 
 Started and completed 2026-09-11 for implementation/local verification. The source-only
 continuation identified two client implementation gaps:
@@ -1921,7 +1989,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
-| Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three actual initial decisions now pass. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Complete the hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case, borrow the human session or treat machine initial-decision success as human acceptance. |
+| Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three actual initial decisions pass. The current D2-054 admin preview is deployed/protected at `b3da818`; zero project environment variables confirms hosted Auth0 is unconfigured. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Configure the existing dedicated human appeal client for one exact protected stable host with `ADMIN_AUTHORIZATION_PROFILE=appeals`, distinct hosted session secret and server-only settings, then complete hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case or borrow the human session. |
 | Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. Both providers remain disabled in development. | Acquire representative provider-derived fixtures, complete sanitization/scanning and separate QA acceptance, then activate exact development registrations. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
 | Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
@@ -1935,6 +2003,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-11 | Continued full Phase 2 implementation on shared main without branches. Deployed the D2-054 admin presentation from exact `b3da818` after 174 admin tests, typecheck, clean-source/owner/project preflight and a 128-file digest-checked upload. READY/source/iad1/Node24 and three protected no-store 302s pass; hosted Auth0 remains unconfigured with zero project variables. Started concrete OAuth/session-control and rights-acceptance gaps as D2-056/057. Provider focused tests pass 218/218; Lever/Ashby require representative fixture inputs, not another migration. No case decision, provider activation, candidate-data mutation, paid protection or Docker/WSL start. | D2-054; D2-056; D2-057; D2-011; D2-035 | Admin `17d36f`/`9c78fb`/`08bb4a`/`71a2e2`; [hosted follow-through](#d2-054--session-and-reviewer-state-transitions); pending fixture request in this conversation |
 | 2026-09-11 | User confirms successful website refresh and `View details and sources` for the reported job after D2-055. Combined with earlier Processing `published`, Trust `accepted` and website search confirmation, this closes D2-019/D2-039 for controlled Greenhouse development and removes the repeated website check from outstanding acceptance. No all-job browser, external-link navigation, cross-browser, human/provider or Phase 2 acceptance is inferred. Documentation only; no deployment, submission, decision, database write or runtime start. | D2-019; D2-039; D2-047; D2-055 | User confirmation in this conversation; [owner follow-up](#d2-055--catalog-details-and-synthetic-fixture-retirement) |
 | 2026-09-11 | Completed D2-055: full live two-page inventory validates all 33 detail/source contracts, with 33 verified-provider jobs and zero fixtures or unclassified jobs. No visible synthetic targets exist, so no cleanup task, migration, catalog mutation or deletion ran. Corrective source `dc855732` passes the full verifier; its deterministic cleanup artifact finishes publication and is retained unused. Docker/WSL are stopped. Refreshing the website needs no client rebuild; remaining Phase 2 browser/human acceptance is unchanged. | D2-055; D2-019; D2-039 | Inventory `986e2d`; full verification `b02efc`; publication `de40f9`; runtime shutdown `ee47e8`/`8248ed`; [final disposition](#d2-055--catalog-details-and-synthetic-fixture-retirement) |
 | 2026-09-11 | Renewed AWS SSO and deployed Gateway `985f5312`/61 through the reviewed two-resource plan. Immutable alias, authenticated boundary and zero drift pass; three real-provider detail/source contracts return 200 instead of 500. Cleanup preflight found only a state/native default-metadata mismatch; symmetric strict normalization passes 261 assertions per PowerShell host and 39 read-only native checks. Original cleanup image is retained but unused; corrected source-bound cleanup release is next. No catalog mutation or client rebuild. | D2-055; D2-019; D2-039 | Apply `3d263d`; detail probe `32a955`; native preflight `e634d9`; [deployed correction](#d2-055--catalog-details-and-synthetic-fixture-retirement) |
@@ -2137,6 +2206,15 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For D2-056/D2-057 on 2026-09-11, bound external transport at the client/operator edge and validate
+the actual returned content. A timeout prevents stalled authentication from trapping the user;
+visible expired-session controls allow recovery without treating retained credentials as a valid
+session. An HTTP 200 is insufficient evidence that a candidate export is correct, so reuse the
+current domain schema with exact identity/policy binding and aggregate-only stdin processing.
+Keep empty and nonempty rights coverage distinct, preserve previous recovery evidence, and fail
+missing execution prerequisites before creating anything. These changes add no provider gate,
+reviewer authority, account collection or production activation.
 
 For D2-055 on 2026-09-11, normalize persistence timestamps at the Jobs read boundary, retaining
 the strict canonical API and frontend validator. When present, remove exact generated development fixtures
@@ -2481,7 +2559,7 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R7 | Open | The architecture's older raw-snapshot example conflicts with the newer 30-day maximum quarantine specification. | Product owner; privacy/security reviewers | ADR-028 selects zero normal raw-snapshot retention; use the 30-day maximum only for separately authorized external fixture quarantine and obtain accountable acceptance. |
 | D2-R8 | Mitigated; acceptance open | A cramped or incomplete installed preview can cause a candidate to misunderstand what will be added or where it will go, weakening the explicit command even when the underlying payload is correct. | Product design; platform engineering; QA/automation | The wider responsive redesign, single public-add action, and automated Edge/Google Chrome for Testing geometry, keyboard, reflow, and two-surface axe checks are complete. Branded-browser authenticated lifecycle and human assistive-technology acceptance remain; do not relabel already-passing automated coverage as an open gate. |
 | D2-R9 | Closed | The dedicated D2 Trust workflow client and its exact `trust:review trust:case:open` grant are operator-confirmed. Its tenant-bound machine subject is bound only to `case_opener`; no secret is stored and the candidate-rights M2M identity remains separate. | Product owner; platform engineering | Preserve the workflow-only assignment and keep human decision roles separately assigned. |
-| D2-R10 | Owner publication follow-up open | Three accepted/version-2 initial decisions and later processing/Trust aggregates pass, but do not identify exact owner/catalog rows. Anonymous public-job routes remain disabled. | Platform engineering; QA/automation | Browser control is unavailable here; owner login status is unobserved. Ask the user to Refresh processing and Refresh Trust on existing contributions and report fixed status lines only, then check authenticated catalog/detail. No resubmission, token, identifier or repeated decision; hosted/human appeal acceptance remains separate. |
+| D2-R10 | Closed | On September 11 the user confirms Processing `published`, Trust `accepted`, website search visibility and successful details/source display after D2-055. This closes the reported-job owner follow-up, not all historical or cross-browser coverage. Anonymous public-job routes remain disabled. | Platform engineering; QA/automation | Do not repeat the completed refresh, resubmit a contribution or repeat a decision. Hosted/human appeal and wider lifecycle acceptance remain separate. |
 | D2-R11 | Closed | Recurring development signing/policy fetch/expiry is removed from the deployed Gateway/scheduled runtime and rebuilt unpacked extension. The user confirms installed reload, successful sign-in, and successful job addition on 2026-09-08, closing this development adoption blocker. Exact scope, authentication, independent verification, and Trust remain enforced. | Platform engineering | Preserve the fixed development scope and remaining independent publication/lifecycle checks. No fresh contribution signing or renewal approval is needed. Production/store and unsupported providers remain disabled; do not automatically resubmit old items. |
 | D2-R12 | Open; hosted reviewer and appeal-decision journey acceptance pending | The September 8 exact human identity/fresh-MFA/two-scope check, state-285 assignment and user-confirmed empty local appeal queue pass; the local-only window ended at `2026-09-08T13:38:16Z`. All three assignments remain unchanged through state `298`. D2-042's three initial decisions are delegated-agent acceptance, not a human appeal or hosted-console journey. | Product owner; platform engineering | Complete hosted reviewer and separate human appeal acceptance under scoped testing. Do not manufacture a case or submit a decision merely to test access; preserve exact reviewer authentication and roles. |
 | D2-R13 | Closed | The expired mobile-only exception blocked initial publication attempts. The exact user-approved parser patch passes 136 focused tests, independent review, frozen installation, the full repository verifier, and the dependency audit without exceptions. Two matching no-cache migration-image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings now pass; that image was published and used successfully. | Platform engineering | Maintain the exact local patch until a compatible upstream fix is verified. No mobile/public-launch acceptance is implied. |

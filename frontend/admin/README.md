@@ -52,8 +52,8 @@ not implemented or authorized by this slice.
   manual evidence and confirmation; editing evidence requires a new takedown confirmation. Late
   reads cannot restore an obsolete selection, and repeated clicks cannot duplicate an in-flight
   write. An acknowledged write with unavailable follow-up evidence explicitly requests a reload;
-  ambiguous writes are never automatically replayed. These D2-054 changes require a fresh admin
-  presentation rollout and do not establish hosted or human decision acceptance.
+  ambiguous writes are never automatically replayed. These D2-054 changes are deployed in the
+  protected identity-dark preview below; hosted sign-in and human decision acceptance remain open.
 - The Gateway and Terraform D2 route inventories are deployed. The verified 2026-09-08 development
   rollout preserves all three reviewer assignments: workflow case opener, separate delegated M2M
   read/initial/takedown reviewer, and separate human read/appeal reviewer. Exact runtime readback
@@ -130,14 +130,26 @@ acceptance. The sole assignment and rationale record remains the
 [Phase 2 reviewer section](../../docs/product/delivery/phase-2-extension-and-community.md#delegated-reviewer-assignment).
 
 ## Vercel hosting boundary
+
+The current protected identity-dark preview is built from `b3da818` (2026-09-11):
+[admin preview](https://ai-job-apply-admin-5lytaj3kw-applydash2026-5637.vercel.app).
+Exact source/project readback, `iad1`/Node 24 and three Vercel-protected `302`/`no-store` checks
+pass after 174 admin tests and typecheck. It includes the appeal profile and D2-054 reviewer-state
+fixes. The existing project has no configured environment variables; hosted Auth0 still requires
+one protected stable origin, exact callback/logout configuration, the dedicated human appeal
+client and server-only `appeals` profile settings. No new role, grant or hosted session is implied.
+
+Historical hosting evidence:
+
 The 2026-09-05 preview built from source `116b272` is `READY`:
 [protected admin preview](https://ai-job-apply-admin-6ewxee4ci-applydash2026-5637.vercel.app).
 Its recorded unauthenticated root returns a Vercel SSO protection redirect (`302`, `no-store`), not
 the admin application or proof of an Auth0 reviewer session. Human appeal/read roles were later
 bound and local access accepted, but hosted admin Auth0 acceptance remains open. This preview
 predates the local appeal-only profile; it includes the
-earlier review UI while the matching queue/evidence handlers are deployed in AWS. A fresh protected
-admin deployment and exact-host Auth0 configuration are still required for hosted appeal acceptance. Consult the
+earlier review UI while the matching queue/evidence handlers are deployed in AWS. The fresh protected
+admin deployment above supersedes this older presentation; exact-host Auth0 configuration and
+hosted appeal acceptance remain. Consult the
 [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md) before attempting
 the authenticated end-to-end review journey.
 

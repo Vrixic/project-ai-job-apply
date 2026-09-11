@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface SessionRecord {
   accessToken: string;
@@ -138,6 +138,10 @@ describe("extension Auth0 protocol lifecycle", () => {
     vi.unstubAllGlobals();
     vi.resetModules();
     installPublicConfiguration();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("fails closed when interactive authorization is cancelled", async () => {
@@ -579,5 +583,270 @@ describe("extension Auth0 protocol lifecycle", () => {
     expect(browser.records.has("auth0Session")).toBe(false);
     expect(await api.authenticationStatus()).toMatchObject({ authenticated: false });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each(["login", "refresh", "logout"] as const)(
+    "isolates the %s OAuth POST from redirects, cookies, and caching",
+    async (action) => {
+      const browser = installChrome({ initialSession: await storedSession() });
+      browser.launchWebAuthFlow.mockImplementation(authorize);
+      const fetcher = vi.fn(async () =>
+        action === "logout"
+          ? new Response(null, { status: 200 })
+          : tokenResponse(accessToken("auth0|candidate-one"), "refresh-next"),
+      );
+      vi.stubGlobal("fetch", fetcher);
+
+      await (await protocol())[action]();
+
+      expect(fetcher).toHaveBeenCalledOnce();
+      expect(fetcher).toHaveBeenCalledWith(
+        new URL(`https://tenant.example.test/oauth/${action === "logout" ? "revoke" : "token"}`),
+        expect.objectContaining({
+          cache: "no-store",
+          credentials: "omit",
+          method: "POST",
+          redirect: "error",
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    },
+  );
+
+  it.each(["refresh", "logout"] as const)(
+    "refuses a redirected %s response without accepting provider content",
+    async (action) => {
+      const original = await storedSession();
+      const browser = installChrome({ initialSession: original });
+      const response = tokenResponse(accessToken("auth0|candidate-one"), "refresh-redirected");
+      Object.defineProperty(response, "redirected", { value: true });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response),
+      );
+
+      await expect((await protocol())[action]()).rejects.toThrow(
+        action === "logout" ? "revocation_failed" : "token_request_failed",
+      );
+      expect(browser.records.get("auth0Session")).toEqual(
+        action === "logout" ? undefined : original,
+      );
+      expect(browser.launchWebAuthFlow).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["login", "headers"],
+    ["login", "body"],
+    ["refresh", "headers"],
+    ["refresh", "body"],
+  ] as const)(
+    "bounds stalled %s %s, releases the lifecycle, and never commits its late result",
+    async (action, stalledAt) => {
+      const original = await storedSession();
+      const browser = installChrome({ initialSession: original });
+      browser.launchWebAuthFlow.mockImplementation(authorize);
+      const started = deferred<void>();
+      const response = deferred<Response>();
+      const releaseBody = deferred<void>();
+      const cancel = vi.fn();
+      let requestSignal: AbortSignal | null | undefined;
+      const fetcher = vi.fn(async (_url: URL, init: RequestInit) => {
+        requestSignal = init.signal;
+        started.resolve();
+        if (stalledAt === "headers") return response.promise;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              await releaseBody.promise;
+              if (requestSignal?.aborted) return;
+              controller.enqueue(
+                new TextEncoder().encode(
+                  JSON.stringify({
+                    access_token: accessToken("auth0|candidate-one", "late"),
+                    expires_in: 3600,
+                    refresh_token: "refresh-late",
+                    token_type: "Bearer",
+                  }),
+                ),
+              );
+              controller.close();
+            },
+            cancel,
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      });
+      vi.stubGlobal("fetch", fetcher);
+      const api = await protocol();
+      vi.useFakeTimers();
+      const outcome = api[action]().then(
+        () => "accepted",
+        (error: unknown) => (error instanceof Error ? error.message : "unexpected_error"),
+      );
+      try {
+        await started.promise;
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(await Promise.race([outcome, Promise.resolve("still_pending")])).toBe(
+          "token_request_failed",
+        );
+        expect(requestSignal?.aborted).toBe(true);
+        expect(browser.records.get("auth0Session")).toEqual(original);
+        expect(await api.authenticationStatus()).toMatchObject({ refreshAvailable: true });
+        if (stalledAt === "body") expect(cancel).toHaveBeenCalledOnce();
+
+        fetcher.mockImplementationOnce(async () =>
+          tokenResponse(accessToken("auth0|candidate-one", "next"), "refresh-next"),
+        );
+        await api[action]();
+        expect(browser.records.get("auth0Session")).toMatchObject({ refreshToken: "refresh-next" });
+      } finally {
+        response.resolve(tokenResponse(accessToken("auth0|candidate-one", "late"), "refresh-late"));
+        releaseBody.resolve();
+        await outcome;
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(browser.records.get("auth0Session")).toMatchObject({ refreshToken: "refresh-next" });
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("bounds revocation failure after clearing local credentials, without later provider logout", async () => {
+    const browser = installChrome({ initialSession: await storedSession() });
+    const started = deferred<void>();
+    const response = deferred<Response>();
+    let requestSignal: AbortSignal | null | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: URL, init: RequestInit) => {
+        requestSignal = init.signal;
+        started.resolve();
+        return response.promise;
+      }),
+    );
+    const api = await protocol();
+    vi.useFakeTimers();
+    const outcome = api.logout().then(
+      () => "accepted",
+      (error: unknown) => (error instanceof Error ? error.message : "unexpected_error"),
+    );
+    try {
+      await started.promise;
+      expect(browser.records.has("auth0Session")).toBe(false);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await Promise.race([outcome, Promise.resolve("still_pending")])).toBe(
+        "revocation_failed",
+      );
+      expect(requestSignal?.aborted).toBe(true);
+      expect(await api.authenticationStatus()).toMatchObject({
+        authenticated: false,
+        refreshAvailable: false,
+      });
+    } finally {
+      response.resolve(new Response(null, { status: 200 }));
+      await outcome;
+    }
+    expect(browser.launchWebAuthFlow).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    "non-json",
+    "non-object",
+    "wrong-media-type",
+    "invalid-utf8",
+    "oversized-json",
+    "oversized-refresh-token",
+    "malformed-refresh-token",
+    "overflowed-expiry",
+  ])("refuses %s token content without replacing the session or exposing it", async (shape) => {
+    const original = await storedSession();
+    const browser = installChrome({ initialSession: original });
+    let response: Response;
+    if (shape === "non-json" || shape === "non-object" || shape === "invalid-utf8") {
+      response = new Response(
+        shape === "non-json"
+          ? "provider-private-error-content"
+          : shape === "non-object"
+            ? "null"
+            : new Uint8Array([0xff]),
+        { headers: { "content-type": "application/json" } },
+      );
+    } else {
+      response = tokenResponse(accessToken("auth0|candidate-one"), "refresh-next", {
+        ...(shape === "oversized-json" ? { ignored: "x".repeat(65_536) } : {}),
+        ...(shape === "oversized-refresh-token" ? { refresh_token: "x".repeat(4_097) } : {}),
+        ...(shape === "malformed-refresh-token" ? { refresh_token: { token: "private" } } : {}),
+        ...(shape === "overflowed-expiry" ? { expires_in: 1e308 } : {}),
+      });
+      if (shape === "wrong-media-type") response.headers.set("content-type", "text/html");
+    }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response),
+    );
+
+    await expect((await protocol()).refresh()).rejects.toThrow(/^invalid_token_response$/u);
+    expect(browser.records.get("auth0Session")).toEqual(original);
+  });
+
+  it.each(["refresh", "logout"] as const)(
+    "projects a private %s transport error to its fixed code",
+    async (action) => {
+      installChrome({ initialSession: await storedSession() });
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("private-refresh-token-value")));
+      await expect((await protocol())[action]()).rejects.toThrow(
+        action === "logout" ? /^revocation_failed$/u : /^token_request_failed$/u,
+      );
+    },
+  );
+
+  it.each([65_536, 65_537])("bounds streamed token JSON at exactly %s bytes", async (size) => {
+    const original = await storedSession();
+    const browser = installChrome({ initialSession: original });
+    const payload = {
+      access_token: accessToken("auth0|candidate-one"),
+      expires_in: 3600,
+      refresh_token: "refresh-next",
+      token_type: "Bearer",
+      ignored: "é",
+    };
+    const encoder = new TextEncoder();
+    payload.ignored += "x".repeat(size - encoder.encode(JSON.stringify(payload)).byteLength);
+    const bytes = encoder.encode(JSON.stringify(payload));
+    const cancel = vi.fn();
+    let offset = 0;
+    const response = new Response(
+      new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            if (offset === bytes.byteLength) {
+              controller.close();
+              return;
+            }
+            const next = Math.min(offset + 4_096, bytes.byteLength);
+            controller.enqueue(bytes.subarray(offset, next));
+            offset = next;
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      ),
+      { headers: { "content-type": "application/json; charset=utf-8" } },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response),
+    );
+
+    const refreshing = (await protocol()).refresh();
+    if (size === 65_536) {
+      await refreshing;
+      expect(browser.records.get("auth0Session")).toMatchObject({ refreshToken: "refresh-next" });
+    } else {
+      await expect(refreshing).rejects.toThrow(/^invalid_token_response$/u);
+      expect(browser.records.get("auth0Session")).toEqual(original);
+      expect(cancel).toHaveBeenCalledOnce();
+    }
   });
 });

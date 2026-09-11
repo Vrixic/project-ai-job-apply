@@ -1,0 +1,561 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { PassThrough, Readable } from "node:stream";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import {
+  checkCandidateRightsExportReady,
+  EXPORT_INPUT_TIMEOUT_MILLISECONDS,
+  MAXIMUM_EXPORT_BYTES,
+  MAXIMUM_EXPORT_ENVELOPE_BYTES,
+  readCandidateRightsExportEnvelope,
+  validateCandidateRightsExport,
+  validateCandidateRightsExportEnvelope,
+} from "../lib/candidate-rights-export.mjs";
+
+// Generated values follow packages/domain/src/schemas.test.ts; no real artifact or identity.
+const exportId = "019d04cf-1f80-7000-8000-000000000040";
+const consentId = "019d04cf-1f80-7000-8000-000000000061";
+const contributionId = "019d04cf-1f80-7000-8000-000000000060";
+const caseId = "019d04cf-1f80-7000-8000-000000000050";
+const at = "2026-09-11T12:00:00.000Z";
+const policyVersion = "d2-development-synthetic-v1";
+const sentinel = "PRIVATE_SENTINEL_DO_NOT_REFLECT";
+const expected = { expectedExportId: exportId, expectedPolicyVersion: policyVersion };
+const rejected = { valid: false, error: "CandidateRightsExportRejected" };
+const emptyCounts = {
+  valid: true,
+  consentCount: 0,
+  contributionApprovalCount: 0,
+  contributionCount: 0,
+  privateCaptureCount: 0,
+  trustCaseCount: 0,
+  trustCaseEventCount: 0,
+};
+const script = fileURLToPath(new URL("../lib/candidate-rights-export.mjs", import.meta.url));
+
+function fixture(nonempty = false) {
+  const result = {
+    schemaVersion: 1,
+    format: "candidate-data-export-v1",
+    exportId,
+    policyVersion,
+    generatedAt: at,
+    candidate: { email: "candidate@example.test", createdAt: at, connectedAccounts: [] },
+    profile: { preferences: null, facts: [], contributionConsents: [] },
+    documents: { resumes: [] },
+    jobs: { reports: [], contributions: [] },
+    matching: { savedJobs: [], privateSavedPageCaptures: [] },
+    billing: { entitlement: { plan: "free", version: 0, effectiveAt: at } },
+    trust: { schemaVersion: 1, cases: [], caseEvents: [], contributorReputationEvidence: [] },
+    audit: { events: [] },
+  };
+  if (!nonempty) return result;
+  result.profile.contributionConsents.push({
+    consentId,
+    purpose: "ugc_contribution",
+    client: "extension",
+    documentVersion: "ugc-contribution-preview.v1",
+    policyVersion: "synthetic-v1",
+    state: "granted",
+    grantedAt: at,
+    recordedAt: at,
+  });
+  result.jobs.contributions.push({
+    id: contributionId,
+    state: "published",
+    source: {
+      provider: "greenhouse",
+      pageVariant: "greenhouse-board-v1",
+      sourceUrl: "https://job-boards.greenhouse.io/synthetic/jobs/123",
+      adapterVersion: "d2-job-page-v1",
+    },
+    posting: { title: "Synthetic engineer", description: sentinel },
+    observation: { observedAt: at },
+    approval: {
+      consentId,
+      consentVersion: "ugc-contribution-preview.v1",
+      policyVersion: "synthetic-v1",
+      approvedAt: at,
+    },
+    processingHistory: [
+      {
+        state: "published",
+        reasonCode: "publication_complete",
+        policyVersion: "synthetic-v1",
+        occurredAt: at,
+      },
+    ],
+    trustHistory: [{ status: "accepted", policyVersion: "synthetic-v1", decidedAt: at }],
+    createdAt: at,
+    updatedAt: at,
+  });
+  result.matching.privateSavedPageCaptures.push({
+    id: contributionId,
+    provider: "lever",
+    pageVariant: "lever-posting-v1",
+    sourceUrl: "https://jobs.eu.lever.co/synthetic/123",
+    adapterVersion: "d2-job-page-v1",
+    title: "Synthetic engineer",
+    company: null,
+    location: null,
+    description: sentinel,
+    externalJobId: null,
+    capturedAt: at,
+    savedAt: at,
+    resolution: null,
+  });
+  result.trust.cases.push({
+    id: caseId,
+    contributionId,
+    policyVersion: "synthetic-trust-v1",
+    appealWindowMilliseconds: 1_000,
+    state: "accepted",
+    version: 2,
+    appealCount: 0,
+    adverseState: null,
+    adverseDecisionAt: null,
+    appealDeadlineAt: null,
+    pendingAppealEvidenceDigestSha256: null,
+    lastAction: "review_accepted",
+    lastActorKind: "reviewer",
+    lastReasonCode: "independently_verified",
+    lastEvidenceDigestSha256: "a".repeat(64),
+    createdAt: at,
+    updatedAt: at,
+  });
+  result.trust.caseEvents.push({
+    eventId: "019d04cf-1f80-8000-8000-000000000052",
+    caseId,
+    caseVersion: 2,
+    contributionId,
+    policyVersion: "synthetic-trust-v1",
+    priorState: "needs_review",
+    resultingState: "accepted",
+    action: "review_accepted",
+    actorKind: "reviewer",
+    reasonCode: "independently_verified",
+    evidenceDigestSha256: "a".repeat(64),
+    occurredAt: at,
+  });
+  return result;
+}
+
+function bytes(value) {
+  return Buffer.from(JSON.stringify(value));
+}
+
+function envelope(artifactBytes = bytes(fixture()), changes = {}) {
+  return {
+    schemaVersion: 1,
+    ...expected,
+    artifactBase64: artifactBytes.toString("base64"),
+    ...changes,
+  };
+}
+
+function accept(value = fixture(), binding = expected) {
+  return validateCandidateRightsExport(bytes(value), binding);
+}
+
+function cli(input, args = []) {
+  const result = spawnSync(process.execPath, [script, ...args], {
+    input,
+    encoding: "utf8",
+    timeout: 15_000,
+    maxBuffer: 8_192,
+    windowsHide: true,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.stderr, "");
+  assert.equal(result.signal, null);
+  return { status: result.status, output: JSON.parse(result.stdout) };
+}
+
+test("readiness compiles the current source schema without a dist import", () => {
+  assert.deepEqual(checkCandidateRightsExportReady(), { ready: true });
+  const source = readFileSync(script, "utf8");
+  assert.ok(source.includes("packages/domain/schemas/v1/candidate-data-export.schema.json"));
+  assert.equal(source.includes("/dist/"), true); // Only Ajv's own maintained package entrypoint.
+  assert.equal(source.includes("packages/domain/dist"), false);
+  assert.deepEqual(cli(undefined, ["--check-ready"]), { status: 0, output: { ready: true } });
+});
+
+test("generated empty and nonempty fixtures also pass the unmodified shared schema", () => {
+  const domainRequire = createRequire(
+    new URL("../../packages/domain/package.json", import.meta.url),
+  );
+  const { Ajv2020 } = domainRequire("ajv/dist/2020.js");
+  const addFormats = domainRequire("ajv-formats");
+  const ajv = new Ajv2020({ strict: true });
+  addFormats(ajv);
+  const validate = ajv.compile(
+    JSON.parse(
+      readFileSync(
+        new URL(
+          "../../packages/domain/schemas/v1/candidate-data-export.schema.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ),
+  );
+  assert.equal(validate(fixture()), true);
+  assert.equal(validate(fixture(true)), true);
+});
+
+test("valid empty D2 sections report zero, never a nonempty-assurance claim", () => {
+  assert.deepEqual(accept(), emptyCounts);
+  assert.ok(Object.isFrozen(accept()));
+  assert.deepEqual(validateCandidateRightsExportEnvelope(bytes(envelope())), emptyCounts);
+});
+
+test("valid nonempty D2 sections report only the exact independent counters", () => {
+  const value = fixture(true);
+  value.profile.contributionConsents.push({
+    ...value.profile.contributionConsents[0],
+    state: "revoked",
+  });
+  value.trust.caseEvents.push({
+    ...value.trust.caseEvents[0],
+    eventId: "019d04cf-1f80-8000-8000-000000000053",
+  });
+  const result = accept(value);
+  assert.deepEqual(result, {
+    valid: true,
+    consentCount: 2,
+    contributionApprovalCount: 1,
+    contributionCount: 1,
+    privateCaptureCount: 1,
+    trustCaseCount: 1,
+    trustCaseEventCount: 2,
+  });
+  for (const privateValue of [
+    sentinel,
+    exportId,
+    contributionId,
+    caseId,
+    "https://",
+    "candidate@example.test",
+  ]) {
+    assert.equal(JSON.stringify(result).includes(privateValue), false);
+  }
+});
+
+test("valid Unicode and JSON string escapes are data, not parser syntax", () => {
+  const value = fixture(true);
+  value.jobs.contributions[0].posting.description =
+    'Generated 日本語 café 😀 {"duplicate":1,"duplicate":2} \\ \n';
+  assert.equal(accept(value).valid, true);
+});
+
+for (const [label, raw] of [
+  ["empty", Buffer.alloc(0)],
+  ["whitespace", Buffer.from(" \t\r\n")],
+  ["malformed", Buffer.from(`{"${sentinel}":`)],
+  ["truncated", bytes(fixture()).subarray(0, -1)],
+  ["multiple documents", Buffer.from(`${JSON.stringify(fixture())}{}`)],
+  ["null", Buffer.from("null")],
+  ["array", Buffer.from("[]")],
+  ["string", Buffer.from(JSON.stringify(sentinel))],
+  ["invalid byte", Buffer.from([0xff])],
+  ["overlong UTF8", Buffer.from([0xc0, 0xaf])],
+  ["truncated UTF8", Buffer.concat([bytes(fixture()).subarray(0, -1), Buffer.from([0xe2, 0x82])])],
+  ["surrogate UTF8", Buffer.from([0xed, 0xa0, 0x80])],
+  ["BOM", Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), bytes(fixture())])],
+  ["over byte bound", Buffer.alloc(MAXIMUM_EXPORT_BYTES + 1, 0x20)],
+]) {
+  test(`rejects ${label} artifact with a fixed private-data-free error`, () => {
+    assert.deepEqual(validateCandidateRightsExport(raw, expected), rejected);
+  });
+}
+
+test("rejects malformed UTF8 inside an otherwise schema-valid string", () => {
+  const value = fixture(true);
+  const parts = JSON.stringify(value).split(sentinel);
+  assert.deepEqual(
+    validateCandidateRightsExport(
+      Buffer.concat([
+        Buffer.from(parts[0]),
+        Buffer.from([0xc3, 0x28]),
+        Buffer.from(parts.slice(1).join(sentinel)),
+      ]),
+      expected,
+    ),
+    rejected,
+  );
+});
+
+test("byte bounds, not character counts, govern multibyte and maximum artifacts", () => {
+  const valid = bytes(fixture());
+  assert.deepEqual(
+    validateCandidateRightsExport(
+      Buffer.concat([valid, Buffer.alloc(MAXIMUM_EXPORT_BYTES - valid.length, 0x20)]),
+      expected,
+    ),
+    emptyCounts,
+  );
+  assert.deepEqual(
+    validateCandidateRightsExport(
+      Buffer.from(`"${"é".repeat(MAXIMUM_EXPORT_BYTES / 2)}"`),
+      expected,
+    ),
+    rejected,
+  );
+});
+
+test("a maximum-sized valid artifact survives the complete base64 stdin path", () => {
+  const raw = bytes(fixture());
+  const maximum = Buffer.concat([raw, Buffer.alloc(MAXIMUM_EXPORT_BYTES - raw.length, 0x20)]);
+  const transport = bytes(envelope(maximum));
+  assert.ok(transport.length < MAXIMUM_EXPORT_ENVELOPE_BYTES);
+  assert.deepEqual(cli(transport), { status: 0, output: emptyCounts });
+});
+
+for (const binding of [
+  { ...expected, expectedExportId: contributionId },
+  { ...expected, expectedExportId: 123 },
+  { ...expected, expectedExportId: "" },
+  { ...expected, expectedPolicyVersion: "another-policy" },
+  { ...expected, expectedPolicyVersion: null },
+  { ...expected, extra: sentinel },
+  { expectedExportId: exportId },
+  null,
+]) {
+  test("rejects a missing, mistyped, additional or nonmatching expected binding", () => {
+    assert.deepEqual(accept(fixture(), binding), rejected);
+  });
+}
+
+for (const [section, key] of [
+  ["profile", "contributionConsents"],
+  ["jobs", "contributions"],
+  ["matching", "privateSavedPageCaptures"],
+  [null, "trust"],
+]) {
+  test(`D2 requires the existing ${key} section, including when empty`, () => {
+    const value = fixture();
+    delete (section ? value[section] : value)[key];
+    assert.deepEqual(accept(value), rejected);
+    value.policyVersion = "d1-synthetic-v1";
+    assert.deepEqual(
+      accept(value, { ...expected, expectedPolicyVersion: value.policyVersion }),
+      emptyCounts,
+    );
+  });
+}
+
+for (const mutate of [
+  (value) => {
+    value.accessToken = sentinel;
+  },
+  (value) => {
+    value.candidate.subject = sentinel;
+  },
+  (value) => {
+    value.profile.facts = [null];
+  },
+  (value) => {
+    value.profile.contributionConsents[0].ownerUserId = contributionId;
+  },
+  (value) => {
+    value.jobs.contributions[0].approval = null;
+  },
+  (value) => {
+    delete value.jobs.contributions[0].processingHistory;
+  },
+  (value) => {
+    delete value.jobs.contributions[0].trustHistory;
+  },
+  (value) => {
+    value.jobs.contributions[0].processingHistory[0].reasonCode = sentinel;
+  },
+  (value) => {
+    value.matching.privateSavedPageCaptures[0].sourceUrl += "?token=secret";
+  },
+  (value) => {
+    value.trust.cases[0].reviewerId = contributionId;
+  },
+  (value) => {
+    value.trust.caseEvents[0].caseVersion = "2";
+  },
+  (value) => {
+    value.trust.contributorReputationEvidence = [{}];
+  },
+  (value) => {
+    delete value.trust.contributorReputationEvidence;
+  },
+  (value) => {
+    value.generatedAt = "not-a-date";
+  },
+  (value) => {
+    value.schemaVersion = "1";
+  },
+  (value) => {
+    value.format = "arbitrary-export";
+  },
+]) {
+  test("retains strict schema checks across every owner and D2 nested record", () => {
+    const value = fixture(true);
+    mutate(value);
+    assert.deepEqual(accept(value), rejected);
+  });
+}
+
+for (const key of [
+  "schemaVersion",
+  "format",
+  "exportId",
+  "policyVersion",
+  "candidate",
+  "profile",
+  "trust",
+]) {
+  test(`rejects duplicate required or optional artifact key ${key}`, () => {
+    const value = fixture();
+    const duplicate = `{${JSON.stringify(key)}:${JSON.stringify(value[key])},${JSON.stringify(value).slice(1)}`;
+    assert.deepEqual(validateCandidateRightsExport(Buffer.from(duplicate), expected), rejected);
+  });
+}
+
+test("rejects escaped duplicate names and duplicates inside nested arrays", () => {
+  const raw = JSON.stringify(fixture(true));
+  const duplicates = [
+    raw.replace('"exportId":', `"export\\u0049d":"${exportId}","exportId":`),
+    raw.replace('"createdAt":', `"createdAt":"${at}","createdAt":`),
+    raw.replace('"consentId":', `"consentId":"${consentId}","consentId":`),
+    raw.replace('"caseVersion":', '"caseVersion":1,"caseVersion":'),
+  ];
+  for (const candidate of duplicates)
+    assert.deepEqual(validateCandidateRightsExport(Buffer.from(candidate), expected), rejected);
+});
+
+test("rejects deeply nested unexpected JSON without stack overflow or reflection", () => {
+  const raw = `{"${sentinel}":${"[".repeat(5000)}0${"]".repeat(5000)}}`;
+  assert.deepEqual(validateCandidateRightsExport(Buffer.from(raw), expected), rejected);
+});
+
+for (const change of [
+  { schemaVersion: "1" },
+  { schemaVersion: 2 },
+  { extra: sentinel },
+  { expectedExportId: undefined },
+  { expectedPolicyVersion: undefined },
+  { artifactBase64: undefined },
+  { artifactBase64: "" },
+  { artifactBase64: null },
+  { artifactBase64: "%%%%" },
+  { artifactBase64: "Zg==\n" },
+  { artifactBase64: "Zh==" },
+  { artifactBase64: "Zm9v====" },
+  { artifactBase64: "a".repeat(4 * Math.ceil(MAXIMUM_EXPORT_BYTES / 3) + 4) },
+]) {
+  test("rejects noncanonical, incomplete, mistyped or oversized stdin envelopes", () => {
+    assert.deepEqual(
+      validateCandidateRightsExportEnvelope(bytes(envelope(undefined, change))),
+      rejected,
+    );
+  });
+}
+
+for (const key of [
+  "schemaVersion",
+  "expectedExportId",
+  "expectedPolicyVersion",
+  "artifactBase64",
+]) {
+  test(`rejects duplicate stdin envelope key ${key}`, () => {
+    const value = envelope();
+    const raw = `{${JSON.stringify(key)}:${JSON.stringify(value[key])},${JSON.stringify(value).slice(1)}`;
+    assert.deepEqual(validateCandidateRightsExportEnvelope(Buffer.from(raw)), rejected);
+  });
+}
+
+test("stdin envelope UTF8, total bound and full-document checks are independent", () => {
+  const value = bytes(envelope());
+  for (const invalid of [
+    Buffer.from([0xff]),
+    value.subarray(0, -1),
+    Buffer.concat([value, Buffer.from("{}")]),
+    Buffer.alloc(MAXIMUM_EXPORT_ENVELOPE_BYTES + 1, 0x20),
+  ]) {
+    assert.deepEqual(validateCandidateRightsExportEnvelope(invalid), rejected);
+  }
+});
+
+test("complete split byte streams preserve the exact envelope and aggregate", async () => {
+  const input = new PassThrough();
+  const result = readCandidateRightsExportEnvelope(input);
+  const raw = bytes(envelope(bytes(fixture(true))));
+  for (let offset = 0; offset < raw.length; offset += 73)
+    input.write(raw.subarray(offset, offset + 73));
+  input.end();
+  assert.deepEqual(await result, {
+    valid: true,
+    consentCount: 1,
+    contributionApprovalCount: 1,
+    contributionCount: 1,
+    privateCaptureCount: 1,
+    trustCaseCount: 1,
+    trustCaseEventCount: 1,
+  });
+  assert.equal(input.destroyed, true);
+});
+
+test("oversized streaming input stops consumption and destroys the stream", async () => {
+  let emitted = 0;
+  const input = new Readable({
+    read() {
+      emitted += 1;
+      this.push(Buffer.alloc(65_536, 0x20));
+    },
+  });
+  assert.deepEqual(await readCandidateRightsExportEnvelope(input), rejected);
+  assert.equal(input.destroyed, true);
+  assert.ok(emitted < 30);
+});
+
+test("premature stream closure cannot accept even a complete JSON prefix", async () => {
+  const input = new PassThrough();
+  const result = readCandidateRightsExportEnvelope(input);
+  input.write(bytes(envelope()));
+  input.destroy();
+  assert.deepEqual(await result, rejected);
+});
+
+test("stream errors, strings and nonstreams return only fixed refusal", async () => {
+  const input = new PassThrough();
+  const result = readCandidateRightsExportEnvelope(input);
+  input.destroy(new Error(sentinel));
+  assert.deepEqual(await result, rejected);
+  assert.deepEqual(await readCandidateRightsExportEnvelope(Readable.from([sentinel])), rejected);
+  assert.deepEqual(await readCandidateRightsExportEnvelope(null), rejected);
+});
+
+test("stalled stdin has a fixed total deadline, not a per-chunk renewal", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const input = new PassThrough();
+  const result = readCandidateRightsExportEnvelope(input);
+  input.write(Buffer.from("{"));
+  context.mock.timers.tick(EXPORT_INPUT_TIMEOUT_MILLISECONDS - 1);
+  input.write(Buffer.from(" "));
+  context.mock.timers.tick(1);
+  assert.deepEqual(await result, rejected);
+  assert.equal(input.destroyed, true);
+});
+
+test("normal CLI is stdin-only, private and bounded on both acceptance and refusal", () => {
+  assert.deepEqual(cli(bytes(envelope())), { status: 0, output: emptyCounts });
+  assert.deepEqual(cli(Buffer.from(`{"${sentinel}":`)), { status: 1, output: rejected });
+  assert.deepEqual(cli(undefined), { status: 1, output: rejected });
+  for (const args of [
+    [sentinel],
+    ["--check-ready", "--check-ready"],
+    ["--check-ready", sentinel],
+    ["--artifact", sentinel],
+  ]) {
+    assert.deepEqual(cli(undefined, args), { status: 1, output: rejected });
+  }
+});

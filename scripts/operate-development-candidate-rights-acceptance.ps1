@@ -87,6 +87,11 @@ verified ID token supplies recent-authentication and MFA proof for the same subj
 must describe one disposable generated-synthetic identity and an authorized owner other than Zach
 Becker.
 
+Execute also requires CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN and
+CANDIDATE_RIGHTS_ACCEPTANCE_CLIENT_SECRET in the same process. Their prerequisites are checked
+before the first candidate API mutation and again before refresh. Plan does not require them.
+Access-token refresh does not renew the separately retained ID token's recent-MFA authority.
+
 Plan is read-only and writes one checksum-reviewable descriptor below the ignored development
 .terraform directory. Execute is the only normal mutation action. It exercises one disposable
 identity through export, exact-version download, grant expiry, artifact cleanup, request/cancel,
@@ -115,6 +120,10 @@ $idTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN"
 $refreshTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN"
 $clientSecretEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_CLIENT_SECRET"
 $attestationEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH"
+$exportDownloadTimeoutMilliseconds = 20000
+$exportHelperTimeoutMilliseconds = 30000
+$maximumExportBytes = 1048576
+$maximumExportHelperOutputBytes = 8192
 $script:TestOnly = $env:CANDIDATE_RIGHTS_OPERATOR_TEST_ONLY -ceq "1"
 
 $env:AWS_PROFILE = $AwsProfile
@@ -312,18 +321,25 @@ function Read-SyntheticIdentityContext {
   return [pscustomobject]@{ Token = $token; IdToken = $idToken; Subject = $subject; SubjectSha256 = [string]$attestation.subjectSha256; AttestationSha256 = Get-FileSha256 $attestationPath; IdTokenAudienceSha256 = Get-TextSha256 $ExpectedIdTokenAudience; AuthTime = $authTime.ToString('o') }
 }
 
-function Refresh-SyntheticIdentityContext {
-  param(
-    [Parameter(Mandatory)][string]$ExpectedIssuer,
-    [Parameter(Mandatory)][string]$ExpectedIdTokenAudience,
-    [Parameter(Mandatory)][int]$MaximumAgeSeconds
-  )
+function Assert-SyntheticRefreshPrerequisites {
   $refreshToken = [Environment]::GetEnvironmentVariable($refreshTokenEnvironmentName)
   $clientSecret = [Environment]::GetEnvironmentVariable($clientSecretEnvironmentName)
   if ([string]::IsNullOrWhiteSpace($refreshToken) -or
       [string]::IsNullOrWhiteSpace($clientSecret) -or $clientSecret.Length -lt 16) {
     throw "The fixed generated-synthetic refresh-token and client-authentication environment variables are required."
   }
+  return $true
+}
+
+function Refresh-SyntheticIdentityContext {
+  param(
+    [Parameter(Mandatory)][string]$ExpectedIssuer,
+    [Parameter(Mandatory)][string]$ExpectedIdTokenAudience,
+    [Parameter(Mandatory)][int]$MaximumAgeSeconds
+  )
+  $null = Assert-SyntheticRefreshPrerequisites
+  $refreshToken = [Environment]::GetEnvironmentVariable($refreshTokenEnvironmentName)
+  $clientSecret = [Environment]::GetEnvironmentVariable($clientSecretEnvironmentName)
   $client = [Net.Http.HttpClient]::new([Net.Http.HttpClientHandler]@{ AllowAutoRedirect = $false })
   $content = $null
   try {
@@ -651,20 +667,180 @@ function Wait-ExportReady {
   throw "The generated-synthetic export did not become ready within the bounded wait."
 }
 
-function Test-ExactVersionGrant {
-  param([Parameter(Mandatory)][object]$Access)
-  $uri = [Uri]([string]$Access.download.url)
-  $query = [Web.HttpUtility]::ParseQueryString($uri.Query)
-  if ($uri.Scheme -cne 'https' -or $uri.Host -notmatch '\.s3\..*\.amazonaws\.com$' -or [string]::IsNullOrWhiteSpace($query['versionId']) -or [string]$Access.download.method -cne 'GET' -or [int]$query['X-Amz-Expires'] -gt $ExpectedDownloadGrantSeconds) { throw "The export grant is not exact-version, bounded, and HTTPS." }
-  $client = [Net.Http.HttpClient]::new([Net.Http.HttpClientHandler]@{ AllowAutoRedirect = $false })
+function Wait-CandidateRightsTask {
+  param(
+    [Parameter(Mandatory)][Threading.Tasks.Task]$Task,
+    [Parameter(Mandatory)][Threading.CancellationToken]$CancellationToken
+  )
+  $Task.Wait($CancellationToken)
+  return $Task.GetAwaiter().GetResult()
+}
+
+function Read-CandidateRightsExportHelperResult {
+  param([Parameter(Mandatory)][string]$Json, [switch]$CheckReady)
+  $result = ConvertFrom-OperatorJson $Json 'Candidate export verification'
+  if ($CheckReady) {
+    $null = Assert-ExactPropertySet $result @('ready') 'Candidate export verifier readiness'
+    if ($result.ready -isnot [bool] -or $result.ready -ne $true) { throw 'Candidate export verifier is not ready.' }
+  }
+  else {
+    $countNames = @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount')
+    $null = Assert-ExactPropertySet $result (@('valid') + $countNames) 'Candidate export verification'
+    if ($result.valid -isnot [bool] -or $result.valid -ne $true) { throw 'Candidate export verification failed.' }
+    foreach ($name in $countNames) {
+      $count = $result.$name
+      if (($count -isnot [int] -and $count -isnot [long]) -or $count -lt 0 -or $count -gt $maximumExportBytes) { throw 'Candidate export coverage count is invalid.' }
+    }
+    if ($result.contributionApprovalCount -ne $result.contributionCount) { throw 'Candidate export approval coverage is invalid.' }
+  }
+  return $result
+}
+
+function Invoke-CandidateRightsExportHelper {
+  param(
+    [switch]$CheckReady,
+    [string]$ExpectedExportId = '',
+    [string]$ExpectedPolicyVersion = '',
+    [AllowNull()][byte[]]$Artifact = $null
+  )
+  $process = $null
+  $output = $null
+  $inputWriter = $null
+  $deadline = $null
+  $processStarted = $false
   try {
-    $response = $client.GetAsync($uri, [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
-    if ([int]$response.StatusCode -ne 200) { throw "The exact-version generated-synthetic download failed." }
-    $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult(); $buffer = New-Object byte[] 8192; $count = 0
-    while (($read = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) { $count += $read; if ($count -gt 1048576) { throw "The generated-synthetic export exceeded the acceptance bound." } }
-    $response.Dispose()
-  } finally { $client.Dispose() }
-  return [pscustomobject]@{ DownloadBytes = $count; GrantExpiresAt = [DateTimeOffset]::Parse([string]$Access.download.expiresAt); ArtifactExpiresAt = [DateTimeOffset]::Parse([string]$Access.export.artifactExpiresAt) }
+    $helperPath = Join-Path $repositoryRoot 'scripts/lib/candidate-rights-export.mjs'
+    if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) { throw 'helper-unavailable' }
+    $node = @(Get-Command node -CommandType Application -ErrorAction Stop)[0]
+    $inputJson = ''
+    if (-not $CheckReady) {
+      if ($null -eq $Artifact -or $Artifact.Length -lt 1 -or $Artifact.Length -gt $maximumExportBytes) { throw 'artifact-bound' }
+      $inputJson = [ordered]@{
+        schemaVersion = 1
+        expectedExportId = $ExpectedExportId
+        expectedPolicyVersion = $ExpectedPolicyVersion
+        artifactBase64 = [Convert]::ToBase64String($Artifact)
+      } | ConvertTo-Json -Compress
+    }
+    $start = New-Object Diagnostics.ProcessStartInfo
+    $start.FileName = $node.Source
+    $start.Arguments = '"' + $helperPath + '"' + $(if ($CheckReady) { ' --check-ready' } else { '' })
+    $start.WorkingDirectory = $repositoryRoot
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardInput = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $process = New-Object Diagnostics.Process
+    $process.StartInfo = $start
+    $deadline = [Threading.CancellationTokenSource]::new($exportHelperTimeoutMilliseconds)
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    if (-not $process.Start()) { throw 'helper-unavailable' }
+    $processStarted = $true
+    # ProcessStartInfo.StandardInputEncoding is absent on Windows PowerShell 5.1.
+    # An explicit writer keeps the same BOM-free UTF-8 wire representation on both hosts.
+    $inputWriter = [IO.StreamWriter]::new($process.StandardInput.BaseStream, $utf8WithoutBom)
+    $inputWriter.AutoFlush = $true
+    $null = Wait-CandidateRightsTask ($inputWriter.WriteAsync($inputJson)) $deadline.Token
+    $inputWriter.Close()
+    $inputWriter = $null
+
+    $output = [IO.MemoryStream]::new()
+    $buffer = New-Object byte[] ($maximumExportHelperOutputBytes + 1)
+    do {
+      $read = Wait-CandidateRightsTask ($process.StandardOutput.BaseStream.ReadAsync($buffer, 0, $buffer.Length, $deadline.Token)) $deadline.Token
+      if ($read -eq 0) { break }
+      if ($output.Length + $read -gt $maximumExportHelperOutputBytes) { throw 'helper-output-bound' }
+      $output.Write($buffer, 0, $read)
+    } while ($true)
+    # Consume at most one stderr byte: any stderr is a closed refusal, never evidence.
+    $errorBuffer = New-Object byte[] 1
+    $errorRead = Wait-CandidateRightsTask ($process.StandardError.BaseStream.ReadAsync($errorBuffer, 0, 1, $deadline.Token)) $deadline.Token
+    $remaining = [Math]::Max(0, $exportHelperTimeoutMilliseconds - [int]$clock.ElapsedMilliseconds)
+    if ($errorRead -ne 0 -or -not $process.WaitForExit($remaining) -or $process.ExitCode -ne 0) { throw 'helper-rejected' }
+    $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+    return Read-CandidateRightsExportHelperResult -Json ($strictUtf8.GetString($output.ToArray())) -CheckReady:$CheckReady
+  }
+  catch { throw 'The generated-synthetic export verifier is unavailable or rejected the bounded artifact.' }
+  finally {
+    if ($null -ne $output) { $output.Dispose() }
+    if ($null -ne $deadline) { $deadline.Dispose() }
+    if ($null -ne $process) {
+      try {
+        if ($processStarted -and -not $process.HasExited) {
+          $process.Kill()
+          if (-not $process.WaitForExit(2000)) { throw 'helper-cleanup-incomplete' }
+        }
+      }
+      catch { throw 'The generated-synthetic export verifier process cleanup could not be confirmed.' }
+      finally {
+        $process.Dispose()
+        if ($null -ne $inputWriter) { try { $inputWriter.Dispose() } catch { } }
+      }
+    }
+  }
+}
+
+function Assert-CandidateRightsExportReady {
+  $null = Invoke-CandidateRightsExportHelper -CheckReady
+  return $true
+}
+
+function New-CandidateExportHttpClient {
+  return [Net.Http.HttpClient]::new([Net.Http.HttpClientHandler]@{ AllowAutoRedirect = $false })
+}
+
+function Test-ExactVersionGrant {
+  param([Parameter(Mandatory)][object]$Access, [Parameter(Mandatory)][string]$ExpectedExportId)
+  $client = $null
+  $response = $null
+  $stream = $null
+  $body = $null
+  $artifact = $null
+  $buffer = $null
+  $deadline = $null
+  try {
+    $uri = [Uri]([string]$Access.download.url)
+    $query = [Web.HttpUtility]::ParseQueryString($uri.Query)
+    if ($uri.Scheme -cne 'https' -or $uri.Host -notmatch '\.s3\..*\.amazonaws\.com$' -or [string]::IsNullOrWhiteSpace($query['versionId']) -or [string]$Access.download.method -cne 'GET' -or [int]$query['X-Amz-Expires'] -gt $ExpectedDownloadGrantSeconds) { throw 'grant-rejected' }
+    $deadline = [Threading.CancellationTokenSource]::new($exportDownloadTimeoutMilliseconds)
+    $client = New-CandidateExportHttpClient
+    $response = Wait-CandidateRightsTask ($client.GetAsync($uri, [Net.Http.HttpCompletionOption]::ResponseHeadersRead, $deadline.Token)) $deadline.Token
+    if ([int]$response.StatusCode -ne 200) { throw 'download-rejected' }
+    if ($null -ne $response.Content.Headers.ContentLength -and $response.Content.Headers.ContentLength -gt $maximumExportBytes) { throw 'artifact-bound' }
+    $stream = Wait-CandidateRightsTask ($response.Content.ReadAsStreamAsync()) $deadline.Token
+    $body = [IO.MemoryStream]::new()
+    $buffer = New-Object byte[] 8192
+    do {
+      $read = Wait-CandidateRightsTask ($stream.ReadAsync($buffer, 0, $buffer.Length, $deadline.Token)) $deadline.Token
+      if ($read -eq 0) { break }
+      if ($body.Length + $read -gt $maximumExportBytes) { throw 'artifact-bound' }
+      $body.Write($buffer, 0, $read)
+    } while ($true)
+    if ($body.Length -eq 0) { throw 'artifact-empty' }
+    $artifact = $body.ToArray()
+    $coverage = Invoke-CandidateRightsExportHelper -ExpectedExportId $ExpectedExportId -ExpectedPolicyVersion $ExpectedPolicyVersion -Artifact $artifact
+    return [pscustomobject]@{
+      DownloadBytes = $artifact.Length
+      GrantExpiresAt = [DateTimeOffset]::Parse([string]$Access.download.expiresAt)
+      ArtifactExpiresAt = [DateTimeOffset]::Parse([string]$Access.export.artifactExpiresAt)
+      ExportCoverage = $coverage
+    }
+  }
+  catch { throw 'The exact-version generated-synthetic export download or verification failed.' }
+  finally {
+    if ($null -ne $artifact) { [Array]::Clear($artifact, 0, $artifact.Length) }
+    if ($null -ne $buffer) { [Array]::Clear($buffer, 0, $buffer.Length) }
+    if ($null -ne $body) {
+      $storage = $body.GetBuffer()
+      [Array]::Clear($storage, 0, $storage.Length)
+      $body.Dispose()
+    }
+    if ($null -ne $stream) { $stream.Dispose() }
+    if ($null -ne $response) { $response.Dispose() }
+    if ($null -ne $client) { $client.Dispose() }
+    if ($null -ne $deadline) { $deadline.Dispose() }
+  }
 }
 
 function Wait-GrantExpiry {
@@ -697,6 +873,9 @@ function Wait-DeletionCompletion {
 
 function Invoke-FixedLifecycle {
   param([Parameter(Mandatory)][object]$Boundary, [Parameter(Mandatory)][object]$Plan)
+  $script:VerifiedExportCoverage = $null
+  $null = Assert-SyntheticRefreshPrerequisites
+  $null = Assert-CandidateRightsExportReady
   $script:Runtime = $Boundary.Runtime
   $token = $Boundary.Identity.Token
   $idToken = $Boundary.Identity.IdToken
@@ -707,7 +886,8 @@ function Invoke-FixedLifecycle {
   $replay = Invoke-CandidateApi POST '/me/data-exports' $token $exportBody @{ 'idempotency-key' = $exportKey; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
   if ([string]$first.Body.id -cne [string]$replay.Body.id -or [string]$first.Body.policyVersion -cne $ExpectedPolicyVersion) { throw "Candidate export idempotency or policy binding failed." }
   $ready = Wait-ExportReady ([string]$first.Body.id) $token
-  $download = Test-ExactVersionGrant $ready
+  $download = Test-ExactVersionGrant $ready ([string]$first.Body.id)
+  $script:VerifiedExportCoverage = $download.ExportCoverage
   $grantUri = [Uri]([string]$ready.download.url)
   $null = Wait-GrantExpiry ([string]$first.Body.id) $token $grantUri $download.GrantExpiresAt $download.ArtifactExpiresAt
 
@@ -798,7 +978,7 @@ if (-not $script:TestOnly) {
       $receipt = Invoke-FixedLifecycle $boundary $reviewed.Value
       $path = Join-Path $operatorRoot "receipt-$($ReviewedExecutionPlanSha256.Substring(0,12)).json"
       Write-ExclusiveJson $path $receipt
-      [pscustomobject]@{ Outcome = 'verified-and-cleaned'; ReceiptPath = $path; ReceiptSha256 = Get-FileSha256 $path; ExportsRequested = 1; DeletionMarkersCompleted = 1; PersistentSyntheticIdentities = 0 }
+      [pscustomobject]@{ Outcome = 'verified-and-cleaned'; ReceiptPath = $path; ReceiptSha256 = Get-FileSha256 $path; ExportsRequested = 1; DeletionMarkersCompleted = 1; PersistentSyntheticIdentities = 0; ExportCoverage = $script:VerifiedExportCoverage }
     }
     'RecoverUnconfirmed' {
       $boundary = Get-AcceptanceBoundary -RequireIdentity

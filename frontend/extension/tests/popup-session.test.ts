@@ -1,0 +1,140 @@
+// @vitest-environment jsdom
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const popupHtml = await readFile(
+  resolve(dirname(fileURLToPath(import.meta.url)), "../static/popup.html"),
+  "utf8",
+);
+
+interface SessionStatus {
+  apiConfigured: boolean;
+  authenticated: boolean;
+  configured: boolean;
+  refreshAvailable: boolean;
+}
+
+const expiredSession: SessionStatus = {
+  apiConfigured: true,
+  authenticated: false,
+  configured: true,
+  refreshAvailable: true,
+};
+
+function button(id: string): HTMLButtonElement {
+  const element = document.querySelector<HTMLButtonElement>(`#${id}`);
+  if (!element) throw new Error("Missing generated fixture control");
+  return element;
+}
+
+async function idle(): Promise<void> {
+  await vi.waitFor(() => {
+    expect(document.querySelector("main")?.getAttribute("aria-busy")).toBe("false");
+  });
+}
+
+async function popup(status: SessionStatus) {
+  const sendMessage = vi.fn(
+    async (_message: unknown): Promise<{ ok: boolean; status: SessionStatus; error?: string }> => ({
+      ok: true,
+      status,
+    }),
+  );
+  vi.stubGlobal("chrome", { runtime: { sendMessage } });
+  await import("../entrypoints/popup");
+  await idle();
+  expect(sendMessage).toHaveBeenCalledWith({ action: "status" });
+  return sendMessage;
+}
+
+describe("popup retained-session lifecycle", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.resetModules();
+    document.body.innerHTML = new DOMParser().parseFromString(
+      popupHtml,
+      "text/html",
+    ).body.innerHTML;
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network forbidden in this test")));
+  });
+
+  it.each([
+    [false, true, false, false, false],
+    [true, true, true, false, false],
+    [true, false, true, true, false],
+    [false, false, false, true, true],
+  ])(
+    "offers only relevant controls for authenticated=%s and refreshAvailable=%s",
+    async (authenticated, refreshAvailable, loginHidden, refreshHidden, logoutHidden) => {
+      await popup({ ...expiredSession, authenticated, refreshAvailable });
+      expect(button("login").hidden).toBe(loginHidden);
+      expect(button("refresh").hidden).toBe(refreshHidden);
+      expect(button("logout").hidden).toBe(logoutHidden);
+      expect(button("contribute").disabled).toBe(true);
+      expect(button("inspect").disabled).toBe(false);
+      if (!authenticated && refreshAvailable) {
+        expect(document.querySelector("#auth-status")?.textContent).toBe("Session expired");
+      }
+    },
+  );
+
+  it("keeps auth controls hidden when public identity configuration is absent", async () => {
+    await popup({ ...expiredSession, configured: false, refreshAvailable: false });
+    expect(button("login").hidden).toBe(true);
+    expect(button("refresh").hidden).toBe(true);
+    expect(button("logout").hidden).toBe(true);
+    expect(button("inspect").disabled).toBe(false);
+  });
+
+  it("lets an expired retained session retry refresh without authorizing delivery", async () => {
+    const sendMessage = await popup(expiredSession);
+    expect(button("refresh").hidden).toBe(false);
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      status: { ...expiredSession, authenticated: true },
+    });
+    button("refresh").click();
+    await idle();
+    expect(sendMessage).toHaveBeenLastCalledWith({ action: "refresh" });
+    expect(button("login").hidden).toBe(true);
+    expect(button("logout").hidden).toBe(false);
+    expect(button("contribute").disabled).toBe(true);
+  });
+
+  it("lets the owner clear an expired retained session and shows unconfirmed revocation honestly", async () => {
+    const sendMessage = await popup(expiredSession);
+    expect(button("logout").hidden).toBe(false);
+    sendMessage.mockResolvedValueOnce({
+      ok: false,
+      status: { ...expiredSession, refreshAvailable: false },
+      error: "Auth0 revocation could not be confirmed. Local extension data was cleared.",
+    });
+    button("logout").click();
+    await idle();
+    expect(sendMessage).toHaveBeenLastCalledWith({ action: "logout" });
+    expect(document.querySelector("#detail")?.textContent).toBe(
+      "Auth0 revocation could not be confirmed. Local extension data was cleared.",
+    );
+    expect(button("refresh").hidden).toBe(true);
+    expect(button("logout").hidden).toBe(true);
+    expect(button("inspect").disabled).toBe(false);
+  });
+
+  it("keeps retained-session clearing accessible after a failed refresh response", async () => {
+    const sendMessage = await popup(expiredSession);
+    expect(button("refresh").hidden).toBe(false);
+    sendMessage.mockRejectedValueOnce(new Error("private-provider-error"));
+    button("refresh").click();
+    await idle();
+    expect(button("logout").hidden).toBe(false);
+    expect(button("logout").disabled).toBe(false);
+    expect(button("contribute").disabled).toBe(true);
+    expect(document.querySelector("#detail")?.textContent).toBe(
+      "The extension did not respond. Close and reopen it, then try again.",
+    );
+    expect(document.body.textContent).not.toContain("private-provider-error");
+  });
+});
