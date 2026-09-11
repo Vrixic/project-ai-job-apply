@@ -94,6 +94,13 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
   input, limits a release to the gateway Lambda function and immutable alias, and runs the direct
   authenticated search boundary. See
   `infrastructure/runbooks/deployments/development-gateway-release.md`.
+- `operate-development-synthetic-catalog-retirement.ps1` — Inspects and retires only exact generated
+  source-neutral development catalog fixtures through a reviewed immutable migration image and
+  temporary migration-task revision. A reviewed manifest is required for retirement; posting/source
+  rows, saved associations and audit history are retained. It performs no schema migration,
+  provider activation or IAM expansion. The
+  [Phase 2 record](../docs/product/delivery/phase-2-extension-and-community.md#d2-055--catalog-details-and-synthetic-fixture-retirement)
+  owns scope and execution; `pnpm test:synthetic-catalog-retirement` runs offline operator guards.
 - `operate-development-d2-runtime-release.ps1` — Separately plans, applies and verifies D2
   maintenance, paused worker-artifact replacement and compatible resumption. It preserves queues,
   provider/reviewer configuration and D1/private captures. A verified pause cutoff binds the old

@@ -185,6 +185,123 @@ describe("PostgresJobCatalog observation ordering", () => {
 });
 
 describe("PostgresJobCatalog active read parameters", () => {
+  const canonicalId = "00000000-0000-7000-8000-000000000001";
+  const aliasId = "00000000-0000-7000-8000-000000000003";
+  const activeAt = new Date("2026-08-12T20:00:00.000Z");
+
+  function detailRow(timestamp: (value: string) => Date | string = (value) => value) {
+    return {
+      id: canonicalId,
+      companyId: "00000000-0000-7000-8000-000000000002",
+      companyName: "Synthetic Company",
+      companyVerifiedDomain: null,
+      title: "Software Engineer",
+      locations: ["Remote - US"],
+      department: null,
+      description: "Synthetic independently verified provider text.",
+      status: "active",
+      firstObservedAt: timestamp("2026-08-10 20:00:00.123456+00"),
+      lastVerifiedAt: timestamp("2026-08-11 20:00:00.000+00"),
+      expiresAt: timestamp("2026-09-10 20:00:00.000+00"),
+      validThrough: timestamp("2026-09-20 20:00:00.000+00"),
+      sources: [
+        {
+          provider: "greenhouse",
+          provenance: "permitted_api",
+          canonicalUrl: "https://boards.greenhouse.io/synthetic/jobs/1",
+          firstObservedAt: "2026-08-10T20:00:00.123456+00:00",
+          lastVerifiedAt: "2026-08-11T20:00:00+00:00",
+          validThrough: "2026-09-20T20:00:00+00:00",
+        },
+      ],
+    };
+  }
+
+  function detailCatalog(row: unknown) {
+    let queryCount = 0;
+    const client = (() =>
+      Promise.resolve(
+        ++queryCount === 1 ? [{ id: canonicalId }] : [row],
+      )) as unknown as postgres.Sql;
+    return new PostgresJobCatalog(client, catalogOptions);
+  }
+
+  it.each(["Date", "PostgreSQL string"] as const)(
+    "normalizes %s detail timestamps while preserving canonical aliases and redacted source truth",
+    async (representation) => {
+      const row = detailRow((value) => (representation === "Date" ? new Date(value) : value));
+      const before = structuredClone(row);
+      const active = await detailCatalog(row).getActiveJob(aliasId, activeAt);
+
+      expect(active).toEqual({
+        id: canonicalId,
+        company: { id: row.companyId, name: row.companyName },
+        title: row.title,
+        locations: row.locations,
+        description: row.description,
+        status: "active",
+        firstObservedAt: new Date(row.firstObservedAt),
+        lastVerifiedAt: new Date(row.lastVerifiedAt),
+        expiresAt: new Date(row.expiresAt),
+        validThrough: new Date(row.validThrough),
+        sources: row.sources.map((source) => ({
+          ...source,
+          firstObservedAt: new Date(source.firstObservedAt),
+          lastVerifiedAt: new Date(source.lastVerifiedAt),
+          validThrough: new Date(source.validThrough),
+        })),
+      });
+      expect(active?.id).not.toBe(aliasId);
+      expect(active?.firstObservedAt).not.toBe(row.firstObservedAt);
+      expect(row).toEqual(before);
+    },
+  );
+
+  it.each(["Date", "PostgreSQL string"] as const)(
+    "omits only SQL-null optional detail timestamps with %s required timestamps",
+    async (representation) => {
+      const row = detailRow((value) => (representation === "Date" ? new Date(value) : value));
+      const active = await detailCatalog({
+        ...row,
+        validThrough: null,
+        sources: row.sources.map((source) => ({ ...source, validThrough: null })),
+      }).getActiveJob(aliasId, activeAt);
+
+      expect(active?.expiresAt).toEqual(new Date(row.expiresAt));
+      expect(active).not.toHaveProperty("validThrough");
+      expect(active?.sources[0]).not.toHaveProperty("validThrough");
+    },
+  );
+
+  it.each([
+    ["invalid string", "not-a-timestamp"],
+    ["invalid Date", new Date(Number.NaN)],
+    ["empty string", ""],
+    ["null", null],
+    ["undefined", undefined],
+    ["number", 0],
+    ["boolean", false],
+    ["object", { timestamp: "2026-08-11T20:00:00.000Z" }],
+    ["array", ["2026-08-11T20:00:00.000Z"]],
+  ])("rejects %s detail timestamps before returning a record", async (_label, value) => {
+    const row = detailRow();
+    for (const field of ["firstObservedAt", "lastVerifiedAt", "expiresAt", "validThrough"]) {
+      if (field === "validThrough" && value === null) continue;
+      await expect(
+        detailCatalog({ ...row, [field]: value }).getActiveJob(aliasId, activeAt),
+      ).rejects.toThrow(TypeError);
+    }
+    for (const field of ["firstObservedAt", "lastVerifiedAt", "validThrough"]) {
+      if (field === "validThrough" && value === null) continue;
+      await expect(
+        detailCatalog({
+          ...row,
+          sources: row.sources.map((source) => ({ ...source, [field]: value })),
+        }).getActiveJob(aliasId, activeAt),
+      ).rejects.toThrow(TypeError);
+    }
+  });
+
   it("returns only the opaque catalog revision used to invalidate dependent read cursors", async () => {
     const client = (() => Promise.resolve([{ revision: "17" }])) as unknown as postgres.Sql;
     const catalog = new PostgresJobCatalog(client, catalogOptions);

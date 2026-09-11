@@ -26,6 +26,7 @@ import type {
   SignedContributionCapabilityPolicy,
   UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
+import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal, IdTokenVerifier } from "@ai-job-apply/auth";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
 import {
@@ -58,6 +59,7 @@ import {
   JobSearchCatalogChangedError,
   jobContributionContentDigestInput,
   jobContributionPreviewDigestInput,
+  PostgresJobCatalog,
 } from "@ai-job-apply/jobs-service";
 import {
   type CreatePrivateSavedPageCaptureCommand,
@@ -88,6 +90,7 @@ import {
   type TrustCase,
 } from "@ai-job-apply/trust-service";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { privacySafeRequestFailure } from "./app.module.js";
@@ -882,6 +885,7 @@ class MemoryDocumentStore implements DocumentStore {
 
 async function createApp(
   options: {
+    catalog?: JobCatalogReader;
     contributionCapabilityPolicy?: ContributionCapabilityPolicySource;
     trust?: TrustApplicationService;
     trustReviewerAssignments?: readonly TrustReviewerAssignment[];
@@ -926,7 +930,7 @@ async function createApp(
   };
   const app = await createGatewayApplication({
     store,
-    catalog,
+    catalog: options.catalog ?? catalog,
     savedJobs,
     privateSavedPageCaptures,
     jobReports,
@@ -1910,6 +1914,113 @@ describe("candidate API", () => {
     expect(invalid.statusCode).toBe(400);
     expect(store.resolveUserCalls).toBe(identityWritesBeforeJobReads);
   });
+
+  it.each([false, true])(
+    "serializes PostgreSQL detail timestamp strings into the canonical contract (alias=%s)",
+    async (alias) => {
+      const canonicalId = uuidv7();
+      const requestedId = alias ? uuidv7() : canonicalId;
+      const companyId = uuidv7();
+      const privateCanary = "synthetic-private-source-field-not-for-candidate-response";
+      const row = {
+        id: canonicalId,
+        companyId,
+        companyName: "Synthetic PostgreSQL Company",
+        companyVerifiedDomain: null,
+        title: "Synthetic PostgreSQL Engineer",
+        locations: ["Remote - US"],
+        department: null,
+        description: "Synthetic description preserved through the actual detail route.",
+        status: "active",
+        firstObservedAt: "2026-08-11 20:00:00.123456+00",
+        lastVerifiedAt: "2026-08-12 20:00:00.234567+00",
+        expiresAt: "2099-09-11 20:00:00.345678+00",
+        validThrough: alias ? "2099-09-10 20:00:00.456789+00" : null,
+        rawSnapshot: privateCanary,
+        sources: [
+          {
+            provider: "greenhouse",
+            provenance: "permitted_api",
+            canonicalUrl: "https://jobs.example.test/synthetic/postgres-detail",
+            firstObservedAt: "2026-08-11T20:00:00.123456+00:00",
+            lastVerifiedAt: "2026-08-12T20:00:00.234567+00:00",
+            validThrough: "2099-09-10T20:00:00.456789+00:00",
+            externalJobId: privateCanary,
+          },
+          {
+            provider: "ugc",
+            provenance: "explicit_ugc",
+            canonicalUrl: "https://careers.example.test/synthetic/postgres-detail",
+            firstObservedAt: "2026-08-11T16:00:00.123456-04:00",
+            lastVerifiedAt: "2026-08-12T16:00:00.234567-04:00",
+            validThrough: null,
+            contributorId: privateCanary,
+          },
+        ],
+      };
+      const parameters: unknown[][] = [];
+      const client = ((parts: TemplateStringsArray, ...values: unknown[]) => {
+        parameters.push(values);
+        const statement = parts.join("?").replace(/\s+/g, " ").trim();
+        if (statement.startsWith("WITH RECURSIVE resolution(id, path)")) {
+          return Promise.resolve(alias ? [{ id: canonicalId }] : []);
+        }
+        if (statement.startsWith("WITH RECURSIVE canonical_members(id)")) {
+          expect(statement).toContain("source.withdrawn_at IS NULL");
+          expect(statement).toContain("job.status = 'active'");
+          expect(statement).toContain("job.expires_at > ?");
+          return Promise.resolve([row]);
+        }
+        throw new Error("Unexpected generated detail query");
+      }) as unknown as postgres.Sql;
+      const setup = await createApp({
+        catalog: new PostgresJobCatalog(client, {
+          searchCursorKeys: { active: { id: "detail-test-v1", key: Buffer.alloc(32, 7) } },
+        }),
+      });
+      try {
+        const token = await setup.issuer.issue("synthetic-postgres-detail-reader", {
+          scope: "jobs:read",
+        });
+        const response = await setup.app.inject({
+          method: "GET",
+          url: `/v1/jobs/${requestedId}`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(response.statusCode).toBe(200);
+        const value: unknown = response.json();
+        expect(compileComponentValidator("CanonicalJobDetail")(value)).toBe(true);
+        expect(value).toEqual({
+          id: canonicalId,
+          company: { id: companyId, name: row.companyName },
+          title: row.title,
+          locations: row.locations,
+          description: row.description,
+          status: "active",
+          firstObservedAt: "2026-08-11T20:00:00.123Z",
+          lastVerifiedAt: "2026-08-12T20:00:00.234Z",
+          expiresAt: "2099-09-11T20:00:00.345Z",
+          ...(alias ? { validThrough: "2099-09-10T20:00:00.456Z" } : {}),
+          sources: row.sources.map((source) => ({
+            provider: source.provider,
+            provenance: source.provenance,
+            canonicalUrl: source.canonicalUrl,
+            firstObservedAt: "2026-08-11T20:00:00.123Z",
+            lastVerifiedAt: "2026-08-12T20:00:00.234Z",
+            ...(source.validThrough ? { validThrough: "2099-09-10T20:00:00.456Z" } : {}),
+          })),
+        });
+        expect(response.body).not.toContain(privateCanary);
+        expect(parameters).toHaveLength(2);
+        expect(parameters[0]).toEqual([requestedId, requestedId]);
+        expect(parameters[1]?.slice(0, 2)).toEqual([canonicalId, canonicalId]);
+        expect(parameters[1]?.[2]).toEqual(expect.any(String));
+        expect(setup.store.resolveUserCalls).toBe(0);
+      } finally {
+        await setup.app.close();
+      }
+    },
+  );
 
   it("searches active jobs through a strict privacy-safe body and dedicated read scope", async () => {
     const jobToken = await issuer.issue("candidate-job-search", { scope: "jobs:read" });

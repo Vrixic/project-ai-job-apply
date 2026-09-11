@@ -164,6 +164,13 @@ The active-job read model returns only active, unexpired canonical records and r
 summaries. It excludes raw snapshots, exact source identity keys, content hashes, pending or
 suspect records, and terminal tombstones.
 
+Authenticated detail normalizes all canonical and source timestamps at the persistence boundary,
+including optional validity dates. The shared Drizzle client can return PostgreSQL timestamp
+strings; standalone clients can return `Date` values. Both produce the same strict transport
+contract, and malformed timestamps remain availability failures rather than false absence.
+Regression coverage includes the actual Drizzle/Postgres composition and direct/alias Gateway
+HTTP reads. The Phase 2 register records deployment separately.
+
 Migration `0007_matchable_job_attributes` adds nullable, exact-enum work-mode and employment-type
 columns to the canonical job. The matchable-job read port resolves reversible exact aliases inside
 one repeatable-read snapshot and returns only canonical identity, catalog revision, title,
@@ -217,6 +224,16 @@ mutates only that sentinel through the real search-revision trigger, and removes
 claimed synthetic rows after verifying their complete shape and relationships. Its bounded JSON
 result contains no candidate or source values. Deployment requires a separately reviewed operator
 and an immutable migration-image receipt; the default migration task command remains unchanged.
+
+`src/run-synthetic-catalog-retirement.ts` is a separate development-only internal command for
+retiring exact source-neutral generator fixtures. Inspect returns aggregate counts and a row-bound
+manifest digest. Retire locks and revalidates that exact state, rejects mixed-source, alias and D2
+publication bindings, sets only eligible generated jobs to blocked with a fixed retirement reason,
+and appends status events through the normal catalog revision transaction. Posting/source payloads,
+saved associations and history remain intact; other fixture namespaces are counted but not targeted.
+Keep synthetic ingestion disabled. There is no general SQL input, API, schema migration or built-in
+undo. The [Phase 2 register](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-055--catalog-details-and-synthetic-fixture-retirement)
+records exact deployment and execution, separately from local tests.
 
 Probable-duplicate review is an internal catalog boundary. A reviewed exact match creates a
 reversible canonical alias without moving or deleting either record's source provenance. Canonical

@@ -44,16 +44,13 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
-Current owner checkpoint (`2026-09-11`): the user reports extension Processing `published` and
-Trust `accepted`. Record these two fixed statuses as user-observed owner readback, not a new
-submission, an independently inspected catalog row, or confirmation for all three historical
-contributions. The extension-status check is satisfied for the reported result. Next verify the
-same posting through signed-in website search and `View details and sources`; website visibility
-and the remaining Phase 2 acceptance are not yet confirmed. No tokens or identifiers are retained.
-Use distinctive posting words in `Keywords` under `Search current jobs`, leave optional filters
-blank, and press `Search jobs`; the separate `Job title` filter requires an exact stored title.
-Check that details load and the description and Greenhouse source match the posting. Do not
-resubmit, sign out of the extension, or provide private account/session information for this check.
+Current owner checkpoint (`2026-09-11`): the user confirms jobs appear on the website after
+extension Processing `published` and Trust `accepted`, but `View details and sources` returns
+`Job details are temporarily unavailable. Try again.` Website search visibility is now
+user-confirmed; successful detail/source readback is not. No count of all historical contributions
+is inferred. The user also authorizes removing synthetic catalog jobs. D2-055 owns the reproduced
+detail failure and exact generated-fixture retirement, preserving real contributions and saved
+associations. No new submission, sign-out, private identifier or renewed reviewer authority is needed.
 
 Current local continuation (`2026-09-11` UTC): D2-054 is Complete for implementation and local
 verification at `dd2d560`. Session/dispatch fencing, ordered logout cleanup, monotonic receipt
@@ -79,8 +76,8 @@ role/endpoint/bootstrap allowances removed. Normal runtime `2ff32ef`/version `14
 the source is available, 44 core alarms are OK and ECS/Docker/WSL are idle or stopped.
 Protected original context, immutable artifacts and both journals remain intact.
 Phase 2 remains In progress. The subsequent user report above satisfies the extension-status
-readback for the reported result; signed-in website visibility still needs user help because
-browser control is unavailable here. Do not resubmit existing contributions. Broader rights,
+readback for the reported result; the subsequent website report confirms visibility and exposes
+the D2-055 detail failure. Do not resubmit existing contributions. Broader rights,
 human/provider, workload, alarm
 receipt and store/accountable gates remain [below](#remaining-acceptance-and-operator-inputs).
 See the [recovery evidence](#d2-038--isolated-deletion-recovery) and [one-shot boundary](../../../infrastructure/runbooks/restore/candidate-deletion-recovery-replay.md#separately-authorized-recovery-of-a-proven-pre-dispatch-refusal).
@@ -368,6 +365,47 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | Complete | Product owner; platform engineering | D2-038; D2-050; D2-051; D2-053 | Completed 2026-09-11: corroborated persisted request/ledger/operation evidence and three acknowledged/unclaimed dispatches support the exact historical correction. Separately authorized recovery `8649` / `7d6e48` sends one exact-version completion-tag Put and verifies intended state, preserving all other protected data and original evidence. Unchanged same-copy Inspect/Replay and final cleanup pass. No fresh nonempty deletion is claimed. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
 | D2-053 | Define and verify one-shot pre-dispatch recovery for the consumed historical completion-repair reservation. | Complete | Platform engineering; product owner | D2-052; D2-R21 | Completed 2026-09-11: 199 repair tests, 119 protected-storage checks, 274 two-source checks and full verification pass. Actual `6eb7a86` recovery `8649` / `7d6e48` verifies the intended single-tag correction after fresh checks, preserving the original journal and fixed companion. Default repair remains readback-only; neither journal may be reset or used to resend. Normal runtime `2ff32ef`/version `14` is unchanged. Same-copy strict Inspect/Replay and all temporary cleanup pass. |
 | D2-054 | Fence asynchronous extension identity/delivery and reviewer decision state across transitions. | Complete | Platform engineering; QA/automation | D2-007; D2-012; D2-015; D2-022 | Completed 2026-09-11 at `dd2d560` for source/local verification: extension 258/258 and admin 174/174 tests, both no-emit checks, source/document review and full maintained verification pass, including all 20 builds. Configured extension and local admin bundle are rebuilt; installed reload/lifecycle and hosted admin rollout/acceptance remain separate. No cloud or authority changes. See [scope and evidence](#d2-054--session-and-reviewer-state-transitions). |
+| D2-055 | Repair deployed catalog details and retire exact generated synthetic development fixtures. | In progress | Platform engineering | D2-019; D2-039; D2-047 | User confirms website search visibility but details fail. Direct deployed Gateway version 60 search returns 200 and all three bounded detail reads return 500. Timestamp repair passes catalog unit 34/34, actual isolated PostgreSQL catalog 34/34 and composed Gateway 51/51. Safe fixture inventory/retirement and deployment verification are in progress; no catalog mutation yet. |
+
+### D2-055 — Catalog details and synthetic fixture retirement
+
+The user-reported failure is reproduced with a read-only IAM Lambda boundary probe: one search
+returns 200, with 25 visible first-page items and a continuation cursor; three detail requests
+return 500. These are bounded request aggregates, not a count of the complete catalog. The probe
+uses the existing synthetic `jobs:read` boundary context, not a candidate token or new identity
+grant, and submits no writes. Independent source reproduction shows the shared Drizzle/Postgres
+client returns top-level timestamps as strings; search normalizes them, while detail passes them
+to Gateway's Date-only serializer. The frontend contract must not be weakened to accept bad data.
+
+The Jobs fix normalizes required and optional canonical/source timestamps, handles both standalone
+Postgres and Drizzle-shared clients, and rejects invalid values. Root verification passes 34/34
+catalog PostgreSQL tests (including the new real shared-client regression) and 51/51 Gateway
+HTTP tests against the rebuilt Jobs package. Two new direct/alias HTTP regressions fail with the
+original emitted code and pass with the fix. The disposable loopback PostgreSQL container and
+its tmpfs data are removed; Docker/WSL are stopped until another required database/build step.
+
+Synthetic retirement is limited to exact generated source-neutral fixture identities after a
+fresh inventory and manifest check. Preserve all real provider/contribution rows, saved-job
+associations, source payloads and audit history. Use the existing blocked visibility state plus
+a fixed retirement reason and normal catalog revision; do not select by title or provenance alone,
+delete catalog tables, manufacture a Trust decision, or restart the disabled ingestion source.
+Implementation, local PostgreSQL verification, deployed execution and owner acceptance remain
+distinct until their results are recorded here.
+
+Root's full isolated PostgreSQL Jobs suite passes 98/98 across eleven files, including six
+synthetic-retirement cases using the actual ingestion generator and real Matching saved rows.
+It covers retained payload/source/history/saved associations, normal search revision, changed
+manifest refusal, mixed sources/aliases, event-write rollback, a real concurrent row-lock conflict,
+and counting—but not targeting—other fixture namespaces. A first full-suite run exposed a test's
+assumption that no other fixtures existed; the corrected test checks its own aggregate delta and
+the rerun passes without deleting other suites' records. Jobs unit tests pass 278/278; Gateway
+passes 192 with seven explicit existing skips. The new fixed-command retirement operator passes
+208 generated checks on both PowerShell 7 and Windows PowerShell 5.1, including native JSON
+integer handling, regular receipt paths, exact task overrides and one-shot recovery. It clones
+only the migration image into a temporary task revision, then deregisters that exact revision;
+no Terraform migration-runtime update, schema migration or IAM expansion is needed. Independent
+source review finds no issue. Full repository verification and cloud deployment/retirement
+remain pending.
 
 ### D2-054 — Session and reviewer state transitions
 
@@ -1798,7 +1836,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
-| Signed-in website visibility after owner publication status | Three accepted/version-2 initial decisions and subsequent processing/Trust aggregates pass. On September 11 the user reports extension Processing `published` and Trust `accepted`; the status readback is satisfied for the reported result, not inferred for every historical contribution. Authenticated candidate search/detail is implemented; anonymous public-job routes remain disabled. | In the signed-in candidate website, search for the same posting and open View details and sources. Confirm the expected title/company, description and source link, with no duplicate card for that posting. Report only whether it appears and the details match, or a fixed error. Browser control is unavailable here; no resubmission, token, identifier, new reviewer scope or repeated decision is needed. |
+| Signed-in website visibility after owner publication status | User confirms extension Processing `published`, Trust `accepted`, and website search visibility on September 11. View details and sources fails; a read-only Gateway probe reproduces detail 500 while search succeeds. This is not confirmation for every historical contribution. Anonymous public-job routes remain disabled. | Complete D2-055's timestamp fix, deployed verification and exact synthetic retirement, then confirm the existing posting's description and source load. Do not ask for another search-only check, resubmission, token, identifier, reviewer scope or decision. |
 | Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three actual initial decisions now pass. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Complete the hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case, borrow the human session or treat machine initial-decision success as human acceptance. |
 | Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. Both providers remain disabled in development. | Acquire representative provider-derived fixtures, complete sanitization/scanning and separate QA acceptance, then activate exact development registrations. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
 | Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
@@ -1813,6 +1851,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-11 | User confirms website jobs are visible, reports the fixed detail-unavailable error and authorizes synthetic-job removal. Read-only Gateway version 60 probe reproduces search 200 and three detail 500s; independent source reproduction identifies shared-client timestamp normalization. Started D2-055 fix and exact generated-fixture retirement; real contributions and saved associations remain protected. No catalog mutation or deployment yet. | D2-055; D2-019; D2-039 | User report; aggregate probe `e5f47b`; [implementation boundary](#d2-055--catalog-details-and-synthetic-fixture-retirement) |
 | 2026-09-11 | User reports extension Processing `published` and Trust `accepted`. Recorded only those fixed statuses; no contribution count, token, identifier, independently inspected backend row or website visibility is inferred. This satisfies extension owner-status readback for the reported result and advances D2-019/D2-039; signed-in candidate search/detail is next. No new submission, review decision, cloud operation or activation. Phase 2 remains In progress. | D2-019; D2-039 | User confirmation in this conversation; [remaining website check](#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | Completed D2-054 source/local verification at `dd2d560`: serialized session/queue transitions, explicit logout barriers, refresh/dispatch coalescing, monotonic receipts and case-scoped reviewer drafts. Extension 258/258 and admin 174/174 tests pass, with 55/32 focused cases; independent review and full verifier `9865` / `a81c7a` pass, including 34 test tasks and 20 builds. Configured extension and admin local bundle rebuilt; no cloud/identity/provider change or new agent branch. Installed reload/lifecycle and hosted admin rollout remain separate. Corrected stale onboarding summaries without reopening completed D2-042 reviews or recovery. | D2-054; D2-012; D2-015; D2-007; D2-022 | [Implementation and verification](#d2-054--session-and-reviewer-state-transitions), [remaining acceptance](#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | Completed the bounded recovery under operator/artifact `6eb7a86`, leaving normal runtime `2ff32ef`/version `14` unchanged. Recovery `8649` / `7d6e48` verifies exactly one completion-tag Put; the original journal and linked companion remain intact. Fresh same-copy Inspect `70881` and Replay `87268` pass with one historical marker/one already-reconciled subject, no documents or new reconciliation, and zero S3/recovery-ledger writes or identity-provider calls. Final executor `9634`, PITR `62815`, Platform `329` and Bootstrap `21` cleanup all verify; drill-only permissions and canonical context are removed. D2-038/050/052/053 close, not fresh nonempty deletion or Phase 2 acceptance. Owner refresh now needs user help because browser control is unavailable. | D2-038; D2-050; D2-052; D2-053 | [Final evidence](#d2-038--isolated-deletion-recovery), [correction boundary](#d2-052--historical-completion-consistency), [remaining acceptance](#remaining-acceptance-and-operator-inputs) |
@@ -2011,6 +2050,13 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For D2-055 on 2026-09-11, normalize persistence timestamps at the Jobs read boundary, retaining
+the strict canonical API and frontend validator. Remove exact generated development fixtures
+from active catalog visibility with a fixed synthetic-retirement reason, retaining stored rows
+and audit history. This satisfies cleanup without breaking saved associations or erasing evidence;
+unknown/mixed/real provenance must fail closed. There is no title-based deletion, new moderation
+authority, provider activation, or automatic rollback/restore claim.
 
 For D2-054 on 2026-09-11, treat asynchronous client results as valid only for their originating
 session or reviewed case. Logout/new login invalidates pending credential and delivery commits;
@@ -2424,9 +2470,9 @@ These are local checks; deployed migration, human review, and publication eviden
   refusal; the unused bootstrap allowance was removed and verified at state `15`. No Platform
   recovery role, executor, PITR copy or replay existed at that earlier checkpoint; today's partial
   drill and credential blocker are recorded above.
-- Remaining acceptance: installed job addition is not provider/Trust approval or website publication.
-  Owner readback needs user help with the existing Refresh processing/Refresh Trust actions
-  because browser control is unavailable here; owner login status is unobserved. Hosted
+- Remaining acceptance: the user confirms Processing `published`, Trust `accepted`, and website
+  search visibility. D2-055 fixes the reported detail failure and retires exact generated fixtures;
+  successful description/source readback remains open. Do not repeat the completed owner refresh. Hosted
   reviewer/appeal decisions, fresh rights, browser lifecycle, authenticated workload, human
   accessibility, alarm delivery receipt, other provider/store and accountable acceptance remain
   open. Engineering, release and bounded recovery completion do not complete Phase 2.

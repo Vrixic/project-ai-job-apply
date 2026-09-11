@@ -274,10 +274,10 @@ interface ActiveJobRow {
   department: string | null;
   description: string;
   status: "active";
-  firstObservedAt: Date;
-  lastVerifiedAt: Date;
-  expiresAt: Date;
-  validThrough: Date | null;
+  firstObservedAt: Date | string;
+  lastVerifiedAt: Date | string;
+  expiresAt: Date | string;
+  validThrough: Date | string | null;
   sources: Array<{
     provider: JobObservation["provider"];
     provenance: JobProvenance;
@@ -1511,17 +1511,29 @@ export class PostgresJobCatalog {
       ...(row.department ? { department: row.department } : {}),
       description: row.description,
       status: "active",
-      firstObservedAt: row.firstObservedAt,
-      lastVerifiedAt: row.lastVerifiedAt,
-      expiresAt: row.expiresAt,
-      ...(row.validThrough ? { validThrough: row.validThrough } : {}),
+      firstObservedAt: normalizeJobSearchTimestamp(row.firstObservedAt, "first-observed"),
+      lastVerifiedAt: normalizeJobSearchTimestamp(row.lastVerifiedAt, "last-verified"),
+      expiresAt: normalizeJobSearchTimestamp(row.expiresAt, "expiry"),
+      ...(row.validThrough !== null
+        ? { validThrough: normalizeJobSearchTimestamp(row.validThrough, "valid-through") }
+        : {}),
       sources: row.sources.map((source) => ({
         provider: source.provider,
         provenance: source.provenance,
         canonicalUrl: source.canonicalUrl,
-        firstObservedAt: new Date(source.firstObservedAt),
-        lastVerifiedAt: new Date(source.lastVerifiedAt),
-        ...(source.validThrough ? { validThrough: new Date(source.validThrough) } : {}),
+        firstObservedAt: normalizeJobSearchTimestamp(
+          source.firstObservedAt,
+          "source-first-observed",
+        ),
+        lastVerifiedAt: normalizeJobSearchTimestamp(source.lastVerifiedAt, "source-last-verified"),
+        ...(source.validThrough !== null
+          ? {
+              validThrough: normalizeJobSearchTimestamp(
+                source.validThrough,
+                "source-valid-through",
+              ),
+            }
+          : {}),
       })),
     };
   }

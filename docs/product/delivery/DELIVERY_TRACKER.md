@@ -321,11 +321,14 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Current owner checkpoint (`2026-09-11`): the user reports extension Processing `published`
-  and Trust `accepted`. Owner-status readback is satisfied for the reported result; no count,
-  independently inspected catalog row or website visibility is inferred. D2-019/D2-039 remain
-  In progress pending signed-in website search/detail confirmation and their remaining acceptance.
-  No resubmission or new reviewer authority is needed.
+- Current owner checkpoint (`2026-09-11`): the user confirms website search visibility after
+  extension Processing `published` and Trust `accepted`, but View details and sources fails.
+  D2-055 repairs the reproduced backend timestamp mismatch and implements the user-authorized
+  retirement of exact generated synthetic fixtures, preserving real contributions, saved
+  associations and history. Read-only deployed version-60 probe returns search 200 and three
+  detail 500s. No cleanup or corrective deployment has run yet. D2-019/D2-039 remain In progress
+  pending successful detail/source readback and their remaining acceptance. No resubmission or
+  new reviewer authority is needed.
   [Next website check](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
 - Current local continuation (`2026-09-11` UTC): D2-054 is Complete for source/local verification
   at `dd2d560`. Reproduced extension session/dispatch races and stale reviewer drafts are fixed;
@@ -348,8 +351,8 @@ This is the master record for the delivery phases defined in the [product and sy
   ECS idle. Protected context/artifacts and both journals remain intact. Phase 2 remains
   In progress behind owner, human/provider, fresh rights, workload, alarm-receipt and store/
   accountable acceptance. The subsequent user report above satisfies the extension-status
-  readback for the reported result. Browser control is unavailable here; signed-in website
-  visibility remains the next owner check, without resubmission, tokens or identifiers.
+  readback for the reported result. The subsequent user report confirms website visibility and
+  identifies the D2-055 detail failure; no resubmission, tokens or identifiers are needed.
   [Final recovery evidence](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery),
   [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
 - Previous engineering checkpoint (`2026-09-11` UTC, before recovery authorization): Gateway `423d63b` and combined core `2ff32ef`

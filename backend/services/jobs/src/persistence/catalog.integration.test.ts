@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   buildJobSearchAcceptanceFixture,
@@ -731,6 +732,41 @@ describeWithDatabase("PostgresJobCatalog", () => {
     expect(active?.sources[0]).not.toHaveProperty("rawSnapshot");
     expect(active?.sources[0]).not.toHaveProperty("externalJobId");
     expect(active?.sources[0]).not.toHaveProperty("atsTenant");
+  });
+
+  it("returns identical detail dates through standalone and gateway-shared Drizzle clients", async () => {
+    const created = await catalog.recordObservation(
+      fixture({
+        sourceUrl: `https://jobs.example.test/${runId}/shared-client-detail`,
+        externalJobId: "shared-client-detail",
+        employerRequisitionId: `req-${runId}-shared-client-detail`,
+        validThrough: new Date("2026-09-20T12:00:00.000Z"),
+      }),
+    );
+    const sharedClient = createJobCatalogDatabase(databaseUrl ?? "postgres://invalid", {
+      maxConnections: 1,
+    });
+    // Profile's gateway factory applies Drizzle to this same raw postgres client.
+    // Drizzle changes its top-level timestamp parsers to return strings, not Dates.
+    drizzle(sharedClient);
+    const sharedCatalog = new PostgresJobCatalog(sharedClient, {
+      searchCursorKeys: { active: { id: "test-v1", key: Buffer.alloc(32, 1) } },
+    });
+    try {
+      const plain = await catalog.getActiveJob(created.job.id, observedAt);
+      const shared = await sharedCatalog.getActiveJob(created.job.id, observedAt);
+
+      expect(shared).toEqual(plain);
+      expect(shared?.firstObservedAt).toEqual(observedAt);
+      expect(shared?.lastVerifiedAt).toEqual(observedAt);
+      expect(shared?.expiresAt).toBeInstanceOf(Date);
+      expect(shared?.validThrough).toEqual(new Date("2026-09-20T12:00:00.000Z"));
+      expect(shared?.sources[0]?.firstObservedAt).toEqual(observedAt);
+      expect(shared?.sources[0]?.lastVerifiedAt).toEqual(observedAt);
+      expect(shared?.sources[0]?.validThrough).toEqual(new Date("2026-09-20T12:00:00.000Z"));
+    } finally {
+      await sharedCatalog.close();
+    }
   });
 
   it("persists and resolves only active matchable attributes with reversible alias identity", async () => {
