@@ -44,14 +44,15 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
-Current local continuation (`2026-09-11` UTC): D2-054 is In progress. Source inspection and
-memory-only synthetic reproductions expose late refresh writes after logout/new login, duplicate
-concurrent refresh-token use, and obsolete delivery dispatch after logout. Reviewer form state
-also survived case/filter transitions. The case/session-scoped fixes are implemented on shared
-`main`: extension 258/258 and admin 174/174 tests pass, including 55 extension and 32 reviewer
-focused cases. Independent extension and root reviewer source review pass; full maintained
-verification and build follow. No cloud, account, provider or reviewer-authority change is needed.
-This work does not replace the remaining owner and human acceptance below.
+Current local continuation (`2026-09-11` UTC): D2-054 is Complete for implementation and local
+verification at `dd2d560`. Session/dispatch fencing, ordered logout cleanup, monotonic receipt
+updates and case-scoped reviewer drafts fix the reproduced client races. Extension 258/258 and
+admin 174/174 tests pass, including 55 extension and 32 reviewer focused cases. Source/document
+review and the full maintained verifier pass: 34 test tasks and all 20 builds; database opt-ins
+remain explicitly skipped. The configured unpacked extension and local admin production bundle
+are rebuilt. Reload the extension to use its fix; the admin presentation still needs a fresh
+hosted rollout and acceptance. No cloud, account, provider or reviewer-authority change occurred.
+Phase 2 remains In progress behind the owner and human acceptance below.
 
 Completed recovery checkpoint (`2026-09-11` UTC): D2-038/D2-050/D2-052/D2-053 are Complete for their
 bounded recovery scope. Operator/artifact source `6eb7a86` completes the separately authorized
@@ -354,11 +355,12 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-051 | Preserve authoritative deletion timestamps and prevent late terminal events from enqueueing another completed-operation retry. | Complete | Platform engineering | D2-020; D2-038 | Completed 2026-09-11 for code/deployment: Gateway `423d63b` and combined core `2ff32ef` are verified, with core `14` resumed at state `328` and zero drift. Timestamp tests pass 30 cases/13 original-source failures; the enqueue guard passes 41 Profile cases/eight original-source failures, and real PostgreSQL covers rollback, persisted timestamps and the already-terminal no-extra-outbox path. Full verification passes. Generated concurrency seams do not establish a real concurrent row-lock race; fresh rights acceptance and historical repair remain separate. See [retry timestamps](#d2-051--deletion-retry-timestamps). |
 | D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | Complete | Product owner; platform engineering | D2-038; D2-050; D2-051; D2-053 | Completed 2026-09-11: corroborated persisted request/ledger/operation evidence and three acknowledged/unclaimed dispatches support the exact historical correction. Separately authorized recovery `8649` / `7d6e48` sends one exact-version completion-tag Put and verifies intended state, preserving all other protected data and original evidence. Unchanged same-copy Inspect/Replay and final cleanup pass. No fresh nonempty deletion is claimed. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
 | D2-053 | Define and verify one-shot pre-dispatch recovery for the consumed historical completion-repair reservation. | Complete | Platform engineering; product owner | D2-052; D2-R21 | Completed 2026-09-11: 199 repair tests, 119 protected-storage checks, 274 two-source checks and full verification pass. Actual `6eb7a86` recovery `8649` / `7d6e48` verifies the intended single-tag correction after fresh checks, preserving the original journal and fixed companion. Default repair remains readback-only; neither journal may be reset or used to resend. Normal runtime `2ff32ef`/version `14` is unchanged. Same-copy strict Inspect/Replay and all temporary cleanup pass. |
-| D2-054 | Fence asynchronous extension identity/delivery and reviewer decision state across transitions. | In progress | Platform engineering; QA/automation | D2-007; D2-012; D2-015; D2-022 | Started 2026-09-11 after actual-source synthetic reproduction of stale refresh/dispatch and reviewer state inspection. Bounded client changes and generated regression tests are underway; no live identity, hosted-review or installed-browser acceptance is implied. See [scope](#d2-054--session-and-reviewer-state-transitions). |
+| D2-054 | Fence asynchronous extension identity/delivery and reviewer decision state across transitions. | Complete | Platform engineering; QA/automation | D2-007; D2-012; D2-015; D2-022 | Completed 2026-09-11 at `dd2d560` for source/local verification: extension 258/258 and admin 174/174 tests, both no-emit checks, source/document review and full maintained verification pass, including all 20 builds. Configured extension and local admin bundle are rebuilt; installed reload/lifecycle and hosted admin rollout/acceptance remain separate. No cloud or authority changes. See [scope and evidence](#d2-054--session-and-reviewer-state-transitions). |
 
 ### D2-054 — Session and reviewer state transitions
 
-Started 2026-09-11. The source-only continuation identified two client implementation gaps:
+Started and completed 2026-09-11 for implementation/local verification. The source-only
+continuation identified two client implementation gaps:
 
 - Extension refresh responses can recreate credentials after logout or overwrite a newer login;
   simultaneous near-expiry requests can reuse one rotating refresh token. Dispatch also continues
@@ -386,7 +388,13 @@ Local verification: focused extension 55/55 and reviewer 32/32 pass; full extens
 admin 174/174 pass. Both no-emit typechecks, scoped formatting/whitespace, independent extension
 review and root reviewer review pass. The earlier 23-test reviewer packet fails 15 cases against
 original source and passes after the fix. Six updated Markdown files have 1,089 valid local link
-targets and 215 valid anchors at this checkpoint. Full maintained verification/build is next.
+targets and 215 valid anchors at the pre-completion documentation checkpoint. Full maintained
+`scripts/verify-phase0.ps1` at committed `dd2d560` exits `0` (execution `9865`, completion
+`a81c7a`), with all 34 test tasks (32 cached), all 20 builds (18 cached), formatting, lint,
+typechecks, dependency-security regressions, source-bound operator guards, Compose configuration
+and product-scope checks passing. Existing lint warnings and explicit database opt-in skips are
+not new integration acceptance. Both changed frontend packages build freshly; the extension keeps
+its existing machine-local authenticated development settings. No Docker engine is needed.
 Installed-browser lifecycle, hosted review, takedown and human appeal acceptance remain open;
 synthetic tests cannot complete them. No migration, AWS release, identity grant, provider
 activation, real job submission or new branch is part of D2-054.
@@ -1793,6 +1801,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-11 | Completed D2-054 source/local verification at `dd2d560`: serialized session/queue transitions, explicit logout barriers, refresh/dispatch coalescing, monotonic receipts and case-scoped reviewer drafts. Extension 258/258 and admin 174/174 tests pass, with 55/32 focused cases; independent review and full verifier `9865` / `a81c7a` pass, including 34 test tasks and 20 builds. Configured extension and admin local bundle rebuilt; no cloud/identity/provider change or new agent branch. Installed reload/lifecycle and hosted admin rollout remain separate. Corrected stale onboarding summaries without reopening completed D2-042 reviews or recovery. | D2-054; D2-012; D2-015; D2-007; D2-022 | [Implementation and verification](#d2-054--session-and-reviewer-state-transitions), [remaining acceptance](#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | Completed the bounded recovery under operator/artifact `6eb7a86`, leaving normal runtime `2ff32ef`/version `14` unchanged. Recovery `8649` / `7d6e48` verifies exactly one completion-tag Put; the original journal and linked companion remain intact. Fresh same-copy Inspect `70881` and Replay `87268` pass with one historical marker/one already-reconciled subject, no documents or new reconciliation, and zero S3/recovery-ledger writes or identity-provider calls. Final executor `9634`, PITR `62815`, Platform `329` and Bootstrap `21` cleanup all verify; drill-only permissions and canonical context are removed. D2-038/050/052/053 close, not fresh nonempty deletion or Phase 2 acceptance. Owner refresh now needs user help because browser control is unavailable. | D2-038; D2-050; D2-052; D2-053 | [Final evidence](#d2-038--isolated-deletion-recovery), [correction boundary](#d2-052--historical-completion-consistency), [remaining acceptance](#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | User approves D2-053 and closes R21 authority. Implemented the explicit linked pre-dispatch recovery without resetting the original attempt, with exact old/current preimage/intended continuity, authenticated finished zero-dispatch provenance, two fresh checks and one bounded tag send. Existing/new repair tests pass 199/199; protected storage passes 119/119 including 13 actual generated Windows cases; explicit operator/runtime source checks pass 274/274. Full repository verifier `25821` / `a32df3` exits 0, including all 20 builds. Original files/journal remain intact; five standalone artifacts and five emitted dependencies are archived owner-only before builds. No new branch, Docker start, cloud write, historical correction or ordinary Inspect/Replay. Source integration and same-copy execution follow. | D2-053; D2-052; D2-038 | [Recovery design](#decisions-and-scope-changes), [execution boundary](../../../infrastructure/runbooks/restore/candidate-deletion-recovery-replay.md#separately-authorized-recovery-of-a-proven-pre-dispatch-refusal) |
 | 2026-09-10 | Actual `dda6003` native restore-role Enable verifies at Platform `318`. A separately reproduced PowerShell 7.5 cleanup defect stops recovery before any target/executor exists; exact unused cleanup verifies Platform `319`/Bootstrap `19`, all temporary authority off. D2-047 authenticated website details and D2-048 exact environment restoration are integrated directly on shared main. Web 629 tests, final UI 38/38, eleven Chrome scenarios, five public-page result groups, production build/typecheck and integrated 266/260 inspector assertions pass. Full committed-source verification, candidate-only release and authorized recovery follow. No new branch, provider, reviewer or human acceptance claim. | D2-047; D2-048; D2-038 | [Website implementation](#d2-047--authenticated-website-job-details), [reproduced cause and cleanup](#d2-048--runtime-inspection-environment-restoration) |
@@ -2337,6 +2346,10 @@ These are local checks; deployed migration, human review, and publication eviden
 
 ## Completion record
 
+- Latest local implementation checkpoint (`2026-09-11` UTC): D2-054 is Complete at `dd2d560`.
+  Extension/admin complete suites and full repository verification/build pass. The configured
+  extension is rebuilt; installed reload and hosted admin rollout remain distinct from source
+  completion. Phase 2 itself remains In progress; no remaining human or owner gate is waived.
 - Completion date: Not completed
 - Exit review: Not performed
 - Current engineering summary (`2026-09-11` UTC): D2-038/D2-050/D2-052/D2-053 are Complete.

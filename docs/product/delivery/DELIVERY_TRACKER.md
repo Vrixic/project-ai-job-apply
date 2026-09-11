@@ -321,12 +321,13 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Current local continuation (`2026-09-11` UTC): D2-054 is In progress for reproduced extension
-  refresh/logout/concurrent-rotation and obsolete-delivery races, plus stale reviewer decision
-  inputs across case/filter changes. Client fixes are implemented on shared `main`; extension
-  258/258 and admin 174/174 tests, both no-emit checks and source review pass. Full maintained
-  verification/build follows, without cloud writes, new branches or real identities. Installed
-  lifecycle and human/hosted review acceptance remain separate.
+- Current local continuation (`2026-09-11` UTC): D2-054 is Complete for source/local verification
+  at `dd2d560`. Reproduced extension session/dispatch races and stale reviewer drafts are fixed;
+  extension 258/258 and admin 174/174 tests, both no-emit checks and source/document review pass.
+  Full maintained verifier `9865` / `a81c7a` exits `0`, including all 34 test tasks and 20 builds;
+  explicit database opt-in skips remain distinct from integration acceptance. Configured extension
+  and local admin bundle are rebuilt; installed reload/lifecycle and hosted admin rollout/acceptance
+  remain separate. No cloud, identity, provider, authority or branch change occurred.
   [Implementation](phase-2-extension-and-community.md#d2-054--session-and-reviewer-state-transitions)
 - Completed recovery checkpoint (`2026-09-11` UTC): D2-038/D2-050/D2-052/D2-053 are Complete for bounded
   recovery. Operator/artifact `6eb7a86` recovery `8649` / `7d6e48` verifies exactly one
@@ -961,6 +962,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-11 | D2 | Completed D2-054 source/local fixes at `dd2d560`: extension session/dispatch isolation, ordered logout cleanup, monotonic receipts and case-scoped reviewer decisions. Extension 258/258, admin 174/174 and full maintained verifier pass, including all 34 test tasks and 20 builds. Both frontend bundles rebuilt; installed lifecycle and hosted admin rollout/acceptance remain open. Stale onboarding summaries corrected; completed AWS recovery is untouched. No new branches, cloud writes, provider activation or authority expansion. Phase 2 remains In progress. | [Client state fixes](phase-2-extension-and-community.md#d2-054--session-and-reviewer-state-transitions), [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | D2 | Completed D2-038/050/052/053 under operator/artifact `6eb7a86`, leaving normal runtime `2ff32ef`/version `14` unchanged. Recovery `8649` / `7d6e48` verifies one exact completion-tag Put with both linked journals preserved. Fresh same-copy Inspect `70881` and Replay `87268` pass: one historical marker/one already-reconciled restored subject, no documents or new reconciliation, zero S3/recovery-ledger writes and identity-provider calls. Final executor `9634`, PITR `62815` and Platform `329`/Bootstrap `21` cleanup verify absence/removal and zero drift; protected context/artifacts remain retained. This is not fresh nonempty deletion or Phase 2 completion. Owner refresh needs user help because browser control is unavailable; no resubmission or login-expiry claim. | [Final recovery evidence](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery), [remaining gates](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-03 | D2 | Activated the time-bounded Greenhouse-only development contribution boundary under the exact product-owner exception. The first real batch exposed missing deployed D2 migrations; reviewed task revision `47` then applied and verified all 39 migrations/68 relations. The next automatic batch exposed an invalid generated EventBridge-envelope assumption; source `9a8fb5f` replaced it with a strict Terraform-owned versioned command and was deployed through a five-update/no-destroy saved plan at state `260`. Manual and automatic batches now succeed with zero work, both Trust queues are empty, all 13 alarms are `OK`, ECS is idle, and zero drift passes. Production/store, Lever/Ashby, and human Trust decisions remain dark; the signed policy expires `2026-09-04T18:24:32.188Z`. | [Phase 2 activation record](phase-2-extension-and-community.md#work-log) |
 | 2026-09-04 | D2 | Investigated one retained installed-extension contribution. Policy revisions match; aggregate AWS evidence shows handled `5xx` responses before contribution processing, no `4xx`, empty Trust queues, healthy batches, and 13/13 alarms `OK`. The exact immutable migration task re-verified all 39 deployed migrations with exit `0`, and the local consent PostgreSQL integration passed. Fixed manual pending retry, added confirmed stopped-item recovery with original idempotency, and retained only allowlisted privacy-safe server failure classifications. The first reload correctly exposed that the original item had already exhausted retries and made no new API call. It still needs reload plus explicit stopped retry before success can be claimed. | [Phase 2 work log](phase-2-extension-and-community.md#work-log) |
