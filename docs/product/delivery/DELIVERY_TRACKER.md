@@ -321,7 +321,16 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Latest recovery checkpoint (`2026-09-10T23:13:34Z`): exact `9b608ac` matching artifacts,
+- Latest authority checkpoint (`2026-09-11` UTC): the user grants D2-052's conditional diagnosis
+  and exact-version completion-time tag correction only if corroborated retained evidence proves
+  the tag wrong. D2-R20's approval gate is closed. Require agreeing persisted request/ledger
+  completion evidence, retired old writers and unchanged exact-version preconditions; no other
+  tag, SQL, marker-body, confirmation, retention, document or Auth0 change is authorized. Diagnosis,
+  Gateway/core future-writer releases and any correction remain unperformed. Keep the restore
+  executor read-only in AWS, reuse the same verified private copy, then finish unchanged replay
+  checks and exact cleanup. Phase 2 is not complete.
+  [Conditional historical correction](phase-2-extension-and-community.md#d2-052--historical-completion-consistency)
+- Earlier recovery checkpoint (`2026-09-10T23:13:34Z`): exact `9b608ac` matching artifacts,
   preparation and temporary Create pass. Its single Inspect reports the private store's
   `CompletionCollision` after connection and four initial SQL reads, with no validated receipt
   or Replay. The exact conflicting predicate, incorrect value and relation to either retry bug

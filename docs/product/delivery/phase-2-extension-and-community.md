@@ -4,7 +4,7 @@
 - Start: 2026-09-01
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-09-10
+- Last updated: 2026-09-11
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d2--extension-and-community-loop)
 
 ## Objective
@@ -44,7 +44,16 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
-Current recovery checkpoint (`2026-09-10T23:13:34Z`): actual `9b608ac` preparation and Create pass
+Current authority checkpoint (`2026-09-11` UTC): the user approves D2-052's conditional diagnosis
+and exact-object-version completion-time tag correction only if corroborated retained evidence
+proves that tag wrong. D2-R20's authority gate is closed; diagnosis, future-writer releases and any
+correction remain unperformed. Require matching persisted request/ledger completion evidence,
+retire old workflow writers, preserve the complete preimage, and change no other tag or data.
+If these conditions fail, stop without writing. The original D2-R17 drill boundary is unchanged;
+the separate correction does not grant the restore executor cloud-write permissions. Reuse the
+same verified private RDS copy, then finish unchanged inspection/replay and exact cleanup.
+
+Earlier recovery checkpoint (`2026-09-10T23:13:34Z`): actual `9b608ac` preparation and Create pass
 with two matching standalone builds and independent packet review. Its single Inspect refuses at
 `store_preflight` with the branded `CompletionCollision` reason. The database connection and
 read-only transaction opened, and four initial SQL reads completed; the exact conflicting predicate
@@ -249,7 +258,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-035 | Extend persistent development contribution support to independently enabled Lever and Ashby providers. | In progress; source released with providers disabled | Platform engineering; QA/automation | D2-002, D2-011, D2-014, D2-020, D2-033 | Fixed per-provider descriptors, explicit development-only provider selection, extension/runtime/Terraform wiring and Jobs `0022` are released at `42b9686`. Greenhouse's original version/digest and default selection are preserved. Local provider/variant/domain, renewal/immutability, migration/recovery, isolated build, PostgreSQL and actual-DOM generated page/API checks pass. Posting identity, optional fields, locations and complete description pairing defects are fixed. Representative provider-derived fixture acceptance and separate activation remain; Lever and Ashby are still disabled. See details below. |
 | D2-036 | Add repeatable current-schema logical backup/restore coverage with nonempty D2 data. | Complete | Platform engineering | D2-020, D2-035 | Completed 2026-09-08 at 42 migrations; rerun successfully on September 9 against D2-039's 44-migration source. The generated-only command performs real dump/restore, matches all 68 relation row sets including 18 nonempty D2 relations, and verifies restored owner/lease/publication/authorization behavior with exact disposable-container cleanup. This is local logical recovery, not cloud restore or provider acceptance. See details below. |
 | D2-037 | Patch release-blocking dependency advisories surfaced by the current registry audit. | Complete | Platform engineering | D2-016, D2-035 | Compatible dependency repairs and exact Vercel patch packaging pass the full repository verifier and focused guards. Exact source `42b9686` is released to the existing candidate/admin Vercel targets and development AWS migration/Gateway/D2 workers. Migration exits 0 with seven success records; state 290 runs Gateway/scheduled/Trust 55/17/13 with zero drift, 13 healthy alarms and unchanged development scope. No audit exemptions or production/store activation. |
-| D2-038 | Bind candidate-deletion replay to an authenticated, isolated AWS restore target. | Blocked | Platform engineering | D2-020, D2-036; D2-052 | Temporary private Lambda, dedicated default-off read-only cloud role and strict historical-marker/restored-owner/document checks are implemented; focused and real seven-owner PostgreSQL tests pass. Actual IAM activation verifies at Platform `320`/Bootstrap `20`; the same private PITR verifies 44 migrations/68 relations and the exact aggregate digest. Actual `9b608ac` Create passes; Inspect reaches SQL but refuses `CompletionCollision`, with no Replay. Maintained Cleanup `88848` removes the exact executor after full drain. D2-052's conditional historical correction authority, valid reinspection/replay and final resource/permission cleanup remain. No primary database, cloud document, completion tag or Auth0 mutation is permitted by the drill. |
+| D2-038 | Bind candidate-deletion replay to an authenticated, isolated AWS restore target. | In progress | Platform engineering | D2-020, D2-036; D2-052 | Temporary private Lambda, dedicated default-off read-only cloud role and strict historical-marker/restored-owner/document checks are implemented; focused and real seven-owner PostgreSQL tests pass. Actual IAM activation verifies at Platform `320`/Bootstrap `20`; the same private PITR verifies 44 migrations/68 relations and the exact aggregate digest. Actual `9b608ac` Create passes; Inspect reaches SQL but refuses `CompletionCollision`, with no Replay. Maintained Cleanup `88848` removes the exact executor after full drain. D2-052's separate conditional correction authority is granted on 2026-09-11 UTC; diagnosis, valid reinspection/replay and final resource/permission cleanup remain. No primary database, cloud document, completion tag or Auth0 mutation is permitted by the drill itself. |
 | D2-039 | Refresh stale unpublished contribution evidence and prevent out-of-order catalog regression. | In progress | Platform engineering | D2-006, D2-007, D2-019, D2-020 | Append-only proof generations, bounded refresh, evidence/freshness binding and monotonic catalog writes pass repository/PostgreSQL checks and the 44-migration deployment. Compatible `e2e730a` Gateway/D2 workers verify at states `298`/`297`; three fresh proofs support three explicit accepted initial decisions. Post-decision aggregates record three processing completions and copied Trust signals. The separately bundled dark-ingestion artifact verifies at state `308` without activation. Exact authenticated owner/catalog publication remains. Original submissions/evidence and reviewer separation stay intact; no automatic decision or resubmission. |
 | D2-040 | Correct the deployment toolchain's remote-state locking incompatibility. | Complete | Platform engineering; product owner | D2-016, D2-038 | Verified portable 1.16.2/current and 1.9.8/historical readers, exact encrypted S3 lock checks and 441 toolchain assertions on both PowerShell hosts pass. Full infrastructure/repository validation passes. Actual locked plans succeed; one exact equal-value sensitivity-only apply advances state 290 to 291, followed by zero changes. Application versions, budget values, provider locks, old evidence and excluded Actions are unchanged. D2-039's coordinated deployment and D2-038's approved drill remain separate. |
 | D2-041 | Include all implemented D2 owner data in the strict candidate-export contract. | Complete | Platform engineering | D2-017, D2-018, D2-020, D2-039 | Repository implementation completed 2026-09-09 in `fab4960`. Strict optional v1 sections include authorizations, contribution histories, private captures and Trust evidence while preserving D1 exports. Real seven-owner assembly, idempotency, isolation, redaction and full repository checks pass. The separately bundled rights activity fix is deployed at `e2e730a`; its exact release/Resume verifies at state `305` on September 10. Fresh user export/deletion acceptance and isolated recovery remain under D2-016/D2-020/D2-038. No additional SQL beyond D2-039. |
@@ -263,7 +272,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-049 | Read actual function-level tags and optional concurrency metadata for the exact numeric recovery executor. | Complete | Platform engineering | D2-038; D2-048 | Completed 2026-09-10 at `92c1fc2`: actual 448 executor/908 role assertions, independent review and full committed-source verification pass. Both standalone builds match, and the corrected maintained Create produces its genuine numeric-version receipt. Subsequent maintained cleanup also succeeds without the earlier bridge. The independent runtime inspection failure is D2-050, not a metadata-check failure or successful replay. See [repair and recovery boundary](#d2-049--recovery-executor-metadata). |
 | D2-050 | Diagnose and repair the private restore executor's database-opening/runtime inspection rejection without exposing secrets. | In progress | Platform engineering | D2-038; D2-049; D2-052 | Branded diagnostics at `fa01d53` pass 95 focused tests, independent review, full verification (721 workflow tests; seven explicit DB opt-ins skipped) and 20 builds. Actual `9b608ac` Inspect confirms connection and four SQL reads before `CompletionCollision`; the precise historical predicate/cause remains unknown under D2-052. No Replay; exact executor cleanup passes. Full cloud inspection/replay and final cleanup remain. SDK compatibility is not retroactively claimed as the earlier cause. See [runtime repair](#d2-050--private-restore-runtime-compatibility). |
 | D2-051 | Preserve authoritative deletion confirmation/completion timestamps across rollback, duplicate delivery and concurrent completion retries. | In progress | Platform engineering | D2-020; D2-038 | Fixes at `fa01d53` pass 30 focused tests while original-source tests produce 13 expected failures. Actual isolated PostgreSQL passes all five restore/export tests, including journal-success/SQL-rollback and completion-tag retry. Independent review, both typechecks, formatting, full committed-source verification and 20 builds pass. Required Gateway/core releases remain; no historical live marker repair is authorized. See [retry timestamps](#d2-051--deletion-retry-timestamps). |
-| D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | Blocked | Product owner; platform engineering | D2-038; D2-050; D2-051 | Actual `9b608ac` Inspect reports the module-owned `CompletionCollision` after initial SQL reads. The precise predicate and correct replacement value are not established. No Replay or historical write runs; exact executor cleanup succeeds. Request separate conditional authority for an exact-version completion-tag correction only if corroborated retained evidence proves that tag wrong. Otherwise stop without writing. Future-writer releases, unchanged guard reinspection/replay and final cleanup remain. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
+| D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | In progress | Product owner; platform engineering | D2-038; D2-050; D2-051 | User grants separate conditional exact-version completion-tag repair authority on 2026-09-11 UTC. Actual `9b608ac` Inspect proves only `CompletionCollision`; the precise predicate and correct value are still unestablished. No Replay or historical write runs. Require matching persisted request/ledger evidence, retired writers and unchanged exact-version preconditions; otherwise stop without writing. Future-writer releases, diagnosis, any proven one-tag correction, unchanged reinspection/replay and final cleanup remain. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
 
 ### D2-050 — Private restore runtime compatibility
 
@@ -387,14 +396,17 @@ request/ledger/horizon disagreements. The exact predicate and incorrect value ar
 Do not choose a replacement timestamp from a later attempt clock, edit the restored SQL to match
 a tag, skip the historical marker, or relax the validator.
 
-Existing D2-R17 authority explicitly preserves completion tags. The new decision requested is
-conditional: privately diagnose this exact historical mismatch and correct only that exact object
-version's completion-time tag if corroborated retained evidence proves it wrong. Preserve prior
-evidence, database rows, marker bodies, confirmation times, retention, documents, Auth0 and other
-markers. If the evidence does not prove that bounded correction, stop without writing. No such
-authority or correction exists at this checkpoint; no broader permission is inferred.
+Existing D2-R17 authority explicitly preserves completion tags. On 2026-09-11 UTC, the user
+separately approves conditional diagnosis of this exact historical mismatch and correction of
+only that exact object version's completion-time tag if corroborated retained evidence proves it
+wrong. Preserve prior evidence, database rows, marker bodies, confirmation times, retention,
+documents, Auth0 and other markers. Require agreeing persisted request/ledger completion times,
+bound operation evidence, retired competing writers and unchanged exact-version preconditions.
+Preserve the original complete tags before one write attempt; recover an uncertain response by
+readback, not blind retry or rollback. If the evidence does not prove that bounded correction,
+stop without writing. No correction has run, and no broader permission is inferred.
 
-After approval, release the already-verified Gateway/core future-writer fixes before correction,
+Release the already-verified Gateway/core future-writer fixes before correction,
 validate the smallest exact repair and its recovery path, then use unchanged inspection/replay
 guards on the same verified copy. Do not repeat PITR or renew the expired packet. Finish exact
 executor, restored-database and Platform/Bootstrap drill-permission cleanup afterward. This does
@@ -1754,6 +1766,15 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Decisions and scope changes
 
+For D2-052 on 2026-09-11 UTC, accept the user's conditional exact-version historical tag repair
+approval. The reason is to correct proven historical metadata while preserving the strict restore
+validator and immutable evidence. Matching persisted request/ledger timestamps and bound operation
+evidence must prove the replacement; an attempt or workflow-end clock is not a substitute. Retire
+old writers and recheck the exact complete preimage before a single version-qualified tag write.
+No SQL, marker-body, confirmation, retention, document, Auth0 or other-marker change is authorized.
+An ambiguous result requires exact-version readback, never blind resubmission or rollback. Keep
+the replay executor read-only in AWS and reuse the existing private restore.
+
 For D2-052 on 2026-09-10, keep the proven completion-state conflict distinct from a proven wrong
 tag or proven retry-bug cause. The original restore approval is unchanged and still forbids
 historical completion-tag edits. Request a conditional, exact-version correction decision rather
@@ -2039,13 +2060,17 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R17 | Closed; isolated drill authorized | The user approved the development-only recovery role, one isolated restore/replay drill and exact cleanup on 2026-09-09. The September 10 current-schema cloud restore passes 44 migrations/68 relations. D2-049's corrected Create now passes; D2-050 tracks the separate first-Inspect runtime refusal before any Replay. Its exact executor is drained and removed. Remaining replay/final cleanup stays under D2-038. | Product owner; platform engineering | Reuse the same verified private copy with a reviewed corrected-source executor. Preserve the primary database, cloud document objects, completion tags, retention and Auth0. Remove exact temporary resources and drill-only permissions afterward. Do not request the same approval again or expand its scope. |
 | D2-R18 | Closed | Verified portable 1.16.2, historical read-only decoding, effective encrypted S3 locking, 441 two-host toolchain assertions and full infrastructure/repository checks pass. Exact sensitivity-only reconciliation advances state to 291 without resource-value changes; fresh locked planning exits 0. | Platform engineering | Use fresh source-bound handoffs for D2-039/D2-038. Preserve historical plans, provider locks and excluded Actions; no further toolchain approval is needed. |
 | D2-R19 | Closed | D2-044's exact-version acknowledgment repair is deployed in core source `31051e1` and resumed at state `315`. Activity `13` records four ordinary invocations with explicit zero errors/throttles; all 57 managed alarms are OK with unchanged configuration/actions. | Platform engineering | Continue the approved recovery after D2-046's operator correction. Keep permissions unchanged; do not override alarms, reuse old plans or relabel deployment health as candidate-rights/recovery acceptance. |
-| D2-R20 | Open; conditional correction authority required | Actual isolated inspection reports `CompletionCollision` after initial SQL reads. The precise inconsistent field/state and correct value are unproven; existing drill authority preserves historical completion tags. | Product owner; platform engineering | Privately diagnose the exact mismatch and request conditional exact-version completion-tag correction only if corroborated retained evidence proves the tag wrong; otherwise stop without writing. Preserve SQL rows, marker bodies, confirmation, retention, documents, Auth0 and other markers. Release tested future writers before correction, then unchanged inspection/replay and exact final cleanup. No broad repair or permission expansion is implied. |
+| D2-R20 | Closed; conditional authority granted | The user approves exact-version historical completion-time tag correction on 2026-09-11 UTC only if corroborated retained evidence proves the tag wrong. The precise inconsistent field/state and correct value remain unproven. | Product owner; platform engineering | D2-052 must diagnose, require agreeing persisted evidence, retire competing writers and recheck unchanged exact-version preconditions before one bounded write. Otherwise stop without writing. Preserve SQL rows, marker bodies, confirmation, retention, documents, Auth0 and all other tags/markers. Future-writer releases, unchanged inspection/replay and exact final cleanup remain. Original drill authority and read-only replay IAM are unchanged. |
 
 ## Completion record
 
 - Completion date: Not completed
 - Exit review: Not performed
-- Current recovery summary (`2026-09-10T23:13:34Z`): actual `9b608ac` Create passes, but Inspect
+- Current authority summary (`2026-09-11` UTC): the user grants D2-052's conditional exact-version
+  completion-tag correction authority. D2-R20 is closed for approval only; positive diagnosis,
+  future-writer releases, any proven correction, unchanged inspection/replay and exact temporary
+  resource/permission cleanup remain. No historical mutation or new deployment has run yet.
+- Earlier recovery summary (`2026-09-10T23:13:34Z`): actual `9b608ac` Create passes, but Inspect
   reports the store's `CompletionCollision` after initial SQL reads. No validated inspection or
   Replay. Cleanup `88848` removes the exact temporary function after its full drain; the same
   verified private copy and Platform `320`/Bootstrap `20` temporary permissions remain. D2-052/R20
