@@ -598,13 +598,19 @@ public sealed class GeneratedRightsExportHandler : HttpMessageHandler {
         else { $null = Invoke-CandidateRightsExportHelper -CheckReady }
       }
       catch { $failure = $_.Exception.Message }
-      Assert-GeneratedExportCondition ($failure -ceq 'The generated-synthetic export verifier is unavailable or rejected the bounded artifact.') 'A generated child failure leaked output or was accepted.'
-      Assert-GeneratedExportCondition (Test-Path -LiteralPath $childPidPath -PathType Leaf) 'The generated child control did not actually start.'
+      Assert-GeneratedExportCondition ($failure -ceq 'The generated-synthetic export verifier is unavailable or rejected the bounded artifact.') "Generated verifier case $($case.Name) leaked failure output or was accepted."
+      Assert-GeneratedExportCondition (Test-Path -LiteralPath $childPidPath -PathType Leaf) "Generated verifier case $($case.Name) did not actually start."
       $generatedProcessId = [int](Get-Content -LiteralPath $childPidPath -Raw)
       $remainingChild = Get-Process -Id $generatedProcessId -ErrorAction SilentlyContinue
-      Assert-GeneratedExportCondition ($null -eq $remainingChild) 'A generated verifier child remained running after refusal.'
+      try {
+        # Windows can still enumerate a terminated process. Observe liveness, not enumeration
+        # alone; a reused live PID remains a conservative failure and is never terminated here.
+        $observedExited = $null -eq $remainingChild -or $remainingChild.HasExited
+        Assert-GeneratedExportCondition $observedExited "Generated verifier case $($case.Name) has a live process observation after refusal."
+      }
+      finally { if ($null -ne $remainingChild) { $remainingChild.Dispose() } }
       if ($case.Slow) {
-        Assert-GeneratedExportCondition ($timer.ElapsedMilliseconds -lt 7000) 'The whole child deadline failed to bound a stalled pipe or process.'
+        Assert-GeneratedExportCondition ($timer.ElapsedMilliseconds -lt 7000) "Generated verifier case $($case.Name) exceeded the whole child deadline."
       }
     }
   }

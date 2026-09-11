@@ -2211,7 +2211,7 @@ For D2-056/D2-057 on 2026-09-11, bound external transport at the client/operator
 the actual returned content. A timeout prevents stalled authentication from trapping the user;
 visible expired-session controls allow recovery without treating retained credentials as a valid
 session. An HTTP 200 is insufficient evidence that a candidate export is correct, so reuse the
-current domain schema with exact identity/policy binding and aggregate-only stdin processing.
+current domain schema with exact export/policy binding and aggregate-only stdin processing.
 Keep empty and nonempty rights coverage distinct, preserve previous recovery evidence, and fail
 missing execution prerequisites before creating anything. These changes add no provider gate,
 reviewer authority, account collection or production activation.
