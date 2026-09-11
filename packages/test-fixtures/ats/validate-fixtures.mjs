@@ -135,7 +135,9 @@ function findRepositoryFiles(root, current = root) {
   return matches;
 }
 
-function assertPayloadSafety(fixture, relativePath, content) {
+// Lexical preflight for an already-sanitized working copy. This grants no fixture approval:
+// validateFixture/validateTree still require the complete manifest and independent reviews.
+export function assertPayloadSafety(fixture, relativePath, content) {
   const lower = content.toLowerCase();
   const forbiddenSecrets = [
     /-----begin (?:rsa |ec |openssh )?private key-----/i,

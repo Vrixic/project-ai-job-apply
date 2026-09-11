@@ -33,8 +33,8 @@ not fixture evidence or activation authority.
 | Provider | Variant ID | Exact current-page hosts | Initial evidence state | Activation state |
 |---|---|---|---|---|
 | Greenhouse | `greenhouse-board-v1` | `boards.greenhouse.io`, `job-boards.greenhouse.io` | Authorized sanitized fixture accepted 2026-09-03 | Persistent development mode deployed under D2-033; installed reload, sign-in, and job addition user-confirmed 2026-09-08; production/store dark |
-| Lever | `lever-posting-v1` | `jobs.lever.co`, `jobs.eu.lever.co` | Synthetic detector tests only | Disabled pending D2-011 |
-| Ashby | `ashby-job-board-v1` | `jobs.ashbyhq.com` | Synthetic detector tests only | Disabled pending D2-011 |
+| Lever | `lever-posting-v1` | `jobs.lever.co`, `jobs.eu.lever.co` | Global-host sanitized review candidate prepared 2026-09-11; scans and separate human reviews pending; no EU representative claim | Disabled pending D2-011 |
+| Ashby | `ashby-job-board-v1` | `jobs.ashbyhq.com` | Hosted-page sanitized review candidate prepared 2026-09-11; scans and separate human reviews pending; no custom-domain claim | Disabled pending D2-011 |
 
 The first detector reads only the explicitly activated current tab and extracts a strict bounded
 allowlist. It does not claim support for custom domains, embedded variants, authenticated pages,
@@ -54,8 +54,10 @@ controls) and D2-057 (early rights prerequisites and strict export download vali
 for implementation/local verification at `3bf4a7e`. The full maintained verifier passes, including
 34 test tasks and all 20 builds. Agents' changes are integrated on shared main without branches;
 Docker/WSL remain stopped. The configured extension is rebuilt; installed adoption remains a user
-step. Exact Lever/Ashby fixture inputs, hosted Auth0/fresh MFA and a newly authorized disposable
-candidate are needed to advance the remaining live/human acceptance, not more recovery replay.
+step. The owner has now supplied Lever and Ashby fixture inputs; bounded public reads produced
+sanitized review candidates outside the approved fixture tree. Scanner and separate human review
+acceptance are still pending. Hosted Auth0/fresh MFA and a newly authorized disposable candidate
+are needed for the remaining live/human acceptance, not more recovery replay.
 
 Current owner checkpoint (`2026-09-11`): the user confirms jobs appear on the website after
 extension Processing `published` and Trust `accepted`. Following D2-055's deployed correction,
@@ -1483,6 +1485,24 @@ remained open. Both now pass as recorded above.
 
 ### D2-035 — Complete multi-provider development contributions
 
+- Provider-input continuation (`2026-09-11`): the owner supplies a global Lever posting and an
+  embedded Ashby careers link. The latter's actual embed configuration identifies its hosted
+  board; the exact hosted posting returns successfully with matching structured identity. No
+  custom-domain support or broader host permission is needed or added. Bounded public reads
+  retain no raw response file. Fully replaced inert HTML and separate sanitized JobPosting JSON
+  are review candidates only, under ignored `.tmp/d2-provider-fixtures-20260911`, not approved
+  fixtures. Ashby's initial hosted HTML is a script-driven shell: structured data can be tested
+  offline, but rendered DOM/browser representativeness must not be invented. The observed Lever
+  workplace category exposes a missing selector; the correction now reads it only on the exact
+  Lever hosts, preserves structured-data precedence and keeps location separate. Six original-source
+  failures now pass; focused inspection/capture tests pass 46/46, extension tests 300/300, typecheck
+  and independent review pass. Sanitized candidate probes pass 48 Lever assertions/four offline
+  cases and 19 Ashby checks, without network or rendered-browser claims. Gitleaks 8.30.1 passes
+  all four frozen candidate files. PII findings remain under explicit review, not silently waived.
+  Full maintained verification `38230` / `fb33c4` exits zero: 33 typecheck tasks, 34 test tasks and
+  20 builds (19 cached), with the configured extension rebuilt. Nine existing lint warnings and
+  explicit database opt-in skips remain; no fresh database acceptance is claimed. Separate human
+  sanitization/QA review and exact development activation remain.
 - Started 2026-09-08 with a source audit. This is real implementation work, not merely a missing
   fixture approval or detector flag. Existing Greenhouse development remains unchanged.
 - Implemented fixed provider descriptors and independently opt-in provider settings:
@@ -1999,7 +2019,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
 | Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three actual initial decisions pass. The current D2-054 admin preview is deployed/protected at `b3da818`; zero project environment variables confirms hosted Auth0 is unconfigured. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Configure the existing dedicated human appeal client for one exact protected stable host with `ADMIN_AUTHORIZATION_PROFILE=appeals`, distinct hosted session secret and server-only settings, then complete hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case or borrow the human session. |
-| Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. Both providers remain disabled in development. | Acquire representative provider-derived fixtures, complete sanitization/scanning and separate QA acceptance, then activate exact development registrations. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
+| Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. The owner supplied both provider inputs on 2026-09-11; sanitized review candidates are prepared, not approved. Both providers remain disabled in development. | Finish scanner checks and separate human sanitization/QA acceptance for the exact candidates, then activate exact development registrations. The Ashby example uses its discovered hosted posting, not custom-domain inspection. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
 | Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
@@ -2216,6 +2236,15 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For D2-011/D2-035 on 2026-09-11, use the supplied public pages only for bounded representative
+fixture preparation. Keep raw responses memory-only and already-sanitized review candidates
+outside the approved fixture tree until scanner and separate human reviews pass. Export the
+existing lexical payload checker for preflight without weakening full manifest/approval checks;
+its success is not a secret/PII scan or approval. Use Ashby's observed hosted posting rather than
+expanding extension access to arbitrary careers domains. Preserve its actual initial shell and
+separate structured data, not an invented rendered page. Provider activation remains distinct
+from capture permission, and this global Lever sample does not establish EU representativeness.
 
 For D2-056/D2-057 on 2026-09-11, bound external transport at the client/operator edge and validate
 the actual returned content. A timeout prevents stalled authentication from trapping the user;

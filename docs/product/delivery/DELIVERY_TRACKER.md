@@ -331,8 +331,10 @@ This is the master record for the delivery phases defined in the [product and sy
   PowerShell host's existing suite plus 33 prerequisite/85 export assertions pass. The reproduced
   exited-process observation is fixed in the test only, with three final runs per host passing.
   The full maintained verifier exits zero with 34 test tasks and all 20 builds. All agent changes
-  are integrated on main, no extra branches. Lever/Ashby fixture inputs are requested; hosted
-  Auth0/fresh MFA and a newly authorized disposable candidate remain necessary for live acceptance.
+  are integrated on main, no extra branches. Lever/Ashby fixture inputs are now supplied and inert
+  review candidates prepared; scans and separate human reviews remain. Ashby's observed hosted
+  posting avoids custom-domain expansion. Hosted Auth0/fresh MFA and a newly authorized disposable
+  candidate remain necessary for live acceptance.
   No case decision, provider activation, candidate-data mutation or Docker/WSL start.
 - Current owner checkpoint (`2026-09-11`): the user confirms website search visibility after
   extension Processing `published` and Trust `accepted`, then confirms successful `View details

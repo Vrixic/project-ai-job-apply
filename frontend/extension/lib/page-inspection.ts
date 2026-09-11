@@ -186,7 +186,12 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
     text("[data-job-location]", ".job__location", ".location", ".posting-categories .location");
   const explicitWorkMode =
     normalizedWorkMode(structured?.jobLocationType) ??
-    normalizedWorkMode(text("[data-job-work-mode]", "[data-workplace-type]", ".workplace-type"));
+    normalizedWorkMode(text("[data-job-work-mode]", "[data-workplace-type]", ".workplace-type")) ??
+    normalizedWorkMode(
+      activeHostname === "jobs.lever.co" || activeHostname === "jobs.eu.lever.co"
+        ? text(".posting-categories .workplaceTypes")
+        : undefined,
+    );
   const separatedLocation = splitLocation(publicLocation, explicitWorkMode);
   const title =
     typeof structured?.title === "string"

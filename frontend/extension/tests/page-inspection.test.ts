@@ -6,7 +6,90 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function stubLeverWorkplaceCategory(
+  category: string,
+  hostname = "jobs.lever.co",
+  structuredMode?: string,
+): string {
+  const canonicalUrl = `https://${hostname}/example/EXAMPLE-JOB-001`;
+  const values = new Map([
+    [".posting-headline h2", "Example Platform Engineer"],
+    [".posting-categories .location", "Example City, EXAMPLE-REGION"],
+    [".posting-categories .workplaceTypes", category],
+    [".content", "Example public job description"],
+  ]);
+  vi.stubGlobal("location", { href: canonicalUrl });
+  vi.stubGlobal("document", {
+    querySelector(selector: string) {
+      const textContent = values.get(selector);
+      return textContent ? { firstElementChild: null, textContent } : null;
+    },
+    querySelectorAll() {
+      return structuredMode
+        ? [
+            {
+              textContent: JSON.stringify({
+                "@type": "JobPosting",
+                jobLocationType: structuredMode,
+              }),
+            },
+          ]
+        : [];
+    },
+  });
+  return canonicalUrl;
+}
+
 describe("explicit current-page inspection", () => {
+  it.each([
+    ["jobs.lever.co", "Remote", "remote"],
+    ["jobs.lever.co", "Hybrid", "hybrid"],
+    ["jobs.lever.co", "On-site", "on_site"],
+    ["jobs.eu.lever.co", "Remote", "remote"],
+    ["jobs.eu.lever.co", "Hybrid", "hybrid"],
+    ["jobs.eu.lever.co", "On-site", "on_site"],
+  ])(
+    "reads the exact %s workplace category %s separately from location",
+    (hostname, label, mode) => {
+      const canonicalUrl = stubLeverWorkplaceCategory(label, hostname);
+
+      expect(captureCurrentPublicJobPage()).toEqual({
+        canonicalUrl,
+        description: "Example public job description",
+        location: "Example City, EXAMPLE-REGION",
+        title: "Example Platform Engineer",
+        workMode: mode,
+      });
+    },
+  );
+
+  it.each(["jobs.ashbyhq.com", "job-boards.greenhouse.io", "jobs.lever.co.example"])(
+    "does not use Lever workplace markup on %s",
+    (hostname) => {
+      stubLeverWorkplaceCategory("Remote", hostname);
+
+      expect(captureCurrentPublicJobPage()).not.toHaveProperty("workMode");
+    },
+  );
+
+  it.each(["Remote-friendly", "On-site occasionally"])(
+    "does not infer a workplace category from %s",
+    (label) => {
+      stubLeverWorkplaceCategory(label);
+
+      expect(captureCurrentPublicJobPage()).not.toHaveProperty("workMode");
+    },
+  );
+
+  it("preserves structured work-mode precedence over the Lever category", () => {
+    stubLeverWorkplaceCategory("Remote", "jobs.lever.co", "HYBRID");
+
+    expect(captureCurrentPublicJobPage()).toMatchObject({
+      location: "Example City, EXAMPLE-REGION",
+      workMode: "hybrid",
+    });
+  });
+
   it("reads the accepted sanitized Greenhouse board fixture", () => {
     const fixture = readFileSync(
       new URL(

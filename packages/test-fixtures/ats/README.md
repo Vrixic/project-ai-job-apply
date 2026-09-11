@@ -23,3 +23,9 @@ pnpm --filter @ai-job-apply/test-fixtures test
 Passing validation proves repository structure and declared integrity. It does not prove source
 authorization, legal/privacy approval, security/privacy approval, or representative provider
 coverage. See the [fixture policy](../../../docs/product/foundation/ats-fixture-policy.md).
+
+The module also exports `assertPayloadSafety` for lexical preflight of an already-sanitized working
+copy before human review. It returns no approval or representative-evidence result and writes
+nothing. Keep such candidates outside this fixture tree; the full validator still requires the
+unchanged manifest, integrity, scanner and review evidence. Lexical preflight alone is not the
+secret/PII scan or human inspection.

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { validateTree } from "./validate-fixtures.mjs";
+import { assertPayloadSafety, validateTree } from "./validate-fixtures.mjs";
 
 const atsDirectory = path.dirname(fileURLToPath(import.meta.url));
 const temporaryDirectories = [];
@@ -47,6 +47,50 @@ test("accepts the repository fixtures with their exact evidence classes", () => 
     "greenhouse-job-page-board-v1",
     "synthetic-foundation-v1",
   ]);
+});
+
+test("preflights inert working-copy payloads without making a representative claim", () => {
+  assert.equal(
+    assertPayloadSafety("review-candidate", "page.html", "<main><h1>Example Engineer</h1></main>"),
+    undefined,
+  );
+  assert.equal(
+    assertPayloadSafety("review-candidate", "structured.json", '{"title":"Example Engineer"}'),
+    undefined,
+  );
+});
+
+test("working-copy preflight retains the same active-content and sensitive-value denials", () => {
+  for (const content of [
+    '<iframe src="https://example.invalid"></iframe>',
+    '<form action="https://example.invalid"></form>',
+    '<img src="https://example.invalid/image.png">',
+    '<p onclick="alert(1)">Example</p>',
+    '<input type="password">',
+  ]) {
+    assert.throws(
+      () => assertPayloadSafety("review-candidate", "page.html", content),
+      /contains active, hidden, authentication, or network/,
+    );
+  }
+  for (const file of ["page.html", "structured.json"]) {
+    assert.throws(
+      () => assertPayloadSafety("review-candidate", file, "owner@nonreserved-provider.com"),
+      /contains a non-reserved email/,
+    );
+    assert.throws(
+      () => assertPayloadSafety("review-candidate", file, "Bearer generated-test-secret-canary"),
+      /contains credential- or token-shaped content/,
+    );
+  }
+});
+
+test("passing payload preflight cannot admit an unmanifested working copy", () => {
+  const root = copySyntheticFixture();
+  const payload = "<main><h1>Example Engineer</h1></main>";
+  assertPayloadSafety("review-candidate", "unreviewed.html", payload);
+  writeFileSync(path.join(root, "synthetic", "unreviewed.html"), payload, "utf8");
+  assert.throws(() => validateTree(root), /every fixture payload must be listed exactly once/);
 });
 
 test("rejects a payload whose declared checksum does not match", () => {
