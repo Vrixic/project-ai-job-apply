@@ -337,8 +337,13 @@ This is the master record for the delivery phases defined in the [product and sy
   pass; no EU/custom-domain or live hydration evidence is inferred. The Lever work-mode correction
   `dab84ac` passes the earlier full maintained verifier. D2-035's new current-domain restriction
   passes 107 config, 97 focused Jobs and 70 mocked community Terraform tests without changing
-  immutable descriptors or migrations. Domain-aware binaries and separately guarded exact
-  provider/source configuration activation are next; both providers remain disabled until verified.
+  immutable descriptors or migrations. Domain-aware source `3552f23` passes full maintained
+  verification and is deployed as Gateway/scheduled/Trust `62`/`22`/`18` at state `332`, with
+  authenticated search and zero drift. All 13 D2 alarms are OK; approximate visible/in-flight/
+  delayed counts are zero in both Trust queues. Existing Greenhouse-only inputs, authority,
+  concurrency, schedules and mappings are unchanged. Global Lever remains disabled pending
+  scoped server configuration activation, independent local extension provider/detector changes,
+  rebuild/reload and installed acceptance. No EU/Ashby, production or store activation is included.
   Actual API preflight passes global Lever (one observation/11,984 bytes), but the supplied Ashby
   board exceeds the unchanged 1,000,000-byte cap. D2-R22 records that distinct activation blocker;
   it is not another fixture-review request. Prepare Lever separately and keep Ashby disabled.
@@ -1005,6 +1010,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-11 | D2 | The approved global Lever/hosted Ashby fixtures and domain restriction are integrated in `3552f23`; the full maintained verifier passes. Reproducible publications and reviewed artifact-only Gateway/worker applies verify at state `332`, aliases `62`/`22`/`18`, with zero drift and 13 healthy D2 alarms. Greenhouse and all authority/triggers/migrations remain unchanged. Global Lever needs scoped server/client activation and installed acceptance; Ashby stays disabled under R22's board-acquisition bound. No new branches or Docker/WSL start; Phase 2 remains In progress. | [Release and remaining scope](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions), [single decision record](phase-2-extension-and-community.md#decisions-and-scope-changes) |
 | 2026-09-11 | D2 | User confirms successful `View details and sources` after refreshing the corrected website. Earlier published/accepted and search confirmations plus this reported-job browser check close D2-019/D2-039 for controlled Greenhouse implementation/deployment. The website check is removed from outstanding acceptance; no all-job browser, external-link navigation, cross-browser, human/provider or full Phase 2 acceptance is claimed. Documentation only; no cloud, identity, database or runtime change. | User confirmation in this conversation; [owner follow-up](phase-2-extension-and-community.md#d2-055--catalog-details-and-synthetic-fixture-retirement), [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | D2 | User reports extension Processing `published` and Trust `accepted`, satisfying owner-status readback for the reported result. Only fixed statuses are retained; no contribution count or website visibility is inferred. D2-019/D2-039 advance but remain In progress pending signed-in candidate search/detail and remaining acceptance. No new submission, decision, cloud operation or authority. | User confirmation in this conversation; [next website check](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-11 | D2 | Completed D2-054 source/local fixes at `dd2d560`: extension session/dispatch isolation, ordered logout cleanup, monotonic receipts and case-scoped reviewer decisions. Extension 258/258, admin 174/174 and full maintained verifier pass, including all 34 test tasks and 20 builds. Both frontend bundles rebuilt; installed lifecycle and hosted admin rollout/acceptance remain open. Stale onboarding summaries corrected; completed AWS recovery is untouched. No new branches, cloud writes, provider activation or authority expansion. Phase 2 remains In progress. | [Client state fixes](phase-2-extension-and-community.md#d2-054--session-and-reviewer-state-transitions), [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
