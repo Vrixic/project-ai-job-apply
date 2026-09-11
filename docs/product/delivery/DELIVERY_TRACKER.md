@@ -324,12 +324,16 @@ This is the master record for the delivery phases defined in the [product and sy
 - Current implementation continuation (`2026-09-11`): D2-054's admin presentation is now deployed
   from `b3da818` to the existing protected identity-dark preview; 174 tests/typecheck, a 128-file
   allowed-source upload, exact source/project/region and three protected no-store HTTP checks pass.
-  Hosted Auth0 is still unconfigured (zero project environment variables). D2-056 addresses
-  unbounded extension OAuth requests and hidden expired-session controls; D2-057 addresses late
-  rights prerequisites and missing export-content validation. Both are In progress on the shared
-  worktree with focused agent ownership and no new branches. Lever/Ashby representative fixture
-  inputs are requested; their existing focused source tests pass 218/218. No case decision,
-  provider activation, candidate-data mutation or Docker/WSL start.
+  Hosted Auth0 is still unconfigured (zero project environment variables). D2-056/D2-057 are now
+  Complete for implementation/local verification at `3bf4a7e`: bounded OAuth, expired-session
+  controls, early rights prerequisites and strict aggregate-only export validation. Extension 288
+  tests, rebuilt artifact, isolated Edge/Chrome-for-Testing checks, 83 export tests and each
+  PowerShell host's existing suite plus 33 prerequisite/85 export assertions pass. The reproduced
+  exited-process observation is fixed in the test only, with three final runs per host passing.
+  The full maintained verifier exits zero with 34 test tasks and all 20 builds. All agent changes
+  are integrated on main, no extra branches. Lever/Ashby fixture inputs are requested; hosted
+  Auth0/fresh MFA and a newly authorized disposable candidate remain necessary for live acceptance.
+  No case decision, provider activation, candidate-data mutation or Docker/WSL start.
 - Current owner checkpoint (`2026-09-11`): the user confirms website search visibility after
   extension Processing `published` and Trust `accepted`, then confirms successful `View details
   and sources` after the corrective deployment. D2-019/D2-039 are Complete for their controlled

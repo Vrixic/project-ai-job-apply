@@ -49,11 +49,13 @@ implementation. The D2-054 admin presentation is now deployed from `b3da818` to 
 protected preview project; source/region/project readback and three protected HTTP checks pass.
 It remains identity-dark: the project has no configured environment variables, so hosted appeal
 sign-in still needs exact-host Auth0 and server-only configuration. No paid protection or new
-reviewer authority was added. New concrete gaps are tracked as D2-056 (bounded extension OAuth
-transport and expired-session controls) and D2-057 (early rights prerequisites and strict export
-download validation). Agents work directly in the shared worktree without branches; Docker/WSL
-remain stopped. Provider source tests pass; exact Lever/Ashby fixture inputs are requested while
-the other implementation continues.
+reviewer authority was added. D2-056 (bounded extension OAuth transport and expired-session
+controls) and D2-057 (early rights prerequisites and strict export download validation) are Complete
+for implementation/local verification at `3bf4a7e`. The full maintained verifier passes, including
+34 test tasks and all 20 builds. Agents' changes are integrated on shared main without branches;
+Docker/WSL remain stopped. The configured extension is rebuilt; installed adoption remains a user
+step. Exact Lever/Ashby fixture inputs, hosted Auth0/fresh MFA and a newly authorized disposable
+candidate are needed to advance the remaining live/human acceptance, not more recovery replay.
 
 Current owner checkpoint (`2026-09-11`): the user confirms jobs appear on the website after
 extension Processing `published` and Trust `accepted`. Following D2-055's deployed correction,
@@ -388,8 +390,8 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-053 | Define and verify one-shot pre-dispatch recovery for the consumed historical completion-repair reservation. | Complete | Platform engineering; product owner | D2-052; D2-R21 | Completed 2026-09-11: 199 repair tests, 119 protected-storage checks, 274 two-source checks and full verification pass. Actual `6eb7a86` recovery `8649` / `7d6e48` verifies the intended single-tag correction after fresh checks, preserving the original journal and fixed companion. Default repair remains readback-only; neither journal may be reset or used to resend. Normal runtime `2ff32ef`/version `14` is unchanged. Same-copy strict Inspect/Replay and all temporary cleanup pass. |
 | D2-054 | Fence asynchronous extension identity/delivery and reviewer decision state across transitions. | Complete | Platform engineering; QA/automation | D2-007; D2-012; D2-015; D2-022 | Completed 2026-09-11 at `dd2d560` for source/local verification: extension 258/258 and admin 174/174 tests, both no-emit checks, source/document review and full maintained verification pass, including all 20 builds. Configured extension rebuilt; the admin presentation subsequently deploys at `b3da818` to the protected identity-dark preview with 174 tests/typecheck and source/region/HTTP checks passing. Installed lifecycle and hosted sign-in/human acceptance remain separate. No role, grant or provider changes. See [scope and evidence](#d2-054--session-and-reviewer-state-transitions). |
 | D2-055 | Repair deployed catalog details and retire exact generated synthetic development fixtures when present. | Complete | Platform engineering | D2-019; D2-039; D2-047 | Completed 2026-09-11: Gateway `985f5312`/61 is deployed with authenticated boundary and zero drift verified. Complete two-page inventory validates all 33 detail/source contracts: 33 verified-provider jobs, zero fixtures or unclassified jobs. Retirement is unnecessary and was not executed; no catalog rows changed or were deleted. Jobs PostgreSQL 98/98, 261 operator checks on each PowerShell host, and full corrective verification at `dc855732` pass. The user subsequently confirms the reported job's browser details/source display. Docker/WSL stopped; wider Phase 2 acceptance stays separate. |
-| D2-056 | Bound extension OAuth transport and retain expired-session refresh/sign-out controls. | In progress | Platform engineering; QA/automation | D2-012; D2-015; D2-054 | Source inspection finds unbounded token/revocation fetches and expired-session controls hidden despite retained refresh credentials. Implement redirect refusal, response/body timeout and size bounds, fixed errors, and visible recovery/clearing controls without changing scopes or account-transition fences. Focused regressions and integration pending. |
-| D2-057 | Fail candidate-rights acceptance before writes on missing prerequisites and validate downloaded export content. | In progress | Platform engineering; QA/automation | D2-020; D2-041 | The old fixed lifecycle reaches its first write without the required refresh inputs; a generated no-network negative control reproduces this. Early prerequisite checks pass 33 new assertions per PowerShell host. Strict bounded UTF-8/schema/export-ID/policy validation and honest D2 section counts are in progress; the previous downloader accepted any bounded HTTP 200 body. No fresh candidate, export/deletion, cloud or recovery execution occurred. |
+| D2-056 | Bound extension OAuth transport and retain expired-session refresh/sign-out controls. | Complete | Platform engineering; QA/automation | D2-012; D2-015; D2-054 | Completed 2026-09-11 for source/local verification at `3bf4a7e`: redirect refusal, ten-second whole-response deadline, strict 64-KiB token JSON, fixed errors and expired-session Refresh/Sign out controls. Extension 288/288 tests, no-emit, exact rebuilt artifact, isolated Edge/Chrome-for-Testing checks and full verifier pass. Scopes/account fences are unchanged; installed real-account lifecycle remains D2-012/015. |
+| D2-057 | Fail candidate-rights acceptance before writes on missing prerequisites and validate downloaded export content. | Complete | Platform engineering; QA/automation | D2-020; D2-041 | Completed 2026-09-11 for source/local verification at `3bf4a7e`: pre-write refresh/helper readiness, bounded download/stdin child, current source schema, exact export/policy binding and six honest D2 counts. Node 83 tests and both PowerShell hosts' existing suite plus 33 prerequisite/85 export assertions pass; full verifier includes the new checks. A reproduced exited-process test observation is corrected without changing production cleanup. No fresh candidate, export/deletion, cloud or recovery execution occurred. |
 
 ### D2-056 — Bounded OAuth and expired-session controls
 
@@ -409,7 +411,9 @@ unpacked extension is rebuilt. Source assurance and the isolated Edge/Chrome-for
 pass (`5085` / `170b9b`), with a 448-pixel popup, four reflow profiles, zero axe/geometry failures,
 zero allowed external requests and no retained sensitive artifacts. Generated browser checks do
 not establish real Auth0 rotation/replay, cross-account/offline parity or human accessibility.
-Full maintained repository verification and coherent source integration follow.
+Complete for this implementation/local boundary at `3bf4a7e`: maintained verifier `58499` /
+`289654` exits zero, including all 34 test tasks and all 20 builds. The configured extension is
+rebuilt by the final build; a user reload is still required to adopt it in the installed browser.
 
 ### D2-057 — Candidate-rights prerequisites and export validation
 
@@ -428,7 +432,12 @@ PowerShell 5.1 pass the existing operator suite plus 33 prerequisite and 85 expo
 The checks cover real Node stdin round-trips, stalled headers/body/child processes, bounded output,
 redacted refusal and confirmed child cleanup. Downloads have a twenty-second whole-transfer
 deadline and the child has a separate thirty-second bound. The new aggregate-only checks are
-included in `pnpm check` and the maintained repository verifier. Full integration follows.
+included in `pnpm check` and the maintained repository verifier. A final Windows rerun exposed
+a test-only race: `Get-Process` could enumerate an already-exited helper. The test now checks
+liveness and disposes the observation, without PID-based termination or a relaxed deadline.
+Three consecutive runs per host pass after that correction (`ed1069` / `b63206`). Exact source
+`3bf4a7e` then passes the full maintained verifier (`58499` / `289654`); D2-057 is Complete for
+implementation/local verification.
 Existing persisted lifecycle/recovery receipt schemas stay unchanged. No candidate export,
 deletion, account creation, database or cloud action is part of this local tooling change.
 
@@ -2003,6 +2012,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-11 | Completed D2-056/057 at `3bf4a7e`, integrating all agents directly on main. Extension 288 tests, configured artifact and isolated Edge/Chrome-for-Testing matrix pass. Export helper 83 tests and each PowerShell host's existing suite plus 33 prerequisite/85 export assertions pass; a reproduced exited-process observation is corrected in the test only, followed by three fresh runs per host. Full verifier exits zero with 34 test tasks and 20 builds; nine existing lint warnings and explicit database opt-in skips are unchanged, not new database acceptance. Validated 1,088 local document links. Docker/WSL remain off; no fresh rights, reviewer decision, provider activation or production/store release. Hosted Auth0, representative provider inputs and disposable fresh MFA remain next. | D2-056; D2-057; D2-054 | [OAuth/session controls](#d2-056--bounded-oauth-and-expired-session-controls), [rights validation](#d2-057--candidate-rights-prerequisites-and-export-validation); full `58499` / `289654`; browser `5085` / `170b9b`; links `5b0e02` |
 | 2026-09-11 | Continued full Phase 2 implementation on shared main without branches. Deployed the D2-054 admin presentation from exact `b3da818` after 174 admin tests, typecheck, clean-source/owner/project preflight and a 128-file digest-checked upload. READY/source/iad1/Node24 and three protected no-store 302s pass; hosted Auth0 remains unconfigured with zero project variables. Started concrete OAuth/session-control and rights-acceptance gaps as D2-056/057. Provider focused tests pass 218/218; Lever/Ashby require representative fixture inputs, not another migration. No case decision, provider activation, candidate-data mutation, paid protection or Docker/WSL start. | D2-054; D2-056; D2-057; D2-011; D2-035 | Admin `17d36f`/`9c78fb`/`08bb4a`/`71a2e2`; [hosted follow-through](#d2-054--session-and-reviewer-state-transitions); pending fixture request in this conversation |
 | 2026-09-11 | User confirms successful website refresh and `View details and sources` for the reported job after D2-055. Combined with earlier Processing `published`, Trust `accepted` and website search confirmation, this closes D2-019/D2-039 for controlled Greenhouse development and removes the repeated website check from outstanding acceptance. No all-job browser, external-link navigation, cross-browser, human/provider or Phase 2 acceptance is inferred. Documentation only; no deployment, submission, decision, database write or runtime start. | D2-019; D2-039; D2-047; D2-055 | User confirmation in this conversation; [owner follow-up](#d2-055--catalog-details-and-synthetic-fixture-retirement) |
 | 2026-09-11 | Completed D2-055: full live two-page inventory validates all 33 detail/source contracts, with 33 verified-provider jobs and zero fixtures or unclassified jobs. No visible synthetic targets exist, so no cleanup task, migration, catalog mutation or deletion ran. Corrective source `dc855732` passes the full verifier; its deterministic cleanup artifact finishes publication and is retained unused. Docker/WSL are stopped. Refreshing the website needs no client rebuild; remaining Phase 2 browser/human acceptance is unchanged. | D2-055; D2-019; D2-039 | Inventory `986e2d`; full verification `b02efc`; publication `de40f9`; runtime shutdown `ee47e8`/`8248ed`; [final disposition](#d2-055--catalog-details-and-synthetic-fixture-retirement) |
@@ -2574,7 +2584,11 @@ These are local checks; deployed migration, human review, and publication eviden
 
 ## Completion record
 
-- Latest local implementation checkpoint (`2026-09-11` UTC): D2-054 is Complete at `dd2d560`.
+- Latest local implementation checkpoint (`2026-09-11`): D2-056/D2-057 are Complete at `3bf4a7e`.
+  The full verifier passes, including all 20 builds, the new rights checks and 34 test tasks.
+  Configured extension and both isolated browser checks pass; hosted admin presentation is deployed
+  separately from `b3da818`. Hosted Auth0 and the remaining live/human acceptance are not completed.
+- Earlier local implementation checkpoint (`2026-09-11` UTC): D2-054 is Complete at `dd2d560`.
   Extension/admin complete suites and full repository verification/build pass. The configured
   extension is rebuilt; installed reload and hosted admin rollout remain distinct from source
   completion. Phase 2 itself remains In progress; no remaining human or owner gate is waived.
