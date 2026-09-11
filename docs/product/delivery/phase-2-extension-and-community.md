@@ -365,7 +365,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | Complete | Product owner; platform engineering | D2-038; D2-050; D2-051; D2-053 | Completed 2026-09-11: corroborated persisted request/ledger/operation evidence and three acknowledged/unclaimed dispatches support the exact historical correction. Separately authorized recovery `8649` / `7d6e48` sends one exact-version completion-tag Put and verifies intended state, preserving all other protected data and original evidence. Unchanged same-copy Inspect/Replay and final cleanup pass. No fresh nonempty deletion is claimed. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
 | D2-053 | Define and verify one-shot pre-dispatch recovery for the consumed historical completion-repair reservation. | Complete | Platform engineering; product owner | D2-052; D2-R21 | Completed 2026-09-11: 199 repair tests, 119 protected-storage checks, 274 two-source checks and full verification pass. Actual `6eb7a86` recovery `8649` / `7d6e48` verifies the intended single-tag correction after fresh checks, preserving the original journal and fixed companion. Default repair remains readback-only; neither journal may be reset or used to resend. Normal runtime `2ff32ef`/version `14` is unchanged. Same-copy strict Inspect/Replay and all temporary cleanup pass. |
 | D2-054 | Fence asynchronous extension identity/delivery and reviewer decision state across transitions. | Complete | Platform engineering; QA/automation | D2-007; D2-012; D2-015; D2-022 | Completed 2026-09-11 at `dd2d560` for source/local verification: extension 258/258 and admin 174/174 tests, both no-emit checks, source/document review and full maintained verification pass, including all 20 builds. Configured extension and local admin bundle are rebuilt; installed reload/lifecycle and hosted admin rollout/acceptance remain separate. No cloud or authority changes. See [scope and evidence](#d2-054--session-and-reviewer-state-transitions). |
-| D2-055 | Repair deployed catalog details and retire exact generated synthetic development fixtures. | In progress | Platform engineering | D2-019; D2-039; D2-047 | User confirms website search visibility but details fail. Direct deployed Gateway version 60 search returns 200 and all three bounded detail reads return 500. Timestamp repair passes catalog unit 34/34, actual isolated PostgreSQL catalog 34/34 and composed Gateway 51/51. Safe fixture inventory/retirement and deployment verification are in progress; no catalog mutation yet. |
+| D2-055 | Repair deployed catalog details and retire exact generated synthetic development fixtures. | In progress | Platform engineering | D2-019; D2-039; D2-047 | User confirms website search visibility but details fail. Gateway version 60 search returns 200 and three bounded detail reads return 500. Repair and exact non-destructive fixture retirement are merged at `02a0434`: full maintained verification, 98/98 Jobs PostgreSQL tests and 208 offline operator checks pass. Deployment preflight requires AWS SSO renewal; no live catalog mutation or corrective deployment yet. |
 
 ### D2-055 — Catalog details and synthetic fixture retirement
 
@@ -404,8 +404,17 @@ passes 192 with seven explicit existing skips. The new fixed-command retirement 
 integer handling, regular receipt paths, exact task overrides and one-shot recovery. It clones
 only the migration image into a temporary task revision, then deregisters that exact revision;
 no Terraform migration-runtime update, schema migration or IAM expansion is needed. Independent
-source review finds no issue. Full repository verification and cloud deployment/retirement
-remain pending.
+source review finds no issue. Implementation is merged on `main` at `02a0434`. Full maintained
+`scripts/verify-phase0.ps1` passes (execution `31831`, completion `c00b18`, exit `0`), including
+all 34 test tasks and all 20 builds, formatting, lint, typechecking, dependency-security and
+operator regressions, Compose configuration and product-scope checks. Nine existing lint warnings
+and explicit database opt-in skips are not new failures; the separate Jobs PostgreSQL suite above
+actually ran against an isolated database. The first read-only deployment baseline capture stopped before any
+cloud mutation because Terraform could not refresh the expired AWS SSO session. A short-lived
+cached CLI credential still answers STS, but is not a renewed session suitable for completing
+deployment and cleanup. The owner has been asked to run
+`aws sso login --profile ai-job-apply-development-admin`; no credentials or tokens are requested.
+Cloud deployment and retirement remain pending that sign-in. Docker/WSL remain stopped.
 
 ### D2-054 — Session and reviewer state transitions
 

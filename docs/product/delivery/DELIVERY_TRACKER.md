@@ -326,7 +326,10 @@ This is the master record for the delivery phases defined in the [product and sy
   D2-055 repairs the reproduced backend timestamp mismatch and implements the user-authorized
   retirement of exact generated synthetic fixtures, preserving real contributions, saved
   associations and history. Read-only deployed version-60 probe returns search 200 and three
-  detail 500s. No cleanup or corrective deployment has run yet. D2-019/D2-039 remain In progress
+  detail 500s. The fix and bounded retirement command are merged at `02a0434`; full maintained
+  verification, 98/98 Jobs PostgreSQL tests and 208 offline operator checks pass. Deployment
+  preflight needs renewed AWS SSO; no cleanup or corrective deployment has run yet.
+  D2-019/D2-039 remain In progress
   pending successful detail/source readback and their remaining acceptance. No resubmission or
   new reviewer authority is needed.
   [Next website check](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
