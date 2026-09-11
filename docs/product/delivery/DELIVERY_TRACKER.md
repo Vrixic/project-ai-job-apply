@@ -347,6 +347,10 @@ This is the master record for the delivery phases defined in the [product and sy
   Actual API preflight passes global Lever (one observation/11,984 bytes), but the supplied Ashby
   board exceeds the unchanged 1,000,000-byte cap. D2-R22 records that distinct activation blocker;
   it is not another fixture-review request. Prepare Lever separately and keep Ashby disabled.
+  An initial configuration-planning refusal is traced to the new checker's incorrect assumption
+  about the existing worker build-marker format; the artifact/source/deployment checks remain
+  intact. The correction passes 407 generated assertions and both exact local ZIP checks. Its
+  rationale lives in the Phase 2 decision record, not a new document; no provider is activated.
   Hosted Auth0/fresh MFA and a newly authorized disposable
   candidate remain necessary for live acceptance.
   No case decision, provider activation, candidate-data mutation or Docker/WSL start.

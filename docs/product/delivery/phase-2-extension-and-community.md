@@ -2334,11 +2334,25 @@ later source changes are the two existing delivery documents. The ignored compos
 actual commit ancestry and an exact modified-text-only delta in those two paths, rejecting file
 mode, binary, added, deleted or unrelated changes. Current clean main/origin, Terraform baseline,
 plan and helper bindings still use the current operator commit; publication receipts, immutable
-objects and exact local bundle markers use the artifact commit. This avoids republishing unchanged
+keys/object checks and the Gateway's exact source banner use the artifact commit. This avoids republishing unchanged
 binaries solely to record their rollout without allowing an arbitrary source-compatibility waiver.
 The configuration guard passes 251 assertions on each PowerShell host; the ignored composition's
-342 generated assertions and independent read-only review pass. Neither test result authorizes
+initial 342 generated assertions and independent read-only review pass. Neither test result authorizes
 provider activation or substitutes for the actual saved plan and live checks.
+
+The first actual configuration Plan exposes a checker-format mismatch and refuses before producing
+a native plan or activating anything: the [maintained D2 publisher](../../../scripts/operate-development-d2-community-artifact.ps1) does not set `ARTIFACT_SOURCE_SHA`,
+so the shared builder emits the exact leading `local` banner. Unlike Gateway, worker commit
+provenance comes from the publisher's clean exact checkout, repeat builds, reviewed source-bearing
+receipt/key and immutable checksum/deployed-code bindings, not that literal banner. Correct only
+the new ignored checker: require the single exact Gateway commit banner or the single exact
+existing worker `local` banner according to mandatory internal artifact kind. Retain strict ZIP,
+UTF-8, size, domain-code presence, receipt, source, deployed-state and KMS checks. Missing, duplicate,
+wrong-kind or other-source markers remain rejected. Do not relabel receipts, change published
+bytes, accept arbitrary unmarked bundles or republish unchanged code to satisfy the wrong format.
+The corrected checker passes 407 generated assertions, including actual-format ZIP fixtures and
+the prior-checker failure. A read-only check of both exact published local ZIPs also passes
+(`3d8e65`), without artifact mutation or cloud calls. Provider activation is still not performed.
 
 For D2-011/D2-035 on 2026-09-11, use the supplied public pages only for bounded representative
 fixture preparation. Keep raw responses memory-only and already-sanitized review candidates
