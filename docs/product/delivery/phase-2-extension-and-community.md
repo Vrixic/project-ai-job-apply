@@ -44,7 +44,35 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
-Current engineering checkpoint (`2026-09-11` UTC): Gateway `423d63b` is deployed and verified;
+Current engineering checkpoint (`2026-09-11` UTC): Gateway `423d63b` and corrective core
+`2ff32ef` are deployed and verified. Core Release, exact state-only metadata reconciliation,
+and mapping-only Resume finish at Platform `328` with durable/activity/terminal `14`, starts
+unpaused and a genuine zero-drift baseline. D2-051 is Complete for its verified code/deployment
+boundary; generated concurrency seams and the real already-terminal SQL case are not a real
+concurrent row-lock race or fresh candidate-rights acceptance.
+
+On the same verified `f4baf68e` private PITR copy, fresh packet `20fa3a4c` passes Prepare `4799`,
+Create `50475` and read-only DiagnoseCompletion `36727`. Persisted request/ledger completion
+times agree with the bound operation evidence and differ from the historical completion tag;
+three dispatch attempts are acknowledged and unclaimed. Diagnosis writes no database, S3,
+recovery-ledger or Auth0 data and is not an Inspect/Replay approval.
+Repair `45914` / `a9336e` passes its first complete writer-exclusion/retirement pass, reserves
+stable attempt `1`, then refuses when the second runtime read reports
+`authenticated_metadata_read_failed`. No Put was dispatched and the write count is zero:
+this is a proven pre-dispatch refusal, not an ambiguous Put. Exact readback `00fadf` confirms
+the original complete preimage and tags unchanged. A later read-only repetition passes both
+195-check inventories in 150,932 ms; it does not reproduce the failure, establish its cause or
+retroactively authorize the refused attempt.
+Preserve the original journal and all evidence; D2-053/R21 block reset, replacement-journal
+retry or any further write without an explicitly reviewed pre-dispatch recovery design and
+authority. Cleanup Disable `8510` / `6c4f64` confirms concurrency zero; after the full drain,
+Cleanup `27423` / `a2cb06` confirms exact executor absence at `2026-09-11T11:38:08Z` and
+retains its immutable artifact. The same verified copy
+and Platform `328`/Bootstrap `20` temporary permissions remain pending the recovery decision.
+D2-038/050/052 and Phase 2 remain In progress; no historical correction or Replay has run.
+
+Earlier engineering checkpoint (`2026-09-11` UTC, before the corrective release and diagnosis):
+Gateway `423d63b` is deployed and verified;
 the fresh canonical baseline has zero drift at Platform `321`. Core workflow starts are then
 paused and verified at `322`, with durable/activity/terminal versions still `13`. The first
 complete metadata inventory observes 23 retained executions (six succeeded, 17 failed), none
@@ -68,13 +96,14 @@ The same verified PITR copy and temporary permissions remain; no executor is cur
 
 Authority checkpoint (`2026-09-11` UTC): the user approves D2-052's conditional diagnosis
 and exact-object-version completion-time tag correction only if corroborated retained evidence
-proves that tag wrong. D2-R20's authority gate is closed; cloud diagnosis and any correction remain
-unperformed. Gateway is released; the core release is pending as qualified above. Require matching
-persisted request/ledger completion evidence,
-retire old workflow writers, preserve the complete preimage, and change no other tag or data.
-If these conditions fail, stop without writing. The original D2-R17 drill boundary is unchanged;
-the separate correction does not grant the restore executor cloud-write permissions. Reuse the
-same verified private RDS copy, then finish unchanged inspection/replay and exact cleanup.
+proves that tag wrong. D2-R20's original authority gate is closed; positive diagnosis and the
+future-writer releases now pass, but no correction has run. The stable one-attempt reservation
+was consumed before dispatch, so that original authority is not permission to reset it or retry
+under another journal. D2-053/R21 require a separately reviewed pre-dispatch recovery design and
+explicit authority before any further write. Matching persisted evidence, two fresh writer
+passes and the complete unchanged preimage remain mandatory; change no other tag or data.
+The original D2-R17 drill boundary and read-only restore IAM are unchanged. Reuse the same
+verified private copy; unchanged inspection/replay and exact final cleanup remain.
 
 Earlier recovery checkpoint (`2026-09-10T23:13:34Z`): actual `9b608ac` preparation and Create pass
 with two matching standalone builds and independent packet review. Its single Inspect refuses at
@@ -281,7 +310,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-035 | Extend persistent development contribution support to independently enabled Lever and Ashby providers. | In progress; source released with providers disabled | Platform engineering; QA/automation | D2-002, D2-011, D2-014, D2-020, D2-033 | Fixed per-provider descriptors, explicit development-only provider selection, extension/runtime/Terraform wiring and Jobs `0022` are released at `42b9686`. Greenhouse's original version/digest and default selection are preserved. Local provider/variant/domain, renewal/immutability, migration/recovery, isolated build, PostgreSQL and actual-DOM generated page/API checks pass. Posting identity, optional fields, locations and complete description pairing defects are fixed. Representative provider-derived fixture acceptance and separate activation remain; Lever and Ashby are still disabled. See details below. |
 | D2-036 | Add repeatable current-schema logical backup/restore coverage with nonempty D2 data. | Complete | Platform engineering | D2-020, D2-035 | Completed 2026-09-08 at 42 migrations; rerun successfully on September 9 against D2-039's 44-migration source. The generated-only command performs real dump/restore, matches all 68 relation row sets including 18 nonempty D2 relations, and verifies restored owner/lease/publication/authorization behavior with exact disposable-container cleanup. This is local logical recovery, not cloud restore or provider acceptance. See details below. |
 | D2-037 | Patch release-blocking dependency advisories surfaced by the current registry audit. | Complete | Platform engineering | D2-016, D2-035 | Compatible dependency repairs and exact Vercel patch packaging pass the full repository verifier and focused guards. Exact source `42b9686` is released to the existing candidate/admin Vercel targets and development AWS migration/Gateway/D2 workers. Migration exits 0 with seven success records; state 290 runs Gateway/scheduled/Trust 55/17/13 with zero drift, 13 healthy alarms and unchanged development scope. No audit exemptions or production/store activation. |
-| D2-038 | Bind candidate-deletion replay to an authenticated, isolated AWS restore target. | In progress | Platform engineering | D2-020, D2-036; D2-052 | Temporary private Lambda, dedicated default-off read-only cloud role and strict historical-marker/restored-owner/document checks are implemented; focused and real seven-owner PostgreSQL tests pass. Actual IAM activation verifies at Platform `320`/Bootstrap `20`; the same private PITR verifies 44 migrations/68 relations and the exact aggregate digest. Actual `9b608ac` Create passes; Inspect reaches SQL but refuses `CompletionCollision`, with no Replay. Maintained Cleanup `88848` removes the exact executor after full drain. D2-052's separate conditional correction authority is granted on 2026-09-11 UTC; diagnosis, valid reinspection/replay and final resource/permission cleanup remain. No primary database, cloud document, completion tag or Auth0 mutation is permitted by the drill itself. |
+| D2-038 | Bind candidate-deletion replay to an authenticated, isolated AWS restore target. | In progress | Platform engineering | D2-020, D2-036; D2-052; D2-053 | The same private PITR verifies 44 migrations/68 relations and the exact aggregate digest; the read-only role remains at Platform `328`/Bootstrap `20`. Fresh `2ff32ef` Prepare/Create/DiagnoseCompletion pass on that copy, but diagnosis is not an Inspect/Replay approval. The separate historical repair refuses after reservation and before Put; no Replay or historical write runs. Cleanup `27423` confirms the exact executor absent after full drain. D2-053's reviewed recovery decision, unchanged inspection/replay and final restored-copy/permission cleanup remain. The drill itself permits no primary-database, cloud-document, completion-tag or Auth0 mutation. |
 | D2-039 | Refresh stale unpublished contribution evidence and prevent out-of-order catalog regression. | In progress | Platform engineering | D2-006, D2-007, D2-019, D2-020 | Append-only proof generations, bounded refresh, evidence/freshness binding and monotonic catalog writes pass repository/PostgreSQL checks and the 44-migration deployment. Compatible `e2e730a` Gateway/D2 workers verify at states `298`/`297`; three fresh proofs support three explicit accepted initial decisions. Post-decision aggregates record three processing completions and copied Trust signals. The separately bundled dark-ingestion artifact verifies at state `308` without activation. Exact authenticated owner/catalog publication remains. Original submissions/evidence and reviewer separation stay intact; no automatic decision or resubmission. |
 | D2-040 | Correct the deployment toolchain's remote-state locking incompatibility. | Complete | Platform engineering; product owner | D2-016, D2-038 | Verified portable 1.16.2/current and 1.9.8/historical readers, exact encrypted S3 lock checks and 441 toolchain assertions on both PowerShell hosts pass. Full infrastructure/repository validation passes. Actual locked plans succeed; one exact equal-value sensitivity-only apply advances state 290 to 291, followed by zero changes. Application versions, budget values, provider locks, old evidence and excluded Actions are unchanged. D2-039's coordinated deployment and D2-038's approved drill remain separate. |
 | D2-041 | Include all implemented D2 owner data in the strict candidate-export contract. | Complete | Platform engineering | D2-017, D2-018, D2-020, D2-039 | Repository implementation completed 2026-09-09 in `fab4960`. Strict optional v1 sections include authorizations, contribution histories, private captures and Trust evidence while preserving D1 exports. Real seven-owner assembly, idempotency, isolation, redaction and full repository checks pass. The separately bundled rights activity fix is deployed at `e2e730a`; its exact release/Resume verifies at state `305` on September 10. Fresh user export/deletion acceptance and isolated recovery remain under D2-016/D2-020/D2-038. No additional SQL beyond D2-039. |
@@ -293,11 +322,18 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-047 | Expose full descriptions and independently verified source links from authenticated website search. | Complete | Platform engineering; QA/automation | D2-019; D1 catalog search | Completed 2026-09-10: the on-demand panel and narrow BFF reuse `jobs:read`, canonical aliases and bounded no-store detail. Web 629 tests, final UI 38/38, eleven Chrome scenarios, public-page regression, production build, typecheck and independent review pass. Full committed-source verification passes at `c9351e2`; candidate-only source `7bf510e` is READY at the existing stable Vercel origin, with five credentialless HTTP checks passing. Separate authenticated owner/human acceptance remains under D2-019/D2-039. No anonymous publication, provider expansion, paid deployment-protection acceptance or new permission is implied. See [scope and verification](#d2-047--authenticated-website-job-details). |
 | D2-048 | Preserve absent process inputs between nested workload/recovery inspections. | Complete | Platform engineering | D2-038; D2-045 | Completed 2026-09-10 at `c9351e2` after Platform `319`/Bootstrap `19` cleanup. Original PowerShell 7.5 reproduces the absent-to-empty failure; integrated exact-cleanup-AST regressions pass independently with 266 assertions on 7.5 and 260 on Windows PowerShell 5.1, plus the full committed-source verifier/all 20 builds. Present-empty, composite, unrelated and `TF_DATA_DIR` inputs remain intact; no blanket purge or decoder relaxation. Actual recovery remains under D2-038. See [cause and repair](#d2-048--runtime-inspection-environment-restoration). |
 | D2-049 | Read actual function-level tags and optional concurrency metadata for the exact numeric recovery executor. | Complete | Platform engineering | D2-038; D2-048 | Completed 2026-09-10 at `92c1fc2`: actual 448 executor/908 role assertions, independent review and full committed-source verification pass. Both standalone builds match, and the corrected maintained Create produces its genuine numeric-version receipt. Subsequent maintained cleanup also succeeds without the earlier bridge. The independent runtime inspection failure is D2-050, not a metadata-check failure or successful replay. See [repair and recovery boundary](#d2-049--recovery-executor-metadata). |
-| D2-050 | Diagnose and repair the private restore executor's database-opening/runtime inspection rejection without exposing secrets. | In progress | Platform engineering | D2-038; D2-049; D2-052 | Branded diagnostics at `fa01d53` pass 95 focused tests, independent review, full verification (721 workflow tests; seven explicit DB opt-ins skipped) and 20 builds. Actual `9b608ac` Inspect confirms connection and four SQL reads before `CompletionCollision`; the precise historical predicate/cause remains unknown under D2-052. No Replay; exact executor cleanup passes. Full cloud inspection/replay and final cleanup remain. SDK compatibility is not retroactively claimed as the earlier cause. See [runtime repair](#d2-050--private-restore-runtime-compatibility). |
-| D2-051 | Preserve authoritative deletion timestamps and prevent late terminal events from enqueueing another completed-operation retry. | In progress | Platform engineering | D2-020; D2-038 | Timestamp fixes pass 30 focused tests, 13 expected original-source failures, five real PostgreSQL tests and full verification. Gateway `423d63b` is deployed/verified; core Pause verifies at `322`, with old versions `13` pending replacement. The additional conditional-update/enqueue fix passes 41 Profile unit tests, eight expected original-source failures and typecheck; real concurrent SQL verification remains separate. Fresh combined core publication/release/resume remains. Historical correction requires D2-052's separate conditional authority. See [retry timestamps](#d2-051--deletion-retry-timestamps). |
-| D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | In progress | Product owner; platform engineering | D2-038; D2-050; D2-051 | User grants separate conditional exact-version completion-tag repair authority on 2026-09-11 UTC. Actual `9b608ac` Inspect proves only `CompletionCollision`; the precise predicate and correct value are still unestablished. No Replay or historical write runs. Require matching persisted request/ledger evidence, retired writers and unchanged exact-version preconditions; otherwise stop without writing. Future-writer releases, diagnosis, any proven one-tag correction, unchanged reinspection/replay and final cleanup remain. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
+| D2-050 | Diagnose and repair the private restore executor's database-opening/runtime inspection rejection without exposing secrets. | In progress | Platform engineering | D2-038; D2-049; D2-052; D2-053 | Private fixed diagnostics and bounded compatibility pass focused, real PostgreSQL and full verification. Actual `2ff32ef` read-only diagnosis now establishes agreeing persisted completion evidence versus a differing historical tag. It is not normal Inspect/Replay acceptance, nor proof that SDK compatibility or either retry defect caused an earlier failure. No historical write or Replay runs; unchanged inspection/replay and final cleanup remain behind D2-053. See [runtime repair](#d2-050--private-restore-runtime-compatibility). |
+| D2-051 | Preserve authoritative deletion timestamps and prevent late terminal events from enqueueing another completed-operation retry. | Complete | Platform engineering | D2-020; D2-038 | Completed 2026-09-11 for code/deployment: Gateway `423d63b` and combined core `2ff32ef` are verified, with core `14` resumed at state `328` and zero drift. Timestamp tests pass 30 cases/13 original-source failures; the enqueue guard passes 41 Profile cases/eight original-source failures, and real PostgreSQL covers rollback, persisted timestamps and the already-terminal no-extra-outbox path. Full verification passes. Generated concurrency seams do not establish a real concurrent row-lock race; fresh rights acceptance and historical repair remain separate. See [retry timestamps](#d2-051--deletion-retry-timestamps). |
+| D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | In progress | Product owner; platform engineering | D2-038; D2-050; D2-051; D2-053 | Conditional authority is granted. Actual `36727` diagnosis on the same verified copy proves matching request/ledger/operation completion evidence versus the historical tag and three acknowledged/unclaimed dispatches, with all writes zero. Repair `45914` consumes stable attempt `1` but refuses during the second writer read before any Put; exact readback confirms the original preimage/tags unchanged. D2-053/R21 now gate any further write. No Replay; unchanged inspection/replay and final cleanup remain. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
+| D2-053 | Define and verify one-shot pre-dispatch recovery for the consumed historical completion-repair reservation. | Blocked | Platform engineering; product owner | D2-052; D2-R21 | The first full writer/retirement pass succeeds, but the second metadata read refuses after durable reservation and before Put. Preserve stable attempt `1` and its complete evidence; no reset, alternate journal, automatic retry or rollback. A later successful read-only repetition does not renew authority. Any further write requires an explicitly reviewed recovery design, bounded regressions and separate authority, while retaining fresh writer/preimage checks and the exact original target. |
 
 ### D2-050 — Private restore runtime compatibility
+
+Current cloud checkpoint (`2026-09-11` UTC): `2ff32ef` DiagnoseCompletion `36727` succeeds
+read-only on the same verified copy and establishes the request/ledger-versus-tag mismatch.
+This is separate from normal full-owner/document Inspect and Replay, which remain unaccepted.
+The pre-dispatch historical-repair refusal is D2-053/R21; it does not reopen database-opening
+diagnosis or establish SDK compatibility as the cause of an earlier refusal.
 
 The corrected `92c1fc2` executor Create succeeds at `20:47:46Z`. Its first Inspect returns only
 the fixed runtime refusal at `20:50:22Z`, without a validated inspection receipt. No Replay runs.
@@ -382,10 +418,17 @@ authorized or performed by this diagnosis.
 
 ### D2-051 — Deletion retry timestamps
 
+Completed `2026-09-11` for the code/deployment boundary: Gateway `423d63b` is verified and
+combined core `2ff32ef` finishes Release, exact state-only reconciliation and Resume at state
+`328`, versions `14`, starts unpaused and zero drift. The verification below proves generated
+concurrency seams and real rollback/persisted-time/already-terminal behavior, not a real
+concurrent row-lock race. Neither deployment nor those tests replace fresh candidate-rights
+acceptance or authorize historical correction.
+
 Two source-level retry defects were found while diagnosing D2-050. Confirmation retries correctly
-reuse the immutable journal's confirmation time for the request, but currently write the later
-attempt time into quarantine and privacy-ledger records. Completion retries currently tag the
-marker with confirmation time; a losing concurrent completion can instead tag its own attempt time.
+reused the immutable journal's confirmation time for the request, but the original code wrote the
+later attempt time into quarantine and privacy-ledger records. Original completion retries tagged
+the marker with confirmation time; a losing concurrent completion could tag its own attempt time.
 Both can disagree with authoritative persisted completion/confirmation timestamps.
 
 Use the validated journal timestamp consistently for confirmation and the persisted request's
@@ -418,12 +461,27 @@ The minimal fix uses `UPDATE ... RETURNING id` and inserts only after exactly on
 within the existing transaction. It preserves the pending-event and three-attempt limits and does
 not delete already queued work. The actual 41-test Profile suite and typecheck pass; the same suite
 against the original implementation has eight expected failures. These generated query/rollback
-seams do not establish real row-lock concurrency. Include this fix in the next core release;
-retain the earlier, un-applied `423d63b` release plan as superseded evidence.
+seams do not establish real row-lock concurrency. The fix is included in the verified `2ff32ef`
+core release; retain the earlier, un-applied `423d63b` release plan as superseded evidence.
 
 ### D2-052 — Historical completion consistency
 
-Local implementation checkpoint (`2026-09-11` UTC): the separately journaled `DiagnoseCompletion`
+Current cloud checkpoint (`2026-09-11` UTC): fresh same-copy Prepare `4799`, Create `50475`
+and DiagnoseCompletion `36727` pass. The private result proves an agreeing persisted request/
+ledger pair and matching operation evidence against a differing completion tag, with three
+acknowledged/unclaimed dispatch attempts and every write counter zero. No SQL row or locator is
+published. The subsequent repair `45914` / `a9336e` completes its first writer/retirement pass,
+reserves stable attempt `1`, and refuses at the second runtime read with the fixed
+`authenticated_metadata_read_failed` classification, before any Put is dispatched.
+Exact readback `00fadf` confirms the complete original preimage and tag set. The 2,633-byte
+journal is preserved with SHA-256
+`3a183bd911fbf2a9c51aeb8dd87dc9c6546aadf39b8dea889c371f516f8cf1d8`.
+This is not an ambiguous S3 result. Later read-only check `97941` / `237dbe` / `fa132c` passes
+both complete 195-check inventories in 150,932 ms without triggering the failure telemetry;
+the earlier refusal is not reproduced and its exact cause remains unknown, not a proven AWS API
+failure. That later success is not retrospective writer-exclusion proof or renewed write authority.
+
+Earlier local implementation checkpoint (`2026-09-11` UTC): the separately journaled `DiagnoseCompletion`
 action is integrated without changing normal Inspect/Replay approval or cloud-write permissions.
 It validates the exact singleton marker and reads five bounded selectors in one read-only
 repeatable-read transaction. Fixed comparisons distinguish refusal, consistency and agreeing
@@ -434,13 +492,15 @@ a stable durable one-attempt journal, and permits only readback after an uncerta
 Authenticated diagnostic provenance and independent old-writer exclusion remain separate
 requirements; a checksum or an empty queue is not sufficient. Integrated checks pass 785 focused
 tests, 697 operator assertions, the workflow build and all six real PostgreSQL tests. The full
-repository verifier also passes with 1,146 workflow tests and all 20 builds. No cloud diagnosis
-or correction has run; clean-source publication and the combined core release are next.
+repository verifier also passes with 1,146 workflow tests and all 20 builds. Cloud diagnosis and
+the combined core release had not run at that checkpoint; both now pass as recorded above.
 
-The current-source isolated inspection demonstrates a real `CompletionCollision`, not a generic
+The earlier `9b608ac` isolated inspection demonstrates a real `CompletionCollision`, not a generic
 database or SDK failure. Its five store guards cover request/ledger completion versus the retained
 marker, completion/backup-expiry fields inconsistent with their state, and backup-expired
-request/ledger/horizon disagreements. The exact predicate and incorrect value are still unknown.
+request/ledger/horizon disagreements. The exact predicate and incorrect value were unknown then;
+the later diagnosis above establishes the request/ledger-versus-tag mismatch without establishing
+either retry defect as its historical cause.
 Do not choose a replacement timestamp from a later attempt clock, edit the restored SQL to match
 a tag, skip the historical marker, or relax the validator.
 
@@ -454,11 +514,15 @@ Preserve the original complete tags before one write attempt; recover an uncerta
 readback, not blind retry or rollback. If the evidence does not prove that bounded correction,
 stop without writing. No correction has run, and no broader permission is inferred.
 
-Release the already-verified Gateway/core future-writer fixes before correction,
-validate the smallest exact repair and its recovery path, then use unchanged inspection/replay
-guards on the same verified copy. Do not repeat PITR or renew the expired packet. Finish exact
-executor, restored-database and Platform/Bootstrap drill-permission cleanup afterward. This does
-not replace fresh seven-owner candidate-rights or other owner/human/provider acceptance.
+The future-writer releases are complete. Preserve the consumed reservation and require D2-053/
+R21's explicitly reviewed pre-dispatch recovery design and authority before any further write;
+do not reset, replace or replay the attempt journal. Any authorized continuation must retain
+fresh writer exclusion and complete exact-version preconditions, then use unchanged Inspect/
+Replay guards on the same verified copy. Do not repeat PITR or renew an expired packet.
+Cleanup Disable `8510` / `6c4f64` confirms concurrency zero, and Cleanup `27423` / `a2cb06`
+confirms exact executor absence after the full drain, retaining its immutable artifact. The same restore
+and Platform `328`/Bootstrap `20` permissions remain pending the recovery decision and final
+cleanup. This does not replace fresh seven-owner rights or owner/human/provider acceptance.
 
 ### D2-049 — Recovery executor metadata
 
@@ -1607,9 +1671,10 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Owner processing state through website publication | D2-042's compatible `e2e730a` release and three accepted/version-2 initial decisions pass. The subsequent aggregate window records three processing completions and three copied Trust signals with healthy alarms; this does not identify exact catalog/owner rows. Anonymous public-job routes remain disabled. | Use the existing signed-in owner's Refresh processing/Refresh Trust and authenticated candidate catalog/detail to check the existing contribution and public source. No new reviewer scope or submission is needed. Keep exact publication acceptance open; do not repeat decisions, resubmit acknowledged jobs, delete account-held items or bypass Trust. |
 | Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three actual initial decisions now pass. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Complete the hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case, borrow the human session or treat machine initial-decision success as human acceptance. |
 | Lever and Ashby enablement | D2-035's provider selection, fixed descriptors, forward lease migration and paired extraction/verification fixes are implemented and locally verified. The migration/runtime is released at source `42b9686`; generated actual-DOM tests pass in Edge and Chrome for Testing. Both providers remain disabled in development. | Acquire representative provider-derived fixtures, complete sanitization/scanning and separate QA acceptance, then activate exact development registrations. Do not repeat the completed migration release, weaken board limits, or ask again for waived blanket provider legal approval. |
-| Current-schema deployed recovery | The actual September 10 isolated AWS PITR passes all 44 migrations/68 relations, six contributors and the exact aggregate digest. Temporary permissions verify at Platform `320`/Bootstrap `20`. D2-049 records an uninvoked executor metadata failure and confirmed exact executor cleanup. | Keep the same verified copy. Verify the corrected-source operator/artifact, prepare a distinct reviewed executor, then complete exact marker/owner-bound replay and final temporary-resource/permission cleanup. Do not repeat structural PITR or rewrite the old packet. Writes remain confined to restored rows. |
-| Fresh candidate-rights acceptance | Corrective core source `31051e1` is released and resumed at state `315`, with exact version-13 pins, zero changes and positive scheduled activity health. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance without relabelling deployment as that acceptance or isolated recovery. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
-| Recovery operator compatibility | D2-043/D2-046/D2-048 are Complete and the real 44-migration PITR now passes. D2-049's actual-function metadata repair passes 448 generated assertions independently after the unused executor is removed. Original evidence and the verified restore are intact. | Complete committed-source verification and the corrected standalone artifact. Reuse the genuine unchanged-state native plan and verified context through maintained checks; no application rerelease, repeated recovery approval, old-packet renewal or generic drift exemption. |
+| Current-schema deployed recovery | The same September 10 private PITR passes all 44 migrations/68 relations and the exact aggregate digest. Temporary permissions remain at Platform `328`/Bootstrap `20`. Fresh `2ff32ef` Prepare/Create/DiagnoseCompletion pass; normal Inspect/Replay remain unaccepted. Exact executor cleanup `27423` passes after full drain. | Preserve the same verified copy pending D2-053's recovery decision; then complete unchanged marker/owner-bound inspection/replay and final restored-copy/permission cleanup. No repeated PITR, old-packet renewal or primary-database write. |
+| Historical completion correction | D2-052's positive read-only diagnosis proves the persisted completion/tag mismatch. Stable repair attempt `1` is reserved, but the second writer read refuses before Put; exact preimage/tag readback is unchanged. | Preserve the journal without reset or replacement. D2-053/R21 require an explicitly reviewed pre-dispatch recovery design and authority before any further write; later successful read-only checks are not permission to retry. |
+| Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and combined core `2ff32ef` releases are verified; core versions `14` are resumed at state `328` with zero drift. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance without relabelling deployment as that acceptance or isolated recovery. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
+| Recovery operator compatibility | D2-043/D2-046/D2-048/D2-049 tooling, current-source full verification and matching standalone artifacts pass; the maintained fresh Prepare/Create/DiagnoseCompletion path succeeds on the verified copy. | Do not repeat completed compatibility work or widen guards. The remaining pre-dispatch reservation recovery is D2-053/R21; normal inspection/replay and final cleanup remain. Preserve original evidence and read-only restore IAM. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
 | Authenticated load and abuse acceptance | Paced public-policy and unauthenticated-boundary workload passed. Separate paused-intake and active-processing-to-review runners pass 29 synthetic regressions. D2-045's matching inspector profiles are implemented and verified, including strict aggregates, metric coverage and settled queues. | Use explicitly scoped disposable authenticated candidates for a bounded development workload and matching server aggregates. The active runner follows the existing five-minute schedule, never approves a case, and is not throughput/publication acceptance. No production traffic, raw tokens, personal payloads, or invented provider truth. |
@@ -1812,8 +1877,17 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-10 | Exact `fa01d53` passes the full maintained verifier, 721 workflow tests (seven explicit database opt-ins skipped) and all 20 build tasks (17 cached). The separate actual PostgreSQL run passes 5/5. Exact generated tmpfs container cleanup and Docker/WSL shutdown complete without user-data/volume removal. D2-050 and D2-051 implementation is verified; cloud diagnosis/replay, corrective Gateway/core releases and final cleanup remain. Only the two existing delivery MDs change after verification; no new branches or GitHub Actions changes. | D2-050; D2-051; D2-038 | [Runtime diagnosis](#d2-050--private-restore-runtime-compatibility), [verified retry fixes](#d2-051--deletion-retry-timestamps), [maintained verifier](../../../scripts/verify-phase0.ps1) |
 | 2026-09-10 | Actual `9b608ac` has matching standalone artifacts, independently reviewed preparation and successful Create. Single Inspect `24050` refuses; bounded diagnostic `666332` identifies `store_preflight` / `CompletionCollision` after connection and initial SQL reads. The exact failing comparison is unknown; no Replay or historical mutation runs. Cleanup `88848` confirms the exact executor absent after full drain. Its immutable artifact and five byte-identical private files are retained with the same verified RDS copy and `320`/`20` permissions. D2-052/D2-R20 record the new conditional historical correction decision; D2-051 future-writer releases remain separate. Docker/WSL are confirmed off and the PC stays running. | D2-038; D2-050; D2-051; D2-052 | [Historical completion blocker](#d2-052--historical-completion-consistency), [fixed store guards](../../../backend/workflows/src/candidate-deletion-restore-store.ts), [maintained cleanup](../../../scripts/operate-development-candidate-deletion-replay.ps1) |
 | 2026-09-11 | Gateway `423d63b` is published, applied and verified with zero drift at `321`. Core mapping-only Pause applies/verifies at `322`; first metadata inventory has 23 historical executions, none running and no start/end in 24 hours. Approximate empty queues and absent metrics are not business recovery or writer-exclusion proof. The un-applied core release plan is retained as superseded to include the newly confirmed late-terminal enqueue fix; actual Profile tests pass 41/41 and typecheck passes, with eight expected original-source failures. No historical tag correction, SQL/body/document/Auth0 write, Replay or repeat PITR runs. The read-only diagnostic, exact-version helpers and internal contracts now pass 785 focused tests/697 operator assertions; six real PostgreSQL cases prove unchanged-row diagnosis and completed-operation no-extra-outbox. Full maintained verification passes 1,146 workflow tests/eight explicit DB skips and 20 builds/17 cached. Generated tmpfs data/container are removed; no user volumes touched, Docker/WSL stopped. Fresh combined release, diagnosis and cleanup remain. | D2-051; D2-052; D2-038 | [Retry fixes](#d2-051--deletion-retry-timestamps), [historical diagnosis](#d2-052--historical-completion-consistency) |
+| 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For D2-052/D2-053 on 2026-09-11 UTC, preserve the stable one-attempt reservation after the
+proven pre-dispatch refusal. No Put was dispatched; do not mislabel this as an ambiguous write.
+An unchanged readback or later successful metadata run cannot reset the journal, renew writer
+proof or authorize another attempt. Any further write requires a separately reviewed pre-dispatch
+recovery design and explicit authority, retaining the original target, complete preimage,
+immutable evidence and fresh writer checks. Keep the same private restore and read-only replay
+role pending that decision; do not repeat PITR or relax normal inspection/replay.
 
 For D2-051/D2-052 on 2026-09-11 UTC, keep the verified mapping-only pause while integrating the
 newly demonstrated late-terminal enqueue fix. The existing baseline-capture operator accepts the
@@ -2117,25 +2191,28 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R17 | Closed; isolated drill authorized | The user approved the development-only recovery role, one isolated restore/replay drill and exact cleanup on 2026-09-09. The September 10 current-schema cloud restore passes 44 migrations/68 relations. D2-049's corrected Create now passes; D2-050 tracks the separate first-Inspect runtime refusal before any Replay. Its exact executor is drained and removed. Remaining replay/final cleanup stays under D2-038. | Product owner; platform engineering | Reuse the same verified private copy with a reviewed corrected-source executor. Preserve the primary database, cloud document objects, completion tags, retention and Auth0. Remove exact temporary resources and drill-only permissions afterward. Do not request the same approval again or expand its scope. |
 | D2-R18 | Closed | Verified portable 1.16.2, historical read-only decoding, effective encrypted S3 locking, 441 two-host toolchain assertions and full infrastructure/repository checks pass. Exact sensitivity-only reconciliation advances state to 291 without resource-value changes; fresh locked planning exits 0. | Platform engineering | Use fresh source-bound handoffs for D2-039/D2-038. Preserve historical plans, provider locks and excluded Actions; no further toolchain approval is needed. |
 | D2-R19 | Closed | D2-044's exact-version acknowledgment repair is deployed in core source `31051e1` and resumed at state `315`. Activity `13` records four ordinary invocations with explicit zero errors/throttles; all 57 managed alarms are OK with unchanged configuration/actions. | Platform engineering | Continue the approved recovery after D2-046's operator correction. Keep permissions unchanged; do not override alarms, reuse old plans or relabel deployment health as candidate-rights/recovery acceptance. |
-| D2-R20 | Closed; conditional authority granted | The user approves exact-version historical completion-time tag correction on 2026-09-11 UTC only if corroborated retained evidence proves the tag wrong. The precise inconsistent field/state and correct value remain unproven. | Product owner; platform engineering | D2-052 must diagnose, require agreeing persisted evidence, retire competing writers and recheck unchanged exact-version preconditions before one bounded write. Otherwise stop without writing. Preserve SQL rows, marker bodies, confirmation, retention, documents, Auth0 and all other tags/markers. Future-writer releases, unchanged inspection/replay and exact final cleanup remain. Original drill authority and read-only replay IAM are unchanged. |
+| D2-R20 | Closed; conditional authority granted | The user approves exact-version historical completion-time tag correction on 2026-09-11 UTC only if corroborated retained evidence proves the tag wrong. Positive read-only diagnosis now establishes agreeing persisted request/ledger/operation completion versus the historical tag. No historical write runs. | Product owner; platform engineering | The original conditional approval does not authorize resetting the consumed one-attempt journal; D2-053/R21 govern any further write. Preserve SQL rows, bodies, confirmation, retention, documents, Auth0, other tags/markers and original evidence. Future-writer releases are complete; unchanged inspection/replay and final cleanup remain. Original drill authority and read-only replay IAM are unchanged. |
+| D2-R21 | Open; pre-dispatch recovery blocked | Stable repair attempt `1` is reserved after the first complete writer/retirement pass, but the second runtime read refuses before any Put. Exact readback confirms the original complete preimage/tags unchanged. A later read-only repetition passes; the earlier failure's exact cause remains unknown. Exact executor removal passes after full drain. | Platform engineering; product owner | Preserve the journal and all evidence; no reset, alternate journal, automatic retry or rollback. Before any further write, explicitly review the one-shot pre-dispatch recovery design, bounded regressions and separate authority, with fresh writer exclusion and exact-version preconditions. Retain the same verified private copy pending the decision; unchanged inspection/replay and exact restored-copy/permission cleanup remain. |
 
 ## Completion record
 
 - Completion date: Not completed
 - Exit review: Not performed
-- Current engineering summary (`2026-09-11` UTC): Gateway `423d63b` is deployed and verified.
-  Core Pause is verified at `322`; versions remain `13` and starts remain disabled pending the
-  combined timestamp/late-terminal retry release. Forty-one Profile unit tests and typecheck
-  pass for the added enqueue guard. Diagnostic/helpers/contracts pass 785 focused tests and six
-  real PostgreSQL cases; the full verifier passes 1,146 workflow tests and all 20 builds.
-  Cloud diagnosis, any proven one-tag correction, unchanged
-  inspection/replay and exact temporary resource/permission cleanup remain. No historical write
-  or Replay has run; Phase 2 is not complete.
+- Current engineering summary (`2026-09-11` UTC): Gateway `423d63b` and combined core `2ff32ef`
+  are deployed and verified; core `14` is resumed at state `328` with zero drift. D2-051 is
+  Complete for code/deployment, with no real concurrent row-lock race or fresh rights acceptance
+  claimed. Same-copy Prepare/Create/DiagnoseCompletion pass, proving the persisted completion/
+  tag mismatch with zero writes. Repair refuses after stable reservation and before Put; exact
+  readback confirms the original preimage/tags. D2-053/R21 gate any further write. Disable and
+  full-drain Cleanup `27423` confirm exact executor absence, retaining its immutable artifact.
+  The same PITR and `328`/`20` temporary permissions remain pending recovery decision.
+  D2-038/050/052 and Phase 2 remain In progress; no historical correction or Replay has run.
 - Authority summary (`2026-09-11` UTC): the user grants D2-052's conditional exact-version
-  completion-tag correction authority. D2-R20 is closed for approval only; positive diagnosis,
-  future-writer releases, any proven correction, unchanged inspection/replay and exact temporary
-  resource/permission cleanup remain, with the Gateway release and core pause qualified above.
-  No historical mutation has run.
+  completion-tag correction authority. D2-R20 is closed; diagnosis and future-writer releases
+  now pass. The consumed reservation cannot be reset or retried under that original authority;
+  D2-053/R21 require an explicitly reviewed pre-dispatch recovery design and authority before
+  further writing. Unchanged inspection/replay and exact temporary cleanup remain. No historical
+  mutation has run.
 - Earlier recovery summary (`2026-09-10T23:13:34Z`): actual `9b608ac` Create passes, but Inspect
   reports the store's `CompletionCollision` after initial SQL reads. No validated inspection or
   Replay. Cleanup `88848` removes the exact temporary function after its full drain; the same

@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-10
+Last updated: 2026-09-11
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -321,7 +321,25 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Latest engineering checkpoint (`2026-09-11` UTC): Gateway `423d63b` is deployed and verified,
+- Latest engineering checkpoint (`2026-09-11` UTC): Gateway `423d63b` and combined core `2ff32ef`
+  are deployed and verified. Core `14` is resumed at Platform `328` with zero drift, completing
+  D2-051 for code/deployment without claiming a real concurrent SQL lock race or fresh rights
+  acceptance. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass:
+  persisted request/ledger/operation completion agrees and differs from the historical tag;
+  three dispatches are acknowledged/unclaimed and all write counters are zero.
+  Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves stable attempt `1`
+  and refuses during the second metadata read before Put. Exact `00fadf` readback confirms the
+  original preimage/tags unchanged. A later two-pass read-only repetition succeeds but does not
+  establish the earlier cause or renew authority. Preserve the journal: D2-053/R21 block any
+  further write pending an explicitly reviewed pre-dispatch recovery design and authority.
+  Disable `8510` and full-drain Cleanup `27423` / `a2cb06` confirm exact executor absence,
+  retaining its immutable artifact. The same verified 44-migration/68-relation PITR and
+  Platform `328`/Bootstrap `20` temporary permissions remain. D2-038/050/052 and Phase 2 stay
+  In progress; no historical correction or Replay has run.
+  [Current Phase 2 work](phase-2-extension-and-community.md#task-register),
+  [pre-dispatch blocker](phase-2-extension-and-community.md#risks-and-blockers)
+- Earlier engineering checkpoint (`2026-09-11` UTC, before the corrective release and diagnosis):
+  Gateway `423d63b` is deployed and verified,
   with zero drift at `321`. Core Pause verifies at `322`; versions remain `13`, and starts remain
   disabled pending the combined timestamp/late-terminal retry release. The added enqueue guard
   passes 41 Profile unit tests and typecheck, with eight expected original-source failures; real
@@ -336,12 +354,14 @@ This is the master record for the delivery phases defined in the [product and sy
   [Current Phase 2 work](phase-2-extension-and-community.md#task-register)
 - Authority checkpoint (`2026-09-11` UTC): the user grants D2-052's conditional diagnosis
   and exact-version completion-time tag correction only if corroborated retained evidence proves
-  the tag wrong. D2-R20's approval gate is closed. Require agreeing persisted request/ledger
-  completion evidence, retired old writers and unchanged exact-version preconditions; no other
-  tag, SQL, marker-body, confirmation, retention, document or Auth0 change is authorized. Diagnosis,
-  core future-writer release and any correction remain, with Gateway complete above. Keep the restore
-  executor read-only in AWS, reuse the same verified private copy, then finish unchanged replay
-  checks and exact cleanup. Phase 2 is not complete.
+  the tag wrong. D2-R20's approval gate is closed; diagnosis and future-writer releases pass.
+  No Put was dispatched, but the stable one-attempt reservation is consumed. D2-053/R21 require
+  an explicitly reviewed pre-dispatch recovery design and separate authority before any further
+  write; no journal reset, replacement or blind retry. Agreeing persisted evidence, fresh writer
+  exclusion and the complete unchanged preimage remain mandatory. No other tag, SQL, marker-body,
+  confirmation, retention, document or Auth0 change is authorized. Keep restore IAM read-only
+  and the same verified private copy pending that decision; unchanged inspection/replay and
+  exact cleanup remain. Phase 2 is not complete.
   [Conditional historical correction](phase-2-extension-and-community.md#d2-052--historical-completion-consistency)
 - Earlier recovery checkpoint (`2026-09-10T23:13:34Z`): exact `9b608ac` matching artifacts,
   preparation and temporary Create pass. Its single Inspect reports the private store's
@@ -1252,6 +1272,7 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | User renewal closes R15. Actual `01732ad` Create passes; Inspect refuses at `store_preflight` without Replay. Maintained Cleanup `57506` removes the exact executor after full drain. Integrated D2-050's branded fixed diagnostics and D2-051's confirmation/completion retry repairs: 95 and 30 focused tests pass, with 13 original-source failures. Actual isolated PostgreSQL passes 5/5 restore/export/rollback tests; same cloud copy and `320`/`20` temporary permissions remain. Full committed-source verification, corrected cloud inspection and final cleanup are next. No historical live marker repair or ordinary application deployment occurred. | [Diagnosis](phase-2-extension-and-community.md#d2-050--private-restore-runtime-compatibility), [retry fixes](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps) |
 | 2026-09-10 | D2 | Exact `fa01d53` passes full maintained verification, 721 workflow tests/seven explicit DB opt-ins skipped and all 20 builds/17 cached. Separate fresh PostgreSQL acceptance passes 5/5. Generated tmpfs cleanup leaves no test container or persistent volume; Docker/WSL are stopped. Only the existing two delivery documents change afterward. D2-050/051 cloud continuation, corrective Gateway/core releases and final cleanup remain; neither historical marker repair nor Phase 2 completion is claimed. | [Verified retry repair](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps) |
 | 2026-09-10 | D2 | Exact `9b608ac` matching artifacts, reviewed preparation and Create pass. Its single Inspect reports fixed `store_preflight` / `CompletionCollision` after initial SQL reads; precise predicate/incorrect value and retry-bug causality remain unknown. No validated inspection, Replay or historical mutation runs. Maintained Cleanup `88848` removes the exact executor after full drain, preserving immutable/local artifacts and the same verified private RDS copy with `320`/`20` permissions. D2-052/R20 track conditional exact-version historical correction authority; future-writer Gateway/core releases and final recovery/cleanup remain. Phase 2 is not complete. | [Historical completion blocker](phase-2-extension-and-community.md#d2-052--historical-completion-consistency) |
+| 2026-09-11 | D2 | Gateway `423d63b` and core `2ff32ef` are deployed/verified; core `14` is resumed at Platform `328` with zero drift. D2-051 is Complete for code/deployment, with generated concurrency and real already-terminal SQL evidence explicitly distinguished from a real concurrent lock race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` prove agreeing persisted completion evidence versus the tag and three acknowledged/unclaimed dispatches, with no writes. Repair `45914` / `a9336e` reserves stable attempt `1` after its first writer/retirement pass, then refuses the second metadata read before Put. Exact `00fadf` preimage/tag readback is unchanged; a later successful read-only repetition neither proves the earlier cause nor renews authority. Preserve the journal; new D2-053/R21 gate further writing. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact; the same PITR and `328`/`20` permissions remain. No historical mutation or Replay; Phase 2 remains In progress. | [Current diagnosis](phase-2-extension-and-community.md#d2-052--historical-completion-consistency), [completed writer deployment](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps), [pre-dispatch blocker](phase-2-extension-and-community.md#risks-and-blockers) |
 
 ## Cross-delivery decisions and changes
 
