@@ -188,8 +188,10 @@ release candidate.
 
 ## Remaining activation gates
 
-- Owner processing/Trust refresh and authenticated website readback for existing contributions;
-  the generated contracts and development backend are already implemented and deployed.
+- Signed-in website search/detail confirmation for existing contributions. On 2026-09-11 the
+  user reports Processing `published` and Trust `accepted` in the extension; that satisfies owner
+  status readback for the reported result, not website visibility or every historical contribution.
+  The generated contracts and development backend are already implemented and deployed.
 - Authorized Lever/Ashby provider-derived fixtures and independent representative-variant
   acceptance; Greenhouse's accepted fixture and controlled development activation already exist.
 - Remaining installed Chrome/Edge Auth0 lifecycle, cancellation, rotation/replay, logout,
