@@ -321,21 +321,23 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Current continuation (`2026-09-11` UTC): the user approves D2-053's narrowly scoped recovery
-  from the proven pre-dispatch refusal. R21 is closed for authority and D2-053 is In progress.
-  Preserve the original journal, authenticate the completed zero-dispatch execution, require
-  the same original/current preimage and intended tag, and bind one fixed linked recovery
-  reservation to two fresh writer checks and at most one tag send. No reset, new PITR or wider
-  data/IAM scope is authorized. Fresh development SSO passes. The explicit recovery entrypoint
-  passes 199 existing/new repair tests, workflow no-emit and targeted lint; protected companion
-  storage passes 119 checks, including 13 actual generated Windows filesystem cases. Original
-  evidence remains unchanged, with ten artifact/code files additionally preserved in owner-only
-  copies. Full repository verification passes (`25821` / `a32df3`, exit `0`, all 20 builds), as
-  do 274 explicit operator/runtime source-binding checks. The corrected deployed runtime remains
-  `2ff32ef`/version `14`; source integration, fresh standalone artifacts and actual same-copy
-  recovery/inspection/replay/cleanup are next. No historical correction or normal Inspect/Replay
-  has run.
-  [Recovery decision](phase-2-extension-and-community.md#decisions-and-scope-changes)
+- Current continuation (`2026-09-11` UTC): D2-038/D2-050/D2-052/D2-053 are Complete for bounded
+  recovery. Operator/artifact `6eb7a86` recovery `8649` / `7d6e48` verifies exactly one
+  completion-tag Put, preserving the original journal and fixed linked companion. Fresh
+  same-copy Inspect `70881` and Replay `87268` pass unchanged guards: one historical marker,
+  one present already-reconciled subject, zero newly reconciled/absent subjects or documents,
+  and zero S3/recovery-ledger writes or identity-provider calls. This is idempotent restored-only
+  replay, not fresh nonempty deletion. Final executor `9634` and PITR `62815` cleanup pass;
+  the exact target/snapshots/backups and canonical context are absent. Platform `329` and
+  Bootstrap `21` Disable/Verify pass with zero drift and all drill-only allowances removed.
+  Normal runtime `2ff32ef`/version `14` is unchanged, source available, 44 core alarms OK and
+  ECS idle. Protected context/artifacts and both journals remain intact. Phase 2 remains
+  In progress behind owner, human/provider, fresh rights, workload, alarm-receipt and store/
+  accountable acceptance. Browser control is unavailable here, not proof of an expired owner
+  login: ask the user to Refresh processing and Refresh Trust on existing contributions and
+  report fixed status lines only, without resubmission, tokens or identifiers.
+  [Final recovery evidence](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery),
+  [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
 - Previous engineering checkpoint (`2026-09-11` UTC, before recovery authorization): Gateway `423d63b` and combined core `2ff32ef`
   are deployed and verified. Core `14` is resumed at Platform `328` with zero drift, completing
   D2-051 for code/deployment without claiming a real concurrent SQL lock race or fresh rights
@@ -367,7 +369,7 @@ This is the master record for the delivery phases defined in the [product and sy
   are retained unchanged. Cloud diagnosis, conditional historical correction, unchanged replay,
   final cleanup and broader Phase 2 acceptance remain. No historical tag or SQL mutation ran.
   [Current Phase 2 work](phase-2-extension-and-community.md#task-register)
-- Authority checkpoint (`2026-09-11` UTC): the user grants D2-052's conditional diagnosis
+- Earlier authority checkpoint (`2026-09-11` UTC, before D2-053 approval and execution): the user grants D2-052's conditional diagnosis
   and exact-version completion-time tag correction only if corroborated retained evidence proves
   the tag wrong. D2-R20's approval gate is closed; diagnosis and future-writer releases pass.
   No Put was dispatched, but the stable one-attempt reservation is consumed. D2-053/R21 require
@@ -952,6 +954,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-11 | D2 | Completed D2-038/050/052/053 under operator/artifact `6eb7a86`, leaving normal runtime `2ff32ef`/version `14` unchanged. Recovery `8649` / `7d6e48` verifies one exact completion-tag Put with both linked journals preserved. Fresh same-copy Inspect `70881` and Replay `87268` pass: one historical marker/one already-reconciled restored subject, no documents or new reconciliation, zero S3/recovery-ledger writes and identity-provider calls. Final executor `9634`, PITR `62815` and Platform `329`/Bootstrap `21` cleanup verify absence/removal and zero drift; protected context/artifacts remain retained. This is not fresh nonempty deletion or Phase 2 completion. Owner refresh needs user help because browser control is unavailable; no resubmission or login-expiry claim. | [Final recovery evidence](phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery), [remaining gates](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-03 | D2 | Activated the time-bounded Greenhouse-only development contribution boundary under the exact product-owner exception. The first real batch exposed missing deployed D2 migrations; reviewed task revision `47` then applied and verified all 39 migrations/68 relations. The next automatic batch exposed an invalid generated EventBridge-envelope assumption; source `9a8fb5f` replaced it with a strict Terraform-owned versioned command and was deployed through a five-update/no-destroy saved plan at state `260`. Manual and automatic batches now succeed with zero work, both Trust queues are empty, all 13 alarms are `OK`, ECS is idle, and zero drift passes. Production/store, Lever/Ashby, and human Trust decisions remain dark; the signed policy expires `2026-09-04T18:24:32.188Z`. | [Phase 2 activation record](phase-2-extension-and-community.md#work-log) |
 | 2026-09-04 | D2 | Investigated one retained installed-extension contribution. Policy revisions match; aggregate AWS evidence shows handled `5xx` responses before contribution processing, no `4xx`, empty Trust queues, healthy batches, and 13/13 alarms `OK`. The exact immutable migration task re-verified all 39 deployed migrations with exit `0`, and the local consent PostgreSQL integration passed. Fixed manual pending retry, added confirmed stopped-item recovery with original idempotency, and retained only allowlisted privacy-safe server failure classifications. The first reload correctly exposed that the original item had already exhausted retries and made no new API call. It still needs reload plus explicit stopped retry before success can be claimed. | [Phase 2 work log](phase-2-extension-and-community.md#work-log) |
 | 2026-09-04 | D2 | The installed retry reached contribution intake and returned its generic unavailable classification. Two fresh API `5xx` and zero `4xx` were observed. Aggregate-only live probes found one recent granted consent, zero committed contribution/outbox/queue rows, complete intake privileges, and a successful generated-synthetic store/outbox/queue transaction that was intentionally rolled back with no persistent mutation. This isolates the remaining fault to the real request before commit. Privacy-safe server-only diagnostic categories and handled-server-error logging are locally implemented and verified; deployment plus one retained-item retry remain before the request-specific category and fix can be closed. | [Phase 2 work log](phase-2-extension-and-community.md#work-log) |
