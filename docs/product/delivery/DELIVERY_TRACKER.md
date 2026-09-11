@@ -321,7 +321,14 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Current continuation (`2026-09-11` UTC): D2-038/D2-050/D2-052/D2-053 are Complete for bounded
+- Current local continuation (`2026-09-11` UTC): D2-054 is In progress for reproduced extension
+  refresh/logout/concurrent-rotation and obsolete-delivery races, plus stale reviewer decision
+  inputs across case/filter changes. Client fixes are implemented on shared `main`; extension
+  258/258 and admin 174/174 tests, both no-emit checks and source review pass. Full maintained
+  verification/build follows, without cloud writes, new branches or real identities. Installed
+  lifecycle and human/hosted review acceptance remain separate.
+  [Implementation](phase-2-extension-and-community.md#d2-054--session-and-reviewer-state-transitions)
+- Completed recovery checkpoint (`2026-09-11` UTC): D2-038/D2-050/D2-052/D2-053 are Complete for bounded
   recovery. Operator/artifact `6eb7a86` recovery `8649` / `7d6e48` verifies exactly one
   completion-tag Put, preserving the original journal and fixed linked companion. Fresh
   same-copy Inspect `70881` and Replay `87268` pass unchanged guards: one historical marker,

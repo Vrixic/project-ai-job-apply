@@ -22,6 +22,26 @@ interface TokenResponse {
   token_type?: unknown;
 }
 
+let sessionGeneration = 0;
+let identityTransition: number | undefined;
+let sessionStorageTail: Promise<void> = Promise.resolve();
+let pendingRefresh: { generation: number; promise: Promise<void> } | undefined;
+
+function withSessionStorage<T>(operation: () => Promise<T>): Promise<T> {
+  const result = sessionStorageTail.then(operation);
+  sessionStorageTail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+function assertSessionGeneration(generation: number, allowTransition = false): void {
+  if (generation !== sessionGeneration || (!allowTransition && identityTransition !== undefined)) {
+    throw new Error("identity_changed");
+  }
+}
+
 function endpoint(path: string): URL {
   return new URL(path, `https://${extensionConfiguration.domain}/`);
 }
@@ -77,7 +97,7 @@ async function tokenRequest(parameters: URLSearchParams): Promise<StoredSession>
   };
 }
 
-async function readSession(): Promise<StoredSession | undefined> {
+async function readStoredSession(): Promise<StoredSession | undefined> {
   const result = await chrome.storage.session.get(SESSION_KEY);
   const candidate = result[SESSION_KEY] as Partial<StoredSession> | undefined;
   if (candidate === undefined) return undefined;
@@ -101,58 +121,111 @@ async function readSession(): Promise<StoredSession | undefined> {
   return candidate as StoredSession;
 }
 
-async function writeSession(session: StoredSession | undefined): Promise<void> {
-  if (session) {
-    await chrome.storage.session.set({ [SESSION_KEY]: session });
-  } else {
-    await chrome.storage.session.remove(SESSION_KEY);
-  }
+function readSession(): Promise<StoredSession | undefined> {
+  return withSessionStorage(readStoredSession);
+}
+
+function writeSession(
+  session: StoredSession | undefined,
+  generation: number,
+  expected?: StoredSession,
+): Promise<void> {
+  return withSessionStorage(async () => {
+    assertSessionGeneration(generation, true);
+    const previous = await readStoredSession();
+    assertSessionGeneration(generation, true);
+    if (expected) {
+      assertSessionGeneration(generation);
+      if (
+        previous?.accessToken !== expected.accessToken ||
+        previous?.refreshToken !== expected.refreshToken ||
+        previous?.identityFence !== expected.identityFence
+      ) {
+        throw new Error("identity_changed");
+      }
+    }
+    if (session) {
+      await chrome.storage.session.set({ [SESSION_KEY]: session });
+    } else {
+      await chrome.storage.session.remove(SESSION_KEY);
+    }
+    if (generation !== sessionGeneration && session) {
+      // No newer storage operation can interleave here. Roll back only this superseded write;
+      // an ordered logout still needs the previous refresh token for its revocation attempt.
+      if (previous) await chrome.storage.session.set({ [SESSION_KEY]: previous });
+      else await chrome.storage.session.remove(SESSION_KEY);
+    }
+    // A newer logout/commit queues behind this write, including a delayed storage completion.
+    assertSessionGeneration(generation, true);
+  });
 }
 
 export async function login(): Promise<void> {
   configured();
-  const redirectUri = chrome.identity.getRedirectURL("auth0");
-  const state = randomBase64Url(32);
-  const verifier = randomBase64Url(64);
-  const authorizationUrl = endpoint("/authorize");
-  authorizationUrl.search = new URLSearchParams({
-    audience: extensionConfiguration.audience,
-    client_id: extensionConfiguration.clientId,
-    code_challenge: await pkceChallenge(verifier),
-    code_challenge_method: "S256",
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: REQUIRED_SCOPE,
-    state,
-  }).toString();
-
-  const callbackUrl = await chrome.identity.launchWebAuthFlow({
-    interactive: true,
-    url: authorizationUrl.href,
-  });
-  if (!callbackUrl) {
-    throw new Error("authorization_cancelled");
-  }
-  const code = validateAuthorizationCallback({
-    callbackUrl,
-    expectedRedirectUri: redirectUri,
-    expectedState: state,
-  });
-  const session = await tokenRequest(
-    new URLSearchParams({
+  const generation = ++sessionGeneration;
+  identityTransition = generation;
+  try {
+    const redirectUri = chrome.identity.getRedirectURL("auth0");
+    const state = randomBase64Url(32);
+    const verifier = randomBase64Url(64);
+    const authorizationUrl = endpoint("/authorize");
+    authorizationUrl.search = new URLSearchParams({
+      audience: extensionConfiguration.audience,
       client_id: extensionConfiguration.clientId,
-      code,
-      code_verifier: verifier,
-      grant_type: "authorization_code",
+      code_challenge: await pkceChallenge(verifier),
+      code_challenge_method: "S256",
       redirect_uri: redirectUri,
-    }),
-  );
-  await writeSession(session);
+      response_type: "code",
+      scope: REQUIRED_SCOPE,
+      state,
+    }).toString();
+
+    assertSessionGeneration(generation, true);
+    const callbackUrl = await chrome.identity.launchWebAuthFlow({
+      interactive: true,
+      url: authorizationUrl.href,
+    });
+    assertSessionGeneration(generation, true);
+    if (!callbackUrl) {
+      throw new Error("authorization_cancelled");
+    }
+    const code = validateAuthorizationCallback({
+      callbackUrl,
+      expectedRedirectUri: redirectUri,
+      expectedState: state,
+    });
+    const session = await tokenRequest(
+      new URLSearchParams({
+        client_id: extensionConfiguration.clientId,
+        code,
+        code_verifier: verifier,
+        grant_type: "authorization_code",
+        redirect_uri: redirectUri,
+      }),
+    );
+    await writeSession(session, generation);
+  } finally {
+    if (identityTransition === generation) identityTransition = undefined;
+  }
 }
 
 export async function refresh(): Promise<void> {
   configured();
+  const generation = sessionGeneration;
+  assertSessionGeneration(generation);
+  if (pendingRefresh?.generation === generation) return pendingRefresh.promise;
+  const promise = refreshSession(generation);
+  pendingRefresh = { generation, promise };
+  try {
+    await promise;
+  } finally {
+    if (pendingRefresh?.promise === promise) pendingRefresh = undefined;
+  }
+}
+
+async function refreshSession(generation: number): Promise<void> {
   const current = await readSession();
+  assertSessionGeneration(generation);
   if (!current?.refreshToken) {
     throw new Error("reauthentication_required");
   }
@@ -163,13 +236,18 @@ export async function refresh(): Promise<void> {
       refresh_token: current.refreshToken,
     }),
   );
+  assertSessionGeneration(generation);
   if (replacement.identityFence !== current.identityFence) {
     throw new Error("identity_changed");
   }
-  await writeSession({
-    ...replacement,
-    refreshToken: replacement.refreshToken ?? current.refreshToken,
-  });
+  await writeSession(
+    {
+      ...replacement,
+      refreshToken: replacement.refreshToken ?? current.refreshToken,
+    },
+    generation,
+    current,
+  );
 }
 
 export async function authenticatedApiSession(): Promise<{
@@ -177,13 +255,17 @@ export async function authenticatedApiSession(): Promise<{
   identityFence: string;
 }> {
   configured();
+  const generation = sessionGeneration;
+  assertSessionGeneration(generation);
   let current = await readSession();
+  assertSessionGeneration(generation);
   if (!current) {
     throw new Error("authentication_required");
   }
   if (current.expiresAt <= Date.now() + 30_000) {
     await refresh();
     current = await readSession();
+    assertSessionGeneration(generation);
   }
   if (!current || current.expiresAt <= Date.now()) {
     throw new Error("authentication_required");
@@ -193,8 +275,18 @@ export async function authenticatedApiSession(): Promise<{
 
 export async function logout(): Promise<void> {
   configured();
-  const current = await readSession();
+  const generation = ++sessionGeneration;
+  identityTransition = generation;
+  // Enqueue synchronously: explicit logout clears prior credentials even if a newer login
+  // cancels, but this barrier always precedes any newer successful session commit.
+  const cleared = withSessionStorage(async () => {
+    const current = await readStoredSession();
+    await chrome.storage.session.remove(SESSION_KEY);
+    return current;
+  });
   try {
+    const current = await cleared;
+    assertSessionGeneration(generation, true);
     if (current?.refreshToken) {
       const revocationResponse = await fetch(endpoint("/oauth/revoke"), {
         body: new URLSearchParams({
@@ -209,6 +301,7 @@ export async function logout(): Promise<void> {
         throw new Error("revocation_failed");
       }
     }
+    assertSessionGeneration(generation, true);
     const returnTo = chrome.identity.getRedirectURL("auth0");
     const logoutUrl = endpoint("/v2/logout");
     logoutUrl.search = new URLSearchParams({
@@ -217,7 +310,7 @@ export async function logout(): Promise<void> {
     }).toString();
     await chrome.identity.launchWebAuthFlow({ interactive: true, url: logoutUrl.href });
   } finally {
-    await writeSession(undefined);
+    if (identityTransition === generation) identityTransition = undefined;
   }
 }
 
@@ -235,11 +328,13 @@ export async function authenticationStatus(): Promise<{
       refreshAvailable: false,
     };
   }
+  const generation = sessionGeneration;
   const session = await readSession();
+  const current = generation === sessionGeneration && identityTransition === undefined;
   return {
     apiConfigured: extensionConfiguration.apiConfigured,
-    authenticated: Boolean(session && session.expiresAt > Date.now()),
+    authenticated: Boolean(current && session && session.expiresAt > Date.now()),
     configured: true,
-    refreshAvailable: Boolean(session?.refreshToken),
+    refreshAvailable: Boolean(current && session?.refreshToken),
   };
 }

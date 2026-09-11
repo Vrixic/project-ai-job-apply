@@ -5,11 +5,18 @@ import type {
   ReviewerTrustCasePage,
   ReviewerTrustEvidence,
 } from "@ai-job-apply/api-contracts";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TRUST_CASE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
+
+function decisionPurpose(action: string): string | undefined {
+  if (action === "accept" || action === "reject") return "initial_review";
+  if (action === "takedown") return "takedown";
+  if (action === "uphold" || action === "reverse") return "appeal_resolution";
+  return undefined;
+}
 
 async function requestTrust<T = ReviewerTrustCase>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -33,14 +40,48 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
   const [message, setMessage] = useState("Load the review queue to choose a case.");
   const [busy, setBusy] = useState(false);
   const [confirmTakedown, setConfirmTakedown] = useState(false);
+  const [manualEvidenceDigest, setManualEvidenceDigest] = useState("");
   const statusRef = useRef<HTMLOutputElement>(null);
   const requestSequence = useRef(0);
+  const activeRequest = useRef<"read" | "write" | undefined>(undefined);
+  const selectedCase = useRef<ReviewerTrustCase | undefined>(undefined);
 
-  async function loadCases(cursor?: string) {
-    const sequence = ++requestSequence.current;
-    setBusy(true);
+  useEffect(
+    () => () => {
+      ++requestSequence.current;
+      activeRequest.current = undefined;
+      selectedCase.current = undefined;
+    },
+    [],
+  );
+
+  function clearReview() {
+    selectedCase.current = undefined;
     setTrustCase(undefined);
     setReviewEvidence(undefined);
+    setManualEvidenceDigest("");
+    setConfirmTakedown(false);
+  }
+
+  function beginRequest(write = false): number | undefined {
+    // A read can supersede another read, but never interrupt or duplicate a write.
+    if (activeRequest.current === "write" || (write && activeRequest.current)) return undefined;
+    const sequence = ++requestSequence.current;
+    activeRequest.current = write ? "write" : "read";
+    setBusy(true);
+    clearReview();
+    return sequence;
+  }
+
+  function finishRequest(sequence: number) {
+    if (sequence !== requestSequence.current) return;
+    activeRequest.current = undefined;
+    setBusy(false);
+  }
+
+  async function loadCases(cursor?: string) {
+    const sequence = beginRequest();
+    if (sequence === undefined) return;
     setMessage("Loading review queue…");
     try {
       const query = new URLSearchParams({
@@ -66,21 +107,19 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
       setMessage("The queue could not be loaded. Check your case-reader role and try again.");
       statusRef.current?.focus();
     } finally {
-      if (sequence === requestSequence.current) setBusy(false);
+      finishRequest(sequence);
     }
   }
 
-  async function run(operation: () => Promise<ReviewerTrustCase>, pending: string) {
-    const sequence = ++requestSequence.current;
-    setBusy(true);
-    setTrustCase(undefined);
-    setReviewEvidence(undefined);
-    setConfirmTakedown(false);
+  async function run(operation: () => Promise<ReviewerTrustCase>, pending: string, write = false) {
+    const sequence = beginRequest(write);
+    if (sequence === undefined) return;
     setMessage(pending);
+    let acknowledged = false;
     try {
       const value = await operation();
+      acknowledged = write;
       if (sequence !== requestSequence.current) return;
-      setTrustCase(value);
       const evidence = await requestTrust<ReviewerTrustEvidence>(
         `/api/trust/cases/${value.id}/evidence`,
         { method: "GET" },
@@ -92,25 +131,30 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
         evidence.evidence.contributionId !== value.contributionId
       )
         throw new Error("The case changed. Reload it before reviewing evidence.");
+      selectedCase.current = value;
+      setTrustCase(value);
       setReviewEvidence(evidence);
       setMessage(`Case ${value.id} is ${value.state.replaceAll("_", " ")}.`);
     } catch (error) {
       if (sequence !== requestSequence.current) return;
-      setMessage(error instanceof Error ? error.message : "The Trust request failed.");
+      setMessage(
+        write
+          ? acknowledged
+            ? "The Trust operation was acknowledged, but its follow-up evidence could not be loaded. Reload the case before taking another action."
+            : "The Trust operation could not be confirmed. Reload the case before taking another action."
+          : error instanceof Error
+            ? error.message
+            : "The Trust request failed.",
+      );
       statusRef.current?.focus();
     } finally {
-      if (sequence === requestSequence.current) setBusy(false);
+      finishRequest(sequence);
     }
   }
 
   function caseId(form: FormData): string | undefined {
     const value = String(form.get("caseId") ?? "");
     return TRUST_CASE_ID.test(value) ? value : undefined;
-  }
-
-  function evidence(form: FormData): string | undefined {
-    const value = String(form.get("evidenceDigestSha256") ?? "");
-    return DIGEST.test(value) ? value : undefined;
   }
 
   function focusControl(form: HTMLFormElement, name: string) {
@@ -146,6 +190,11 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
           value={appealOnly ? "appeal_pending" : queueState}
           disabled={busy}
           onChange={(event) => {
+            if (activeRequest.current === "write") return;
+            ++requestSequence.current;
+            activeRequest.current = undefined;
+            setBusy(false);
+            clearReview();
             setQueueState(
               appealOnly
                 ? "appeal_pending"
@@ -153,6 +202,7 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
             );
             setCases([]);
             setNextCursor(undefined);
+            setMessage("Load the review queue to choose a case.");
           }}
         >
           {!appealOnly ? <option value="needs_review">Awaiting initial review</option> : null}
@@ -239,6 +289,7 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
                   body: JSON.stringify({ contributionId }),
                 }),
               "Opening Trust case…",
+              true,
             );
           }}
         >
@@ -359,9 +410,13 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
           const id = caseId(form);
-          const action = String(form.get("action"));
-          if (appealOnly && action !== "uphold" && action !== "reverse") {
+          const requestedAction = String(form.get("action"));
+          if (appealOnly && requestedAction !== "uphold" && requestedAction !== "reverse") {
             setMessage("This profile supports appeal decisions only.");
+            return;
+          }
+          if (requestedAction !== action || !decisionPurpose(requestedAction)) {
+            setMessage("Choose the current reviewer action before deciding.");
             return;
           }
           if (appealOnly && trustCase?.state !== "appeal_pending") {
@@ -370,14 +425,18 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
           }
           const expectedVersion = Number(form.get("expectedVersion"));
           const evidenceDigestSha256 =
-            action === "accept" || action === "reject"
+            requestedAction === "accept" || requestedAction === "reject"
               ? reviewEvidence?.evidence.evidenceDigestSha256
-              : evidence(form);
+              : DIGEST.test(manualEvidenceDigest)
+                ? manualEvidenceDigest
+                : undefined;
           if (
             !trustCase ||
+            selectedCase.current !== trustCase ||
+            activeRequest.current !== undefined ||
             id !== trustCase.id ||
             expectedVersion !== trustCase.version ||
-            ((action === "accept" || action === "reject") &&
+            ((requestedAction === "accept" || requestedAction === "reject") &&
               (!reviewEvidence ||
                 reviewEvidence.caseId !== trustCase.id ||
                 reviewEvidence.caseVersion !== trustCase.version))
@@ -395,23 +454,30 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
             focusControl(event.currentTarget, "evidenceDigestSha256");
             return;
           }
+          if (
+            decisionPurpose(requestedAction) !== "initial_review" &&
+            form.get("evidenceDigestSha256") !== manualEvidenceDigest
+          ) {
+            setMessage("Review the current evidence digest before deciding.");
+            return;
+          }
           let path = "decision";
           let body: Record<string, unknown>;
-          if (action === "accept") {
+          if (requestedAction === "accept") {
             body = {
               expectedVersion,
               outcome: "accepted",
               reasonCode: "independently_verified",
               evidenceDigestSha256,
             };
-          } else if (action === "reject") {
+          } else if (requestedAction === "reject") {
             body = {
               expectedVersion,
               outcome: "rejected",
               reasonCode: "insufficient_evidence",
               evidenceDigestSha256,
             };
-          } else if (action === "takedown") {
+          } else if (requestedAction === "takedown") {
             if (!confirmTakedown) {
               setMessage("Confirm the takedown before submitting.");
               return;
@@ -426,7 +492,7 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
             path = "appeal-resolution";
             body = {
               expectedVersion,
-              outcome: action === "reverse" ? "reversed" : "upheld",
+              outcome: requestedAction === "reverse" ? "reversed" : "upheld",
               evidenceDigestSha256,
             };
           }
@@ -437,6 +503,7 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
                 body: JSON.stringify(body),
               }),
             "Recording Trust decision…",
+            true,
           );
         }}
       >
@@ -471,7 +538,13 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
           id="trust-evidence-digest"
           name="evidenceDigestSha256"
           required={action !== "accept" && action !== "reject"}
-          disabled={action === "accept" || action === "reject"}
+          disabled={busy || !trustCase || action === "accept" || action === "reject"}
+          value={manualEvidenceDigest}
+          onChange={(event) => {
+            if (activeRequest.current || !trustCase || selectedCase.current !== trustCase) return;
+            setManualEvidenceDigest(event.target.value);
+            setConfirmTakedown(false);
+          }}
           minLength={64}
           maxLength={64}
           pattern="[a-f0-9]{64}"
@@ -483,8 +556,13 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
           id="trust-action"
           name="action"
           value={action}
+          disabled={busy}
           onChange={(event) => {
-            setAction(event.target.value);
+            const nextAction = event.target.value;
+            if (activeRequest.current || !decisionPurpose(nextAction)) return;
+            if (decisionPurpose(nextAction) !== decisionPurpose(action))
+              setManualEvidenceDigest("");
+            setAction(nextAction);
             setConfirmTakedown(false);
           }}
         >
@@ -503,7 +581,12 @@ export function TrustConsole({ appealOnly = false }: { appealOnly?: boolean }) {
             <input
               type="checkbox"
               checked={confirmTakedown}
-              onChange={(event) => setConfirmTakedown(event.target.checked)}
+              disabled={busy || !trustCase}
+              onChange={(event) => {
+                if (activeRequest.current || !trustCase || selectedCase.current !== trustCase)
+                  return;
+                setConfirmTakedown(event.target.checked);
+              }}
             />
             Confirm takedown (required only for the takedown action)
           </label>

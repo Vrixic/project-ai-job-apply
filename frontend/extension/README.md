@@ -16,7 +16,10 @@ release, and browser-store distribution are not approved. See the current
   after a field-level preview. The extension does not present a separate private-save action or a
   redundant approval checkbox.
 - Auth0 public-client authorization code + PKCE, rotating refresh, revocation, and tokens confined
-  to trusted `chrome.storage.session` contexts.
+  to trusted `chrome.storage.session` contexts. Concurrent refreshes share one exchange; session
+  generations and ordered storage commits reject obsolete responses. Explicit logout clears prior
+  credentials before network completion, even if a newer sign-in is cancelled, without clearing
+  a newer successful login.
 - Explicit `activeTab` inspection through `chrome.scripting.executeScript`; there are no persistent
   content scripts or provider host grants.
 - Exact provider-domain adapters for Greenhouse, Lever, and Ashby behind a separate reviewed
@@ -61,6 +64,11 @@ release, and browser-store distribution are not approved. See the current
   claims: it remains stable when the same account reauthenticates, changes for a different account,
   and never stores the raw subject. Explicit logout clears both the queue and last capture. Tokens
   are never included in UI messages or local pending records.
+- Delivery shares one in-flight dispatcher per session. Every consent/intake request and local
+  receipt commit is session-fenced; short storage locks preserve concurrent additions and explicit
+  removal without holding logout behind HTTP. Logout also clears contribution receipts. Late
+  responses cannot restore cleared state or expose old-account receipts, and owner refreshes do
+  not overwrite newer processing timestamps or Trust versions.
 - An exact background-only HTTPS API origin. Contribution transport records an immutable,
   digest-bound command authorization through the existing v1 Profile consent endpoint and then
   calls `POST /v1/jobs/contributions`. The authorization receipt is an audit, replay, attribution,
@@ -180,9 +188,12 @@ release candidate.
 
 ## Remaining activation gates
 
-- Generated API types and accepted server contracts, including private source resolution.
-- Authorized provider-derived fixtures and independent representative-variant acceptance.
-- Dedicated extension Auth0 Chrome/Edge conformance.
+- Owner processing/Trust refresh and authenticated website readback for existing contributions;
+  the generated contracts and development backend are already implemented and deployed.
+- Authorized Lever/Ashby provider-derived fixtures and independent representative-variant
+  acceptance; Greenhouse's accepted fixture and controlled development activation already exist.
+- Remaining installed Chrome/Edge Auth0 lifecycle, cancellation, rotation/replay, logout,
+  revocation and cross-account/offline/restart conformance; initial installed Edge login passes.
 - Accountable UGC, permission, privacy, security, accessibility, and store approval.
 - Final archive, malicious-page, offline/replay, deployed rollback, alert, and kill-switch evidence.
 

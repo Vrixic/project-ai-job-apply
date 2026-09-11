@@ -2,8 +2,9 @@
 
 The restricted internal console implements the Phase 1 job/source moderation slice and the
 default-dark Phase 2 Trust review slice. A protected development preview is deployed, and the
-separate human appeal identity and local empty-queue read are accepted in development. Hosted
-reviewer and actual decision journeys remain open. Later customer service, workflow, provider, entitlement,
+separate human appeal identity and local empty-queue read are accepted in development. Three
+delegated initial decisions pass under D2-042; hosted reviewer, actual takedown and human appeal
+journeys remain open. Later customer service, workflow, provider, entitlement,
 privacy, and emergency-control surfaces are not implemented or authorized by this application.
 
 ## Implemented Phase 1 moderation slice
@@ -47,6 +48,12 @@ not implemented or authorized by this slice.
 - Controls use native labels, explicit destructive confirmation, keyboard focus on failures, and an
   `aria-live` result region. The same-origin BFF strictly validates bounded requests and redacted
   responses and emits `no-store` fixed problem details.
+- Local decision drafts are case/version/purpose-scoped. Changing queues or loading a case clears
+  manual evidence and confirmation; editing evidence requires a new takedown confirmation. Late
+  reads cannot restore an obsolete selection, and repeated clicks cannot duplicate an in-flight
+  write. An acknowledged write with unavailable follow-up evidence explicitly requests a reload;
+  ambiguous writes are never automatically replayed. These D2-054 changes require a fresh admin
+  presentation rollout and do not establish hosted or human decision acceptance.
 - The Gateway and Terraform D2 route inventories are deployed. The verified 2026-09-08 development
   rollout preserves all three reviewer assignments: workflow case opener, separate delegated M2M
   read/initial/takedown reviewer, and separate human read/appeal reviewer. Exact runtime readback
@@ -54,7 +61,9 @@ not implemented or authorized by this slice.
   for the exact release evidence rather than treating a presentation build as backend deployment.
 - The human identity/MFA/scope check and separate backend appeal binding pass; the user confirms
   a successful empty local appeal-queue read. The appeal-only profile does not itself assign
-  permissions. Hosted admin Auth0 and actual reviewed-decision journeys, verified-requester
+  permissions. D2-042 subsequently records three evidence-bound delegated initial decisions with
+  accepted/version-2 readbacks, not human appeal or hosted-console acceptance. Hosted admin Auth0,
+  actual takedown and human appeal journeys, verified-requester
   authority, human accessibility acceptance, and accountable production approval remain open.
   Invalid-input probes and an empty queue are not completed case decisions or publication evidence.
 

@@ -99,24 +99,33 @@ the prior processing snapshot is not a current owner-state observation.
 All three reviewer assignments are bound: the workflow is case-opener-only, the distinct delegated
 agent can read and make initial/takedown decisions, and the separate human can read and resolve
 appeals. Exact human identity/MFA/scope checks and the user-confirmed empty local appeal-queue read
-pass. The September 10 `01:13:53Z` reviewer inspection passes the exact three agent scopes without
-role changes; all three initial cases have fresh independent provider proof. One delegated initial
-decision POST returned `503`. A separate `01:16:14Z` readback confirms all three remain
-`needs_review`, version `1`; no successful decision, Trust acceptance, or publication is claimed.
-Hosted reviewer and actual reviewed-decision journeys remain open. The prior state-292 pause and
-retirement window are historical maintenance evidence, not the current runtime state.
+pass. D2-042's September 10 shared-client SQL fix supersedes the earlier rolled-back `503`:
+three evidence-bound initial decisions have accepted/version-2 readbacks. Subsequent aggregates
+record three processing completions and three copied Trust signals. These aggregates do not
+establish each owner's website publication. Hosted reviewer, actual takedown, and separate human
+appeal journeys remain open; the existing assignments and their separation are unchanged.
 
-Separate rights/export activity and dark-ingestion artifact releases, current-schema cloud recovery,
-and the recorded owner, fixture and human/browser acceptance gates remain. Historical cloud PITR
-covers 39 migrations, not the current 44-migration schema. D2-038's isolated deletion-replay executor
-remains a separate default-off recovery boundary. The D2-039/041 source delta requires no additional
-hosted web/admin bundle for contract compatibility; that does not establish hosted acceptance.
+The rights/export activity and dark-ingestion releases are verified. Gateway `423d63b` and
+corrected core `2ff32ef`/version `14` include the later deletion-retry fixes. On September 11,
+D2-038/050/052/053 complete the bounded current-schema recovery on the same 44-migration,
+68-relation PITR copy: one historical already-reconciled subject, no new reconciliation or document
+writes. The temporary executor, restored copy and drill-only permissions are removed, with
+Platform `329`/Bootstrap `21` zero drift; protected evidence remains retained. Do not repeat the
+completed drill or mistake restored-only replay for fresh candidate export/deletion acceptance.
+Owner readback, provider fixtures, human/browser testing and the other recorded acceptance gates
+remain. The isolated replay executor remains default-off. The D2-039/041 contract delta did not
+require an additional hosted web/admin bundle; later frontend changes need their own rollout.
 The old singleton Jobs verification writer cannot run against `0023`; rollback must keep
 contributions disabled or use a compatible binary. This is not Phase 2 completion.
 
 The [admin hosting boundary](frontend/admin/README.md#vercel-hosting-boundary) records the earlier
 protected presentation preview, not hosted Auth0 moderation acceptance. Other provider activation,
 production/store distribution, and final accountable acceptance remain separate gates.
+
+D2-054 additionally repairs client-only session/queue races and stale reviewer decision drafts.
+The complete extension and admin unit suites pass locally. Reload the rebuilt unpacked extension
+to use its fix; the admin presentation needs its own rollout. These changes grant no additional
+provider, reviewer or publication authority.
 
 The following Phase 0/1 overview is historical; use the linked delivery records for the current
 status of each individual gate.

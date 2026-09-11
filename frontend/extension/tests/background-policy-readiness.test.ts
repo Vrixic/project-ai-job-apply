@@ -77,6 +77,51 @@ function response(envelope: unknown, status = 200) {
   });
 }
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {
+    throw new Error("Deferred promise not initialized");
+  };
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+function contributionResponse(url: URL | RequestInfo, init?: RequestInit): Response {
+  if (String(url).endsWith("/ugc-contribution-consents")) {
+    return response(
+      {
+        documentVersion: "ugc-contribution-preview.v1",
+        grantedAt: now,
+        id: "01991000-0000-7000-8000-000000000009",
+        policyVersion: "synthetic-policy-v1",
+        schemaVersion: 1,
+        state: "granted",
+      },
+      201,
+    );
+  }
+  const body = JSON.parse(String(init?.body));
+  return response(
+    { id: body.contributionId, state: "queued", submittedAt: now, updatedAt: now },
+    202,
+  );
+}
+
+const ownerContributionId = "01991000-0000-7000-8000-000000000001";
+function trustResponse(version: number, state = "needs_review", updatedAt = now) {
+  return {
+    id: "01991000-0000-7000-8000-000000000007",
+    contributionId: ownerContributionId,
+    state,
+    policyVersion: "synthetic-policy-v1",
+    version,
+    appealed: false,
+    createdAt: now,
+    updatedAt,
+  };
+}
+
 interface BackgroundResponse {
   ok: boolean;
   ownerAction?: string;
@@ -217,10 +262,24 @@ async function background(
 }
 
 describe("warm background worker signed-policy readiness", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
     vi.useFakeTimers();
     vi.setSystemTime(new Date(now));
+    const api = await import("../lib/protocol");
+    vi.mocked(api.login).mockReset();
+    vi.mocked(api.logout).mockReset();
+    vi.mocked(api.refresh).mockReset();
+    vi.mocked(api.authenticatedApiSession).mockReset().mockResolvedValue({
+      accessToken: "synthetic-token",
+      identityFence,
+    });
+    vi.mocked(api.authenticationStatus).mockReset().mockResolvedValue({
+      configured: true,
+      authenticated: true,
+      apiConfigured: true,
+      refreshAvailable: false,
+    });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -502,6 +561,302 @@ describe("warm background worker signed-policy readiness", () => {
     expect(await cancel).toMatchObject({ ok: false, ownerAction: "rejected" });
     expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual([]);
   });
+
+  it.each(["logout", "login"] as const)(
+    "fences remaining queued sends and receipts after %s during intake",
+    async (action) => {
+      const started = deferred<void>();
+      const release = deferred<void>();
+      const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+        if (String(url).endsWith("/jobs/contributions")) {
+          started.resolve();
+          await release.promise;
+        }
+        return contributionResponse(url, init);
+      });
+      const worker = await background(fetcher, true);
+      const extra = createPendingIntent({
+        approvedFields: ["title"],
+        capture,
+        identityFence,
+        intent: "contribute",
+        retentionMilliseconds: 86_400_000,
+      });
+      worker.local.set(PENDING_QUEUE_KEY, [...(worker.originalQueue as unknown[]), extra]);
+      const before = structuredClone(worker.local.get(PENDING_QUEUE_KEY));
+      const retry = worker.send({ action: "retry" });
+      await started.promise;
+      const api = await import("../lib/protocol");
+      if (action === "login")
+        vi.mocked(api.login).mockImplementationOnce(async () => {
+          vi.mocked(api.authenticatedApiSession).mockResolvedValue({
+            accessToken: "synthetic-other-token",
+            identityFence: "c".repeat(43),
+          });
+        });
+      await worker.send({ action });
+      release.resolve();
+      const stale = await retry;
+      expect(stale.ok).toBe(false);
+      expect(stale).not.toHaveProperty("receipts");
+      expect(
+        fetcher.mock.calls.filter(([url]) => String(url).endsWith("/jobs/contributions")),
+      ).toHaveLength(1);
+      expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(action === "logout" ? [] : before);
+      expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(
+        action === "logout" ? [] : worker.originalReceipts,
+      );
+    },
+  );
+
+  it("fences intake after logout while the same intent's consent request is pending", async () => {
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+      started.resolve();
+      await release.promise;
+      return contributionResponse(url, init);
+    });
+    const worker = await background(fetcher, true);
+    const retry = worker.send({ action: "retry" });
+    await started.promise;
+    await worker.send({ action: "logout" });
+    release.resolve();
+    expect((await retry).ok).toBe(false);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual([]);
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual([]);
+  });
+
+  it("coalesces overlapping retry dispatch without duplicating consent or intake", async () => {
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).endsWith("/jobs/contributions")) {
+        started.resolve();
+        await release.promise;
+      }
+      return contributionResponse(url, init);
+    });
+    const worker = await background(fetcher, true);
+    const first = worker.send({ action: "retry" });
+    await started.promise;
+    const second = worker.send({ action: "retry" });
+    release.resolve();
+    const results = await Promise.all([first, second]);
+    expect(results.every((result) => result.ok)).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not restore Remove all items or persist their late acknowledgement", async () => {
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const worker = await background(async (url, init) => {
+      if (String(url).endsWith("/jobs/contributions")) {
+        started.resolve();
+        await release.promise;
+      }
+      return contributionResponse(url, init);
+    }, true);
+    const retry = worker.send({ action: "retry" });
+    await started.promise;
+    await worker.send({ action: "clear_queue" });
+    release.resolve();
+    await retry;
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual([]);
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+  });
+
+  it("preserves a newly enqueued item when an older dispatch commits", async () => {
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const worker = await background(async (url, init) => {
+      if (String(url).endsWith("/jobs/contributions")) {
+        started.resolve();
+        await release.promise;
+      }
+      return contributionResponse(url, init);
+    }, true);
+    const retry = worker.send({ action: "retry" });
+    await started.promise;
+    const enqueued = deferred<void>();
+    const originalSet = worker.browser.storage.local.set.getMockImplementation();
+    if (!originalSet) throw new Error("Storage fixture missing");
+    worker.browser.storage.local.set.mockImplementation(async (entries) => {
+      await originalSet(entries);
+      if (Array.isArray(entries[PENDING_QUEUE_KEY]) && entries[PENDING_QUEUE_KEY].length === 3)
+        enqueued.resolve();
+    });
+    const adding = worker.send({
+      action: "enqueue",
+      intent: "contribute",
+      approvedFields: ["title"],
+    });
+    await enqueued.promise;
+    release.resolve();
+    await Promise.all([retry, adding]);
+    const remaining = worker.local.get(PENDING_QUEUE_KEY) as { id: string; state: string }[];
+    expect(remaining).toHaveLength(2);
+    expect(remaining.filter((item) => item.state === "pending")).toHaveLength(1);
+    expect(remaining.filter((item) => item.state === "blocked")).toHaveLength(1);
+  });
+
+  it.each([false, true])(
+    "orders logout after delayed receipt storage even if a newer login cancels: %s",
+    async (cancelNewLogin) => {
+      const worker = await background(
+        async () =>
+          response({
+            id: ownerContributionId,
+            state: "consent_invalid",
+            submittedAt: now,
+            updatedAt: now,
+          }),
+        true,
+      );
+      const started = deferred<void>();
+      const release = deferred<void>();
+      const originalSet = worker.browser.storage.local.set.getMockImplementation();
+      if (!originalSet) throw new Error("Storage fixture missing");
+      worker.browser.storage.local.set.mockImplementationOnce(async (entries) => {
+        started.resolve();
+        await release.promise;
+        await originalSet(entries);
+      });
+      const cancel = worker.send({
+        action: "cancel_contribution",
+        contributionId: ownerContributionId,
+        confirmed: true,
+      });
+      await started.promise;
+      const signingOut = worker.send({ action: "logout" });
+      const api = await import("../lib/protocol");
+      if (cancelNewLogin)
+        vi.mocked(api.login).mockRejectedValueOnce(new Error("authorization_cancelled"));
+      const login = cancelNewLogin ? worker.send({ action: "login" }) : Promise.resolve();
+      release.resolve();
+      await Promise.all([cancel, signingOut, login]);
+      expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual([]);
+      expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual([]);
+      expect(worker.session.has("d2LastJobCaptureV1")).toBe(false);
+    },
+  );
+
+  it("does not let an old logout's network completion clear newer owner state", async () => {
+    const worker = await background(vi.fn<typeof fetch>(), true);
+    const api = await import("../lib/protocol");
+    const started = deferred<void>();
+    const release = deferred<void>();
+    vi.mocked(api.logout).mockImplementationOnce(async () => {
+      started.resolve();
+      await release.promise;
+    });
+    const signingOut = worker.send({ action: "logout" });
+    await started.promise;
+    await worker.send({ action: "login" });
+    worker.local.set(PENDING_QUEUE_KEY, worker.originalQueue);
+    worker.local.set(CONTRIBUTION_RECEIPTS_KEY, worker.originalReceipts);
+    release.resolve();
+    expect((await signingOut).ok).toBe(false);
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+  });
+
+  it("drops an old-owner response when logout wins its final status await", async () => {
+    const worker = await background(vi.fn<typeof fetch>(), true);
+    const api = await import("../lib/protocol");
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const status = await api.authenticationStatus();
+    vi.mocked(api.authenticationStatus).mockImplementationOnce(async () => {
+      started.resolve();
+      await release.promise;
+      return status;
+    });
+    const pending = worker.status();
+    await started.promise;
+    await worker.send({ action: "logout" });
+    release.resolve();
+    const result = await pending;
+    expect(result.ok).toBe(false);
+    expect(result).not.toHaveProperty("receipts");
+    expect(result).not.toHaveProperty("capture");
+    expect(result).not.toHaveProperty("queue");
+  });
+
+  it("ignores an older processing read completed after cancellation while retaining Trust fields", async () => {
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const later = "2026-09-05T12:00:21.000Z";
+    const worker = await background(async (url) => {
+      if (String(url).includes("/trust/")) return response(trustResponse(1));
+      if (String(url).endsWith("/cancel"))
+        return response({
+          id: ownerContributionId,
+          state: "consent_invalid",
+          submittedAt: now,
+          updatedAt: later,
+        });
+      started.resolve();
+      await release.promise;
+      return response({
+        id: ownerContributionId,
+        state: "awaiting_independent_verification",
+        submittedAt: now,
+        updatedAt: now,
+      });
+    }, true);
+    const reading = worker.send({
+      action: "contribution_refresh",
+      contributionId: ownerContributionId,
+    });
+    await started.promise;
+    await worker.send({
+      action: "cancel_contribution",
+      contributionId: ownerContributionId,
+      confirmed: true,
+    });
+    await worker.send({ action: "trust_refresh", contributionId: ownerContributionId });
+    release.resolve();
+    expect((await reading).ownerAction).toBe("ok");
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toContainEqual(
+      expect.objectContaining({
+        contributionId: ownerContributionId,
+        state: "consent_invalid",
+        updatedAt: later,
+        trust: expect.objectContaining({ version: 1 }),
+      }),
+    );
+  });
+
+  it.each([false, true])(
+    "does not regress Trust from an inverse-order old response, equal conflicting version: %s",
+    async (equalVersion) => {
+      const started = deferred<void>();
+      const release = deferred<void>();
+      let reads = 0;
+      const worker = await background(async () => {
+        if (++reads === 1) {
+          started.resolve();
+          await release.promise;
+          return response(trustResponse(equalVersion ? 2 : 1));
+        }
+        return response(trustResponse(2, "withdrawn", "2026-09-05T12:00:21.000Z"));
+      }, true);
+      const old = worker.send({ action: "trust_refresh", contributionId: ownerContributionId });
+      await started.promise;
+      await worker.send({ action: "trust_refresh", contributionId: ownerContributionId });
+      release.resolve();
+      expect((await old).ownerAction).toBe(equalVersion ? "rejected" : "ok");
+      expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toContainEqual(
+        expect.objectContaining({
+          contributionId: ownerContributionId,
+          state: "awaiting_independent_verification",
+          trust: expect.objectContaining({ state: "withdrawn", version: 2 }),
+        }),
+      );
+    },
+  );
 
   it("recognizes renewal through explicit status without reloading, enqueueing, or touching account-held work", async () => {
     let envelope: unknown = signed();

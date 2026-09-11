@@ -44,7 +44,16 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
-Current continuation (`2026-09-11` UTC): D2-038/D2-050/D2-052/D2-053 are Complete for their
+Current local continuation (`2026-09-11` UTC): D2-054 is In progress. Source inspection and
+memory-only synthetic reproductions expose late refresh writes after logout/new login, duplicate
+concurrent refresh-token use, and obsolete delivery dispatch after logout. Reviewer form state
+also survived case/filter transitions. The case/session-scoped fixes are implemented on shared
+`main`: extension 258/258 and admin 174/174 tests pass, including 55 extension and 32 reviewer
+focused cases. Independent extension and root reviewer source review pass; full maintained
+verification and build follow. No cloud, account, provider or reviewer-authority change is needed.
+This work does not replace the remaining owner and human acceptance below.
+
+Completed recovery checkpoint (`2026-09-11` UTC): D2-038/D2-050/D2-052/D2-053 are Complete for their
 bounded recovery scope. Operator/artifact source `6eb7a86` completes the separately authorized
 recovery `8649` / `7d6e48`: exactly one completion-tag Put reaches `intended_state_verified`,
 preserving the original attempt and fixed linked companion. Fresh same-copy Inspect `70881`
@@ -345,6 +354,42 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-051 | Preserve authoritative deletion timestamps and prevent late terminal events from enqueueing another completed-operation retry. | Complete | Platform engineering | D2-020; D2-038 | Completed 2026-09-11 for code/deployment: Gateway `423d63b` and combined core `2ff32ef` are verified, with core `14` resumed at state `328` and zero drift. Timestamp tests pass 30 cases/13 original-source failures; the enqueue guard passes 41 Profile cases/eight original-source failures, and real PostgreSQL covers rollback, persisted timestamps and the already-terminal no-extra-outbox path. Full verification passes. Generated concurrency seams do not establish a real concurrent row-lock race; fresh rights acceptance and historical repair remain separate. See [retry timestamps](#d2-051--deletion-retry-timestamps). |
 | D2-052 | Diagnose and conditionally correct the exact historical development deletion-completion inconsistency without relaxing restore checks. | Complete | Product owner; platform engineering | D2-038; D2-050; D2-051; D2-053 | Completed 2026-09-11: corroborated persisted request/ledger/operation evidence and three acknowledged/unclaimed dispatches support the exact historical correction. Separately authorized recovery `8649` / `7d6e48` sends one exact-version completion-tag Put and verifies intended state, preserving all other protected data and original evidence. Unchanged same-copy Inspect/Replay and final cleanup pass. No fresh nonempty deletion is claimed. See [historical completion diagnosis](#d2-052--historical-completion-consistency). |
 | D2-053 | Define and verify one-shot pre-dispatch recovery for the consumed historical completion-repair reservation. | Complete | Platform engineering; product owner | D2-052; D2-R21 | Completed 2026-09-11: 199 repair tests, 119 protected-storage checks, 274 two-source checks and full verification pass. Actual `6eb7a86` recovery `8649` / `7d6e48` verifies the intended single-tag correction after fresh checks, preserving the original journal and fixed companion. Default repair remains readback-only; neither journal may be reset or used to resend. Normal runtime `2ff32ef`/version `14` is unchanged. Same-copy strict Inspect/Replay and all temporary cleanup pass. |
+| D2-054 | Fence asynchronous extension identity/delivery and reviewer decision state across transitions. | In progress | Platform engineering; QA/automation | D2-007; D2-012; D2-015; D2-022 | Started 2026-09-11 after actual-source synthetic reproduction of stale refresh/dispatch and reviewer state inspection. Bounded client changes and generated regression tests are underway; no live identity, hosted-review or installed-browser acceptance is implied. See [scope](#d2-054--session-and-reviewer-state-transitions). |
+
+### D2-054 — Session and reviewer state transitions
+
+Started 2026-09-11. The source-only continuation identified two client implementation gaps:
+
+- Extension refresh responses can recreate credentials after logout or overwrite a newer login;
+  simultaneous near-expiry requests can reuse one rotating refresh token. Dispatch also continues
+  with a captured session and rewrites receipts after logout clears local state. Fix session and
+  dispatch generation fencing, serialize relevant commits and coalesce refreshes. Deferred-response
+  tests must check logout, newer login/account switch and concurrent rotation without real tokens.
+- The reviewer console leaves a selected case/evidence actionable after changing the queue filter
+  and retains manual evidence digests across case changes. Reset decision inputs and confirmations
+  with the case/version/purpose and fence late loads. Server-side evidence, version, role and
+  independent-appeal checks remain authoritative.
+
+Implemented session generations, shared in-flight refresh/dispatch and short ordered storage
+operations. Explicit logout clears old credentials/queue/receipts even across a cancelled later
+login; superseded in-flight writes restore their preimage before newer mutations proceed.
+Each consent/intake send and final UI reply is fenced. Queue updates merge by intent/account,
+honor removal and retain concurrent additions. Out-of-order processing and Trust reads are safe
+no-ops; contradictory equal-version Trust responses reject rather than replace existing evidence.
+
+Reviewer drafts are controlled and reset across case/version/filter/purpose changes, with renewed
+takedown confirmation after evidence edits. Missing/mismatched/late evidence leaves no actionable
+selection; synchronous request guards prevent duplicate writes. Acknowledged writes with failed
+follow-up reads request reload, while ambiguous writes are neither claimed successful nor retried.
+
+Local verification: focused extension 55/55 and reviewer 32/32 pass; full extension 258/258 and
+admin 174/174 pass. Both no-emit typechecks, scoped formatting/whitespace, independent extension
+review and root reviewer review pass. The earlier 23-test reviewer packet fails 15 cases against
+original source and passes after the fix. Six updated Markdown files have 1,089 valid local link
+targets and 215 valid anchors at this checkpoint. Full maintained verification/build is next.
+Installed-browser lifecycle, hosted review, takedown and human appeal acceptance remain open;
+synthetic tests cannot complete them. No migration, AWS release, identity grant, provider
+activation, real job submission or new branch is part of D2-054.
 
 ### D2-050 — Private restore runtime compatibility
 
@@ -1944,6 +1989,13 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For D2-054 on 2026-09-11, treat asynchronous client results as valid only for their originating
+session or reviewed case. Logout/new login invalidates pending credential and delivery commits;
+one rotating refresh token gets one shared in-flight exchange. Queue/filter/case/version/purpose
+changes invalidate manual evidence and destructive confirmation. This prevents stale UI/network
+work from carrying authority into another account or decision. It adds no permission, automatic
+case decision, submission retry or deployment activation; server checks remain unchanged.
 
 Outcome of the separately authorized D2-052/D2-053 path (`2026-09-11` UTC): corroborated
 evidence and fresh checks permit exactly one completion-tag correction, which verifies without

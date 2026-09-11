@@ -1,7 +1,7 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-09
+- Last updated: 2026-09-11
 - Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
@@ -108,7 +108,9 @@ description; the single decision and rationale are in the
 
 ## Fresh verification and accepted evidence
 
-The undeployed D2-039 source adds Jobs `0023` and Trust `0004`. Initial acceptance and appeal
+The coordinated September 10 D2-039 rollout applied Jobs `0023` and Trust `0004`; the
+[Phase 2 register](../product/delivery/phase-2-extension-and-community.md) owns exact release and
+subsequent recovery evidence. Initial acceptance and appeal
 reversal require exact, independently fetched provider evidence no more than 24 hours old and
 not future-dated. Trust records the accepted provider basis separately from review/appeal
 evidence; a distinct appeal digest never becomes provider truth. Historical Trust rows retain
@@ -130,8 +132,8 @@ their persisted fields match; contradictory ties are held. Candidate export incl
 case/event basis without reviewer identities, tokens, or transport details. Events remain
 identifier-only.
 
-Rollout must quiesce contribution processing and reviewer decisions before applying the two
-migrations, then deploy the coordinated Gateway and workers before resuming. The old singleton
+That rollout quiesced contribution processing and reviewer decisions before applying the two
+migrations, then deployed the coordinated Gateway and workers before resuming. The old singleton
 verification writer is not compatible with Jobs `0023`; rollback must keep contributions disabled
 or use a forward-compatible binary. Keep historical receipts and restore manifests distinct from
 the new 44-migration source boundary. Decision rationale is recorded only in the

@@ -80,24 +80,52 @@ function installChrome(options: {
     if (options.launchError) throw options.launchError;
     return options.callback;
   });
+  const sessionStorage = {
+    get: vi.fn(async (key: string) => ({ [key]: structuredClone(records.get(key)) })),
+    remove: vi.fn(async (key: string) => {
+      records.delete(key);
+    }),
+    set: vi.fn(async (value: Record<string, unknown>) => {
+      for (const [key, entry] of Object.entries(value)) records.set(key, structuredClone(entry));
+    }),
+  };
   vi.stubGlobal("chrome", {
     identity: {
       getRedirectURL: vi.fn(() => "https://extension-id.chromiumapp.org/auth0"),
       launchWebAuthFlow,
     },
     storage: {
-      session: {
-        get: vi.fn(async (key: string) => ({ [key]: records.get(key) })),
-        remove: vi.fn(async (key: string) => {
-          records.delete(key);
-        }),
-        set: vi.fn(async (value: Record<string, unknown>) => {
-          for (const [key, entry] of Object.entries(value)) records.set(key, entry);
-        }),
-      },
+      session: sessionStorage,
     },
   });
-  return { launchWebAuthFlow, records };
+  return { launchWebAuthFlow, records, sessionStorage };
+}
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {
+    throw new Error("Deferred promise not initialized");
+  };
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+async function storedSession(subject = "auth0|candidate-one"): Promise<SessionRecord> {
+  return {
+    accessToken: accessToken(subject),
+    expiresAt: Date.now() + 10_000,
+    identityFence: await accountFence(subject),
+    identityFenceVersion: "auth0-subject-sha256-v1",
+    refreshToken: "refresh-original",
+  };
+}
+
+function authorize({ url }: { url: string }) {
+  const state = new URL(url).searchParams.get("state");
+  return Promise.resolve(
+    `https://extension-id.chromiumapp.org/auth0?code=short-code&state=${state}`,
+  );
 }
 
 async function protocol() {
@@ -355,5 +383,201 @@ describe("extension Auth0 protocol lifecycle", () => {
     await expect((await protocol()).logout()).rejects.toThrow("revocation_failed");
     expect(browser.launchWebAuthFlow).not.toHaveBeenCalled();
     expect(browser.records.has("auth0Session")).toBe(false);
+  });
+
+  it("does not restore a deferred refresh after logout", async () => {
+    const browser = installChrome({ initialSession: await storedSession() });
+    const started = deferred<void>();
+    const response = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL) => {
+        if (url.pathname === "/oauth/revoke") return new Response(null, { status: 200 });
+        started.resolve();
+        return response.promise;
+      }),
+    );
+    const api = await protocol();
+    const refreshing = expect(api.refresh()).rejects.toThrow("identity_changed");
+    await started.promise;
+    await api.logout();
+    response.resolve(tokenResponse(accessToken("auth0|candidate-one"), "refresh-late"));
+    await refreshing;
+    expect(browser.records.has("auth0Session")).toBe(false);
+    expect(await api.authenticationStatus()).toMatchObject({ authenticated: false });
+  });
+
+  it("does not let an old refresh replace a newer account login", async () => {
+    const browser = installChrome({ initialSession: await storedSession() });
+    browser.launchWebAuthFlow.mockImplementation(authorize);
+    const started = deferred<void>();
+    const response = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: URL, init: RequestInit) => {
+        if ((init.body as URLSearchParams).get("grant_type") === "authorization_code") {
+          return tokenResponse(accessToken("auth0|candidate-two"), "refresh-new-account");
+        }
+        started.resolve();
+        return response.promise;
+      }),
+    );
+    const api = await protocol();
+    const refreshing = expect(api.refresh()).rejects.toThrow("identity_changed");
+    await started.promise;
+    await api.login();
+    response.resolve(tokenResponse(accessToken("auth0|candidate-one"), "refresh-late"));
+    await refreshing;
+    expect(browser.records.get("auth0Session")).toMatchObject({
+      identityFence: await accountFence("auth0|candidate-two"),
+      refreshToken: "refresh-new-account",
+    });
+  });
+
+  it("coalesces concurrent near-expiry and explicit refresh calls into one rotation", async () => {
+    const browser = installChrome({ initialSession: await storedSession() });
+    const started = deferred<void>();
+    const response = deferred<Response>();
+    const fetcher = vi.fn(async (_url: URL, init: RequestInit) => {
+      expect((init.body as URLSearchParams).get("refresh_token")).toBe("refresh-original");
+      started.resolve();
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const api = await protocol();
+    const sessions = [api.authenticatedApiSession(), api.authenticatedApiSession()];
+    await started.promise;
+    const explicit = api.refresh();
+    response.resolve(tokenResponse(accessToken("auth0|candidate-one", "rotated"), "refresh-next"));
+    const [first, second] = await Promise.all(sessions);
+    await explicit;
+    expect(first).toEqual(second);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(browser.records.get("auth0Session")).toMatchObject({ refreshToken: "refresh-next" });
+  });
+
+  it("drains a delayed session write before logout clears it", async () => {
+    const browser = installChrome({ initialSession: await storedSession() });
+    const started = deferred<void>();
+    const release = deferred<void>();
+    browser.sessionStorage.set.mockImplementationOnce(async (value) => {
+      started.resolve();
+      await release.promise;
+      for (const [key, entry] of Object.entries(value)) browser.records.set(key, entry);
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL) =>
+        url.pathname === "/oauth/revoke"
+          ? new Response(null, { status: 200 })
+          : tokenResponse(accessToken("auth0|candidate-one"), "refresh-next"),
+      ),
+    );
+    const api = await protocol();
+    const refreshing = expect(api.refresh()).rejects.toThrow("identity_changed");
+    await started.promise;
+    const signingOut = api.logout();
+    release.resolve();
+    await Promise.all([refreshing, signingOut]);
+    expect(browser.records.has("auth0Session")).toBe(false);
+  });
+
+  it("removes a stale login storage write when the newer login cancels", async () => {
+    const browser = installChrome({});
+    browser.launchWebAuthFlow.mockImplementationOnce(authorize).mockResolvedValueOnce(undefined);
+    const started = deferred<void>();
+    const release = deferred<void>();
+    browser.sessionStorage.set.mockImplementationOnce(async (value) => {
+      started.resolve();
+      await release.promise;
+      for (const [key, entry] of Object.entries(value)) browser.records.set(key, entry);
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => tokenResponse(accessToken("auth0|candidate-one"), "refresh-one")),
+    );
+    const api = await protocol();
+    const first = expect(api.login()).rejects.toThrow("identity_changed");
+    await started.promise;
+    await expect(api.login()).rejects.toThrow("authorization_cancelled");
+    release.resolve();
+    await first;
+    expect(browser.records.has("auth0Session")).toBe(false);
+  });
+
+  it("does not let an older logout clear or complete provider logout after a newer login", async () => {
+    const browser = installChrome({ initialSession: await storedSession() });
+    browser.launchWebAuthFlow.mockImplementation(authorize);
+    const started = deferred<void>();
+    const revocation = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL) => {
+        if (url.pathname === "/oauth/revoke") {
+          started.resolve();
+          return revocation.promise;
+        }
+        return tokenResponse(accessToken("auth0|candidate-two"), "refresh-new-account");
+      }),
+    );
+    const api = await protocol();
+    const signingOut = expect(api.logout()).rejects.toThrow("identity_changed");
+    await started.promise;
+    await api.login();
+    revocation.resolve(new Response(null, { status: 200 }));
+    await signingOut;
+    expect(browser.records.get("auth0Session")).toMatchObject({
+      refreshToken: "refresh-new-account",
+    });
+    expect(browser.launchWebAuthFlow).toHaveBeenCalledTimes(1);
+    expect(
+      new URL(browser.launchWebAuthFlow.mock.calls[0]?.[0].url ?? "https://invalid.test").pathname,
+    ).toBe("/authorize");
+  });
+
+  it("refuses credentials from a delayed session read after logout starts", async () => {
+    const initial = { ...(await storedSession()), expiresAt: Date.now() + 60_000 };
+    const browser = installChrome({ initialSession: initial });
+    const started = deferred<void>();
+    const release = deferred<void>();
+    browser.sessionStorage.get.mockImplementationOnce(async (key) => {
+      started.resolve();
+      await release.promise;
+      return { [key]: initial };
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 200 })),
+    );
+    const api = await protocol();
+    const reading = expect(api.authenticatedApiSession()).rejects.toThrow("identity_changed");
+    await started.promise;
+    const signingOut = api.logout();
+    release.resolve();
+    await Promise.all([reading, signingOut]);
+    expect(browser.records.has("auth0Session")).toBe(false);
+  });
+
+  it("keeps the ordered logout clear when a newer login cancels during its storage read", async () => {
+    const initial = await storedSession();
+    const browser = installChrome({ initialSession: initial });
+    const started = deferred<void>();
+    const release = deferred<void>();
+    browser.sessionStorage.get.mockImplementationOnce(async (key) => {
+      started.resolve();
+      await release.promise;
+      return { [key]: initial };
+    });
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const api = await protocol();
+    const signingOut = expect(api.logout()).rejects.toThrow("identity_changed");
+    await started.promise;
+    await expect(api.login()).rejects.toThrow("authorization_cancelled");
+    release.resolve();
+    await signingOut;
+    expect(browser.records.has("auth0Session")).toBe(false);
+    expect(await api.authenticationStatus()).toMatchObject({ authenticated: false });
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });
