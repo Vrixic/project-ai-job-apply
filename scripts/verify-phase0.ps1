@@ -19,6 +19,7 @@ Invoke-CheckedCommand "Portable Terraform and locked-backend operator validation
 Invoke-CheckedCommand "Deployment operator guard validation" { & scripts/tests/deployment-operator-guards.tests.ps1 }
 Invoke-CheckedCommand "Isolated deletion restore contract/operator validation" { pnpm test:deletion-restore }
 Invoke-CheckedCommand "Coordinated D2 maintenance and runtime release validation" { pnpm test:d2-runtime-release }
+Invoke-CheckedCommand "Scoped D2 provider configuration validation" { pnpm test:d2-provider-configuration }
 Invoke-CheckedCommand "Generated synthetic catalog retirement operator validation" { pnpm test:synthetic-catalog-retirement }
 Invoke-CheckedCommand "Candidate rights prerequisites and export validation" { pnpm test:candidate-rights-acceptance }
 Invoke-CheckedCommand "Development document dark guard validation" { & scripts/tests/development-document-dark-guards.tests.ps1 }

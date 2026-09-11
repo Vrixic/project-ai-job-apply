@@ -43,3 +43,7 @@ must not be carried into a release candidate.
 The optional `development_contribution_providers` input retains the inert `["greenhouse"]`
 compatibility default in staging. Any non-default selection, including `[]`, is rejected by the
 platform module because this setting belongs only to explicit development contribution mode.
+
+`development_contribution_domains` defaults to `null`, emits no environment key, and applies no
+additional host restriction. Every non-null value, including `[]`, is rejected in staging;
+the setting is available only in explicit development contribution mode.

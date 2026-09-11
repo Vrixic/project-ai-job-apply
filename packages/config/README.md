@@ -35,3 +35,12 @@ development selection. Any presence outside explicit development mode is invalid
 empty text or an empty array. `loadD2DevelopmentContributionProviders` returns a frozen selection
 and is shared by Gateway and scheduled processing so their interpretation cannot diverge. This
 selection neither activates routes nor supplies provider-verification registrations.
+
+`D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON` adds an independent exact-host restriction: an optional
+JSON array containing only unique values from `boards.greenhouse.io`, `job-boards.greenhouse.io`,
+`jobs.lever.co`, `jobs.eu.lever.co`, and `jobs.ashbyhq.com`. Absence preserves the selected providers'
+existing descriptor domains; `[]` denies every domain. JSON `null`, duplicates, suffixes, URLs,
+wildcards, case changes and any presence outside explicit enabled development mode are rejected.
+`loadD2DevelopmentContributionDomains` returns `undefined` or a frozen selection and rereads current
+configuration on every call. Selecting the global Lever host does not select its EU host. This
+narrowing control does not enable a provider, route or verifier, or change immutable lease descriptors.

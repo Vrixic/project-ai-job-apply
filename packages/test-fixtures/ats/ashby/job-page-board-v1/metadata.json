@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "ats-fixture-metadata.v1",
+  "fixtureId": "ashby-job-page-board-v1",
+  "evidenceClass": "sanitized_authorized_provider",
+  "provider": {
+    "family": "ashby",
+    "variant": "ashby-job-board-v1"
+  },
+  "source": {
+    "kind": "user_provided_with_consent",
+    "capturedOn": "2026-09-11",
+    "authorizationEvidenceId": "d2-ashby-user-source-authorization-20260911",
+    "authorizationExpiresOn": null,
+    "authorizationRevalidateOn": "2026-12-10"
+  },
+  "dataSafety": {
+    "containsProductionData": false,
+    "containsCandidateData": false,
+    "containsAuthenticationMaterial": false,
+    "containsActiveContent": false
+  },
+  "sanitization": {
+    "status": "complete",
+    "policyVersion": "ats-fixture-policy-2026-08-11",
+    "automatedChecks": [
+      {
+        "category": "repository",
+        "tool": "ats-fixture-validator",
+        "toolVersion": "1",
+        "runOn": "2026-09-11",
+        "result": "passed",
+        "evidenceId": "d2-ashby-repository-validation-20260911"
+      },
+      {
+        "category": "secret",
+        "tool": "gitleaks",
+        "toolVersion": "8.30.1",
+        "runOn": "2026-09-11",
+        "result": "passed",
+        "evidenceId": "d2-provider-fixtures-secret-scan-20260911"
+      },
+      {
+        "category": "pii",
+        "tool": "presidio-analyzer",
+        "toolVersion": "2.2.364",
+        "runOn": "2026-09-11",
+        "result": "passed",
+        "evidenceId": "d2-provider-fixtures-pii-adjudicated-20260911"
+      }
+    ],
+    "humanReview": {
+      "state": "approved_sanitized",
+      "reviewerId": "d2-product-owner-20260911-a1",
+      "reviewedOn": "2026-09-11",
+      "evidenceId": "d2-ashby-user-sanitization-acceptance-20260911"
+    }
+  },
+  "retention": {
+    "rawCaptureCreated": true,
+    "rawCaptureDisposition": "destroyed",
+    "rawCaptureEvidenceId": "d2-ashby-memory-only-disposition-20260911",
+    "rawDeletionDueOn": null,
+    "sanitizedFixturePolicy": "retain_until_replaced_or_policy_change"
+  },
+  "representativeness": {
+    "claim": true,
+    "state": "accepted",
+    "reviewerId": "d2-product-owner-20260911-a1",
+    "reviewedOn": "2026-09-11",
+    "evidenceId": "d2-ashby-user-representative-acceptance-20260911"
+  },
+  "behaviorTags": [
+    "hosted-board-shell",
+    "property-value-identifier",
+    "separate-job-posting-data",
+    "structured-description",
+    "structured-organization",
+    "structured-postal-address",
+    "structured-remote-work"
+  ],
+  "integrity": {
+    "algorithm": "sha256",
+    "files": [
+      {
+        "path": "ashby-job-board-v1.html",
+        "bytes": 281,
+        "digest": "62a46c935c942811ed454ef624bc7921be03b141edb5f16faf5be49c5b70ec48"
+      },
+      {
+        "path": "ashby-job-posting.json",
+        "bytes": 7152,
+        "digest": "31e06f3dcce2330899f98f618978d0056f712eca936b24645b0593b174521454"
+      }
+    ]
+  },
+  "reviewState": "approved_sanitized_provider"
+}

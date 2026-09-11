@@ -1,0 +1,23 @@
+{
+  "@context": "https://schema.org",
+  "@type": "JobPosting",
+  "title": "Example Platform Engineer",
+  "hiringOrganization": {
+    "@type": "Organization",
+    "name": "Example Organization",
+    "logo": "https://jobs.example/example-posting"
+  },
+  "jobLocation": {
+    "@type": "Place",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Example City",
+      "addressRegion": null,
+      "addressCountry": null,
+      "postalCode": null
+    }
+  },
+  "employmentType": "FULL_TIME",
+  "datePosted": "2026-01-01",
+  "description": "<p><b>Example description. </b></p><p><br></p><p><b>Example description. </b></p><p>Example description. </p><p><br></p><p><b>Example description. </b></p><p>Example description. </p><p><br></p><p><b>Example description. </b></p><p>Example description. </p>Example description. <p></p><p><br></p><b>Example description. </b><ul><li>Example description. <a>Example description. </a>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li></ul><div><br></div><p><br></p><b>Example description. </b><ul><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li></ul><p><br></p><b>Example description. </b><ul><li><b>Example description. </b></li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li><b>Example description. </b></li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li></ul><p><br></p><b>Example description. </b><ul><li><b>Example description. </b>Example description. </li><li><b>Example description. </b>Example description. </li><li><b>Example description. </b>Example description. </li><li><b>Example description. </b>Example description. </li></ul><p><br></p><b>Example description. </b><ul><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li></ul><p><br></p><b>Example description. </b><ul><li>Example description. </li><li>Example description. </li><li>Example description. </li><li>Example description. </li></ul><p><br></p><p></p>Example description. <p><b>Example description. </b></p><p>Example description. </p><p>Example description. </p><p><br></p><p><b>Example description. </b></p><p>Example description. </p><p>Example description. </p><p><br></p><p><b>Example description. </b></p><p>Example description. </p><p>Example description. </p>"
+}

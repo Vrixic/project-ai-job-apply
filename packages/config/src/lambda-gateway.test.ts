@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  loadD2DevelopmentContributionDomains,
   loadD2DevelopmentContributionProviders,
   loadD2LambdaGatewayConfig,
   loadD2LambdaGatewayConfigSafely,
@@ -156,7 +157,125 @@ describe("Phase 2 Lambda gateway configuration", () => {
     });
     expect(Object.isFrozen(configured.developmentContributionProviders)).toBe(true);
     expect(loadD2DevelopmentContributionProviders({})).toEqual([]);
+    expect(loadD2DevelopmentContributionDomains({})).toBeUndefined();
+    expect(loadD2DevelopmentContributionDomains(developmentEnvironment)).toBeUndefined();
+    expect(configured).not.toHaveProperty("developmentContributionDomains");
   });
+
+  it.each(
+    [
+      [],
+      ["boards.greenhouse.io"],
+      ["job-boards.greenhouse.io"],
+      ["jobs.lever.co"],
+      ["jobs.eu.lever.co"],
+      ["jobs.ashbyhq.com"],
+      ["jobs.lever.co", "jobs.eu.lever.co"],
+      [
+        "boards.greenhouse.io",
+        "job-boards.greenhouse.io",
+        "jobs.lever.co",
+        "jobs.eu.lever.co",
+        "jobs.ashbyhq.com",
+      ],
+    ].map((domains) => ({ domains })),
+  )("accepts only a frozen exact domain selection without activation: $domains", ({ domains }) => {
+    const values = {
+      ...developmentEnvironment,
+      D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: JSON.stringify(domains),
+    };
+    const configured = loadD2LambdaGatewayConfig(values);
+    expect(loadD2DevelopmentContributionDomains(values)).toEqual(domains);
+    expect(configured.developmentContributionDomains).toEqual(domains);
+    expect(Object.isFrozen(configured.developmentContributionDomains)).toBe(true);
+    expect(configured.developmentContributionProviders).toEqual(["greenhouse"]);
+    expect(configured.contributionRoutesEnabled).toBe(false);
+    expect(configured.contributionPolicyRouteEnabled).toBe(false);
+  });
+
+  it("rereads domain selection without changing an earlier immutable snapshot", () => {
+    const values = {
+      ...developmentEnvironment,
+      D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: '["jobs.lever.co","jobs.eu.lever.co"]',
+    };
+    const previous = loadD2DevelopmentContributionDomains(values);
+    values.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON = '["jobs.lever.co"]';
+    expect(loadD2DevelopmentContributionDomains(values)).toEqual(["jobs.lever.co"]);
+    values.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON = "[]";
+    expect(loadD2DevelopmentContributionDomains(values)).toEqual([]);
+    expect(previous).toEqual(["jobs.lever.co", "jobs.eu.lever.co"]);
+    values.D2_DEPLOYMENT_ENVIRONMENT = "staging";
+    expect(() => loadD2DevelopmentContributionDomains(values)).toThrow();
+  });
+
+  it.each([
+    "",
+    " ",
+    "null",
+    "true",
+    "{}",
+    '"jobs.lever.co"',
+    "jobs.lever.co,jobs.ashbyhq.com",
+    '["jobs.lever.co "]',
+    '["JOBS.LEVER.CO"]',
+    '["jobs.lever.co."]',
+    '["https://jobs.lever.co"]',
+    '["jobs.lever.co:443"]',
+    '["jobs.lever.co.example.test"]',
+    '["jobs.eu.lever.co.example.test"]',
+    '["eu.lever.co"]',
+    '["*.lever.co"]',
+    '["localhost"]',
+    "[1]",
+    "[null]",
+    '["jobs.lever.co","jobs.lever.co"]',
+    '["jobs.lever.co","jobs\\u002elever.co"]',
+    `${" ".repeat(256)}[]`,
+  ])("rejects invalid development domain JSON %j without disabling private capture", (domains) => {
+    const values = {
+      ...developmentEnvironment,
+      D2_PRIVATE_CAPTURE_ROUTES_ENABLED: "true",
+      D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: domains,
+    };
+    expect(() => loadD2DevelopmentContributionDomains(values)).toThrow();
+    expect(() => loadD2LambdaGatewayConfig(values)).toThrow();
+    expect(loadD2LambdaGatewayConfigSafely(values)).toMatchObject({
+      valid: false,
+      developmentContributionsEnabled: false,
+      privateCaptureRoutesEnabled: true,
+      contributionRoutesEnabled: false,
+    });
+  });
+
+  it.each([undefined, "staging", "production", "development "])(
+    "rejects any domain setting outside the exact development environment %j",
+    (deploymentEnvironment) => {
+      for (const flag of [undefined, "false", "true"]) {
+        for (const domains of ["", "[]", '["jobs.lever.co"]']) {
+          const values = {
+            D2_DEPLOYMENT_ENVIRONMENT: deploymentEnvironment,
+            D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: flag,
+            D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: domains,
+          };
+          expect(() => loadD2DevelopmentContributionDomains(values)).toThrow();
+          expect(() => loadD2LambdaGatewayConfig(values)).toThrow();
+        }
+      }
+    },
+  );
+
+  it.each([undefined, "false", "TRUE", "yes"])(
+    "rejects domains unless the development flag is exactly true: %j",
+    (flag) => {
+      const values = {
+        D2_DEPLOYMENT_ENVIRONMENT: "development",
+        D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: flag,
+        D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: "[]",
+      };
+      expect(() => loadD2DevelopmentContributionDomains(values)).toThrow();
+      expect(() => loadD2LambdaGatewayConfig(values)).toThrow();
+    },
+  );
 
   it("rereads provider selection and the development boundary on every call", () => {
     const environment = {

@@ -572,6 +572,7 @@ variable "d2_community_runtime" {
     policy_endpoint_enabled                        = bool
     development_contributions_enabled              = optional(bool, false)
     development_contribution_providers             = optional(list(string), ["greenhouse"])
+    development_contribution_domains               = optional(list(string), null)
     artifact_s3_key                                = string
     artifact_s3_object_version                     = string
     artifact_sha256                                = string
@@ -631,6 +632,7 @@ variable "d2_community_runtime" {
     policy_endpoint_enabled                        = false
     development_contributions_enabled              = false
     development_contribution_providers             = ["greenhouse"]
+    development_contribution_domains               = null
     artifact_s3_key                                = ""
     artifact_s3_object_version                     = ""
     artifact_sha256                                = ""
@@ -751,6 +753,19 @@ variable "d2_community_runtime" {
   }
 
   validation {
+    condition = var.d2_community_runtime.development_contribution_domains == null ? true : (
+      var.environment == "development" &&
+      var.d2_community_runtime.development_contributions_enabled &&
+      length(var.d2_community_runtime.development_contribution_domains) <= 5 &&
+      length(distinct(var.d2_community_runtime.development_contribution_domains)) == length(var.d2_community_runtime.development_contribution_domains) &&
+      alltrue([for domain in var.d2_community_runtime.development_contribution_domains : try(contains([
+        "boards.greenhouse.io", "job-boards.greenhouse.io", "jobs.lever.co", "jobs.eu.lever.co", "jobs.ashbyhq.com"
+      ], domain), false)])
+    )
+    error_message = "Development contribution domains must be null (no additional restriction) or an exact unique subset of the five supported provider hosts. Any list, including empty deny-all, requires explicit development contribution mode."
+  }
+
+  validation {
     condition = !var.d2_community_runtime.policy_endpoint_enabled || (
       var.deploy_applications &&
       var.deploy_gateway_lambda &&
@@ -829,6 +844,7 @@ variable "d2_community_runtime" {
         var.d2_community_runtime.development_contributions_enabled ? "" : var.d2_community_runtime.signed_policy_json,
         var.d2_community_runtime.development_contributions_enabled ? "" : var.d2_community_runtime.signed_public_keys_json,
         var.d2_community_runtime.development_contributions_enabled && var.d2_community_runtime.development_contribution_providers != tolist(["greenhouse"]) ? jsonencode(var.d2_community_runtime.development_contribution_providers) : "",
+        var.d2_community_runtime.development_contributions_enabled && var.d2_community_runtime.development_contribution_domains != null ? jsonencode(var.d2_community_runtime.development_contribution_domains) : "",
         var.d2_community_runtime.trust_reviewer_assignments_json,
         var.d2_community_runtime.trust_evidence_allowlist_json,
         var.d2_community_runtime.provider_sources_json,

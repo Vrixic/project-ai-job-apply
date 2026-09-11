@@ -303,6 +303,7 @@ variable "d2_community_runtime" {
     policy_endpoint_enabled                        = false
     development_contributions_enabled              = false
     development_contribution_providers             = ["greenhouse"]
+    development_contribution_domains               = null
     artifact_s3_key                                = ""
     artifact_s3_object_version                     = ""
     artifact_sha256                                = ""

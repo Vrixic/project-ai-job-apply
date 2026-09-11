@@ -134,6 +134,7 @@ run "d2_defaults_create_nothing" {
       !var.d2_community_runtime.maintenance_mode &&
       !var.d2_community_runtime.development_contributions_enabled &&
       var.d2_community_runtime.development_contribution_providers == tolist(["greenhouse"]) &&
+      var.d2_community_runtime.development_contribution_domains == null &&
       var.d2_community_runtime.signal_reserved_concurrency == 0 &&
       !var.d2_community_runtime.policy_endpoint_enabled &&
       length(aws_lambda_function.d2_community_scheduled) == 0 &&
@@ -847,6 +848,369 @@ run "d2_development_provider_selection_does_not_enable_dark_runtime" {
   }
 }
 
+run "d2_development_domain_null_preserves_existing_environment_shape" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = null
+      policy_endpoint_enabled           = false
+    })
+  }
+  assert {
+    condition = (
+      var.d2_community_runtime.development_contribution_domains == null &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON") &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON")
+    )
+    error_message = "Null domain restriction must preserve the existing environment shape."
+  }
+}
+
+run "d2_development_domain_selection_global_lever_and_hosted_ashby" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse", "lever", "ashby"]
+      development_contribution_domains   = ["boards.greenhouse.io", "job-boards.greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com"]
+      policy_endpoint_enabled            = false
+    })
+  }
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON == jsonencode(["boards.greenhouse.io", "job-boards.greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON == jsonencode(["boards.greenhouse.io", "job-boards.greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com"]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON") &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "lever", "ashby"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "Only the exact domain subset may reach Gateway and scheduled processing; provider, Trust and execution controls must stay independent."
+  }
+}
+
+run "d2_development_domain_selection_all_five" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse", "lever", "ashby"]
+      development_contribution_domains   = ["boards.greenhouse.io", "job-boards.greenhouse.io", "jobs.lever.co", "jobs.eu.lever.co", "jobs.ashbyhq.com"]
+      policy_endpoint_enabled            = false
+    })
+  }
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON == jsonencode(["boards.greenhouse.io", "job-boards.greenhouse.io", "jobs.lever.co", "jobs.eu.lever.co", "jobs.ashbyhq.com"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON == jsonencode(["boards.greenhouse.io", "job-boards.greenhouse.io", "jobs.lever.co", "jobs.eu.lever.co", "jobs.ashbyhq.com"]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON") &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "lever", "ashby"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "Only the exact domain subset may reach Gateway and scheduled processing; provider, Trust and execution controls must stay independent."
+  }
+}
+
+run "d2_development_domain_selection_deny_all" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled  = true
+      development_contribution_providers = ["greenhouse", "lever", "ashby"]
+      development_contribution_domains   = []
+      policy_endpoint_enabled            = false
+    })
+  }
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON == jsonencode([]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON == jsonencode([]) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON") &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON == jsonencode(["greenhouse", "lever", "ashby"]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_active_runtime_fixture.provider_sources_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_active_runtime_fixture.provider_verification_registrations_json &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_active_runtime_fixture.trust_reviewer_assignments_json &&
+      aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
+      aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 2
+    )
+    error_message = "Only the exact domain subset may reach Gateway and scheduled processing; provider, Trust and execution controls must stay independent."
+  }
+}
+
+run "d2_development_domain_selection_rejects_duplicate" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["jobs.lever.co", "jobs.lever.co"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_too_many" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["boards.greenhouse.io", "job-boards.greenhouse.io", "jobs.lever.co", "jobs.eu.lever.co", "jobs.ashbyhq.com", "jobs.lever.co"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_unknown" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["jobs.example.test"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_case_changed" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["JOBS.lever.co"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_whitespace" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["jobs.lever.co "]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_wildcard" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["*.lever.co"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_url" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["https://jobs.lever.co"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_port" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["jobs.lever.co:443"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_trailing_dot" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["jobs.lever.co."]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_null_element" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = [null]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_flag_off" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = false
+      development_contribution_domains  = ["jobs.lever.co"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_deny_all_flag_off" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = false
+      development_contribution_domains  = []
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_staging" {
+  command = plan
+  variables {
+    environment = "staging"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = false
+      development_contribution_domains  = ["jobs.lever.co"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_deny_all_staging" {
+  command = plan
+  variables {
+    environment = "staging"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = false
+      development_contribution_domains  = []
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_production" {
+  command = plan
+  variables {
+    environment = "production"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = false
+      development_contribution_domains  = ["jobs.lever.co"]
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_rejects_deny_all_production" {
+  command = plan
+  variables {
+    environment = "production"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = false
+      development_contribution_domains  = []
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_domain_selection_does_not_activate_dark_runtime" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      enabled                           = false
+      policy_endpoint_enabled           = false
+      provider_private_egress           = false
+      development_contributions_enabled = true
+      development_contribution_domains  = ["jobs.lever.co"]
+    })
+  }
+  assert {
+    condition = (
+      !local.d2_community_enabled &&
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON") &&
+      !contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON") &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 0 &&
+      length(aws_cloudwatch_event_rule.d2_community_schedule) == 0 &&
+      length(aws_lambda_event_source_mapping.d2_trust_signal) == 0 &&
+      length(aws_nat_gateway.ingestion_provider) == 0
+    )
+    error_message = "A domain restriction alone must not activate any runtime, routes, triggers or egress."
+  }
+}
+
+run "d2_development_domain_configuration_budget_boundary_without_restriction" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = null
+      policy_endpoint_enabled           = false
+      signed_policy_json                = ""
+      signed_public_keys_json           = ""
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 2 - length(join("", [
+        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+        var.d2_active_runtime_fixture.provider_sources_json,
+        var.d2_active_runtime_fixture.provider_verification_registrations_json
+      ]))))
+    })
+  }
+  assert {
+    condition     = !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON")
+    error_message = "The existing 2400-byte encoded configuration boundary must pass without an omitted restriction's bytes."
+  }
+}
+
+run "d2_development_domain_configuration_budget_includes_restriction" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = ["jobs.lever.co"]
+      policy_endpoint_enabled           = false
+      signed_policy_json                = ""
+      signed_public_keys_json           = ""
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 2 - length(join("", [
+        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+        var.d2_active_runtime_fixture.provider_sources_json,
+        var.d2_active_runtime_fixture.provider_verification_registrations_json
+      ]))))
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
 run "d2_development_contributions_ignore_legacy_signatures" {
   command = plan
 
@@ -1067,6 +1431,7 @@ run "d2_development_maintenance_retains_unsigned_mode_and_provider_selection" {
       maintenance_mode                   = true
       development_contributions_enabled  = true
       development_contribution_providers = ["greenhouse", "lever", "ashby"]
+      development_contribution_domains   = ["boards.greenhouse.io", "job-boards.greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com"]
       policy_endpoint_enabled            = false
       signed_policy_json                 = ""
       signed_public_keys_json            = ""
@@ -1076,6 +1441,9 @@ run "d2_development_maintenance_retains_unsigned_mode_and_provider_selection" {
   assert {
     condition = (
       local.d2_development_contributions_enabled && !local.d2_community_operational &&
+      aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON == jsonencode(var.d2_community_runtime.development_contribution_domains) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON == jsonencode(var.d2_community_runtime.development_contribution_domains) &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON") &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "false" &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ROUTES_ENABLED == "false" &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_PRIVATE_CAPTURE_ROUTES_ENABLED == "true" &&

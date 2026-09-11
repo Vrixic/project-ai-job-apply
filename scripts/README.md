@@ -252,6 +252,14 @@ Both are included in maintained infrastructure and full repository verification.
 
 ## Repository and infrastructure policy
 
+- `lib/development-d2-provider-configuration.ps1` — Pure saved-plan guard for a separate additive
+  development provider configuration change. It preserves existing Greenhouse bindings and
+  requires an explicit exact-domain subset, cross-bound sources/verification registrations and
+  exactly four Gateway/scheduled function/alias updates. All artifacts, Trust settings, schema,
+  maintenance, IAM/network and other variables stay unchanged. It performs no cloud operation;
+  an operator must bind reviewed source/artifact receipts to actual aliases before application.
+  `pnpm test:d2-provider-configuration` runs its generated positive/negative regressions and is
+  included in the maintained repository verifier. This is not a bypass of migration maintenance.
 - `prepare-terraform-bootstrap.ps1` — Prepares the exact isolated AWS bootstrap boundary.
 - `operate-bootstrap-workload-boundary.ps1` — Produces, checksum-gates, applies, and independently
   verifies the one-statement document-role bootstrap boundary change. See

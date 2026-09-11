@@ -54,6 +54,14 @@ JSON array can independently select `greenhouse`, `lever`, and `ashby`, and `[]`
 Each fixed descriptor binds extension `0.2.0`, its exact variant, and its exact HTTPS hosts.
 Malformed selection or any selection outside explicit development is rejected. Intake and
 processing still honor their separate runtime-disable flags and current provider selection.
+`D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON` can additionally restrict the five existing exact hosts;
+absence preserves descriptor behavior, `[]` denies all, and malformed/off-environment settings fail
+closed. Global Lever and EU Lever are independently selectable. Current domain authority is read
+at intake and at processing's initial and pre-publication checks, including before a prepared
+operation lease can renew. Domain selection does not alter descriptor versions/digests or require
+a migration. An already authorized in-flight operation retains the existing bounded lease, so
+deployment changes still use the normal quiesce/drain procedure; this is not instantaneous
+revocation across old runtime versions.
 This source support does not enable detectors, supply verification registrations, or activate
 Lever/Ashby in the deployed environment; their representative page/API acceptance remains open.
 Production/default composition retains signed-policy expiry checks. The legacy public policy API

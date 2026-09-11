@@ -45,3 +45,12 @@ The optional `d2_community_runtime.development_contribution_providers` list sele
 preserves Greenhouse-only behavior without a new environment key; `[]` denies every provider.
 It does not change enable flags or create verification registrations, and additional providers
 remain subject to their separate source, fixture acceptance, and activation configuration.
+
+`d2_community_runtime.development_contribution_domains` optionally narrows those providers to an
+exact unique subset of the five supported job-page hosts. Omission or `null` emits no additional
+environment key; `[]` denies all hosts. Any non-null list requires explicit development contribution
+mode and reaches only Gateway and scheduled processing. For global-only Lever, omit
+`jobs.eu.lever.co` from the reviewed list while retaining the accepted Greenhouse hosts and any
+separately accepted hosted Ashby host. Provider registration and extension detector activation
+remain independent; this setting changes no immutable descriptor, migration, identity, or Trust
+authority.

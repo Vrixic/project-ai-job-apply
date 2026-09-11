@@ -5,7 +5,10 @@ import {
   contributionCapabilityPolicyDigestInput,
   type D2ContributionCapabilityPolicy,
 } from "./contribution-capability-policy.js";
-import { DevelopmentContributionCapabilitySource } from "./contribution-capability-source.js";
+import {
+  DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS,
+  DevelopmentContributionCapabilitySource,
+} from "./contribution-capability-source.js";
 import {
   ContributionProcessingDependencyUnavailableError,
   ContributionProcessingService,
@@ -494,6 +497,75 @@ function service(
 }
 
 describe("ContributionProcessingService", () => {
+  it("rechecks a development domain disabled during final consent before preparing publication", async () => {
+    const values = {
+      D2_DEPLOYMENT_ENVIRONMENT: "development",
+      D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
+      D2_COMMUNITY_RUNTIME_ENABLED: "true",
+      D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: '["job-boards.greenhouse.io"]',
+    };
+    const capability = new DevelopmentContributionCapabilitySource(values);
+    const authorize = vi.spyOn(capability, "authorize");
+    const store = new MemoryProcessingStore();
+    const prepare = vi.spyOn(store, "preparePublication");
+    const publish = vi.fn();
+    let checks = 0;
+    const consent = {
+      verifyCurrent: vi.fn(async () => {
+        checks += 1;
+        if (checks === 2) values.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON = "[]";
+        return { status: "current" as const };
+      }),
+    };
+    await expect(
+      service(store, { capability, consent, reconciler: { publish, remove: vi.fn() } }).process(
+        ids.contribution,
+      ),
+    ).resolves.toBe("capability_disabled");
+    expect(consent.verifyCurrent).toHaveBeenCalledTimes(2);
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(store.value.trustDecision?.status).toBe("accepted");
+    expect(prepare).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+    expect(store.preparedPublications).toEqual([]);
+  });
+
+  it.each([1, DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS + 1])(
+    "does not reuse or renew a prepared development lease after domain denial at +%ims",
+    async (elapsed) => {
+      const values = {
+        D2_DEPLOYMENT_ENVIRONMENT: "development",
+        D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
+        D2_COMMUNITY_RUNTIME_ENABLED: "true",
+        D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: '["job-boards.greenhouse.io"]',
+      };
+      const capability = new DevelopmentContributionCapabilitySource(values);
+      const store = new MemoryProcessingStore();
+      const prepare = vi.spyOn(store, "preparePublication");
+      const publish = vi.fn().mockRejectedValue(new Error("Synthetic publication dependency stop"));
+      let clock = now;
+      const processing = service(store, {
+        capability,
+        reconciler: { publish, remove: vi.fn() },
+        now: () => clock,
+      });
+      await expect(processing.process(ids.contribution)).rejects.toBeInstanceOf(
+        ContributionProcessingDependencyUnavailableError,
+      );
+      expect(prepare).toHaveBeenCalledOnce();
+      expect(store.preparedPublications).toHaveLength(1);
+      const originalPrepared = structuredClone(store.preparedPublications);
+
+      values.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON = "[]";
+      clock = new Date(now.getTime() + elapsed);
+      await expect(processing.process(ids.contribution)).resolves.toBe("capability_disabled");
+      expect(prepare).toHaveBeenCalledOnce();
+      expect(publish).toHaveBeenCalledOnce();
+      expect(store.preparedPublications).toEqual(originalPrepared);
+      expect(store.value.publication).toBeUndefined();
+    },
+  );
+
   it("uses a development operation lease without bypassing independent verification or Trust", async () => {
     const values = {
       D2_DEPLOYMENT_ENVIRONMENT: "development",

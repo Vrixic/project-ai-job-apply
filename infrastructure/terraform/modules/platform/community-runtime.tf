@@ -17,6 +17,8 @@ locals {
     D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED = "true"
     }, var.d2_community_runtime.development_contribution_providers != tolist(["greenhouse"]) ? {
     D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON = jsonencode(var.d2_community_runtime.development_contribution_providers)
+    } : {}, var.d2_community_runtime.development_contribution_domains != null ? {
+    D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON = jsonencode(var.d2_community_runtime.development_contribution_domains)
   } : {}) : {}
   d2_policy_endpoint_enabled = (
     var.d2_community_runtime.policy_endpoint_enabled &&

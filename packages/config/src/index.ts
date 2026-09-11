@@ -112,6 +112,25 @@ const lowercaseUuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}
 const policyVersion = /^[a-z0-9][a-z0-9._-]{2,99}$/;
 const d2DevelopmentContributionProviders = ["greenhouse", "lever", "ashby"] as const;
 export type D2DevelopmentContributionProvider = (typeof d2DevelopmentContributionProviders)[number];
+const d2DevelopmentContributionDomains = [
+  "boards.greenhouse.io",
+  "job-boards.greenhouse.io",
+  "jobs.lever.co",
+  "jobs.eu.lever.co",
+  "jobs.ashbyhq.com",
+] as const;
+export type D2DevelopmentContributionDomain = (typeof d2DevelopmentContributionDomains)[number];
+const d2DevelopmentContributionDomainSchema = z
+  .array(z.enum(d2DevelopmentContributionDomains))
+  .max(d2DevelopmentContributionDomains.length)
+  .superRefine((domains, context) => {
+    if (new Set(domains).size !== domains.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Development contribution domains must be unique",
+      });
+    }
+  });
 const d2DevelopmentContributionProviderSchema = z
   .array(z.enum(d2DevelopmentContributionProviders))
   .max(d2DevelopmentContributionProviders.length)
@@ -180,6 +199,7 @@ export interface D2LambdaGatewayConfiguration {
   valid: boolean;
   developmentContributionsEnabled: boolean;
   developmentContributionProviders?: readonly D2DevelopmentContributionProvider[];
+  developmentContributionDomains?: readonly D2DevelopmentContributionDomain[];
   privateCaptureRoutesEnabled: boolean;
   contributionPolicyRouteEnabled: boolean;
   contributionRoutesEnabled: boolean;
@@ -234,6 +254,29 @@ export function loadD2DevelopmentContributionProviders(
   return Object.freeze(parseBoundedJson(configured, d2DevelopmentContributionProviderSchema));
 }
 
+/** Additional exact-host restriction; absence preserves each immutable provider descriptor. */
+export function loadD2DevelopmentContributionDomains(
+  environment: NodeJS.ProcessEnv = process.env,
+): readonly D2DevelopmentContributionDomain[] | undefined {
+  const configured = environment.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON;
+  const explicitDevelopment =
+    environment.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED === "true" &&
+    environment.D2_DEPLOYMENT_ENVIRONMENT === "development";
+  if (!explicitDevelopment) {
+    if (configured !== undefined || environment.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED === "true") {
+      throw new Error(
+        "Development contribution domain selection requires explicit development mode",
+      );
+    }
+    return undefined;
+  }
+  if (configured === undefined) return undefined;
+  if (typeof configured !== "string" || configured.length > 256) {
+    throw new Error("Development contribution domain selection exceeds its configuration bound");
+  }
+  return Object.freeze(parseBoundedJson(configured, d2DevelopmentContributionDomainSchema));
+}
+
 /**
  * Parses only the default-dark Phase 2 Gateway boundary. Callers should use the safe loader in a
  * shared Gateway process so a malformed optional D2 configuration cannot disable existing D1
@@ -265,6 +308,7 @@ export function loadD2LambdaGatewayConfig(
     );
   }
   const developmentContributionProviders = loadD2DevelopmentContributionProviders(environment);
+  const developmentContributionDomains = loadD2DevelopmentContributionDomains(environment);
   const policyPair =
     Boolean(value.JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON) ===
     Boolean(value.JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON);
@@ -356,6 +400,7 @@ export function loadD2LambdaGatewayConfig(
     valid: true,
     developmentContributionsEnabled: value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED,
     ...(value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED ? { developmentContributionProviders } : {}),
+    ...(developmentContributionDomains !== undefined ? { developmentContributionDomains } : {}),
     privateCaptureRoutesEnabled: value.D2_PRIVATE_CAPTURE_ROUTES_ENABLED,
     contributionPolicyRouteEnabled:
       !value.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED && value.D2_CONTRIBUTION_POLICY_ROUTE_ENABLED,

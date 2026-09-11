@@ -331,13 +331,18 @@ This is the master record for the delivery phases defined in the [product and sy
   PowerShell host's existing suite plus 33 prerequisite/85 export assertions pass. The reproduced
   exited-process observation is fixed in the test only, with three final runs per host passing.
   The full maintained verifier exits zero with 34 test tasks and all 20 builds. All agent changes
-  are integrated on main, no extra branches. Lever/Ashby fixture inputs are now supplied and inert
-  review candidates prepared; lexical/secret scans and exact-context PII adjudication pass, with
-  separate human reviews remaining. The Lever work-mode correction `dab84ac` passes 300 extension
-  tests and the full maintained verifier; the configured extension is rebuilt. Ashby's observed hosted
-  posting avoids custom-domain expansion. A global-only Lever activation also needs server-side
-  EU intake restriction; existing exact registrations limit publication, not intake. Both providers
-  remain disabled. Hosted Auth0/fresh MFA and a newly authorized disposable
+  are integrated on main, no extra branches. D2-011 now completes its initial scoped fixtures:
+  the user accepts sanitization and representative structure for global Lever and hosted Ashby.
+  Four unchanged scanned payloads, four manifests, 14 validator and 52 focused extension tests
+  pass; no EU/custom-domain or live hydration evidence is inferred. The Lever work-mode correction
+  `dab84ac` passes the earlier full maintained verifier. D2-035's new current-domain restriction
+  passes 107 config, 97 focused Jobs and 70 mocked community Terraform tests without changing
+  immutable descriptors or migrations. Domain-aware binaries and separately guarded exact
+  provider/source configuration activation are next; both providers remain disabled until verified.
+  Actual API preflight passes global Lever (one observation/11,984 bytes), but the supplied Ashby
+  board exceeds the unchanged 1,000,000-byte cap. D2-R22 records that distinct activation blocker;
+  it is not another fixture-review request. Prepare Lever separately and keep Ashby disabled.
+  Hosted Auth0/fresh MFA and a newly authorized disposable
   candidate remain necessary for live acceptance.
   No case decision, provider activation, candidate-data mutation or Docker/WSL start.
 - Current owner checkpoint (`2026-09-11`): the user confirms website search visibility after

@@ -32,6 +32,18 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["packages/test-fixtures/ats/lever/job-page-posting-v1/lever-posting-v1.html"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useValidAnchor": "off"
+          }
+        }
+      }
+    }
+  ],
   "javascript": {
     "parser": {
       "unsafeParameterDecoratorsEnabled": true

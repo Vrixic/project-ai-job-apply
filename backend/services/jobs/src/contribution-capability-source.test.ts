@@ -133,6 +133,212 @@ describe("explicit development contribution capability", () => {
     await expect(source.authorize(lever)).rejects.toThrow();
   });
 
+  it.each(["intake", "processing"] as const)(
+    "independently narrows both exact Lever hosts at %s without changing descriptor identity",
+    async (stage) => {
+      const values: NodeJS.ProcessEnv = {
+        ...environment(),
+        D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: '["greenhouse","lever","ashby"]',
+        D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON:
+          '["boards.greenhouse.io","job-boards.greenhouse.io","jobs.lever.co","jobs.ashbyhq.com"]',
+      };
+      const source = new DevelopmentContributionCapabilitySource(values);
+      const request = {
+        ...input(),
+        stage,
+        provider: "lever" as const,
+        pageVariant: "lever-posting-v1" as const,
+        domain: "jobs.lever.co",
+      };
+      const allowed = await source.authorize(request);
+      expect(allowed).toMatchObject({
+        allowed: true,
+        policyRevision: DEVELOPMENT_CONTRIBUTION_CAPABILITIES.lever.version,
+        configurationDigestSha256:
+          DEVELOPMENT_CONTRIBUTION_CAPABILITIES.lever.configurationDigestSha256,
+      });
+      expect(await source.authorize({ ...request, domain: "jobs.eu.lever.co" })).toEqual({
+        allowed: false,
+        reason: "domain_disabled",
+      });
+      expect(await source.authorize({ ...input(), stage })).toMatchObject({ allowed: true });
+      expect(
+        await source.authorize({
+          ...input(),
+          stage,
+          provider: "ashby",
+          pageVariant: "ashby-job-board-v1",
+          domain: "jobs.ashbyhq.com",
+        }),
+      ).toMatchObject({ allowed: true });
+
+      values.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON = '["jobs.eu.lever.co"]';
+      expect(await source.authorize(request)).toEqual({
+        allowed: false,
+        reason: "domain_disabled",
+      });
+      expect(await source.authorize({ ...request, domain: "jobs.eu.lever.co" })).toMatchObject({
+        allowed: true,
+        policyRevision: DEVELOPMENT_CONTRIBUTION_CAPABILITIES.lever.version,
+        configurationDigestSha256:
+          DEVELOPMENT_CONTRIBUTION_CAPABILITIES.lever.configurationDigestSha256,
+      });
+      values.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON = undefined;
+      expect(await source.authorize(request)).toEqual(allowed);
+      expect(await source.authorize({ ...request, domain: "jobs.eu.lever.co" })).toEqual(allowed);
+    },
+  );
+
+  it("rereads domain denial both within an issued lease and when a retry would renew it", async () => {
+    const values = {
+      ...environment(),
+      D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: '["lever"]',
+      D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: '["jobs.lever.co"]',
+    };
+    const source = new DevelopmentContributionCapabilitySource(values);
+    const request = {
+      ...input(),
+      provider: "lever" as const,
+      pageVariant: "lever-posting-v1" as const,
+      domain: "jobs.lever.co",
+    };
+    const first = await source.authorize(request);
+    expect(first).toMatchObject({ allowed: true });
+    values.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON = "[]";
+    for (const elapsed of [1, DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS + 1]) {
+      for (const stage of ["intake", "processing"] as const) {
+        expect(
+          await source.authorize({
+            ...request,
+            stage,
+            now: new Date(request.now.getTime() + elapsed),
+          }),
+        ).toEqual({ allowed: false, reason: "domain_disabled" });
+      }
+    }
+    values.D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON = '["jobs.lever.co","jobs.lever.co"]';
+    await expect(source.authorize(request)).rejects.toThrow();
+    expect(first).toMatchObject({ allowed: true });
+    expect(Object.isFrozen(first)).toBe(true);
+  });
+
+  it("denies every descriptor domain for an explicit empty selection at both stages", async () => {
+    const source = new DevelopmentContributionCapabilitySource({
+      ...environment(),
+      D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: '["greenhouse","lever","ashby"]',
+      D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: "[]",
+    });
+    for (const descriptor of Object.values(DEVELOPMENT_CONTRIBUTION_CAPABILITIES)) {
+      for (const domain of descriptor.domains) {
+        for (const stage of ["intake", "processing"] as const) {
+          expect(
+            await source.authorize({
+              ...input(),
+              stage,
+              provider: descriptor.provider,
+              pageVariant: descriptor.pageVariant,
+              domain,
+            }),
+          ).toEqual({ allowed: false, reason: "domain_disabled" });
+        }
+      }
+    }
+  });
+
+  it.each([
+    "jobs.lever.co.example.test",
+    "jobs.eu.lever.co.example.test",
+    "jobs.lever.co.",
+    "JOBS.LEVER.CO",
+    "https://jobs.lever.co",
+    "jobs.lever.co:443",
+    "jobs.lever.co@other.example.test",
+    "jobs.lever.co ",
+    "eu.lever.co",
+    "localhost",
+  ])("never normalizes a false domain into the selected exact Lever host: %s", async (domain) => {
+    const source = new DevelopmentContributionCapabilitySource({
+      ...environment(),
+      D2_DEVELOPMENT_CONTRIBUTION_PROVIDERS_JSON: '["lever"]',
+      D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: '["jobs.lever.co"]',
+    });
+    for (const stage of ["intake", "processing"] as const) {
+      expect(
+        await source.authorize({
+          ...input(),
+          stage,
+          provider: "lever",
+          pageVariant: "lever-posting-v1",
+          domain,
+        }),
+      ).toEqual({ allowed: false, reason: "domain_disabled" });
+    }
+  });
+
+  it("keeps provider, variant, client and independent stage gates above the extra domain selection", async () => {
+    const values = {
+      ...environment(),
+      D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: '["job-boards.greenhouse.io","jobs.lever.co"]',
+    };
+    const source = new DevelopmentContributionCapabilitySource(values);
+    expect(
+      await source.authorize({
+        ...input(),
+        provider: "lever",
+        pageVariant: "lever-posting-v1",
+        domain: "jobs.lever.co",
+      }),
+    ).toEqual({ allowed: false, reason: "provider_disabled" });
+    expect(await source.authorize({ ...input(), domain: "jobs.lever.co" })).toEqual({
+      allowed: false,
+      reason: "domain_disabled",
+    });
+    expect(await source.authorize({ ...input(), pageVariant: "lever-posting-v1" })).toEqual({
+      allowed: false,
+      reason: "variant_disabled",
+    });
+    expect(await source.authorize({ ...input(), clientVersion: "0.2.1" })).toEqual({
+      allowed: false,
+      reason: "client_disabled",
+    });
+    values.D2_CONTRIBUTION_ROUTES_ENABLED = "false";
+    expect(await source.authorize({ ...input(), stage: "intake" })).toEqual({
+      allowed: false,
+      reason: "global_disabled",
+    });
+    expect(await source.authorize(input())).toMatchObject({ allowed: true });
+    values.D2_CONTRIBUTION_ROUTES_ENABLED = "true";
+    values.D2_COMMUNITY_RUNTIME_ENABLED = "false";
+    expect(await source.authorize(input())).toEqual({ allowed: false, reason: "global_disabled" });
+    expect(await source.authorize({ ...input(), stage: "intake" })).toMatchObject({
+      allowed: true,
+    });
+  });
+
+  it.each(["null", "{}", '"jobs.lever.co"', '["jobs.lever.co","jobs.lever.co"]', ""])(
+    "rejects malformed domain settings at source construction: %s",
+    (selection) => {
+      expect(() =>
+        contributionCapabilitySourceFromEnvironment(
+          { ...environment(), D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: selection },
+          () => input().now,
+        ),
+      ).toThrow();
+    },
+  );
+
+  it.each(["", "[]", '["jobs.lever.co"]'])(
+    "rejects development domain settings in signed/default composition: %s",
+    (selection) => {
+      expect(() =>
+        contributionCapabilitySourceFromEnvironment(
+          { D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON: selection },
+          () => input().now,
+        ),
+      ).toThrow();
+    },
+  );
+
   it.each([
     "null",
     "{}",

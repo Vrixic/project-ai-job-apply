@@ -5,7 +5,8 @@ Its repository defaults remain a **synthetic, default-dark release candidate**. 
 development candidate separately enables the accepted Greenhouse variant. An explicit unpacked-only
 development contribution mode avoids signed-policy renewal; the default distribution path remains
 signed-policy-bound. Initial installed Edge sign-in and server acknowledgement are confirmed. Lever and
-Ashby remain disabled pending D2-011 fixtures and QA acceptance. Acknowledgement is not publication:
+Ashby now have accepted global-Lever/hosted-Ashby fixtures under D2-011, but remain disabled until
+the D2-035 scoped server/configuration release verifies. Acknowledgement is not publication:
 independent provider verification and Trust acceptance still apply. Production, general candidate
 release, and browser-store distribution are not approved. See the current
 [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md) for live gates.
@@ -193,12 +194,12 @@ release candidate.
 
 ## Remaining activation gates
 
-- Signed-in website search/detail confirmation for existing contributions. On 2026-09-11 the
-  user reports Processing `published` and Trust `accepted` in the extension; that satisfies owner
-  status readback for the reported result, not website visibility or every historical contribution.
-  The generated contracts and development backend are already implemented and deployed.
-- Authorized Lever/Ashby provider-derived fixtures and independent representative-variant
-  acceptance; Greenhouse's accepted fixture and controlled development activation already exist.
+- Scoped global Lever/hosted Ashby domain-aware server release, exact source registrations and
+  configured extension rebuild/reload; representative fixtures are accepted on 2026-09-11.
+  EU Lever, custom domains and rendered Ashby hydration are not covered by that fixture acceptance.
+- Broader live lifecycle acceptance remains separate from the user's 2026-09-11 confirmation of
+  the reported Greenhouse job's published/accepted status and website search/detail/source display.
+  That completed journey should not be requested again.
 - Remaining installed Chrome/Edge Auth0 lifecycle, cancellation, rotation/replay, logout,
   revocation and cross-account/offline/restart conformance; initial installed Edge login passes.
 - Accountable UGC, permission, privacy, security, accessibility, and store approval.

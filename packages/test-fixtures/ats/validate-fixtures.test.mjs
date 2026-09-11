@@ -44,7 +44,9 @@ afterEach(() => {
 
 test("accepts the repository fixtures with their exact evidence classes", () => {
   assert.deepEqual(validateTree(atsDirectory), [
+    "ashby-job-page-board-v1",
     "greenhouse-job-page-board-v1",
+    "lever-job-page-posting-v1",
     "synthetic-foundation-v1",
   ]);
 });

@@ -1,0 +1,50 @@
+{
+  "@context": "https://schema.org",
+  "@type": "JobPosting",
+  "title": "Synthetic Platform Engineer",
+  "description": "<p>Synthetic public job description.<a><u>Synthetic public job description.</u></a>Synthetic public job description.</p><p>Synthetic public job description.</p><p>Synthetic public job description.</p><ul><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li></ul><p>Synthetic public job description.</p><ul><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li></ul><div>&nbsp;</div><h1><strong>Synthetic public job description.</strong></h1><p>Synthetic public job description.</p><ul><li><p><em>Synthetic public job description.</em>Synthetic public job description.</p></li><li><p><em>Synthetic public job description.</em>Synthetic public job description.</p></li><li><p><em>Synthetic public job description.</em>Synthetic public job description.<em>Synthetic public job description.</em>Synthetic public job description.</p></li><li><p><em>Synthetic public job description.</em>Synthetic public job description.</p></li><li><p><em>Synthetic public job description.</em>Synthetic public job description.</p></li><li><p><em>Synthetic public job description.</em>Synthetic public job description.</p></li></ul><div>&nbsp;</div><h1><strong>Synthetic public job description.</strong></h1><p>Synthetic public job description.<em>Synthetic public job description.</em></p><ul><li><p><strong>Synthetic public job description.</strong>Synthetic public job description.<strong> </strong>Synthetic public job description.<em>Synthetic public job description.</em>Synthetic public job description.</p></li><li><p><strong>Synthetic public job description.</strong> <strong>Synthetic public job description.</strong>Synthetic public job description.<em>Synthetic public job description.</em>Synthetic public job description.</p></li><li><p><strong>Synthetic public job description.</strong>Synthetic public job description.</p></li></ul><p>Synthetic public job description.<a><u>Synthetic public job description.</u></a>Synthetic public job description.</p><div>&nbsp;</div><h1>Synthetic section</h1><p>Synthetic public job description.<strong>Synthetic public job description.</strong>Synthetic public job description.</p><p>Synthetic public job description.</p><p>Synthetic public job description.<em>Synthetic public job description.</em>Synthetic public job description.</p><p>Synthetic public job description.</p><div>&nbsp;</div><h1>Synthetic section</h1><p>Synthetic public job description.</p><ul><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li></ul><div>&nbsp;</div><h2><strong>Synthetic public job description.</strong></h2><p>Synthetic public job description.</p><p>Synthetic public job description.</p><p>Synthetic public job description.<em>Synthetic public job description.</em>Synthetic public job description.</p><div>&nbsp;</div><h2><strong>Synthetic public job description.</strong></h2><p>Synthetic public job description.<a><u>Synthetic public job description.</u></a>Synthetic public job description.<a><u>Synthetic public job description.</u></a>Synthetic public job description.</p><p>Synthetic public job description.</p><div>&nbsp;</div><div></div><div>&nbsp;</div><p>Synthetic public job description.</p><div>&nbsp;</div><h2><strong>Synthetic public job description.</strong></h2><p>Synthetic public job description.</p><ul><li><p><strong>Synthetic public job description.</strong>Synthetic public job description.</p></li><li><p><strong>Synthetic public job description.</strong>Synthetic public job description.</p></li><li><p><strong>Synthetic public job description.</strong>Synthetic public job description.<a><u>Synthetic public job description.</u></a>Synthetic public job description.</p></li></ul><p>Synthetic public job description.</p><div>&nbsp;</div><div></div><div>&nbsp;</div><p>Synthetic public job description.</p><div><div></div></div><h2><strong>Synthetic public job description.</strong></h2><p>Synthetic public job description.</p><p>Synthetic public job description.</p><div>&nbsp;</div><h2><strong>Synthetic public job description.</strong></h2><p>Synthetic public job description.</p><p>Synthetic public job description.<em>Synthetic public job description.</em>Synthetic public job description.</p><p>Synthetic public job description.<a><u>Synthetic public job description.</u></a>Synthetic public job description.<a><u>Synthetic public job description.</u></a>Synthetic public job description.</p><div>&nbsp;</div><h1><strong>Synthetic public job description.</strong></h1><p>Synthetic public job description.</p><p>Synthetic public job description.</p><ul><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li></ul><p>Synthetic public job description.</p><p>Synthetic public job description.</p><div>&nbsp;</div><h1><strong>Synthetic public job description.</strong></h1><p>Synthetic public job description.</p><p>Synthetic public job description.</p><div>&nbsp;</div><h1><strong>Synthetic public job description.</strong></h1><p>Synthetic public job description.</p><div>&nbsp;</div><h1><strong>Synthetic public job description.</strong></h1><ul><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li><li><p>Synthetic public job description.</p></li></ul><p>Synthetic public job description.</p><p><em>Synthetic public job description.</em></p><p><em>Synthetic public job description.</em></p>",
+  "directApply": true,
+  "identifier": {
+    "@type": "PropertyValue",
+    "name": "Synthetic requisition",
+    "value": "019d04cf-1f80-7000-8000-000000000060"
+  },
+  "datePosted": "2026-09-11",
+  "hiringOrganization": {
+    "@type": "Organization",
+    "name": "Synthetic Employer",
+    "sameAs": "https://employer.example.test/",
+    "logo": "https://employer.example.test/"
+  },
+  "jobLocation": {
+    "@type": "Place",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Example City",
+      "addressRegion": "Example Region",
+      "addressCountry": "Example Country"
+    }
+  },
+  "employmentType": "FULL_TIME",
+  "baseSalary": {
+    "@type": "MonetaryAmount",
+    "currency": "USD",
+    "value": {
+      "@type": "QuantitativeValue",
+      "minValue": 40000,
+      "maxValue": 80000,
+      "unitText": "YEAR"
+    }
+  },
+  "jobLocationType": "TELECOMMUTE",
+  "applicantLocationRequirements": [
+    {
+      "@type": "Country",
+      "name": "Example Country 1"
+    },
+    {
+      "@type": "Country",
+      "name": "Example Country 2"
+    }
+  ]
+}

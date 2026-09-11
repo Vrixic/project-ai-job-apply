@@ -80,6 +80,18 @@ existing runtime environment shape. The Trust-signal runtime never receives it. 
 provider activation still requires the corresponding reviewed source and independent-verification
 registrations; contribution selection alone does not establish provider or publication readiness.
 
+`development_contribution_domains` is an optional additional host restriction. Omission or `null`
+preserves the existing environment shape and applies no extra restriction; `[]` denies every host.
+A non-null list must contain at most five unique exact supported provider hosts and requires
+explicit development contribution mode. Only Gateway and the scheduled processor receive
+`D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON`; the Trust-signal runtime is unchanged. The restriction
+is intersected with the selected provider and its immutable descriptor, not a replacement for
+either. In particular, global Lever can be selected while `jobs.eu.lever.co` remains denied.
+This neither activates providers nor establishes representative-fixture or publication acceptance.
+Matching exact source/verification registrations and the extension's separate detector-domain
+policy remain required. The added JSON counts toward the existing 2,400-byte encoded configuration
+budget, and maintenance retains the restriction while pausing execution.
+
 The gateway and reconciler are the only producers for the platform-CMK-encrypted outbox queue.
 The durable orchestrator is outside the VPC and invokes an exact activity version; database
 activity and terminal handlers remain private and retrieve only the database secret. A narrow

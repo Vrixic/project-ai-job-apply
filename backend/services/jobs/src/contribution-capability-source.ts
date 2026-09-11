@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { loadD2DevelopmentContributionProviders } from "@ai-job-apply/config";
+import {
+  loadD2DevelopmentContributionDomains,
+  loadD2DevelopmentContributionProviders,
+} from "@ai-job-apply/config";
 import type {
   ContributionCapabilityDecision,
   ContributionCapabilityInput,
@@ -99,6 +102,7 @@ export class DevelopmentContributionCapabilitySource {
       throw new ContributionCapabilityPolicySourceUnavailableError();
     }
     loadD2DevelopmentContributionProviders(environment);
+    loadD2DevelopmentContributionDomains(environment);
   }
 
   async authorize(
@@ -125,7 +129,11 @@ export class DevelopmentContributionCapabilitySource {
     if (input.pageVariant !== descriptor.pageVariant) {
       return { allowed: false, reason: "variant_disabled" };
     }
-    if (!descriptor.domains.includes(input.domain)) {
+    const selectedDomains = loadD2DevelopmentContributionDomains(this.environment);
+    if (
+      !descriptor.domains.includes(input.domain) ||
+      (selectedDomains !== undefined && !selectedDomains.some((domain) => domain === input.domain))
+    ) {
       return { allowed: false, reason: "domain_disabled" };
     }
     return Object.freeze({
@@ -149,6 +157,7 @@ export function contributionCapabilitySourceFromEnvironment(
   now: () => Date,
 ): ContributionCapabilitySource | null {
   loadD2DevelopmentContributionProviders(environment);
+  loadD2DevelopmentContributionDomains(environment);
   if (developmentEnabled(environment))
     return new DevelopmentContributionCapabilitySource(environment);
   return contributionCapabilityPolicySourceFromEnvironment(environment, now);

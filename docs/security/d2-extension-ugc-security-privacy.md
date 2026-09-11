@@ -92,7 +92,15 @@ and provider selection outside explicit development is rejected. Exact client, p
 HTTPS hosts, runtime enable flags, authentication, preview-bound command authorization,
 independent provider evidence, Trust decisions, and account fencing remain enforced. Detector
 activation and exact provider registrations are separate; Lever/Ashby remain disabled in the
-current deployment pending representative page/API acceptance.
+current deployment pending their scoped runtime/configuration release. Accepted global Lever
+and hosted Ashby fixtures do not authorize EU/custom-domain or automatic publication.
+The optional `D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON` further intersects descriptor authority
+with an exact fixed-host subset, re-read at intake and before publication preparation/renewal.
+It is rejected outside explicit development; absence preserves descriptor hosts, while `[]`
+denies all. Global-only Lever activation must explicitly retain the domain restriction because
+the immutable Lever descriptor itself includes both regional hosts. Release domain-aware code
+before introducing the provider/domain configuration together. Existing in-flight 60-second
+publication leases may finish; no instantaneous old-version revocation is claimed.
 Consent and contribution HTTP requests refuse redirects, including cross-origin redirects.
 
 Prepared development publication operations use a 60-second automatically refreshed lease after
