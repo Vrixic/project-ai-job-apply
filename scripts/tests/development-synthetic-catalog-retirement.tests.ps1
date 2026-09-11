@@ -108,6 +108,27 @@ Assert-Test ($registration.containerDefinitions[0].image -ceq $image) "Only imag
 Assert-Test ($before -ceq (ConvertTo-DeploymentCanonicalValue $native)) "Registration preserves native observation"
 Assert-Test ($null -eq $registration.PSObject.Properties["taskDefinitionArn"]) "Registration removes only computed identity"
 Assert-Test ($registration.containerDefinitions[0].cpu -eq 0) "Native integer CPU zero accepted"
+# Terraform also persists ECS-normalized default fields in container_definitions.
+$ownedDefaults=Copy-Json $owned
+$ownedDefaults.container_definitions=ConvertTo-Json -InputObject @($nativeContainer) -Depth 30 -Compress
+$ownedBefore=ConvertTo-DeploymentCanonicalValue $ownedDefaults
+Assert-Test ((ConvertTo-DeploymentCanonicalValue (New-RetirementRegistration $native $ownedDefaults $image)) -ceq (ConvertTo-DeploymentCanonicalValue $registration)) "Both native and Terraform default metadata normalize identically"
+Assert-Test ($ownedBefore -ceq (ConvertTo-DeploymentCanonicalValue $ownedDefaults)) "Symmetric normalization preserves original Terraform bytes"
+foreach ($field in @("portMappings","mountPoints","volumesFrom","systemControls","resourceRequirements","environmentFiles","dependsOn","ulimits","credentialSpecs")) {
+  foreach ($invalid in @($null,"",0,$false,@("nonempty"))) {
+    $stateContainer=Copy-Json $nativeContainer; Set-TestProperty $stateContainer $field $invalid
+    $badOwned=Copy-Json $ownedDefaults; $badOwned.container_definitions=ConvertTo-Json -InputObject @($stateContainer) -Depth 30 -Compress
+    Assert-Rejected {New-RetirementRegistration $native $badOwned $image} "Terraform default $field exact empty array only"
+  }
+}
+foreach ($invalid in @($null,"0",0.5,$false,1)) {
+  $stateContainer=Copy-Json $nativeContainer; $stateContainer.cpu=$invalid
+  $badOwned=Copy-Json $ownedDefaults; $badOwned.container_definitions=ConvertTo-Json -InputObject @($stateContainer) -Depth 30 -Compress
+  Assert-Rejected {New-RetirementRegistration $native $badOwned $image} "Terraform CPU default integer zero only"
+}
+$stateContainer=Copy-Json $nativeContainer; Set-TestProperty $stateContainer "privileged" $true
+$badOwned=Copy-Json $ownedDefaults; $badOwned.container_definitions=ConvertTo-Json -InputObject @($stateContainer) -Depth 30 -Compress
+Assert-Rejected {New-RetirementRegistration $native $badOwned $image} "Symmetric normalization never removes unknown Terraform capabilities"
 foreach ($name in @("privileged","user","entryPoint","dockerSecurityOptions","linuxParameters")) {
   $bad=Copy-Json $native; Set-TestProperty $bad.taskDefinition.containerDefinitions[0] $name "unexpected"
   Assert-Rejected {New-RetirementRegistration $bad $owned $image} "Container capability $name refuses"

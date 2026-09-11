@@ -310,7 +310,7 @@ function New-RetirementRegistration {
   $containers = @($task.containerDefinitions)
   if ($declared.Count -ne 1 -or $containers.Count -ne 1) { throw "Exactly one migration container is required." }
   $container = $containers[0]
-  $expected = $declared[0]
+  $expected = ConvertTo-RetirementContainer $declared[0]
   if ($Temporary) { $expected.image = $Image }
   if ((ConvertTo-DeploymentCanonicalValue (ConvertTo-RetirementContainer $container)) -cne (ConvertTo-DeploymentCanonicalValue $expected) -or $container.name -cne $containerName -or $container.essential -isnot [bool] -or -not $container.essential -or $container.readonlyRootFilesystem -isnot [bool] -or -not $container.readonlyRootFilesystem -or (@($container.command) -join "|") -cne "runner/dist/src/main.js" -or @($container.environment).Count -ne 1 -or $container.environment[0].name -cne "NODE_ENV" -or $container.environment[0].value -cne "production" -or @($container.secrets).Count -ne 1 -or $container.secrets[0].name -cne "DATABASE_URL" -or $container.logConfiguration.logDriver -cne "awslogs" -or $container.logConfiguration.options.'awslogs-group' -cne $applicationLogGroup -or $container.logConfiguration.options.'awslogs-region' -cne $Region -or $container.logConfiguration.options.'awslogs-stream-prefix' -cne "database-migration") { throw "The migration container configuration changed or is not hardened." }
   $tagMap = @{}
