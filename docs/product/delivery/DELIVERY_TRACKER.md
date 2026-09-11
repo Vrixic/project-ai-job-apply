@@ -332,8 +332,12 @@ This is the master record for the delivery phases defined in the [product and sy
   exited-process observation is fixed in the test only, with three final runs per host passing.
   The full maintained verifier exits zero with 34 test tasks and all 20 builds. All agent changes
   are integrated on main, no extra branches. Lever/Ashby fixture inputs are now supplied and inert
-  review candidates prepared; scans and separate human reviews remain. Ashby's observed hosted
-  posting avoids custom-domain expansion. Hosted Auth0/fresh MFA and a newly authorized disposable
+  review candidates prepared; lexical/secret scans and exact-context PII adjudication pass, with
+  separate human reviews remaining. The Lever work-mode correction `dab84ac` passes 300 extension
+  tests and the full maintained verifier; the configured extension is rebuilt. Ashby's observed hosted
+  posting avoids custom-domain expansion. A global-only Lever activation also needs server-side
+  EU intake restriction; existing exact registrations limit publication, not intake. Both providers
+  remain disabled. Hosted Auth0/fresh MFA and a newly authorized disposable
   candidate remain necessary for live acceptance.
   No case decision, provider activation, candidate-data mutation or Docker/WSL start.
 - Current owner checkpoint (`2026-09-11`): the user confirms website search visibility after
