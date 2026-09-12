@@ -65,15 +65,22 @@ provider verifier without treating candidate-supplied content as catalog truth.
   board/posting identity. It requests no compensation data and never calls an authenticated API.
   Public API documentation provides only board acquisition, so the existing response/count caps
   remain unchanged. An unlisted record causes catalog withdrawal, not a claim of employer closure.
-  D2-059 is now approved and In progress for an Ashby-specific `pollExact` implementation:
+  D2-059's Ashby-specific `pollExact` is implemented and locally verified at `09cc3fa`:
   stream the same documented full-board GET with `includeCompensation=false`, retain the exact
   target and validate full EOF before returning it through the existing independent verifier.
   A separate frozen `ashby-exact-board-v1` acquisition profile bounds response, record scan,
-  transient memory and whole-operation time; only Ashby's source-configuration digest changes.
-  General scheduled polling/shared limits and Greenhouse/Lever digests stay unchanged. Identity,
+  serialized-record/envelope/depth/key/fragment buffers and whole-operation time, retaining one
+  selected record. This is not a measured total V8 heap/RSS ceiling. Only Ashby's source digest
+  changes, binding all eight profile fields and requiring fresh source binding for later activation.
+  General scheduled polling retains `1_000_000` bytes/`100` jobs/`5_000` ms; Greenhouse/Lever digests
+  stay unchanged. Identity,
   duplicate, malformed, overflow and deadline failures deny without partial evidence or
-  absence-based closure; raw bodies are never retained. Source/test completion, live acceptance,
-  deployment and activation are not claimed. See the [existing task and target bounds](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification).
+  absence-based closure; raw bodies are never persisted. Reader 131/131, the full ingestion suite
+  427/427 and the maintained repository verifier pass. A subsequent read-only live preflight
+  validates the complete 2,118,913-byte/71-record board and supplied exact posting, then replays
+  only that in-memory record through the strict mapper. No raw response is persisted and no
+  catalog, deployment or activation is changed. Fresh source binding and development activation
+  remain separate. See the [verified task and exact bounds](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification).
 - `provider-description.ts` — bounded inert HTML-to-plaintext/textContent conversion for independent
   Lever/Ashby evidence, excluding executable, form, and embedded-resource subtrees. It retains no
   raw HTML and never executes or fetches page content.

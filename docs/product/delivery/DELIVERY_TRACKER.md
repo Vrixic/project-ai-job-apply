@@ -323,13 +323,20 @@ This is the master record for the delivery phases defined in the [product and sy
 - Completion: Not completed
 - Current Ashby implementation (`2026-09-12`): the user explicitly approves implementing the
   separately bounded Ashby large-board verifier with activation kept separate and disabled.
-  D2-059 is In progress for code/local verification on the existing independent-verifier/exact-
-  poll/Jobs/Trust path. A frozen Ashby-specific profile bounds response, record scan, transient
-  memory and whole-operation time while preserving general/shared limits and Greenhouse/Lever
-  digests. No API/event/SQL/migration change, live provider call, deployment or provider/reviewer/
-  candidate authority expansion is included. Final source/test evidence remains pending;
-  D2-R22 stays Open, Ashby/EU remain disabled and Phase 2 stays In progress.
-  [Started task and target bounds](phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification),
+  D2-059 is Complete for implementation/local verification at `09cc3fa` on the existing independent-
+  verifier/exact-poll/Jobs/Trust path. The full maintained verifier exits zero (`66f131`): ingestion
+  427/427, workflows 1,239 passed/eight existing opt-ins skipped, and builds 20/20 with 18 cache hits.
+  Independent review, focused reader 131/131 and runtime/configuration 29/29 pass. The frozen
+  Ashby-specific profile binds every field into its source digest while preserving general
+  `1_000_000`-byte/`100`-job/`5_000`-ms polling and Greenhouse/Lever digests. Structural record/
+  envelope/depth/key/fragment bounds plus one selected record are not measured V8/RSS limits.
+  No API/event/SQL/migration change, deployment or authority expansion occurred. Subsequent
+  read-only preflight `84b7bb` validates the full 2,118,913-byte/71-record board and supplied exact
+  target, with strict selected-record mapping, zero raw files and zero catalog writes. Fresh
+  source binding/development deployment/activation remain separately approved; no new recurring
+  permission gate is added.
+  D2-R22/D2-035 remain open, Ashby/EU stay disabled and Phase 2 stays In progress.
+  [Verified task and exact bounds](phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification),
   [single rationale](phase-2-extension-and-community.md#decisions-and-scope-changes)
 - Latest owner follow-up (`2026-09-12`): after D2-058's corrected extension handoff, the user
   supplies `Processing: awaiting trust` and `Trust: needs review`, then explicitly approves
@@ -1073,6 +1080,8 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-12 | D2 | Subsequent bounded live Ashby preflight passes: one public API GET, HTTP 200, full EOF at 2,118,913 decompressed bytes, 71 identity-valid records and the supplied exact target. Acquisition takes 374 ms; target-only in-memory replay through strict mapping produces one observation/zero withdrawals, total 397 ms. Zero raw files, catalog writes, deployment or activation. This is one local live sample, not deployed/installed/publication or load acceptance. D2-R22's old acquisition blocker is resolved for this sample; fresh source binding and development activation remain pending. | Aggregate `84b7bb`; [preflight scope and limits](phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification) |
+| 2026-09-12 | D2 | D2-059 completes implementation/local verification at `09cc3fa`: independent review, reader 131/131, runtime/configuration 29/29 and full maintained verification pass; ingestion 427/427, workflows 1,239 passed/eight existing opt-ins skipped, builds 20/20 with 18 cache hits. Exact Ashby profile binding, target-only output and structural parser bounds preserve general limits and other providers' digests; no measured V8/RSS ceiling is claimed. No live supplied-board acquisition, deployment, activation or permission/API/event/SQL/migration change occurred. D2-R22/D2-035/Phase 2 remain open behind separate acceptance. | [Verified implementation and remaining evidence](phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification); maintained verifier exit 0, final aggregate `66f131` |
 | 2026-09-12 | D2 | The user approves implementing the Ashby-specific large-board verifier with activation separate and disabled. Started D2-059 using the existing independent-verifier/exact-poll/Jobs/Trust path, a separate frozen bounded profile and full-response validation. Preserve shared polling limits, current scopes and zero raw retention. No API/event/SQL/migration change, live provider call or deployment is included; implementation/test evidence remains pending. D2-R22 and Phase 2 stay open. | User's explicit implementation approval; [started task](phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification); [single rationale](phase-2-extension-and-community.md#decisions-and-scope-changes) |
 | 2026-09-12 | D2 | Synchronized current approved Greenhouse/global-Lever scope in the repository overview, D2 security/privacy delta and ingestion README, preserving historical releases and excluded gates. Documentation only: no new runtime, provider, reviewer or cloud action; all 15 local links in those three documents pass. | [Repository overview](../../../README.md); [D2 security/privacy delta](../../security/d2-extension-ugc-security-privacy.md); [ingestion README](../../../backend/workers/ingestion/README.md) |
 | 2026-09-12 | D2 | Recorded the proposed D2-R22 next choice: an Ashby-specific large-board verification design with explicit total-download, scanned-record, memory and deadline budgets, preserving general/shared limits; alternatively another exact authorized smaller board. Owner choice remains pending, with no numeric budgets, implementation or activation approval, partial-success evidence or guessed endpoint. D2-R22 stays Open and Ashby disabled. | [Single proposed choice/rationale](phase-2-extension-and-community.md#decisions-and-scope-changes); [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |

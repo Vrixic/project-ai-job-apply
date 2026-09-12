@@ -121,20 +121,27 @@ description; the single decision and rationale are in the
 
 ## Fresh verification and accepted evidence
 
-D2-059's Ashby-specific large-board verifier is approved for implementation on September 12,
-with activation separately gated and disabled. The design reuses the registered independent
+D2-059's Ashby-specific large-board verifier is implemented and locally verified at `09cc3fa`
+on September 12, with activation separately gated and disabled. It reuses the registered independent
 verifier and exact-poll seam, streams only the documented public full-board GET with compensation
 excluded, and returns the exact selected posting through the existing Jobs/Trust gates. The
 separate frozen `ashby-exact-board-v1` profile bounds decompressed bytes, scanned records,
-per-record/envelope memory, nesting/root fields and whole fetch/body/parse time; its exact target
-bounds are recorded in the [existing Phase 2 task](../product/delivery/phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification).
+serialized-record/envelope, depth, key and fragment buffers plus whole fetch/body/parse time.
+Only one selected record is retained. These are structural bounds, not a measured total V8 heap
+or RSS ceiling; exact limits and evidence are recorded in the [existing Phase 2 task](../product/delivery/phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification).
 Validate full EOF including trailing content, identities and duplicates before evidence; failure,
 partial acquisition or absence cannot establish acceptance or closure. Retain only target data
 beyond bounded transient parsing, with no raw-body persistence or telemetry. Only Ashby's
-source-configuration digest binds the new exact profile; general scheduled polling/shared limits
-and Greenhouse/Lever digests stay unchanged. Implementation/local validation is pending, not live
-provider or deployment evidence. No API/event/SQL/migration, candidate/reviewer authority or
-current activation change is included; Ashby/EU and production/store remain disabled.
+source-configuration digest binds all eight frozen profile fields; general scheduled polling
+retains `1_000_000` bytes/`100` jobs/`5_000` ms and Greenhouse/Lever digests stay unchanged.
+Independent review, focused regressions and the full maintained verifier pass. A subsequent
+bounded read-only preflight validates the complete 2,118,913-byte/71-record public board and the
+exact supplied posting; only the selected in-memory record is replayed through strict mapping.
+No raw response is persisted and no catalog/deployment/activation change is performed. This is
+not deployed verification or publication acceptance; fresh source binding and development
+deployment/activation remain separate.
+No API/event/SQL/migration or candidate/reviewer authority changed; Ashby/EU and production/store
+remain disabled.
 
 The coordinated September 10 D2-039 rollout applied Jobs `0023` and Trust `0004`; the
 [Phase 2 register](../product/delivery/phase-2-extension-and-community.md) owns exact release and
