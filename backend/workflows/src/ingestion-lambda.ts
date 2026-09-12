@@ -6,6 +6,7 @@ import {
 } from "@ai-job-apply/event-contracts";
 import {
   AshbyJobBoardAdapter,
+  ashbyExactBoardProfile,
   ashbyJobBoardAdapterVersion,
   DurableIngestionCoordinator,
   GeneratedSyntheticIngestionAdapter,
@@ -159,6 +160,13 @@ function providerConfigurationDigest(configuration: ProviderSourceConfiguration)
         "maximumObservations=100",
         "requestTimeoutMs=5000",
         "maximumResponseBytes=1000000",
+        // Scheduled poll budgets stay unchanged. A new Ashby source binding also
+        // identifies its separate contribution-verification acquisition profile.
+        ...(configuration.provider === "ashby"
+          ? Object.entries(ashbyExactBoardProfile).map(
+              ([key, value]) => `exactVerification.${key}=${value}`,
+            )
+          : []),
         "",
       ].join("\n"),
       "utf8",

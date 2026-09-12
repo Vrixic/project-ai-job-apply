@@ -65,6 +65,15 @@ provider verifier without treating candidate-supplied content as catalog truth.
   board/posting identity. It requests no compensation data and never calls an authenticated API.
   Public API documentation provides only board acquisition, so the existing response/count caps
   remain unchanged. An unlisted record causes catalog withdrawal, not a claim of employer closure.
+  D2-059 is now approved and In progress for an Ashby-specific `pollExact` implementation:
+  stream the same documented full-board GET with `includeCompensation=false`, retain the exact
+  target and validate full EOF before returning it through the existing independent verifier.
+  A separate frozen `ashby-exact-board-v1` acquisition profile bounds response, record scan,
+  transient memory and whole-operation time; only Ashby's source-configuration digest changes.
+  General scheduled polling/shared limits and Greenhouse/Lever digests stay unchanged. Identity,
+  duplicate, malformed, overflow and deadline failures deny without partial evidence or
+  absence-based closure; raw bodies are never retained. Source/test completion, live acceptance,
+  deployment and activation are not claimed. See the [existing task and target bounds](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification).
 - `provider-description.ts` — bounded inert HTML-to-plaintext/textContent conversion for independent
   Lever/Ashby evidence, excluding executable, form, and embedded-resource subtrees. It retains no
   raw HTML and never executes or fetches page content.
@@ -108,8 +117,9 @@ around this coordinator. Greenhouse, Lever, and Ashby configuration is an exact 
 list, not an arbitrary URL or credential. Provider execution additionally requires the global
 runtime gate, explicit provider authority, and private application networking with NAT egress.
 Each source is independently enabled and pauseable; changing its company/tenant configuration
-changes its immutable configuration digest. Development Terraform retains no enabled provider
-configuration and all ingestion/provider activation gates remain off. A prior bounded, attributable
+changes its immutable configuration digest. The general-ingestion development Terraform
+configuration retains no enabled provider sources, and its runtime/provider activation gates
+remain off; the separate D2 verification scope is described below. A prior bounded, attributable
 Ashby acceptance run retained canonical projections with exact provenance; it retained no raw
 provider snapshots and does not authorize another provider request or an enabled source.
 
@@ -121,10 +131,14 @@ detector, selected payload, normalizer, provider adapters, and verifier. It uses
 browser context and mocked provider responses, not a live provider or authenticated contribution.
 This catches cross-component representation errors that isolated detector/adapter unit tests miss.
 
-Contribution verification defaults to no registrations. Controlled development has one accepted
-Greenhouse registration in the separate D2 scheduled runtime; this does not activate the general
-ingestion runtime or other providers. Every registration requires an enabled reviewed adapter,
-explicit provider authority, and an exact verification/source-policy binding. Repository fixtures
-and synthetic tests alone do not authorize a provider or live host. The
-[Phase 2 register](../../../docs/product/delivery/phase-2-extension-and-community.md) tracks the
-current deployment and remaining acceptance gates.
+Contribution verification defaults to no registrations. The separate D2 scheduled runtime's
+controlled state-333 development release preserves the accepted Greenhouse registration and adds
+only Supermove as an independent global-Lever registration. The exact three allowed contribution
+hosts are the two existing Greenhouse hosts plus `jobs.lever.co`; EU Lever and Ashby remain
+disabled. This does not activate the general ingestion runtime. Every registration requires an
+enabled reviewed adapter, explicit provider authority, and an exact verification/source-policy
+binding. Repository fixtures and synthetic tests alone do not authorize a provider or live host.
+The [Phase 2 register](../../../docs/product/delivery/phase-2-extension-and-community.md) owns the
+current release and acceptance evidence, including the user's Lever Processing `published` /
+Trust `accepted` report; the Lever website visibility/details/source journey remains unconfirmed.
+Production and store distribution remain disabled.

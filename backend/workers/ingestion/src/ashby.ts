@@ -1,5 +1,7 @@
+import { ashbyExactBoardProfile, fetchAshbyExactBoard } from "./ashby-exact-board.js";
 import type {
   IngestionSourceAdapter,
+  SourceExactPollContext,
   SourceJobObservation,
   SourceJobWithdrawal,
   SourcePollContext,
@@ -293,6 +295,54 @@ export class AshbyJobBoardAdapter implements IngestionSourceAdapter {
     return captureAdapterVersion === "d2-job-page-v1"
       ? (this.#pageDescriptions.get(observation) ?? [])
       : [];
+  }
+
+  async pollExact(context: SourceExactPollContext): Promise<SourcePollResult> {
+    const startedAt = performance.now();
+    const result = await fetchAshbyExactBoard({
+      fetch: this.#fetch,
+      jobBoardName: this.#jobBoardName,
+      externalJobId: context.externalJobId,
+      signal: context.signal,
+      onJob: (value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          throw new Error("The Ashby job record is invalid");
+        }
+        const job = value as Record<string, unknown>;
+        if (typeof job.isListed !== "boolean") {
+          throw new Error("The Ashby listing state is invalid");
+        }
+        return (
+          canonicalJobIdentity(job.jobUrl, this.#jobBoardName).externalJobId ===
+          context.externalJobId
+        );
+      },
+    });
+    if (result.kind === "retry") return result;
+    // Missing/partial board data never establishes closure. Only an explicit, exact
+    // unlisted record in a completely validated response can supply a withdrawal.
+    if (result.job === null) return { kind: "retry", reason: "source_unavailable" };
+    let previewDigests: readonly string[] = [];
+    const parsed = parseJob(
+      result.job,
+      {
+        jobBoardName: this.#jobBoardName,
+        companyName: this.#companyName,
+        verifiedCompanyDomain: this.#verifiedCompanyDomain,
+      },
+      (digests) => {
+        previewDigests = digests;
+      },
+    );
+    if (context.signal.aborted) return { kind: "retry", reason: "source_unavailable" };
+    if (performance.now() - startedAt >= ashbyExactBoardProfile.requestTimeoutMs) {
+      return { kind: "retry", reason: "timeout" };
+    }
+    if (parsed.kind === "withdrawal") {
+      return { kind: "success", observations: [], withdrawals: [parsed.withdrawal] };
+    }
+    this.#pageDescriptions.set(parsed.observation, previewDigests);
+    return { kind: "success", observations: [parsed.observation], withdrawals: [] };
   }
 
   async poll(context: SourcePollContext): Promise<SourcePollResult> {

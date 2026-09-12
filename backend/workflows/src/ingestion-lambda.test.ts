@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ashbyExactBoardProfile } from "@ai-job-apply/ingestion-worker";
 import { durableIngestionExecutionName } from "@ai-job-apply/jobs-service";
 import type { EventBridgeEvent, SQSEvent } from "aws-lambda";
 import { describe, expect, it, vi } from "vitest";
@@ -175,6 +176,67 @@ describe("ingestion Lambda transport", () => {
     ]);
     expect(new Set(parsed.map((source) => source.adapterConfigSha256)).size).toBe(3);
     expect(parsed.every((source) => /^[a-f0-9]{64}$/u.test(source.adapterConfigSha256))).toBe(true);
+    expect(ashbyExactBoardProfile).toEqual({
+      version: "ashby-exact-board-v1",
+      maximumResponseBytes: 16_000_000,
+      maximumJobs: 1_000,
+      maximumRecordBytes: 512_000,
+      maximumEnvelopeValueBytes: 64_000,
+      maximumDepth: 32,
+      maximumRootFields: 16,
+      requestTimeoutMs: 5_000,
+    });
+    expect(Object.isFrozen(ashbyExactBoardProfile)).toBe(true);
+    for (const [index, configuration] of configurations.entries()) {
+      const source = parsed[index];
+      if (!source) throw new Error("Missing synthetic configuration");
+      const legacyFields = [
+        "schemaVersion=1",
+        `sourceId=${configuration.sourceId}`,
+        `provider=${configuration.provider}`,
+        `adapterVersion=${source.registration.adapter.adapterVersion}`,
+        "provenance=permitted_api",
+        `companyName=${configuration.companyName}`,
+        `verifiedCompanyDomain=${configuration.verifiedCompanyDomain}`,
+        ...(configuration.provider === "greenhouse"
+          ? [configuration.boardToken]
+          : configuration.provider === "lever"
+            ? [configuration.site, configuration.region]
+            : [configuration.jobBoardName]),
+        "maximumObservations=100",
+        "requestTimeoutMs=5000",
+        "maximumResponseBytes=1000000",
+      ];
+      const hash = (fields: readonly (string | undefined)[]) =>
+        createHash("sha256")
+          .update([...fields, ""].join("\n"), "utf8")
+          .digest("hex");
+      if (configuration.provider !== "ashby") {
+        expect(source.adapterConfigSha256).toBe(hash(legacyFields));
+      } else {
+        expect(source.adapterConfigSha256).not.toBe(hash(legacyFields));
+        expect(source.adapterConfigSha256).toBe(
+          hash([
+            ...legacyFields,
+            ...Object.entries(ashbyExactBoardProfile).map(
+              ([key, value]) => `exactVerification.${key}=${value}`,
+            ),
+          ]),
+        );
+        for (const [omitted] of Object.entries(ashbyExactBoardProfile)) {
+          expect(source.adapterConfigSha256).not.toBe(
+            hash([
+              ...legacyFields,
+              ...Object.entries(ashbyExactBoardProfile)
+                .filter(([key]) => key !== omitted)
+                .map(([key, value]) => `exactVerification.${key}=${value}`),
+            ]),
+          );
+        }
+        expect(source.registration.adapter.pollExact).toBeTypeOf("function");
+        expect(source.registration.enabled).toBe(false);
+      }
+    }
     expect(() =>
       parseProviderSourceConfigurations(
         JSON.stringify([{ ...configurations[0], unexpected: "field" }]),

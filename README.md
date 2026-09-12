@@ -70,9 +70,15 @@ scopes validate; test tokens are unavailable outside `NODE_ENV=test`.
 
 ## Current status
 
-Phase 2's extension and community backend are implemented in controlled Greenhouse-only
+Phase 2's extension and community backend are implemented in controlled Greenhouse and global-Lever
 development. The [Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md)
-owns the exact release evidence and remaining acceptance; Phase 2 is still In progress.
+owns the state-333 release evidence and remaining acceptance: Greenhouse is preserved, only
+Supermove is independently registered for Lever, and the allowed hosts remain the two Greenhouse
+hosts plus `jobs.lever.co`. EU Lever, Ashby, production and store distribution remain disabled.
+The user now reports Processing `published` and Trust `accepted` for the reviewed Lever
+contribution; its website visibility/details/source journey is not yet confirmed. General
+provider ingestion remains dark, separate from D2 independent verification. Phase 2 is still
+In progress.
 
 The 2026-09-08 rollout introduced persistent opt-in development contributions without signing,
 remote policy fetching, expiry, or renewal. Authentication, exact client/provider/host scope,

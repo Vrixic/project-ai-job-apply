@@ -321,6 +321,16 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
+- Current Ashby implementation (`2026-09-12`): the user explicitly approves implementing the
+  separately bounded Ashby large-board verifier with activation kept separate and disabled.
+  D2-059 is In progress for code/local verification on the existing independent-verifier/exact-
+  poll/Jobs/Trust path. A frozen Ashby-specific profile bounds response, record scan, transient
+  memory and whole-operation time while preserving general/shared limits and Greenhouse/Lever
+  digests. No API/event/SQL/migration change, live provider call, deployment or provider/reviewer/
+  candidate authority expansion is included. Final source/test evidence remains pending;
+  D2-R22 stays Open, Ashby/EU remain disabled and Phase 2 stays In progress.
+  [Started task and target bounds](phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification),
+  [single rationale](phase-2-extension-and-community.md#decisions-and-scope-changes)
 - Latest owner follow-up (`2026-09-12`): after D2-058's corrected extension handoff, the user
   supplies `Processing: awaiting trust` and `Trust: needs review`, then explicitly approves
   extending agent initial review to approved global-Lever development contributions while
@@ -339,9 +349,10 @@ This is the master record for the delivery phases defined in the [product and sy
   alarms OK, zero ALARM/insufficient-data/disabled alarms, both Trust queue/DLQ approximate
   counts `0/0/0` and the exact schedule enabled. Five read-only cloud calls make zero writes,
   receives, token requests or log reads; this non-atomic snapshot proves neither exact publication
-  nor fresh Terraform state. Await the requested owner Processing/Trust refresh after ordinary
-  processing, then confirm website visibility/details/source;
-  publication is not established by the accepted decision alone. Do not resubmit, remove queue
+  nor fresh Terraform state. The user now explicitly confirms Processing `published` and Trust
+  `accepted` for the supplied approved Supermove/global-Lever contribution. This completes only
+  its owner-status check; the Lever job's website visibility/details/source remain unconfirmed.
+  Do not repeat the completed status request, resubmit, remove queue
   entries, repeat the decision or request the same scope/secret approval. D2-035 and Phase 2
   remain In progress, including Ashby D2-R22 and broader acceptance.
   [Sole decision/rationale](phase-2-extension-and-community.md#decisions-and-scope-changes)
@@ -386,9 +397,10 @@ This is the master record for the delivery phases defined in the [product and sy
   executed), retaining nine existing lint warnings. Provider pairing `87c4fa` and the configured
   development rebuild pass. The user subsequently reports `awaiting trust` / `needs review`;
   the approved initial-only global-Lever decision now independently reads back accepted/version `2`.
-  Owner Processing/Trust refresh and website publication confirmation remain. Do not repeat
-  submission, the accepted decision or queue removal.
-  No publication or new AWS release is claimed; verified state `333` and server scope remain unchanged.
+  The user subsequently confirms Processing `published` and Trust `accepted`, completing only
+  this contribution's owner-status check. Website visibility/details/source remain unconfirmed.
+  Do not repeat the status request, submission, accepted decision or queue removal.
+  No independent website check or new AWS release is claimed; verified state `333` and server scope remain unchanged.
   Actual API preflight passes global Lever (one observation/11,984 bytes), but the supplied Ashby
   board exceeds the unchanged 1,000,000-byte cap. D2-R22 records that distinct activation blocker;
   it is not another fixture-review request. Keep Ashby disabled; global Lever is separately activated.
@@ -1061,6 +1073,10 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-12 | D2 | The user approves implementing the Ashby-specific large-board verifier with activation separate and disabled. Started D2-059 using the existing independent-verifier/exact-poll/Jobs/Trust path, a separate frozen bounded profile and full-response validation. Preserve shared polling limits, current scopes and zero raw retention. No API/event/SQL/migration change, live provider call or deployment is included; implementation/test evidence remains pending. D2-R22 and Phase 2 stay open. | User's explicit implementation approval; [started task](phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification); [single rationale](phase-2-extension-and-community.md#decisions-and-scope-changes) |
+| 2026-09-12 | D2 | Synchronized current approved Greenhouse/global-Lever scope in the repository overview, D2 security/privacy delta and ingestion README, preserving historical releases and excluded gates. Documentation only: no new runtime, provider, reviewer or cloud action; all 15 local links in those three documents pass. | [Repository overview](../../../README.md); [D2 security/privacy delta](../../security/d2-extension-ugc-security-privacy.md); [ingestion README](../../../backend/workers/ingestion/README.md) |
+| 2026-09-12 | D2 | Recorded the proposed D2-R22 next choice: an Ashby-specific large-board verification design with explicit total-download, scanned-record, memory and deadline budgets, preserving general/shared limits; alternatively another exact authorized smaller board. Owner choice remains pending, with no numeric budgets, implementation or activation approval, partial-success evidence or guessed endpoint. D2-R22 stays Open and Ashby disabled. | [Single proposed choice/rationale](phase-2-extension-and-community.md#decisions-and-scope-changes); [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
+| 2026-09-12 | D2 | The user explicitly confirms Processing `published` and Trust `accepted` for the supplied approved Supermove/global-Lever contribution. Only its owner-status readback closes; website visibility/details/source have not been confirmed. No repeated status request, submission or decision is needed. D2-035 and Phase 2 remain In progress, with Ashby and broader gates unchanged. | User's explicit status response; [current owner follow-up](phase-2-extension-and-community.md#task-register); [remaining website check](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs) |
 | 2026-09-12 | D2 | Post-decision bounded health matches the pinned state-333 baseline and exact account/resource bindings: all 13 D2 alarms OK, zero ALARM/insufficient-data/disabled states, both Trust queue/DLQ approximate counts `0/0/0`, and the expected schedule enabled. Five read-only cloud calls make zero writes, receives, token requests or log reads. This non-atomic snapshot is not exact publication or fresh Terraform-state evidence; the requested owner Processing/Trust and website confirmation remains pending. | [Post-decision bounded health](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions); `18:29:53.2954272Z`–`18:30:08.5157736Z` |
 | 2026-09-12 | D2 | Exact current boundary and three reviewer scopes pass; 42 synthetic helper checks pass. Inspect reads the complete one-item initial queue and current independent evidence through five requests/zero decisions. Decide performs seven requests including exactly one version/evidence-bound POST; separate readback confirms accepted/version `2` at `18:26:42.033Z`. Existing reviewer roles, human appeals, approved global-Lever scope and runtime `63`/`23`/`18` remain unchanged. No new submission, unrelated-case decision, application source change or deployment. Owner Processing/Trust refresh and website publication confirmation remain; do not repeat the accepted decision. D2-035 and Phase 2 remain In progress. | [Review execution](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions); boundary `cd9ce0`; tests `cf4910`; Inspect `70092d`; Decide `a77792` |
 | 2026-09-12 | D2 | The owner explicitly approves initial-only agent review of approved global-Lever development contributions, retaining the separate human appeal reviewer. Scope remains `jobs.lever.co`, with only Supermove independently registered. Greenhouse initial/takedown and September 8 encrypted-credential reuse are preserved; no Lever takedown, new Auth0 roles/grants, human appeal action, EU/Ashby, production or store authority. User statuses confirm only delivery-to-review; review execution and publication remain pending. D2-035 and Phase 2 remain In progress. | User's explicit `yes`; [delegated scope](phase-2-extension-and-community.md#delegated-reviewer-assignment); [sole decision/rationale](phase-2-extension-and-community.md#decisions-and-scope-changes) |

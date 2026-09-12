@@ -1,4 +1,5 @@
 export * from "./ashby.js";
+export { ashbyExactBoardProfile } from "./ashby-exact-board.js";
 export * from "./backoff.js";
 export * from "./contract.js";
 export * from "./contribution-verification.js";
