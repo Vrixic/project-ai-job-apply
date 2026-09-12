@@ -322,12 +322,29 @@ This is the master record for the delivery phases defined in the [product and sy
 - Start: 2026-09-01
 - Completion: Not completed
 - Latest owner follow-up (`2026-09-12`): after D2-058's corrected extension handoff, the user
-  supplies `Processing: awaiting trust` and `Trust: needs review`. Delivery-to-review is
-  user-confirmed; publication is not. The recorded agent delegation remains Greenhouse-only,
-  while global-Lever activation preserved Trust authority. Obtain one narrow owner extension for
-  initial reviews of approved global-Lever development contributions, retaining human appeals
-  and existing role/evidence controls. No credential/cloud/case call or decision was attempted;
-  do not resubmit, remove queue entries or repeat the completed status request. D2-035 and Phase 2 remain In progress.
+  supplies `Processing: awaiting trust` and `Trust: needs review`, then explicitly approves
+  extending agent initial review to approved global-Lever development contributions while
+  remaining the separate human appeal reviewer. Scope remains `jobs.lever.co`, with only
+  Supermove independently registered. Greenhouse initial/takedown and September 8 encrypted-
+  credential reuse remain intact; no Lever takedown, new Auth0 roles/grants, human appeal action,
+  EU/Ashby, production or store authority is added. Exact-boundary inspection and current
+  independent readable evidence support one initial decision at `2026-09-12T18:26:42.033Z`;
+  separate readback confirms `accepted` / version `2`. Boundary `cd9ce0` preserves Gateway `63`,
+  its exact full environment, approved providers/three hosts and three reviewer assignments.
+  Helpers pass 42 synthetic checks (`cf4910`); Inspect `70092d` performs five requests and zero
+  decisions, and Decide `a77792` performs seven requests including exactly one decision POST.
+  Each sees a complete one-item queue; no new submission or unrelated-case decision occurs.
+  Runtime `63`/`23`/`18` and the verified state-`333` deployment are unchanged. Post-decision health
+  (`18:29:53.2954272Z`–`18:30:08.5157736Z`) matches the pinned baseline/exact bindings: 13 D2
+  alarms OK, zero ALARM/insufficient-data/disabled alarms, both Trust queue/DLQ approximate
+  counts `0/0/0` and the exact schedule enabled. Five read-only cloud calls make zero writes,
+  receives, token requests or log reads; this non-atomic snapshot proves neither exact publication
+  nor fresh Terraform state. Await the requested owner Processing/Trust refresh after ordinary
+  processing, then confirm website visibility/details/source;
+  publication is not established by the accepted decision alone. Do not resubmit, remove queue
+  entries, repeat the decision or request the same scope/secret approval. D2-035 and Phase 2
+  remain In progress, including Ashby D2-R22 and broader acceptance.
+  [Sole decision/rationale](phase-2-extension-and-community.md#decisions-and-scope-changes)
 - Current implementation continuation (`2026-09-12` UTC): D2-054's admin presentation is now deployed
   from `b3da818` to the existing protected identity-dark preview; 174 tests/typecheck, a 128-file
   allowed-source upload, exact source/project/region and three protected no-store HTTP checks pass.
@@ -368,7 +385,9 @@ This is the master record for the delivery phases defined in the [product and sy
   tests/27 suites, 34 test tasks, 33 typecheck tasks and all 20 builds (19 cached, extension
   executed), retaining nine existing lint warnings. Provider pairing `87c4fa` and the configured
   development rebuild pass. The user subsequently reports `awaiting trust` / `needs review`;
-  obtain the scoped initial-review extension before deciding. Do not repeat submission or queue removal.
+  the approved initial-only global-Lever decision now independently reads back accepted/version `2`.
+  Owner Processing/Trust refresh and website publication confirmation remain. Do not repeat
+  submission, the accepted decision or queue removal.
   No publication or new AWS release is claimed; verified state `333` and server scope remain unchanged.
   Actual API preflight passes global Lever (one observation/11,984 bytes), but the supplied Ashby
   board exceeds the unchanged 1,000,000-byte cap. D2-R22 records that distinct activation blocker;
@@ -1042,6 +1061,9 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-12 | D2 | Post-decision bounded health matches the pinned state-333 baseline and exact account/resource bindings: all 13 D2 alarms OK, zero ALARM/insufficient-data/disabled states, both Trust queue/DLQ approximate counts `0/0/0`, and the expected schedule enabled. Five read-only cloud calls make zero writes, receives, token requests or log reads. This non-atomic snapshot is not exact publication or fresh Terraform-state evidence; the requested owner Processing/Trust and website confirmation remains pending. | [Post-decision bounded health](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions); `18:29:53.2954272Z`–`18:30:08.5157736Z` |
+| 2026-09-12 | D2 | Exact current boundary and three reviewer scopes pass; 42 synthetic helper checks pass. Inspect reads the complete one-item initial queue and current independent evidence through five requests/zero decisions. Decide performs seven requests including exactly one version/evidence-bound POST; separate readback confirms accepted/version `2` at `18:26:42.033Z`. Existing reviewer roles, human appeals, approved global-Lever scope and runtime `63`/`23`/`18` remain unchanged. No new submission, unrelated-case decision, application source change or deployment. Owner Processing/Trust refresh and website publication confirmation remain; do not repeat the accepted decision. D2-035 and Phase 2 remain In progress. | [Review execution](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions); boundary `cd9ce0`; tests `cf4910`; Inspect `70092d`; Decide `a77792` |
+| 2026-09-12 | D2 | The owner explicitly approves initial-only agent review of approved global-Lever development contributions, retaining the separate human appeal reviewer. Scope remains `jobs.lever.co`, with only Supermove independently registered. Greenhouse initial/takedown and September 8 encrypted-credential reuse are preserved; no Lever takedown, new Auth0 roles/grants, human appeal action, EU/Ashby, production or store authority. User statuses confirm only delivery-to-review; review execution and publication remain pending. D2-035 and Phase 2 remain In progress. | User's explicit `yes`; [delegated scope](phase-2-extension-and-community.md#delegated-reviewer-assignment); [sole decision/rationale](phase-2-extension-and-community.md#decisions-and-scope-changes) |
 | 2026-09-12 | D2 | User readback `awaiting trust` / `needs review` confirms delivery-to-review after D2-058, not publication. Recorded initial/takedown delegation remains Greenhouse-only; approved Lever activation preserved Trust authority. One narrow initial-review scope extension is required before a Lever decision. No credential/cloud/case request, decision, role change or repeated submission. | User status readback; [sole delegated reviewer record](phase-2-extension-and-community.md#delegated-reviewer-assignment) |
 | 2026-09-12 | D2 | User reports apparent sharing success after the corrected extension handoff. Exact receipt, Processing/Trust states and website visibility remain unconfirmed. Next step is one status refresh/readback, not another submission or queue removal. No cloud/runtime/data change or wider phase acceptance. | User follow-up in this conversation; [latest D2 owner follow-up](phase-2-extension-and-community.md#task-register) |
 | 2026-09-12 | D2 | Completed D2-058's client correction after the September 11 stopped Lever consent `201`/contribution `400` attempt. Actual-page original extraction reproduces strict Jobs refusal; corrected extraction omits the unsupported description and passes OpenAPI/real service with mocked consent/store, no live writes and no claim to the original user-selected payload. Extension 317 tests/27 suites, composed intake/provider checks and full verification pass: 34 test tasks, 33 typechecks and 20 builds/19 cached, with configured extension rebuilt. Preserve server guards, approved queues and verified `333` activation scope. Fresh installed preview/approval remains D2-035; no AWS release or automatic resend. | [D2-058 diagnosis and continuation](phase-2-extension-and-community.md#d2-058--client-preview-and-intake-compatibility); aggregate `ad2da2`; original `650c3e`; corrected `85f9e8`; composed `1a2ccb`; pairing `87c4fa`; full `8951d8` |
