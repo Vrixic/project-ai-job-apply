@@ -353,14 +353,14 @@ function appendField(
   requirement.className = "field-requirement";
   requirement.textContent = options.field
     ? missing
-      ? "Not available"
+      ? "Unavailable"
       : "Optional"
     : "Always included";
   labelLine.append(heading, requirement);
   const body = document.createElement("span");
   body.className = `field-value${missing ? " not-detected" : ""}`;
   body.id = valueId;
-  body.textContent = value ?? "Not detected on this page";
+  body.textContent = value ?? "Not available for sharing";
   if (options.translateNo) body.translate = false;
   content.append(labelLine, body);
 
@@ -439,7 +439,7 @@ function updateSelectionSummary(): void {
     ? "Next action: Add job to shared database"
     : "Delivery unavailable: review readiness below";
   selectionSummary.textContent = `5 required fields always included · ${selectedOptional} of ${detectedOptional} detected optional fields selected · ${nextAction}${
-    missing > 0 ? ` · ${missing} not detected` : ""
+    missing > 0 ? ` · ${missing} unavailable for sharing` : ""
   }`;
 
   const sourceSummary = fieldList.querySelector<HTMLElement>("#source-summary");
@@ -448,7 +448,7 @@ function updateSelectionSummary(): void {
       'input[data-field="externalJobId"]',
     );
     sourceSummary.textContent = !currentCapture.externalJobId
-      ? "4 always included · External job ID not detected"
+      ? "4 always included · External job ID unavailable for sharing"
       : `4 always included · External job ID ${externalJobId?.checked ? "selected" : "not selected"}`;
   }
   updateControlState();

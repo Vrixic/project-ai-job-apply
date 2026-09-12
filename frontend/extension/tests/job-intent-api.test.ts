@@ -7,7 +7,7 @@ import {
   preparePrivateSavedPageCapture,
   sendJobIntent,
 } from "../lib/job-intent-api";
-import { createPendingIntent, settleDispatch } from "../lib/pending-queue";
+import { createPendingIntent, restartStoppedIntent, settleDispatch } from "../lib/pending-queue";
 
 function intent() {
   return createPendingIntent({
@@ -171,6 +171,50 @@ describe("background-only contribution consent transport", () => {
       consent: { id: expect.any(String) },
     });
     expect(settleDispatch(pending, result)?.consent).toEqual(result.consent);
+  });
+
+  it("never rewrites an already approved stopped capture when retrying after sanitizer changes", async () => {
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    extensionConfiguration.ugcContributionPolicyVersion = "d2-synthetic-policy.v1";
+    const pending = intent();
+    pending.approvedFields = ["company", "location", "description"];
+    pending.capture.company = "x".repeat(201);
+    pending.capture.location = "x".repeat(241);
+    pending.capture.description = "Synthetic threshold > 10 ";
+    const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0");
+    const consent = {
+      grantedAt: "2026-09-01T12:00:01.000Z",
+      id: "018f0000-0000-7000-8000-000000000099",
+      previewDigestSha256: prepared.previewDigestSha256,
+    };
+    const stopped = settleDispatch(pending, { outcome: "terminal", consent });
+    if (!stopped) throw new Error("Expected a generated stopped intent");
+    const before = structuredClone(stopped);
+    const expectedBody = createContributionRequest(
+      pending,
+      prepared.body,
+      consent,
+      "synthetic-token",
+      "https://api.example.test",
+    ).init.body;
+    const restarted = restartStoppedIntent(stopped);
+    expect(restarted.capture).toEqual(before.capture);
+    expect(restarted.approvedFields).toEqual(before.approvedFields);
+    expect(restarted.consent).toEqual(before.consent);
+    expect(restarted.id).toBe(before.id);
+    expect(restarted.idempotencyKey).toBe(before.idempotencyKey);
+    expect(restarted.consentIdempotencyKey).toBe(before.consentIdempotencyKey);
+    const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.example.test/v1/jobs/contributions");
+      expect(init?.body).toBe(expectedBody);
+      expect(init?.headers).toMatchObject({ "idempotency-key": before.idempotencyKey });
+      return jsonResponse(400, { code: "invalid_request" });
+    });
+    await expect(
+      sendJobIntent(restarted, "synthetic-token", fetcher as typeof fetch, "0.2.0"),
+    ).resolves.toMatchObject({ outcome: "terminal", consent });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(stopped).toEqual(before);
   });
 
   it("retains only an allowlisted privacy-safe server failure code", async () => {

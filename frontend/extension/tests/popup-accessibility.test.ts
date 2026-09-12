@@ -52,7 +52,7 @@ describe("popup and side-panel source assurance", () => {
     const source = await readFile(entrypoint, "utf8");
     expect(source).toContain('jobHeading.textContent = "Job details"');
     expect(source).toContain('sourceDetails.id = "source-details"');
-    expect(source).toContain('body.textContent = value ?? "Not detected on this page"');
+    expect(source).toContain('body.textContent = value ?? "Not available for sharing"');
     expect(source).toContain('expandButton.setAttribute("aria-controls", valueId)');
     expect(source).toContain('expandButton.setAttribute("aria-expanded", "false")');
     expect(source).toContain("function updateSelectionSummary(): void");

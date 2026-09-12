@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { sanitizeSnapshot } from "../lib/job-capture";
 
 const popupHtml = await readFile(
   resolve(dirname(fileURLToPath(import.meta.url)), "../static/popup.html"),
@@ -42,7 +43,9 @@ async function popup(status: SessionStatus) {
       status,
     }),
   );
-  vi.stubGlobal("chrome", { runtime: { sendMessage } });
+  vi.stubGlobal("chrome", {
+    runtime: { sendMessage, getManifest: () => ({ version: "0.2.0" }) },
+  });
   await import("../entrypoints/popup");
   await idle();
   expect(sendMessage).toHaveBeenCalledWith({ action: "status" });
@@ -136,5 +139,52 @@ describe("popup retained-session lifecycle", () => {
       "The extension did not respond. Close and reopen it, then try again.",
     );
     expect(document.body.textContent).not.toContain("private-provider-error");
+  });
+
+  it("shows unsupported optional text as unavailable and submits only visible selected fields", async () => {
+    const status = { ...expiredSession, authenticated: true };
+    const sendMessage = await popup(status);
+    const capture = sanitizeSnapshot(
+      {
+        canonicalUrl: "https://jobs.lever.co/example/123",
+        title: "Engineer",
+        company: "Example Company",
+        description: "Synthetic threshold > 10",
+      },
+      "lever",
+      "lever-posting-v1",
+    );
+    expect(capture).toBeDefined();
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      status,
+      ...{
+        capture,
+        delivery: {
+          contribution: { ready: true, reason: "ready" },
+          privateSave: { ready: true, reason: "ready" },
+        },
+      },
+    });
+    button("inspect").click();
+    await idle();
+    const description = document.querySelector<HTMLInputElement>('input[data-field="description"]');
+    expect(description?.checked).toBe(false);
+    expect(description?.disabled).toBe(true);
+    const row = description?.closest(".field-row");
+    expect(row?.getAttribute("data-field-kind")).toBe("unavailable");
+    expect(row?.textContent).toContain("Not available for sharing");
+    expect(document.body.textContent).not.toContain("Synthetic threshold");
+    expect(document.querySelector("#selection-summary")?.textContent).toContain(
+      "unavailable for sharing",
+    );
+    expect(button("contribute").disabled).toBe(false);
+    button("contribute").click();
+    await idle();
+    expect(sendMessage).toHaveBeenLastCalledWith({
+      action: "enqueue",
+      approvedFields: ["company"],
+      intent: "contribute",
+    });
   });
 });

@@ -3,6 +3,7 @@ import { detectPublicJob, PROVIDER_DETECTORS } from "../lib/detectors";
 import {
   canonicalizePublicJobUrl,
   sanitizeSnapshot,
+  sanitizeText,
   selectContributionFields,
 } from "../lib/job-capture";
 
@@ -181,6 +182,86 @@ describe("strict public job capture", () => {
     );
     expect(capture?.title).toBe("Safe misleading title ignored");
     expect(capture?.workMode).toBeUndefined();
+  });
+
+  it.each([
+    ["company", 200],
+    ["location", 240],
+  ] as const)("omits an over-limit %s without inventing a shortened identity", (field, maximum) => {
+    const snapshot = { canonicalUrl: "https://jobs.lever.co/example/123", title: "Engineer" };
+    const exact = sanitizeSnapshot(
+      { ...snapshot, [field]: ` ${"x".repeat(maximum)} ` },
+      "lever",
+      "lever-posting-v1",
+    );
+    expect(exact?.[field]).toBe("x".repeat(maximum));
+    for (const value of ["x".repeat(maximum + 1), `${"x".repeat(maximum - 1)} tail`]) {
+      const oversized = sanitizeSnapshot(
+        { ...snapshot, [field]: value },
+        "lever",
+        "lever-posting-v1",
+      );
+      expect(oversized).toMatchObject({ title: "Engineer" });
+      expect(oversized).not.toHaveProperty(field);
+    }
+  });
+
+  it.each([
+    ["title", 240],
+    ["description", 12_000],
+    ["externalJobId", 200],
+  ] as const)("bounds %s to the sharing limit and trims after truncation", (field, maximum) => {
+    const snapshot = { canonicalUrl: "https://jobs.lever.co/example/123", title: "Engineer" };
+    const exact = sanitizeSnapshot(
+      { ...snapshot, [field]: "x".repeat(maximum) },
+      "lever",
+      "lever-posting-v1",
+    );
+    expect(exact?.[field]).toBe("x".repeat(maximum));
+    const overflow = sanitizeSnapshot(
+      { ...snapshot, [field]: "x".repeat(maximum + 1) },
+      "lever",
+      "lever-posting-v1",
+    );
+    expect(overflow?.[field]).toBe("x".repeat(maximum));
+    const cutAtSpace = sanitizeSnapshot(
+      { ...snapshot, [field]: `${"x".repeat(maximum - 1)} tail` },
+      "lever",
+      "lever-posting-v1",
+    );
+    expect(cutAtSpace?.[field]).toBe("x".repeat(maximum - 1));
+  });
+
+  it.each(["<", ">"])(
+    "omits an entire optional field containing residual %s without rewording it",
+    (bracket) => {
+      const capture = sanitizeSnapshot(
+        {
+          canonicalUrl: "https://jobs.lever.co/example/123",
+          title: "Engineer",
+          description: `Synthetic threshold ${bracket} 10`,
+          company: "Example Company",
+        },
+        "lever",
+        "lever-posting-v1",
+      );
+      expect(capture).toMatchObject({ title: "Engineer", company: "Example Company" });
+      expect(capture).not.toHaveProperty("description");
+      expect(sanitizeText(`safe prefix ${bracket} threshold`, 4)).toBeUndefined();
+    },
+  );
+
+  it.each(["<", ">"])("refuses a required title containing residual %s", (bracket) => {
+    expect(
+      sanitizeSnapshot(
+        {
+          canonicalUrl: "https://jobs.lever.co/example/123",
+          title: `Engineer ${bracket} threshold`,
+        },
+        "lever",
+        "lever-posting-v1",
+      ),
+    ).toBeUndefined();
   });
 
   it("requires URL and title and sends only selected removable fields", () => {

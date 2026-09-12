@@ -51,3 +51,13 @@ adapters with injected responses, and independent verifier. All browser requests
 or blocked and no provider, login, deployment, or workstation secret is used. This complements
 the installed-extension matrix; it does not replace representative provider fixtures, live
 account lifecycle, or activated end-to-end publication acceptance.
+
+The same pairing runner includes a browser-free intake seam. Run it independently with
+`node scripts/tests/d2-extension-assurance/contribution-intake.mjs`. It composes the current
+sanitizer, selected-field request mapper, OpenAPI validator, and Jobs intake service with generated
+consent/persistence ports. Generated limit, truncation, and residual-bracket cases plus both accepted
+inert Lever fixture variants must reach the unchanged server checks. Unsafe optional fields are
+omitted before preview approval; existing queued approvals remain unchanged and invalid payloads
+still refuse before persistence. Source bundling stays in memory, emits aggregate results only,
+and makes no network request or application-artifact write. This is local compatibility evidence,
+not an installed-browser, live contribution, independent provider, or publication acceptance.

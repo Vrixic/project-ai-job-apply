@@ -3,6 +3,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { build, stop } from "esbuild";
 import { chromium } from "playwright-core";
+import { verifyContributionIntake } from "./contribution-intake.mjs";
 
 // Generated page/API pairs only. No live provider, Auth0, API, database, or user profile is used.
 // Bundle current source in memory: stale dist output cannot make this composed check pass.
@@ -185,6 +186,7 @@ let browser;
 let context;
 const originalFetch = globalThis.fetch;
 try {
+  stats.intake = await verifyContributionIntake();
   const browserBundle = await build({
     stdin: {
       contents: `export { captureCurrentPublicJobPage } from "./frontend/extension/lib/page-inspection.ts";

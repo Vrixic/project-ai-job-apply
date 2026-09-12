@@ -37,10 +37,10 @@ export interface SanitizedJobCapture {
 }
 
 const LIMITS: Record<CaptureField, number> = {
-  company: 240,
+  company: 200,
   description: 12_000,
   externalJobId: 200,
-  location: 500,
+  location: 240,
   title: 240,
   workMode: 20,
 };
@@ -51,7 +51,7 @@ function sanitizeWorkMode(value: unknown): WorkMode | undefined {
     : undefined;
 }
 
-export function sanitizeText(value: unknown, maximum: number): string | undefined {
+export function sanitizeText(value: unknown, maximum: number, truncate = true): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -75,7 +75,12 @@ export function sanitizeText(value: unknown, maximum: number): string | undefine
     .replace(/<[^>]*>/gu, " ")
     .replace(/\s+/gu, " ")
     .trim();
-  return normalized.length > 0 ? normalized.slice(0, maximum) : undefined;
+  // Do not remove or reinterpret a comparator in public text. Unsupported optional fields
+  // remain visibly unavailable before approval; an unsupported required title refuses capture.
+  if (/[<>]/u.test(normalized)) return undefined;
+  if (!truncate && normalized.length > maximum) return undefined;
+  const bounded = normalized.slice(0, maximum).trim();
+  return bounded.length > 0 ? bounded : undefined;
 }
 
 export function canonicalizePublicJobUrl(value: unknown): string | undefined {
@@ -123,7 +128,11 @@ export function sanitizeSnapshot(
   }
   const optional = Object.fromEntries(
     CAPTURE_FIELDS.filter((field) => field !== "title" && field !== "workMode")
-      .map((field) => [field, sanitizeText(snapshot[field], LIMITS[field])])
+      .map((field) => [
+        field,
+        // Provider verification requires the complete company/location identity, not a prefix.
+        sanitizeText(snapshot[field], LIMITS[field], field !== "company" && field !== "location"),
+      ])
       .filter((entry): entry is [CaptureField, string] => typeof entry[1] === "string"),
   );
   const workMode = sanitizeWorkMode(snapshot.workMode);
