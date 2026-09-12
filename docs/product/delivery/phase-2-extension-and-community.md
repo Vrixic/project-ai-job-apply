@@ -26,8 +26,8 @@ accepts current authorized provider-derived fixtures for the exact variant and D
 explicit scoped activation. Greenhouse's persistent opt-in development mode under D2-033 retains
 client `0.2.0`, `greenhouse-board-v1`, and its two exact hosts. The separately approved global
 Lever server activation verifies on 2026-09-11. The first installed Lever attempt then stops with
-`Request rejected`; D2-058's client correction is now verified and rebuilt, with fresh installed
-review/Add still pending. This mode requires no signing key, remote policy
+`Request rejected`; D2-058's client correction is now verified and rebuilt. On September 12 the
+user reports apparent sharing success; exact Processing/Trust states remain unconfirmed. This mode requires no signing key, remote policy
 request, expiry, or renewal. The Greenhouse extension's reload, sign-in, and successful job addition are user-confirmed on
 2026-09-08. Production and extension-store distribution remain dark. A provider family name is
 not fixture evidence or activation authority.
@@ -45,6 +45,13 @@ requires new variant behavior, fixtures, authorization, scans, human sanitizatio
 QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
+
+Latest owner follow-up (`2026-09-12`): after the D2-058 rebuild/reload handoff, the user reports
+"Looks like it got shared." Record apparent sharing success as user-reported, not independently
+verified receipt, publication, Trust acceptance, website visibility or browser-lifecycle evidence.
+Do not ask for another submission or queue removal. Under `Your shared jobs`, use
+`Refresh processing` and `Refresh Trust` once and report only the two displayed status lines.
+This supersedes the earlier retry/re-capture instructions; D2-035 and Phase 2 remain In progress.
 
 Current completion continuation (`2026-09-12` UTC): the owner requests continued full Phase 2
 implementation. The D2-054 admin presentation is now deployed from `b3da818` to the existing
@@ -70,9 +77,8 @@ The current page's default extraction reproduces a description angle-bracket rej
 mocked persistence; the original selected payload is not observed. D2-058 is Complete for source
 and local verification: a fresh memory-only page/intake probe passes with that description omitted,
 all 317 extension tests and the full maintained verifier pass, and the configured rebuild is ready.
-Reload, explicitly remove the rejected stopped capture and freshly Inspect/review/Add; do not
-retry its already-approved payload. No installed
-Lever success is claimed. Hosted
+The user now reports apparent sharing success; exact Processing/Trust states remain unconfirmed.
+Do not repeat submission or remove queue entries based on the earlier recovery instructions. Hosted
 Auth0/fresh MFA and a newly authorized disposable candidate
 are needed for the remaining live/human acceptance, not more recovery replay.
 
@@ -451,8 +457,8 @@ regression above. The configured development build preserves existing detector/A
 prohibits store packaging. Background SHA-256 is
 `b9de237d1fc3863f7a1df48bb178870eb01916adfb1be1b242c277c09b25aba6`; popup SHA-256 is
 `45e2e63e8ccb965c9cdb70f194ca41db255b41eabf9dedd4667edc9759e12235`.
-D2-058 is Complete for this local boundary; fresh installed approval, processing and Trust results
-remain unobserved under D2-035.
+D2-058 is Complete for this local boundary. The September 12 follow-up reports apparent sharing
+success; exact Processing/Trust results remain unconfirmed under D2-035. No new submission is needed.
 
 Evidence: [client sanitizer](../../../frontend/extension/lib/job-capture.ts),
 [request mapper](../../../frontend/extension/lib/job-intent-api.ts),
@@ -1730,9 +1736,9 @@ remained open. Both now pass as recorded above.
   unit tasks are not counted as integration acceptance; the separate fresh Jobs run passed 77/77.
   The configured unpacked extension is rebuilt without changing its ignored provider settings.
   No additional agent branches or worktrees were created; the user-owned stash is preserved.
-- Representative fixtures and global-Lever server activation are accepted. The first installed
-  attempt failed; D2-058's verified rebuild is ready. Reload, explicitly remove the rejected stopped capture
-  and freshly Inspect/review/Add. Keep the supplied Ashby board disabled under D2-R22; the
+- Representative fixtures and global-Lever server activation are accepted. After the first failed
+  attempt and D2-058's corrected rebuild, the user reports apparent sharing success on September 12.
+  Confirm only the displayed Processing/Trust states; do not resubmit. Keep Ashby disabled under D2-R22; the
   previously waived blanket provider legal approval is not being requested again.
 - Evidence: [extension development boundary](../../../frontend/extension/lib/development-contributions.ts),
   [server descriptor](../../../backend/services/jobs/src/contribution-capability-source.ts),
@@ -2177,7 +2183,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
 | Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three actual initial decisions pass. The current D2-054 admin preview is deployed/protected at `b3da818`; zero project environment variables confirms hosted Auth0 is unconfigured. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Configure the existing dedicated human appeal client for one exact protected stable host with `ADMIN_AUTHORIZATION_PROFILE=appeals`, distinct hosted session secret and server-only settings, then complete hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case or borrow the human session. |
-| Lever installed acceptance and Ashby enablement | Approved global-Lever server scope remains verified at `333`, with Greenhouse preserved and only Supermove independently registered for Lever. The first installed attempt stops after consent `201` and contribution `400`; D2-058's client correction, full verification and configured rebuild are Complete. The supplied Ashby board still exceeds the one-megabyte API cap. | Reload the existing unpacked extension, explicitly use `Remove stopped` for the rejected capture, then freshly Inspect, review and Add the supplied job. Never rewrite/retry its already-approved payload. Retain fixed Processing/Trust outcomes; no installed success yet. Keep EU/Ashby disabled. Resolve Ashby under D2-R22 without repeated fixture/activation approval, migration, blanket legal approval or silently increased limits. |
+| Lever installed acceptance and Ashby enablement | Approved global-Lever server scope remains verified at `333`, with Greenhouse preserved and only Supermove independently registered for Lever. D2-058's correction is Complete; on September 12 the user reports apparent sharing success, without literal Processing/Trust states. The supplied Ashby board still exceeds the one-megabyte API cap. | Under `Your shared jobs`, refresh Processing and Trust once and retain only the two status lines. Do not resubmit or remove queue items. Receipt acknowledgement, publication, Trust acceptance and website visibility are not inferred from the report. Keep EU/Ashby disabled. Resolve Ashby under D2-R22 without repeated fixture/activation approval, migration, blanket legal approval or silently increased limits. |
 | Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
@@ -2190,6 +2196,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-12 | User reports apparent sharing success after the D2-058 handoff. Exact receipt, Processing/Trust states and website visibility are not supplied or independently checked. Replace repeat submission/removal instructions with one status refresh/readback; no cloud, candidate, queue, review or runtime mutation. D2-035 and the phase remain In progress. | D2-058; D2-035 | User follow-up in this conversation; [latest owner follow-up](#task-register) |
 | 2026-09-12 | Completed D2-058's client correction after the September 11 consent `201`/contribution `400` failure. Original current-page extraction reproduces an angle-bearing description and Jobs refusal; corrected extraction omits it and passes OpenAPI/real service with mocked consent/store and zero live writes. Original user-selected fields remain unknown. Extension 317 tests/27 suites, composed intake/provider checks and full verification pass: 34 test tasks, 33 typechecks, 20 builds/19 cached, with extension rebuilt. Whole optional-field omission/bounds/trim preserve strict server guards and approved queues. State `333` and scope remain unchanged; fresh installed review/Add and fixed Processing/Trust results remain pending. | D2-058; D2-002; D2-035 | [Diagnosis and safe continuation](#d2-058--client-preview-and-intake-compatibility); aggregate `ad2da2`; original `650c3e`; corrected `85f9e8`; composed `1a2ccb`; pairing `87c4fa`; full `8951d8` |
 | 2026-09-11 | The owner separately approves global-Lever activation and local extension configuration. The reviewed four-resource configuration plan applies once and verifies at state `333`, Gateway/scheduled/Trust `63`/`23`/`18`, with zero meaningful changes and unchanged `3552f23` artifact code. Existing Greenhouse records remain; global-host intake admits Lever with only Supermove independently registered. EU/Ashby and production/store remain disabled; authority, triggers and migrations are unchanged. Exact runtime readback, `200/200/401` probes, 13 healthy D2 alarms and approximately empty Trust queues pass. Extension 306 tests/27 suites, 77 focused tests, typecheck, configured build and artifact readback pass; installed reload/one supplied-posting attempt remains. D2-035 and Phase 2 remain In progress. | D2-002; D2-014; D2-016; D2-035 | [Current activation checkpoint](#d2-035--complete-multi-provider-development-contributions); Apply `5dfd93`; Verify `c5fad6`; readback `17e079`; health `098e91`; build `72e7b6`; artifact `d118da` |
 | 2026-09-11 | Shared-main source `3552f23` passes the full maintained verifier. Reproducible Gateway/D2 publications, independently reviewed two/four-update plans and single applies complete the domain-aware code release at state `332`, aliases `62`/`22`/`18`, with authenticated search and zero drift. All 13 D2 alarms are OK and both Trust queues are approximately empty. Greenhouse settings, authority, schedules, concurrency and migrations are unchanged; Docker/WSL were not started. Global Lever still needs scoped server/client activation and installed acceptance. Ashby stays disabled under R22; neither provider is activated by fixture approval or this code release. | D2-011; D2-035 | [Release checkpoint](#d2-035--complete-multi-provider-development-contributions); Gateway plan `55fc2129`; worker plan `fb7b82e8`; worker verification `df4bc9`; health `79c92d` |
@@ -2842,8 +2849,8 @@ These are local checks; deployed migration, human review, and publication eviden
 - Latest client checkpoint (`2026-09-12` UTC): D2-058 is Complete for source/local verification
   after the September 11 stopped installed Lever attempt. Corrected source passes a fresh
   public-page/intake probe with mocked persistence, all 317 extension tests, composed regressions
-  and the full maintained verifier/build. The configured rebuild is ready; fresh installed
-  Inspect/review/Add and Processing/Trust acceptance remain D2-035, not completed evidence.
+  and the full maintained verifier/build. After the corrected rebuild handoff, the user reports
+  apparent sharing success. Exact Processing/Trust acceptance remains D2-035, not completed evidence.
   State `333`, approved global-Lever scope and broader phase gates remain unchanged.
 - Verified activation checkpoint (`2026-09-11`): approved global-Lever server configuration verifies
   at state `333`, Gateway/scheduled/Trust `63`/`23`/`18`, with unchanged `3552f23` code and zero

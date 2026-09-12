@@ -321,6 +321,11 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
+- Latest owner follow-up (`2026-09-12`): after D2-058's corrected extension handoff, the user
+  reports "Looks like it got shared." Record apparent sharing success only; exact receipt,
+  Processing/Trust states and website visibility remain unconfirmed. Ask for one Processing/Trust
+  refresh and only the two displayed status lines, not another submission or queue removal.
+  D2-035 and Phase 2 remain In progress; no deployment or broader acceptance is implied.
 - Current implementation continuation (`2026-09-12` UTC): D2-054's admin presentation is now deployed
   from `b3da818` to the existing protected identity-dark preview; 174 tests/typecheck, a 128-file
   allowed-source upload, exact source/project/region and three protected no-store HTTP checks pass.
@@ -360,9 +365,9 @@ This is the master record for the delivery phases defined in the [product and sy
   D2-058 is Complete for source/local verification: full verifier `8951d8` passes 317 extension
   tests/27 suites, 34 test tasks, 33 typecheck tasks and all 20 builds (19 cached, extension
   executed), retaining nine existing lint warnings. Provider pairing `87c4fa` and the configured
-  development rebuild pass. Reload, explicitly remove the rejected stopped capture and freshly Inspect/review/Add.
-  Do not rewrite or retry the already-approved payload. No installed Lever success or new AWS
-  release is claimed; verified state `333` and server scope remain unchanged.
+  development rebuild pass. The user subsequently reports apparent sharing success; exact
+  Processing/Trust states remain unconfirmed. Do not repeat submission or queue removal.
+  No publication or new AWS release is claimed; verified state `333` and server scope remain unchanged.
   Actual API preflight passes global Lever (one observation/11,984 bytes), but the supplied Ashby
   board exceeds the unchanged 1,000,000-byte cap. D2-R22 records that distinct activation blocker;
   it is not another fixture-review request. Keep Ashby disabled; global Lever is separately activated.
@@ -1035,6 +1040,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-12 | D2 | User reports apparent sharing success after the corrected extension handoff. Exact receipt, Processing/Trust states and website visibility remain unconfirmed. Next step is one status refresh/readback, not another submission or queue removal. No cloud/runtime/data change or wider phase acceptance. | User follow-up in this conversation; [latest D2 owner follow-up](phase-2-extension-and-community.md#task-register) |
 | 2026-09-12 | D2 | Completed D2-058's client correction after the September 11 stopped Lever consent `201`/contribution `400` attempt. Actual-page original extraction reproduces strict Jobs refusal; corrected extraction omits the unsupported description and passes OpenAPI/real service with mocked consent/store, no live writes and no claim to the original user-selected payload. Extension 317 tests/27 suites, composed intake/provider checks and full verification pass: 34 test tasks, 33 typechecks and 20 builds/19 cached, with configured extension rebuilt. Preserve server guards, approved queues and verified `333` activation scope. Fresh installed preview/approval remains D2-035; no AWS release or automatic resend. | [D2-058 diagnosis and continuation](phase-2-extension-and-community.md#d2-058--client-preview-and-intake-compatibility); aggregate `ad2da2`; original `650c3e`; corrected `85f9e8`; composed `1a2ccb`; pairing `87c4fa`; full `8951d8` |
 | 2026-09-11 | D2 | The owner approves global-Lever server activation and local extension configuration. Reviewed four-resource Apply `5dfd93` and Verify `c5fad6` establish state `333`, Gateway/scheduled/Trust `63`/`23`/`18`, with zero meaningful changes and unchanged `3552f23` code. Greenhouse records remain; global-host intake adds Lever with only Supermove independently registered. EU/Ashby and production/store stay disabled; authority, triggers and migrations are unchanged. Independent runtime/boundary and health checks pass: 13 D2 alarms OK, both Trust queues approximately empty. Extension 306 tests/27 suites, 77 focused tests, typecheck, configured build and artifact readback pass. Reload the existing unpacked extension and try the supplied posting once; installed acceptance, Ashby R22 and broader Phase 2 gates remain. | [Actual activation and next step](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions); readback `17e079`; health `098e91`; build `72e7b6`; artifact `d118da` |
 | 2026-09-11 | D2 | The approved global Lever/hosted Ashby fixtures and domain restriction are integrated in `3552f23`; the full maintained verifier passes. Reproducible publications and reviewed artifact-only Gateway/worker applies verify at state `332`, aliases `62`/`22`/`18`, with zero drift and 13 healthy D2 alarms. Greenhouse and all authority/triggers/migrations remain unchanged. Global Lever needs scoped server/client activation and installed acceptance; Ashby stays disabled under R22's board-acquisition bound. No new branches or Docker/WSL start; Phase 2 remains In progress. | [Release and remaining scope](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions), [single decision record](phase-2-extension-and-community.md#decisions-and-scope-changes) |
