@@ -4,7 +4,7 @@
 - Start: 2026-09-01
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-09-12
+- Last updated: 2026-09-13
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d2--extension-and-community-loop)
 
 ## Objective
@@ -48,6 +48,17 @@ requires new variant behavior, fixtures, authorization, scans, human sanitizatio
 QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
+
+Current full-description correction (`2026-09-13`, D2-061): the user confirms that Ashby's
+description now appears, but it stops at the 12,000-character client capture boundary. The API
+and Jobs already allow 50,000 characters; display expansion must not hide a shortened payload.
+Complete capture within that existing bound, explicit oversize refusal rather than a prefix,
+full independently corroborated description aliases alongside both historical 12,000-character
+representations, and exact tail/digest regressions are implemented and independently reviewed.
+The supplied-page read-only probe retains all 18,185 characters; its 19,401-byte request fits the
+unchanged 64 KiB gateway budget. Larger encoded selections fail locally before queue persistence
+or consent, with an editable full preview and explicit optional-field deselection. Installed description availability
+is confirmed; full-description capture/delivery and Ashby review/publication are not yet accepted.
 
 Current Ashby description correction (`2026-09-12`, D2-060): the installed user reports
 Description unavailable. A bounded, read-only replay of the supplied hosted page reproduces an
@@ -483,6 +494,58 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-058 | Align fresh extension previews with strict contribution intake without rewriting approved payloads. | Complete | Platform engineering; QA/automation | D2-002; D2-005; D2-035 | Completed 2026-09-12 for source/local verification after the September 11 consent `201`/contribution `400` failure. Whole-field optional omission, exact bounds and final trim preserve strict server/comparator/consent guards and approved queues. Extension 317 tests/27 suites, composed intake/provider regressions, full verification and configured build pass. A fresh public-page/OpenAPI/real-service probe passes with mocked consent/store and no live submission. The user now confirms installed owner Processing `published` / Trust `accepted` under D2-035; website acceptance remains separate and original user field selection was not observed. |
 | D2-059 | Implement a separately bounded Ashby exact-board verifier without changing general polling limits or activating Ashby. | Complete | Platform engineering; QA/automation | D2-006; D2-015; D2-035; D2-R22 | Completed 2026-09-12 for implementation/local verification at `09cc3fa`: frozen exact-board profile, complete-response/identity validation, target-only output, post-parse deadline/abort and Ashby-only configuration-digest binding pass independent review and the full maintained verifier. Ingestion 427/427 includes reader 131 and exact adapter 12; focused runtime/configuration 29/29 passes. Structural parser bounds are not measured V8/RSS limits. General polling/shared limits and other scopes/digests are unchanged. No API/event/SQL/migration, live supplied-board acquisition, deployment or activation occurred. See [evidence and remaining live gate](#d2-059--bounded-ashby-exact-board-verification). |
 | D2-060 | Preserve plaintext comparison symbols in Ashby descriptions through preview, intake and independent verification. | Complete | Platform engineering; QA/automation | D2-005; D2-035; D2-058 | Completed 2026-09-12: extension 337, Jobs 388 and ingestion 539 tests, composed supplied-page read-only probe, full verifier and 20/20 builds pass. Exact native corroboration preserves Ashby provider truth. Source `dccbb65` is development-deployed at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with passing API boundary, zero drift and healthy alarms/queues/database. Matching configured client rebuilt and readiness-checked. No SQL/API shape, provider scope, reviewer role or queued-payload change. Installed-client acceptance remains under D2-035. |
+| D2-061 | Capture and verify complete supported descriptions without silent preview truncation. | In progress | Platform engineering; QA/automation | D2-005; D2-035; D2-060 | User confirms description availability but identifies the preserved 12,000-character cutoff. Align complete client capture with the existing 50,000-character API/Jobs bound, clearly omit unsupported oversize values, preserve old queued approvals and verifier aliases, and require full-tail compatibility tests plus the appropriate worker rollout. No new API shape, database migration, provider scope or reviewer authority. |
+
+### D2-061 — Complete description capture
+
+The September 13 installed report confirms D2-060 restored description availability, but not its
+completeness. `job-capture.ts` still slices the sanitized description to 12,000 characters;
+`page-inspection.ts` additionally slices normalized text at 50,000 and structured description
+HTML at 200,000. The supported current path must retain the whole description within the existing
+50,000-character intake bound, not silently accept a prefix at either layer. Keep visual
+expand/collapse separate from the selected/transmitted value. Reject normalized full-page
+description text above 50,000 before repeated-heading removal and reject oversize structured
+HTML without slicing; present a fixed local explanation excluded from contribution payloads.
+
+The existing browser-free intake assurance initially fails at `optional_residual_brackets`
+(`7dd3dc`): its stale expectation predates D2-060, and neither `pnpm check` nor the maintained
+verifier invoked it. The corrected `pnpm test:d2-contribution-intake` now belongs to both standard
+commands. Final composed check `807cbb` passes 22 requests, five full-description cases (including
+12,001, 18,185 and 50,000 characters), oversize/markup refusal, two tampered payload rejections
+and two oversized UTF-8 request refusals with unchanged inputs, optional-deselection recovery and
+zero external network requests. It compares the actual client and gateway byte-budget constants.
+Consent/persistence are mocked ports, not deployed acceptance.
+
+The complete serialized request remains bounded to 65,536 UTF-8 bytes, including JSON escaping
+and all selected fields. Oversized new selections fail before queue persistence or consent;
+historical oversized queues stop with fixed guidance and no HTTP. Final consent substitution is
+rechecked. Neither a full preview nor 50,000-character validity implies that a Unicode-heavy
+request fits the wire budget. Full source remains editable and deselection never rewrites an
+existing queued authorization. Tests cover exact 65,536/65,537 byte bodies and recovery.
+
+Extension tests pass 368/368 (`d81936`), ingestion 574/574 (`9149b8`), both typechecks and focused
+format checks pass, and independent source review accepts full capture, frozen historical aliases,
+tail integrity, response-bound provenance, the twelve-digest ceiling and UTF-8 guard. The isolated
+browser/provider pairing `2ec3a8` passes 60 generated page inspections, 147 prepared payloads,
+114 verifier successes and 46 expected refusals with zero external network requests.
+Read-only supplied-page probe `eb3f3a` retains all 18,185 extracted characters through actual
+client mapping, current OpenAPI, Jobs intake with one mock-store call and normalization; its
+19,401-byte body fits the unchanged gateway. Independent provider HTML corroborates the complete
+description, with two bounded public GETs, zero raw files and zero application writes. This is
+not authentication, database persistence, Trust or publication acceptance. Full maintained
+verification, compatible worker deployment and configured client rebuild follow; installed
+full-description adoption remains D2-035.
+
+The first full maintained run (`5a9b49`) passes the operator/format/lint/type checks but the two
+existing 16,000,000/16,000,001-byte Ashby tests exceed Vitest's 5,000 ms harness deadline under
+simultaneous package pools (572/574 ingestion tests pass). The same boundary suite already passed
+in the isolated worker run. Serialize package-level `pnpm test` tasks, as integration tasks already
+do, while retaining each suite's internal scheduling and every test/runtime timeout, byte bound
+and assertion. This also covers `pnpm check` and the maintained verifier; it does not bypass a
+failed check or treat the first full run as passing. The uncached full `pnpm test --force`
+rerun (`442b63`) passes all 34 tasks with zero cache hits in 5m44s, including both unchanged
+large-byte tests, ingestion 574, extension 368, workflows 1,239 (eight existing opt-ins skipped)
+and Gateway 192 (seven existing opt-ins skipped). Full maintained revalidation follows.
 
 ### D2-060 — Plaintext description compatibility
 
@@ -2525,6 +2588,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-13 | User confirms Ashby description availability, then identifies that the capture still cuts off at 12,000 characters. Opened D2-061 for full bounded capture/verification and explicit oversize handling. Reproduced the stale browser-free intake regression and added its corrected seam to standard checks. Preserve all already acknowledged/queued payloads and provider truth. | D2-061; D2-035 | User report; source capture limit; intake failure `7dd3dc`, corrected composed check `c2765f`; [current scope](#d2-061--complete-description-capture) |
 | 2026-09-12 | Completed the Ashby unavailable-description correction across client, Jobs and independent verification. Preserved comparison symbols and exact provider-native corroboration without changing provider truth or pending payloads. Full verifier passes; compatible code is deployed at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with API boundary, zero drift and health checks passing. Matching configured extension rebuilt; installed preview/delivery acceptance remains under D2-035. No migration, authority/configuration expansion, queue clearing or new branch. | D2-060; D2-035 | Source `dccbb65`; verifier `8b35d1`; release `cafcac` / `6f6e7d`; health `60e865`; [exact evidence and handoff](#d2-060--plaintext-description-compatibility) |
 | 2026-09-12 | After verified server activation, enabled hosted Ashby in the existing ignored unpacked-client configuration and rebuilt. Typecheck, all 317 tests, configured build, actual bundle/manifest readback and four runtime readiness cases pass. Only provider selection/detector map changed; identity/API/retention, extension version, manifest permissions and existing provider settings remain unchanged. Installed reload/capture/delivery and subsequent review/publication are not claimed. | D2-002; D2-014; D2-035 | Typecheck `56a488`, tests `5890e0`, build `a7da0a`; [client evidence and deployment](#d2-035--ashby-development-rollout) |
 | 2026-09-12 | Completed the approved Ashby development server rollout from `61a23de`: independently reviewed immutable worker/gateway code releases precede the four-update additive configuration. State `336`, Gateway/scheduled/Trust `65`/`25`/`19`, three registrations/four hosts and zero drift verify. D2-R22 closes for acquisition/source binding/deployment, while installed/client and broader acceptance remain under D2-035. All 13 D2 alarms are OK and exact Trust queue/DLQ approximate counts are zero. No reviewer-role change, database migration, queue clearing, general-ingestion/EU/production/store activation or new branch. | D2-035; D2-R22; D2-016 | [Rollout, hashes and limitations](#d2-035--ashby-development-rollout); final `33d264`; independent `a8be19`; health `d073e0` |
@@ -2750,6 +2814,24 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For D2-061 (`2026-09-13`), the preview must carry the complete supported description, not a
+12,000-character excerpt. Reuse the existing 50,000-character API/Jobs maximum rather than
+increase server/body/storage authority. Refuse oversized complete text or structured HTML with a
+fixed local explanation; never hide a prefix behind a full-description disclosure. Preserve both
+historical 12,000-character verifier representations and unchanged old queued payloads while
+adding full response-bound aliases. The internal alias ceiling may increase from eight to twelve
+only for the existing two heading/presentation alternatives across three historical/current
+representations; it is not permission for fuzzy or candidate-supplied evidence. No provider truth,
+identity/scopes, database or API shape changes are needed. Release verifier compatibility before
+asking the user to reload the complete-description client.
+The separate 65,536-byte gateway request budget remains unchanged: check the exact serialized
+UTF-8 body before queue persistence/consent and again after consent substitution. Reject oversize
+selections with fixed local guidance and retain the complete editable preview so optional fields
+can be deselected; do not truncate, widen the gateway limit or retry an impossible payload.
+The repeated cross-package 16 MB harness timeout is handled by serial package test scheduling,
+not increased runtime/test deadlines or weaker boundary assertions. This bounds nested worker-pool
+contention across the shared workstation and makes the standard command use the verified schedule.
 
 For D2-060 (`2026-09-12`), fix Description unavailable by preserving literal plaintext
 comparison symbols in descriptions only. The client already extracts inert DOM text; do not

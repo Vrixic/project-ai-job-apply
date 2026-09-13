@@ -5,11 +5,14 @@ Its repository defaults remain a **synthetic, default-dark release candidate**. 
 unpacked development candidate now enables the accepted Greenhouse, global-Lever and hosted-Ashby
 variants on their four exact hosts; EU Lever and custom domains remain disabled. Development mode
 avoids signed-policy renewal; the default distribution path remains signed-policy-bound.
-The September 12 description correction verifies at state `338`, Gateway/scheduled/Trust
+The earlier September 12 description correction (D2-060) verifies at state `338`, Gateway/scheduled/Trust
 `66`/`26`/`20`, from source `dccbb65`, preserving the state-336 provider activation. The configured
 extension is rebuilt: typecheck, all 337 unit tests, 137 focused capture/readiness tests, four
-runtime readiness cases and five generated-sanitizer checks pass. Installed Ashby reload, preview and delivery remain
-unconfirmed; a successful build is not installed acceptance. Initial installed Edge sign-in and
+runtime readiness cases and five generated-sanitizer checks pass. The user subsequently confirms
+description availability but identifies its 12,000-character cutoff. D2-061 now implements complete
+bounded descriptions and passes 368 extension tests and typecheck locally; its compatible worker
+release, configured-client handoff and installed full-description delivery remain pending. A
+successful build is not installed acceptance. Initial installed Edge sign-in and
 server acknowledgement are confirmed for the existing journey. The supplied global-Lever job is
 user-confirmed published/accepted; its website detail/source journey remains unconfirmed.
 Acknowledgement is not publication: independent provider verification and Trust acceptance still
@@ -19,11 +22,23 @@ browser-store distribution are not approved. See the current
 
 ## Implemented source boundary
 
-- Descriptions retain literal plaintext comparison symbols (`<`, `>`, `<=`, `>=`) after inert
-  page extraction, including paired comparisons. The preview keeps its 12,000-character bound;
-  tag-like starts (including incomplete/NFKC markup) remain unavailable. Other field guards,
-  selected-payload hashes and already queued intents are unchanged. Jobs intake and independent
-  verification are development-deployed with this client correction; see D2-060 in the Phase 2 register.
+- D2-061 retains complete supported descriptions, including literal plaintext comparison symbols
+  (`<`, `>`, `<=`, `>=`), up to 50,000 UTF-16 code units after whitespace normalization. Inspection
+  checks the full text before repeated-heading removal; oversized text or structured description
+  HTML above the existing 200,000-code-unit input bound is explicitly unavailable, never sliced
+  into a prefix. The sanitizer independently checks the complete control-cleaned text. Tag-like
+  starts (including incomplete/NFKC markup) remain unavailable. Expand/collapse affects only
+  presentation, not the selected value. Fixed size explanations remain local and are excluded
+  from contribution payloads. Existing queued approvals and both historical 12,000-character
+  verifier aliases remain immutable; current full-description verification is implemented but
+  not yet deployed. See [D2-061](../../docs/product/delivery/phase-2-extension-and-community.md#d2-061--complete-description-capture).
+- The complete serialized contribution also must fit the unchanged Gateway limit of 65,536 UTF-8
+  bytes, including JSON escaping and metadata. The client checks the exact body before queue
+  insertion or consent creation and again at transmission. Oversize refusal preserves the preview
+  and editable field selection so the user can deselect optional fields and explicitly try again;
+  it never silently truncates, drops fields, or rewrites an existing queued intent. The character
+  and wire-byte limits are distinct, so some Unicode/escaped descriptions need deselection even
+  when their character count is within range. No API shape, SQL, provider or runtime authority changes.
 
 - A popup and side-panel product shell with one explicit **Add job to shared database** action
   after a field-level preview. The extension does not present a separate private-save action or a
@@ -69,8 +84,9 @@ browser-store distribution are not approved. See the current
   The build is visibly labelled Development; store packaging refuses active development settings
   and development-marked artifacts. The default signed implementation remains unchanged.
 - A strict structured allowlist: canonical HTTPS URL, provider, adapter version, timestamp, title,
-  company, location, work type, description, and external job ID. Text is bounded and stripped of
-  markup and control characters; URLs reject credentials, fragments, trackers, and local/private
+  company, location, work type, description, and external job ID. Text is bounded and control-cleaned;
+  descriptions reject markup without rewriting comparison symbols. URLs reject credentials,
+  fragments, trackers, and local/private
   targets. A work arrangement embedded in a combined location such as `Remote-NORAM` is separated
   into grounded work type `Remote` and location `NORAM`.
 - One field-level preview for the explicit public-add command. Optional-field removal is honored;
@@ -207,14 +223,19 @@ release candidate.
 
 ## Remaining activation gates
 
-- Hosted Ashby server/source activation and the configured unpacked rebuild are complete; reload
-  `dist` and inspect the observed `jobs.ashbyhq.com` posting, not the custom careers page. Validate
-  the rendered preview and explicit delivery, then its Processing/Trust and website journey.
+- Hosted Ashby server/source activation and the earlier D2-060 configured rebuild are complete;
+  the user confirms description availability. D2-061 below owns the newly reported cutoff.
+  Complete full-preview/delivery and Processing/Trust/website acceptance on the observed
+  `jobs.ashbyhq.com` posting, not the unsupported custom careers page.
   Representative fixtures and bounded API acquisition do not establish installed rendered capture,
   delivery or publication. Existing reviewer powers are unchanged; this rollout authorizes no
   Ashby Trust decision. Global Lever's supplied job is user-confirmed published/accepted, with
   website detail/source acceptance still pending. Do not repeat its submission or decision.
   EU Lever and custom domains remain excluded; no store or production activation is implied.
+- D2-061's full-description correction is locally verified, not yet development-deployed or
+  installed-accepted. Its worker release and matching configured-client handoff must precede
+  claiming complete-description delivery. The earlier D2-060 deployment restored availability
+  only; do not rewrite or automatically resubmit already approved/acknowledged contributions.
 - Broader live lifecycle acceptance remains separate from the user's 2026-09-11 confirmation of
   the reported Greenhouse job's published/accepted status and website search/detail/source display.
   That completed journey should not be requested again.

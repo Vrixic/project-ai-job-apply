@@ -1,7 +1,7 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-12
+- Last updated: 2026-09-13
 - Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
@@ -37,13 +37,32 @@ D2-060 distinguishes literal plaintext comparison symbols from markup in descrip
 Client extraction remains inert; Jobs rejects tag-like starts, incomplete markup and NFKC forms,
 while text-node/escaped rendering preserves comparison operators. Existing other-field guards,
 authorization, payload digests and complete independent provider truth are unchanged. Both frozen
-legacy and comparator-preserving preview representations are derived from the independent
-response; a bounded maximum of eight digests accommodates the existing heading/join/Greenhouse
-currency variants without dropping historical compatibility or accepting client-supplied aliases.
+legacy and comparator-preserving 12,000-character representations remain frozen. D2-061 adds
+complete current descriptions within the existing 50,000-character bound (JavaScript UTF-16 code
+units), after whitespace normalization and before repeated-heading removal. Oversized descriptions
+or structured HTML above the existing 200,000-code-unit client input bound are explicitly omitted,
+not truncated; fixed local explanations never enter the submitted fields. Sanitization independently
+checks the complete value. Full compatibility digests derive only from complete independent
+evidence, not the historical sliced acquisition. A maximum of twelve response-bound digests covers
+two heading/layout choices, two existing provider presentations, and three historical/current
+representations. Old aliases are retained, while changed tails/numbers, arbitrary prefixes and
+unbounded collections reject. No candidate-supplied aliases or canonical provider-truth changes.
 Ashby's HTML may also corroborate its full native plaintext representation: exact href/image
 annotations, list dashes and uppercase heading text, compared case-sensitively after whitespace
 collapse. Attributes remain exact and are never fetched; the bounded conversion neither changes
 canonical provider plaintext nor applies to other providers.
+
+The complete contribution's JSON encoding must also fit the unchanged 65,536-byte UTF-8 Gateway
+body limit, including metadata and escaping. Client preflight refuses an oversized request before
+queue insertion or consent creation, with a final serialization check before transmission. Field
+selection remains editable so the user can deselect optional content and explicitly retry; no field
+is silently shortened or removed, and existing queued approvals remain unchanged. The character
+bound does not guarantee wire-byte fit. D2-061 passes 368 client and 574 ingestion tests locally;
+compatible deployment and installed full-description acceptance remain pending. The browser-free
+`pnpm test:d2-contribution-intake` regression now runs in `pnpm check` and the maintained verifier.
+No API/event shape, SQL, provider activation, reviewer permission or runtime authority changes.
+The existing [Phase 2 decisions section](../product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes)
+owns the decision rationale; this is engineering behavior, not new release approval.
 
 ## Data classification and ownership
 
@@ -109,7 +128,8 @@ activation and exact provider registrations are separate. The approved Phase 2 s
 preserves Greenhouse and Supermove/global-Lever registrations and adds only the supplied hosted
 Ashby board. D2-060's compatible description code subsequently verifies from `dccbb65` at state
 `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with zero meaningful Terraform changes and unchanged
-authority/configuration. Three exact sources/verification registrations serve the four allowed hosts:
+authority/configuration. This D2-060 checkpoint is not deployment evidence for D2-061's new full
+description aliases. Three exact sources/verification registrations serve the four allowed hosts:
 the two existing Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain
 detection, general provider ingestion, production and store distribution remain disabled.
 Reviewer authority is unchanged: Greenhouse initial/takedown and approved global-Lever initial

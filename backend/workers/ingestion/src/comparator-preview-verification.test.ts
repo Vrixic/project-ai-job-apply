@@ -6,7 +6,10 @@ import type { IngestionSourceAdapter } from "./contract.js";
 import { RegisteredIndependentProviderVerifier } from "./contribution-verification.js";
 import { GreenhouseJobBoardAdapter } from "./greenhouse.js";
 import { LeverPostingsAdapter } from "./lever.js";
-import { legacyPreviewDescription } from "./page-preview-compatibility.js";
+import {
+  comparatorPreservingPreviewDescription,
+  legacyPreviewDescription,
+} from "./page-preview-compatibility.js";
 import { SourceRegistry } from "./registry.js";
 
 const digest = (value: string) => createHash("sha256").update(normalizeText(value)).digest("hex");
@@ -197,6 +200,64 @@ describe.each(providers)("%s comparator page/provider verification", (provider) 
     expect(await verify(trimmed.slice(0, -1))).toMatchObject({ status: "mismatch" });
     expect(await verify(text.slice(0, 12_001))).toMatchObject({ status: "mismatch" });
   });
+
+  it("verifies the complete description beyond 12k and preserves both historical approved previews", async () => {
+    const paragraphs = [comparisons, `${"x".repeat(12_100)} Final requirement >= 3 checks.`, tail];
+    const { verify, page, plain } = setup(provider, paragraphs);
+    expect(page.length).toBeGreaterThan(12_000);
+    for (const submitted of [
+      page,
+      legacyPreviewDescription(page),
+      comparatorPreservingPreviewDescription(page),
+    ]) {
+      if (!submitted) throw new Error("Expected complete or historical description");
+      expect(await verify(submitted)).toMatchObject({
+        status: "verified",
+        providerObservation: { description: plain },
+      });
+    }
+    for (const changed of [
+      page.replace("Final requirement >= 3", "Final requirement > 3"),
+      page.replace("Final requirement >= 3", "Final requirement >= 4"),
+      page.replace(tail, "Build different systems."),
+      page.slice(0, -1),
+      page.slice(0, 12_001),
+      `${page} Invented obligation.`,
+    ]) {
+      expect(await verify(changed)).toMatchObject({ status: "mismatch" });
+    }
+    expect(await verify(page, "d2-job-page-v2")).toMatchObject({ status: "mismatch" });
+  });
+
+  it("accepts exactly 50k complete page characters but not its invented prefix", async () => {
+    const text = `${comparisons}${"x".repeat(50_000 - comparisons.length - tail.length)}${tail}`;
+    const { verify, page, plain } = setup(provider, [text.slice(0, 100), text.slice(100)]);
+    expect(page).toHaveLength(50_000);
+    expect(await verify(page)).toMatchObject({
+      status: "verified",
+      providerObservation: { description: plain },
+    });
+    expect(await verify(page.slice(0, -1))).toMatchObject({ status: "mismatch" });
+  });
+
+  it("never derives a full or 50k-prefix page alias from an oversized description", async () => {
+    const { verify, page } = setup(provider, [comparisons, "x".repeat(50_000), tail]);
+    expect(page.length).toBeGreaterThan(50_000);
+    expect(await verify(page)).toMatchObject({ status: "mismatch" });
+    expect(await verify(page.slice(0, 50_000))).toMatchObject({ status: "mismatch" });
+    // Previously approved 12k payloads retain their exact independently derived compatibility.
+    const historical = comparatorPreservingPreviewDescription(page);
+    if (!historical) throw new Error("Expected historical description");
+    expect(await verify(historical)).toMatchObject({ status: "verified" });
+  });
+
+  it.each(["<script", "</script", "<!unfinished", "＜script", "<ｓｃｒｉｐｔ"])(
+    "does not derive a full alias for late malformed plaintext markup: %s",
+    async (markup) => {
+      const { verify, page } = setup(provider, [`${"x".repeat(12_100)} ${markup}`, tail]);
+      expect(await verify(page)).toMatchObject({ status: "mismatch" });
+    },
+  );
 });
 
 describe.each(["ashby", "lever"] as const)("%s auxiliary-HTML corroboration", (provider) => {
@@ -206,6 +267,22 @@ describe.each(["ashby", "lever"] as const)("%s auxiliary-HTML corroboration", (p
       const { verify, page, plain } = setup(provider, [comparisons, tail], auxiliary);
       expect(await verify(page)).toMatchObject({ status: "mismatch" });
       expect(await verify(legacyPreviewDescription(page))).toMatchObject({ status: "mismatch" });
+      expect(await verify(plain)).toMatchObject({
+        status: "verified",
+        providerObservation: { description: plain },
+      });
+    },
+  );
+
+  it.each(["absent", "contradictory"] as const)(
+    "cannot infer complete >12k page-only aliases from %s auxiliary HTML",
+    async (auxiliary) => {
+      const { verify, page, plain } = setup(
+        provider,
+        [comparisons, "x".repeat(12_100), tail],
+        auxiliary,
+      );
+      expect(await verify(page)).toMatchObject({ status: "mismatch" });
       expect(await verify(plain)).toMatchObject({
         status: "verified",
         providerObservation: { description: plain },

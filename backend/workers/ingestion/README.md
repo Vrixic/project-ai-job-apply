@@ -14,11 +14,18 @@ provider verifier without treating candidate-supplied content as catalog truth.
 
 ## Implemented boundaries
 
-- `page-preview-compatibility.ts` — Frozen legacy v1 digests plus comparator-preserving v1
-  plaintext previews derived only from independently fetched provider descriptions. Up to eight
-  response-bound HTML-preview digests retain both sanitizers across the existing heading/join/
-  Greenhouse currency representations. Full provider text remains canonical; changed comparison
-  operators/numbers still mismatch. No candidate-supplied aliases or new provider request scope.
+- `page-preview-compatibility.ts` — D2-061 retains both frozen 12,000-character v1 representations
+  and adds complete descriptions up to 50,000 UTF-16 code units, derived only from independently
+  fetched provider evidence. Full HTML-preview text is whitespace-normalized and size-checked
+  before repeated-heading removal; an oversized value never gains a 50,000-character prefix
+  alias. Up to twelve response-bound digests cover two heading/layout choices, two existing
+  provider presentations, and the three historical/current representations without dropping old
+  approvals. Actual Greenhouse currency and Lever join combinations exercise that bound; thirteen
+  digests refuse. Full provider text remains canonical, while changed tails, comparison operators,
+  numbers and arbitrary prefixes mismatch. Markup/NFKC/control guards and reader version
+  `d2-job-page-v1` are preserved. No candidate-supplied aliases, new provider request scope or
+  acquisition-limit increase. All 574 ingestion tests and typecheck pass locally; the compatible
+  worker deployment remains pending under [D2-061](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-061--complete-description-capture).
 
 - `contract.ts` — strict adapter, registry, catalog-port, and aggregate-result shapes.
 - `registry.ts` — immutable registration, duplicate rejection, and default-deny activation.
@@ -150,12 +157,19 @@ requires an explicit `DATABASE_URL` and is separate from the default suite.
 detector, selected payload, normalizer, provider adapters, and verifier. It uses an isolated local
 browser context and mocked provider responses, not a live provider or authenticated contribution.
 This catches cross-component representation errors that isolated detector/adapter unit tests miss.
+`pnpm test:d2-contribution-intake` separately exercises the browser-free sanitizer/request/intake
+seam, including complete descriptions and the unchanged 65,536-byte UTF-8 Gateway request limit.
+It is now included in `pnpm check` and the maintained repository verifier. The client refuses an
+oversized complete request before queue insertion or consent creation while retaining editable
+field selection; it does not truncate or silently deselect the description. These checks use
+generated data and mocked persistence, not live publication or installed acceptance.
 
 Contribution verification defaults to no registrations. The separate D2 scheduled runtime's
 controlled state-336 activation preserves the accepted Greenhouse and Supermove/global-Lever
 registrations and adds only the supplied hosted Ashby board. D2-060's compatible description code
 then verifies at state `338` from source `dccbb65`, Gateway/scheduled/Trust versions `66`/`26`/`20`,
-with zero meaningful Terraform changes. The separate general-ingestion runtime was not redeployed. Three exact
+with zero meaningful Terraform changes. That is the earlier D2-060 release, not deployment
+evidence for D2-061's new complete-description aliases. The separate general-ingestion runtime was not redeployed. Three exact
 sources/verification registrations serve four allowed contribution hosts: the two existing
 Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain detection,
 production/store distribution and the general ingestion runtime remain disabled. Every registration

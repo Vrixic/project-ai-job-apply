@@ -12,6 +12,7 @@ import { v7 as uuidv7 } from "uuid";
 import type { SourceRegistration } from "./contract.js";
 import {
   comparatorPreservingPreviewDescription,
+  fullPreviewDescription,
   legacyPreviewDescription,
 } from "./page-preview-compatibility.js";
 import type { SourceRegistry } from "./registry.js";
@@ -193,6 +194,8 @@ function descriptionDigests(observation: CatalogObservation, legacy: boolean): R
     values.push(normalizeText(legacyPreviewDescription(observation.description)));
     const current = comparatorPreservingPreviewDescription(observation.description);
     if (current !== undefined) values.push(normalizeText(current));
+    const complete = fullPreviewDescription(observation.description);
+    if (complete !== undefined) values.push(normalizeText(complete));
     const firstLine = observation.description.split(/\r?\n/u).find((line) => line.trim());
     const heading = firstLine ? normalizeText(firstLine) : "";
     const full = normalizeText(observation.description);
@@ -201,6 +204,8 @@ function descriptionDigests(observation: CatalogObservation, legacy: boolean): R
       values.push(deduplicated, normalizeText(legacyPreviewDescription(deduplicated)));
       const currentDeduplicated = comparatorPreservingPreviewDescription(deduplicated);
       if (currentDeduplicated !== undefined) values.push(normalizeText(currentDeduplicated));
+      const completeDeduplicated = fullPreviewDescription(deduplicated);
+      if (completeDeduplicated !== undefined) values.push(normalizeText(completeDeduplicated));
     }
   }
   return new Set(values.map(sha256));
@@ -361,9 +366,10 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
             : [];
         if (
           !Array.isArray(previewDigests) ||
-          // Two fixed headings/layouts, two provider presentations, and both v1 sanitizers.
+          // Two fixed headings/layouts, two provider presentations, and three v1 representations
+          // (frozen legacy 12k, comparator-preserving 12k, and complete bounded description).
           // Retain historical aliases; never accept an unbounded or arbitrary digest collection.
-          previewDigests.length > 8 ||
+          previewDigests.length > 12 ||
           previewDigests.some(
             (value) => typeof value !== "string" || !/^[0-9a-f]{64}$/u.test(value),
           )

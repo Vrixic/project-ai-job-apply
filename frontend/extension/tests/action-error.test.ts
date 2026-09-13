@@ -7,6 +7,11 @@ describe("extension privacy-safe action errors", () => {
     ["access_denied", "login", "Authentication action cancelled."],
     ["configuration_required", "login", "Public Auth0 configuration is required."],
     [
+      "contribution_request_too_large",
+      "enqueue",
+      "Selected fields exceed the 64 KiB delivery limit. Deselect Description or another optional field, then add the job again. No shortened text was shared.",
+    ],
+    [
       "development_contribution_disabled",
       "enqueue",
       "This unpacked development build accepts only explicitly selected and detector-enabled provider pages for extension version 0.2.0.",

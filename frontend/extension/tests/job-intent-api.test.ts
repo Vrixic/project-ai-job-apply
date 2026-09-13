@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { extensionConfiguration } from "../lib/config";
+import { sanitizeSnapshot } from "../lib/job-capture";
 import {
+  ContributionRequestTooLargeError,
   createConsentGrantRequest,
   createContributionRequest,
+  MAXIMUM_CONTRIBUTION_REQUEST_BYTES,
   prepareContribution,
   preparePrivateSavedPageCapture,
   sendJobIntent,
@@ -56,6 +59,138 @@ afterEach(() => {
 });
 
 describe("background-only contribution consent transport", () => {
+  it("accepts exactly 65,536 serialized bytes and rejects one more byte before consent", async () => {
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    extensionConfiguration.ugcContributionPolicyVersion = "d2-synthetic-policy.v1";
+    const pending = intent();
+    pending.capture.description = "x";
+    pending.approvedFields = ["description"];
+    const base = await prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0");
+    const available =
+      MAXIMUM_CONTRIBUTION_REQUEST_BYTES -
+      new TextEncoder().encode(JSON.stringify(base.body)).byteLength +
+      1;
+    // A quotation mark occupies two escaped JSON bytes, independently of its string length.
+    pending.capture.description = `${'"'.repeat(Math.floor(available / 2))}${"x".repeat(available % 2)}`;
+    const exact = await prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0");
+    expect(new TextEncoder().encode(JSON.stringify(exact.body)).byteLength).toBe(65_536);
+    const consent = {
+      id: pending.id,
+      grantedAt: pending.capture.capturedAt,
+      previewDigestSha256: exact.previewDigestSha256,
+    };
+    expect(
+      new TextEncoder().encode(
+        String(
+          createContributionRequest(
+            pending,
+            exact.body,
+            consent,
+            "synthetic-token",
+            "https://api.example.test",
+          ).init.body,
+        ),
+      ).byteLength,
+    ).toBe(65_536);
+    pending.capture.description += "x";
+    const unchanged = JSON.stringify(pending);
+    await expect(
+      prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0"),
+    ).rejects.toBeInstanceOf(ContributionRequestTooLargeError);
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(sendJobIntent(pending, "synthetic-token", fetcher, "0.2.0")).resolves.toEqual({
+      outcome: "terminal",
+      failureCode: "request_too_large",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(JSON.stringify(pending)).toBe(unchanged);
+    exact.body.posting.description += "x";
+    expect(() =>
+      createContributionRequest(
+        pending,
+        exact.body,
+        consent,
+        "synthetic-token",
+        "https://api.example.test",
+      ),
+    ).toThrow(ContributionRequestTooLargeError);
+  });
+
+  it("retains complete Unicode locally but refuses an oversized UTF-8 delivery until deselected", async () => {
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    extensionConfiguration.ugcContributionPolicyVersion = "d2-synthetic-policy.v1";
+    const pending = intent();
+    pending.capture.description = "漢".repeat(50_000);
+    pending.approvedFields = ["description"];
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(sendJobIntent(pending, "synthetic-token", fetcher, "0.2.0")).resolves.toEqual({
+      outcome: "terminal",
+      failureCode: "request_too_large",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(pending.capture.description).toBe("漢".repeat(50_000));
+    pending.approvedFields = [];
+    const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0");
+    expect(prepared.body.posting).not.toHaveProperty("description");
+    expect(pending.capture.description).toBe("漢".repeat(50_000));
+  });
+
+  it.each([12_000, 18_185, 50_000])(
+    "retains the exact %i-character description and its tail across persistence and digest preparation",
+    async (length) => {
+      const pending = intent();
+      const tail = " complete synthetic tail >= 5";
+      pending.capture.description = `${"x".repeat(length - tail.length)}${tail}`;
+      pending.approvedFields = ["description"];
+      const original = JSON.stringify(pending);
+      const reloaded = JSON.parse(original) as typeof pending;
+      const prepared = await prepareContribution(reloaded, "d2-synthetic-policy.v1", "0.2.0");
+      expect(prepared.body.posting.description).toBe(pending.capture.description);
+      expect(prepared.body.posting.description?.endsWith(tail)).toBe(true);
+      const retry = await prepareContribution(reloaded, "d2-synthetic-policy.v1", "0.2.0");
+      expect(retry).toEqual(prepared);
+      expect(JSON.stringify(reloaded)).toBe(original);
+      const changed = structuredClone(reloaded);
+      changed.capture.description = `${changed.capture.description?.slice(0, -1)}6`;
+      const edited = await prepareContribution(changed, "d2-synthetic-policy.v1", "0.2.0");
+      expect(edited.body.observation.contentSha256).not.toBe(
+        prepared.body.observation.contentSha256,
+      );
+      expect(edited.previewDigestSha256).not.toBe(prepared.previewDigestSha256);
+    },
+  );
+
+  it.each(["too_long", "source_too_large"] as const)(
+    "never sends or digests the local %s explanation",
+    async (reason) => {
+      const pending = intent();
+      const capture = sanitizeSnapshot(
+        {
+          canonicalUrl: pending.capture.sourceUrl,
+          title: "Engineer",
+          descriptionUnavailableReason: reason,
+        },
+        "lever",
+        "lever-posting-v1",
+        pending.capture.capturedAt,
+      );
+      if (!capture) throw new Error("Expected synthetic capture");
+      pending.capture = capture;
+      pending.approvedFields = ["description"];
+      const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0");
+      expect(prepared.body.posting).not.toHaveProperty("description");
+      expect(JSON.stringify(prepared.body)).not.toContain("descriptionUnavailableReason");
+      const withoutDiagnostic = structuredClone(pending);
+      delete withoutDiagnostic.capture.descriptionUnavailableReason;
+      expect(
+        await prepareContribution(withoutDiagnostic, "d2-synthetic-policy.v1", "0.2.0"),
+      ).toEqual(prepared);
+      expect(preparePrivateSavedPageCapture(pending)).toEqual(
+        preparePrivateSavedPageCapture(withoutDiagnostic),
+      );
+    },
+  );
+
   it("maps selected capture fields to the exact generated request and canonical order", async () => {
     const pending = intent();
     const prepared = await prepareContribution(pending, "d2-synthetic-policy.v1", "0.2.0");

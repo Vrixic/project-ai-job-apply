@@ -26,6 +26,23 @@ import {
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+// Match the deployed gateway's complete UTF-8 JSON request-body budget, not character count.
+export const MAXIMUM_CONTRIBUTION_REQUEST_BYTES = 64 * 1_024;
+
+export class ContributionRequestTooLargeError extends Error {
+  constructor() {
+    super("contribution_request_too_large");
+    this.name = "ContributionRequestTooLargeError";
+  }
+}
+
+function serializeContributionBody(body: CreateJobContributionRequest): string {
+  const serialized = JSON.stringify(body);
+  if (new TextEncoder().encode(serialized).byteLength > MAXIMUM_CONTRIBUTION_REQUEST_BYTES) {
+    throw new ContributionRequestTooLargeError();
+  }
+  return serialized;
+}
 
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -254,6 +271,7 @@ export async function prepareContribution(
   body.observation.contentSha256 = await sha256Hex(jobContributionContentDigestInput(body));
   const previewDigestSha256 = await sha256Hex(jobContributionPreviewDigestInput(body));
   body.approval.previewDigestSha256 = previewDigestSha256;
+  serializeContributionBody(body);
   return { body, previewDigestSha256 };
 }
 
@@ -298,7 +316,7 @@ export function createContributionRequest(
   body.approval.approvedAt = consent.grantedAt;
   return {
     init: {
-      body: JSON.stringify(body),
+      body: serializeContributionBody(body),
       headers: {
         accept: "application/json",
         authorization: `Bearer ${accessToken}`,
@@ -355,13 +373,21 @@ async function sendContribution(
       previewDigestSha256: prepared.previewDigestSha256,
     };
   }
-  const contributionRequest = createContributionRequest(
-    intent,
-    prepared.body,
-    consent,
-    accessToken,
-    apiOrigin,
-  );
+  let contributionRequest: ReturnType<typeof createContributionRequest>;
+  try {
+    contributionRequest = createContributionRequest(
+      intent,
+      prepared.body,
+      consent,
+      accessToken,
+      apiOrigin,
+    );
+  } catch (error) {
+    if (error instanceof ContributionRequestTooLargeError) {
+      return { consent, failureCode: "request_too_large", outcome: "terminal" };
+    }
+    throw error;
+  }
   let response: Response;
   try {
     response = await fetchImplementation(contributionRequest.url, contributionRequest.init);
@@ -400,11 +426,12 @@ export async function sendJobIntent(
         fetchImplementation,
         clientVersion,
       );
-    } catch {
+    } catch (error) {
       return {
         ...(intent.consent ? { consent: intent.consent } : {}),
-        failureCode: "network_error",
-        outcome: "retryable",
+        failureCode:
+          error instanceof ContributionRequestTooLargeError ? "request_too_large" : "network_error",
+        outcome: error instanceof ContributionRequestTooLargeError ? "terminal" : "retryable",
       };
     }
   }

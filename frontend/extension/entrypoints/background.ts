@@ -25,7 +25,7 @@ import {
 import { detectPublicJob } from "../lib/detectors";
 import { DevelopmentContributionRuntime } from "../lib/development-contributions";
 import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
-import { sendJobIntent } from "../lib/job-intent-api";
+import { prepareContribution, sendJobIntent } from "../lib/job-intent-api";
 import { parseExtensionMessage } from "../lib/messages";
 import { captureCurrentPublicJobPage } from "../lib/page-inspection";
 import {
@@ -628,6 +628,15 @@ async function enqueue(
     intent,
     retentionMilliseconds: extensionConfiguration.pendingRetentionMilliseconds,
   });
+  if (intent === "contribute") {
+    // Refuse oversized selected fields before persisting an undeliverable intent or granting
+    // consent. Keep the complete preview so the user can remove optional fields and try again.
+    await prepareContribution(
+      created,
+      extensionConfiguration.ugcContributionPolicyVersion,
+      chrome.runtime.getManifest().version,
+    );
+  }
   await updatePendingQueue(generation, (queue) => {
     if (queue.length >= MAXIMUM_QUEUE_ITEMS) throw new Error("queue_capacity_reached");
     return [...queue, created];

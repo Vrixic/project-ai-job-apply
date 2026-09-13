@@ -11,11 +11,13 @@ export type CaptureField = (typeof CAPTURE_FIELDS)[number];
 export type AtsProvider = "ashby" | "greenhouse" | "lever";
 export type JobPageVariant = "ashby-job-board-v1" | "greenhouse-board-v1" | "lever-posting-v1";
 export type WorkMode = "hybrid" | "on_site" | "remote" | "unknown";
+export type DescriptionUnavailableReason = "too_long" | "source_too_large";
 
 export interface RawPageSnapshot {
   canonicalUrl: string;
   company?: string;
   description?: string;
+  descriptionUnavailableReason?: DescriptionUnavailableReason;
   externalJobId?: string;
   location?: string;
   title?: string;
@@ -27,6 +29,8 @@ export interface SanitizedJobCapture {
   capturedAt: string;
   company?: string;
   description?: string;
+  /** Local preview diagnostic only; never a selected contribution field. */
+  descriptionUnavailableReason?: DescriptionUnavailableReason;
   externalJobId?: string;
   location?: string;
   pageVariant: JobPageVariant;
@@ -38,7 +42,7 @@ export interface SanitizedJobCapture {
 
 const LIMITS: Record<CaptureField, number> = {
   company: 200,
-  description: 12_000,
+  description: 50_000,
   externalJobId: 200,
   location: 240,
   title: 240,
@@ -86,8 +90,11 @@ export function sanitizeText(value: unknown, maximum: number, truncate = true): 
   return bounded.length > 0 ? bounded : undefined;
 }
 
-function sanitizeDescription(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
+function sanitizeDescription(value: unknown): {
+  description?: string;
+  descriptionUnavailableReason?: DescriptionUnavailableReason;
+} {
+  if (typeof value !== "string") return {};
   // Page inspection already extracts inert DOM textContent. Reject markup at this boundary,
   // but never interpret paired comparisons ("< 10 and > 5") as an HTML element to remove.
   // Match Jobs intake/normalization, including tag starts exposed by NFKC normalization.
@@ -98,10 +105,13 @@ function sanitizeDescription(value: unknown): string | undefined {
       (text) => markupStart.test(text) || markupStart.test(text.normalize("NFKC")),
     )
   ) {
-    return undefined;
+    return {};
   }
-  const bounded = withoutControls.replace(/\s+/gu, " ").trim().slice(0, LIMITS.description).trim();
-  return bounded.length > 0 ? bounded : undefined;
+  const normalized = withoutControls.replace(/\s+/gu, " ").trim();
+  if (normalized.length > LIMITS.description) {
+    return { descriptionUnavailableReason: "too_long" };
+  }
+  return normalized ? { description: normalized } : {};
 }
 
 export function canonicalizePublicJobUrl(value: unknown): string | undefined {
@@ -148,20 +158,22 @@ export function sanitizeSnapshot(
     return undefined;
   }
   const optional = Object.fromEntries(
-    CAPTURE_FIELDS.filter((field) => field !== "title" && field !== "workMode")
+    CAPTURE_FIELDS.filter(
+      (field) => field !== "title" && field !== "workMode" && field !== "description",
+    )
       .map((field) => [
         field,
         // Provider verification requires the complete company/location identity, not a prefix.
-        field === "description"
-          ? sanitizeDescription(snapshot[field])
-          : sanitizeText(
-              snapshot[field],
-              LIMITS[field],
-              field !== "company" && field !== "location",
-            ),
+        sanitizeText(snapshot[field], LIMITS[field], field !== "company" && field !== "location"),
       ])
       .filter((entry): entry is [CaptureField, string] => typeof entry[1] === "string"),
   );
+  // Inspector overflow diagnostics never turn an incomplete prefix into a selectable value.
+  const description =
+    snapshot.descriptionUnavailableReason === "too_long" ||
+    snapshot.descriptionUnavailableReason === "source_too_large"
+      ? { descriptionUnavailableReason: snapshot.descriptionUnavailableReason }
+      : sanitizeDescription(snapshot.description);
   const workMode = sanitizeWorkMode(snapshot.workMode);
   return {
     adapterVersion: "d2-job-page-v1",
@@ -171,6 +183,7 @@ export function sanitizeSnapshot(
     sourceUrl,
     title,
     ...optional,
+    ...description,
     ...(workMode ? { workMode } : {}),
   };
 }

@@ -3,7 +3,10 @@ import type { NormalizedContributionProposal } from "@ai-job-apply/jobs-service"
 import { describe, expect, it, vi } from "vitest";
 import { RegisteredIndependentProviderVerifier } from "./contribution-verification.js";
 import { LeverPostingsAdapter } from "./lever.js";
-import { legacyPreviewDescription } from "./page-preview-compatibility.js";
+import {
+  comparatorPreservingPreviewDescription,
+  legacyPreviewDescription,
+} from "./page-preview-compatibility.js";
 import { SourceRegistry } from "./registry.js";
 
 const context = () => ({
@@ -179,6 +182,48 @@ describe("LeverPostingsAdapter", () => {
     expect(digests).toHaveLength(8);
     expect(digests).toEqual(expected);
     expect(result.observations[0].description).toBe(`About Example\n${after}\n\nBuild safely.`);
+  });
+
+  it("retains all twelve full and historical join/heading representations beyond 12k", async () => {
+    const after = "About Example Require < 5 and > 2 years.";
+    const closing = `Build safely. ${"x".repeat(12_100)} Final >= 3 checks.`;
+    const selected = adapter(async () =>
+      jsonResponse(
+        posting({
+          descriptionPlain: `About Example\n${after}`,
+          description: `<h2>About Example</h2><p>${after.replace("< 5", "&lt; 5").replace("> 2", "&gt; 2")}</p>`,
+          additionalPlain: closing,
+          additional: `<p>${closing}</p>`,
+        }),
+      ),
+    );
+    const result = await selected.pollExact(exactContext());
+    if (result.kind !== "success" || !result.observations[0])
+      throw new Error("Expected observation");
+    const observation = result.observations[0];
+    const digests = selected.pagePreviewDescriptionDigests(observation, "d2-job-page-v1");
+    const expected = ["", "\n"].flatMap((join) => {
+      const values = [`About Example${after}${join}${closing}`, `${after}${join}${closing}`];
+      return [
+        ...values.flatMap((text) => [
+          previewDigest(legacyPreviewDescription(text)),
+          previewDigest(comparatorPreservingPreviewDescription(text) ?? ""),
+        ]),
+        ...values.map(previewDigest),
+      ];
+    });
+    expect(digests).toHaveLength(12);
+    expect(digests).toEqual(expected);
+    for (const join of ["", "\n"]) {
+      expect(digests).toContain(previewDigest(`${after}${join}${closing}`));
+      expect(digests).not.toContain(
+        previewDigest(`${after}${join}${closing.replace("Final >= 3", "Final >= 4")}`),
+      );
+    }
+    expect(observation.description).toBe(`About Example\n${after}\n\n${closing}`);
+    expect(selected.pagePreviewDescriptionDigests({ ...observation }, "d2-job-page-v1")).toEqual(
+      [],
+    );
   });
 
   it("converts list HTML inertly without collecting form values or executing resources", async () => {

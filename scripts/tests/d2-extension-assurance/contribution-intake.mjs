@@ -22,7 +22,8 @@ async function currentSource() {
     stdin: {
       contents: `export { captureCurrentPublicJobPage } from "./frontend/extension/lib/page-inspection.ts";
 export { detectPublicJob } from "./frontend/extension/lib/detectors.ts";
-export { prepareContribution, createContributionRequest } from "./frontend/extension/lib/job-intent-api.ts";
+export { prepareContribution, createContributionRequest, ContributionRequestTooLargeError, MAXIMUM_CONTRIBUTION_REQUEST_BYTES } from "./frontend/extension/lib/job-intent-api.ts";
+export { MAXIMUM_GATEWAY_BODY_BYTES } from "./backend/gateway/src/gateway-boundary.ts";
 export { createPendingIntent } from "./frontend/extension/lib/pending-queue.ts";
 export { compileComponentValidator } from "./packages/api-contracts/src/index.ts";
 export { JobContributionService } from "./backend/services/jobs/src/contribution.ts";
@@ -61,6 +62,8 @@ export async function verifyContributionIntake() {
     refusedCaptures: 0,
     unchangedQueuedRejections: 0,
     tamperedPayloadRejections: 0,
+    completeDescriptionsValidated: 0,
+    oversizedWireRequestsRefused: 0,
     consentChecks: 0,
     storeCalls: 0,
     externalNetworkRequests: 0,
@@ -76,6 +79,7 @@ export async function verifyContributionIntake() {
   let stage = "source_composition";
   try {
     const api = await currentSource();
+    assert.equal(api.MAXIMUM_CONTRIBUTION_REQUEST_BYTES, api.MAXIMUM_GATEWAY_BODY_BYTES);
     const validate = api.compileComponentValidator("CreateJobContributionRequest");
     const extensionRequire = createRequire(join(root, "frontend/extension/package.json"));
     const { JSDOM } = extensionRequire("jsdom");
@@ -149,6 +153,7 @@ export async function verifyContributionIntake() {
         "https://api.example.test",
       );
       const body = JSON.parse(request.init.body);
+      assert.ok(Buffer.byteLength(request.init.body, "utf8") <= api.MAXIMUM_GATEWAY_BODY_BYTES);
       assert.equal(body.approval.previewDigestSha256, prepared.previewDigestSha256);
       assert.equal(JSON.stringify(intent), before, "Preparation must not rewrite queued approvals");
       return body;
@@ -183,8 +188,8 @@ export async function verifyContributionIntake() {
     };
     const capture = (changes = {}) => api.detectPublicJob({ ...generated, ...changes }, timestamp);
 
-    stage = "optional_residual_brackets";
-    for (const field of ["description", "company", "location"]) {
+    stage = "optional_identity_brackets";
+    for (const field of ["company", "location"]) {
       for (const bracket of ["<", ">"]) {
         const captured = capture({ [field]: `Generated threshold ${bracket} 10.` });
         assert.ok(captured);
@@ -198,10 +203,60 @@ export async function verifyContributionIntake() {
         stats.refusedFields += 1;
       }
     }
-    const beyondLimit = capture({ description: `${"x".repeat(12_000)} > 10.` });
-    assert.equal(Object.hasOwn(beyondLimit, "description"), false);
-    await accepted(beyondLimit);
-    stats.refusedFields += 1;
+    stage = "complete_description";
+    for (const description of [
+      "Generated threshold < 10 and throughput > 5.",
+      "Generated threshold <= 10 and throughput >= 5.",
+      ...[12_001, 18_185, 50_000].map((length) => {
+        const tail = " COMPLETE DESCRIPTION END.";
+        return `${"x".repeat(length - tail.length)}${tail}`;
+      }),
+    ]) {
+      const captured = capture({ description });
+      assert.equal(captured.description, description);
+      await accepted(captured, fields, (body) => {
+        assert.equal(body.posting.description, description);
+        assert.equal(body.approval.approvedFields.includes("description"), true);
+      });
+      stats.completeDescriptionsValidated += 1;
+    }
+    stage = "complete_description_wire_budget";
+    for (const description of ["字".repeat(50_000), `${"\u{10437}".repeat(24_999)}XY`]) {
+      const captured = capture({ description });
+      assert.equal(captured.description, description, "Preview must retain complete Unicode text");
+      const intent = pending(captured);
+      const before = JSON.stringify(intent);
+      const calls = { consent: stats.consentChecks, store: stats.storeCalls };
+      await assert.rejects(prepare(intent), api.ContributionRequestTooLargeError);
+      assert.equal(JSON.stringify(intent), before);
+      assert.deepEqual({ consent: stats.consentChecks, store: stats.storeCalls }, calls);
+      stats.oversizedWireRequestsRefused += 1;
+      await accepted(
+        captured,
+        fields.filter((field) => field !== "description"),
+        (body) => {
+          assert.equal(Object.hasOwn(body.posting, "description"), false);
+          assert.equal(body.approval.approvedFields.includes("description"), false);
+        },
+      );
+      assert.equal(captured.description, description, "Deselection must not rewrite the preview");
+    }
+    stage = "oversized_description_omission";
+    for (const description of [
+      `${"x".repeat(50_000)}x`,
+      "Generated threshold < 10 then <script",
+      "Generated threshold > 10 then \uFF1Cscript\uFF1E",
+    ]) {
+      const captured = capture({ description });
+      assert.equal(Object.hasOwn(captured, "description"), false);
+      await accepted(captured, fields, (body) => {
+        assert.equal(Object.hasOwn(body.posting, "description"), false);
+        assert.equal(body.approval.approvedFields.includes("description"), false);
+        assert.equal(Object.hasOwn(body, "descriptionUnavailableReason"), false);
+        assert.equal(Object.hasOwn(body.posting, "descriptionUnavailableReason"), false);
+      });
+      stats.refusedFields += 1;
+    }
     for (const bracket of ["<", ">"]) {
       assert.equal(capture({ title: `Generated ${bracket} title` }), undefined);
       stats.refusedCaptures += 1;
@@ -222,10 +277,7 @@ export async function verifyContributionIntake() {
     assert.equal(exactLimits.company, "c".repeat(200));
     assert.equal(exactLimits.location, "l".repeat(240));
     await accepted(exactLimits);
-    for (const [field, maximum] of [
-      ["title", 240],
-      ["description", 12_000],
-    ]) {
+    for (const [field, maximum] of [["title", 240]]) {
       const captured = capture({ [field]: `${"x".repeat(maximum - 1)} remainder` });
       assert.equal(captured[field], "x".repeat(maximum - 1));
       await accepted(captured);
@@ -280,7 +332,19 @@ export async function verifyContributionIntake() {
     stage = "unchanged_queued_payload";
     // This is generated pre-fix local state, not a fresh capture. Reusing an old authorization
     // must never sanitize, remove fields, or recompute an approval for a different payload.
-    const oldPending = pending({ ...capture(), description: "Generated threshold > 10." });
+    const historicalDescription = `${"x".repeat(11_980)} historical excerpt.`;
+    const historicalPending = pending({ ...capture(), description: historicalDescription });
+    const historicalBefore = JSON.stringify(historicalPending);
+    const historicalBody = await prepare(historicalPending);
+    assert.equal(historicalBody.posting.description, historicalDescription);
+    assert.equal(JSON.stringify(historicalPending), historicalBefore);
+    assert.equal((await service.contribute(command(historicalBody))).state, "queued");
+    stats.acceptedRequests += 1;
+
+    const oldPending = pending({
+      ...capture(),
+      description: "Generated threshold > 10 then <script",
+    });
     const oldBefore = JSON.stringify(oldPending);
     const oldBody = await prepare(oldPending);
     oldPending.consent = {
@@ -303,6 +367,12 @@ export async function verifyContributionIntake() {
     tampered.posting.title = "Different generated title after approval";
     assert.equal(validate(tampered), true);
     await assert.rejects(service.contribute(command(tampered)), TypeError);
+    stats.tamperedPayloadRejections += 1;
+    const fullTail = `${"x".repeat(18_000)} END 123.`;
+    const changedTail = await prepare(pending(capture({ description: fullTail })));
+    changedTail.posting.description = `${"x".repeat(18_000)} END 124.`;
+    assert.equal(validate(changedTail), true);
+    await assert.rejects(service.contribute(command(changedTail)), TypeError);
     stats.tamperedPayloadRejections += 1;
     assert.deepEqual(
       { consent: stats.consentChecks, store: stats.storeCalls },

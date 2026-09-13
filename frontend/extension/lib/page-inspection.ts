@@ -3,6 +3,7 @@ import type { RawPageSnapshot } from "./job-capture";
 // This function is serialized by chrome.scripting and therefore must remain self-contained.
 // It reads a strict public-job allowlist only after the user invokes the extension action.
 export function captureCurrentPublicJobPage(): RawPageSnapshot {
+  let descriptionUnavailableReason: "too_long" | "source_too_large" | undefined;
   const normalize = (value: string | null | undefined): string | undefined => {
     const normalized = value?.replace(/\s+/gu, " ").trim();
     return normalized ? normalized.slice(0, 50_000) : undefined;
@@ -53,7 +54,13 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
   const descriptionText = (
     root: Pick<Element, "firstElementChild" | "textContent">,
   ): string | undefined => {
-    const fullText = normalize(root.textContent);
+    // Never present a truncated prefix as the complete selected description. Check the full
+    // normalized text before the optional duplicate-heading adjustment below.
+    const fullText = root.textContent?.replace(/\s+/gu, " ").trim();
+    if (fullText && fullText.length > 50_000) {
+      descriptionUnavailableReason = "too_long";
+      return undefined;
+    }
     const firstElement = root.firstElementChild;
     if (!fullText || !firstElement || !/^H[1-6]$/u.test(firstElement.tagName)) {
       return fullText;
@@ -67,16 +74,20 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
     const boundary = afterHeading.at(heading.length);
     return repeatedPrefix.toLowerCase() === heading.toLowerCase() &&
       (!boundary || /[\s.,:;!?—–-]/u.test(boundary))
-      ? normalize(afterHeading)
+      ? afterHeading || undefined
       : fullText;
   };
   let structured: Record<string, unknown> | undefined;
+  let oversizedStructuredSource = false;
   for (const node of document.querySelectorAll<HTMLScriptElement>(
     'script[type="application/ld+json"]',
   )) {
     try {
       const source = node.textContent ?? "";
-      if (source.length > 200_000) continue;
+      if (source.length > 200_000) {
+        oversizedStructuredSource = true;
+        continue;
+      }
       const parsed = JSON.parse(source) as unknown;
       const roots = Array.isArray(parsed) ? parsed : [parsed];
       const candidates = roots.flatMap((candidate) => {
@@ -133,12 +144,18 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
         .filter((part): part is string => typeof part === "string" && part.length > 0)
         .join(", ")
     : undefined;
+  const structuredDescription = structured?.description;
   const description =
-    typeof structured?.description === "string"
-      ? descriptionText(
-          new DOMParser().parseFromString(structured.description.slice(0, 200_000), "text/html")
-            .body,
-        )
+    typeof structuredDescription === "string"
+      ? (() => {
+          if (structuredDescription.length > 200_000) {
+            descriptionUnavailableReason = "source_too_large";
+            return undefined;
+          }
+          return descriptionText(
+            new DOMParser().parseFromString(structuredDescription, "text/html").body,
+          );
+        })()
       : (() => {
           for (const selector of [
             "[data-job-description]",
@@ -151,6 +168,9 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
           }
           return undefined;
         })();
+  if (!description && !descriptionUnavailableReason && !structured && oversizedStructuredSource) {
+    descriptionUnavailableReason = "source_too_large";
+  }
   // The already-authorized active tab is the source identity. Page-owned canonical links are
   // untrusted input and can incorrectly downgrade HTTPS or point at another origin.
   const result: RawPageSnapshot = { canonicalUrl: location.href };
@@ -199,6 +219,8 @@ export function captureCurrentPublicJobPage(): RawPageSnapshot {
       : text("h1", "[data-job-title]", ".posting-headline h2");
   if (company) result.company = company;
   if (description) result.description = description;
+  if (descriptionUnavailableReason)
+    result.descriptionUnavailableReason = descriptionUnavailableReason;
   if (typeof externalJobId === "string" && externalJobId) result.externalJobId = externalJobId;
   if (separatedLocation.location) result.location = separatedLocation.location;
   if (separatedLocation.workMode) result.workMode = separatedLocation.workMode;

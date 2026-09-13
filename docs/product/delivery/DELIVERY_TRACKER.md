@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -317,6 +317,18 @@ This is the master record for the delivery phases defined in the [product and sy
 - D1-009 is In progress. The no-VPC/no-database public edge, exact private projection, Jobs `0010` truth fields, conditional `JobPosting`, and bounded Jobs `0013` sitemap are implemented. Exact artifact source `9abcebb5c2577d09b789ad74be1bb7ee51a891e6` is immutably published and dark-deployed at state `202`; public aliases are unweighted version `6`, Jobs `0013` is applied, the current 26-migration recovery boundary passes, and Terraform is zero drift. Indexing disabled yields an empty Next sitemap without a platform request, while both anonymous API routes remain absent and return `401` through the protected default route. Hosted crawlability/indexing, public abuse/load/lifecycle/cache, source-quality, accessibility, security/privacy, and accountable publication acceptance remain open. No Indexing API exists. [Current dark release](evidence/d1-current-dark-release-migration-and-recovery-2026-08-25.md), [Evidence](evidence/d1-ashby-public-job-truth-foundation-2026-08-23.md), [Jobs boundary](../../../backend/services/jobs/README.md)
 
 ## D2 — Extension and community loop
+
+- Current full-description correction (`2026-09-13`, D2-061): the user confirms that Ashby's
+  description is available but still cut off at the client 12,000-character limit. Full capture
+  within the existing 50,000-character API/Jobs bound, explicit oversize handling, backward-
+  compatible independent verification and exact-tail regressions are implemented/reviewed.
+  Extension 368/368 and ingestion 574/574 pass; generated browser/provider pairing covers 60 pages
+  without external requests. The supplied-page read-only check retains all 18,185 characters in
+  a 19,401-byte request. The unchanged 65,536-byte gateway budget is checked before queue/consent;
+  oversized Unicode selections retain an editable preview rather than truncating or retrying.
+  The corrected intake seam is included in standard checks; full maintained verification,
+  worker rollout and installed acceptance remain. Existing queued payloads/provider truth stay
+  unchanged. [Phase 2 current task](phase-2-extension-and-community.md#d2-061--complete-description-capture)
 
 - Current Ashby description bugfix (`2026-09-12`, D2-060): the user's unavailable preview is
   reproduced as a literal-comparator rejection, not a missing provider description. Corrected

@@ -222,7 +222,7 @@ describe("RegisteredIndependentProviderVerifier", () => {
       ).resolves.toMatchObject({ status: "mismatch" });
       expect(pageDigests).not.toHaveBeenCalled();
       pageDigests.mockReturnValueOnce([
-        ...Array.from({ length: 7 }, (_, index) => digest(`synthetic-layout-${index}`)),
+        ...Array.from({ length: 11 }, (_, index) => digest(`synthetic-layout-${index}`)),
         selectedDigest,
       ]);
       await expect(
@@ -231,7 +231,7 @@ describe("RegisteredIndependentProviderVerifier", () => {
       for (const values of [
         ["not-a-digest"],
         [selectedDigest.toUpperCase()],
-        Array.from({ length: 9 }, () => selectedDigest),
+        Array.from({ length: 13 }, () => selectedDigest),
       ]) {
         pageDigests.mockReturnValueOnce(values);
         await expect(

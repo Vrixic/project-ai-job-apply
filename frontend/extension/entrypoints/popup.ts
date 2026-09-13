@@ -220,6 +220,8 @@ function renderStatus(response: ExtensionResponse): void {
           job_contribution_unavailable: "Contribution service unavailable",
           network_error: "Network unavailable",
           request_rejected: "Request rejected",
+          request_too_large:
+            "Selected fields too large; inspect again and deselect optional fields",
           retry_exhausted: "Retries exhausted",
           retryable: "Delivery unavailable",
           ugc_contribution_consent_unavailable: "Consent service unavailable",
@@ -334,6 +336,7 @@ function appendField(
     field?: CaptureField;
     kind: "required" | "system";
     translateNo?: boolean;
+    unavailableMessage?: string;
   },
 ): void {
   const row = document.createElement("div");
@@ -360,7 +363,7 @@ function appendField(
   const body = document.createElement("span");
   body.className = `field-value${missing ? " not-detected" : ""}`;
   body.id = valueId;
-  body.textContent = value ?? "Not available for sharing";
+  body.textContent = value ?? options.unavailableMessage ?? "Not available for sharing";
   if (options.translateNo) body.translate = false;
   content.append(labelLine, body);
 
@@ -478,6 +481,17 @@ function renderCapture(capture: SanitizedJobCapture): void {
     expandable: "description",
     field: "description",
     kind: "system",
+    ...(capture.descriptionUnavailableReason === "too_long"
+      ? {
+          unavailableMessage:
+            "Description exceeds the 50,000-character limit. No shortened description will be shared.",
+        }
+      : capture.descriptionUnavailableReason === "source_too_large"
+        ? {
+            unavailableMessage:
+              "Description source exceeds the safe capture limit. No shortened description will be shared.",
+          }
+        : {}),
   });
 
   const sourceDetails = document.createElement("details");

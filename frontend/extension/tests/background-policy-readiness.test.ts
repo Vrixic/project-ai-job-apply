@@ -124,6 +124,7 @@ function trustResponse(version: number, state = "needs_review", updatedAt = now)
 
 interface BackgroundResponse {
   ok: boolean;
+  error?: string;
   ownerAction?: string;
   delivery: { contribution: { ready: boolean; reason: string } };
   queue: { blocked: number; pending: number; stopped: number };
@@ -285,6 +286,60 @@ describe("warm background worker signed-policy readiness", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it("refuses oversized selected UTF-8 fields before queue persistence or consent and keeps the preview", async () => {
+    const fullDescription = "漢".repeat(50_000);
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => contributionResponse(url, init));
+    const worker = await background(fetcher, true, {
+      capture: { ...capture, description: fullDescription },
+    });
+    const result = await worker.send({
+      action: "enqueue",
+      intent: "contribute",
+      approvedFields: ["description"],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe(
+      "Selected fields exceed the 64 KiB delivery limit. Deselect Description or another optional field, then add the job again. No shortened text was shared.",
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
+    expect(worker.session.get("d2LastJobCaptureV1")).toMatchObject({
+      capture: { description: fullDescription },
+    });
+    const retryWithSelectedFields = await worker.send({
+      action: "enqueue",
+      intent: "contribute",
+      approvedFields: [],
+    });
+    expect(retryWithSelectedFields.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalled();
+    for (const [, init] of fetcher.mock.calls) {
+      expect(JSON.parse(String(init?.body))).not.toHaveProperty("posting.description");
+    }
+    expect(worker.session.get("d2LastJobCaptureV1")).toMatchObject({
+      capture: { description: fullDescription },
+    });
+  });
+
+  it("stops an already queued oversized intent without modifying its selected payload or retrying HTTP", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const worker = await background(fetcher, true);
+    const oversized = createPendingIntent({
+      approvedFields: ["description"],
+      capture: { ...capture, description: "漢".repeat(50_000) },
+      identityFence,
+      intent: "contribute",
+      retentionMilliseconds: 86_400_000,
+    });
+    worker.local.set(PENDING_QUEUE_KEY, [oversized]);
+    const result = await worker.send({ action: "retry" });
+    expect(result.queue).toMatchObject({ pending: 0, stopped: 1 });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual([
+      { ...oversized, attempt: 1, state: "terminal", lastError: "request_too_large" },
+    ]);
   });
 
   it.each([

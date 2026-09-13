@@ -208,7 +208,6 @@ describe("strict public job capture", () => {
 
   it.each([
     ["title", 240],
-    ["description", 12_000],
     ["externalJobId", 200],
   ] as const)("bounds %s to the sharing limit and trims after truncation", (field, maximum) => {
     const snapshot = { canonicalUrl: "https://jobs.lever.co/example/123", title: "Engineer" };
@@ -231,6 +230,75 @@ describe("strict public job capture", () => {
     );
     expect(cutAtSpace?.[field]).toBe("x".repeat(maximum - 1));
   });
+
+  it.each([
+    `${"x".repeat(12_001)} complete synthetic tail`,
+    "x".repeat(50_000),
+    `  ${"x".repeat(50_000)} \n\t`,
+    "😀".repeat(25_000),
+    `${"x".repeat(49_997)}\u0000\u200bZ`,
+  ])("preserves the complete normalized description within 50,000 UTF-16 units", (description) => {
+    const normalized = description
+      .replaceAll("\u0000", " ")
+      .replaceAll("\u200b", " ")
+      .replace(/\s+/gu, " ")
+      .trim();
+    const capture = sanitizeSnapshot(
+      {
+        canonicalUrl: "https://jobs.ashbyhq.com/example/posting-42",
+        title: "Engineer",
+        description,
+      },
+      "ashby",
+      "ashby-job-board-v1",
+    );
+    expect(capture?.description).toBe(normalized);
+    expect(capture).not.toHaveProperty("descriptionUnavailableReason");
+    if (!capture) throw new Error("Expected a sanitized capture");
+    expect(selectContributionFields(capture, ["description"]).description).toBe(normalized);
+  });
+
+  it.each(["x".repeat(50_001), `${"x".repeat(49_999)} tail`, `${"😀".repeat(25_000)}Z`])(
+    "omits oversized descriptions with a local diagnostic instead of saving a prefix",
+    (description) => {
+      const capture = sanitizeSnapshot(
+        {
+          canonicalUrl: "https://jobs.ashbyhq.com/example/posting-42",
+          title: "Engineer",
+          description,
+        },
+        "ashby",
+        "ashby-job-board-v1",
+      );
+      expect(capture).toMatchObject({
+        title: "Engineer",
+        descriptionUnavailableReason: "too_long",
+      });
+      expect(capture).not.toHaveProperty("description");
+      if (!capture) throw new Error("Expected a sanitized capture");
+      const selected = selectContributionFields(capture, ["description"]);
+      expect(selected).not.toHaveProperty("description");
+      expect(selected).not.toHaveProperty("descriptionUnavailableReason");
+    },
+  );
+
+  it.each(["too_long", "source_too_large"] as const)(
+    "honors the fixed inspector %s diagnostic without accepting a prefix",
+    (descriptionUnavailableReason) => {
+      const capture = sanitizeSnapshot(
+        {
+          canonicalUrl: "https://jobs.ashbyhq.com/example/posting-42",
+          title: "Engineer",
+          description: "An incomplete prefix must never be shared",
+          descriptionUnavailableReason,
+        },
+        "ashby",
+        "ashby-job-board-v1",
+      );
+      expect(capture).toMatchObject({ descriptionUnavailableReason });
+      expect(capture).not.toHaveProperty("description");
+    },
+  );
 
   it.each(["<", ">", "<=", ">="])(
     "preserves description comparator %s without changing other field guards",
@@ -267,7 +335,7 @@ describe("strict public job capture", () => {
       "ashby",
       "ashby-job-board-v1",
     );
-    expect(capture?.description).toBe(description.slice(0, 12_000).trim());
+    expect(capture?.description).toBe(description);
   });
 
   it.each([

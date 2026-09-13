@@ -3,7 +3,10 @@ import { type NormalizedContributionProposal, normalizeText } from "@ai-job-appl
 import { describe, expect, it } from "vitest";
 import { RegisteredIndependentProviderVerifier } from "./contribution-verification.js";
 import { GreenhouseJobBoardAdapter } from "./greenhouse.js";
-import { legacyPreviewDescription } from "./page-preview-compatibility.js";
+import {
+  comparatorPreservingPreviewDescription,
+  legacyPreviewDescription,
+} from "./page-preview-compatibility.js";
 import { SourceRegistry } from "./registry.js";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -140,6 +143,29 @@ describe("paired Greenhouse page/provider description verification", () => {
         for (const submitted of [presentation, legacyPreviewDescription(presentation)]) {
           expect(await verify(submitted)).toMatchObject({ status: "verified" });
         }
+      }
+    }
+  });
+
+  it("verifies all twelve complete and historical heading/currency layouts beyond 12k", async () => {
+    const after = `About Example Require < 5 and > 2 years. Salary $123,400—$145,600 USD. ${"x".repeat(12_100)} Final >= 3 checks.`;
+    const full = `About Example${after}`;
+    const { verify } = setup(
+      `<h2>About Example</h2><p>${after.replace("< 5", "&lt; 5").replace("> 2", "&gt; 2")}</p>`,
+    );
+    for (const text of [full, after]) {
+      for (const presentation of [text, text.replace("$123,400—$145,600", "$123,400 - $145,600")]) {
+        for (const submitted of [
+          presentation,
+          legacyPreviewDescription(presentation),
+          comparatorPreservingPreviewDescription(presentation),
+        ]) {
+          if (!submitted) throw new Error("Expected full or historical description");
+          expect(await verify(submitted)).toMatchObject({ status: "verified" });
+        }
+        expect(await verify(presentation.replace("Final >= 3", "Final >= 4"))).toMatchObject({
+          status: "mismatch",
+        });
       }
     }
   });

@@ -90,6 +90,81 @@ afterEach(() => {
 });
 
 describe("accepted provider-derived job fixtures", () => {
+  it.each([12_001, 18_185, 50_000, 50_001])(
+    "keeps or explicitly omits the complete %i-character synthetic Ashby description",
+    (length) => {
+      const tail = " complete synthetic tail >= 5";
+      const description = `${"x".repeat(length - tail.length)}${tail}`;
+      const encoded = description.replaceAll(">", "&gt;");
+      const structured = document.createElement("script");
+      structured.type = "application/ld+json";
+      structured.textContent = JSON.stringify({
+        "@type": "JobPosting",
+        title: "Synthetic Platform Engineer",
+        description: `<p> \n${encoded}\t </p>`,
+      });
+      document.head.append(structured);
+      vi.stubGlobal("location", { href: fixtures[1].sourceUrl });
+      const snapshot = captureCurrentPublicJobPage();
+      const capture = detectPublicJob(snapshot);
+      if (length <= 50_000) {
+        expect(snapshot.description).toBe(description);
+        expect(capture?.description).toBe(description);
+        expect(capture).not.toHaveProperty("descriptionUnavailableReason");
+      } else {
+        expect(snapshot).not.toHaveProperty("description");
+        expect(capture).not.toHaveProperty("description");
+        expect(capture?.descriptionUnavailableReason).toBe("too_long");
+      }
+    },
+  );
+
+  it.each([50_000, 50_001])(
+    "checks the full %i-character DOM description before duplicate-heading removal",
+    (length) => {
+      const root = document.createElement("article");
+      root.dataset.jobDescription = "";
+      const heading = document.createElement("h2");
+      heading.textContent = "Synthetic heading ";
+      const rest = `Synthetic heading ${"x".repeat(length - 36)}`;
+      root.append(heading, document.createTextNode(rest));
+      const title = document.createElement("h1");
+      title.textContent = "Synthetic Engineer";
+      document.body.append(title, root);
+      vi.stubGlobal("location", { href: fixtures[1].sourceUrl });
+      expect(root.textContent?.length).toBe(length);
+      const snapshot = captureCurrentPublicJobPage();
+      if (length === 50_000) {
+        expect(snapshot.description).toBe(rest);
+      } else {
+        expect(snapshot).not.toHaveProperty("description");
+        expect(snapshot.descriptionUnavailableReason).toBe("too_long");
+      }
+    },
+  );
+
+  it("does not parse or share a prefix of oversized structured source", () => {
+    const structured = document.createElement("script");
+    structured.type = "application/ld+json";
+    structured.textContent = JSON.stringify({
+      "@type": "JobPosting",
+      title: "Synthetic Engineer",
+      description: `<p>${"x".repeat(200_001)} tail</p>`,
+    });
+    const title = document.createElement("h1");
+    title.textContent = "Synthetic Engineer";
+    document.head.append(structured);
+    document.body.append(title);
+    vi.stubGlobal("location", { href: fixtures[1].sourceUrl });
+    const parse = vi.spyOn(DOMParser.prototype, "parseFromString");
+    const snapshot = captureCurrentPublicJobPage();
+    expect(parse).not.toHaveBeenCalled();
+    expect(snapshot).not.toHaveProperty("description");
+    expect(snapshot.descriptionUnavailableReason).toBe("source_too_large");
+    expect(detectPublicJob(snapshot)?.descriptionUnavailableReason).toBe("source_too_large");
+    parse.mockRestore();
+  });
+
   it.each(["< 10 and > 5", "<=10 and >=5", "x < y and y > z"])(
     "keeps entity-decoded synthetic Ashby comparisons in the actual capture path: %s",
     (comparison) => {

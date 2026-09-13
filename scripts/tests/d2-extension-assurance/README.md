@@ -53,11 +53,23 @@ the installed-extension matrix; it does not replace representative provider fixt
 account lifecycle, or activated end-to-end publication acceptance.
 
 The same pairing runner includes a browser-free intake seam. Run it independently with
-`node scripts/tests/d2-extension-assurance/contribution-intake.mjs`. It composes the current
+`pnpm test:d2-contribution-intake` (also included in `pnpm check` and
+`scripts/verify-phase0.ps1`). It composes the current
 sanitizer, selected-field request mapper, OpenAPI validator, and Jobs intake service with generated
-consent/persistence ports. Generated limit, truncation, and residual-bracket cases plus both accepted
-inert Lever fixture variants must reach the unchanged server checks. Unsafe optional fields are
-omitted before preview approval; existing queued approvals remain unchanged and invalid payloads
-still refuse before persistence. Source bundling stays in memory, emits aggregate results only,
+consent/persistence ports. D2-061 covers complete descriptions beyond 12,000 characters through the
+existing 50,000 UTF-16-code-unit bound, final-tail preservation, and explicit oversize/markup refusal
+without accepting a shortened prefix. It also checks the complete serialized contribution against
+the unchanged 65,536-byte UTF-8 Gateway budget, including Unicode and JSON escaping. Client
+preflight rejects oversize before queue insertion or consent creation; the preview retains editable
+optional-field selection for an explicit retry. Both accepted inert Lever fixture variants still
+reach the unchanged server checks. Unsafe optional fields are omitted before preview approval;
+already queued payloads/approvals remain unchanged and invalid requests refuse before persistence.
+The independent provider-pairing/ingestion suites retain both historical 12,000-character aliases
+and complete current aliases, with full text checked before heading removal and a twelve-digest
+response-bound ceiling. These are not arbitrary prefixes or candidate-supplied equivalence claims.
+Source bundling stays in memory, emits aggregate results only,
 and makes no network request or application-artifact write. This is local compatibility evidence,
 not an installed-browser, live contribution, independent provider, or publication acceptance.
+D2-061's compatible development release and installed full-description acceptance remain pending;
+the earlier D2-060 deployment does not establish them. No API/SQL, provider scope or runtime
+authority change is part of these regressions.

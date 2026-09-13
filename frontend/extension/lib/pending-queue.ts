@@ -15,6 +15,7 @@ export type DispatchFailureCode =
   | "invalid_response"
   | "job_contribution_unavailable"
   | "network_error"
+  | "request_too_large"
   | "ugc_contribution_consent_unavailable";
 
 export interface UgcConsentBinding {

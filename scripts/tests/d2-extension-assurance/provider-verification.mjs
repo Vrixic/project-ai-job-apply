@@ -419,7 +419,11 @@ export { AshbyJobBoardAdapter } from "./backend/workers/ingestion/src/ashby.ts";
     for (const variant of ["repeated-heading", "long"]) {
       const changed = pair(kind, { variant });
       const nextCapture = await capture(changed);
-      if (variant === "long") assert.equal(nextCapture.description.length, 12_000);
+      if (variant === "long") {
+        assert.ok(nextCapture.description.length > 12_000);
+        assert.ok(nextCapture.description.length <= 50_000);
+        assert.ok(nextCapture.description.endsWith("Equal opportunity for all."));
+      }
       await verify(changed, await prepare(nextCapture), "verified");
       if (variant === "long") {
         const encodeScriptText = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
@@ -432,6 +436,18 @@ export { AshbyJobBoardAdapter } from "./backend/workers/ingestion/src/ashby.ts";
         const shortenedCapture = await capture(changed, shortenedHtml);
         assert.equal(shortenedCapture.description, shortenedText);
         await verify(changed, await prepare(shortenedCapture), "mismatch");
+        const tailChangedHtml = changed.html.replace(
+          "Equal opportunity for all.",
+          "Equal opportunity for none.",
+        );
+        assert.notEqual(tailChangedHtml, changed.html);
+        const tailChangedCapture = await capture(changed, tailChangedHtml);
+        assert.ok(tailChangedCapture.description.endsWith("Equal opportunity for none."));
+        assert.equal(
+          tailChangedCapture.description.slice(0, 12_000),
+          nextCapture.description.slice(0, 12_000),
+        );
+        await verify(changed, await prepare(tailChangedCapture), "mismatch");
       }
     }
     const visible = pair(kind, { structured: false });
