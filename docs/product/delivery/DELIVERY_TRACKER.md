@@ -320,7 +320,9 @@ This is the master record for the delivery phases defined in the [product and sy
 
 - Current support/checklist follow-through (`2026-09-13`, D2-062): corrected public help to name
   the installed owner controls and explicit withdrawal/appeal confirmations; focused tests,
-  all 630 web tests and full verification including 20 builds pass, with candidate-only release pending. The enabled
+  all 630 web tests and full verification including 20 builds pass. Candidate-only `e930ad2`
+  is READY at the existing stable origin; exact-source/region, hosted copy and five credentialless
+  route/header checks pass. D2-062 is Complete. The enabled
   provider-fixture exit criterion is reconciled as satisfied against accepted current records,
   matching five payload hashes/lengths, 14 manifest tests and 32 consuming detector tests.
   No provider expansion or broader Phase 2 completion is claimed.
