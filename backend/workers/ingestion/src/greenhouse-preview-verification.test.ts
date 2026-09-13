@@ -3,6 +3,7 @@ import { type NormalizedContributionProposal, normalizeText } from "@ai-job-appl
 import { describe, expect, it } from "vitest";
 import { RegisteredIndependentProviderVerifier } from "./contribution-verification.js";
 import { GreenhouseJobBoardAdapter } from "./greenhouse.js";
+import { legacyPreviewDescription } from "./page-preview-compatibility.js";
 import { SourceRegistry } from "./registry.js";
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -126,6 +127,21 @@ describe("paired Greenhouse page/provider description verification", () => {
 
   it("does not apply this compatibility to another page-reader version", async () => {
     expect(await setup().verify(pageText, "d2-job-page-v2")).toMatchObject({ status: "mismatch" });
+  });
+
+  it("verifies all eight independent heading, currency and sanitizer layouts", async () => {
+    const after = "About Example Require < 5 and > 2 years. Salary $123,400—$145,600 USD.";
+    const full = `About Example${after}`;
+    const { verify } = setup(
+      "<h2>About Example</h2><p>About Example Require &lt; 5 and &gt; 2 years. Salary $123,400&mdash;$145,600 USD.</p>",
+    );
+    for (const text of [full, after]) {
+      for (const presentation of [text, text.replace("$123,400—$145,600", "$123,400 - $145,600")]) {
+        for (const submitted of [presentation, legacyPreviewDescription(presentation)]) {
+          expect(await verify(submitted)).toMatchObject({ status: "verified" });
+        }
+      }
+    }
   });
 
   it("uses the exact v1 capture limit after page conversion, not arbitrary truncation", async () => {

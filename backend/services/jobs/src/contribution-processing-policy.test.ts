@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { JobContributionInput } from "./contribution.js";
 import { normalizeContributionForProcessing } from "./contribution-processing-policy.js";
@@ -40,6 +41,99 @@ function input(): JobContributionInput {
 }
 
 describe("normalizeContributionForProcessing", () => {
+  it.each([
+    ["Threshold < 10, throughput > 5.", "threshold < 10, throughput > 5."],
+    ["Threshold <= 10, throughput >= 5.", "threshold <= 10, throughput >= 5."],
+    ["Range 1 < 2 > 1; budget <$100.", "range 1 < 2 > 1; budget <$100."],
+    ["Keep x < y and y > z unchanged.", "keep x < y and y > z unchanged."],
+    ["Threshold\t＜  10,\nthroughput ＞ 5.", "threshold < 10, throughput > 5."],
+  ])("hashes exact normalized comparison text: %s", (description, normalized) => {
+    const value = input();
+    value.posting.description = description;
+    const original = JSON.stringify(value);
+    const first = normalizeContributionForProcessing(value);
+    const replay = normalizeContributionForProcessing(structuredClone(value));
+    expect(first.normalizedDescriptionSha256).toBe(
+      createHash("sha256").update(normalized).digest("hex"),
+    );
+    expect(replay).toEqual(first);
+    expect(JSON.stringify(value)).toBe(original);
+    expect(JSON.stringify(first)).not.toContain(description);
+  });
+
+  it("never normalizes different operators or numbers to the same description digest", () => {
+    const digests = [
+      "Threshold < 10 and throughput > 5.",
+      "Threshold > 10 and throughput > 5.",
+      "Threshold <= 10 and throughput > 5.",
+      "Threshold < 11 and throughput > 5.",
+      "Threshold 10 and throughput 5.",
+    ].map((description) => {
+      const value = input();
+      value.posting.description = description;
+      return normalizeContributionForProcessing(value).normalizedDescriptionSha256;
+    });
+    expect(new Set(digests).size).toBe(digests.length);
+  });
+
+  it.each([
+    "<b>Selected description</b>",
+    "Threshold < 10 followed by <img",
+    "Incomplete <script",
+    "Incomplete </div",
+    "Incomplete <!-- comment",
+    "Incomplete <!DOCTYPE",
+    "Incomplete <?xml",
+    "Full-width ＜script＞hidden＜/script＞",
+    "Mixed-width <ｓｃｒｉｐｔ",
+    "Unsafe\u0000control",
+    "Unsafe\u007fcontrol",
+    "Unsafe\u0085control",
+    "Unsafe\u202eoverride",
+    "Unsafe\u2066isolate",
+    " leading comparison < 10",
+    "Trailing comparison > 5 ",
+    "",
+    "x".repeat(50_001),
+    "ﬃ".repeat(16_667),
+  ])("rejects unsupported description text before normalization (#%#)", (description) => {
+    const value = input();
+    value.posting.description = description;
+    expect(() => normalizeContributionForProcessing(value)).toThrow("invalid normalized field");
+  });
+
+  it("keeps comparison symbols forbidden outside descriptions", () => {
+    const changes = [
+      (value: JobContributionInput) => {
+        value.posting.title = "Engineer > 5";
+      },
+      (value: JobContributionInput) => {
+        value.posting.companyName = "Company < 10";
+      },
+      (value: JobContributionInput) => {
+        value.posting.locations = ["Region > 5"];
+      },
+      (value: JobContributionInput) => {
+        value.posting.department = "Team <= 10";
+      },
+    ];
+    for (const change of changes) {
+      const value = input();
+      change(value);
+      expect(() => normalizeContributionForProcessing(value)).toThrow("invalid normalized field");
+    }
+  });
+
+  it("retains the exact description limit and optional omission", () => {
+    const exact = input();
+    exact.posting.description = `< 10 ${"x".repeat(49_995)}`;
+    expect(normalizeContributionForProcessing(exact).normalizedDescriptionSha256).toBe(
+      createHash("sha256").update(exact.posting.description).digest("hex"),
+    );
+    delete exact.posting.description;
+    expect(normalizeContributionForProcessing(exact).normalizedDescriptionSha256).toBeUndefined();
+  });
+
   it("creates one deterministic bounded proposal and keeps provenance separate", () => {
     const first = normalizeContributionForProcessing(input());
     const second = normalizeContributionForProcessing(input());

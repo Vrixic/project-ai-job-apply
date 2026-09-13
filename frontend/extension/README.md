@@ -18,6 +18,12 @@ browser-store distribution are not approved. See the current
 
 ## Implemented source boundary
 
+- Descriptions retain literal plaintext comparison symbols (`<`, `>`, `<=`, `>=`) after inert
+  page extraction, including paired comparisons. The preview keeps its 12,000-character bound;
+  tag-like starts (including incomplete/NFKC markup) remain unavailable. Other field guards,
+  selected-payload hashes and already queued intents are unchanged. Jobs intake and independent
+  verification must be released with this client correction; see D2-060 in the Phase 2 register.
+
 - A popup and side-panel product shell with one explicit **Add job to shared database** action
   after a field-level preview. The extension does not present a separate private-save action or a
   redundant approval checkbox.

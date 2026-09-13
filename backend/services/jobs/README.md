@@ -4,6 +4,12 @@ Owns companies, canonical jobs, source observations, provenance, deduplication s
 
 ## Implemented foundation
 
+- `src/contribution-description.ts` — Description-only plaintext guard shared by contribution
+  intake and normalization. Literal comparison symbols are retained without changing submitted
+  bytes or digest binding; markup starts (including incomplete/NFKC forms) and controls reject.
+  Other fields retain their existing restrictions. Description omission and the 50,000-character
+  API limit remain unchanged; no database or transport-shape migration is required.
+
 - `src/domain/` — Pure canonicalization, exact-identity precedence, duplicate classification,
   lifecycle, freshness, and tombstone rules.
 - `src/persistence/` — The job-owned PostgreSQL schema and transactional catalog repository.

@@ -318,6 +318,16 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Current Ashby description bugfix (`2026-09-12`, D2-060): the user's unavailable preview is
+  reproduced as a literal-comparator rejection, not a missing provider description. Corrected
+  extraction retains the existing 12,000-character preview and passes 337 extension tests.
+  Jobs validation (388 tests), independent provider compatibility (539 tests), and exact native
+  HTML corroboration now pass, including the supplied-page composed read-only description probe.
+  The full maintained verifier and 20/20 builds pass. Coordinated development release remains;
+  installed acceptance is not yet claimed. Provider scope, reviewer
+  authority, canonical truth and old pending payloads remain unchanged.
+  [Current Phase 2 task register](phase-2-extension-and-community.md#task-register)
+
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed

@@ -15,6 +15,7 @@ import {
   type ContributionCapabilitySource,
   isDevelopmentContributionCapabilitySource,
 } from "./contribution-capability-source.js";
+import { isSafeContributionDescription } from "./contribution-description.js";
 
 export const contributionProviders = ["greenhouse", "lever", "ashby"] as const;
 export type ContributionProvider = (typeof contributionProviders)[number];
@@ -324,14 +325,14 @@ const UNSAFE_TEXT =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: reject browser control and bidi payloads before persistence.
   /[<>\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;
 
-function boundedText(value: string | undefined, maximum: number, required = false): boolean {
+function boundedText(
+  value: string | undefined,
+  maximum: number,
+  required = false,
+  isSafeText = (text: string) => !UNSAFE_TEXT.test(text),
+): boolean {
   if (value === undefined) return !required;
-  return (
-    value === value.trim() &&
-    value.length > 0 &&
-    value.length <= maximum &&
-    !UNSAFE_TEXT.test(value)
-  );
+  return value === value.trim() && value.length > 0 && value.length <= maximum && isSafeText(value);
 }
 
 export { jobContributionContentDigestInput, jobContributionPreviewDigestInput };
@@ -353,7 +354,7 @@ function assertInput(input: JobContributionInput): void {
       input.observation.contentSha256 ||
     !boundedText(input.posting.title, 240, true) ||
     !boundedText(input.posting.companyName, 200) ||
-    !boundedText(input.posting.description, 50_000) ||
+    !boundedText(input.posting.description, 50_000, false, isSafeContributionDescription) ||
     !boundedText(input.posting.department, 200) ||
     (input.posting.locations !== undefined &&
       (input.posting.locations.length < 1 ||

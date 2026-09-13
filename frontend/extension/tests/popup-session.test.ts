@@ -149,7 +149,7 @@ describe("popup retained-session lifecycle", () => {
         canonicalUrl: "https://jobs.lever.co/example/123",
         title: "Engineer",
         company: "Example Company",
-        description: "Synthetic threshold > 10",
+        description: "<p>Synthetic threshold > 10</p>",
       },
       "lever",
       "lever-posting-v1",
@@ -184,6 +184,40 @@ describe("popup retained-session lifecycle", () => {
     expect(sendMessage).toHaveBeenLastCalledWith({
       action: "enqueue",
       approvedFields: ["company"],
+      intent: "contribute",
+    });
+  });
+
+  it("shows literal comparisons as selected description text and enqueues that visible field", async () => {
+    const status = { ...expiredSession, authenticated: true };
+    const sendMessage = await popup(status);
+    const publicDescription = "Synthetic threshold < 10 and > 5";
+    const capture = sanitizeSnapshot(
+      {
+        canonicalUrl: "https://jobs.ashbyhq.com/example/posting-42",
+        title: "Engineer",
+        description: publicDescription,
+      },
+      "ashby",
+      "ashby-job-board-v1",
+    );
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      status,
+      ...{ capture, delivery: { contribution: { ready: true, reason: "ready" } } },
+    });
+    button("inspect").click();
+    await idle();
+    const description = document.querySelector<HTMLInputElement>('input[data-field="description"]');
+    expect(description?.checked).toBe(true);
+    expect(description?.disabled).toBe(false);
+    expect(description?.closest(".field-row")?.textContent).toContain(publicDescription);
+    expect(button("contribute").disabled).toBe(false);
+    button("contribute").click();
+    await idle();
+    expect(sendMessage).toHaveBeenLastCalledWith({
+      action: "enqueue",
+      approvedFields: ["description"],
       intent: "contribute",
     });
   });

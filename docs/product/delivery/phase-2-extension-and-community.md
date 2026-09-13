@@ -49,6 +49,18 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Current Ashby description correction (`2026-09-12`, D2-060): the installed user reports
+Description unavailable. A bounded, read-only replay of the supplied hosted page reproduces an
+18,185-character JSON-LD description omitted because of one literal comparison symbol. The
+description-specific client correction now retains the existing 12,000-character preview,
+without changing the comparison or provider truth; all 337 extension tests pass. Matching Jobs
+intake/normalization (388 tests) and independently derived provider compatibility (539 tests)
+are implemented. The supplied-page composed read-only probe now passes independent description
+corroboration as well as client/OpenAPI/intake/normalization. The full maintained verifier passes
+(`8b35d1`), including all 20 builds; development deployment and installed acceptance remain.
+Do not treat the rebuilt client alone as deployed upload compatibility. No raw provider response
+is retained and no contribution is submitted by this diagnostic. D2-035 installed acceptance remains open.
+
 Current Ashby rollout (`2026-09-12`): the already approved development deployment and activation
 are verified from source `61a23de` at state `336`, Gateway/scheduled/Trust `65`/`25`/`19`, with
 zero meaningful Terraform changes. Three provider/source registrations and four exact hosts
@@ -466,6 +478,56 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-057 | Fail candidate-rights acceptance before writes on missing prerequisites and validate downloaded export content. | Complete | Platform engineering; QA/automation | D2-020; D2-041 | Completed 2026-09-11 for source/local verification at `3bf4a7e`: pre-write refresh/helper readiness, bounded download/stdin child, current source schema, exact export/policy binding and six honest D2 counts. Node 83 tests and both PowerShell hosts' existing suite plus 33 prerequisite/85 export assertions pass; full verifier includes the new checks. A reproduced exited-process test observation is corrected without changing production cleanup. No fresh candidate, export/deletion, cloud or recovery execution occurred. |
 | D2-058 | Align fresh extension previews with strict contribution intake without rewriting approved payloads. | Complete | Platform engineering; QA/automation | D2-002; D2-005; D2-035 | Completed 2026-09-12 for source/local verification after the September 11 consent `201`/contribution `400` failure. Whole-field optional omission, exact bounds and final trim preserve strict server/comparator/consent guards and approved queues. Extension 317 tests/27 suites, composed intake/provider regressions, full verification and configured build pass. A fresh public-page/OpenAPI/real-service probe passes with mocked consent/store and no live submission. The user now confirms installed owner Processing `published` / Trust `accepted` under D2-035; website acceptance remains separate and original user field selection was not observed. |
 | D2-059 | Implement a separately bounded Ashby exact-board verifier without changing general polling limits or activating Ashby. | Complete | Platform engineering; QA/automation | D2-006; D2-015; D2-035; D2-R22 | Completed 2026-09-12 for implementation/local verification at `09cc3fa`: frozen exact-board profile, complete-response/identity validation, target-only output, post-parse deadline/abort and Ashby-only configuration-digest binding pass independent review and the full maintained verifier. Ingestion 427/427 includes reader 131 and exact adapter 12; focused runtime/configuration 29/29 passes. Structural parser bounds are not measured V8/RSS limits. General polling/shared limits and other scopes/digests are unchanged. No API/event/SQL/migration, live supplied-board acquisition, deployment or activation occurred. See [evidence and remaining live gate](#d2-059--bounded-ashby-exact-board-verification). |
+| D2-060 | Preserve plaintext comparison symbols in Ashby descriptions through preview, intake and independent verification. | In progress | Platform engineering; QA/automation | D2-005; D2-035; D2-058 | Extension 337, Jobs 388 and ingestion 539 tests pass. Composed supplied-page client/OpenAPI/Jobs/normalization/independent-description probe passes with mock persistence and no live writes. Exact Ashby-native HTML corroboration preserves provider truth. Full verifier and 20/20 builds pass; compatible runtime release and installed-client acceptance remain. No SQL/API shape, provider scope or reviewer-role change. |
+
+### D2-060 — Plaintext description compatibility
+
+The user's installed Ashby preview reports Description unavailable. Read-only reproduction
+`2b4686` obtains the supplied hosted page once: a valid 18,185-character JSON-LD description
+contains one angle-bracket comparison symbol, causing complete optional-field omission.
+Corrected extraction `413636` retains 12,000 characters with no raw files or application writes.
+Extension 337/337 (`ac0609`) and typecheck (`bdee0c`), Jobs 388/388 (`5952c2`), and ingestion
+477/477 (`bf8118`) pass. Independent cross-layer review confirms unchanged pending payloads,
+strict other-field guards and response-bound legacy/current preview compatibility.
+
+The first combined repository verifier reaches passing format/type checks but two existing
+16 MB byte-boundary tests hit Vitest's 5,000 ms test timeout under parallel package load.
+Unchanged isolated reruns pass both cases and all 131 boundary tests; no production deadline,
+byte limit or assertion is weakened. Serial package rerun `668d58` then passes all 34 tasks,
+including 477 ingestion, 1,239 workflow (eight existing opt-ins skipped), and 192 Gateway tests
+(seven existing opt-ins skipped). Full verification of the subsequent native-format correction
+remains pending.
+
+Composed read-only probe `a0a376` passes actual client request construction, OpenAPI, Jobs intake
+with mocked consent/store, and normalization. It also discovers a second compatibility issue:
+the full page text exactly matches independently fetched API HTML textContent, but that HTML
+does not yet corroborate Ashby's separate plaintext representation. Investigate the exact
+provider-native relationship before releasing; do not ignore a selected-description mismatch,
+overwrite provider truth or accept candidate-provided digest aliases. This probe performs two
+bounded public GETs and zero raw-file/application writes, and is not authentication, persistence,
+Trust, publication or full provider-identity acceptance. No cloud mutation has occurred for D2-060.
+
+Subsequent bounded board-only diagnostic `8a081a` identifies an exact whole-document native
+representation: each anchor appends its exact href, images contribute alt text plus `[src]`,
+list items use `- `, and heading text is uppercase. All 18,965 whitespace-normalized provider
+plaintext characters match; seven hrefs, two image sources and 33 list items explain the
+formatting difference. An Ashby-only corroboration helper is implemented with unchanged
+direct-plaintext equality first, exact whole-native-text equality second, and unchanged catalog
+plaintext. URL attributes are never case-folded, fetched or rewritten, including within headings.
+The native alternative rejects whitespace/control/bidi URL attributes instead of normalizing
+them. Final ingestion suite `fa7a00` passes all 539 tests; typecheck and formatting pass.
+Current-dist composed probe `a367a0` then passes the supplied page through actual client request
+construction, OpenAPI, Jobs intake with exactly one mock-store call, normalization, whole native
+corroboration and independent description digest matching. The selected description has 12,000
+characters and the independent adapter has one deduplicated preview digest. Two bounded public
+GETs, zero raw files and zero application writes occur. This remains description compatibility,
+not managed-authentication, persistence, full identity, Trust or installed publication acceptance.
+Final independent source review `9a06c5` accepts the exact-format and URL-attribute guards.
+Serial combined tests `4b0c29` pass all 34 tasks without changing timeouts or assertions.
+The complete maintained `scripts/verify-phase0.ps1` then exits zero (`8b35d1`), including
+contract generation, operator/security checks, formatting, lint, typecheck, tests, all 20 builds,
+Compose configuration and product-scope scan. Existing informational lint notices and opt-in
+integration skips are not described as failures or live-database evidence.
 
 ### D2-035 — Ashby development rollout
 
@@ -2643,6 +2705,28 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For D2-060 (`2026-09-12`), fix Description unavailable by preserving literal plaintext
+comparison symbols in descriptions only. The client already extracts inert DOM text; do not
+strip paired comparisons as if they were HTML, change operators/numbers, or silently treat a
+missing optional preview as a missing canonical provider description. Reject tag-like starts,
+including incomplete markup and NFKC forms, at client and Jobs boundaries; keep other field
+guards unchanged. Keep the existing 12,000-character client preview limit and the full
+independently fetched provider description as catalog truth. Retain frozen legacy verification
+digests alongside bounded comparator-preserving representations derived from the same
+independent response, never candidate-supplied aliases. Release server compatibility before
+asking for an extension reload. No migration, new API shape, provider/reviewer authority or
+recurring approval is needed for this scoped development bugfix.
+
+For the second D2-060 issue, reconstruct Ashby's provider-native plaintext from the same
+independently fetched inert HTML tree and require full, case-sensitive equality after whitespace
+collapse. Keep link/image attributes exact, preserve visible image alt text, and limit uppercasing
+to heading text nodes. This explains formatting without deleting arbitrary provider text or
+accepting a candidate's description as truth. Retain the existing direct-equality path and all
+input/traversal bounds; cap native generated text at 100,000 characters. Only the unchanged page
+textContent digest aliases are released after corroboration. Other providers do not inherit this
+format, and no new request endpoint, acquisition profile, source activation or reviewer authority
+is introduced.
 
 For the approved Ashby rollout on `2026-09-12`, use the exact case-sensitive board name verified
 by the live preflight in the new activation candidate, correcting the old unactivated draft's

@@ -10,7 +10,10 @@ import {
 } from "@ai-job-apply/jobs-service";
 import { v7 as uuidv7 } from "uuid";
 import type { SourceRegistration } from "./contract.js";
-import { legacyPreviewDescription } from "./page-preview-compatibility.js";
+import {
+  comparatorPreservingPreviewDescription,
+  legacyPreviewDescription,
+} from "./page-preview-compatibility.js";
 import type { SourceRegistry } from "./registry.js";
 import {
   canonicalizeRegisteredSourceObservation,
@@ -188,12 +191,16 @@ function descriptionDigests(observation: CatalogObservation, legacy: boolean): R
   const values = [normalizeText(observation.description)];
   if (legacy) {
     values.push(normalizeText(legacyPreviewDescription(observation.description)));
+    const current = comparatorPreservingPreviewDescription(observation.description);
+    if (current !== undefined) values.push(normalizeText(current));
     const firstLine = observation.description.split(/\r?\n/u).find((line) => line.trim());
     const heading = firstLine ? normalizeText(firstLine) : "";
     const full = normalizeText(observation.description);
     if (heading.length > 0 && heading.length <= 200 && full.startsWith(`${heading} ${heading} `)) {
       const deduplicated = full.slice(heading.length + 1);
       values.push(deduplicated, normalizeText(legacyPreviewDescription(deduplicated)));
+      const currentDeduplicated = comparatorPreservingPreviewDescription(deduplicated);
+      if (currentDeduplicated !== undefined) values.push(normalizeText(currentDeduplicated));
     }
   }
   return new Set(values.map(sha256));
@@ -354,7 +361,9 @@ export class RegisteredIndependentProviderVerifier implements IndependentProvide
             : [];
         if (
           !Array.isArray(previewDigests) ||
-          previewDigests.length > 4 ||
+          // Two fixed headings/layouts, two provider presentations, and both v1 sanitizers.
+          // Retain historical aliases; never accept an unbounded or arbitrary digest collection.
+          previewDigests.length > 8 ||
           previewDigests.some(
             (value) => typeof value !== "string" || !/^[0-9a-f]{64}$/u.test(value),
           )

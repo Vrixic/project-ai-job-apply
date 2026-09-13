@@ -14,6 +14,12 @@ provider verifier without treating candidate-supplied content as catalog truth.
 
 ## Implemented boundaries
 
+- `page-preview-compatibility.ts` — Frozen legacy v1 digests plus comparator-preserving v1
+  plaintext previews derived only from independently fetched provider descriptions. Up to eight
+  response-bound HTML-preview digests retain both sanitizers across the existing heading/join/
+  Greenhouse currency representations. Full provider text remains canonical; changed comparison
+  operators/numbers still mismatch. No candidate-supplied aliases or new provider request scope.
+
 - `contract.ts` — strict adapter, registry, catalog-port, and aggregate-result shapes.
 - `registry.ts` — immutable registration, duplicate rejection, and default-deny activation.
 - `backoff.ts` — bounded deterministic retry delay calculation without source values.
@@ -86,6 +92,11 @@ provider verifier without treating candidate-supplied content as catalog truth.
 - `provider-description.ts` — bounded inert HTML-to-plaintext/textContent conversion for independent
   Lever/Ashby evidence, excluding executable, form, and embedded-resource subtrees. It retains no
   raw HTML and never executes or fetches page content.
+- Its Ashby-only `parseCorroboratedAshbyDescriptionHtml` first accepts direct complete plaintext
+  equality, then one exact native representation with href/image references, list dashes and
+  uppercase heading text. It compares the entire result after whitespace collapse; URL attribute
+  case/spelling is unchanged. Input/traversal/native-output bounds remain 100,000. Only then may
+  existing page textContent aliases be used; the complete canonical `descriptionPlain` is unchanged.
 - `orchestration-store.ts` — the storage-neutral coordinator that commits every schedule, claim,
   settlement, pause, and retry through the Jobs-owned compare-and-swap port before returning a
   transport disposition.

@@ -8,7 +8,7 @@ import type {
   SourcePollResult,
 } from "./contract.js";
 import { legacyPageDescriptionDigests } from "./page-preview-compatibility.js";
-import { parsePublicDescriptionHtml } from "./provider-description.js";
+import { parseCorroboratedAshbyDescriptionHtml } from "./provider-description.js";
 import {
   approvedCompanyConfiguration,
   canonicalProviderText,
@@ -224,11 +224,10 @@ function parseJob(
     job.descriptionHtml !== null &&
     job.descriptionHtml !== ""
   ) {
-    const html = parsePublicDescriptionHtml(job.descriptionHtml);
-    const equivalentText = (value: string) => value.replace(/\s+/gu, " ").trim();
+    const html = parseCorroboratedAshbyDescriptionHtml(job.descriptionHtml, description);
     // The independently fetched HTML may explain textContent block boundaries only when
     // it corroborates the complete provider plaintext, never changed words or numbers.
-    if (equivalentText(html.plainText) === equivalentText(description)) {
+    if (html) {
       onPreview?.(legacyPageDescriptionDigests(html.textContent, html.firstHeading));
     }
   }

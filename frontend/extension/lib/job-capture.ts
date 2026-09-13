@@ -51,11 +51,8 @@ function sanitizeWorkMode(value: unknown): WorkMode | undefined {
     : undefined;
 }
 
-export function sanitizeText(value: unknown, maximum: number, truncate = true): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const withoutControls = [...value]
+function withoutPageControls(value: string): string {
+  return [...value]
     .map((character) => {
       const code = character.codePointAt(0) ?? 0;
       return (code >= 0 && code <= 8) ||
@@ -71,7 +68,13 @@ export function sanitizeText(value: unknown, maximum: number, truncate = true): 
         : character;
     })
     .join("");
-  const normalized = withoutControls
+}
+
+export function sanitizeText(value: unknown, maximum: number, truncate = true): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = withoutPageControls(value)
     .replace(/<[^>]*>/gu, " ")
     .replace(/\s+/gu, " ")
     .trim();
@@ -80,6 +83,24 @@ export function sanitizeText(value: unknown, maximum: number, truncate = true): 
   if (/[<>]/u.test(normalized)) return undefined;
   if (!truncate && normalized.length > maximum) return undefined;
   const bounded = normalized.slice(0, maximum).trim();
+  return bounded.length > 0 ? bounded : undefined;
+}
+
+function sanitizeDescription(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  // Page inspection already extracts inert DOM textContent. Reject markup at this boundary,
+  // but never interpret paired comparisons ("< 10 and > 5") as an HTML element to remove.
+  // Match Jobs intake/normalization, including tag starts exposed by NFKC normalization.
+  const markupStart = /<(?:\/?[a-z]|[!?])/iu;
+  const withoutControls = withoutPageControls(value);
+  if (
+    [value, withoutControls].some(
+      (text) => markupStart.test(text) || markupStart.test(text.normalize("NFKC")),
+    )
+  ) {
+    return undefined;
+  }
+  const bounded = withoutControls.replace(/\s+/gu, " ").trim().slice(0, LIMITS.description).trim();
   return bounded.length > 0 ? bounded : undefined;
 }
 
@@ -131,7 +152,13 @@ export function sanitizeSnapshot(
       .map((field) => [
         field,
         // Provider verification requires the complete company/location identity, not a prefix.
-        sanitizeText(snapshot[field], LIMITS[field], field !== "company" && field !== "location"),
+        field === "description"
+          ? sanitizeDescription(snapshot[field])
+          : sanitizeText(
+              snapshot[field],
+              LIMITS[field],
+              field !== "company" && field !== "location",
+            ),
       ])
       .filter((entry): entry is [CaptureField, string] => typeof entry[1] === "string"),
   );

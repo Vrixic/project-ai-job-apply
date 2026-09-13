@@ -26,7 +26,32 @@ export function legacyPreviewDescription(value: string): string {
     .slice(0, 12_000);
 }
 
-/** Exact textContent representations, derived only from the independently fetched API HTML. */
+/** Repaired v1 plaintext preview; never rewrite provider truth or historical preview digests. */
+export function comparatorPreservingPreviewDescription(value: string): string | undefined {
+  const markup = /<(?:\/?[a-z]|[!?])/iu;
+  if (markup.test(value) || markup.test(value.normalize("NFKC"))) return undefined;
+  const withoutControls = [...value]
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return (code >= 0 && code <= 8) ||
+        code === 11 ||
+        code === 12 ||
+        (code >= 14 && code <= 31) ||
+        (code >= 127 && code <= 159) ||
+        (code >= 0x200b && code <= 0x200f) ||
+        (code >= 0x202a && code <= 0x202e) ||
+        (code >= 0x2060 && code <= 0x206f) ||
+        code === 0xfeff
+        ? " "
+        : character;
+    })
+    .join("");
+  if (markup.test(withoutControls) || markup.test(withoutControls.normalize("NFKC")))
+    return undefined;
+  return withoutControls.replace(/\s+/gu, " ").trim().slice(0, 12_000).trim();
+}
+
+/** Both v1 textContent representations, derived only from independently fetched API HTML. */
 export function legacyPageDescriptionDigests(
   textContent: string,
   firstHeading?: string,
@@ -71,11 +96,14 @@ function pageDescriptionDigests(
     : values;
   return Object.freeze([
     ...new Set(
-      representations.map((value) =>
-        createHash("sha256")
-          .update(normalizeText(legacyPreviewDescription(value)))
-          .digest("hex"),
-      ),
+      representations.flatMap((value) => {
+        const current = comparatorPreservingPreviewDescription(value);
+        const previews = [legacyPreviewDescription(value)];
+        if (current !== undefined) previews.push(current);
+        return previews.map((preview) =>
+          createHash("sha256").update(normalizeText(preview)).digest("hex"),
+        );
+      }),
     ),
   ]);
 }

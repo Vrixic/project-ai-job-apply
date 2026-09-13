@@ -117,9 +117,9 @@ describe("Ashby bounded exact verification composition", () => {
       const realNow = performance.now.bind(performance);
       let elapsed = 0;
       const clock = vi.spyOn(performance, "now").mockImplementation(() => realNow() + elapsed);
-      const parse = providerDescription.parsePublicDescriptionHtml;
+      const parse = providerDescription.parseCorroboratedAshbyDescriptionHtml;
       const description = vi
-        .spyOn(providerDescription, "parsePublicDescriptionHtml")
+        .spyOn(providerDescription, "parseCorroboratedAshbyDescriptionHtml")
         .mockImplementation((...args) => {
           const result = parse(...args);
           if (mode === "timeout") elapsed = 5_001;
@@ -141,6 +141,29 @@ describe("Ashby bounded exact verification composition", () => {
       }
     },
   );
+
+  it("verifies independently corroborated native page text while retaining full provider annotations", async () => {
+    const descriptionPlain =
+      "ABOUT EXAMPLE\nRead docs https://docs.example.test/Role.\n- Require < 5 and > 2 years.\nChart [https://cdn.example.test/Chart.png]";
+    const descriptionHtml =
+      '<h2>About Example</h2><p>Read <a href="https://docs.example.test/Role">docs</a>.</p><ul><li>Require &lt; 5 and &gt; 2 years.</li></ul><p><img alt="Chart" src="https://cdn.example.test/Chart.png"></p>';
+    const pageText = "about exampleread docs.require < 5 and > 2 years.";
+    const body = JSON.stringify({
+      apiVersion: "1",
+      jobs: [job(postingId, { descriptionPlain, descriptionHtml })],
+    });
+    const { verify, proposal } = harness(body);
+    const selected = { ...proposal, normalizedDescriptionSha256: digest(pageText) };
+    await expect(verify(selected)).resolves.toMatchObject({
+      status: "verified",
+      providerObservation: { description: descriptionPlain },
+    });
+    await expect(
+      verify({ ...selected, normalizedDescriptionSha256: digest(pageText.replace("< 5", "<= 5")) }),
+    ).resolves.toMatchObject({ status: "mismatch" });
+    const changed = harness(body.replace("docs.example.test/Role", "docs.example.test/Other"));
+    await expect(changed.verify(selected)).resolves.toMatchObject({ status: "mismatch" });
+  });
 
   it("verifies the target beyond both old board limits while general ingestion remains capped", async () => {
     const jobs = Array.from({ length: 130 }, (_, index) =>

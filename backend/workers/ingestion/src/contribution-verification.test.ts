@@ -221,10 +221,17 @@ describe("RegisteredIndependentProviderVerifier", () => {
         }),
       ).resolves.toMatchObject({ status: "mismatch" });
       expect(pageDigests).not.toHaveBeenCalled();
+      pageDigests.mockReturnValueOnce([
+        ...Array.from({ length: 7 }, (_, index) => digest(`synthetic-layout-${index}`)),
+        selectedDigest,
+      ]);
+      await expect(
+        verifier.verify({ contributionId, normalizationId, proposal: selected }),
+      ).resolves.toMatchObject({ status: "verified" });
       for (const values of [
         ["not-a-digest"],
         [selectedDigest.toUpperCase()],
-        Array.from({ length: 5 }, () => selectedDigest),
+        Array.from({ length: 9 }, () => selectedDigest),
       ]) {
         pageDigests.mockReturnValueOnce(values);
         await expect(
@@ -525,6 +532,31 @@ describe("RegisteredIndependentProviderVerifier", () => {
           normalizedDescriptionSha256: digest("a".repeat(12_000)),
           provenance: { ...original.provenance, adapterVersion: "d2-job-page-v2" },
         }),
+      }),
+    ).resolves.toMatchObject({ status: "mismatch" });
+  });
+
+  it("retains repaired long repeated-heading previews without changing independent plaintext", async () => {
+    const heading = "About Acme";
+    const deduplicated = `${heading} Require < 5 and > 2 years. ${"z".repeat(12_050)}`;
+    const description = `${heading}\n${deduplicated}`;
+    const { verifier } = harness({
+      kind: "success",
+      observations: [{ ...observation, description }],
+    });
+    const preview = deduplicated.slice(0, 12_000).trim().toLowerCase();
+    await expect(
+      verifier.verify({
+        contributionId,
+        normalizationId,
+        proposal: proposal({ normalizedDescriptionSha256: digest(preview) }),
+      }),
+    ).resolves.toMatchObject({ status: "verified", providerObservation: { description } });
+    await expect(
+      verifier.verify({
+        contributionId,
+        normalizationId,
+        proposal: proposal({ normalizedDescriptionSha256: digest(preview.replace("< 5", "<= 5")) }),
       }),
     ).resolves.toMatchObject({ status: "mismatch" });
   });

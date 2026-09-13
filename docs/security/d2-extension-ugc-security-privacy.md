@@ -33,6 +33,18 @@ must use HTTPS, remove credentials/fragments/tracking parameters, reject local/p
 targets, and match an enabled supported provider/domain rule. Text must be bounded, normalized,
 free of markup/control characters, and never interpreted as instructions.
 
+D2-060 distinguishes literal plaintext comparison symbols from markup in descriptions only.
+Client extraction remains inert; Jobs rejects tag-like starts, incomplete markup and NFKC forms,
+while text-node/escaped rendering preserves comparison operators. Existing other-field guards,
+authorization, payload digests and complete independent provider truth are unchanged. Both frozen
+legacy and comparator-preserving preview representations are derived from the independent
+response; a bounded maximum of eight digests accommodates the existing heading/join/Greenhouse
+currency variants without dropping historical compatibility or accepting client-supplied aliases.
+Ashby's HTML may also corroborate its full native plaintext representation: exact href/image
+annotations, list dashes and uppercase heading text, compared case-sensitively after whitespace
+collapse. Attributes remain exact and are never fetched; the bounded conversion neither changes
+canonical provider plaintext nor applies to other providers.
+
 ## Data classification and ownership
 
 | Data | Classification | Owner | Required behavior |

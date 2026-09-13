@@ -1,12 +1,11 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { DevelopmentContributionCapabilitySource } from "./contribution-capability-source.js";
 import { v7 as uuidv7 } from "uuid";
 import { describe, expect, it } from "vitest";
 import {
   type CreateJobContributionCommand,
-  type JobContributionConsentVerifier,
-  JobContributionConsentRequiredError,
   JobContributionCapabilityDisabledError,
+  JobContributionConsentRequiredError,
+  type JobContributionConsentVerifier,
   type JobContributionInput,
   JobContributionService,
   type JobContributionStatus,
@@ -19,6 +18,7 @@ import {
   contributionCapabilityPolicyDigestInput,
   type D2ContributionCapabilityPolicy,
 } from "./contribution-capability-policy.js";
+import { DevelopmentContributionCapabilitySource } from "./contribution-capability-source.js";
 
 class MemoryStore implements JobContributionStore {
   command?: CreateJobContributionCommand;
@@ -174,6 +174,145 @@ describe("JobContributionService", () => {
     const service = new JobContributionService(store, allowConsent, allowCapability, intakeNow);
     await expect(service.contribute(command())).resolves.toEqual(store.record);
     expect(store.command?.input.posting.title).toBe("Software Engineer");
+  });
+
+  it.each([
+    "Threshold < 10, throughput > 5.",
+    "Threshold <= 10, throughput >= 5.",
+    "Range 1 < 2 > 1; budget <$100 and headcount >500.",
+    "Keep x < y and y > z unchanged.",
+    "Unicode comparison ＜ 10 and ＞ 5.",
+  ])("retains exact description comparisons and replay payloads: %s", async (description) => {
+    const store = new MemoryStore();
+    const service = new JobContributionService(store, allowConsent, allowCapability, intakeNow);
+    const input = command();
+    input.input.posting.description = description;
+    seal(input);
+    const originalPayload = JSON.stringify(input);
+    const contentDigest = input.input.observation.contentSha256;
+    const previewDigest = input.input.approval.previewDigestSha256;
+
+    await expect(service.contribute(input)).resolves.toEqual(store.record);
+    expect(store.command?.input.posting.description).toBe(description);
+    expect(JSON.stringify(store.command)).toBe(originalPayload);
+    await expect(service.contribute(structuredClone(input))).resolves.toEqual(store.record);
+    expect(JSON.stringify(store.command)).toBe(originalPayload);
+    expect(store.command?.input.observation.contentSha256).toBe(contentDigest);
+    expect(store.command?.input.approval.previewDigestSha256).toBe(previewDigest);
+    expect(store.command?.idempotencyKey).toBe(input.idempotencyKey);
+  });
+
+  it("binds changed operators and numbers to different content, preview, and replay payloads", async () => {
+    const original = command();
+    original.input.posting.description = "Threshold < 10 and throughput > 5.";
+    seal(original);
+    const originalPayload = JSON.stringify(original.input);
+    for (const description of [
+      "Threshold > 10 and throughput > 5.",
+      "Threshold <= 10 and throughput > 5.",
+      "Threshold < 11 and throughput > 5.",
+      "Threshold 10 and throughput 5.",
+    ]) {
+      const changed = structuredClone(original);
+      changed.input.posting.description = description;
+      const store = new MemoryStore();
+      const service = new JobContributionService(store, allowConsent, allowCapability, intakeNow);
+      await expect(service.contribute(changed)).rejects.toThrow("source or approval is invalid");
+      expect(store.command).toBeUndefined();
+
+      seal(changed);
+      expect(changed.idempotencyKey).toBe(original.idempotencyKey);
+      expect(changed.input.observation.contentSha256).not.toBe(
+        original.input.observation.contentSha256,
+      );
+      expect(changed.input.approval.previewDigestSha256).not.toBe(
+        original.input.approval.previewDigestSha256,
+      );
+      // The durable store hashes this exact input JSON for idempotent replay comparison.
+      expect(JSON.stringify(changed.input)).not.toBe(originalPayload);
+    }
+  });
+
+  it.each([
+    "<b>Selected description</b>",
+    "Threshold < 10 followed by <img",
+    "Incomplete <script",
+    "Incomplete </div",
+    "Incomplete <!-- comment",
+    "Incomplete <!DOCTYPE",
+    "Incomplete <?xml",
+    "Full-width ＜script＞hidden＜/script＞",
+    "Mixed-width <ｓｃｒｉｐｔ",
+    "Unsafe\u0000control",
+    "Unsafe\u007fcontrol",
+    "Unsafe\u0085control",
+    "Unsafe\u202eoverride",
+    "Unsafe\u2066isolate",
+    " leading comparison < 10",
+    "Trailing comparison > 5 ",
+    "",
+    "x".repeat(50_001),
+  ])("rejects unsupported description text before persistence (#%#)", async (description) => {
+    const input = command();
+    input.input.posting.description = description;
+    seal(input);
+    const store = new MemoryStore();
+    await expect(
+      new JobContributionService(store, allowConsent, allowCapability, intakeNow).contribute(input),
+    ).rejects.toThrow("source or approval is invalid");
+    expect(store.command).toBeUndefined();
+  });
+
+  it("keeps comparison symbols forbidden outside descriptions", async () => {
+    const inputs = [
+      (input: JobContributionInput) => {
+        input.posting.title = "Engineer > 5";
+      },
+      (input: JobContributionInput) => {
+        input.posting.companyName = "Company < 10";
+      },
+      (input: JobContributionInput) => {
+        input.posting.locations = ["Region > 5"];
+      },
+      (input: JobContributionInput) => {
+        input.posting.department = "Team <= 10";
+      },
+      (input: JobContributionInput) => {
+        input.source.externalJobId = "posting>5";
+      },
+    ];
+    for (const change of inputs) {
+      const input = command();
+      change(input.input);
+      seal(input);
+      const store = new MemoryStore();
+      await expect(
+        new JobContributionService(store, allowConsent, allowCapability, intakeNow).contribute(
+          input,
+        ),
+      ).rejects.toThrow("source or approval is invalid");
+      expect(store.command).toBeUndefined();
+    }
+  });
+
+  it("retains the exact description limit and optional omission", async () => {
+    for (const description of [`< 10 ${"x".repeat(49_995)}`, undefined]) {
+      const input = command();
+      if (description === undefined) {
+        delete input.input.posting.description;
+        input.input.approval.approvedFields = input.input.approval.approvedFields.filter(
+          (field) => field !== "description",
+        );
+      } else input.input.posting.description = description;
+      seal(input);
+      const store = new MemoryStore();
+      await expect(
+        new JobContributionService(store, allowConsent, allowCapability, intakeNow).contribute(
+          input,
+        ),
+      ).resolves.toEqual(store.record);
+      expect(store.command?.input.posting.description).toBe(description);
+    }
   });
 
   it("accepts development jobs without signed policy while rechecking authority around consent", async () => {

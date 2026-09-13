@@ -107,6 +107,60 @@ describe("AshbyJobBoardAdapter", () => {
     },
   );
 
+  it("binds native HTML page aliases without replacing canonical descriptionPlain", async () => {
+    const descriptionPlain =
+      "ABOUT EXAMPLE\nRead docs https://docs.example.test/Role.\n- Require < 5 and > 2 years.\nChart [https://cdn.example.test/Chart.png]";
+    const descriptionHtml =
+      '<h2>About Example</h2><p>Read <a href="https://docs.example.test/Role">docs</a>.</p><ul><li>Require &lt; 5 and &gt; 2 years.</li></ul><p><img alt="Chart" src="https://cdn.example.test/Chart.png"></p>';
+    const source = adapter(
+      async () =>
+        new Response(
+          JSON.stringify({ apiVersion: "1", jobs: [job({ descriptionPlain, descriptionHtml })] }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const response = await source.pollExact({
+      ...context(),
+      externalJobId: "12345678-abcd-4abc-8abc-1234567890ab",
+    });
+    if (response.kind !== "success" || !response.observations[0])
+      throw new Error("Synthetic response missing");
+    const observation = response.observations[0];
+    expect(observation.description).toBe(descriptionPlain);
+    const digest = createHash("sha256")
+      .update("about exampleread docs.require < 5 and > 2 years.")
+      .digest("hex");
+    expect(source.pagePreviewDescriptionDigests(observation, "d2-job-page-v1")).toContain(digest);
+    expect(source.pagePreviewDescriptionDigests({ ...observation }, "d2-job-page-v1")).toEqual([]);
+    expect(source.pagePreviewDescriptionDigests(observation, "d2-job-page-v2")).toEqual([]);
+    expect(JSON.stringify(response)).not.toMatch(/descriptionHtml|Digests|<h2>/u);
+  });
+
+  it.each([
+    '<p>Read <a href="https://docs.example.test/other">docs</a>.</p>',
+    '<p>Read <a href="https://docs.example.test/Role">other docs</a>.</p>',
+    '<p>Read <a href="https://docs.example.test/Role">docs</a>.</p><p>Extra requirement.</p>',
+  ])(
+    "does not issue native page aliases for changed independently fetched HTML",
+    async (descriptionHtml) => {
+      const descriptionPlain = "Read docs https://docs.example.test/Role.";
+      const source = adapter(
+        async () =>
+          new Response(
+            JSON.stringify({ apiVersion: "1", jobs: [job({ descriptionPlain, descriptionHtml })] }),
+            { headers: { "content-type": "application/json" } },
+          ),
+      );
+      const response = await source.poll(context());
+      if (response.kind !== "success" || !response.observations[0])
+        throw new Error("Synthetic response missing");
+      expect(response.observations[0].description).toBe(descriptionPlain);
+      expect(
+        source.pagePreviewDescriptionDigests(response.observations[0], "d2-job-page-v1"),
+      ).toEqual([]);
+    },
+  );
+
   it.each([42, {}, "x".repeat(100_001)])(
     "rejects malformed/oversized auxiliary HTML",
     async (descriptionHtml) => {

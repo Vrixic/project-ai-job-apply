@@ -22,7 +22,7 @@ describe("strict public job capture", () => {
           {
             canonicalUrl: `${canonicalUrl}?utm_source=test#private-fragment`,
             company: " Example Company ",
-            description: "Build <b>safe</b> systems\u0000",
+            description: "Build safe systems\u0000",
             location: "Remote",
             title: "Software Engineer",
             workMode: "remote",
@@ -232,8 +232,8 @@ describe("strict public job capture", () => {
     expect(cutAtSpace?.[field]).toBe("x".repeat(maximum - 1));
   });
 
-  it.each(["<", ">"])(
-    "omits an entire optional field containing residual %s without rewording it",
+  it.each(["<", ">", "<=", ">="])(
+    "preserves description comparator %s without changing other field guards",
     (bracket) => {
       const capture = sanitizeSnapshot(
         {
@@ -246,8 +246,54 @@ describe("strict public job capture", () => {
         "lever-posting-v1",
       );
       expect(capture).toMatchObject({ title: "Engineer", company: "Example Company" });
-      expect(capture).not.toHaveProperty("description");
+      expect(capture?.description).toBe(`Synthetic threshold ${bracket} 10`);
       expect(sanitizeText(`safe prefix ${bracket} threshold`, 4)).toBeUndefined();
+    },
+  );
+
+  it.each([
+    "Synthetic threshold < 10 and > 5",
+    "Synthetic threshold <=10 and >=5",
+    "Synthetic x < y and y > z",
+    `${"x".repeat(11_995)} < 10 and > 5`,
+    `${"x".repeat(12_000)} > 5`,
+  ])("preserves bounded plaintext comparisons", (description) => {
+    const capture = sanitizeSnapshot(
+      {
+        canonicalUrl: "https://jobs.ashbyhq.com/example/posting-42",
+        title: "Engineer",
+        description,
+      },
+      "ashby",
+      "ashby-job-board-v1",
+    );
+    expect(capture?.description).toBe(description.slice(0, 12_000).trim());
+  });
+
+  it.each([
+    "<p>Raw HTML</p>",
+    "<script>alert(1)</script>",
+    "<img src=x onerror=alert(1)",
+    "</div",
+    "<!-- comment",
+    "<!DOCTYPE html>",
+    "<?instruction",
+    "＜script＞alert(1)＜/script＞",
+    `${"x".repeat(12_001)}<img`,
+  ])(
+    "omits a raw-markup description instead of converting it to different prose",
+    (description) => {
+      const capture = sanitizeSnapshot(
+        {
+          canonicalUrl: "https://jobs.ashbyhq.com/example/posting-42",
+          title: "Engineer",
+          description,
+        },
+        "ashby",
+        "ashby-job-board-v1",
+      );
+      expect(capture).toMatchObject({ title: "Engineer" });
+      expect(capture).not.toHaveProperty("description");
     },
   );
 

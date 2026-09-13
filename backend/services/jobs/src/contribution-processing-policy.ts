@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { JobContributionInput } from "./contribution.js";
+import { isSafeContributionDescription } from "./contribution-description.js";
 
 export const contributionProcessingProviders = ["greenhouse", "lever", "ashby"] as const;
 export type ContributionProcessingProvider = (typeof contributionProcessingProviders)[number];
@@ -81,17 +82,13 @@ function boundedNormalizedText(
   value: string | undefined,
   maximum: number,
   required: boolean,
+  isSafeText = (text: string) => !UNSAFE_TEXT.test(text),
 ): string | undefined {
   if (value === undefined) {
     if (required) throw new TypeError("The contribution is missing a required normalized field");
     return undefined;
   }
-  if (
-    value !== value.trim() ||
-    value.length < 1 ||
-    value.length > maximum ||
-    UNSAFE_TEXT.test(value)
-  ) {
+  if (value !== value.trim() || value.length < 1 || value.length > maximum || !isSafeText(value)) {
     throw new TypeError("The contribution contains an invalid normalized field");
   }
   const result = normalize(value);
@@ -185,7 +182,12 @@ export function normalizeContributionForProcessing(
   if (!normalizedTitle) throw new TypeError("The contribution title is invalid");
   const normalizedCompanyName = boundedNormalizedText(input.posting.companyName, 200, false);
   const normalizedDepartment = boundedNormalizedText(input.posting.department, 200, false);
-  const normalizedDescription = boundedNormalizedText(input.posting.description, 50_000, false);
+  const normalizedDescription = boundedNormalizedText(
+    input.posting.description,
+    50_000,
+    false,
+    isSafeContributionDescription,
+  );
   const normalizedLocations = Object.freeze(
     [
       ...new Set(

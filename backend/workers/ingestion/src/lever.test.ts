@@ -3,6 +3,7 @@ import type { NormalizedContributionProposal } from "@ai-job-apply/jobs-service"
 import { describe, expect, it, vi } from "vitest";
 import { RegisteredIndependentProviderVerifier } from "./contribution-verification.js";
 import { LeverPostingsAdapter } from "./lever.js";
+import { legacyPreviewDescription } from "./page-preview-compatibility.js";
 import { SourceRegistry } from "./registry.js";
 
 const context = () => ({
@@ -148,6 +149,36 @@ describe("LeverPostingsAdapter", () => {
     expect(
       selected.pagePreviewDescriptionDigests(result.observations[0], "d2-job-page-v1"),
     ).toEqual([]);
+  });
+
+  it("retains all eight exact join, heading and sanitizer representations", async () => {
+    const after = "About Example Require < 5 and > 2 years.";
+    const selected = adapter(async () =>
+      jsonResponse(
+        posting({
+          descriptionPlain: `About Example\n${after}`,
+          description:
+            "<h2>About Example</h2><p>About Example Require &lt; 5 and &gt; 2 years.</p>",
+          additionalPlain: "Build safely.",
+          additional: "<p>Build safely.</p>",
+        }),
+      ),
+    );
+    const result = await selected.pollExact(exactContext());
+    if (result.kind !== "success" || !result.observations[0])
+      throw new Error("Expected observation");
+    const digests = selected.pagePreviewDescriptionDigests(
+      result.observations[0],
+      "d2-job-page-v1",
+    );
+    const expected = ["", "\n"].flatMap((join) =>
+      [`About Example${after}${join}Build safely.`, `${after}${join}Build safely.`].flatMap(
+        (text) => [previewDigest(legacyPreviewDescription(text)), previewDigest(text)],
+      ),
+    );
+    expect(digests).toHaveLength(8);
+    expect(digests).toEqual(expected);
+    expect(result.observations[0].description).toBe(`About Example\n${after}\n\nBuild safely.`);
   });
 
   it("converts list HTML inertly without collecting form values or executing resources", async () => {

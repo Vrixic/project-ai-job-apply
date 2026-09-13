@@ -90,6 +90,28 @@ afterEach(() => {
 });
 
 describe("accepted provider-derived job fixtures", () => {
+  it.each(["< 10 and > 5", "<=10 and >=5", "x < y and y > z"])(
+    "keeps entity-decoded synthetic Ashby comparisons in the actual capture path: %s",
+    (comparison) => {
+      const description = `Synthetic workload ${comparison}. `;
+      const encoded = description.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+      const structured = document.createElement("script");
+      structured.type = "application/ld+json";
+      structured.textContent = JSON.stringify({
+        "@type": "JobPosting",
+        title: "Synthetic Platform Engineer",
+        description: `<p>${encoded}</p><p>Public responsibilities.</p>`,
+      });
+      document.head.append(structured);
+      vi.stubGlobal("location", { href: fixtures[1].sourceUrl });
+
+      const capture = detectPublicJob(captureCurrentPublicJobPage());
+
+      expect(capture?.description).toBe(`${description}Public responsibilities.`);
+      expect(capture?.provider).toBe("ashby");
+    },
+  );
+
   it.each(fixtures)(
     "keeps the approved $provider payloads inert and integrity-pinned",
     (fixture) => {
