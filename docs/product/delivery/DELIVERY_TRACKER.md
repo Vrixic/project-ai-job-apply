@@ -321,16 +321,21 @@ This is the master record for the delivery phases defined in the [product and sy
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Current Ashby activation approval (`2026-09-12`): the user approves development deployment and
-  activation, including unpacked-client follow-through after server verification. Production/store,
-  EU hosts, existing reviewer permissions and other providers remain unchanged. The user's SSO
-  renewal resolves `fbed61`: STS `83e125` confirms the exact development account/SSO role in
-  `us-east-2`, closing D2-R15. No cloud write or local client activation occurred yet.
-  The existing additive guard passes 251 assertions and client configuration support
-  is confirmed. Approval is recorded and must not be requested again; revalidate the exact cloud
-  boundary after login, release code separately, then apply the scoped configuration change.
-  [Current preparation](phase-2-extension-and-community.md#decisions-and-scope-changes)
-- Current Ashby implementation (`2026-09-12`): the user explicitly approves implementing the
+- Current Ashby deployment (`2026-09-12`): the approved development rollout is verified from
+  `61a23de` at state `336`, Gateway/scheduled/Trust `65`/`25`/`19`, with zero drift. Independently
+  reviewed immutable worker and gateway releases precede the four-update additive configuration.
+  Three sources/registrations and four exact hosts preserve Greenhouse/global Lever and add the
+  supplied hosted Ashby board with exact profile-aware binding. D2-R22 closes for bounded
+  acquisition/source binding/deployment; D2-035 and Phase 2 remain In progress for installed and
+  broader acceptance. All 13 D2 alarms are OK; exact Trust queue/DLQ approximate counts are zero.
+  No reviewer-role change, migration, queue clearing, general-ingestion/EU/custom-domain,
+  production/store activation or new branch occurred. The unpacked client is rebuilt: typecheck,
+  all 317 tests, build and four runtime readiness cases pass with the exact three-provider/four-host
+  configuration. Installed reload/capture remain next; no Ashby Trust decision or publication is claimed.
+  No repeated deployment approval is required.
+  [Verified rollout and exact evidence](phase-2-extension-and-community.md#d2-035--ashby-development-rollout),
+  [remaining acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
+- Earlier Ashby implementation checkpoint (`2026-09-12`; deployment superseded above): the user explicitly approves implementing the
   separately bounded Ashby large-board verifier with activation kept separate and disabled.
   D2-059 is Complete for implementation/local verification at `09cc3fa` on the existing independent-
   verifier/exact-poll/Jobs/Trust path. The full maintained verifier exits zero (`66f131`): ingestion
@@ -1089,6 +1094,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-12 | D2 | Approved Ashby development deployment verifies from `61a23de`: state `336`, Gateway/scheduled/Trust `65`/`25`/`19`, three sources/registrations, four hosts and zero drift. Code releases precede additive configuration. The matching unpacked client is rebuilt with typecheck, 317 tests and four readiness cases passing. D2-R22 closes for acquisition/source binding/deployment; D2-035 installed and broader acceptance stay open. All 13 D2 alarms OK; Trust queue/DLQ approximate counts zero. Existing provider/reviewer/runtime boundaries are preserved; no migration, queue clearing, general ingestion/EU/production/store activation or branch was added. | Final `33d264`, independent `a8be19`, health `d073e0`, client `56a488` / `5890e0` / `a7da0a`; [rollout and limitations](phase-2-extension-and-community.md#d2-035--ashby-development-rollout) |
 | 2026-09-12 | D2 | User renews SSO; read-only STS confirms the exact configured development account/SSO role in us-east-2, closing D2-R15 for the current session. Continue the already approved Ashby code release and separate scoped activation. Login is not deployment or installed acceptance. | STS `83e125`; [recorded activation scope](phase-2-extension-and-community.md#decisions-and-scope-changes) |
 | 2026-09-12 | D2 | Owner approves Ashby development deployment/activation with normal unpacked-client follow-through; production/store/EU and reviewer authority stay unchanged. Read-only STS requires SSO renewal (D2-R15 reopened), not repeated deployment approval. Existing additive guard passes 251 assertions and exact hosted client support is confirmed. No cloud write, migration, client activation or new branch occurred. Phase 2 remains In progress. | STS `fbed61`; guard `709359`; client `028eff`; [recorded scope/rationale](phase-2-extension-and-community.md#decisions-and-scope-changes) |
 | 2026-09-12 | D2 | Subsequent bounded live Ashby preflight passes: one public API GET, HTTP 200, full EOF at 2,118,913 decompressed bytes, 71 identity-valid records and the supplied exact target. Acquisition takes 374 ms; target-only in-memory replay through strict mapping produces one observation/zero withdrawals, total 397 ms. Zero raw files, catalog writes, deployment or activation. This is one local live sample, not deployed/installed/publication or load acceptance. D2-R22's old acquisition blocker is resolved for this sample; fresh source binding and development activation remain pending. | Aggregate `84b7bb`; [preflight scope and limits](phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification) |

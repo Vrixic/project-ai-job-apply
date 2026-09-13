@@ -70,11 +70,15 @@ scopes validate; test tokens are unavailable outside `NODE_ENV=test`.
 
 ## Current status
 
-Phase 2's extension and community backend are implemented in controlled Greenhouse and global-Lever
-development. The [Phase 2 register](docs/product/delivery/phase-2-extension-and-community.md)
-owns the state-333 release evidence and remaining acceptance: Greenhouse is preserved, only
-Supermove is independently registered for Lever, and the allowed hosts remain the two Greenhouse
-hosts plus `jobs.lever.co`. EU Lever, Ashby, production and store distribution remain disabled.
+Phase 2's extension and community backend support controlled Greenhouse, global-Lever and hosted
+Ashby development contributions. The [Ashby rollout checkpoint](docs/product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout)
+records source `61a23de`, state `336`, Gateway/scheduled/Trust versions `65`/`25`/`19` and zero
+meaningful Terraform changes. Existing Greenhouse and Supermove/global-Lever registrations are
+preserved; only the supplied hosted Ashby board is added. The four allowed hosts are the two
+Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain detection,
+production and store distribution remain disabled. D2-R22's acquisition/source-binding/deployment
+blocker is closed; installed Ashby preview/delivery/Trust/publication acceptance remains under
+D2-035 and is not implied by activation.
 The user now reports Processing `published` and Trust `accepted` for the reviewed Lever
 contribution; its website visibility/details/source journey is not yet confirmed. General
 provider ingestion remains dark, separate from D2 independent verification. Phase 2 is still
@@ -103,9 +107,10 @@ lifecycle. Refresh existing acknowledged contributions' Processing/Trust state r
 the prior processing snapshot is not a current owner-state observation.
 
 All three reviewer assignments are bound: the workflow is case-opener-only, the distinct delegated
-agent can read and make initial/takedown decisions, and the separate human can read and resolve
-appeals. Exact human identity/MFA/scope checks and the user-confirmed empty local appeal-queue read
-pass. D2-042's September 10 shared-client SQL fix supersedes the earlier rolled-back `503`:
+agent retains Greenhouse initial/takedown and approved global-Lever initial review, and the separate
+human can read and resolve appeals. Ashby activation changes no reviewer authority and includes no
+Ashby Trust decision. Exact human identity/MFA/scope checks and the user-confirmed empty local
+appeal-queue read pass. D2-042's September 10 shared-client SQL fix supersedes the earlier rolled-back `503`:
 three evidence-bound initial decisions have accepted/version-2 readbacks. Subsequent aggregates
 record three processing completions and three copied Trust signals. These aggregates do not
 establish each owner's website publication. Hosted reviewer, actual takedown, and separate human

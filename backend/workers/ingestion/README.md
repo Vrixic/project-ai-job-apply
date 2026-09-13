@@ -63,7 +63,7 @@ provider verifier without treating candidate-supplied content as catalog truth.
 - `ashby.ts` — fixed public Job Board GET adapter with exact API version, listed-only projection,
   bounded locations and response size, documented work-mode/employment mapping, and exact
   board/posting identity. It requests no compensation data and never calls an authenticated API.
-  Public API documentation provides only board acquisition, so the existing response/count caps
+  Public API documentation provides only board acquisition; general polling response/count caps
   remain unchanged. An unlisted record causes catalog withdrawal, not a claim of employer closure.
   D2-059's Ashby-specific `pollExact` is implemented and locally verified at `09cc3fa`:
   stream the same documented full-board GET with `includeCompensation=false`, retain the exact
@@ -71,7 +71,7 @@ provider verifier without treating candidate-supplied content as catalog truth.
   A separate frozen `ashby-exact-board-v1` acquisition profile bounds response, record scan,
   serialized-record/envelope/depth/key/fragment buffers and whole-operation time, retaining one
   selected record. This is not a measured total V8 heap/RSS ceiling. Only Ashby's source digest
-  changes, binding all eight profile fields and requiring fresh source binding for later activation.
+  changes, binding all eight profile fields; the later development rollout supplies that fresh binding.
   General scheduled polling retains `1_000_000` bytes/`100` jobs/`5_000` ms; Greenhouse/Lever digests
   stay unchanged. Identity,
   duplicate, malformed, overflow and deadline failures deny without partial evidence or
@@ -79,8 +79,10 @@ provider verifier without treating candidate-supplied content as catalog truth.
   427/427 and the maintained repository verifier pass. A subsequent read-only live preflight
   validates the complete 2,118,913-byte/71-record board and supplied exact posting, then replays
   only that in-memory record through the strict mapper. No raw response is persisted and no
-  catalog, deployment or activation is changed. Fresh source binding and development activation
-  remain separate. See the [verified task and exact bounds](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification).
+  catalog, deployment or activation changed during that earlier preflight. The separately approved
+  source binding and development rollout subsequently verify at state `336`; installed Ashby
+  acceptance remains open. See the [verified task and exact bounds](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-059--bounded-ashby-exact-board-verification)
+  and [development rollout](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout).
 - `provider-description.ts` — bounded inert HTML-to-plaintext/textContent conversion for independent
   Lever/Ashby evidence, excluding executable, form, and embedded-resource subtrees. It retains no
   raw HTML and never executes or fetches page content.
@@ -139,13 +141,17 @@ browser context and mocked provider responses, not a live provider or authentica
 This catches cross-component representation errors that isolated detector/adapter unit tests miss.
 
 Contribution verification defaults to no registrations. The separate D2 scheduled runtime's
-controlled state-333 development release preserves the accepted Greenhouse registration and adds
-only Supermove as an independent global-Lever registration. The exact three allowed contribution
-hosts are the two existing Greenhouse hosts plus `jobs.lever.co`; EU Lever and Ashby remain
-disabled. This does not activate the general ingestion runtime. Every registration requires an
-enabled reviewed adapter, explicit provider authority, and an exact verification/source-policy
+controlled state-336 development release preserves the accepted Greenhouse and Supermove/global-
+Lever registrations and adds only the supplied hosted Ashby board. Source `61a23de` verifies at
+Gateway/scheduled/Trust versions `65`/`25`/`19` with zero meaningful Terraform changes. Three exact
+sources/verification registrations serve four allowed contribution hosts: the two existing
+Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain detection,
+production/store distribution and the general ingestion runtime remain disabled. Every registration
+requires an enabled reviewed adapter, explicit provider authority, and an exact verification/source-policy
 binding. Repository fixtures and synthetic tests alone do not authorize a provider or live host.
-The [Phase 2 register](../../../docs/product/delivery/phase-2-extension-and-community.md) owns the
+The [Phase 2 rollout](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout) owns the
 current release and acceptance evidence, including the user's Lever Processing `published` /
 Trust `accepted` report; the Lever website visibility/details/source journey remains unconfirmed.
-Production and store distribution remain disabled.
+D2-R22's acquisition/source-binding/deployment blocker is closed. Installed Ashby preview,
+delivery, Trust and publication acceptance remain under D2-035. Reviewer assignments are unchanged;
+this activation includes no Ashby Trust decision and does not complete Phase 2.

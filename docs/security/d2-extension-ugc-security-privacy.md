@@ -6,8 +6,8 @@
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
 This is the single D2 engineering delta for the extension, contribution, and community trust
-surface, not a deployment authorization. The separately recorded controlled Greenhouse and
-global-Lever development activation and narrowly scoped reviewer assignments remain in the
+surface, not a deployment authorization. The separately recorded controlled Greenhouse,
+global-Lever and hosted-Ashby development activation and narrowly scoped reviewer assignments remain in the
 [Phase 2 record](../product/delivery/phase-2-extension-and-community.md). This document grants no
 additional provider, reviewer, production, or browser-store authority; human appeals remain
 separate.
@@ -93,12 +93,16 @@ Lever, and Ashby descriptors; explicit empty selection denies all, invalid input
 and provider selection outside explicit development is rejected. Exact client, provider variant,
 HTTPS hosts, runtime enable flags, authentication, preview-bound command authorization,
 independent provider evidence, Trust decisions, and account fencing remain enforced. Detector
-activation and exact provider registrations are separate. The Phase 2 state-333 release preserves
-Greenhouse and enables global-Lever development intake, with only Supermove independently
-registered for Lever. The exact three allowed hosts are the two existing Greenhouse hosts plus
-`jobs.lever.co`; EU Lever and Ashby remain disabled. This separate D2 verification scope does not
-activate general provider ingestion. Accepted global Lever and hosted Ashby fixtures do not
-authorize EU/custom-domain or automatic publication.
+activation and exact provider registrations are separate. The approved Phase 2 state-336 rollout
+preserves Greenhouse and Supermove/global-Lever registrations and adds only the supplied hosted
+Ashby board. Source `61a23de` verifies at Gateway/scheduled/Trust `65`/`25`/`19` with zero meaningful
+Terraform changes. Three exact sources/verification registrations serve the four allowed hosts:
+the two existing Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain
+detection, general provider ingestion, production and store distribution remain disabled.
+Reviewer authority is unchanged: Greenhouse initial/takedown and approved global-Lever initial
+review remain delegated to the agent, with independent human appeals. No Ashby Trust decision
+is included. Accepted fixtures and development activation do not authorize automatic publication;
+installed Ashby acceptance remains under [D2-035](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout).
 The optional `D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON` further intersects descriptor authority
 with an exact fixed-host subset, re-read at intake and before publication preparation/renewal.
 It is rejected outside explicit development; absence preserves descriptor hosts, while `[]`
@@ -121,8 +125,8 @@ description; the single decision and rationale are in the
 
 ## Fresh verification and accepted evidence
 
-D2-059's Ashby-specific large-board verifier is implemented and locally verified at `09cc3fa`
-on September 12, with activation separately gated and disabled. It reuses the registered independent
+D2-059's Ashby-specific large-board verifier was implemented and locally verified at `09cc3fa`
+on September 12, before the separately approved development rollout. It reuses the registered independent
 verifier and exact-poll seam, streams only the documented public full-board GET with compensation
 excluded, and returns the exact selected posting through the existing Jobs/Trust gates. The
 separate frozen `ashby-exact-board-v1` profile bounds decompressed bytes, scanned records,
@@ -137,11 +141,14 @@ retains `1_000_000` bytes/`100` jobs/`5_000` ms and Greenhouse/Lever digests sta
 Independent review, focused regressions and the full maintained verifier pass. A subsequent
 bounded read-only preflight validates the complete 2,118,913-byte/71-record public board and the
 exact supplied posting; only the selected in-memory record is replayed through strict mapping.
-No raw response is persisted and no catalog/deployment/activation change is performed. This is
-not deployed verification or publication acceptance; fresh source binding and development
-deployment/activation remain separate.
-No API/event/SQL/migration or candidate/reviewer authority changed; Ashby/EU and production/store
-remain disabled.
+No raw response was persisted and no catalog/deployment/activation change occurred during that
+earlier preflight. Its success is not installed contribution or publication acceptance.
+The subsequent [development rollout](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout)
+binds the exact Ashby configuration, publishes compatible immutable binaries and verifies the
+four-resource configuration-only activation at state `336`. D2-R22 closes for acquisition,
+source binding and deployment; D2-035 remains open for installed acceptance. No API/event/SQL/
+migration or candidate/reviewer authority changed. EU/custom-domain, production/store and general
+provider-ingestion activation remain excluded.
 
 The coordinated September 10 D2-039 rollout applied Jobs `0023` and Trust `0004`; the
 [Phase 2 register](../product/delivery/phase-2-extension-and-community.md) owns exact release and
@@ -207,7 +214,8 @@ decision rationale remain in the [Phase 2 record](../product/delivery/phase-2-ex
 
 ## Release gates
 
-The following remain blocking and cannot be self-certified by repository implementation:
+These acceptance areas cannot be self-certified by repository implementation; the Phase 2
+register distinguishes completed evidence from remaining gates:
 
 1. LR-D2-01 contribution license, provenance, contributor privacy, takedown, withdrawal, appeal,
    and repeat-abuse disposition.
@@ -215,8 +223,10 @@ The following remain blocking and cannot be self-certified by repository impleme
    disposition.
 3. Accountable D2 security/privacy acceptance of the exact data flow, controls, retention,
    subprocessors, telemetry, and deployed candidate.
-4. Authorized Greenhouse, Lever, and Ashby fixtures with capture authorization, scans, human
-   sanitization review, independent QA representativeness acceptance, and raw disposition.
+4. Authorized Greenhouse, Lever, and Ashby fixtures with capture authorization, scans,
+   sanitization and QA representativeness acceptance, and raw disposition. D2-011 completed the
+   initial scoped variants on September 11; EU/custom-domain and rendered-hydration coverage
+   are not implied and fixture approval is not a recurring blocker for the accepted variants.
 5. Dedicated extension Auth0 Native Application plus Chrome and Edge PKCE, refresh rotation/replay,
    cancellation, logout, and revocation evidence.
 6. Final archive permission/CSP/remote-code/secret inspection, accessibility and malicious-UGC
@@ -224,8 +234,9 @@ The following remain blocking and cannot be self-certified by repository impleme
    evidence.
 
 Until all applicable gates pass, production and store distribution remain dark. The separately
-authorized development exception covers the recorded Greenhouse and global-Lever scope only;
-contribution intake is not publication approval. EU Lever, Ashby and broader use remain subject
-to their recorded gates. The Phase 2 record distinguishes the user's latest Lever Processing
+authorized development exception covers the recorded Greenhouse, global-Lever and hosted-Ashby
+scope only; contribution intake is not publication approval. EU Lever, custom-domain and broader
+use remain excluded; installed Ashby acceptance is still open. The Phase 2 record distinguishes
+the user's latest Lever Processing
 `published` / Trust `accepted` report from its still-unconfirmed website visibility/details/source
 journey; that report grants no additional authority.
