@@ -52,8 +52,10 @@ QA representativeness acceptance, and an updated kill-switch policy.
 Installed Ashby acceptance (`2026-09-13`, D2-035/D2-061): the user answers the post-reload
 Technology Stack/Benefits check with “yes it includes everything nice.” The full-description
 preview check is complete. This does not establish delivery, a Trust decision, publication or
-cross-browser parity. Next request Processing and Trust statuses from the existing Ashby entry;
-if no entry exists, record that before choosing a delivery action. Do not repeat this preview
+cross-browser parity. The next user report shows the Ashby entry as Processing `queued` and
+Trust `refresh to check`. The worker is healthy, and read-only provider-hold inspection returns
+zero eligible rows; this is not owner-specific completion evidence. Request one fresh processing
+and Trust read after the observed scheduler ticks, including any fixed result message. Do not repeat this preview
 check, resubmit an acknowledged job, clear the queue or change reviewer authority.
 
 Completed build correction (`2026-09-13`, D2-063): Vercel's build warning exposed one real
@@ -711,9 +713,34 @@ D2-061 is Complete for implementation and development deployment. The user subse
 on `2026-09-13` that the installed expanded description includes everything, answering the specific
 Technology Stack/Benefits check. D2-035's full-description preview acceptance is now complete;
 this user observation does not establish browser-brand parity, delivery, Trust or publication.
-Next obtain Processing/Trust statuses from the existing Ashby entry, or an explicit report that
-no entry is listed. No resubmission, sign-out or queue removal is needed. Docker/WSL were not
-needed or started. Phase 2 remains In progress.
+The subsequent owner report shows Processing `queued` and Trust `refresh to check`. No
+resubmission, sign-out or queue removal is needed. Docker/WSL were not needed or started.
+Phase 2 remains In progress.
+
+The source [popup](../../../frontend/extension/entrypoints/popup.ts) renders the retained owner
+status and uses `refresh to check` when no Trust result is cached; those labels do not expose
+the internal processing queue or establish a Trust decision. The [owner status reader](../../../backend/services/jobs/src/persistence/contribution.ts)
+uses the latest state event or the original queued acknowledgement. Explicit reads update the
+two displays independently; no background status polling occurs.
+
+Read-only development diagnostic `b3ad88` covers `2026-09-13T21:23:28Z`–`21:53:28Z`:
+scheduled/Trust aliases remain `27`/`21`, the scheduled runtime is Active/enabled with reservation
+one, and the exact target runs on `rate(5 minutes)`. All 13 D2 alarms are OK. Six native
+invocations and six successful-batch datapoints report zero observed errors/throttles;
+one item was claimed and parked, with zero completed/retried/dead counts in that window.
+No failure-batch datapoints were emitted; absence is not a separate zero-valued observation.
+This eight-read snapshot, preceded by exact SSO verification `ab1edf`, contains no raw logs,
+queue-message receipt, owner rows or application invocation and cannot attribute the aggregate
+item to this owner.
+
+The maintained [provider-hold operator](../../../scripts/operate-development-d2-provider-recovery.ps1)
+then runs **Inspect only** against the reviewed immutable scheduled version `27` (`05fc69`).
+Its bounded [SELECT-only implementation](../../../backend/services/jobs/src/persistence/contribution-recovery.ts)
+returns zero eligible provider-held rows and zero retryable/unavailable/mismatch/closed/duplicate
+counts. This makes one diagnostic Lambda invocation, not a processing run; no Retry, queue
+change, provider fetch, Trust decision or catalog mutation occurs. It excludes other hold kinds
+and refresh-budget rows and is not a complete backlog or owner-state query. Next obtain one
+post-tick owner refresh of both statuses and any fixed message before choosing another action.
 
 ### D2-060 — Plaintext description compatibility
 
@@ -2743,7 +2770,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
 | Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three Greenhouse decisions and separately approved Lever initial decision pass. The current D2-054 admin preview is deployed/protected at `b3da818`; zero project environment variables confirms hosted Auth0 is unconfigured. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Configure the existing dedicated human appeal client for one exact protected stable host with `ADMIN_AUTHORIZATION_PROFILE=appeals`, distinct hosted session secret and server-only settings, then complete hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case or borrow the human session. |
-| Lever website follow-up and Ashby delivery/publication acceptance | Lever is user-confirmed published/accepted. Ashby acquisition/source binding closes D2-R22; D2-061's compatible complete-description workers verify at `339`, Gateway/scheduled/Trust `66`/`27`/`21`. The user confirms the complete installed Ashby description on 2026-09-13, including Technology Stack/Benefits. Three providers/four hosts, reviewer roles and general limits are unchanged. | Read Processing and Trust statuses from the existing Ashby entry under Your shared jobs; if not listed, report that before choosing a delivery action. The preview check is complete: do not repeat it, resubmit an acknowledged job, sign out or clear the queue. Delivery and separately authorized Trust/website follow-through remain distinct. Confirm Lever website visibility/details/source without repeating status, submission or decision. No repeated deployment approval is needed. EU/custom/production/store remain excluded. See [complete-description release](#d2-061--complete-description-capture). |
+| Lever website follow-up and Ashby delivery/publication acceptance | Lever is user-confirmed published/accepted. Ashby acquisition/source binding closes D2-R22; D2-061's compatible complete-description workers verify at `339`, Gateway/scheduled/Trust `66`/`27`/`21`. The user confirms the complete installed Ashby description on 2026-09-13, then reports its entry as Processing queued / Trust refresh to check. The scheduled worker is healthy and bounded provider-hold Inspect returns zero eligible rows; neither result establishes this owner's current processing state. Three providers/four hosts and reviewer roles are unchanged. | Refresh processing and Trust once after the observed scheduler ticks and report both statuses plus any fixed result message. The preview check is complete: do not repeat it, resubmit an acknowledged job, sign out or clear the queue. Delivery and separately authorized Trust/website follow-through remain distinct. Confirm Lever website visibility/details/source without repeating status, submission or decision. No repeated deployment approval is needed. EU/custom/production/store remain excluded. See [complete-description release and owner diagnostic](#d2-061--complete-description-capture). |
 | Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
@@ -2756,6 +2783,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-13 | Recorded the Ashby entry as Processing queued / Trust refresh to check, then checked the scheduled runtime without retrying or resubmitting. Six normal batches, no observed Lambda errors/throttles, one aggregate claimed/parked item and 13 healthy alarms; bounded provider-hold Inspect finds zero eligible rows. | D2-035 | User status report; exact SSO `ab1edf`, read-only runtime/metric snapshot `b3ad88`, SELECT-only diagnostic `05fc69`. These aggregates do not identify the owner's item or establish Trust/publication. One post-tick owner refresh and its fixed result message are requested. No code, deployment, authority or application-data mutation. |
 | 2026-09-13 | Closed the installed Ashby full-description preview check after the user confirms all text, including the requested Technology Stack/Benefits sections. Updated current phase/master/root summaries and next action; no runtime or queued-data changes. | D2-035; D2-061 | User reply: “yes it includes everything nice.” This is installed preview acceptance only. Existing-entry Processing/Trust status, delivery, separately authorized review and website publication remain unconfirmed; no repeat preview check or resubmission is needed. |
 | 2026-09-13 | Completed and development-deployed the narrow web build/cache correction after classifying Vercel environment warnings. Only the crawler flag becomes a hashed web build input; authentication/session/API configuration stays runtime-only and existing NEXT_PUBLIC framework inference stays unchanged. Local ignored-env rebuild limitations are documented. | D2-063 | Eleven focused tests (`a8cfeb`), web typecheck (`52f4f9`), independent review and false indexing preflight `96cb8c`. Full verifier `c4a0ea` passes, including 638 web tests and 20 builds. Candidate-only `27a987b` source/alias/region/runtime readback `34f5f7` and five hosted probes `6db4be` pass; no new publication, AWS, Auth0 or human acceptance. |
 | 2026-09-13 | Completed support instructions matching installed owner controls and both explicit appeal confirmation steps. Reconciled the already accepted provider-fixture exit criterion for the enabled three variants/four hosts only. Root README now accurately records the already deployed admin presentation; no repeat admin rollout is needed. Full verification passes and candidate-only `e930ad2` is deployed/verified at the existing stable origin. | D2-062; D2-011; D2-054 | Focused support `4/4`, all web `630/630`, full verifier `8bdfb5` with 20 builds, fixtures `14/14`, detector `32/32`, independent scope/copy review. Hosted source/five boundaries `105b9b` and six-current/two-obsolete copy checks `21a9e4` pass. No new provider/reviewer scope, branch, AWS change or human acceptance; Docker/WSL stopped. |

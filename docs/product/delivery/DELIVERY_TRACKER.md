@@ -321,9 +321,12 @@ This is the master record for the delivery phases defined in the [product and sy
 - Installed Ashby description acceptance (`2026-09-13`, D2-035/D2-061): the user confirms that
   the expanded description now includes everything, answering the Technology Stack/Benefits
   check after the configured rebuild. The installed full-description preview check is complete.
-  Ashby delivery, separate Trust review and website publication remain unconfirmed; request only
-  the existing contribution's Processing/Trust statuses next, without resubmission or queue
-  clearing. No new deployment, source scope or reviewer authority follows from this confirmation.
+  The owner subsequently reports Processing `queued` / Trust `refresh to check`. Six normal
+  scheduled batches with no observed Lambda errors/throttles and 13 healthy alarms are confirmed;
+  aggregate provider-hold Inspect returns zero eligible rows. These checks do not identify the
+  owner's item or establish Trust/publication. Request one post-tick refresh of both statuses
+  and any fixed result message, without resubmission or queue clearing. No new deployment,
+  source scope, reviewer authority or application-data mutation follows from this confirmation.
   [Installed acceptance](phase-2-extension-and-community.md#d2-061--complete-description-capture)
 
 - Completed build-input repair (`2026-09-13`, D2-063): Next generates crawler headers during the
