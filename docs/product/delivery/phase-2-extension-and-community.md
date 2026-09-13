@@ -49,6 +49,17 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Current Ashby activation approval (`2026-09-12`): the user's `i approve` authorizes the proposed
+development-only deployment and activation, including the corresponding unpacked client settings
+after server verification. Preserve Greenhouse/global Lever, production/store/EU exclusions,
+existing reviewer permissions, shared limits and all data/queue state. This approval is recorded;
+do not ask for it again. Read-only STS check `fbed61` cannot obtain a current development session
+and indicates SSO renewal is required (D2-R15 reopened). No cloud write or local client activation
+has occurred. Safe preparation confirms the existing additive configuration guard supports Ashby
+and passes 251 assertions; the client already supports the exact hosted provider/variant/domain.
+Publish and verify compatible immutable code first, then independently review/apply the exact
+four-update source/configuration plan. No migration or new reviewer role is needed for this change.
+
 Current Ashby implementation (`2026-09-12`): the user explicitly approves implementing the
 Ashby-specific large-board verifier while keeping activation separate and disabled. D2-059 is
 Complete for implementation/local verification at `09cc3fa`. It reuses the existing independent-verifier
@@ -2348,6 +2359,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-12 | Recorded explicit approval for Ashby development deployment/activation and normal unpacked client follow-through; production/store/EU and reviewer permissions remain excluded. Read-only STS is unavailable and requires SSO renewal, reopening D2-R15 without revoking deployment approval. Existing additive provider guard passes 251 assertions; redacted local inspection confirms only the three Ashby detector dimensions/provider selection need activation after server verification. No cloud write, migration, client activation or new branch occurred. | D2-035; D2-R22; D2-R15 | User approval; STS `fbed61`; guard `709359`; client readiness `028eff`; [single scope decision](#decisions-and-scope-changes) |
 | 2026-09-12 | Subsequent bounded read-only Ashby preflight passes: one public API GET, HTTP 200, full EOF at 2,118,913 decompressed bytes, 71 identity-valid records and the supplied exact target. Acquisition takes 374 ms; target-only strict in-memory mapping yields one observation/zero withdrawals, total 397 ms. Zero raw files, catalog writes, deployment or activation. This is one local live sample, not deployed/installed/publication or load acceptance. The old acquisition blocker is resolved for this sample; fresh source binding and development activation remain pending. | D2-059; D2-035; D2-R22 | Aggregate `84b7bb`; [preflight scope and limits](#d2-059--bounded-ashby-exact-board-verification) |
 | 2026-09-12 | Completed D2-059 implementation/local verification at `09cc3fa`. Independent review, reader 131/131, runtime/configuration 29/29 and the full maintained verifier pass: ingestion 427/427, workflows 1,239 passed/eight existing opt-ins skipped, builds 20/20 with 18 cache hits. All frozen profile fields bind only Ashby's source digest; structural parser buffers and one selected record are bounded, without a measured V8/RSS claim. No live supplied-board acquisition, deployment, activation, API/event/SQL/migration or permission change occurred. D2-R22/D2-035/Phase 2 remain open for the recorded separate acceptance gates. | D2-059; D2-035; D2-R22 | [Implementation and exact evidence](#d2-059--bounded-ashby-exact-board-verification); maintained verifier exit 0, final aggregate `66f131` |
 | 2026-09-12 | The user explicitly approves implementing the Ashby-specific large-board verifier while leaving activation separate and disabled. Started D2-059 on the existing independent-verifier/exact-poll/Jobs/Trust path with a separate bounded profile and full-response validation. Preserve general/shared polling limits, current scopes and raw-retention controls. No API/event/SQL/migration change, live provider call, deployment or new reviewer/candidate authority is included. Implementation/test evidence remains pending; D2-R22 and Phase 2 remain open. | D2-059; D2-035; D2-R22 | User's explicit implementation approval; [started task and target bounds](#d2-059--bounded-ashby-exact-board-verification); [single rationale](#decisions-and-scope-changes) |
@@ -2568,6 +2580,15 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+On `2026-09-12`, the user's subsequent `i approve` authorizes the requested Ashby development
+deployment/activation after the passing bounded live preflight. Treat this as approval to finish
+the exact server/source registration and corresponding unpacked-client configuration, not as
+approval for production/store/EU hosts, another source, broader reviewer powers, a Trust decision,
+or overall Phase 2 acceptance. Preserve all current Greenhouse/global-Lever settings and apply
+new code separately from the four-resource configuration change. This keeps the rollout scoped
+and its rollback clear without introducing another recurring approval request. AWS SSO renewal
+is a credential prerequisite, not a request to approve the same deployment again.
 
 For D2-059/D2-R22 on 2026-09-12, accept the user's explicit `yes` to implementing the Ashby-specific
 large-board verifier, with activation separately gated and disabled. Reuse the registered
@@ -3041,7 +3062,7 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R12 | Open; hosted reviewer and appeal-decision journey acceptance pending | The September 8 exact human identity/fresh-MFA/two-scope check, state-285 assignment and user-confirmed empty local appeal queue pass; the local-only window ended at `2026-09-08T13:38:16Z`. All three assignments remain unchanged through state `298`. D2-042's three initial decisions are delegated-agent acceptance, not a human appeal or hosted-console journey. | Product owner; platform engineering | Complete hosted reviewer and separate human appeal acceptance under scoped testing. Do not manufacture a case or submit a decision merely to test access; preserve exact reviewer authentication and roles. |
 | D2-R13 | Closed | The expired mobile-only exception blocked initial publication attempts. The exact user-approved parser patch passes 136 focused tests, independent review, frozen installation, the full repository verifier, and the dependency audit without exceptions. Two matching no-cache migration-image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings now pass; that image was published and used successfully. | Platform engineering | Maintain the exact local patch until a compatible upstream fix is verified. No mobile/public-launch acceptance is implied. |
 | D2-R14 | Closed | The user confirmed reuse of the existing encrypted agent-reviewer credential on 2026-09-08 for the remaining Phase 2 development initial/takedown work. Private current-user access, unchanged encrypted bytes, and the live exact assignment pass. The historical collection window remains unchanged; the subsequent Auth0 refusal is separately tracked as R16. | Product owner; platform engineering | Preserve the existing roles and separate human appeal reviewer. No recurring contribution-policy approval or new secret is required for this unchanged assignment; do not borrow another identity, expand roles, or submit unsupported decisions. |
-| D2-R15 | Closed | Renewed development SSO permitted the exact-boundary recovery and cleanup; earlier expiry is historical, not a current blocker. | Product owner; platform engineering | No cloud operation remains for this drill. Final Platform `329`/Bootstrap `21` Verify confirms zero drift and drill-only permission removal. Owner browser/session state is separate and unobserved; no renewed recovery approval is needed. |
+| D2-R15 | Open; session renewal required | The prior recovery/cleanup remains complete, but read-only STS `fbed61` on September 12 cannot obtain a current development session for the newly approved Ashby deployment. | Product owner; platform engineering | Run `aws sso login --profile ai-job-apply-development-admin`, then revalidate the exact account/region/backend before publishing or applying. Existing Ashby approval remains valid; no repeat approval, recovery drill or credential disclosure is needed. |
 | D2-R16 | Closed | The corrected existing Client Access grant passes exact three-scope authentication. The September 9 read-only access check and September 10 fresh-evidence/three accepted initial-decision readbacks pass without grant, role, credential or human-session changes. | Product owner; platform engineering | Keep the unchanged least-privilege assignment and evidence/version binding. Hosted/human appeal and exact owner-publication acceptance remain open; no further screenshot or new secret is needed for this resolved grant. |
 | D2-R17 | Closed; isolated drill completed | The user-approved development-only drill completes on the original 44-migration/68-relation copy: strict Inspect/Replay passes one already-reconciled historical subject, then exact executor/PITR and all temporary-permission cleanup pass. | Product owner; platform engineering | Retain protected evidence and do not repeat PITR or infer fresh nonempty deletion acceptance. The separately authorized single-tag correction is D2-052/D2-053; replay preserves primary database, cloud documents, tags, retention and Auth0. |
 | D2-R18 | Closed | Verified portable 1.16.2, historical read-only decoding, effective encrypted S3 locking, 441 two-host toolchain assertions and full infrastructure/repository checks pass. Exact sensitivity-only reconciliation advances state to 291 without resource-value changes; fresh locked planning exits 0. | Platform engineering | Use fresh source-bound handoffs for D2-039/D2-038. Preserve historical plans, provider locks and excluded Actions; no further toolchain approval is needed. |
@@ -3051,6 +3072,10 @@ These are local checks; deployed migration, human review, and publication eviden
 
 ## Completion record
 
+- Latest activation preparation (`2026-09-12`): Ashby development deployment/activation is approved,
+  not executed. Existing server guard/client configuration support is verified; AWS SSO renewal
+  is the immediate prerequisite. D2-035 and Phase 2 remain In progress; D2-R22 stays open and
+  D2-R15 is reopened.
 - Latest implementation checkpoint (`2026-09-12`): D2-059 is Complete for source/local verification
   at `09cc3fa`. Independent review, reader 131/131, runtime/configuration 29/29 and full maintained
   verification pass, including ingestion 427/427 and 20 successful build tasks/18 cache hits.

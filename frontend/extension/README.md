@@ -2,11 +2,13 @@
 
 This directory contains the Manifest V3 Chrome/Edge client for explicit current-tab job capture.
 Its repository defaults remain a **synthetic, default-dark release candidate**. The configured
-development candidate separately enables the accepted Greenhouse variant. An explicit unpacked-only
+development candidate separately enables the accepted Greenhouse and global-Lever variants. An explicit unpacked-only
 development contribution mode avoids signed-policy renewal; the default distribution path remains
-signed-policy-bound. Initial installed Edge sign-in and server acknowledgement are confirmed. Lever and
-Ashby now have accepted global-Lever/hosted-Ashby fixtures under D2-011, but remain disabled until
-the D2-035 scoped server/configuration release verifies. Acknowledgement is not publication:
+signed-policy-bound. Initial installed Edge sign-in and server acknowledgement are confirmed.
+Global-Lever activation is deployed and the user confirms its supplied job as published/accepted;
+its website detail/source journey remains unconfirmed. Hosted Ashby has accepted fixtures and a
+passing bounded live verifier preflight. Its development activation is approved but not yet deployed
+or enabled in the client; AWS SSO renewal is the immediate prerequisite. Acknowledgement is not publication:
 independent provider verification and Trust acceptance still apply. Production, general candidate
 release, and browser-store distribution are not approved. See the current
 [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md) for live gates.
@@ -194,8 +196,10 @@ release candidate.
 
 ## Remaining activation gates
 
-- Scoped global Lever/hosted Ashby domain-aware server release, exact source registrations and
-  configured extension rebuild/reload; representative fixtures are accepted on 2026-09-11.
+- Approved hosted Ashby server/code release, exact source registration and configured extension
+  rebuild/reload; representative fixtures are accepted on 2026-09-11 and bounded acquisition passes.
+  Global Lever is already enabled; its supplied job is user-confirmed published/accepted, with
+  website detail/source acceptance still pending. Do not repeat its submission or decision.
   EU Lever, custom domains and rendered Ashby hydration are not covered by that fixture acceptance.
 - Broader live lifecycle acceptance remains separate from the user's 2026-09-11 confirmation of
   the reported Greenhouse job's published/accepted status and website search/detail/source display.
