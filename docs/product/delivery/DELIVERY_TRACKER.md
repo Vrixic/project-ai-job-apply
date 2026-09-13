@@ -326,10 +326,13 @@ This is the master record for the delivery phases defined in the [product and sy
   aggregate provider-hold Inspect returns zero eligible rows. These checks do not identify the
   owner's item or establish Trust/publication. The subsequent owner refresh now confirms
   Processing `awaiting trust` / Trust `needs review`, closing installed delivery-to-review
-  acceptance. Initial Ashby review authority, the evidence-bound decision and website publication
-  remain; request approval for this contribution using the existing agent identity and independent
-  human appeal reviewer. No further queued-status refresh, resubmission, deployment, new role or
-  application-data mutation is needed to establish this reported stage.
+  acceptance. The subsequent `approve it` authorizes initial review of this contribution only.
+  Fresh independent provider evidence supports exactly one acceptance; independent readback
+  `81588c` at `2026-09-13T22:58:41.094Z` confirms `accepted` / version `2` after seven bounded
+  requests and one decision. Existing agent scopes/roles and separate human appeals are unchanged.
+  Processing publication and website visibility/details/source remain unconfirmed: check the
+  existing signed-in owner session, without another decision, submission or approval request.
+  No other Ashby review, takedown, new role, production or store authority is included.
   [Installed acceptance](phase-2-extension-and-community.md#d2-061--complete-description-capture)
 
 - Completed build-input repair (`2026-09-13`, D2-063): Next generates crawler headers during the

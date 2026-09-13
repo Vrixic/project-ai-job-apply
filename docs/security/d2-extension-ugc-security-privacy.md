@@ -136,10 +136,14 @@ current-source function parity and unchanged public-configuration checks. Three 
 sources/verification registrations serve the four allowed hosts:
 the two existing Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain
 detection, general provider ingestion, production and store distribution remain disabled.
-Reviewer authority is unchanged: Greenhouse initial/takedown and approved global-Lever initial
-review remain delegated to the agent, with independent human appeals. No Ashby Trust decision
-is included. Accepted fixtures and development activation do not authorize automatic publication;
-installed Ashby acceptance remains under [D2-035](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout).
+Those deployments changed no reviewer authority. The separately recorded September 13 approval
+adds initial review of the supplied Ashby contribution only; fresh independent evidence supports
+one decision with an independent `accepted` / version `2` readback. Existing Greenhouse
+initial/takedown, approved global-Lever initial review, exact roles/scopes and independent human
+appeals remain unchanged. No other Ashby review, Ashby takedown, production or store authority is
+included. Scope and rationale remain in the [single Phase 2 record](../product/delivery/phase-2-extension-and-community.md#delegated-reviewer-assignment).
+Accepted fixtures, development activation and this decision do not establish publication;
+processing publication and website acceptance remain under [D2-035](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout).
 The optional `D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON` further intersects descriptor authority
 with an exact fixed-host subset, re-read at intake and before publication preparation/renewal.
 It is rejected outside explicit development; absence preserves descriptor hosts, while `[]`

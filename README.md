@@ -90,8 +90,11 @@ oversized text or encoded requests. The actual supplied-page read-only check pre
 Gateway/scheduled/Trust `66`/`27`/`21`, with zero drift; the matching configured extension is rebuilt.
 On 2026-09-13 the user confirms the installed preview includes the full description, including
 Technology Stack and Benefits. The user then confirms Processing `awaiting trust` and Trust
-`needs review`, completing installed delivery-to-review acceptance. Initial review of this Ashby
-contribution needs separate owner authority; no resubmission or queue clearing is needed.
+`needs review`, completing installed delivery-to-review acceptance. The user's subsequent
+`approve it` authorizes initial review of this supplied Ashby contribution only. Current independent
+evidence supports one initial acceptance, with an independent `accepted` / version `2` readback
+on September 13. Processing publication and website visibility/details/source remain unconfirmed;
+use the existing signed-in session to check, without resubmission or queue clearing.
 The user now reports Processing `published` and Trust `accepted` for the reviewed Lever
 contribution; its website visibility/details/source journey is not yet confirmed. General
 provider ingestion remains dark, separate from D2 independent verification. Phase 2 is still
@@ -121,8 +124,9 @@ the prior processing snapshot is not a current owner-state observation.
 
 All three reviewer assignments are bound: the workflow is case-opener-only, the distinct delegated
 agent retains Greenhouse initial/takedown and approved global-Lever initial review, and the separate
-human can read and resolve appeals. Ashby activation changes no reviewer authority and includes no
-Ashby Trust decision. Exact human identity/MFA/scope checks and the user-confirmed empty local
+human can read and resolve appeals. September 13's separately approved initial decision covers
+the supplied Ashby contribution only; it adds no role, Ashby-wide review or Ashby takedown authority.
+Exact human identity/MFA/scope checks and the user-confirmed empty local
 appeal-queue read pass. D2-042's September 10 shared-client SQL fix supersedes the earlier rolled-back `503`:
 three evidence-bound initial decisions have accepted/version-2 readbacks. Subsequent aggregates
 record three processing completions and three copied Trust signals. These aggregates do not
