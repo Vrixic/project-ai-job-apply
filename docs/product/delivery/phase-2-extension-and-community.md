@@ -49,6 +49,13 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Current support follow-through (`2026-09-13`, D2-062): the hosted help instructions named
+controls that no longer exist. The correction uses the installed **Your shared jobs**, **Refresh
+processing** and **Refresh Trust** labels and explicit withdrawal/appeal confirmation steps.
+Four focused rendered-page tests, all 630 web tests and the full repository verifier pass,
+including 20/20 builds. The candidate-only web release remains in progress. No extension identity,
+queue, permission or backend behavior changes.
+
 Current full-description correction (`2026-09-13`, D2-061): the user confirms that Ashby's
 description now appears, but it stops at the 12,000-character client capture boundary. The API
 and Jobs already allow 50,000 characters; display expansion must not hide a shortened payload.
@@ -503,6 +510,21 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-059 | Implement a separately bounded Ashby exact-board verifier without changing general polling limits or activating Ashby. | Complete | Platform engineering; QA/automation | D2-006; D2-015; D2-035; D2-R22 | Completed 2026-09-12 for implementation/local verification at `09cc3fa`: frozen exact-board profile, complete-response/identity validation, target-only output, post-parse deadline/abort and Ashby-only configuration-digest binding pass independent review and the full maintained verifier. Ingestion 427/427 includes reader 131 and exact adapter 12; focused runtime/configuration 29/29 passes. Structural parser bounds are not measured V8/RSS limits. General polling/shared limits and other scopes/digests are unchanged. No API/event/SQL/migration, live supplied-board acquisition, deployment or activation occurred. See [evidence and remaining live gate](#d2-059--bounded-ashby-exact-board-verification). |
 | D2-060 | Preserve plaintext comparison symbols in Ashby descriptions through preview, intake and independent verification. | Complete | Platform engineering; QA/automation | D2-005; D2-035; D2-058 | Completed 2026-09-12: extension 337, Jobs 388 and ingestion 539 tests, composed supplied-page read-only probe, full verifier and 20/20 builds pass. Exact native corroboration preserves Ashby provider truth. Source `dccbb65` is development-deployed at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with passing API boundary, zero drift and healthy alarms/queues/database. Matching configured client rebuilt and readiness-checked. No SQL/API shape, provider scope, reviewer role or queued-payload change. Installed-client acceptance remains under D2-035. |
 | D2-061 | Capture and verify complete supported descriptions without silent preview truncation. | Complete | Platform engineering; QA/automation | D2-005; D2-035; D2-060 | Completed 2026-09-13 for implementation and development deployment. Full capture within the existing 50,000-character bound, explicit oversize handling, the unchanged 65,536-byte request budget, frozen old aliases and full-tail verification pass 368 extension/574 ingestion tests, composed regressions and the full verifier. Supplied-page probe retains all 18,185 characters. Corrected source-bound worker release `edf0194` verifies at `339`, Gateway/scheduled/Trust `66`/`27`/`21`, zero drift and healthy runtime. Matching configured client rebuilt and checked; installed adoption remains D2-035. No API/SQL, provider/reviewer scope or queued-payload change. |
+| D2-062 | Align hosted extension-support instructions with the installed owner controls. | In progress | Platform engineering; QA/automation | D2-017; D2-022 | Started 2026-09-13. Exact current labels and explicit withdrawal/appeal confirmation are implemented; four focused tests, all 630 web tests and the full verifier including 20 builds pass. Candidate-only hosted release remains. No authentication, queue, API or permission change. |
+
+### D2-062 — Current extension-support controls
+
+Started `2026-09-13`. The bounded slice is existing extension controls → public help instructions
+→ rendered-page regression. The page now names **Your shared jobs**, **Refresh processing** and
+**Refresh Trust**, describes withdrawal as a confirmed request, and names **Confirm & submit
+appeal** after evidence entry, followed by the existing submission confirmation prompt.
+No service, contract, persistence or workflow change is needed.
+Final focused page tests pass `4/4` (`51dc05`), web typecheck passes (`5709ed`), and main review confirms
+the actual popup labels and confirmation behavior. The full maintained verifier passes (`8bdfb5`),
+including 630 web tests, 33 typecheck tasks, 34 test tasks and 20 builds; caches remain enabled.
+The 128-file candidate upload is tracked/allowlisted with matching hashes and lengths (`02a594`),
+and the existing account/project matches prior accepted bindings. The hosted release remains
+pending. This does not close the monitored support-channel or store-approval gates.
 
 ### D2-061 — Complete description capture
 
@@ -2304,7 +2326,7 @@ temporary test containers were removed, and Docker/WSL were stopped when testing
 - [ ] Offline/retry behavior cannot duplicate contributions or assign them to another account.
 - [ ] Community observations improve freshness without being treated as unquestioned source truth.
 - [ ] Store policy, security, privacy, accessibility, adapter, and end-to-end tests pass.
-- [ ] Every enabled job-page detector has current authorized provider fixtures, sanitization and scan evidence, and separate QA representativeness acceptance.
+- [x] Every enabled job-page detector has current authorized provider fixtures, sanitization and scan evidence, and separate QA representativeness acceptance. Reconciled 2026-09-13 against D2-011/D2-R4 and the accepted [Greenhouse](../../../packages/test-fixtures/ats/greenhouse/job-page-board-v1/README.md), [global Lever](../../../packages/test-fixtures/ats/lever/job-page-posting-v1/README.md) and [hosted Ashby](../../../packages/test-fixtures/ats/ashby/job-page-board-v1/README.md) records. Fresh manifest tests pass `14/14` and consuming detector tests `32/32` (`f15ad3`); all five payload hashes/lengths match. This covers only the enabled three variants/four hosts, not EU, custom domains or hydration.
 - [ ] The extension can be disabled by version/domain without affecting web/mobile/catalog availability.
 
 ## Delegated reviewer assignment
@@ -2648,7 +2670,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
 | Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three Greenhouse decisions and separately approved Lever initial decision pass. The current D2-054 admin preview is deployed/protected at `b3da818`; zero project environment variables confirms hosted Auth0 is unconfigured. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Configure the existing dedicated human appeal client for one exact protected stable host with `ADMIN_AUTHORIZATION_PROFILE=appeals`, distinct hosted session secret and server-only settings, then complete hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case or borrow the human session. |
-| Lever website follow-up and Ashby installed acceptance | Lever is user-confirmed published/accepted. Ashby's bounded acquisition and profile-aware source binding are deployed/verified at `336`, closing D2-R22. Three providers/four hosts preserve Greenhouse/Lever; reviewer roles and general limits are unchanged. | Reload the rebuilt extension, inspect the supplied hosted Ashby posting and validate preview/delivery, then separately authorized Trust/website follow-through. Confirm Lever website visibility/details/source without repeating status, submission or decision. No repeated deployment approval is needed. EU/custom/production/store remain excluded. See [rollout](#d2-035--ashby-development-rollout). |
+| Lever website follow-up and Ashby installed acceptance | Lever is user-confirmed published/accepted. Ashby acquisition/source binding closes D2-R22; D2-061's compatible complete-description workers verify at `339`, Gateway/scheduled/Trust `66`/`27`/`21`. Description availability is user-confirmed. Three providers/four hosts, reviewer roles and general limits are unchanged. | Reload the rebuilt extension, refresh and inspect the supplied hosted Ashby posting, then expand Description to confirm Technology Stack and Benefits beyond the old cutoff. Do not resubmit an acknowledged job, sign out or clear the queue for this check. Delivery and separately authorized Trust/website follow-through remain distinct. Confirm Lever website visibility/details/source without repeating status, submission or decision. No repeated deployment approval is needed. EU/custom/production/store remain excluded. See [complete-description release](#d2-061--complete-description-capture). |
 | Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
@@ -2661,6 +2683,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-13 | Corrected support instructions to match installed owner controls and both explicit appeal confirmation steps. Reconciled the already accepted provider-fixture exit criterion for the enabled three variants/four hosts only. Root README now accurately records the already deployed admin presentation; no repeat admin rollout is needed. Full verification passes; candidate-only support release remains in progress. | D2-062; D2-011; D2-054 | Final focused support tests `4/4` and 1,133 local Markdown targets pass (`51dc05`); fixtures `14/14` and detector tests `32/32` (`f15ad3`); full verifier `8bdfb5` including 630 web tests/20 builds; independent scope/copy review. No new provider/reviewer scope, branch, AWS change or human acceptance. |
 | 2026-09-13 | Completed full bounded description capture, explicit oversize handling and compatible independent verification. Full checks pass; corrected source-bound worker publication is deployed at state `339`, Gateway/scheduled/Trust `66`/`27`/`21`, with zero drift and healthy runtime. Configured extension rebuilt/read back with unchanged settings. Installed full-description acceptance remains D2-035; reload/reinspect only, with no queue clearing or acknowledged-job resubmission. | D2-061; D2-035 | Sources `aa03c94`/`edf0194`; full verifier `828e98`; Apply `64bfe1`; Verify `009945`; health/bundle `b8eb30`; [exact release and handoff](#d2-061--complete-description-capture) |
 | 2026-09-13 | User confirms Ashby description availability, then identifies that the capture still cuts off at 12,000 characters. Opened D2-061 for full bounded capture/verification and explicit oversize handling. Reproduced the stale browser-free intake regression and added its corrected seam to standard checks. Preserve all already acknowledged/queued payloads and provider truth. | D2-061; D2-035 | User report; source capture limit; intake failure `7dd3dc`, corrected composed check `c2765f`; [current scope](#d2-061--complete-description-capture) |
 | 2026-09-12 | Completed the Ashby unavailable-description correction across client, Jobs and independent verification. Preserved comparison symbols and exact provider-native corroboration without changing provider truth or pending payloads. Full verifier passes; compatible code is deployed at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with API boundary, zero drift and health checks passing. Matching configured extension rebuilt; installed preview/delivery acceptance remains under D2-035. No migration, authority/configuration expansion, queue clearing or new branch. | D2-060; D2-035 | Source `dccbb65`; verifier `8b35d1`; release `cafcac` / `6f6e7d`; health `60e865`; [exact evidence and handoff](#d2-060--plaintext-description-compatibility) |
@@ -2888,6 +2911,13 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For D2-062 (`2026-09-13`), public help must use exact installed control names and distinguish a
+confirmed owner request from a completed backend action. Correct only the help copy and its
+regression test; do not add UI actions or alter withdrawal, appeal, authentication or queue behavior.
+The same audit reconciles the already satisfied provider-fixture exit criterion with current
+accepted records and fresh tests. Other exit criteria remain open; no new provider scope or
+accountable acceptance is inferred.
 
 For D2-061 (`2026-09-13`), the preview must carry the complete supported description, not a
 12,000-character excerpt. Reuse the existing 50,000-character API/Jobs maximum rather than
@@ -3560,8 +3590,9 @@ These are local checks; deployed migration, human review, and publication eviden
   Complete for controlled Greenhouse development. D2-055's deployed correction separately passes
   all 33 API detail/source reads, with no visible synthetic jobs to retire and no database cleanup
   executed. Do not repeat the completed owner refresh or infer all-job browser coverage. Hosted
-  reviewer/appeal decisions, fresh rights, browser lifecycle, installed Lever acceptance, Ashby
-  acquisition under R22, authenticated workload, human accessibility, alarm delivery receipt,
+  reviewer/appeal journeys, fresh rights, browser lifecycle, Lever website visibility/details/source,
+  Ashby installed full-description/delivery and separately authorized Trust/publication acceptance,
+  authenticated workload, human accessibility, alarm delivery receipt,
   store and accountable acceptance remain open. Engineering, release and bounded recovery
   completion do not complete Phase 2.
 - Accepted residual risks: None recorded

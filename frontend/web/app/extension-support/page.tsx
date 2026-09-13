@@ -64,10 +64,19 @@ export default function ExtensionSupportPage() {
       <section className="extension-support-section" aria-labelledby="rights-heading">
         <h2 id="rights-heading">Manage an accepted contribution</h2>
         <ol className="extension-support-steps">
-          <li>Open Recent contributions in the extension.</li>
-          <li>Choose Refresh to load the current processing and Trust state.</li>
-          <li>Choose Withdraw to remove the contribution from Trust eligibility.</li>
-          <li>Use Appeal only when the current state offers that action.</li>
+          <li>Open Your shared jobs in the extension.</li>
+          <li>
+            Choose Refresh processing to load the current processing state, then Refresh Trust to
+            load the current Trust state.
+          </li>
+          <li>
+            To request withdrawal, choose Withdraw when available and confirm removal of this
+            contribution from Trust eligibility.
+          </li>
+          <li>
+            To request an appeal, choose Appeal when available, enter supporting evidence, then
+            choose Confirm &amp; submit appeal and confirm the submission prompt.
+          </li>
         </ol>
         <p>
           Uninstalling the extension removes local software, but it does not withdraw an already

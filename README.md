@@ -146,7 +146,8 @@ production/store distribution, and final accountable acceptance remain separate 
 
 D2-054 additionally repairs client-only session/queue races and stale reviewer decision drafts.
 The complete extension and admin unit suites pass locally. Reload the rebuilt unpacked extension
-to use its fix; the admin presentation needs its own rollout. These changes grant no additional
+to use its fix; the admin presentation is already deployed at `b3da818` to the protected,
+identity-dark preview. Hosted Auth0 and human acceptance remain open. These changes grant no additional
 provider, reviewer or publication authority.
 
 The following Phase 0/1 overview is historical; use the linked delivery records for the current

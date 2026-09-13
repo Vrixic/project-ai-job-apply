@@ -318,6 +318,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Current support/checklist follow-through (`2026-09-13`, D2-062): corrected public help to name
+  the installed owner controls and explicit withdrawal/appeal confirmations; focused tests,
+  all 630 web tests and full verification including 20 builds pass, with candidate-only release pending. The enabled
+  provider-fixture exit criterion is reconciled as satisfied against accepted current records,
+  matching five payload hashes/lengths, 14 manifest tests and 32 consuming detector tests.
+  No provider expansion or broader Phase 2 completion is claimed.
+  [Current task](phase-2-extension-and-community.md#d2-062--current-extension-support-controls)
+
 - Current full-description correction (`2026-09-13`, D2-061): the user confirms that Ashby's
   description is available but still cut off at the client 12,000-character limit. Full capture
   within the existing 50,000-character API/Jobs bound, explicit oversize handling, backward-
