@@ -318,6 +318,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Installed Ashby description acceptance (`2026-09-13`, D2-035/D2-061): the user confirms that
+  the expanded description now includes everything, answering the Technology Stack/Benefits
+  check after the configured rebuild. The installed full-description preview check is complete.
+  Ashby delivery, separate Trust review and website publication remain unconfirmed; request only
+  the existing contribution's Processing/Trust statuses next, without resubmission or queue
+  clearing. No new deployment, source scope or reviewer authority follows from this confirmation.
+  [Installed acceptance](phase-2-extension-and-community.md#d2-061--complete-description-capture)
+
 - Completed build-input repair (`2026-09-13`, D2-063): Next generates crawler headers during the
   build, but Turbo omitted `PUBLIC_JOB_INDEXING_ENABLED` from the web task's environment
   and cache identity. Current false/noindex behavior passes in the hosted candidate. A narrowly
@@ -339,8 +347,8 @@ This is the master record for the delivery phases defined in the [product and sy
   No provider expansion or broader Phase 2 completion is claimed.
   [Current task](phase-2-extension-and-community.md#d2-062--current-extension-support-controls)
 
-- Current full-description correction (`2026-09-13`, D2-061): the user confirms that Ashby's
-  description is available but still cut off at the client 12,000-character limit. Full capture
+- Completed full-description correction (`2026-09-13`, D2-061): the earlier report identified
+  an Ashby description cut off at the client 12,000-character limit. Full capture
   within the existing 50,000-character API/Jobs bound, explicit oversize handling, backward-
   compatible independent verification and exact-tail regressions are implemented/reviewed.
   Extension 368/368 and ingestion 574/574 pass; generated browser/provider pairing covers 60 pages
@@ -355,9 +363,9 @@ This is the master record for the delivery phases defined in the [product and sy
   source-bound release `edf0194` now verifies at state `339`, Gateway/scheduled/Trust
   `66`/`27`/`21`, with zero drift, 13 healthy alarms and both Trust queues approximately empty.
   Configured extension rebuilt; eight full-description bundle checks pass with unchanged
-  configuration. D2-061 is Complete for implementation/development deployment; installed
-  acceptance remains D2-035. Reload the extension, refresh/reinspect Ashby and expand Description
-  to confirm later Technology Stack/Benefits text. No resubmission, sign-out or queue clearing.
+  configuration. D2-061 is Complete for implementation/development deployment; the user now
+  confirms installed full-description preview acceptance, including Technology Stack/Benefits.
+  D2-035 still owns delivery/Trust/publication follow-through. No resubmission, sign-out or queue clearing.
   Existing queued payloads/provider truth stay unchanged; Phase 2 is still In progress.
   [Phase 2 current task](phase-2-extension-and-community.md#d2-061--complete-description-capture)
 
