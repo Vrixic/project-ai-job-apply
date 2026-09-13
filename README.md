@@ -81,7 +81,7 @@ meaningful Terraform changes. Existing Greenhouse and Supermove/global-Lever reg
 preserved; only the supplied hosted Ashby board is added. The four allowed hosts are the two
 Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain detection,
 production and store distribution remain disabled. D2-R22's acquisition/source-binding/deployment
-blocker is closed; installed Ashby delivery/Trust/publication acceptance remains under
+blocker is closed; Ashby Trust-decision/publication acceptance remains under
 D2-035 and is not implied by activation. The earlier 12,000-character cutoff is corrected by
 [D2-061](docs/product/delivery/phase-2-extension-and-community.md#d2-061--complete-description-capture), which
 implements complete capture within the existing 50,000-character limit and explicit refusal of
@@ -89,8 +89,9 @@ oversized text or encoded requests. The actual supplied-page read-only check pre
 18,185 characters. The compatible worker release is verified from `edf0194` at state `339`,
 Gateway/scheduled/Trust `66`/`27`/`21`, with zero drift; the matching configured extension is rebuilt.
 On 2026-09-13 the user confirms the installed preview includes the full description, including
-Technology Stack and Benefits. That preview check is complete; next read the existing Ashby
-contribution's Processing/Trust status without resubmitting or clearing existing jobs.
+Technology Stack and Benefits. The user then confirms Processing `awaiting trust` and Trust
+`needs review`, completing installed delivery-to-review acceptance. Initial review of this Ashby
+contribution needs separate owner authority; no resubmission or queue clearing is needed.
 The user now reports Processing `published` and Trust `accepted` for the reviewed Lever
 contribution; its website visibility/details/source journey is not yet confirmed. General
 provider ingestion remains dark, separate from D2 independent verification. Phase 2 is still
