@@ -24,8 +24,9 @@ provider verifier without treating candidate-supplied content as catalog truth.
   digests refuse. Full provider text remains canonical, while changed tails, comparison operators,
   numbers and arbitrary prefixes mismatch. Markup/NFKC/control guards and reader version
   `d2-job-page-v1` are preserved. No candidate-supplied aliases, new provider request scope or
-  acquisition-limit increase. All 574 ingestion tests and typecheck pass locally; the compatible
-  worker deployment remains pending under [D2-061](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-061--complete-description-capture).
+  acquisition-limit increase. All 574 ingestion tests and typecheck pass locally. The compatible
+  worker release from `edf0194` verifies at state `339`, scheduled/Trust versions `27`/`21`,
+  with zero drift under [D2-061](../../../docs/product/delivery/phase-2-extension-and-community.md#d2-061--complete-description-capture).
 
 - `contract.ts` — strict adapter, registry, catalog-port, and aggregate-result shapes.
 - `registry.ts` — immutable registration, duplicate rejection, and default-deny activation.
@@ -168,8 +169,9 @@ Contribution verification defaults to no registrations. The separate D2 schedule
 controlled state-336 activation preserves the accepted Greenhouse and Supermove/global-Lever
 registrations and adds only the supplied hosted Ashby board. D2-060's compatible description code
 then verifies at state `338` from source `dccbb65`, Gateway/scheduled/Trust versions `66`/`26`/`20`,
-with zero meaningful Terraform changes. That is the earlier D2-060 release, not deployment
-evidence for D2-061's new complete-description aliases. The separate general-ingestion runtime was not redeployed. Three exact
+with zero meaningful Terraform changes. The subsequent D2-061 complete-description worker release
+verifies from `edf0194` at state `339`, Gateway/scheduled/Trust `66`/`27`/`21`, with zero drift;
+the Gateway version is unchanged. The separate general-ingestion runtime was not redeployed. Three exact
 sources/verification registrations serve four allowed contribution hosts: the two existing
 Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain detection,
 production/store distribution and the general ingestion runtime remain disabled. Every registration

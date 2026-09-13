@@ -70,6 +70,7 @@ response-bound ceiling. These are not arbitrary prefixes or candidate-supplied e
 Source bundling stays in memory, emits aggregate results only,
 and makes no network request or application-artifact write. This is local compatibility evidence,
 not an installed-browser, live contribution, independent provider, or publication acceptance.
-D2-061's compatible development release and installed full-description acceptance remain pending;
-the earlier D2-060 deployment does not establish them. No API/SQL, provider scope or runtime
-authority change is part of these regressions.
+D2-061's compatible development worker release and configured-client rebuild are separately
+verified at state `339` from `edf0194`; installed full-description acceptance remains under D2-035.
+The earlier D2-060 evidence remains historical. No API/SQL, provider scope or runtime authority
+change is part of these regressions.

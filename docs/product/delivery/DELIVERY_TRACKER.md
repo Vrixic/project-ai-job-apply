@@ -331,9 +331,14 @@ This is the master record for the delivery phases defined in the [product and sy
   review catches the publisher's embedded `local` source marker before Plan/Apply; the first
   immutable artifact/receipt is preserved, not deployed. The publisher correction and its 374
   regression assertions now pass both PowerShell hosts and full maintained verification;
-  a new source-bound release follows. No credential/activation input is missing.
-  Worker rollout and installed acceptance remain. Existing queued payloads/provider truth stay
-  unchanged. [Phase 2 current task](phase-2-extension-and-community.md#d2-061--complete-description-capture)
+  source-bound release `edf0194` now verifies at state `339`, Gateway/scheduled/Trust
+  `66`/`27`/`21`, with zero drift, 13 healthy alarms and both Trust queues approximately empty.
+  Configured extension rebuilt; eight full-description bundle checks pass with unchanged
+  configuration. D2-061 is Complete for implementation/development deployment; installed
+  acceptance remains D2-035. Reload the extension, refresh/reinspect Ashby and expand Description
+  to confirm later Technology Stack/Benefits text. No resubmission, sign-out or queue clearing.
+  Existing queued payloads/provider truth stay unchanged; Phase 2 is still In progress.
+  [Phase 2 current task](phase-2-extension-and-community.md#d2-061--complete-description-capture)
 
 - Current Ashby description bugfix (`2026-09-12`, D2-060): the user's unavailable preview is
   reproduced as a literal-comparator rejection, not a missing provider description. Corrected

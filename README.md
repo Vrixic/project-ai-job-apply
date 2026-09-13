@@ -86,7 +86,10 @@ D2-035 and is not implied by activation. The user confirms description availabil
 its 12,000-character cutoff. [D2-061](docs/product/delivery/phase-2-extension-and-community.md#d2-061--complete-description-capture)
 implements complete capture within the existing 50,000-character limit and explicit refusal of
 oversized text or encoded requests. The actual supplied-page read-only check preserves all
-18,185 characters; compatible verifier deployment and installed full-description acceptance remain separate.
+18,185 characters. The compatible worker release is verified from `edf0194` at state `339`,
+Gateway/scheduled/Trust `66`/`27`/`21`, with zero drift; the matching configured extension is rebuilt.
+Installed full-description acceptance remains under D2-035: reload the extension, refresh the
+Ashby page and inspect its full description without resubmitting or clearing existing jobs.
 The user now reports Processing `published` and Trust `accepted` for the reviewed Lever
 contribution; its website visibility/details/source journey is not yet confirmed. General
 provider ingestion remains dark, separate from D2 independent verification. Phase 2 is still

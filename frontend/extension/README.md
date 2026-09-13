@@ -7,12 +7,15 @@ variants on their four exact hosts; EU Lever and custom domains remain disabled.
 avoids signed-policy renewal; the default distribution path remains signed-policy-bound.
 The earlier September 12 description correction (D2-060) verifies at state `338`, Gateway/scheduled/Trust
 `66`/`26`/`20`, from source `dccbb65`, preserving the state-336 provider activation. The configured
-extension is rebuilt: typecheck, all 337 unit tests, 137 focused capture/readiness tests, four
-runtime readiness cases and five generated-sanitizer checks pass. The user subsequently confirms
+extension build passed typecheck, all 337 unit tests, 137 focused capture/readiness tests, four
+runtime readiness cases and five generated-sanitizer checks. The user subsequently confirms
 description availability but identifies its 12,000-character cutoff. D2-061 now implements complete
-bounded descriptions and passes 368 extension tests and typecheck locally; its compatible worker
-release, configured-client handoff and installed full-description delivery remain pending. A
-successful build is not installed acceptance. Initial installed Edge sign-in and
+bounded descriptions and passes 368 extension tests and typecheck locally. Its compatible worker
+release verifies from `edf0194` on September 13 at state `339`, Gateway/scheduled/Trust
+`66`/`27`/`21`, with zero drift and unchanged provider/reviewer scope. The configured client is
+rebuilt; eight full-description cases, current-source function parity and unchanged public
+configuration checks pass. D2-061 is Complete for implementation/development release; installed
+full-description acceptance remains under D2-035. Initial installed Edge sign-in and
 server acknowledgement are confirmed for the existing journey. The supplied global-Lever job is
 user-confirmed published/accepted; its website detail/source journey remains unconfirmed.
 Acknowledgement is not publication: independent provider verification and Trust acceptance still
@@ -30,8 +33,8 @@ browser-store distribution are not approved. See the current
   starts (including incomplete/NFKC markup) remain unavailable. Expand/collapse affects only
   presentation, not the selected value. Fixed size explanations remain local and are excluded
   from contribution payloads. Existing queued approvals and both historical 12,000-character
-  verifier aliases remain immutable; current full-description verification is implemented but
-  not yet deployed. See [D2-061](../../docs/product/delivery/phase-2-extension-and-community.md#d2-061--complete-description-capture).
+  verifier aliases remain immutable; current full-description verification is deployed in the
+  scoped development worker. See [D2-061](../../docs/product/delivery/phase-2-extension-and-community.md#d2-061--complete-description-capture).
 - The complete serialized contribution also must fit the unchanged Gateway limit of 65,536 UTF-8
   bytes, including JSON escaping and metadata. The client checks the exact body before queue
   insertion or consent creation and again at transmission. Oversize refusal preserves the preview
@@ -232,10 +235,11 @@ release candidate.
   Ashby Trust decision. Global Lever's supplied job is user-confirmed published/accepted, with
   website detail/source acceptance still pending. Do not repeat its submission or decision.
   EU Lever and custom domains remain excluded; no store or production activation is implied.
-- D2-061's full-description correction is locally verified, not yet development-deployed or
-  installed-accepted. Its worker release and matching configured-client handoff must precede
-  claiming complete-description delivery. The earlier D2-060 deployment restored availability
-  only; do not rewrite or automatically resubmit already approved/acknowledged contributions.
+- D2-061's full-description correction is development-deployed and the configured client is rebuilt.
+  Reload the extension, refresh the Ashby page, inspect it and expand Description; confirm that
+  Technology Stack and Benefits are present. Installed full-description acceptance remains open
+  under D2-035. No sign-out, queue clearing or resubmission is needed; already approved/acknowledged
+  contributions are not rewritten or automatically resubmitted.
 - Broader live lifecycle acceptance remains separate from the user's 2026-09-11 confirmation of
   the reported Greenhouse job's published/accepted status and website search/detail/source display.
   That completed journey should not be requested again.
