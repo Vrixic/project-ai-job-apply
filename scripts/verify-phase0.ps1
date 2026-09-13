@@ -23,6 +23,7 @@ Invoke-CheckedCommand "Scoped D2 provider configuration validation" { pnpm test:
 Invoke-CheckedCommand "Generated synthetic catalog retirement operator validation" { pnpm test:synthetic-catalog-retirement }
 Invoke-CheckedCommand "Candidate rights prerequisites and export validation" { pnpm test:candidate-rights-acceptance }
 Invoke-CheckedCommand "D2 complete-description client/intake compatibility" { pnpm test:d2-contribution-intake }
+Invoke-CheckedCommand "D2 immutable artifact source binding" { pnpm test:d2-artifact-source }
 Invoke-CheckedCommand "Development document dark guard validation" { & scripts/tests/development-document-dark-guards.tests.ps1 }
 Invoke-CheckedCommand "Development document dark operator validation" { & scripts/tests/development-document-dark-operator.tests.ps1 }
 Invoke-CheckedCommand "Development document migration operator path validation" { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/development-document-migration-operator.tests.ps1 }

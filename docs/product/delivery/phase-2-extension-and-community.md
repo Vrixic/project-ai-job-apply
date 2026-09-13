@@ -59,6 +59,8 @@ The supplied-page read-only probe retains all 18,185 characters; its 19,401-byte
 unchanged 64 KiB gateway budget. Larger encoded selections fail locally before queue persistence
 or consent, with an editable full preview and explicit optional-field deselection. Installed description availability
 is confirmed; full-description capture/delivery and Ashby review/publication are not yet accepted.
+The compatible release is awaiting the source-bound publisher correction described below; the
+first uploaded package is preserved but was not deployed. No new user approval is required.
 
 Current Ashby description correction (`2026-09-12`, D2-060): the installed user reports
 Description unavailable. A bounded, read-only replay of the supplied hosted page reproduces an
@@ -546,6 +548,35 @@ failed check or treat the first full run as passing. The uncached full `pnpm tes
 rerun (`442b63`) passes all 34 tasks with zero cache hits in 5m44s, including both unchanged
 large-byte tests, ingestion 574, extension 368, workflows 1,239 (eight existing opt-ins skipped)
 and Gateway 192 (seven existing opt-ins skipped). Full maintained revalidation follows.
+
+Full maintained revalidation `08f2aa` passes all guards, format/lint/type checks, 34 test tasks and
+20 builds. Code is integrated on clean upstream-matched main at `aa03c94`. Current capture
+`2305a3` verifies state `338`, zero changes and unchanged inputs. Fresh five-read health snapshot
+`574fb1` finds all 13 D2 alarms OK, both Trust queues approximately empty, encrypted/protected RDS
+available with 35-day retention and current restore time. It is non-atomic read-only health, not
+new contribution/publication acceptance.
+
+The first worker publication completes both reproducible builds, workflow tests and dependency
+audit, but independent source-provenance review catches a pre-existing publisher defect: the
+manifest and ZIP banner say `local`, because the D2 publisher never sets `ARTIFACT_SOURCE_SHA`.
+Receipt `receipt-aa03c94a96e4.json` SHA-256
+`06d7ab4186482c1f4675fc50bb592806e26ae6c50b7584093bc1002efc867aaa` and immutable artifact
+`a39b971e94592e5730b499630c10edfaca5a2eee1a6b6c8ad825affc5029fb20` are preserved, not deployed.
+Exact remote version, checksum, 662,055-byte size and platform KMS binding pass; they do not
+substitute for an embedded source binding. No release Plan or Apply runs. Correct the maintained
+publisher, add a behavioral regression to standard verification, and publish a new source-bound
+artifact/receipt from the corrected clean commit. No user credential or activation approval is
+missing, and the existing state-338 deployment remains unchanged.
+
+The publisher correction now binds the exact source during both builds and restores the prior
+process environment even on failure. It validates all five artifact companions and checks the
+embedded source in the pinned remote ZIP. Its 374 synthetic assertions pass on PowerShell 7 and
+Windows PowerShell 5.1, with no cloud calls; independent source review accepts the correction.
+The regression is wired into standard checks, community operator checks and the maintained
+repository verifier. A verification run started during test editing stops at an unextracted
+helper; the finalized test fixes that harness issue. Fresh full run `828e98` passes all maintained
+guards, the new 374-assertion regression, format/lint/type checks, 34 test tasks and 20 builds.
+The corrected source-bound artifact publication and compatible worker rollout follow.
 
 ### D2-060 — Plaintext description compatibility
 
@@ -2832,6 +2863,13 @@ can be deselected; do not truncate, widen the gateway limit or retry an impossib
 The repeated cross-package 16 MB harness timeout is handled by serial package test scheduling,
 not increased runtime/test deadlines or weaker boundary assertions. This bounds nested worker-pool
 contention across the shared workstation and makes the standard command use the verified schedule.
+Publication must also bind the reviewed commit inside the actual ZIP, not only its receipt.
+Correct the D2 publisher's missing source environment binding, restore that process value exactly,
+validate both reproducible builds and their companions, and make remote verification reject a
+different embedded source. Pinned verification downloads and decompressed code are each bounded
+to 64 MiB; only the verifier's exclusively created temporary download is cleaned up. The earlier
+662,055-byte rejected publication remains immutable. These are release-tool corrections, not new
+application permissions, API limits or activation authority.
 
 For D2-060 (`2026-09-12`), fix Description unavailable by preserving literal plaintext
 comparison symbols in descriptions only. The client already extracts inert DOM text; do not

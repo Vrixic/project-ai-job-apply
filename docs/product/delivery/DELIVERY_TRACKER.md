@@ -326,8 +326,13 @@ This is the master record for the delivery phases defined in the [product and sy
   without external requests. The supplied-page read-only check retains all 18,185 characters in
   a 19,401-byte request. The unchanged 65,536-byte gateway budget is checked before queue/consent;
   oversized Unicode selections retain an editable preview rather than truncating or retrying.
-  The corrected intake seam is included in standard checks; full maintained verification,
-  worker rollout and installed acceptance remain. Existing queued payloads/provider truth stay
+  The corrected intake seam is included in standard checks; all 34 uncached test tasks and the
+  full maintained verifier/20 builds pass. Code is integrated at `aa03c94`. Independent release
+  review catches the publisher's embedded `local` source marker before Plan/Apply; the first
+  immutable artifact/receipt is preserved, not deployed. The publisher correction and its 374
+  regression assertions now pass both PowerShell hosts and full maintained verification;
+  a new source-bound release follows. No credential/activation input is missing.
+  Worker rollout and installed acceptance remain. Existing queued payloads/provider truth stay
   unchanged. [Phase 2 current task](phase-2-extension-and-community.md#d2-061--complete-description-capture)
 
 - Current Ashby description bugfix (`2026-09-12`, D2-060): the user's unavailable preview is
