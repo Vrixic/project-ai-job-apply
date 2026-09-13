@@ -76,6 +76,18 @@ add wildcard Auth0 origins or expose secrets through `NEXT_PUBLIC_*`. Keep
 an exact origin with no credentials, path, query, fragment, trailing slash, or trailing-dot host;
 HTTP remains limited to local `localhost` or `127.0.0.1` development.
 
+The web workspace's Turbo build hashes and passes process-environment `PUBLIC_JOB_INDEXING_ENABLED` because Next
+materializes crawler headers during the build. Changing that non-secret setting requires a new
+build and must not reuse the previous value's cache entry; it remains `false` until publication
+acceptance. Auth0 credentials, session secrets, `APP_BASE_URL` and `PLATFORM_API_BASE_URL` remain
+server-runtime values, not build inputs. Do not forward secrets to silence unrelated Vercel build
+warnings. Next.js framework inference continues to track the existing `NEXT_PUBLIC_*` branding inputs.
+
+This covers Vercel-injected settings, not changes only in ignored local `.env` files. After changing
+local build-time settings, run `pnpm --filter @ai-job-apply/web build` directly and restart the local
+server; a later Turbo cache hit does not establish that ignored-file changes were rebuilt.
+Runtime-only Auth0/API setting changes require a server restart, not secret-file hashing.
+
 ## Phase 1 implementation
 
 The truth-profile panel uses server-held Auth0 sessions to list, create, correct, and reject

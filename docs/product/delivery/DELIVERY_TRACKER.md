@@ -318,6 +318,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Current build-input repair (`2026-09-13`, D2-063): Next generates crawler headers during the
+  build, but Turbo currently omits `PUBLIC_JOB_INDEXING_ENABLED` from the web task's environment
+  and cache identity. Current false/noindex behavior passes in the hosted candidate. A narrowly
+  scoped build/cache binding and 11 focused regressions now pass, with real Turbo dry-run,
+  header-generation, typecheck and independent-review evidence. Full verification passes,
+  including 638 web tests and 20 builds. Candidate release remains in progress; indexing stays
+  disabled and Auth0 credentials stay runtime-only.
+  [Current task](phase-2-extension-and-community.md#d2-063--web-crawler-build-input)
+
 - Current support/checklist follow-through (`2026-09-13`, D2-062): corrected public help to name
   the installed owner controls and explicit withdrawal/appeal confirmations; focused tests,
   all 630 web tests and full verification including 20 builds pass. Candidate-only `e930ad2`

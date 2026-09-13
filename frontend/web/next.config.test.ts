@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import nextConfig, {
   resolveCrawlerHeaders,
   resolveOutputMode,
@@ -6,12 +6,15 @@ import nextConfig, {
 } from "./next.config.js";
 
 describe("candidate web deployment headers", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("lets Vercel own its build output while preserving standalone self-hosting", () => {
     expect(resolveOutputMode("1")).toEqual({});
     expect(resolveOutputMode(undefined)).toEqual({ output: "standalone" });
   });
 
   it("applies the fail-closed browser boundary to every route", async () => {
+    vi.stubEnv("PUBLIC_JOB_INDEXING_ENABLED", undefined);
     expect(await nextConfig.headers?.()).toEqual([
       {
         source: "/:path*",
@@ -39,5 +42,23 @@ describe("candidate web deployment headers", () => {
         "PUBLIC_JOB_INDEXING_ENABLED must be exactly true or false",
       );
     }
+  });
+
+  it.each([
+    [undefined, [{ key: "X-Robots-Tag", value: "noindex" }]],
+    ["false", [{ key: "X-Robots-Tag", value: "noindex" }]],
+    ["true", []],
+  ])("materializes the exact crawler setting %s in build headers", async (value, crawler) => {
+    vi.stubEnv("PUBLIC_JOB_INDEXING_ENABLED", value);
+    expect(await nextConfig.headers?.()).toEqual([
+      { source: "/:path*", headers: [...securityHeaders, ...crawler] },
+    ]);
+  });
+
+  it("rejects an invalid crawler setting at the build-header boundary", async () => {
+    vi.stubEnv("PUBLIC_JOB_INDEXING_ENABLED", "TRUE");
+    await expect(nextConfig.headers?.()).rejects.toThrow(
+      "PUBLIC_JOB_INDEXING_ENABLED must be exactly true or false",
+    );
   });
 });
