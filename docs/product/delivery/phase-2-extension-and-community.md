@@ -49,14 +49,15 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
-Current build correction (`2026-09-13`, D2-063): Vercel's build warning exposes one real
+Completed build correction (`2026-09-13`, D2-063): Vercel's build warning exposed one real
 build-input gap. `PUBLIC_JOB_INDEXING_ENABLED` is read by Next's build-time header generation,
-but the web Turbo task neither passes nor hashes it. The deployed value remains false and
+but the web Turbo task did not pass or hash it. The deployed value remains false and
 the hosted crawler denial passes; no indexing exposure is observed. Bind only that public
 configuration input to the web build and keep Auth0 credentials runtime-only. The three-file
 correction and 11 focused tests pass, including real Turbo strict-mode dry runs and Next header
 generation. Full repository verification passes, including 638 web tests and 20 builds;
-candidate-only release remains in progress. Indexing stays disabled.
+candidate-only `27a987b` is deployed and its exact source and five HTTP boundaries verify.
+Indexing stays disabled. This does not close installed-client or human acceptance gates.
 
 Current support follow-through (`2026-09-13`, D2-062): the hosted help instructions named
 controls that no longer exist. The correction uses the installed **Your shared jobs**, **Refresh
@@ -521,7 +522,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-060 | Preserve plaintext comparison symbols in Ashby descriptions through preview, intake and independent verification. | Complete | Platform engineering; QA/automation | D2-005; D2-035; D2-058 | Completed 2026-09-12: extension 337, Jobs 388 and ingestion 539 tests, composed supplied-page read-only probe, full verifier and 20/20 builds pass. Exact native corroboration preserves Ashby provider truth. Source `dccbb65` is development-deployed at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with passing API boundary, zero drift and healthy alarms/queues/database. Matching configured client rebuilt and readiness-checked. No SQL/API shape, provider scope, reviewer role or queued-payload change. Installed-client acceptance remains under D2-035. |
 | D2-061 | Capture and verify complete supported descriptions without silent preview truncation. | Complete | Platform engineering; QA/automation | D2-005; D2-035; D2-060 | Completed 2026-09-13 for implementation and development deployment. Full capture within the existing 50,000-character bound, explicit oversize handling, the unchanged 65,536-byte request budget, frozen old aliases and full-tail verification pass 368 extension/574 ingestion tests, composed regressions and the full verifier. Supplied-page probe retains all 18,185 characters. Corrected source-bound worker release `edf0194` verifies at `339`, Gateway/scheduled/Trust `66`/`27`/`21`, zero drift and healthy runtime. Matching configured client rebuilt and checked; installed adoption remains D2-035. No API/SQL, provider/reviewer scope or queued-payload change. |
 | D2-062 | Align hosted extension-support instructions with the installed owner controls. | Complete | Platform engineering; QA/automation | D2-017; D2-022 | Completed 2026-09-13. Exact current labels and explicit withdrawal/appeal confirmation pass four focused tests, all 630 web tests and the full verifier including 20 builds. Candidate-only `e930ad2` is READY at the existing stable origin, with hosted copy and five credentialless route/header checks passing. No authentication, queue, API or permission change. |
-| D2-063 | Bind the web crawler setting to its actual Turbo build/cache inputs. | In progress | Platform engineering; QA/automation | D2-009; D2-062 | Started 2026-09-13 after the support release's Vercel warning. Web-only hashed configuration, real Turbo dry runs and Next header regressions pass 11 focused tests, typecheck and independent review. Full verifier `c4a0ea` passes, including 638 web tests and 20 builds. Current false/noindex behavior and runtime-only Auth0 credentials remain intact. Candidate-only release remains. |
+| D2-063 | Bind the web crawler setting to its actual Turbo build/cache inputs. | Complete | Platform engineering; QA/automation | D2-009; D2-062 | Completed 2026-09-13. Web-only hashed configuration, real Turbo dry runs and Next header regressions pass 11 focused tests, typecheck and independent review. Full verifier `c4a0ea` passes, including 638 web tests and 20 builds. Candidate-only `27a987b` is READY at the existing stable origin; exact source/region/runtime and five credentialless HTTP checks pass. Current false/noindex behavior and runtime-only Auth0 credentials remain intact. Local ignored-env rebuild limitations are documented. |
 
 ### D2-063 — Web crawler build input
 
@@ -532,7 +533,7 @@ approved value change must not restore a build with stale crawler headers. Add o
 `PUBLIC_JOB_INDEXING_ENABLED` to the web task's hashed environment inputs; do not pass session
 secrets or Auth0 client credentials into builds to silence unrelated runtime-variable warnings.
 Generated local tests may exercise both values without enabling any live publication or crawler
-setting. Full verification passes; candidate-only release remains pending.
+setting. Full verification and the candidate-only release are complete.
 
 The implementation adds only `frontend/web/turbo.json` with inherited root behavior and one
 hashed environment key. Five generated-only native Turbo dry runs prove distinct unset/false/true
@@ -551,6 +552,19 @@ build-time settings. Runtime-only setting changes need a restart, not secret-fil
 Read-only deployment preflight (`96cb8c`) verifies the exact existing production-target crawler
 setting is still false. Only this non-secret setting was decrypted for the check; no Auth0 secret
 was read and no project value changed. The intended release therefore preserves crawler denial.
+
+Source `27a987bbe7b17ad6da5b123ed6470b9bb08ab6f5` is committed and pushed on shared `main`.
+Clean-source Validate/Preflight pass (`eb57c6`) for the exact authorized non-Zach identity and
+candidate project. The 129-file upload contains the new package Turbo configuration and excludes
+tests, documentation, local environment files and credentials. Candidate deployment
+`dpl_CyUV1RwGm4GBEWgLpQsTnB43avpK` is READY at
+`https://ai-job-apply-candidate.vercel.app`; exact source, alias, `iad1` region and Node `24.x`
+read back successfully (`34f5f7`). The web crawler-variable warning is resolved; unrelated
+runtime-variable and non-consuming dependency warnings do not justify forwarding secrets.
+All five credentialless root/detail-validation/support/robots probes pass (`6db4be`) with
+crawler denial and security headers preserved. No managed sign-in or owner-data acceptance is
+claimed. Previous candidate deployment `dpl_54Ar9neJrnHfdyHwESviB6EDCa2y` remains available;
+no rollback, admin rollout, AWS operation, configuration change or human gate execution occurred.
 
 ### D2-062 — Current extension-support controls
 
@@ -2732,7 +2746,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
-| 2026-09-13 | Implemented the narrow web build/cache correction after classifying Vercel environment warnings. Only the crawler flag becomes a hashed web build input; authentication/session/API configuration stays runtime-only and existing NEXT_PUBLIC framework inference stays unchanged. Exact candidate production indexing value is read back false with no settings changed. | D2-063 | Eleven focused tests with five generated-only Turbo dry runs (`a8cfeb`), web typecheck (`52f4f9`), independent review and single non-secret setting preflight `96cb8c`. Full verifier `c4a0ea` passes, including 638 web tests and 20 builds. Candidate release in progress; no publication, AWS or Auth0 activation. |
+| 2026-09-13 | Completed and development-deployed the narrow web build/cache correction after classifying Vercel environment warnings. Only the crawler flag becomes a hashed web build input; authentication/session/API configuration stays runtime-only and existing NEXT_PUBLIC framework inference stays unchanged. Local ignored-env rebuild limitations are documented. | D2-063 | Eleven focused tests (`a8cfeb`), web typecheck (`52f4f9`), independent review and false indexing preflight `96cb8c`. Full verifier `c4a0ea` passes, including 638 web tests and 20 builds. Candidate-only `27a987b` source/alias/region/runtime readback `34f5f7` and five hosted probes `6db4be` pass; no new publication, AWS, Auth0 or human acceptance. |
 | 2026-09-13 | Completed support instructions matching installed owner controls and both explicit appeal confirmation steps. Reconciled the already accepted provider-fixture exit criterion for the enabled three variants/four hosts only. Root README now accurately records the already deployed admin presentation; no repeat admin rollout is needed. Full verification passes and candidate-only `e930ad2` is deployed/verified at the existing stable origin. | D2-062; D2-011; D2-054 | Focused support `4/4`, all web `630/630`, full verifier `8bdfb5` with 20 builds, fixtures `14/14`, detector `32/32`, independent scope/copy review. Hosted source/five boundaries `105b9b` and six-current/two-obsolete copy checks `21a9e4` pass. No new provider/reviewer scope, branch, AWS change or human acceptance; Docker/WSL stopped. |
 | 2026-09-13 | Completed full bounded description capture, explicit oversize handling and compatible independent verification. Full checks pass; corrected source-bound worker publication is deployed at state `339`, Gateway/scheduled/Trust `66`/`27`/`21`, with zero drift and healthy runtime. Configured extension rebuilt/read back with unchanged settings. Installed full-description acceptance remains D2-035; reload/reinspect only, with no queue clearing or acknowledged-job resubmission. | D2-061; D2-035 | Sources `aa03c94`/`edf0194`; full verifier `828e98`; Apply `64bfe1`; Verify `009945`; health/bundle `b8eb30`; [exact release and handoff](#d2-061--complete-description-capture) |
 | 2026-09-13 | User confirms Ashby description availability, then identifies that the capture still cuts off at 12,000 characters. Opened D2-061 for full bounded capture/verification and explicit oversize handling. Reproduced the stale browser-free intake regression and added its corrected seam to standard checks. Preserve all already acknowledged/queued payloads and provider truth. | D2-061; D2-035 | User report; source capture limit; intake failure `7dd3dc`, corrected composed check `c2765f`; [current scope](#d2-061--complete-description-capture) |
