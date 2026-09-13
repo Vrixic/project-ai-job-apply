@@ -107,8 +107,9 @@ HTTPS hosts, runtime enable flags, authentication, preview-bound command authori
 independent provider evidence, Trust decisions, and account fencing remain enforced. Detector
 activation and exact provider registrations are separate. The approved Phase 2 state-336 rollout
 preserves Greenhouse and Supermove/global-Lever registrations and adds only the supplied hosted
-Ashby board. Source `61a23de` verifies at Gateway/scheduled/Trust `65`/`25`/`19` with zero meaningful
-Terraform changes. Three exact sources/verification registrations serve the four allowed hosts:
+Ashby board. D2-060's compatible description code subsequently verifies from `dccbb65` at state
+`338`, Gateway/scheduled/Trust `66`/`26`/`20`, with zero meaningful Terraform changes and unchanged
+authority/configuration. Three exact sources/verification registrations serve the four allowed hosts:
 the two existing Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain
 detection, general provider ingestion, production and store distribution remain disabled.
 Reviewer authority is unchanged: Greenhouse initial/takedown and approved global-Lever initial

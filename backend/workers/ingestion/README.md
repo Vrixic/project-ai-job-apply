@@ -152,9 +152,10 @@ browser context and mocked provider responses, not a live provider or authentica
 This catches cross-component representation errors that isolated detector/adapter unit tests miss.
 
 Contribution verification defaults to no registrations. The separate D2 scheduled runtime's
-controlled state-336 development release preserves the accepted Greenhouse and Supermove/global-
-Lever registrations and adds only the supplied hosted Ashby board. Source `61a23de` verifies at
-Gateway/scheduled/Trust versions `65`/`25`/`19` with zero meaningful Terraform changes. Three exact
+controlled state-336 activation preserves the accepted Greenhouse and Supermove/global-Lever
+registrations and adds only the supplied hosted Ashby board. D2-060's compatible description code
+then verifies at state `338` from source `dccbb65`, Gateway/scheduled/Trust versions `66`/`26`/`20`,
+with zero meaningful Terraform changes. The separate general-ingestion runtime was not redeployed. Three exact
 sources/verification registrations serve four allowed contribution hosts: the two existing
 Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain detection,
 production/store distribution and the general ingestion runtime remain disabled. Every registration

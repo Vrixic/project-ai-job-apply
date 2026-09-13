@@ -57,23 +57,27 @@ without changing the comparison or provider truth; all 337 extension tests pass.
 intake/normalization (388 tests) and independently derived provider compatibility (539 tests)
 are implemented. The supplied-page composed read-only probe now passes independent description
 corroboration as well as client/OpenAPI/intake/normalization. The full maintained verifier passes
-(`8b35d1`), including all 20 builds; development deployment and installed acceptance remain.
-Do not treat the rebuilt client alone as deployed upload compatibility. No raw provider response
-is retained and no contribution is submitted by this diagnostic. D2-035 installed acceptance remains open.
+(`8b35d1`), including all 20 builds. The compatible development release is now verified from
+`dccbb65` at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with zero drift. The configured
+extension is rebuilt; 137 focused capture/readiness tests, four runtime readiness cases and five
+generated-sanitizer checks pass. D2-060 is Complete for implementation and development deployment.
+No raw provider response is retained and no contribution is submitted by the diagnostic.
+Installed reload/preview/delivery acceptance remains under D2-035; no sign-out or queue clearing is needed.
 
-Current Ashby rollout (`2026-09-12`): the already approved development deployment and activation
-are verified from source `61a23de` at state `336`, Gateway/scheduled/Trust `65`/`25`/`19`, with
-zero meaningful Terraform changes. Three provider/source registrations and four exact hosts
+Current Ashby rollout (`2026-09-12`): D2-060's compatible code update verifies from source
+`dccbb65` at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with zero meaningful Terraform
+changes. It preserves the approved state-336 activation. Three provider/source registrations and four exact hosts
 preserve Greenhouse/global Lever and add only the supplied hosted Ashby board. D2-R22 closes
 for bounded acquisition, exact source binding and development deployment; D2-035 and Phase 2
 remain In progress for installed and broader acceptance. No migration, reviewer-role change,
 queue clearing, maintenance pause, production/store/EU or general-ingestion activation occurred.
 The user remains the independent appeal reviewer; the agent retains Greenhouse initial/takedown
 and approved global-Lever initial review only. This activation includes no Ashby Trust decision.
-The unpacked client is rebuilt and verified: typecheck, all 317 tests, build and four runtime
-readiness cases pass. Only provider selection and the detector activation map change locally;
-existing identity/API/retention settings are preserved. Installed reload and capture are next. See the
-[exact rollout checkpoint](#d2-035--ashby-development-rollout) and
+The unpacked client is rebuilt with the description correction; all 337 extension tests pass,
+and final generated-bundle/readiness checks preserve provider selection, detector activation,
+identity/API/retention settings and permissions. Installed reload and capture are next. See the
+[description release](#d2-060--plaintext-description-compatibility),
+[original activation checkpoint](#d2-035--ashby-development-rollout) and
 [remaining acceptance](#remaining-acceptance-and-operator-inputs). Do not repeat deployment approval.
 
 Earlier Ashby implementation checkpoint (`2026-09-12`; deployment superseded above): the user explicitly approves implementing the
@@ -453,7 +457,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-032 | Privately verify the local human appeal session against the independently supplied identity before backend assignment. | Complete | Platform engineering | D2-030 | A default-dark, finite-window localhost server action checks SDK MFA freshness, exact issuer/subject/client, independently verified RS256 API token, and only appeal/read scopes. No browser-supplied identity, token export, refresh, Gateway call, role, or case mutation. Exclusive-create aggregate proof remains in the current-user-only ignored setup directory; private binding fingerprints never enter browser output. All 148 admin tests/11 files, typecheck, formatting/lint, independent source review, and the full repository verifier/fresh admin build pass. Actual human verification passes at `2026-09-08T13:19:45Z` before the separately authorized assignment under D2-030. |
 | D2-033 | Remove recurring development contribution signing, policy fetching, and renewal. | Complete | Platform engineering | D2-005, D2-006, D2-014 | Persistent development mode is deployed from `90f3740` at state `287` after Jobs `0021`, with exact artifact/environment readback, zero drift, and unauthenticated boundary checks passing. The user confirms installed reload, successful sign-in, and successful job addition on 2026-09-08. This closes development adoption, not provider/Trust verification, website publication, or the wider browser lifecycle; production/store and unsupported providers stay dark. See details below. |
 | D2-034 | Replace the expired mobile parser exception with a narrow, verified dependency security patch. | Complete | Platform engineering | D2-033 | The user-approved exact `image-size@1.2.1` patch passes independent review, 121 parser and 15 audit regressions, frozen installation, mobile checks, complete dependency audit, and the full repository verifier. Two matching no-cache migration-image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings pass; the reviewed image was used for Jobs `0021`. No exception renewal, broad suppression, or mobile/public-launch acceptance. |
-| D2-035 | Extend persistent development contribution support to independently enabled Lever and Ashby providers. | In progress | Platform engineering; QA/automation | D2-002, D2-011, D2-014, D2-020, D2-033 | Server deployment verifies at `336`, Gateway/scheduled/Trust `65`/`25`/`19`, source `61a23de`, zero drift. Three sources/registrations and four hosts preserve Greenhouse/global-Lever and add the supplied hosted Ashby board with fresh profile-aware binding. D2-R22 closes for acquisition/source binding/deployment. Reviewer roles, general ingestion/shared limits, leases, migrations and triggers are unchanged; EU/production/store remain disabled. Lever is user-confirmed published/accepted, but website details/source remain unconfirmed. Installed Ashby preview/delivery, separately authorized review and publication acceptance remain. See [rollout](#d2-035--ashby-development-rollout). |
+| D2-035 | Extend persistent development contribution support to independently enabled Lever and Ashby providers. | In progress | Platform engineering; QA/automation | D2-002, D2-011, D2-014, D2-020, D2-033 | D2-060 code verifies at `338`, Gateway/scheduled/Trust `66`/`26`/`20`, source `dccbb65`, zero drift. The approved state-336 three-source/four-host activation and exact Ashby profile binding are preserved. D2-R22 is closed for acquisition/source binding/deployment. Reviewer roles, general ingestion/shared limits, leases, migrations and triggers are unchanged; EU/production/store remain disabled. Lever is user-confirmed published/accepted, but website details/source remain unconfirmed. Installed Ashby corrected preview/delivery, separately authorized review and publication acceptance remain. See [description release](#d2-060--plaintext-description-compatibility) and [activation](#d2-035--ashby-development-rollout). |
 | D2-036 | Add repeatable current-schema logical backup/restore coverage with nonempty D2 data. | Complete | Platform engineering | D2-020, D2-035 | Completed 2026-09-08 at 42 migrations; rerun successfully on September 9 against D2-039's 44-migration source. The generated-only command performs real dump/restore, matches all 68 relation row sets including 18 nonempty D2 relations, and verifies restored owner/lease/publication/authorization behavior with exact disposable-container cleanup. This is local logical recovery, not cloud restore or provider acceptance. See details below. |
 | D2-037 | Patch release-blocking dependency advisories surfaced by the current registry audit. | Complete | Platform engineering | D2-016, D2-035 | Compatible dependency repairs and exact Vercel patch packaging pass the full repository verifier and focused guards. Exact source `42b9686` is released to the existing candidate/admin Vercel targets and development AWS migration/Gateway/D2 workers. Migration exits 0 with seven success records; state 290 runs Gateway/scheduled/Trust 55/17/13 with zero drift, 13 healthy alarms and unchanged development scope. No audit exemptions or production/store activation. |
 | D2-038 | Bind candidate-deletion replay to an authenticated, isolated AWS restore target. | Complete | Platform engineering | D2-020, D2-036; D2-052; D2-053 | Completed 2026-09-11: the original 44-migration/68-relation PITR passes strict Inspect `70881` and Replay `87268` under `6eb7a86`, with one historical marker/one already-reconciled restored subject and no documents or new reconciliation. Exact executor/PITR cleanup and final Platform `329`/Bootstrap `21` permission removal verify zero drift. The separate single-tag correction is D2-052/D2-053; replay changes no S3 object, recovery ledger or Auth0 state. Fresh nonempty deletion acceptance remains separate. See [final evidence](#d2-038--isolated-deletion-recovery). |
@@ -478,7 +482,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-057 | Fail candidate-rights acceptance before writes on missing prerequisites and validate downloaded export content. | Complete | Platform engineering; QA/automation | D2-020; D2-041 | Completed 2026-09-11 for source/local verification at `3bf4a7e`: pre-write refresh/helper readiness, bounded download/stdin child, current source schema, exact export/policy binding and six honest D2 counts. Node 83 tests and both PowerShell hosts' existing suite plus 33 prerequisite/85 export assertions pass; full verifier includes the new checks. A reproduced exited-process test observation is corrected without changing production cleanup. No fresh candidate, export/deletion, cloud or recovery execution occurred. |
 | D2-058 | Align fresh extension previews with strict contribution intake without rewriting approved payloads. | Complete | Platform engineering; QA/automation | D2-002; D2-005; D2-035 | Completed 2026-09-12 for source/local verification after the September 11 consent `201`/contribution `400` failure. Whole-field optional omission, exact bounds and final trim preserve strict server/comparator/consent guards and approved queues. Extension 317 tests/27 suites, composed intake/provider regressions, full verification and configured build pass. A fresh public-page/OpenAPI/real-service probe passes with mocked consent/store and no live submission. The user now confirms installed owner Processing `published` / Trust `accepted` under D2-035; website acceptance remains separate and original user field selection was not observed. |
 | D2-059 | Implement a separately bounded Ashby exact-board verifier without changing general polling limits or activating Ashby. | Complete | Platform engineering; QA/automation | D2-006; D2-015; D2-035; D2-R22 | Completed 2026-09-12 for implementation/local verification at `09cc3fa`: frozen exact-board profile, complete-response/identity validation, target-only output, post-parse deadline/abort and Ashby-only configuration-digest binding pass independent review and the full maintained verifier. Ingestion 427/427 includes reader 131 and exact adapter 12; focused runtime/configuration 29/29 passes. Structural parser bounds are not measured V8/RSS limits. General polling/shared limits and other scopes/digests are unchanged. No API/event/SQL/migration, live supplied-board acquisition, deployment or activation occurred. See [evidence and remaining live gate](#d2-059--bounded-ashby-exact-board-verification). |
-| D2-060 | Preserve plaintext comparison symbols in Ashby descriptions through preview, intake and independent verification. | In progress | Platform engineering; QA/automation | D2-005; D2-035; D2-058 | Extension 337, Jobs 388 and ingestion 539 tests pass. Composed supplied-page client/OpenAPI/Jobs/normalization/independent-description probe passes with mock persistence and no live writes. Exact Ashby-native HTML corroboration preserves provider truth. Full verifier and 20/20 builds pass; compatible runtime release and installed-client acceptance remain. No SQL/API shape, provider scope or reviewer-role change. |
+| D2-060 | Preserve plaintext comparison symbols in Ashby descriptions through preview, intake and independent verification. | Complete | Platform engineering; QA/automation | D2-005; D2-035; D2-058 | Completed 2026-09-12: extension 337, Jobs 388 and ingestion 539 tests, composed supplied-page read-only probe, full verifier and 20/20 builds pass. Exact native corroboration preserves Ashby provider truth. Source `dccbb65` is development-deployed at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with passing API boundary, zero drift and healthy alarms/queues/database. Matching configured client rebuilt and readiness-checked. No SQL/API shape, provider scope, reviewer role or queued-payload change. Installed-client acceptance remains under D2-035. |
 
 ### D2-060 — Plaintext description compatibility
 
@@ -496,7 +500,7 @@ Unchanged isolated reruns pass both cases and all 131 boundary tests; no product
 byte limit or assertion is weakened. Serial package rerun `668d58` then passes all 34 tasks,
 including 477 ingestion, 1,239 workflow (eight existing opt-ins skipped), and 192 Gateway tests
 (seven existing opt-ins skipped). Full verification of the subsequent native-format correction
-remains pending.
+was still pending at this intermediate checkpoint; the final result is recorded below.
 
 Composed read-only probe `a0a376` passes actual client request construction, OpenAPI, Jobs intake
 with mocked consent/store, and normalization. It also discovers a second compatibility issue:
@@ -505,7 +509,8 @@ does not yet corroborate Ashby's separate plaintext representation. Investigate 
 provider-native relationship before releasing; do not ignore a selected-description mismatch,
 overwrite provider truth or accept candidate-provided digest aliases. This probe performs two
 bounded public GETs and zero raw-file/application writes, and is not authentication, persistence,
-Trust, publication or full provider-identity acceptance. No cloud mutation has occurred for D2-060.
+Trust, publication or full provider-identity acceptance. No cloud mutation had occurred at this
+diagnostic checkpoint; the subsequent compatible release is recorded below.
 
 Subsequent bounded board-only diagnostic `8a081a` identifies an exact whole-document native
 representation: each anchor appends its exact href, images contribute alt text plus `[src]`,
@@ -528,6 +533,45 @@ The complete maintained `scripts/verify-phase0.ps1` then exits zero (`8b35d1`), 
 contract generation, operator/security checks, formatting, lint, typecheck, tests, all 20 builds,
 Compose configuration and product-scope scan. Existing informational lint notices and opt-in
 integration skips are not described as failures or live-database evidence.
+
+The compatible development release completes on `2026-09-12` from clean, upstream-bound `main`
+source `dccbb6591df34d02cadb5ddcad74470147f18bdf`, using Terraform `1.16.2`. Independent review
+accepts the immutable artifacts and each exact saved plan before its single apply:
+
+| Step | Verified result | Protected local evidence / aggregate |
+|---|---|---|
+| Immutable publication | Worker deterministic builds/audit and 1,239 workflow tests pass; worker ZIP and four gateway objects match exact version/checksum/KMS readback. | Worker receipt `3ad76e5a…`, ZIP `7be1e99e…`; gateway receipt `8e32bda1…`, ZIP `829823a3…`; worker review `e3939f`, gateway publication independently verified `2026-09-13T01:53:19Z` |
+| Compatible worker code | Four artifact-only updates; state `337`, scheduled `26`, Trust `20`; no maintenance and zero drift. | Saved plan `18ff51b9…`, metadata `d263876c…`, independent review `7b31b4`, apply receipt `618b74fc…`, verification `cafcac` |
+| Gateway code | Two artifact-only updates; gateway `66`, state `338`; immutable alias, API boundary and zero drift pass. | Saved plan `25d10bfb…`, metadata `9f1649d6…`, independent review `e389e3`, apply/verification `6f6e7d`, canonical capture `7028e8` |
+
+All 304 managed resources remain; no configuration, API/SQL migration, source/profile binding,
+reviewer role, queue item or authorization is changed. Both workers share the immutable D2 ZIP;
+the Trust worker update does not change review authority. The separate disabled general-ingestion
+runtime is not redeployed. Production/store/EU/custom domains remain disabled. Prior immutable
+artifacts are retained; rollback and restore execution are not claimed for this bugfix.
+
+Final canonical baseline `baseline-dccbb6591df3-20260912-221935.tfplan` has SHA-256
+`ac4416c8eef29d7fac160b32b2eb97e7e13321417e7705f3608993294d89a59a`; its genuine schema-7 metadata
+has SHA-256 `7a9e45aea34217652641c6f6eee1accbc62b7749194f0826f64129546f499f81`.
+Plans, receipts and logs remain in the ignored development `.terraform` tree.
+The read-only health snapshot `60e865` at `2026-09-13T02:20:37Z`–`02:20:52Z` (September 12 local)
+finds all 13 alarm configurations matched/OK, no disabled actions, and approximate visible,
+in-flight and delayed counts of zero on both exact Trust queues. RDS is available, encrypted,
+deletion-protected, with matching 35-day backup retention and a latest-restorable age of 2.15
+minutes. Exactly five cloud reads, zero writes/application/provider requests. This non-atomic
+snapshot is not a restore exercise or contribution/publication result.
+
+Configured extension rebuild `4c04d1` passes; final focused capture/readiness suites `38d48b`
+pass 137 tests. Actual generated bundle checks `0a961d` pass four runtime readiness cases with
+zero policy fetches and five description-sanitizer cases. Version `0.2.0`, three providers/variants,
+four exact hosts, six permissions, two Auth0/API host grants and no persistent content scripts
+remain unchanged. Background SHA-256 is
+`98d99d004decefb1788eacced12c2b22698edc42ca429695d20cee17fd24f5c1`.
+No installed browser session, existing queue payload or public configuration is changed.
+D2-060 is Complete for code/local verification/development deployment; D2-035 and Phase 2 remain
+In progress. Next: reload ApplyDash Job Capture (Development), reopen its popup/sidebar, and
+inspect the supplied hosted Ashby posting. Do not sign out, clear queues or resubmit an already
+acknowledged contribution. Docker/WSL were not started; the PC remains running.
 
 ### D2-035 — Ashby development rollout
 
@@ -2481,6 +2525,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-12 | Completed the Ashby unavailable-description correction across client, Jobs and independent verification. Preserved comparison symbols and exact provider-native corroboration without changing provider truth or pending payloads. Full verifier passes; compatible code is deployed at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`, with API boundary, zero drift and health checks passing. Matching configured extension rebuilt; installed preview/delivery acceptance remains under D2-035. No migration, authority/configuration expansion, queue clearing or new branch. | D2-060; D2-035 | Source `dccbb65`; verifier `8b35d1`; release `cafcac` / `6f6e7d`; health `60e865`; [exact evidence and handoff](#d2-060--plaintext-description-compatibility) |
 | 2026-09-12 | After verified server activation, enabled hosted Ashby in the existing ignored unpacked-client configuration and rebuilt. Typecheck, all 317 tests, configured build, actual bundle/manifest readback and four runtime readiness cases pass. Only provider selection/detector map changed; identity/API/retention, extension version, manifest permissions and existing provider settings remain unchanged. Installed reload/capture/delivery and subsequent review/publication are not claimed. | D2-002; D2-014; D2-035 | Typecheck `56a488`, tests `5890e0`, build `a7da0a`; [client evidence and deployment](#d2-035--ashby-development-rollout) |
 | 2026-09-12 | Completed the approved Ashby development server rollout from `61a23de`: independently reviewed immutable worker/gateway code releases precede the four-update additive configuration. State `336`, Gateway/scheduled/Trust `65`/`25`/`19`, three registrations/four hosts and zero drift verify. D2-R22 closes for acquisition/source binding/deployment, while installed/client and broader acceptance remain under D2-035. All 13 D2 alarms are OK and exact Trust queue/DLQ approximate counts are zero. No reviewer-role change, database migration, queue clearing, general-ingestion/EU/production/store activation or new branch. | D2-035; D2-R22; D2-016 | [Rollout, hashes and limitations](#d2-035--ashby-development-rollout); final `33d264`; independent `a8be19`; health `d073e0` |
 | 2026-09-12 | User renews SSO; read-only STS confirms the exact configured development account and SSO role in us-east-2. D2-R15 closes for the current session. Continue the already approved Ashby code release and separate scoped activation, preserving all exclusions. No deployment or client activation is inferred from login. | D2-035; D2-R22; D2-R15 | STS `83e125`; existing activation approval |

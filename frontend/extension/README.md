@@ -5,9 +5,10 @@ Its repository defaults remain a **synthetic, default-dark release candidate**. 
 unpacked development candidate now enables the accepted Greenhouse, global-Lever and hosted-Ashby
 variants on their four exact hosts; EU Lever and custom domains remain disabled. Development mode
 avoids signed-policy renewal; the default distribution path remains signed-policy-bound.
-The September 12 server rollout verifies at state `336`, Gateway/scheduled/Trust `65`/`25`/`19`,
-from source `61a23de`. The configured extension is rebuilt: typecheck, all 317 unit tests, and
-generated-bundle/manifest scope checks pass. Installed Ashby reload, preview and delivery remain
+The September 12 description correction verifies at state `338`, Gateway/scheduled/Trust
+`66`/`26`/`20`, from source `dccbb65`, preserving the state-336 provider activation. The configured
+extension is rebuilt: typecheck, all 337 unit tests, 137 focused capture/readiness tests, four
+runtime readiness cases and five generated-sanitizer checks pass. Installed Ashby reload, preview and delivery remain
 unconfirmed; a successful build is not installed acceptance. Initial installed Edge sign-in and
 server acknowledgement are confirmed for the existing journey. The supplied global-Lever job is
 user-confirmed published/accepted; its website detail/source journey remains unconfirmed.
@@ -22,7 +23,7 @@ browser-store distribution are not approved. See the current
   page extraction, including paired comparisons. The preview keeps its 12,000-character bound;
   tag-like starts (including incomplete/NFKC markup) remain unavailable. Other field guards,
   selected-payload hashes and already queued intents are unchanged. Jobs intake and independent
-  verification must be released with this client correction; see D2-060 in the Phase 2 register.
+  verification are development-deployed with this client correction; see D2-060 in the Phase 2 register.
 
 - A popup and side-panel product shell with one explicit **Add job to shared database** action
   after a field-level preview. The extension does not present a separate private-save action or a

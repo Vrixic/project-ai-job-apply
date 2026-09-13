@@ -323,15 +323,17 @@ This is the master record for the delivery phases defined in the [product and sy
   extraction retains the existing 12,000-character preview and passes 337 extension tests.
   Jobs validation (388 tests), independent provider compatibility (539 tests), and exact native
   HTML corroboration now pass, including the supplied-page composed read-only description probe.
-  The full maintained verifier and 20/20 builds pass. Coordinated development release remains;
-  installed acceptance is not yet claimed. Provider scope, reviewer
+  The full maintained verifier and 20/20 builds pass. Source `dccbb65` is development-deployed
+  at state `338`, Gateway/scheduled/Trust `66`/`26`/`20`; API boundary, zero drift and final health
+  checks pass. The matching configured client is rebuilt and readiness-checked. D2-060 is Complete;
+  installed acceptance remains under D2-035. Provider scope, reviewer
   authority, canonical truth and old pending payloads remain unchanged.
-  [Current Phase 2 task register](phase-2-extension-and-community.md#task-register)
+  [Description fix and deployed evidence](phase-2-extension-and-community.md#d2-060--plaintext-description-compatibility)
 
 - Status: In progress
 - Start: 2026-09-01
 - Completion: Not completed
-- Current Ashby deployment (`2026-09-12`): the approved development rollout is verified from
+- Original Ashby activation (`2026-09-12`; compatible code superseded by D2-060 above): the approved development rollout is verified from
   `61a23de` at state `336`, Gateway/scheduled/Trust `65`/`25`/`19`, with zero drift. Independently
   reviewed immutable worker and gateway releases precede the four-update additive configuration.
   Three sources/registrations and four exact hosts preserve Greenhouse/global Lever and add the
