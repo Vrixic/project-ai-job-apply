@@ -496,6 +496,33 @@ describe("background-only private saved-page transport", () => {
     expect(String(fetcher.mock.calls[0]?.[0])).toBe(
       "https://api.example.test/v1/saved-job-captures",
     );
+    expect(fetcher.mock.calls[0]?.[1]?.redirect).toBe("error");
+  });
+
+  it("refuses redirects without acknowledging or rewriting the pending private save", async () => {
+    extensionConfiguration.apiOrigin = "https://api.example.test";
+    const pending = privateIntent();
+    const original = structuredClone(pending);
+    const token = "generated-private-token";
+    const fetcher = vi.fn(async (_input: URL | RequestInfo, _init?: RequestInit) => {
+      throw new TypeError(`Redirect refused: ${token} https://other.example.test/private`);
+    });
+
+    const result = await sendJobIntent(pending, token, fetcher as typeof fetch);
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/v1/saved-job-captures",
+    );
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      redirect: "error",
+      headers: { "idempotency-key": pending.idempotencyKey },
+    });
+    expect(result).toEqual({ failureCode: "network_error", outcome: "retryable" });
+    expect(JSON.stringify(result)).not.toContain(token);
+    expect(JSON.stringify(result)).not.toContain("other.example.test");
+    expect(pending).toEqual(original);
   });
 
   it("keeps private-save retry classification independent of contribution policy", async () => {

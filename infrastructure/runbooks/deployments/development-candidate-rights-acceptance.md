@@ -192,6 +192,45 @@ saved-page capture is separately required through the existing owner-scoped API;
 has no private-save button. Applicable revocation/withdrawal history remains part of the acceptance
 review. These records must all belong to the same disposable identity later confirmed below.
 
+Do not cancel the sole fixture while it is queued: early cancellation revokes its authorization and
+prevents verification/Trust coverage. Let normal processing create the case, then use **Refresh
+Trust** and the existing **Withdraw** confirmation. Wait for the owner processing/Trust projections
+to settle. Trust withdrawal does not itself revoke Profile consent; the minimum six-counter check
+requires consent history, not a claim that both withdrawal and revocation have been exercised.
+Do not add another contribution merely to inflate coverage.
+
+The existing compatibility private-save command can be invoked explicitly by the owner from the
+extension popup's own developer console, not the provider webpage console or a copied session.
+Use the disposable account, reload the configured D2-064 build, revisit a supported public posting,
+and press **Inspect current tab**. Review its title/source, keep that tab selected, then open the
+popup's **Inspect** developer tools. Only when that exact account/page preparation is authorized,
+run this once in the extension context:
+
+```javascript
+void chrome.runtime.sendMessage({
+  action: "enqueue",
+  intent: "private_save",
+  approvedFields: ["title"],
+}).then((result) => {
+  const queue = result?.queue;
+  console.log(JSON.stringify({
+    ok: result?.ok === true,
+    pending: Number.isInteger(queue?.pending) ? queue.pending : null,
+    stopped: Number.isInteger(queue?.stopped) ? queue.stopped : null,
+    blocked: Number.isInteger(queue?.blocked) ? queue.blocked : null,
+  }));
+}).catch(() => console.log("Private-capture preparation did not complete."));
+```
+
+This selects title only plus required source metadata; the background uses its existing internal
+API session and stable retry key. It does not add another public contribution. Do not read storage,
+cookies or tokens, paste the complete runtime response, clear existing queues, or rerun after an
+ambiguous result. Report only the fixed aggregates. A rejected/stale capture needs inspection, not
+a less-trusted sender context; a pending command keeps its existing retry identity. Successful
+dispatch and an empty queue are not final persisted-data evidence: the subsequent validated export
+must actually contain the private capture. Leave it present until that export/deletion test.
+No private-save control is being added back to the product UI.
+
 The maintained handoff replaces historical ignored cookie-extraction helpers. Do not launch an old
 browser profile, decrypt a candidate session cookie, reuse an old subject/attestation, or widen client
 scopes. Check that existing `frontend/web/.env.local` candidate issuer, client ID and audience match

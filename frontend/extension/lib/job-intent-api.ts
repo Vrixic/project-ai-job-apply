@@ -448,6 +448,7 @@ export async function sendJobIntent(
           "idempotency-key": intent.idempotencyKey,
         },
         method: "POST",
+        redirect: "error",
       },
     );
     const classified = await classifyFailedResponse(response);

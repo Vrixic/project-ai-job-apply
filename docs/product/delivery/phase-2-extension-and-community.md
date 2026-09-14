@@ -50,6 +50,25 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Disposable contribution preparation (`2026-09-14`, D2-020): the user reports Processing `queued`
+and Trust `refresh to check` after the disposable-account preparation instructions. This confirms
+the reported intake snapshot, not an identified live Trust case or completed rights test. Read-only
+development inspection verifies scheduled version `27` active, unweighted and enabled on
+`rate(5 minutes)`. During `16:23:39Z`–`16:53:39Z`, its alias reports six invocations, zero observed
+Lambda errors and zero throttles; all 13 D2 alarms are OK. The bounded SELECT-only provider-hold
+inspection returns zero eligible rows and zero retryable holds. No retry, resubmission, role change,
+case decision or account mutation is performed. Request one fresh Processing/Trust read for the
+same item; do not cancel it before a Trust case exists, since that would prevent this sole fixture's
+required Trust coverage. Withdraw only after the owner can read that case; publication is unnecessary.
+
+Private-capture preparation remains separate. The compatibility transport already supports a
+trusted extension-context `private_save` command using the explicitly inspected current page; no
+private-save UI is restored. D2-064 corrects its missing redirect refusal before using that path.
+All 369 extension tests, typecheck and configured build pass; public configuration and manifest
+hashes are unchanged. The browser has not been reloaded and no private capture has been created.
+The [rights runbook](../../../infrastructure/runbooks/deployments/development-candidate-rights-acceptance.md#disposable-account-preparation-and-local-sign-in)
+records the credential-safe owner-operated preparation path and its limits.
+
 Fresh candidate-rights preparation (`2026-09-14`, D2-020/D2-057): the owner confirms a disposable
 candidate account is available and may be permanently deleted after testing; this is not authority
 to delete the main candidate or human appeal account. Read-only development Status passes at state
@@ -587,6 +606,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-061 | Capture and verify complete supported descriptions without silent preview truncation. | Complete | Platform engineering; QA/automation | D2-005; D2-035; D2-060 | Completed 2026-09-13 for implementation and development deployment. Full capture within the existing 50,000-character bound, explicit oversize handling, the unchanged 65,536-byte request budget, frozen old aliases and full-tail verification pass 368 extension/574 ingestion tests, composed regressions and the full verifier. Supplied-page probe retains all 18,185 characters. Corrected source-bound worker release `edf0194` verifies at `339`, Gateway/scheduled/Trust `66`/`27`/`21`, zero drift and healthy runtime. Matching configured client rebuilt and checked; the user confirms complete installed preview on 2026-09-13. Delivery/Trust/publication remain D2-035. No API/SQL, provider/reviewer scope or queued-payload change. |
 | D2-062 | Align hosted extension-support instructions with the installed owner controls. | Complete | Platform engineering; QA/automation | D2-017; D2-022 | Completed 2026-09-13. Exact current labels and explicit withdrawal/appeal confirmation pass four focused tests, all 630 web tests and the full verifier including 20 builds. Candidate-only `e930ad2` is READY at the existing stable origin, with hosted copy and five credentialless route/header checks passing. No authentication, queue, API or permission change. |
 | D2-063 | Bind the web crawler setting to its actual Turbo build/cache inputs. | Complete | Platform engineering; QA/automation | D2-009; D2-062 | Completed 2026-09-13. Web-only hashed configuration, real Turbo dry runs and Next header regressions pass 11 focused tests, typecheck and independent review. Full verifier `c4a0ea` passes, including 638 web tests and 20 builds. Candidate-only `27a987b` is READY at the existing stable origin; exact source/region/runtime and five credentialless HTTP checks pass. Current false/noindex behavior and runtime-only Auth0 credentials remain intact. Local ignored-env rebuild limitations are documented. |
+| D2-064 | Refuse redirects in the backward-compatible private saved-page transport before disposable rights preparation. | Complete | Platform engineering; QA/automation | D2-018; D2-020 | Completed 2026-09-14 for source/local build. Private POST now uses redirect error, matching contribution/consent requests. The exact-destination/stable-key/no-acknowledgement/no-payload-rewrite/fixed-error regression passes; 17 focused and all 369 extension tests plus typecheck pass. Configured build `2da6a7` preserves public settings and manifest. Browser reload/private-capture execution remain D2-020; no new UI, scope, contract, backend release or account mutation. |
 
 ### D2-063 — Web crawler build input
 
@@ -2909,6 +2929,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-14 | Recorded the disposable contribution's queued/refresh-to-check snapshot and inspected normal scheduled processing without retrying or deciding a case. Found and corrected missing redirect refusal on the separate private-capture transport; documented existing owner-operated preparation without restoring a private-save button or extracting tokens. | D2-020; D2-064 | User report; `df71ca`: version 27, five-minute enabled schedule, six alias invocations/zero observed Lambda errors or throttles over 16:23:39Z–16:53:39Z, 13 alarms OK. SELECT-only `1bf87c`: zero eligible provider-held rows. 17 focused/369 extension tests, typecheck, source review and configured build `2da6a7` pass. No browser reload, new capture, fresh-MFA login, export, deletion, queue mutation or publication decision. |
 | 2026-09-14 | Recorded disposable-account test/deletion authorization, verified the deployed rights boundary read-only, and replaced unsafe historical sign-in mechanics with a maintained standard OAuth/PKCE handoff. Added a D2-only nonempty coverage stop before deletion and bounded memory-only attestation input, preserving legacy file/D1 behavior. No fresh account was selected, seeded, exported or deleted. | D2-020; D2-057 | Status `e14539`: state 339, bound rights/backup/Auth0, empty queues, healthy alarms, zero active compute; client/Gateway-66 binding `eed573`. Both PowerShell hosts: 33 prerequisite +85 export +94 coverage +43 attestation assertions. Node: 83 export +49 session/bridge tests. Scope and rationale stay in the single decisions section; existing recovery/hosting/provider checks are not repeated. |
 | 2026-09-14 | Completed hosted appeal-console access acceptance after the owner confirms Sign out plus stable-root reload returns the sign-in link without the review queue. Prior hosted sign-in and authenticated empty-queue checks remain accepted; no repetition needed. Separate case-decision and other Phase 2 gates remain open. | D2-026; D2-030; D2-R12 | User `yes` to the exact logout/reload check; [session-gated console](../../../frontend/admin/app/page.tsx) at protected source `211e59d`. Aggregate observed UI/session clearing only, not cross-device/token revocation. No code, deployment, role, case or cloud change. |
 | 2026-09-14 | Accepted the hosted human sign-in and authenticated empty appeal-queue check. The user reports “No cases are awaiting this review” after the fresh stable-origin sign-in/MFA/Load review queue instructions. Logout remains unverified; no case is created or decided for access testing, and Phase 2 stays In progress. | D2-026; D2-030; D2-R12 | User confirmation at the protected stable alias bound to `211e59d` / `dpl_GwzQxabzVjM4rMgwXejddZWAHwE7`. [Queue success handling](../../../frontend/admin/app/trust-console.tsx), [authenticated queue route](../../../frontend/admin/app/api/trust/cases/route.ts), [MFA/session enforcement](../../../frontend/admin/lib/auth0.ts). Aggregate result only; no token, identity, case data or cloud mutation retained. |
@@ -3152,6 +3173,15 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For the disposable contribution reported queued on `2026-09-14`, retain its normal processing
+until its Trust case exists. Early cancellation would remove eligibility before the required Trust
+case/event coverage can be created. Use a later owner withdrawal, not an invented reviewer decision
+or unnecessary publication. Existing compatibility private-save messaging may prepare the separate
+Matching-owned record only from the disposable account's trusted extension context after explicit
+current-page inspection. Keep the public-add-only product UI unchanged, refuse redirects at that
+authenticated private POST, and retain only aggregate preparation results. This does not authorize
+token/cookie extraction, source-registry expansion, another public submission or main-account changes.
 
 For fresh candidate rights on `2026-09-14`, interpret the owner's `yes` only as authorization for
 a separately confirmed disposable candidate account to undergo testing and permanent deletion.

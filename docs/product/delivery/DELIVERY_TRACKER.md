@@ -318,6 +318,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Disposable contribution preparation (`2026-09-14`, D2-020/D2-064): the owner reports queued /
+  refresh to check. Scheduled version `27` is healthy and enabled every five minutes; six observed
+  alias runs have zero Lambda errors/throttles, all 13 alarms are OK, and read-only provider-hold
+  inspection finds zero eligible rows. These aggregates do not identify or advance the user's item.
+  Keep it for a fresh owner read and later withdrawal after Trust exists. Corrected private-capture
+  redirect refusal passes 17 focused/369 extension tests, typecheck and configured build, preserving
+  configuration/manifest. No browser reload, capture, decision, export or deletion was executed.
+  [Current preparation and remaining work](phase-2-extension-and-community.md#task-register).
+
 - Fresh rights preparation (`2026-09-14`, D2-020/D2-057): the owner approves a disposable candidate
   account for testing and permanent deletion, not the main or appeal account. Read-only Status at
   state `339` verifies enabled rights, backup/Auth0 bindings, empty queues, healthy alarms and zero

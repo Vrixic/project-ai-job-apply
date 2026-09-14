@@ -113,7 +113,10 @@ browser-store distribution are not approved. See the current
   transport maps only selected fields, accepts only exact `no-store` server receipts, persists the
   server-issued receipt across ambiguous retries, and uses separate stable idempotency keys. The
   backward-compatible private-capture transport remains implemented but is not exposed by the
-  public-add-only extension surface.
+  public-add-only extension surface. Its authenticated POST now refuses redirects, matching the
+  contribution/consent path; a refused redirect retains the pending intent and its stable retry key
+  with a fixed, private-data-free failure. D2-064 is source-tested and rebuilt; installed rights
+  preparation remains separate under D2-020.
 - Acknowledged jobs still waiting on independent verification can be cancelled explicitly without
   an existing Trust case or an enabled intake policy. The exact owner command ends publication
   authorization, uses one stable replay key, and keeps its receipt. Jobs already entering Trust
