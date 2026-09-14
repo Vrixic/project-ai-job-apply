@@ -144,8 +144,9 @@ appeals remain unchanged. No other Ashby review, Ashby takedown, production or s
 included. Scope and rationale remain in the [single Phase 2 record](../product/delivery/phase-2-extension-and-community.md#delegated-reviewer-assignment).
 Accepted fixtures, development activation and this decision do not themselves establish publication.
 On September 14 the owner separately reports Processing `published` with Trust `needs review`;
-the latter may be the independently cached display and needs a separate Trust refresh. Website
-acceptance remains under [D2-035](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout).
+the subsequent separate Trust refresh confirms Processing `published` / Trust `accepted`, resolving
+the retained display discrepancy. This is installed owner-status acceptance, not website, broader
+browser or release acceptance. Website acceptance remains under [D2-035](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout).
 The optional `D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON` further intersects descriptor authority
 with an exact fixed-host subset, re-read at intake and before publication preparation/renewal.
 It is rejected outside explicit development; absence preserves descriptor hosts, while `[]`

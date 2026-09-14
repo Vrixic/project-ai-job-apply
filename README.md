@@ -94,10 +94,10 @@ Technology Stack and Benefits. The user then confirms Processing `awaiting trust
 `approve it` authorizes initial review of this supplied Ashby contribution only. Current independent
 evidence supports one initial acceptance, with an independent `accepted` / version `2` readback
 on September 13. On September 14 the user reports Processing `published`, confirming the owner
-publication check, alongside Trust `needs review`. The two refresh actions update separate stored
-snapshots, so the Trust display may be stale; request Refresh Trust once before treating this as
-a current server-state discrepancy. Website visibility/details/source remain unconfirmed.
-Do not repeat the acceptance decision, resubmit or clear the queue.
+publication check, alongside a retained Trust `needs review` display. After the separate Refresh
+Trust action, the user confirms Processing `published` and Trust `accepted`, closing the installed
+owner-status check and resolving that display discrepancy. Website visibility/details/source
+remain unconfirmed. Do not repeat the status check, acceptance decision, submission or queue clearing.
 The user now reports Processing `published` and Trust `accepted` for the reviewed Lever
 contribution; its website visibility/details/source journey is not yet confirmed. General
 provider ingestion remains dark, separate from D2 independent verification. Phase 2 is still

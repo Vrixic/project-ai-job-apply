@@ -333,8 +333,10 @@ This is the master record for the delivery phases defined in the [product and sy
   On September 14 the owner reports Processing `published` alongside Trust `needs review`.
   The owner publication check is confirmed. Source inspection and an exact synthetic reproduction
   show that Refresh processing preserves the separately cached Trust value; 41 focused tests pass.
-  Request Refresh Trust once to establish its current owner-visible state. Website
-  visibility/details/source remain unconfirmed; do not repeat the decision or submission.
+  After the separate Refresh Trust action, the owner confirms Processing `published` and Trust
+  `accepted`. This closes the installed owner-status check and resolves the displayed discrepancy.
+  Website visibility/details/source remain unconfirmed; do not repeat the status check, decision
+  or submission.
   No other Ashby review, takedown, new role, production or store authority is included.
   [Installed acceptance](phase-2-extension-and-community.md#d2-061--complete-description-capture)
 
