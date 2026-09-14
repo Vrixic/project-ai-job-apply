@@ -159,15 +159,17 @@ alias readback `b5964c` confirms the exact binding and Vercel `302` / `no-store`
 The shorter `https://ai-job-apply-admin.vercel.app` remains unchanged on
 `dpl_H4CZQ4X4YrHunG92Sh7HaUZFDpLD` and unselected; project environment keys remain zero.
 
-Next, start a fresh journey from the protected stable root using ordinary Vercel access. Select
-**Sign in as appeal reviewer**, complete MFA, then **Load review queue** and report the
-active/empty-queue result or fixed error. Do not refresh the earlier callback or reuse its
-authorization code. Check logout only after the session is accepted. Deployment and alias
-verification created no human Auth0 session and performed zero case actions; those acceptance
-checks remain open. Do not create a protection-bypass secret or infer case-decision authority
-from them. No repeated secret-reuse approval, new role, paid protection upgrade or branch is needed.
+The owner now confirms **No cases are awaiting this review** after the fresh stable-origin
+sign-in/MFA/**Load review queue** instructions. Hosted sign-in and authenticated empty-queue access
+are accepted under the existing MFA-enforced session. This does not establish a nonempty
+evidence/appeal-decision journey or imply every other queue is empty.
+
+Next, select **Sign out**, reload the protected stable root and confirm **Sign in as appeal reviewer**
+returns without the privileged review console. Logout remains unverified. Do not repeat the
+completed sign-in/queue read, replay the earlier callback or manufacture a case to test hosting.
+No protection-bypass secret, repeated secret-reuse approval, new role, paid upgrade or branch is needed.
 The [single Phase 2 decisions record](../../docs/product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes)
-owns the scope and rationale; hosted sign-in and appeal acceptance remain open.
+owns the scope and rationale; logout and separate appeal-decision acceptance remain open.
 
 Historical hosting evidence:
 

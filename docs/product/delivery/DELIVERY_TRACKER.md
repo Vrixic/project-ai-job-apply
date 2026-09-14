@@ -346,11 +346,11 @@ This is the master record for the delivery phases defined in the [product and sy
   [hosted appeals](https://ai-job-apply-admin-applydash2026-5637.vercel.app) now points to the
   corrected deployment; final readback `b5964c` confirms that binding and Vercel `302` / `no-store`.
   The shorter production domain remains on `dpl_H4CZQ4X4YrHunG92Sh7HaUZFDpLD`; project environment
-  keys remain zero. Start fresh from the stable root, choose “Sign in as appeal reviewer” and
-  complete MFA, then “Load review queue” and report the active/empty-queue result or fixed error.
-  Do not refresh the old callback or reuse its authorization code. Check logout after the session
-  is accepted. No human Auth0 session or case action has been performed by the deployment;
-  key-presence metadata, protection and READY do not establish those journeys.
+  keys remain zero. The owner now confirms “No cases are awaiting this review” after the fresh
+  stable-origin sign-in/MFA/Load review queue instructions. Hosted sign-in and authenticated
+  empty-queue access pass; this is user-confirmed behavior, not an inference from READY.
+  Logout remains: sign out, reload the stable root and confirm the appeal sign-in link returns
+  without the privileged console. No repeated login/queue check or case decision is needed.
   No repeated reuse approval, new role, paid upgrade, branch or protection bypass is needed;
   Phase 2 remains In progress.
   [Scope and single rationale](phase-2-extension-and-community.md#decisions-and-scope-changes)
@@ -1209,6 +1209,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-14 | D2 | User confirms successful hosted sign-in and an authenticated empty appeal-queue read at the corrected protected stable alias. Logout and separate appeal-decision acceptance remain open; Phase 2 stays In progress. No role, case or cloud-state change. | User reports “No cases are awaiting this review” after the instructed fresh stable-origin sign-in and queue read; [current acceptance](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs). |
 | 2026-09-14 | D2 | The owner clarifies that 503 identity_unavailable occurred at the old stable deployment's Auth0 callback, not the first generated preview; that preview separately lacked all eight application runtime keys. Dynamic source checks and 31 targeted Auth0/proxy tests pass without code changes. One corrected preview from `211e59de51c6ea46fe1d9536bf8b0b4c7bc213fe` reaches READY with paired deployment-only runtime/build overrides and both eight-key inventories verified. Only the protected stable alias is moved and independently verified; the short production alias and zero project environment keys are preserved. Fresh-root human sign-in/MFA, queue read and later logout remain unverified. | Deployment `dpl_GwzQxabzVjM4rMgwXejddZWAHwE7`; [hosted appeals](https://ai-job-apply-admin-applydash2026-5637.vercel.app); focused tests `fdde0d`; deployment `ede5cf`; final alias `b5964c`; [scope and execution](phase-2-extension-and-community.md#decisions-and-scope-changes). No public/Turbo-hashed secrets, reviewer-role change, case action or Phase 2 completion claim. |
 | 2026-09-14 | D2 | Following exact hosted Auth0-origin confirmation and scoped saved-client-secret reuse approval, one admin preview creation with deployment-only runtime inputs from `ea56284a5da5edf8baceb6b02ad2465d05185377` reaches READY in iad1/Node 24. Its runtime-key inventory omits all eight application variables, so configuration and hosted sign-in remain unverified. No redeployment or stable-alias move; ordinary protected-preview page inspection is next, without Auth0 sign-in. Phase 2 remains In progress. | Deployment `dpl_9e3nKf7VWPNDrdJMekJuEfNVeLUG`; [protected preview](https://ai-job-apply-admin-nfsm531uo-applydash2026-5637.vercel.app); preview/selected-alias HEAD 302/no-store; existing candidate custom-key comparison; [current hosted scope](phase-2-extension-and-community.md#decisions-and-scope-changes). |
 | 2026-09-14 | D2 | D2-035 completes for controlled-development Lever/Ashby contributions after the user confirms both supplied website journeys: jobs found, descriptions available, Ashby final sections present and correct provider-source navigation. Prior installed delivery, evidence-bound review and published/accepted statuses are retained. Phase 2 remains In progress behind separate acceptance gates. | User reply “checks passes”; [provider completion](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions), [remaining inputs](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs). No new runtime write, decision, submission or deployment. |
