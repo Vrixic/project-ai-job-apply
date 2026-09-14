@@ -77,6 +77,10 @@ provider verifier without treating candidate-supplied content as catalog truth.
 - `ashby.ts` — fixed public Job Board GET adapter with exact API version, listed-only projection,
   bounded locations and response size, documented work-mode/employment mapping, and exact
   board/posting identity. It requests no compensation data and never calls an authenticated API.
+  Missing/null provider `workplaceType` omits optional `workMode`; unknown strings and other
+  malformed types still reject. Work mode is never guessed from location or legacy `isRemote`.
+  This compatibility correction passes 586 ingestion tests and a bounded exact Mintlify preflight;
+  its development worker release and Mintlify-only registration are tracked under D2-065.
   Public API documentation provides only board acquisition; general polling response/count caps
   remain unchanged. An unlisted record causes catalog withdrawal, not a claim of employer closure.
   D2-059's Ashby-specific `pollExact` is implemented and locally verified at `09cc3fa`:

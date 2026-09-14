@@ -241,6 +241,61 @@ describe("AshbyJobBoardAdapter", () => {
     );
   });
 
+  it.each([undefined, null])(
+    "omits optional work mode when Ashby omits its workplace type (%s)",
+    async (workplaceType) => {
+      const source = adapter(
+        async () =>
+          new Response(JSON.stringify({ apiVersion: "1", jobs: [job({ workplaceType })] }), {
+            headers: { "content-type": "application/json" },
+          }),
+      );
+
+      const result = await source.poll(context());
+
+      expect(result.kind).toBe("success");
+      if (result.kind !== "success" || !result.observations[0]) {
+        throw new Error("Generated Ashby observation missing");
+      }
+      expect(result.observations[0]).not.toHaveProperty("workMode");
+    },
+  );
+
+  it.each([
+    ["Remote", "remote"],
+    ["Hybrid", "hybrid"],
+    ["OnSite", "on_site"],
+  ] as const)("maps exact Ashby workplace type %s", async (workplaceType, expected) => {
+    const source = adapter(
+      async () =>
+        new Response(JSON.stringify({ apiVersion: "1", jobs: [job({ workplaceType })] }), {
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    const result = await source.poll(context());
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success" || !result.observations[0]) {
+      throw new Error("Generated Ashby observation missing");
+    }
+    expect(result.observations[0].workMode).toBe(expected);
+  });
+
+  it.each(["", "remote", "Unknown", 42, true, {}, []])(
+    "rejects malformed or unknown Ashby workplace type %#",
+    async (workplaceType) => {
+      const source = adapter(
+        async () =>
+          new Response(JSON.stringify({ apiVersion: "1", jobs: [job({ workplaceType })] }), {
+            headers: { "content-type": "application/json" },
+          }),
+      );
+
+      await expect(source.poll(context())).rejects.toThrow("workplace type is invalid");
+    },
+  );
+
   it.each([
     [429, "rate_limited"],
     [500, "source_unavailable"],

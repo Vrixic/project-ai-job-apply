@@ -164,7 +164,8 @@ function publishedAt(value: unknown): Date {
   return parsed;
 }
 
-function workMode(value: unknown): NonNullable<SourceJobObservation["workMode"]> {
+function workMode(value: unknown): SourceJobObservation["workMode"] | undefined {
+  if (value === undefined || value === null) return undefined;
   if (value === "Remote") return "remote";
   if (value === "Hybrid") return "hybrid";
   if (value === "OnSite") return "on_site";
@@ -213,6 +214,7 @@ function parseJob(
   const department = optionalText(job.department, "The Ashby department");
   const team = optionalText(job.team, "The Ashby team");
   const mappedDepartment = department ?? team;
+  const mappedWorkMode = workMode(job.workplaceType);
   const mappedEmploymentType = employmentType(job.employmentType);
   const description = canonicalProviderText(
     job.descriptionPlain,
@@ -252,7 +254,7 @@ function parseJob(
       externalJobId: identity.externalJobId,
       verifiedCompanyDomain: options.verifiedCompanyDomain,
       ...(mappedDepartment ? { department: mappedDepartment } : {}),
-      workMode: workMode(job.workplaceType),
+      ...(mappedWorkMode ? { workMode: mappedWorkMode } : {}),
       ...(mappedEmploymentType ? { employmentType: mappedEmploymentType } : {}),
     },
   };

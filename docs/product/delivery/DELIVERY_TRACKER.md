@@ -319,8 +319,10 @@ This is the master record for the delivery phases defined in the [product and sy
 ## D2 — Extension and community loop
 
 - Mintlify-only activation/recovery is approved (`2026-09-14`, D2-065 In progress). Preserve the
-  existing boards, hosts, application artifacts and reviewer authority. The initial bounded public
-  preflight returned no usable observation, so diagnosis precedes activation. Implement exact
+  existing boards, hosts, Gateway artifact and reviewer authority. The bounded public
+  preflight finds the listed target, but its missing/non-string optional workplace type is rejected.
+  Missing/null handling is corrected without inventing a work mode; 586 ingestion tests and a
+  fresh bounded exact live preflight pass. The compatible worker release remains pending. Implement exact
   registry-only plan validation plus measured development-only configuration headroom with a full
   environment size guard. No cloud or queued-item mutation yet; no all-board or publication approval.
   [Current task and rationale](phase-2-extension-and-community.md#task-register).
