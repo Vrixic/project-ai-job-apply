@@ -318,6 +318,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Disposable Mintlify diagnosis (`2026-09-14`, D2-020/D2-016): the supplied Ashby posting uses a
+  board absent from live version `27` configuration. Exact-account/artifact-bound read confirms
+  sources/registrations 3/3, Ashby 1/1, Mintlify 0/0. The verifier rejects missing exact board
+  registration before fetching; this is not evidence of a provider outage. Request scoped Mintlify
+  development activation and recovery of the existing hold, without enabling all Ashby boards or
+  changing reviewer/publication authority. No live mutation; Phase 2 remains In progress.
+  [Diagnosis and next action](phase-2-extension-and-community.md#task-register).
+
 - Disposable verification follow-up (`2026-09-14`, D2-020): the owner now reports awaiting
   independent verification / refresh to check. Initial failed verification parks instead of
   automatically retrying on the schedule. Exact-account/artifact-bound Inspect on version `27`

@@ -50,6 +50,26 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Disposable Mintlify diagnosis (`2026-09-14`, D2-020/D2-016): the supplied public URL identifies a
+hosted Ashby posting on the Mintlify board. Read-only exact-account inspection at `17:13:36Z`
+(`072301`) verifies scheduled version `27` against the reviewed state-339 artifact: runtime and
+provider activation are enabled, with three sources/three verification registrations, including
+one Ashby source/registration, but **zero Mintlify sources and zero `mintlify` registrations**.
+The [verifier](../../../backend/workers/ingestion/src/contribution-verification.ts) requires an exact
+normalized provider/tenant registration and returns unavailable before fetching when it is absent.
+This establishes a configuration blocker for the supplied board, not an Ashby outage, content
+mismatch, closed posting, or candidate authentication failure. The extension's supported-host
+detection is broader than the configured verification boards. The earlier instruction to choose
+any supported posting was too broad for this development setup.
+
+Recommend a scoped Mintlify source/verification registration using the existing hosted-Ashby
+adapter, followed by reviewed development deployment and snapshot-fenced recovery of the existing
+hold. Ask for this new-board activation/recovery authority before changing live configuration;
+it does not imply all-board support, automatic publication, new reviewer authority, general
+ingestion, production or store activation. No configuration, queue, payload, account or Trust
+mutation was performed. The public page lookup exposes a JavaScript application shell and does
+not establish independent API verification or whether the posting is currently available.
+
 Disposable verification follow-up (`2026-09-14`, D2-020): the owner's next read reports Processing
 `awaiting independent verification` and Trust `refresh to check`. The latter is an absent cached
 Trust result, not a review decision. Source inspection confirms that initial unsuccessful provider
@@ -2945,6 +2965,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-14 | Identified the supplied disposable posting's Mintlify board as absent from the live verifier. Supported-host detection does not imply every employer board is configured. Recommended adding only this board and recovering the existing hold, pending explicit activation/recovery authority. | D2-020; D2-016 | Exact-account, reviewed-artifact-bound configuration read `072301`, 17:13:36Z: version27, runtime/provider enabled, sources/registrations 3/3, Ashby 1/1, Mintlify 0/0. [Verifier registration guard](../../../backend/workers/ingestion/src/contribution-verification.ts) returns unavailable before provider fetch. Public-page lookup returns only a JS shell; no provider API verification, live mutation, resubmission or new acceptance claimed. |
 | 2026-09-14 | The disposable owner's next refresh reaches awaiting independent verification, with no cached Trust result. Corrected the normal-wait assumption: initial failed verification is parked, not automatically retried by the five-minute schedule. Requested the public posting URL before scoped diagnosis/recovery; no repeated submission or case decision. | D2-020 | Exact-account/source-artifact-bound Inspect `dc151d`, scheduled version 27, 17:05:54Z: one eligible unavailable/retryable hold; mismatch, closed, duplicate and other zero. Aggregate only; no owner attribution, raw rows, provider request, Retry, account/export/deletion or cloud configuration change. [Processing](../../../backend/services/jobs/src/contribution-processing.ts), [parking](../../../backend/services/jobs/src/contribution-processing-runner.ts), [diagnostic](../../../scripts/operate-development-d2-provider-recovery.ps1). |
 | 2026-09-14 | Recorded the disposable contribution's queued/refresh-to-check snapshot and inspected normal scheduled processing without retrying or deciding a case. Found and corrected missing redirect refusal on the separate private-capture transport; documented existing owner-operated preparation without restoring a private-save button or extracting tokens. | D2-020; D2-064 | User report; `df71ca`: version 27, five-minute enabled schedule, six alias invocations/zero observed Lambda errors or throttles over 16:23:39Z–16:53:39Z, 13 alarms OK. SELECT-only `1bf87c`: zero eligible provider-held rows. 17 focused/369 extension tests, typecheck, source review and configured build `2da6a7` pass. No browser reload, new capture, fresh-MFA login, export, deletion, queue mutation or publication decision. |
 | 2026-09-14 | Recorded disposable-account test/deletion authorization, verified the deployed rights boundary read-only, and replaced unsafe historical sign-in mechanics with a maintained standard OAuth/PKCE handoff. Added a D2-only nonempty coverage stop before deletion and bounded memory-only attestation input, preserving legacy file/D1 behavior. No fresh account was selected, seeded, exported or deleted. | D2-020; D2-057 | Status `e14539`: state 339, bound rights/backup/Auth0, empty queues, healthy alarms, zero active compute; client/Gateway-66 binding `eed573`. Both PowerShell hosts: 33 prerequisite +85 export +94 coverage +43 attestation assertions. Node: 83 export +49 session/bridge tests. Scope and rationale stay in the single decisions section; existing recovery/hosting/provider checks are not repeated. |
