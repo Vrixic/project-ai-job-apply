@@ -164,12 +164,14 @@ sign-in/MFA/**Load review queue** instructions. Hosted sign-in and authenticated
 are accepted under the existing MFA-enforced session. This does not establish a nonempty
 evidence/appeal-decision journey or imply every other queue is empty.
 
-Next, select **Sign out**, reload the protected stable root and confirm **Sign in as appeal reviewer**
-returns without the privileged review console. Logout remains unverified. Do not repeat the
-completed sign-in/queue read, replay the earlier callback or manufacture a case to test hosting.
+The owner's subsequent **yes** confirms **Sign out** followed by a stable-root reload restores
+**Sign in as appeal reviewer** without the privileged review console. Hosted sign-in, empty-queue
+read and logout acceptance are complete. This is browser-session/UI clearing, not a claim of
+cross-device/token revocation. Do not repeat these checks, replay an old callback or manufacture
+a case to test hosting.
 No protection-bypass secret, repeated secret-reuse approval, new role, paid upgrade or branch is needed.
 The [single Phase 2 decisions record](../../docs/product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes)
-owns the scope and rationale; logout and separate appeal-decision acceptance remain open.
+owns the scope and rationale; separate appeal-decision acceptance remains open.
 
 Historical hosting evidence:
 
