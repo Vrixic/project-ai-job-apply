@@ -1,7 +1,7 @@
 # Vercel Next.js Hosting
 
 - Status: Identity-dark protected-host acceptance passed; managed OIDC, publication, and authority gates remain
-- Last updated: 2026-09-08
+- Last updated: 2026-09-14
 - Scope: Synthetic development acceptance only
 
 This runbook implements [ADR-026](../../../docs/adr/026-vercel-nextjs-presentation-hosting.md).
@@ -210,6 +210,34 @@ Before adding any admin credential, all of these must be true:
 Then configure the same server-only variable names as candidate web, using distinct admin client,
 client-secret, session-secret, and `APP_BASE_URL` values. Admin has no
 `PUBLIC_JOB_INDEXING_ENABLED` variable and emits `X-Robots-Tag: noindex, nofollow, noarchive`.
+
+### D2 appeal-only deployment overrides
+
+The separately authorized D2 human appeal target uses `ADMIN_AUTHORIZATION_PROFILE=appeals`
+and only `openid profile trust:review trust:appeal:resolve`; it does not activate the D1 moderation
+profile above. Its exact host/client and approval rationale live in the
+[single Phase 2 decisions record](../../../docs/product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes).
+
+For deployment-scoped Next.js server settings, provide each of the eight keys in both CLI maps:
+`--env NAME --build-env NAME`. The pinned CLI resolves key-only arguments from an isolated child
+environment; never put credential values in command arguments. Include the five required Auth0
+settings, `AUTH0_AUDIENCE`, `ADMIN_AUTHORIZATION_PROFILE` and `PLATFORM_API_BASE_URL`.
+This pairing follows the [Next.js deployment harness](https://github.com/vercel/next.js/blob/canary/test/lib/next-modes/next-deploy.ts)
+and the separate [Vercel build/runtime options](https://vercel.com/docs/cli/deploy).
+Build variables are visible to Vercel build/install tooling. Do not call them inaccessible to the
+builder, add them to `NEXT_PUBLIC_*`/Next config `env`, or add secrets to Turbo build hashes.
+Do not create persistent project-wide settings or inherit credentials into other previews.
+
+The September 14 runtime-only attempt built successfully but omitted every application key from
+deployment readback. Paired overrides restored all eight keys in both maps on the corrected preview,
+without changing application code. The owner's separate `identity_unavailable` response came from
+the stable `/auth/callback`, which still targeted an older identity-dark deployment.
+READY alone is therefore insufficient. Verify exact source/project/region, expected key names
+without values, protection, and the unchanged excluded short-domain binding before assigning only
+the approved protected alias. The owner must then start a new transaction at that stable home page,
+complete ordinary Auth0 sign-in/MFA and perform the read-only queue/logout check. Do not refresh an
+old callback or start login from the generated preview: its transaction cookie cannot follow the
+stable callback. No protection-bypass token or case decision is needed for hosting.
 
 ## Hosted verification
 

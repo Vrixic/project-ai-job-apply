@@ -71,31 +71,23 @@ hosted human appeals and the other phase-level acceptance items remain separate.
 Do not repeat the decision, approval, preview or owner-status check, resubmit the job, clear the
 queue or broaden reviewer authority.
 
-Next hosted appeal step (`2026-09-14`): read-only Vercel inspection verifies the existing non-Zach
-account and exact `frontend/admin` project, with zero hosted environment keys. The existing stable
-alias `https://ai-job-apply-admin-applydash2026-5637.vercel.app` belongs to that project and returns
-an unauthenticated `302` to Vercel with `no-store`. The shorter production domain returns `200`
-and is not the selected protected host. Use the existing protected alias: no paid upgrade, new
-branch, domain assignment or protection change is needed. The alias currently points to an older
-admin deployment, not the latest `b3da818` preview. The owner now confirms the exact hosted
-callback/logout/web-origin entries were added. A no-cookie public authorization probe, with
-relative redirects resolved against the issuer, reaches the expected Auth0 login page without
-transmitting credentials. It does not establish a human session, MFA or secret validity.
-The current-source admin preflight, all 174 tests, typecheck and production build pass. The owner's
-subsequent `yes` explicitly authorizes reuse of the retained application secret solely for this
-protected development deployment. One preview from `ea56284` is now READY:
-[hosted appeal candidate](https://ai-job-apply-admin-nfsm531uo-applydash2026-5637.vercel.app)
-(`dpl_9e3nKf7VWPNDrdJMekJuEfNVeLUG`). The release supplied eight deployment-only server variables
-and generated a distinct hosted session secret; the original encrypted record/window is unchanged.
-Exact source/project/region/runtime and the preview's Vercel-protected `302`/`no-store` pass.
-However, deployment metadata lists none of the eight application environment names. The pinned CLI
-does transmit them, but runtime configuration is not yet verified. Do not redeploy or infer a
-working sign-in from READY. Both stable aliases still target their old identity-dark deployment,
-and project environment keys remain zero. The next check is the generated preview's anonymous UI
-through the owner's ordinary Vercel access: appeal heading and sign-in link versus configuration
-notice. Do not start Auth0 sign-in until only the protected stable alias is rebound after verification.
-No reviewer role, Auth0 setting or case decision changed. The exact binding and rationale are in
-the [single decisions section](#decisions-and-scope-changes).
+Hosted appeal deployment corrected (`2026-09-14`): the owner reported `identity_unavailable` at
+the stable `/auth/callback`, which still targeted the old identity-dark deployment. Separately,
+the first new preview omitted all eight application keys from its runtime metadata. A corrected
+preview from `211e59de51c6ea46fe1d9536bf8b0b4c7bc213fe` now includes all eight keys in runtime and
+builder maps after paired key-only CLI overrides, without changing application code or Turbo
+configuration. All 31 focused identity/proxy tests pass; earlier 174 admin tests/typecheck/build
+remain recorded. Exact source/project/`iad1`/Node 24 and independent environment-key checks pass.
+Only the approved protected stable alias now points to `dpl_GwzQxabzVjM4rMgwXejddZWAHwE7`:
+[independent contribution appeals](https://ai-job-apply-admin-applydash2026-5637.vercel.app).
+Vercel protection remains enforced, the shorter public alias stays on its old identity-dark
+deployment, and persistent project environment keys remain zero. The approved saved client secret
+was reused without changing its encrypted record/window; a fresh hosted session secret was generated.
+Start a fresh sign-in from the stable home page, complete MFA, then load the review queue and sign
+out. Do not refresh or reuse the old callback, sign in from the generated preview, or submit a case
+decision to test hosting. Human sign-in/queue/logout acceptance remains open; no reviewer role,
+Auth0 setting or case decision changed. The exact binding and rationale are in the
+[single decisions section](#decisions-and-scope-changes).
 
 Completed build correction (`2026-09-13`, D2-063): Vercel's build warning exposed one real
 build-input gap. `PUBLIC_JOB_INDEXING_ENABLED` is read by Next's build-time header generation,
@@ -2882,7 +2874,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
-| Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; delegated initial decisions and prior local human MFA/two-scope checks remain distinct evidence. The owner authorized narrow saved-secret reuse. One protected `ea56284` preview is READY with deployment-only settings submitted; runtime configuration is not verified because metadata omits the eight application keys. Both stable aliases still target their older identity-dark deployment; project environment keys remain zero. | Open the existing generated preview through ordinary owner Vercel access and report the appeal heading/sign-in link or configuration notice; do not sign in to Auth0 yet. Resolve configuration on this existing candidate before any redeploy or protected-alias assignment. Then complete hosted sign-in/queue/logout and separately authorized takedown/human appeal journeys. No new secret, repeated reuse approval, manufactured case, borrowed human session or expanded reviewer role is needed. |
+| Hosted reviewer, takedown and human appeal acceptance | Assignments and prior initial/local-human evidence remain unchanged. Corrected preview `211e59d` is READY with eight verified runtime/builder keys and is bound only to the protected stable alias. The short public alias remains identity-dark and persistent project env keys remain zero. The reported 503 was at the old stable callback; no hosted human session is yet confirmed. | Start a new sign-in from the protected stable home page, complete MFA, load the review queue and sign out; do not reuse the old callback or initiate login from an immutable preview. Then complete separately authorized takedown/human appeal journeys. No new secret, repeated reuse approval, manufactured case, borrowed human session or expanded reviewer role is needed. |
 | Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
@@ -2895,6 +2887,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-14 | Corrected deployment-scoped server environment delivery with paired runtime/build overrides, then bound only the protected stable alias to the READY replacement. The user identifies the reported identity-unavailable response as the old stable `/auth/callback`; start a fresh stable-origin login, not callback replay. No application code, Turbo hashes, roles or cases changed. | D2-030; D2-R12 | Identity/proxy 31/31 (`fdde0d`); exact preflight `aa4f97`; corrected source `211e59d`, deployment `dpl_GwzQxabzVjM4rMgwXejddZWAHwE7`, completed `2026-09-14T15:59:28.5781848+00:00` (`c6fea2`); independent eight-key/source readback `ede5cf`; alias/protection/unchanged short domain/project-env-zero `b5964c`. Original encrypted record/window preserved and fresh hosted session secret generated. Human sign-in/MFA/queue/logout remains unverified. [Operational correction](../../../infrastructure/runbooks/deployments/vercel-nextjs-hosting.md#d2-appeal-only-deployment-overrides). |
 | 2026-09-14 | Used the owner's explicit narrow saved-client-secret reuse approval to create exactly one isolated appeal preview from `ea56284`. READY/source/project/iad1/Node-24 and protected anonymous boundary pass, but the runtime-settings inventory is inconclusive. Kept both stable aliases unchanged and stopped before alias assignment; no retry deployment or human authentication. | D2-030; D2-R12 | Private aggregate reservation/submission retain `dpl_9e3nKf7VWPNDrdJMekJuEfNVeLUG`; readbacks `981eea`/`31d917`/`605b20`, alias/protection `c0d0d6`. CLI request trace confirms runtime variables reach the POST; working-candidate comparison `2e005e` lists its own custom keys, unlike this preview. Exact upload dry run includes 129 tracked files only (`299aae`). Original encrypted record/window unchanged, fresh hosted session secret generated, zero persistent project env keys, no roles/cases changed. [Single hosting rationale](#decisions-and-scope-changes). |
 | 2026-09-14 | Recorded completed hosted Auth0 origin setup and prepared isolated appeal deployment. The public no-cookie callback probe reaches the expected same-issuer login page; local admin tests/typecheck and exact Vercel preflight pass. Deployment-only runtime variables avoid project-wide credential inheritance. Paused before accessing the expired local-setup credential for permission to reuse only its existing client secret for protected hosted development. | D2-030; D2-R12 | User reply done; corrected relative-redirect classification `bb1b90` after `c0920f`; preflight `3c8eed`; tests 174/174 (`a6747a`), typecheck `9108bf`. No token, human session, secret decryption, provider write, branch or Docker/WSL use. [Single hosting rationale](#decisions-and-scope-changes). |
 | 2026-09-14 | Located an existing protected stable admin alias, eliminating the need for a new branch, hostname purchase or protection upgrade. Hosted Auth0 remains unconfigured; exact callback/logout/web-origin setup in the existing human appeal client is the next operator input. | D2-030; D2-015 | Read-only exact-project/domain/deployment/alias/environment inspection `087035` / `763212` / `96ccfa` / `ca1a5e`; two no-cookie/no-redirect HEAD probes `5325d2`. Protected alias returns 302/no-store to Vercel; short production domain returns 200 and is excluded. Zero env keys, no credential access or provider write. [Selected host and rationale](#decisions-and-scope-changes). |
@@ -3196,6 +3189,25 @@ in subprocess arguments; changing protection is unnecessary for this check. A co
 will not establish secret validity, MFA, backend role binding or an appeal decision. Bind only the
 protected stable alias after configuration verification, then obtain the separate human session
 and queue/logout acceptance. No repeated secret collection or reuse permission is requested.
+
+The subsequent error report is clarified as the stable `/auth/callback`, not the generated
+preview's root. That stable host was still bound to the older identity-dark deployment. Do not
+attribute this callback response to a particular generated preview or replay its authorization
+code. Separately, the first preview's missing-key inventory is corrected by providing all eight
+server settings with paired `--env NAME --build-env NAME`, matching Next's own deployment harness.
+The exact replacement `dpl_GwzQxabzVjM4rMgwXejddZWAHwE7` from `211e59d` is READY and both
+environment maps now contain every required name. This demonstrates the effective deployment
+correction, not the provider's internal reason for dropping the runtime-only map. Build tooling
+can access these values; they are not public variables or additions to Next config/Turbo hashes.
+The earlier runtime-only override procedure is superseded for this deployment path. Credentials
+remain scoped to this protected deployment, not persistent project settings or unrelated previews.
+The failed preview's reservation/submission is preserved; one separate corrective attempt generated
+a fresh session secret. After exact source/configuration/protection verification, only the approved
+stable alias was assigned to the replacement. Independent readback confirms the short alias remains
+on `dpl_H4CZQ4X4YrHunG92Sh7HaUZFDpLD`, protection stays enforced and project env keys remain zero.
+The next human step starts a new transaction at the stable root, then MFA, read-only queue and logout.
+Do not sign in from a generated origin whose transaction cookie cannot follow the stable callback.
+These changes do not weaken MFA, change reviewer grants, borrow a human session or decide a case.
 
 Local production compilation also passes (`a1b366`), including all Trust BFF routes and the
 session proxy. This is build evidence only, not a hosted human login or case decision.
@@ -3769,7 +3781,7 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R9 | Closed | The dedicated D2 Trust workflow client and its exact `trust:review trust:case:open` grant are operator-confirmed. Its tenant-bound machine subject is bound only to `case_opener`; no secret is stored and the candidate-rights M2M identity remains separate. | Product owner; platform engineering | Preserve the workflow-only assignment and keep human decision roles separately assigned. |
 | D2-R10 | Closed | On September 11 the user confirms Processing `published`, Trust `accepted`, website search visibility and successful details/source display after D2-055. This closes the reported-job owner follow-up, not all historical or cross-browser coverage. Anonymous public-job routes remain disabled. | Platform engineering; QA/automation | Do not repeat the completed refresh, resubmit a contribution or repeat a decision. Hosted/human appeal and wider lifecycle acceptance remain separate. |
 | D2-R11 | Closed | Recurring development signing/policy fetch/expiry is removed from the deployed Gateway/scheduled runtime and rebuilt unpacked extension. The user confirms installed reload, successful sign-in, and successful job addition on 2026-09-08, closing this development adoption blocker. Exact scope, authentication, independent verification, and Trust remain enforced. | Platform engineering | Preserve the fixed development scope and remaining independent publication/lifecycle checks. No fresh contribution signing or renewal approval is needed. Production/store and unsupported providers remain disabled; do not automatically resubmit old items. |
-| D2-R12 | Open; hosted reviewer and appeal-decision journey acceptance pending | The September 8 exact human identity/fresh-MFA/two-scope check, state-285 assignment and user-confirmed empty local appeal queue pass; the local-only window ended at `2026-09-08T13:38:16Z`. Assignments remain unchanged. The owner approved narrow application-secret reuse; one protected `ea56284` preview is READY, but runtime configuration and hosted human acceptance are unverified. | Product owner; platform engineering | Check the existing generated preview's anonymous UI via ordinary Vercel owner access; do not sign into Auth0 before the protected stable alias is bound. Resolve the missing runtime-key readback without blind redeployment. Both stable aliases remain unchanged. Then complete hosted reviewer and separate human appeal acceptance; no repeated secret approval, new role, manufactured case or borrowed human session. |
+| D2-R12 | Open; hosted reviewer and appeal-decision journey acceptance pending | Historical local identity/MFA/two-scope/empty-queue evidence and assignments remain unchanged. Approved saved-secret reuse and corrected deployment-scoped environment delivery now pass; READY `211e59d` is bound only to the protected stable alias, with the excluded short domain unchanged. Human hosted sign-in remains unverified. | Product owner; platform engineering | Start fresh at the protected stable home page, complete MFA, load the review queue and sign out. Do not reuse the old stable callback or sign in from generated previews. Then complete separate human appeal acceptance; no repeated secret approval, new role, manufactured case or borrowed human session. |
 | D2-R13 | Closed | The expired mobile-only exception blocked initial publication attempts. The exact user-approved parser patch passes 136 focused tests, independent review, frozen installation, the full repository verifier, and the dependency audit without exceptions. Two matching no-cache migration-image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings now pass; that image was published and used successfully. | Platform engineering | Maintain the exact local patch until a compatible upstream fix is verified. No mobile/public-launch acceptance is implied. |
 | D2-R14 | Closed | The user confirmed reuse of the existing encrypted agent-reviewer credential on 2026-09-08 for the remaining Phase 2 development initial/takedown work. Private current-user access, unchanged encrypted bytes, and the live exact assignment pass. The historical collection window remains unchanged; the subsequent Auth0 refusal is separately tracked as R16. | Product owner; platform engineering | Preserve the existing roles and separate human appeal reviewer. No recurring contribution-policy approval or new secret is required for this unchanged assignment; do not borrow another identity, expand roles, or submit unsupported decisions. |
 | D2-R15 | Closed | The user's renewed session passes exact-account/SSO-role/us-east-2 STS check `83e125` for the approved Ashby deployment. Earlier expiry and completed recovery remain historical. | Platform engineering | Recheck credentials at actual cloud operations; continue the recorded deployment approval without requesting it again. No recovery drill or credential disclosure is needed. |

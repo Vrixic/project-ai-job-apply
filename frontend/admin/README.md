@@ -134,30 +134,54 @@ acceptance. The sole assignment and rationale record remains the
 On 2026-09-14 the owner confirms the exact hosted Auth0 callback/logout/web-origin entries and
 separately approves reusing the saved dedicated client secret only for protected development,
 with deployment-only variables and a fresh hosted session secret. All 174 admin tests, typecheck,
-production build and exact Vercel preflight pass. Exactly one new preview from source
-`ea56284a5da5edf8baceb6b02ad2465d05185377` is READY as deployment
-`dpl_9e3nKf7VWPNDrdJMekJuEfNVeLUG`, in `iad1` on Node 24:
-[protected admin preview](https://ai-job-apply-admin-nfsm531uo-applydash2026-5637.vercel.app).
+production build and exact Vercel preflight pass. The owner clarifies that the reported
+`503 identity_unavailable` came from the selected stable host's `/auth/callback`, still routed
+to its older identity-dark deployment, not the generated preview. That first preview separately
+had no application keys in its runtime inventory. The proxy dynamically
+checks required environment settings; no hardcoded identity-dark value or Next configuration
+inlining is present. All 31 targeted Auth0/proxy tests pass without application code changes.
 
-Runtime configuration is **not verified**: the deployment's runtime-key inventory omits all eight
-application variables, while the existing working candidate deployment lists its custom keys.
-The cause remains unresolved. No redeployment or stable-alias move occurred. Both existing admin
-aliases still point to the older `dpl_H4CZQ4X4YrHunG92Sh7HaUZFDpLD` deployment. The selected stable
-alias `https://ai-job-apply-admin-applydash2026-5637.vercel.app` and the new preview both return
-unauthenticated Vercel `302` / `no-store`; the shorter `https://ai-job-apply-admin.vercel.app`
-remains unchanged and unselected.
+One corrected preview from source `211e59de51c6ea46fe1d9536bf8b0b4c7bc213fe` is READY as
+deployment `dpl_GwzQxabzVjM4rMgwXejddZWAHwE7`:
+[corrected protected admin preview](https://ai-job-apply-admin-1apsg6bq6-applydash2026-5637.vercel.app).
+Paired deployment-only `--env` and `--build-env` overrides provide the same eight server-only
+application settings to the Vercel runtime and builder. Both key inventories now contain all
+eight names; project-wide environment keys remain zero. The Vercel builder receives the private
+settings, but none is added to Turbo cache hashes, public configuration or browser variables.
+A fresh hosted session secret is used; the original encrypted local setup is unchanged.
+Protection and application source are unchanged. Key presence and READY are deployment evidence,
+not proof of an accepted human Auth0 session, MFA, queue read or logout.
 
-Next, use ordinary Vercel access to open the generated preview and report whether it displays
-**Independent contribution appeals** and **Sign in as appeal reviewer**, or
-**Configure the dedicated admin Auth0 client before using this console.** Do not start Auth0
-sign-in yet: the approved stable callback still targets the older deployment. This page check
-does not establish an MFA session or authorize any case action. Do not create a protection-bypass
-secret, move the alias or redeploy merely because runtime configuration is unverified.
-No repeated secret-reuse approval, new role, paid protection upgrade or branch is needed.
+Only the selected protected stable alias
+[hosted appeals](https://ai-job-apply-admin-applydash2026-5637.vercel.app) now targets the corrected
+deployment. Independent deployment readback `ede5cf` verifies both eight-key inventories; final
+alias readback `b5964c` confirms the exact binding and Vercel `302` / `no-store` protection.
+The shorter `https://ai-job-apply-admin.vercel.app` remains unchanged on
+`dpl_H4CZQ4X4YrHunG92Sh7HaUZFDpLD` and unselected; project environment keys remain zero.
+
+Next, start a fresh journey from the protected stable root using ordinary Vercel access. Select
+**Sign in as appeal reviewer**, complete MFA, then **Load review queue** and report the
+active/empty-queue result or fixed error. Do not refresh the earlier callback or reuse its
+authorization code. Check logout only after the session is accepted. Deployment and alias
+verification created no human Auth0 session and performed zero case actions; those acceptance
+checks remain open. Do not create a protection-bypass secret or infer case-decision authority
+from them. No repeated secret-reuse approval, new role, paid protection upgrade or branch is needed.
 The [single Phase 2 decisions record](../../docs/product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes)
 owns the scope and rationale; hosted sign-in and appeal acceptance remain open.
 
 Historical hosting evidence:
+
+The first September 14 preview from `ea56284a5da5edf8baceb6b02ad2465d05185377`, deployment
+`dpl_9e3nKf7VWPNDrdJMekJuEfNVeLUG`, reached READY in `iad1` on Node 24:
+[initial preview](https://ai-job-apply-admin-nfsm531uo-applydash2026-5637.vercel.app).
+All eight application keys were absent from its runtime inventory, while the existing working
+candidate deployment listed its custom keys. The preview and selected stable alias returned
+Vercel `302` / `no-store`, but that proved protection, not application configuration. Both stable
+aliases still targeted `dpl_H4CZQ4X4YrHunG92Sh7HaUZFDpLD` at that checkpoint. The owner's later
+URL clarification locates the `503 identity_unavailable` response at that old stable callback,
+not this generated preview. The corrected preview and exact protected-alias move above supersede
+the old inspection request. Neither the missing-key finding nor the callback failure changed a
+reviewer role or established hosted acceptance.
 
 The protected identity-dark preview from `b3da818` (2026-09-11):
 [admin preview](https://ai-job-apply-admin-5lytaj3kw-applydash2026-5637.vercel.app).
