@@ -324,8 +324,12 @@ This is the master record for the delivery phases defined in the [product and sy
   route and explicit refresh without weakening logout cleanup or exposing other accounts.
   No server deletion is established, and no resubmission or repeated Mintlify requeue is needed.
   Source now passes 422 extension, 57 contract, 49 Jobs, 124 Gateway and eight real PostgreSQL
-  tests plus typechecks and 76 Terraform tests. Full verification/deployment/installed acceptance
-  remain pending. Docker/WSL are stopped; no resubmission or live data mutation occurred.
+  tests plus typechecks and 76 Terraform tests. Full repository verification and the configured
+  extension rebuild pass; Gateway source `739ccdc` is published and verified, not deployed.
+  The exact route/Gateway plan passes independent review, but the final state read cannot refresh
+  the cached SSO token (`InvalidGrantException`). No Apply occurred. Renew AWS SSO, finish a fresh
+  reviewed release, then reload the extension and check installed history recovery. Docker/WSL
+  are stopped; no resubmission or live submission mutation occurred.
   [Current work and decision](phase-2-extension-and-community.md#task-register).
 
 - Mintlify-only activation/recovery (`2026-09-14`, D2-065 In progress): corrected worker `f12c289`
