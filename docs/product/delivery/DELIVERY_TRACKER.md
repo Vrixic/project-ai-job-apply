@@ -327,17 +327,24 @@ This is the master record for the delivery phases defined in the [product and sy
   Phase 2 stays In progress. No repeated provider check, submission, review or deployment is needed.
   [Acceptance and remaining work](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
 
-- Next hosted appeal input (`2026-09-14`): the existing stable admin alias
-  `https://ai-job-apply-admin-applydash2026-5637.vercel.app` is already Vercel-protected;
-  exact project/alias inspection and an unauthenticated 302/no-store probe pass. Zero hosted
-  environment keys remain configured. The user now confirms the exact Auth0 entries were added,
-  and a public no-cookie authorization probe reaches the expected login page. Exact Vercel
-  preflight, all 174 admin tests, typecheck and production build pass. Deployment-only runtime variables will isolate
-  the appeals candidate; the alias currently targets an older deployment. Before accessing the
-  encrypted secret retained from the expired local-only setup, obtain permission to reuse only
-  the existing client secret for this protected hosted development target. No new secret, role,
-  paid upgrade or branch is needed; no agent-side credentials or provider state changed.
-  [Exact entries and single rationale](phase-2-extension-and-community.md#decisions-and-scope-changes)
+- Hosted appeal preview (`2026-09-14`): the owner confirms the exact Auth0 origins and separately
+  approves reusing the saved dedicated client secret only for protected hosted development,
+  with deployment-only variables and a fresh hosted session secret. Earlier exact Vercel
+  preflight, all 174 admin tests, typecheck and production build pass. Exactly one preview from
+  `ea56284a5da5edf8baceb6b02ad2465d05185377`, deployment `dpl_9e3nKf7VWPNDrdJMekJuEfNVeLUG`, is
+  READY in `iad1` on Node 24:
+  [protected admin preview](https://ai-job-apply-admin-nfsm531uo-applydash2026-5637.vercel.app).
+  Its runtime-key inventory omits all eight application variables, while the existing working
+  candidate deployment lists its custom keys. The cause is unresolved: READY does not verify
+  runtime configuration or hosted Auth0. No redeployment or stable-alias move occurred; both
+  existing admin aliases still target `dpl_H4CZQ4X4YrHunG92Sh7HaUZFDpLD`. The new preview and selected
+  stable alias return unauthenticated Vercel `302` / `no-store`; the short domain is unchanged.
+  Next, open only the generated preview using ordinary Vercel access and report whether it shows
+  “Independent contribution appeals” and “Sign in as appeal reviewer”, or the configuration
+  notice. Do not start Auth0 sign-in yet: its stable callback still targets the older deployment.
+  No repeated secret-reuse approval, new role, paid upgrade, branch or protection bypass is needed.
+  Phase 2 remains In progress.
+  [Scope and single rationale](phase-2-extension-and-community.md#decisions-and-scope-changes)
 
 - Installed Ashby description acceptance (`2026-09-13`, D2-035/D2-061): the user confirms that
   the expanded description now includes everything, answering the Technology Stack/Benefits
@@ -1193,6 +1200,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-14 | D2 | Following exact hosted Auth0-origin confirmation and scoped saved-client-secret reuse approval, one admin preview creation with deployment-only runtime inputs from `ea56284a5da5edf8baceb6b02ad2465d05185377` reaches READY in iad1/Node 24. Its runtime-key inventory omits all eight application variables, so configuration and hosted sign-in remain unverified. No redeployment or stable-alias move; ordinary protected-preview page inspection is next, without Auth0 sign-in. Phase 2 remains In progress. | Deployment `dpl_9e3nKf7VWPNDrdJMekJuEfNVeLUG`; [protected preview](https://ai-job-apply-admin-nfsm531uo-applydash2026-5637.vercel.app); preview/selected-alias HEAD 302/no-store; existing candidate custom-key comparison; [current hosted scope](phase-2-extension-and-community.md#decisions-and-scope-changes). |
 | 2026-09-14 | D2 | D2-035 completes for controlled-development Lever/Ashby contributions after the user confirms both supplied website journeys: jobs found, descriptions available, Ashby final sections present and correct provider-source navigation. Prior installed delivery, evidence-bound review and published/accepted statuses are retained. Phase 2 remains In progress behind separate acceptance gates. | User reply “checks passes”; [provider completion](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions), [remaining inputs](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs). No new runtime write, decision, submission or deployment. |
 | 2026-09-12 | D2 | Approved Ashby development deployment verifies from `61a23de`: state `336`, Gateway/scheduled/Trust `65`/`25`/`19`, three sources/registrations, four hosts and zero drift. Code releases precede additive configuration. The matching unpacked client is rebuilt with typecheck, 317 tests and four readiness cases passing. D2-R22 closes for acquisition/source binding/deployment; D2-035 installed and broader acceptance stay open. All 13 D2 alarms OK; Trust queue/DLQ approximate counts zero. Existing provider/reviewer/runtime boundaries are preserved; no migration, queue clearing, general ingestion/EU/production/store activation or branch was added. | Final `33d264`, independent `a8be19`, health `d073e0`, client `56a488` / `5890e0` / `a7da0a`; [rollout and limitations](phase-2-extension-and-community.md#d2-035--ashby-development-rollout) |
 | 2026-09-12 | D2 | User renews SSO; read-only STS confirms the exact configured development account/SSO role in us-east-2, closing D2-R15 for the current session. Continue the already approved Ashby code release and separate scoped activation. Login is not deployment or installed acceptance. | STS `83e125`; [recorded activation scope](phase-2-extension-and-community.md#decisions-and-scope-changes) |

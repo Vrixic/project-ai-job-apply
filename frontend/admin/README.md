@@ -131,29 +131,41 @@ acceptance. The sole assignment and rationale record remains the
 
 ## Vercel hosting boundary
 
-On 2026-09-14, read-only inspection confirms the existing stable alias
-`https://ai-job-apply-admin-applydash2026-5637.vercel.app` belongs to this admin project and
-returns an unauthenticated Vercel-protected `302` with `no-store`. Its current deployment is older
-than the preview below, and hosted environment keys remain absent. The owner has now confirmed
-the exact hosted callback/logout/web-origin entries; public authorization reaches the expected
-Auth0 login page without credentials. All 174 admin tests, typecheck, production build and exact Vercel preflight
-pass. Permission to reuse the existing encrypted client secret from its expired local-only setup
-is still required before secure appeals-only configuration and reviewed deployment/alias binding.
-Use deployment-only runtime variables, not project-wide environment settings. The shorter
-`https://ai-job-apply-admin.vercel.app` returns `200` without Vercel protection and is not selected.
-No new branch, paid protection upgrade, role or repeated local identity setup is required.
-The [single Phase 2 decisions record](../../docs/product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes)
-owns the exact entries and rationale; this inspection changed no external state or credentials.
+On 2026-09-14 the owner confirms the exact hosted Auth0 callback/logout/web-origin entries and
+separately approves reusing the saved dedicated client secret only for protected development,
+with deployment-only variables and a fresh hosted session secret. All 174 admin tests, typecheck,
+production build and exact Vercel preflight pass. Exactly one new preview from source
+`ea56284a5da5edf8baceb6b02ad2465d05185377` is READY as deployment
+`dpl_9e3nKf7VWPNDrdJMekJuEfNVeLUG`, in `iad1` on Node 24:
+[protected admin preview](https://ai-job-apply-admin-nfsm531uo-applydash2026-5637.vercel.app).
 
-The current protected identity-dark preview is built from `b3da818` (2026-09-11):
+Runtime configuration is **not verified**: the deployment's runtime-key inventory omits all eight
+application variables, while the existing working candidate deployment lists its custom keys.
+The cause remains unresolved. No redeployment or stable-alias move occurred. Both existing admin
+aliases still point to the older `dpl_H4CZQ4X4YrHunG92Sh7HaUZFDpLD` deployment. The selected stable
+alias `https://ai-job-apply-admin-applydash2026-5637.vercel.app` and the new preview both return
+unauthenticated Vercel `302` / `no-store`; the shorter `https://ai-job-apply-admin.vercel.app`
+remains unchanged and unselected.
+
+Next, use ordinary Vercel access to open the generated preview and report whether it displays
+**Independent contribution appeals** and **Sign in as appeal reviewer**, or
+**Configure the dedicated admin Auth0 client before using this console.** Do not start Auth0
+sign-in yet: the approved stable callback still targets the older deployment. This page check
+does not establish an MFA session or authorize any case action. Do not create a protection-bypass
+secret, move the alias or redeploy merely because runtime configuration is unverified.
+No repeated secret-reuse approval, new role, paid protection upgrade or branch is needed.
+The [single Phase 2 decisions record](../../docs/product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes)
+owns the scope and rationale; hosted sign-in and appeal acceptance remain open.
+
+Historical hosting evidence:
+
+The protected identity-dark preview from `b3da818` (2026-09-11):
 [admin preview](https://ai-job-apply-admin-5lytaj3kw-applydash2026-5637.vercel.app).
 Exact source/project readback, `iad1`/Node 24 and three Vercel-protected `302`/`no-store` checks
 pass after 174 admin tests and typecheck. It includes the appeal profile and D2-054 reviewer-state
 fixes. The existing project has no configured environment variables; hosted Auth0 still requires
 one protected stable origin, exact callback/logout configuration, the dedicated human appeal
 client and server-only `appeals` profile settings. No new role, grant or hosted session is implied.
-
-Historical hosting evidence:
 
 The 2026-09-05 preview built from source `116b272` is `READY`:
 [protected admin preview](https://ai-job-apply-admin-6ewxee4ci-applydash2026-5637.vercel.app).
