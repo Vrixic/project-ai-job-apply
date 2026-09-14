@@ -127,7 +127,10 @@ Stop before planning unless all of these are independently available:
 For `Plan` and `Execute`, the operator reads the API token only from
 `CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN`, the signed
 recent-MFA proof only from `CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN`, and the attestation path only from
-`CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH`. Never place any of these values on the
+`CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH` or its process-memory alternative
+`CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_JSON`. Supply exactly one attestation input;
+the JSON input is bounded to 8192 UTF-8 bytes and retains the same exact schema and identity checks.
+Never place any of these values on the
 command line, in shell history, source, a Terraform value, or evidence. The attestation is a
 private operator input with this exact schema:
 
@@ -143,7 +146,8 @@ private operator input with this exact schema:
 }
 ```
 
-Keep the attestation outside source and below an operator-controlled encrypted location. The plan
+Prefer the maintained process-memory handoff below, which writes no attestation file. If using the
+legacy path input, keep the attestation outside source and below an operator-controlled encrypted location. The plan
 retains only its SHA-256 and the subject SHA-256. Neither token is ever written. Mint a fresh access
 token and ID token immediately before `Execute`; the ID-token proof must remain inside the reviewed
 recent-auth window after the signed-grant expiry wait. If it becomes stale, execution stops before
@@ -170,6 +174,61 @@ which compiles the existing domain-owned source schema without requiring a new a
 The export body and expected export/policy bindings are passed to that helper only over bounded
 UTF-8 stdin, never command arguments or files. A missing helper/dependency stops before export
 creation; invalid downloaded content stops before any deletion request.
+
+For `d2-development-synthetic-v1`, the verified export must also contain at least one consent,
+contribution approval, contribution, private capture, Trust case and Trust case event. This is an
+acceptance precondition, not a change to the export schema: empty exports remain valid account data.
+Missing D2 coverage stops before grant waiting, identity refresh or any deletion request. The created
+export remains subject to its configured expiry; prepare the missing disposable data before a new
+fresh-MFA/reviewed run. Do not label an empty-account deletion as nonempty Phase 2 acceptance.
+
+## Disposable-account preparation and local sign-in
+
+Prepare the disposable account's nonempty D2 records before fresh MFA. Use the installed extension
+under that account for one explicitly selected supported public contribution, its authorization and
+normal pending Trust processing. Do not use the owner's main account, an appeal/reviewer identity,
+real candidate facts, SQL seeding, or a publication decision merely to make a test fixture. A private
+saved-page capture is separately required through the existing owner-scoped API; the current popup
+has no private-save button. Applicable revocation/withdrawal history remains part of the acceptance
+review. These records must all belong to the same disposable identity later confirmed below.
+
+The maintained handoff replaces historical ignored cookie-extraction helpers. Do not launch an old
+browser profile, decrypt a candidate session cookie, reuse an old subject/attestation, or widen client
+scopes. Check that existing `frontend/web/.env.local` candidate issuer, client ID and audience match
+the deployed Gateway. The helper uses the already registered exact
+`http://localhost:3000/auth/callback`; port 3000 must be free. No Auth0/Vercel setting is changed.
+
+```powershell
+pnpm --filter @ai-job-apply/auth build
+node scripts/start-development-candidate-rights-session.mjs
+```
+
+Open `http://localhost:3000` yourself. Sign in at Auth0 with the disposable account and fresh MFA.
+The no-store local confirmation shows the verified identity privately; provide the authorized owner
+name and explicitly confirm generated-only disposable data and permanent-deletion scope. Cancel if
+it is the wrong account. Account selection does not create test data, export or delete anything.
+
+The helper cryptographically verifies both JWTs using the shared RS256/JWKS verifiers, checks
+nonce/state/S256 PKCE, issuer, candidate-only audience, matching subject, fresh MFA and authorized
+party. The existing candidate web scopes are unchanged (they do not include `jobs:contribute`).
+No credentials enter arguments, files, browser responses, logs or chat. The short-lived transaction
+cookie is the helper's own; it never reads application cookies. After confirmation, the HTTP listener
+closes and only the operator's in-memory session remains, until expiry/cancellation/completion.
+
+The operator sends bounded JSON commands over the running process's stdin, not through browser
+routes. `plan` accepts only `ExpectedAccountId`, `StateBucket`, `SourceSha`, `ZeroDriftPlanPath` and
+`ReviewedZeroDriftPlanSha256` inside `options`; all rights policy/timing values stay fixed above.
+The source must be clean merged main and the saved plan must be a current reviewed zero-drift plan
+under the ignored development Terraform directory. Review the returned descriptor, then send
+`execute` with its exact `reviewedPlanSha256`. There is no automatic execution after sign-in or Plan.
+Only one Execute attempt is permitted per session. `{"action":"cancel"}` closes an idle session.
+Do not send secrets through stdin: the helper forwards tokens, client secret and exact attestation
+only through the directly owned PowerShell child's process environment. It emits only fixed statuses
+and validated aggregate results. On ambiguous failure/interruption, inspect the existing recovery
+path before any new execution; never blindly retry a potentially confirmed deletion.
+
+The helper does not seed records, manufacture reviewer decisions, create accounts, configure MFA,
+approve policy, refresh the MFA proof silently, or replace the existing recovery acceptance evidence.
 
 ## Local fail-closed gate
 

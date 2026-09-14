@@ -318,12 +318,22 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Fresh rights preparation (`2026-09-14`, D2-020/D2-057): the owner approves a disposable candidate
+  account for testing and permanent deletion, not the main or appeal account. Read-only Status at
+  state `339` verifies enabled rights, backup/Auth0 bindings, empty queues, healthy alarms and zero
+  active compute; local candidate issuer/client/audience match Gateway `66`. Added a nonempty D2
+  export stop before deletion and a maintained standard loopback OAuth/PKCE handoff with private
+  identity confirmation, process-memory-only credentials/attestation, and separate reviewed
+  Plan/Execute. Both PowerShell hosts and 83 export/49 session-bridge tests pass. No fresh account
+  selection, fixture preparation, export or deletion occurred. Prepare same-account D2 data before
+  fresh MFA; Phase 2 remains In progress. [Current work and rationale](phase-2-extension-and-community.md#task-register).
+
 - Provider website acceptance (`2026-09-14`, D2-035): the user confirms both requested Ashby
   and Supermove/global-Lever checks. Both supplied jobs are found, descriptions load, Ashby's
   full text includes Technology Stack and Benefits, and the source links open the correct
   provider postings. D2-035 is Complete for controlled-development contributions, joining the
   previously confirmed capture, delivery, independent review and published/accepted statuses.
-  Hosted human appeals, fresh rights, broader installed lifecycle and final release gates remain;
+  Human appeal decisions, fresh rights, broader installed lifecycle and final release gates remain;
   Phase 2 stays In progress. No repeated provider check, submission, review or deployment is needed.
   [Acceptance and remaining work](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
 

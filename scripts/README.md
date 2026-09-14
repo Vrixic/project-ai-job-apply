@@ -25,6 +25,12 @@ both AWS environments accepted the steady-state serverless runtime.
   preserves existing console behavior. Profile selection requests scopes but grants no server role.
 - `verify-auth0-tenant.mjs` — Validates managed OIDC discovery and signing configuration without
   exposing credentials.
+- `start-development-candidate-rights-session.mjs` — Maintained loopback OAuth/PKCE handoff for a
+  human-confirmed disposable candidate. Reads the existing candidate web settings, never browser
+  sessions. Keeps tokens and the identity attestation in process memory; accepts only separate
+  reviewed Plan/Execute commands on operator stdin. Sign-in itself makes no candidate-data change.
+  See the [rights acceptance runbook](../infrastructure/runbooks/deployments/development-candidate-rights-acceptance.md#disposable-account-preparation-and-local-sign-in).
+  `pnpm test:candidate-rights-session` exercises generated-only loopback and operator boundaries.
 
 The root `pnpm test:integration` command deliberately runs package suites one at a time. Several
 database-owner suites exercise fail-closed migration verification by temporarily introducing and

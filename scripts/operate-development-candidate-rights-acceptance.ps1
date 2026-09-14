@@ -79,10 +79,13 @@ Usage:
     -ExpectedSubprocessorInventory CSV -ZeroDriftPlanPath PATH `
     -ReviewedZeroDriftPlanSha256 SHA256 [reviewed plan/receipt arguments]
 
-The fixed environment variables CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN,
-CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN, and
-CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH are required for Plan and Execute. The tokens
-and identity are never printed or retained. The access token supplies API scope; the separately
+The fixed environment variables CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN and
+CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN are required for Plan and Execute, with exactly one of
+CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH (existing private file) or
+CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_JSON (process-only JSON, at most 8192 UTF-8 bytes).
+Supplying both attestation inputs is rejected. JSON input is never written to a file; its exact
+UTF-8 text is checksum-bound without reserialization. Existing file checksums remain unchanged.
+The tokens and identity are never printed or retained. The access token supplies API scope; the separately
 verified ID token supplies recent-authentication and MFA proof for the same subject. The attestation
 must describe one disposable generated-synthetic identity and an authorized owner other than Zach
 Becker.
@@ -120,6 +123,7 @@ $idTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN"
 $refreshTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN"
 $clientSecretEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_CLIENT_SECRET"
 $attestationEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH"
+$attestationJsonEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_JSON"
 $exportDownloadTimeoutMilliseconds = 20000
 $exportHelperTimeoutMilliseconds = 30000
 $maximumExportBytes = 1048576
@@ -290,13 +294,24 @@ function Read-SyntheticIdentityContext {
   $token = [Environment]::GetEnvironmentVariable($tokenEnvironmentName)
   $idToken = [Environment]::GetEnvironmentVariable($idTokenEnvironmentName)
   $attestationPath = [Environment]::GetEnvironmentVariable($attestationEnvironmentName)
-  if ([string]::IsNullOrWhiteSpace($token) -or [string]::IsNullOrWhiteSpace($idToken) -or [string]::IsNullOrWhiteSpace($attestationPath)) { throw "The fixed generated-synthetic token and identity-attestation environment variables are required." }
+  $attestationJson = [Environment]::GetEnvironmentVariable($attestationJsonEnvironmentName)
+  if ([string]::IsNullOrWhiteSpace($token) -or [string]::IsNullOrWhiteSpace($idToken)) { throw "The fixed generated-synthetic token and identity-attestation environment variables are required." }
+  $hasAttestationPath = $null -ne $attestationPath
+  $hasAttestationJson = $null -ne $attestationJson
+  if ($hasAttestationPath -eq $hasAttestationJson) { throw "Exactly one fixed identity-attestation input is required: PATH or JSON, never both." }
+  if ($hasAttestationJson) {
+    try {
+      if ([string]::IsNullOrWhiteSpace($attestationJson) -or $attestationJson.Length -gt 8192 -or
+          [Text.UTF8Encoding]::new($false, $true).GetByteCount($attestationJson) -gt 8192) { throw 'invalid-attestation-size' }
+    } catch { throw "The process-only identity attestation must be nonempty valid UTF-8 JSON of at most 8192 bytes." }
+  }
   $accessSegments = $token.Split('.')
   $idSegments = $idToken.Split('.')
   if ($accessSegments.Count -ne 3 -or $idSegments.Count -ne 3) { throw "The acceptance tokens are not compact JWTs." }
   $accessClaims = ConvertFrom-OperatorJson (ConvertFrom-Base64Url $accessSegments[1]) "Access-token claims"
   $idClaims = ConvertFrom-OperatorJson (ConvertFrom-Base64Url $idSegments[1]) "ID-token claims"
-  $attestation = ConvertFrom-OperatorJson (Get-Content -LiteralPath $attestationPath -Raw) "Identity attestation"
+  $attestationText = if ($hasAttestationJson) { $attestationJson } else { Get-Content -LiteralPath $attestationPath -Raw }
+  $attestation = ConvertFrom-OperatorJson $attestationText "Identity attestation"
   $null = Assert-ExactPropertySet $attestation @("schemaVersion", "classification", "issuer", "subjectSha256", "authorizedOwner", "createdAt", "expiresAt") "Identity attestation"
   $now = [DateTimeOffset]::UtcNow
   $created = [DateTimeOffset]::Parse([string]$attestation.createdAt)
@@ -318,7 +333,8 @@ function Read-SyntheticIdentityContext {
       -not $scope.Contains("profile:write") -or -not $amr.Contains("mfa")) {
     throw "The disposable identity is not an exact current generated-synthetic recent-MFA context under an authorized non-Zach owner."
   }
-  return [pscustomobject]@{ Token = $token; IdToken = $idToken; Subject = $subject; SubjectSha256 = [string]$attestation.subjectSha256; AttestationSha256 = Get-FileSha256 $attestationPath; IdTokenAudienceSha256 = Get-TextSha256 $ExpectedIdTokenAudience; AuthTime = $authTime.ToString('o') }
+  $attestationSha256 = if ($hasAttestationJson) { Get-TextSha256 $attestationJson } else { Get-FileSha256 $attestationPath }
+  return [pscustomobject]@{ Token = $token; IdToken = $idToken; Subject = $subject; SubjectSha256 = [string]$attestation.subjectSha256; AttestationSha256 = $attestationSha256; IdTokenAudienceSha256 = Get-TextSha256 $ExpectedIdTokenAudience; AuthTime = $authTime.ToString('o') }
 }
 
 function Assert-SyntheticRefreshPrerequisites {
@@ -696,6 +712,22 @@ function Read-CandidateRightsExportHelperResult {
   return $result
 }
 
+function Assert-CandidateRightsAcceptanceCoverage {
+  param([Parameter(Mandatory)][object]$Coverage)
+  if ($ExpectedPolicyVersion -cne 'd2-development-synthetic-v1') { return $true }
+  # The download verifier already checks the exact aggregate shape and integer bounds. This
+  # acceptance-only gate does not change the export contract: empty exports remain valid data.
+  $missing = @(
+    foreach ($name in @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount')) {
+      if ($Coverage.$name -lt 1) { $name }
+    }
+  )
+  if ($missing.Count -gt 0) {
+    throw "D2 acceptance stopped before account deletion: nonempty export coverage is required for $($missing -join ', '). Prepare the authorized disposable account's missing D2 test records, then obtain fresh MFA and a new reviewed run. The existing export remains subject to its configured expiry."
+  }
+  return $true
+}
+
 function Invoke-CandidateRightsExportHelper {
   param(
     [switch]$CheckReady,
@@ -887,6 +919,7 @@ function Invoke-FixedLifecycle {
   if ([string]$first.Body.id -cne [string]$replay.Body.id -or [string]$first.Body.policyVersion -cne $ExpectedPolicyVersion) { throw "Candidate export idempotency or policy binding failed." }
   $ready = Wait-ExportReady ([string]$first.Body.id) $token
   $download = Test-ExactVersionGrant $ready ([string]$first.Body.id)
+  $null = Assert-CandidateRightsAcceptanceCoverage $download.ExportCoverage
   $script:VerifiedExportCoverage = $download.ExportCoverage
   $grantUri = [Uri]([string]$ready.download.url)
   $null = Wait-GrantExpiry ([string]$first.Body.id) $token $grantUri $download.GrantExpiresAt $download.ArtifactExpiresAt

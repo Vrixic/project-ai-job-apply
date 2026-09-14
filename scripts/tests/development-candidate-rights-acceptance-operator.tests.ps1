@@ -31,6 +31,7 @@ foreach ($required in @(
     'candidate-deletion-recovery-v1',
     'CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN',
     'CANDIDATE_RIGHTS_ACCEPTANCE_CLIENT_SECRET',
+    'CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_JSON',
     "form['grant_type'] = 'refresh_token'",
     'Refresh-SyntheticIdentityContext $Boundary.Runtime.Issuer',
     'PersistentSyntheticIdentities = 0',
@@ -88,6 +89,10 @@ $env:CANDIDATE_RIGHTS_OPERATOR_TEST_ONLY = '1'
   -ExpectedBackupRetentionDays 7 `
   -ExpectedRecentAuthMaxAgeSeconds 300 `
   -ExpectedSubprocessorInventory 'auth0,aws'
+
+# Use a generated-only environment name so the new tests never inspect a caller's attestation.
+$attestationJsonEnvironmentName = 'CANDIDATE_RIGHTS_TEST_GENERATED_ATTESTATION_JSON'
+if (Test-Path -LiteralPath "Env:$attestationJsonEnvironmentName") { throw 'The generated attestation test input must start absent.' }
 
 $policyEnvironment = [pscustomobject]@{
   CANDIDATE_RIGHTS_POLICY_VERSION = 'd1-synthetic-v1'
@@ -153,6 +158,63 @@ try {
     throw 'The recovery-ledger subject digest is not domain-separated from the attestation hash.'
   }
 
+  $attestationInputAssertions = 0
+  function Assert-GeneratedAttestationCondition {
+    param([bool]$Condition, [string]$Description)
+    $script:attestationInputAssertions += 1
+    if (-not $Condition) { throw $Description }
+  }
+  $generatedAttestationJson = Get-Content -LiteralPath $attestationPath -Raw
+  $legacyAttestationHash = Get-FileSha256 $attestationPath
+  Assert-GeneratedAttestationCondition ($identity.AttestationSha256 -ceq $legacyAttestationHash) 'Legacy attestation no longer uses the original file checksum.'
+  $originalAttestationFileHashFunction = ${function:Get-FileSha256}
+  $originalAttestationContentFunction = Get-Item -LiteralPath Function:Get-Content -ErrorAction SilentlyContinue
+  try {
+    $script:attestationFileReads = 0
+    function Get-Content { $script:attestationFileReads += 1; throw 'generated-unexpected-attestation-file-read' }
+    function Get-FileSha256 { $script:attestationFileReads += 1; throw 'generated-unexpected-attestation-file-hash' }
+    Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH
+    [Environment]::SetEnvironmentVariable($attestationJsonEnvironmentName, $generatedAttestationJson, 'Process')
+    $memoryIdentity = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300
+    foreach ($name in @('Token','IdToken','Subject','SubjectSha256','AttestationSha256','IdTokenAudienceSha256','AuthTime')) {
+      Assert-GeneratedAttestationCondition ($memoryIdentity.$name -ceq $identity.$name) 'File and equivalent process-only attestation changed the identity binding.'
+    }
+    $paddedAttestationJson = $generatedAttestationJson + (' ' * (8192 - [Text.Encoding]::UTF8.GetByteCount($generatedAttestationJson)))
+    [Environment]::SetEnvironmentVariable($attestationJsonEnvironmentName, $paddedAttestationJson, 'Process')
+    $paddedIdentity = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300
+    Assert-GeneratedAttestationCondition ($paddedIdentity.AttestationSha256 -ceq (Get-TextSha256 $paddedAttestationJson)) 'The exact 8192-byte attestation text was not accepted or checksum-bound.'
+    Assert-GeneratedAttestationCondition ($paddedIdentity.AttestationSha256 -cne $memoryIdentity.AttestationSha256 -and $paddedIdentity.SubjectSha256 -ceq $memoryIdentity.SubjectSha256) 'The in-memory checksum silently normalized or reserialized JSON.'
+    foreach ($case in @(
+        @{ Path = $attestationPath; Json = $generatedAttestationJson; Message = 'Exactly one fixed identity-attestation input is required: PATH or JSON, never both.' },
+        @{ Path = $attestationPath; Json = ' '; Message = 'Exactly one fixed identity-attestation input is required: PATH or JSON, never both.' },
+        @{ Path = $null; Json = $null; Message = 'Exactly one fixed identity-attestation input is required: PATH or JSON, never both.' },
+        @{ Path = $null; Json = ' '; Message = 'The process-only identity attestation must be nonempty valid UTF-8 JSON of at most 8192 bytes.' },
+        @{ Path = $null; Json = ($paddedAttestationJson + ' '); Message = 'The process-only identity attestation must be nonempty valid UTF-8 JSON of at most 8192 bytes.' },
+        @{ Path = $null; Json = ('{"authorizedOwner":"' + (([string][char]0x00e9) * 4100) + '"}'); Message = 'The process-only identity attestation must be nonempty valid UTF-8 JSON of at most 8192 bytes.' },
+        @{ Path = $null; Json = '{"authorizedOwner":"generated-private-canary",'; Message = 'Identity attestation is invalid JSON.' },
+        @{ Path = $null; Json = '{}'; Message = 'schema-rejection' }
+      )) {
+      if ($null -eq $case.Path) { Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH -ErrorAction SilentlyContinue }
+      else { [Environment]::SetEnvironmentVariable('CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH', $case.Path, 'Process') }
+      if ($null -eq $case.Json) { Remove-Item -LiteralPath "Env:$attestationJsonEnvironmentName" -ErrorAction SilentlyContinue }
+      else { [Environment]::SetEnvironmentVariable($attestationJsonEnvironmentName, $case.Json, 'Process') }
+      $failure = ''
+      try { $null = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300 }
+      catch { $failure = $_.Exception.Message }
+      $expectedFailure = if ($case.Message -ceq 'schema-rejection') { $failure -ne '' } else { $failure -ceq $case.Message }
+      Assert-GeneratedAttestationCondition $expectedFailure 'Ambiguous, absent, malformed or oversized process-only attestation was accepted or exposed an unsafe error.'
+      Assert-GeneratedAttestationCondition (-not $failure.Contains('generated-private-canary')) 'An attestation refusal reflected private input.'
+    }
+    Assert-GeneratedAttestationCondition ($script:attestationFileReads -eq 0) 'Process-only or refused attestation attempted filesystem access.'
+  }
+  finally {
+    $env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH = $attestationPath
+    Remove-Item -LiteralPath "Env:$attestationJsonEnvironmentName" -ErrorAction SilentlyContinue
+    Set-Item -LiteralPath Function:Get-FileSha256 -Value $originalAttestationFileHashFunction
+    if ($null -eq $originalAttestationContentFunction) { Remove-Item -LiteralPath Function:Get-Content }
+    else { Set-Item -LiteralPath Function:Get-Content -Value $originalAttestationContentFunction.ScriptBlock }
+  }
+
   foreach ($case in @(
       @{ AccessToken = New-TestJwt; IdToken = New-TestJwt -Amr @('pwd'); Owner = 'authorized-operator' },
       @{ AccessToken = New-TestJwt; IdToken = New-TestJwt -AuthAge 301; Owner = 'authorized-operator' },
@@ -166,9 +228,18 @@ try {
     Write-Attestation $attestationPath -Owner $case.Owner
     $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = $case.AccessToken
     $env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN = $case.IdToken
-    $rejected = $false
-    try { $null = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300 } catch { $rejected = $true }
-    if (-not $rejected) { throw 'The identity guard accepted missing MFA, stale auth, missing scope, or Zach ownership.' }
+    $generatedAttestationJson = Get-Content -LiteralPath $attestationPath -Raw
+    foreach ($mode in @('path','json')) {
+      if ($mode -ceq 'json') {
+        Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH
+        [Environment]::SetEnvironmentVariable($attestationJsonEnvironmentName, $generatedAttestationJson, 'Process')
+      }
+      $rejected = $false
+      try { $null = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300 } catch { $rejected = $true }
+      Assert-GeneratedAttestationCondition $rejected 'The identity guard accepted missing MFA, stale auth, missing scope, changed identity/audience, or Zach ownership.'
+    }
+    $env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH = $attestationPath
+    Remove-Item -LiteralPath "Env:$attestationJsonEnvironmentName" -ErrorAction SilentlyContinue
   }
   Write-Attestation $attestationPath
   $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = New-TestJwt
@@ -532,6 +603,110 @@ public sealed class GeneratedRightsExportHandler : HttpMessageHandler {
     Set-Item -LiteralPath Function:Wait-GrantExpiry -Value $originalGrantWaitFunction
   }
 
+  # Exercise the real acceptance gate and lifecycle with generated verified aggregates only.
+  # Stopping at the grant wait proves complete/D1 coverage continues, while every incomplete
+  # D2 category must stop after export/download and before waiting, refresh or deletion.
+  $originalCoveragePolicy = $ExpectedPolicyVersion
+  $coverageFunctionNames = @(
+    'Assert-SyntheticRefreshPrerequisites','Assert-CandidateRightsExportReady','Invoke-CandidateApi',
+    'Wait-ExportReady','Test-ExactVersionGrant','Wait-GrantExpiry','Refresh-SyntheticIdentityContext'
+  )
+  $originalCoverageFunctions = @{}
+  foreach ($name in $coverageFunctionNames) {
+    $originalCoverageFunctions[$name] = (Get-Item -LiteralPath "Function:$name").ScriptBlock
+  }
+  $coverageAcceptanceAssertions = 0
+  function Assert-GeneratedCoverageCondition {
+    param([bool]$Condition, [string]$Description)
+    $script:coverageAcceptanceAssertions += 1
+    if (-not $Condition) { throw $Description }
+  }
+  try {
+    function Assert-SyntheticRefreshPrerequisites { return $true }
+    function Assert-CandidateRightsExportReady { return $true }
+    function Invoke-CandidateApi {
+      param([string]$Method, [string]$Path)
+      $script:coverageLifecyclePaths.Add($Path)
+      if ($Method -cne 'POST' -or $Path -cne '/me/data-exports') { throw 'generated-unexpected-deletion' }
+      return [pscustomobject]@{ Body = [pscustomobject]@{
+        id = '018f0f6d-7b51-7c2e-8a91-1c4f35e1b92a'; policyVersion = $ExpectedPolicyVersion
+      } }
+    }
+    function Wait-ExportReady {
+      return [pscustomobject]@{ download = [pscustomobject]@{ url = 'https://generated.example/export' } }
+    }
+    function Test-ExactVersionGrant {
+      $script:coverageDownloadCalls += 1
+      return [pscustomobject]@{
+        ExportCoverage = $script:generatedAcceptanceCoverage
+        GrantExpiresAt = $now.AddMinutes(1); ArtifactExpiresAt = $now.AddHours(1)
+      }
+    }
+    function Wait-GrantExpiry {
+      $script:coverageGrantWaitCalls += 1
+      throw 'generated-stop-after-coverage'
+    }
+    function Refresh-SyntheticIdentityContext { throw 'generated-unexpected-refresh' }
+    $coverageBoundary = [pscustomobject]@{
+      Runtime = [pscustomobject]@{}
+      Identity = [pscustomobject]@{ Token = 'generated-access'; IdToken = 'generated-id' }
+    }
+    $completeCoverage = [ordered]@{
+      valid = $true; consentCount = 1; contributionApprovalCount = 1; contributionCount = 1
+      privateCaptureCount = 1; trustCaseCount = 1; trustCaseEventCount = 1
+    }
+    $coverageCases = @(
+      @{ Policy = 'd2-development-synthetic-v1'; Missing = $null; Continue = $true },
+      @{ Policy = 'd1-synthetic-v1'; Missing = 'all'; Continue = $true },
+      @{ Policy = 'd2-development-synthetic-v1'; Missing = 'all'; Continue = $false }
+    )
+    foreach ($name in @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount')) {
+      $coverageCases += @{ Policy = 'd2-development-synthetic-v1'; Missing = $name; Continue = $false }
+    }
+    foreach ($case in $coverageCases) {
+      $ExpectedPolicyVersion = $case.Policy
+      $script:generatedAcceptanceCoverage = $completeCoverage | ConvertTo-Json | ConvertFrom-Json
+      if ($case.Missing -ceq 'all') {
+        $script:generatedAcceptanceCoverage = $zeroCoverage | ConvertTo-Json | ConvertFrom-Json
+      }
+      elseif ($null -ne $case.Missing) { $script:generatedAcceptanceCoverage.($case.Missing) = 0 }
+      $script:coverageLifecyclePaths = [Collections.Generic.List[string]]::new()
+      $script:coverageDownloadCalls = 0
+      $script:coverageGrantWaitCalls = 0
+      $failure = ''
+      try { $null = Invoke-FixedLifecycle $coverageBoundary $plan }
+      catch { $failure = $_.Exception.Message }
+      Assert-GeneratedCoverageCondition ($script:coverageLifecyclePaths.Count -eq 2) 'The coverage gate changed the idempotent export sequence or reached a deletion request.'
+      Assert-GeneratedCoverageCondition (@($script:coverageLifecyclePaths | Where-Object { $_ -cne '/me/data-exports' }).Count -eq 0) 'Incomplete coverage reached account deletion.'
+      Assert-GeneratedCoverageCondition ($script:coverageDownloadCalls -eq 1) 'Coverage was checked without one verified export download.'
+      if ($case.Continue) {
+        Assert-GeneratedCoverageCondition ($failure -ceq 'generated-stop-after-coverage' -and $script:coverageGrantWaitCalls -eq 1) 'Complete D2 or valid empty D1 coverage did not continue to grant expiry.'
+        Assert-GeneratedCoverageCondition ($null -ne $script:VerifiedExportCoverage) 'Accepted aggregate coverage was not retained.'
+        if ($case.Policy -ceq 'd1-synthetic-v1') {
+          Assert-GeneratedCoverageCondition ($script:VerifiedExportCoverage.contributionCount -eq 0) 'Empty D1 coverage was changed.'
+        }
+      }
+      else {
+        Assert-GeneratedCoverageCondition ($failure.StartsWith('D2 acceptance stopped before account deletion: nonempty export coverage is required for ')) 'Incomplete D2 coverage did not produce the fixed actionable refusal.'
+        Assert-GeneratedCoverageCondition ($script:coverageGrantWaitCalls -eq 0) 'Incomplete D2 coverage reached grant expiry waiting.'
+        Assert-GeneratedCoverageCondition ($null -eq $script:VerifiedExportCoverage) 'Incomplete D2 coverage was retained as verified acceptance.'
+        Assert-GeneratedCoverageCondition ($failure.Contains('fresh MFA and a new reviewed run') -and $failure.Contains('configured expiry')) 'The refusal omitted recovery guidance for the existing export and next reviewed run.'
+        if ($case.Missing -cne 'all') {
+          Assert-GeneratedCoverageCondition ($failure.Contains($case.Missing)) 'The refusal did not identify its missing aggregate category.'
+        }
+        foreach ($privateValue in @('generated-access','generated-id','018f0f6d-7b51-7c2e-8a91-1c4f35e1b92a','https://')) {
+          Assert-GeneratedCoverageCondition (-not $failure.Contains($privateValue)) 'The coverage refusal reflected private input.'
+        }
+      }
+    }
+  }
+  finally {
+    $ExpectedPolicyVersion = $originalCoveragePolicy
+    foreach ($name in $coverageFunctionNames) {
+      Set-Item -LiteralPath "Function:$name" -Value $originalCoverageFunctions[$name]
+    }
+  }
+
   $nativeReady = Invoke-CandidateRightsExportHelper -CheckReady
   Assert-GeneratedExportCondition ($nativeReady.ready -eq $true) 'The actual installed Node/source-schema readiness check failed.'
   $generatedExport = [ordered]@{
@@ -647,6 +822,7 @@ finally {
   Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN -ErrorAction SilentlyContinue
   Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_CLIENT_SECRET -ErrorAction SilentlyContinue
   Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath "Env:$attestationJsonEnvironmentName" -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $temporary) {
     $cleanupTarget = Get-Item -LiteralPath $temporary -Force
     $expectedParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -660,4 +836,4 @@ finally {
   }
 }
 
-Write-Output "development-candidate-rights-acceptance-operator tests passed (refresh prerequisite assertions: $refreshPrerequisiteAssertions; export verification assertions: $exportVerificationAssertions)"
+Write-Output "development-candidate-rights-acceptance-operator tests passed (refresh prerequisite assertions: $refreshPrerequisiteAssertions; export verification assertions: $exportVerificationAssertions; D2 acceptance coverage assertions: $coverageAcceptanceAssertions; attestation input assertions: $attestationInputAssertions)"

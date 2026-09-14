@@ -50,6 +50,25 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Fresh candidate-rights preparation (`2026-09-14`, D2-020/D2-057): the owner confirms a disposable
+candidate account is available and may be permanently deleted after testing; this is not authority
+to delete the main candidate or human appeal account. Read-only development Status passes at state
+`339`: rights/policy/backup/Auth0 bindings are ready, queues empty, alarms OK and active compute zero.
+The existing candidate web issuer, audience and client ID match Gateway `66`. No fresh identity,
+test records, export or deletion has been executed in this preparation turn.
+
+Two operator gaps are corrected: D2 acceptance now refuses deletion unless the verified export has
+all six nonempty D2 counters, and a maintained loopback Auth0/PKCE handoff replaces historical
+cookie-extraction helpers. The new handoff requires private confirmation of the verified disposable
+identity, retains credentials/attestation only in memory, and separates read-only Plan from exact
+reviewed Execute. It creates no accounts or test data and changes no client scopes. Both PowerShell
+hosts pass 33 prerequisite, 85 export, 94 coverage and 43 attestation assertions; Node export tests
+pass 83 cases, and the new session/bridge suite passes 49 cases. These are local checks, not fresh
+rights acceptance. Prepare the disposable account's contribution/consent/Trust history and separate
+private capture before the short-lived MFA run; the current popup has no private-save button.
+See the [maintained handoff](../../../infrastructure/runbooks/deployments/development-candidate-rights-acceptance.md#disposable-account-preparation-and-local-sign-in)
+and the [single rationale](#decisions-and-scope-changes). Phase 2 remains In progress.
+
 Installed Ashby acceptance (`2026-09-13`, D2-035/D2-061): the user answers the post-reload
 Technology Stack/Benefits check with “yes it includes everything nice.” The full-description
 preview check is complete. The initial Processing `queued` / Trust `refresh to check` report
@@ -2878,7 +2897,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
 | Takedown and human appeal-decision acceptance | Hosted sign-in, authenticated empty appeal-queue read and logout/root-reload checks are user-confirmed Complete on September 14 at protected `211e59d`. Assignments remain unchanged, the short public alias stays identity-dark and persistent project env keys remain zero. | Separately authorized takedown/human appeal-decision journeys remain. Do not repeat hosted-access checks or manufacture a case to test access. Preserve independent reviewers and evidence/version binding; no new secret, repeated reuse approval, borrowed human session or expanded reviewer role is needed. |
-| Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
+| Fresh candidate-rights acceptance | D2-051's Gateway/core corrections and historical isolated recovery remain complete. Read-only state-339 rights/backup/Auth0/health and candidate-client bindings pass September 14. Nonempty D2 export guard and secure memory-only disposable sign-in handoff are implemented and locally tested. No fresh export/deletion has run. | The owner has approved a disposable candidate, not the main/appeal account. Prepare same-account contribution/consent/Trust history and private capture, then privately bind that identity with fresh MFA and execute the reviewed lifecycle. Neither deployment nor historical Replay substitutes for this acceptance. Preserve other accounts, queued work and disabled general ingestion. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
 | Authenticated load and abuse acceptance | Paced public-policy and unauthenticated-boundary workload passed. Separate paused-intake and active-processing-to-review runners pass 29 synthetic regressions. D2-045's matching inspector profiles are implemented and verified, including strict aggregates, metric coverage and settled queues. | Use explicitly scoped disposable authenticated candidates for a bounded development workload and matching server aggregates. The active runner follows the existing five-minute schedule, never approves a case, and is not throughput/publication acceptance. No production traffic, raw tokens, personal payloads, or invented provider truth. |
@@ -2890,6 +2909,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-14 | Recorded disposable-account test/deletion authorization, verified the deployed rights boundary read-only, and replaced unsafe historical sign-in mechanics with a maintained standard OAuth/PKCE handoff. Added a D2-only nonempty coverage stop before deletion and bounded memory-only attestation input, preserving legacy file/D1 behavior. No fresh account was selected, seeded, exported or deleted. | D2-020; D2-057 | Status `e14539`: state 339, bound rights/backup/Auth0, empty queues, healthy alarms, zero active compute; client/Gateway-66 binding `eed573`. Both PowerShell hosts: 33 prerequisite +85 export +94 coverage +43 attestation assertions. Node: 83 export +49 session/bridge tests. Scope and rationale stay in the single decisions section; existing recovery/hosting/provider checks are not repeated. |
 | 2026-09-14 | Completed hosted appeal-console access acceptance after the owner confirms Sign out plus stable-root reload returns the sign-in link without the review queue. Prior hosted sign-in and authenticated empty-queue checks remain accepted; no repetition needed. Separate case-decision and other Phase 2 gates remain open. | D2-026; D2-030; D2-R12 | User `yes` to the exact logout/reload check; [session-gated console](../../../frontend/admin/app/page.tsx) at protected source `211e59d`. Aggregate observed UI/session clearing only, not cross-device/token revocation. No code, deployment, role, case or cloud change. |
 | 2026-09-14 | Accepted the hosted human sign-in and authenticated empty appeal-queue check. The user reports “No cases are awaiting this review” after the fresh stable-origin sign-in/MFA/Load review queue instructions. Logout remains unverified; no case is created or decided for access testing, and Phase 2 stays In progress. | D2-026; D2-030; D2-R12 | User confirmation at the protected stable alias bound to `211e59d` / `dpl_GwzQxabzVjM4rMgwXejddZWAHwE7`. [Queue success handling](../../../frontend/admin/app/trust-console.tsx), [authenticated queue route](../../../frontend/admin/app/api/trust/cases/route.ts), [MFA/session enforcement](../../../frontend/admin/lib/auth0.ts). Aggregate result only; no token, identity, case data or cloud mutation retained. |
 | 2026-09-14 | Corrected deployment-scoped server environment delivery with paired runtime/build overrides, then bound only the protected stable alias to the READY replacement. The user identifies the reported identity-unavailable response as the old stable `/auth/callback`; start a fresh stable-origin login, not callback replay. No application code, Turbo hashes, roles or cases changed. | D2-030; D2-R12 | Identity/proxy 31/31 (`fdde0d`); exact preflight `aa4f97`; corrected source `211e59d`, deployment `dpl_GwzQxabzVjM4rMgwXejddZWAHwE7`, completed `2026-09-14T15:59:28.5781848+00:00` (`c6fea2`); independent eight-key/source readback `ede5cf`; alias/protection/unchanged short domain/project-env-zero `b5964c`. Original encrypted record/window preserved and fresh hosted session secret generated. Human sign-in/MFA/queue/logout remains unverified. [Operational correction](../../../infrastructure/runbooks/deployments/vercel-nextjs-hosting.md#d2-appeal-only-deployment-overrides). |
@@ -3132,6 +3152,23 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For fresh candidate rights on `2026-09-14`, interpret the owner's `yes` only as authorization for
+a separately confirmed disposable candidate account to undergo testing and permanent deletion.
+Require nonempty Phase 2 contribution/consent/Trust/private-capture coverage before deletion because
+an empty account would not exercise the new data owners. Keep empty exports valid outside this
+acceptance precondition; no product contract or policy value changes. Do not approve/publish a
+contribution merely to populate test data, and do not reuse the main candidate or appeal identity.
+
+Use a maintained, operator-only OAuth authorization-code/S256-PKCE loopback transaction at the
+already registered candidate callback. Historical ignored helpers bind old accounts/state and
+decrypt browser cookies; they are not reused or executed. The new helper verifies signed tokens,
+requires explicit same-browser disposable-identity confirmation and keeps both credentials and
+the exact attestation in process memory. It does not widen Auth0 scopes, add a hosted credential
+endpoint, change reviewer roles, automatically execute a plan or ask the owner to paste tokens or
+receipt hashes. Explicit reviewed Plan/Execute separation, one Execute attempt per session, private
+identity confirmation and no automatic retry after ambiguous deletion protect the exact authorized
+account. This closes a local handoff gap, not live rights acceptance or a production approval.
 
 For hosted human appeals on `2026-09-14`, select the already-owned protected stable alias
 `https://ai-job-apply-admin-applydash2026-5637.vercel.app`. Exact project/alias metadata and an
