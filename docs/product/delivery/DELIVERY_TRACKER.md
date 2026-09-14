@@ -318,6 +318,16 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Shared-job history recovery (`2026-09-14`, D2-066 In progress): the owner reports empty extension
+  lists on all accounts. Logout clears local receipts and no server history recovery exists;
+  session/storage failures also appear empty. Implement a bounded authenticated owner-history
+  route and explicit refresh without weakening logout cleanup or exposing other accounts.
+  No server deletion is established, and no resubmission or repeated Mintlify requeue is needed.
+  Source now passes 422 extension, 57 contract, 49 Jobs, 124 Gateway and eight real PostgreSQL
+  tests plus typechecks and 76 Terraform tests. Full verification/deployment/installed acceptance
+  remain pending. Docker/WSL are stopped; no resubmission or live data mutation occurred.
+  [Current work and decision](phase-2-extension-and-community.md#task-register).
+
 - Mintlify-only activation/recovery (`2026-09-14`, D2-065 In progress): corrected worker `f12c289`
   and the fourth source/registration pair are deployed and verified at state `341`, versions
   Gateway/scheduled/Trust `66`/`29`/`22`, zero drift and 13 OK alarms. Existing boards, hosts,

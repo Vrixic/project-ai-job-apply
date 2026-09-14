@@ -46,6 +46,13 @@ interface ExtensionResponse {
   queue?: QueueStatus;
   ownerAction?: "ok" | "not_found" | "unavailable" | "version_conflict" | "rejected";
   receipts?: ContributionReceipt[];
+  sharedJobsState?:
+    | "cached"
+    | "refreshed"
+    | "sign_in_required"
+    | "storage_unavailable"
+    | "unavailable"
+    | "rejected";
   status?: AuthStatus;
 }
 
@@ -83,6 +90,8 @@ const queuePanel = node<HTMLDetailsElement>("#queue-panel");
 const contributionsPanel = node<HTMLDetailsElement>("#contributions-panel");
 const contributionsStatus = node<HTMLElement>("#contributions-status");
 const contributionList = node<HTMLElement>("#contribution-list");
+const sharedJobsRefreshButton = node<HTMLButtonElement>("#refresh-shared-jobs");
+const sharedJobsStatus = node<HTMLElement>("#shared-jobs-status");
 const ownerActionStatus = node<HTMLElement>("#owner-action-status");
 const appealDialog = node<HTMLDialogElement>("#appeal-dialog");
 const appealForm = node<HTMLFormElement>("#appeal-form");
@@ -120,6 +129,7 @@ const busyCopy: Record<string, string> = {
   retry: "Retrying queued delivery…",
   retry_stopped: "Retrying stopped delivery…",
   status: "Checking extension readiness…",
+  shared_jobs_refresh: "Loading your latest shared jobs…",
   trust_refresh: "Refreshing Trust status…",
   withdraw: "Withdrawing the contribution…",
 };
@@ -128,6 +138,7 @@ let currentCapture: SanitizedJobCapture | undefined;
 let currentDelivery: DeliveryReadiness | undefined;
 let appealContributionId: string | undefined;
 let busy = false;
+let authenticated = false;
 let fieldSequence = 0;
 
 function controls(): HTMLButtonElement[] {
@@ -141,6 +152,7 @@ function controls(): HTMLButtonElement[] {
     retryStoppedButton,
     clearStoppedButton,
     clearQueueButton,
+    sharedJobsRefreshButton,
     ...fieldList.querySelectorAll<HTMLButtonElement>("button"),
     ...contributionList.querySelectorAll<HTMLButtonElement>("button"),
   ];
@@ -152,6 +164,7 @@ function updateControlState(): void {
 
   inspectButton.disabled = false;
   contributeButton.disabled = !currentCapture || currentDelivery?.contribution.ready !== true;
+  sharedJobsRefreshButton.disabled = !authenticated;
 }
 
 function setBusy(nextBusy: boolean, action?: string): void {
@@ -173,6 +186,8 @@ function renderDeliveryReadiness(): void {
 }
 
 function renderSessionStatus(status: AuthStatus): void {
+  authenticated = status.authenticated;
+  if (!authenticated) renderReceipts([], "sign_in_required");
   authStatus.textContent = status.configured
     ? status.authenticated
       ? "Signed in"
@@ -236,7 +251,7 @@ function renderStatus(response: ExtensionResponse): void {
       response.queue.pending + response.queue.stopped + response.queue.blocked === 0;
     if (response.queue.stopped + response.queue.blocked > 0) queuePanel.open = true;
   }
-  if (response.receipts) renderReceipts(response.receipts);
+  if (response.receipts) renderReceipts(response.receipts, response.sharedJobsState);
   if (response.ownerAction) {
     ownerActionStatus.textContent = {
       ok: "Contribution information updated.",
@@ -253,13 +268,43 @@ function renderStatus(response: ExtensionResponse): void {
   else updateControlState();
 }
 
-function renderReceipts(receipts: ContributionReceipt[]): void {
+function renderReceipts(
+  receipts: ContributionReceipt[],
+  state: ExtensionResponse["sharedJobsState"] = "cached",
+): void {
   contributionList.replaceChildren();
   contributionsStatus.textContent =
-    receipts.length === 0 ? "No contributions" : `${receipts.length} saved`;
+    receipts.length > 0
+      ? `${receipts.length} saved`
+      : state === "refreshed"
+        ? "No shared jobs"
+        : state === "sign_in_required"
+          ? "Sign in required"
+          : state === "cached"
+            ? "History not loaded"
+            : "History unavailable";
+  sharedJobsStatus.textContent = {
+    cached:
+      "Showing this device's saved status. Refresh shared jobs to load your latest 25 contributions from your account.",
+    refreshed:
+      "Your latest shared jobs were loaded. Up to 25 receipts are kept on this device; Trust status refreshes separately.",
+    sign_in_required:
+      "Sign in or refresh your session to load your shared jobs. Do not submit the jobs again.",
+    storage_unavailable:
+      "This device's contribution history could not be read. Close and reopen the extension, then try again. No data was cleared.",
+    unavailable:
+      "Shared jobs could not be loaded. Saved receipts were kept; try Refresh shared jobs again later.",
+    rejected:
+      "The shared-job history response was not accepted. Saved receipts were kept; try again later.",
+  }[state];
   if (!receipts.length) {
     const empty = document.createElement("p");
-    empty.textContent = "No acknowledged contributions for this account.";
+    empty.textContent =
+      state === "refreshed"
+        ? "No shared jobs were returned for this account."
+        : state === "cached"
+          ? "No contribution receipts are saved on this device. This does not mean your shared jobs were deleted."
+          : "Your contribution history is not available in this view yet.";
     contributionList.append(empty);
     return;
   }
@@ -559,6 +604,10 @@ async function invoke(message: Record<string, unknown>): Promise<ExtensionRespon
   try {
     const response = (await chrome.runtime.sendMessage(message)) as ExtensionResponse;
     renderStatus(response);
+    if (action === "shared_jobs_refresh" && response.sharedJobsState) {
+      contributionsPanel.open = true;
+      sharedJobsStatus.focus();
+    }
     if (response.capture) {
       renderCapture(response.capture);
     } else if (action === "capture" && !response.ok) {
@@ -587,8 +636,14 @@ logoutButton.addEventListener("click", () => {
   currentCapture = undefined;
   currentDelivery = undefined;
   preview.hidden = true;
+  authenticated = false;
+  renderReceipts([], "sign_in_required");
   void invoke({ action: "logout" });
 });
+sharedJobsRefreshButton.addEventListener(
+  "click",
+  () => void invoke({ action: "shared_jobs_refresh" }),
+);
 inspectButton.addEventListener("click", () => void invoke({ action: "capture" }));
 retryButton.addEventListener("click", () => void invoke({ action: "retry" }));
 retryStoppedButton.addEventListener("click", () => {

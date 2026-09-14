@@ -265,10 +265,12 @@ run "d2_activation_requires_and_wires_every_explicit_boundary" {
       aws_lambda_event_source_mapping.d2_trust_signal[0].scaling_config[0].maximum_concurrency == 2 &&
       aws_lambda_event_source_mapping.d2_trust_signal[0].scaling_config[0].maximum_concurrency == aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions &&
       aws_lambda_function.d2_community_scheduled[0].reserved_concurrent_executions == 1 &&
-      length(aws_apigatewayv2_route.d2_community_protected) == 18 &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 19 &&
       length(aws_apigatewayv2_route.d2_contribution_policy) == 1 &&
       aws_apigatewayv2_route.d2_contribution_policy[0].authorization_type == "NONE" &&
       toset(aws_apigatewayv2_route.d2_community_protected["POST /v1/jobs/contributions"].authorization_scopes) == toset(["jobs:contribute"]) &&
+      aws_apigatewayv2_route.d2_community_protected["GET /v1/jobs/contributions"].authorization_type == "JWT" &&
+      toset(aws_apigatewayv2_route.d2_community_protected["GET /v1/jobs/contributions"].authorization_scopes) == toset(["jobs:contribute"]) &&
       toset(aws_apigatewayv2_route.d2_community_protected["POST /v1/admin/trust/cases"].authorization_scopes) == toset(["trust:review", "trust:case:open"]) &&
       toset(aws_apigatewayv2_route.d2_community_protected["GET /v1/saved-job-captures/{captureId}"].authorization_scopes) == toset(["jobs:read"]) &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_PRIVATE_CAPTURE_ROUTES_ENABLED == "true" &&
@@ -375,7 +377,7 @@ run "d2_development_contributions_work_without_signatures_or_policy_endpoint" {
     condition = (
       local.d2_development_contributions_enabled &&
       length(aws_apigatewayv2_route.d2_contribution_policy) == 0 &&
-      length(aws_apigatewayv2_route.d2_community_protected) == 18 &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 19 &&
       length(aws_cloudwatch_event_rule.d2_community_schedule) == 1 &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_DEPLOYMENT_ENVIRONMENT == "development" &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED == "true" &&
@@ -1374,7 +1376,7 @@ run "d2_maintenance_pauses_execution_without_changing_the_activated_boundary" {
       length(aws_cloudwatch_event_target.d2_community_schedule) == 1 &&
       length(aws_lambda_permission.d2_community_schedule) == 1 &&
       length(aws_lambda_event_source_mapping.d2_trust_signal) == 1 &&
-      length(aws_apigatewayv2_route.d2_community_protected) == 18 &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 19 &&
       length(aws_apigatewayv2_route.d2_contribution_policy) == 1 &&
       length(aws_nat_gateway.ingestion_provider) == 1 &&
       local.provider_private_egress &&
@@ -1459,7 +1461,7 @@ run "d2_development_maintenance_retains_unsigned_mode_and_provider_selection" {
       aws_lambda_function.d2_trust_signal[0].reserved_concurrent_executions == 0 &&
       aws_cloudwatch_event_rule.d2_community_schedule[0].state == "DISABLED" &&
       !aws_lambda_event_source_mapping.d2_trust_signal[0].enabled &&
-      length(aws_apigatewayv2_route.d2_community_protected) == 18 &&
+      length(aws_apigatewayv2_route.d2_community_protected) == 19 &&
       length(aws_apigatewayv2_route.d2_contribution_policy) == 0 &&
       length(aws_nat_gateway.ingestion_provider) == 1
     )
@@ -1490,7 +1492,7 @@ run "d2_maintenance_false_restores_reviewed_execution_limits" {
       aws_lambda_function.d2_trust_signal[0].environment[0].variables.D2_COMMUNITY_RUNTIME_ENABLED == "true" &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_CONTRIBUTION_ROUTES_ENABLED == "true" &&
       aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_REVIEWER_ROUTES_ENABLED == "true" &&
-      length(aws_apigatewayv2_route.d2_community_protected) == 18
+      length(aws_apigatewayv2_route.d2_community_protected) == 19
     )
     error_message = "Leaving maintenance must restore exact configured bounds and existing triggers/routes, not hardcoded concurrency defaults."
   }

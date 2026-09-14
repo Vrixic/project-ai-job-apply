@@ -93,6 +93,96 @@ describe("popup retained-session lifecycle", () => {
     expect(button("inspect").disabled).toBe(false);
   });
 
+  it("loads shared jobs only after its explicit button and distinguishes missing local history", async () => {
+    const status = { ...expiredSession, authenticated: true };
+    const sendMessage = await popup(status);
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      status,
+      ...{ receipts: [], sharedJobsState: "cached" },
+    });
+    button("refresh").click();
+    await idle();
+    expect(document.querySelector("#contributions-status")?.textContent).toBe("History not loaded");
+    expect(document.querySelector("#contribution-list")?.textContent).toContain(
+      "does not mean your shared jobs were deleted",
+    );
+    expect(button("refresh-shared-jobs").disabled).toBe(false);
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      status,
+      ...{
+        receipts: [
+          { contributionId: "018f0000-0000-7000-8000-000000000004", state: "awaiting_trust" },
+        ],
+        sharedJobsState: "refreshed",
+      },
+    });
+    button("refresh-shared-jobs").click();
+    await idle();
+    expect(sendMessage).toHaveBeenLastCalledWith({ action: "shared_jobs_refresh" });
+    expect(document.querySelector("#contributions-status")?.textContent).toBe("1 saved");
+    expect(document.querySelector("#contribution-list")?.textContent).toContain(
+      "Processing: awaiting trust",
+    );
+    expect(document.querySelector("#shared-jobs-status")?.textContent).toContain(
+      "Trust status refreshes separately",
+    );
+    expect(document.activeElement?.id).toBe("shared-jobs-status");
+    expect(sendMessage).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not show a signed-out account as having no shared jobs", async () => {
+    await popup(expiredSession);
+    expect(button("refresh-shared-jobs").disabled).toBe(true);
+    expect(document.querySelector("#contributions-status")?.textContent).toBe("Sign in required");
+    expect(document.querySelector("#shared-jobs-status")?.textContent).toContain(
+      "Sign in or refresh your session",
+    );
+    expect(document.querySelector("#contribution-list")?.textContent).not.toContain(
+      "No shared jobs",
+    );
+  });
+
+  it("shows a genuine empty account only after a successful owner history load", async () => {
+    const status = { ...expiredSession, authenticated: true };
+    const sendMessage = await popup(status);
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      status,
+      ...{ receipts: [], sharedJobsState: "refreshed" },
+    });
+    button("refresh-shared-jobs").click();
+    await idle();
+    expect(document.querySelector("#contributions-status")?.textContent).toBe("No shared jobs");
+    expect(document.querySelector("#contribution-list")?.textContent).toContain(
+      "No shared jobs were returned for this account",
+    );
+  });
+
+  it("keeps saved receipt controls visible when history loading fails", async () => {
+    const status = { ...expiredSession, authenticated: true };
+    const sendMessage = await popup(status);
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      status,
+      ...{
+        receipts: [{ contributionId: "018f0000-0000-7000-8000-000000000004", state: "published" }],
+        sharedJobsState: "unavailable",
+      },
+    });
+    button("refresh-shared-jobs").click();
+    await idle();
+    expect(document.querySelector("#contributions-status")?.textContent).toBe("1 saved");
+    expect(document.querySelector("#contribution-list")?.textContent).toContain(
+      "Refresh processing",
+    );
+    expect(document.querySelector("#shared-jobs-status")?.textContent).toContain(
+      "Saved receipts were kept",
+    );
+    expect(button("refresh-shared-jobs").disabled).toBe(false);
+  });
+
   it("lets an expired retained session retry refresh without authorizing delivery", async () => {
     const sendMessage = await popup(expiredSession);
     expect(button("refresh").hidden).toBe(false);

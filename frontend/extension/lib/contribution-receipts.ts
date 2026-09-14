@@ -59,7 +59,8 @@ function parseReceipt(value: unknown): ContributionReceipt | undefined {
     !UUID_V7.test(receipt.contributionId) ||
     typeof receipt.identityFence !== "string" ||
     !IDENTITY_FENCE.test(receipt.identityFence) ||
-    !CONTRIBUTION_STATES.has(String(receipt.state)) ||
+    typeof receipt.state !== "string" ||
+    !CONTRIBUTION_STATES.has(receipt.state) ||
     !exactInstant(receipt.submittedAt) ||
     !exactInstant(receipt.updatedAt)
   )
@@ -79,7 +80,8 @@ function parseReceipt(value: unknown): ContributionReceipt | undefined {
     if (
       Object.keys(candidate).sort().join("\0") !== trustKeys.sort().join("\0") ||
       typeof candidate.appealed !== "boolean" ||
-      !TRUST_STATES.has(String(candidate.state)) ||
+      typeof candidate.state !== "string" ||
+      !TRUST_STATES.has(candidate.state) ||
       !Number.isSafeInteger(candidate.version) ||
       Number(candidate.version) < 1 ||
       !exactInstant(candidate.updatedAt) ||
@@ -138,6 +140,44 @@ export function receiptsForIdentity(
   identityFence: string,
 ): ContributionReceipt[] {
   return receipts.filter((receipt) => receipt.identityFence === identityFence);
+}
+
+export function mergeContributionHistory(
+  receipts: readonly ContributionReceipt[],
+  contributions: readonly JobContribution[],
+  identityFence: string,
+): ContributionReceipt[] {
+  const owned = new Map(
+    receiptsForIdentity(receipts, identityFence).map((receipt) => [
+      receipt.contributionId,
+      receipt,
+    ]),
+  );
+  for (const contribution of contributions) {
+    const current = owned.get(contribution.id);
+    if (current && current.submittedAt !== contribution.submittedAt) {
+      throw new TypeError("Contribution history identity mismatch");
+    }
+    // History has no Trust projection. Never replace a newer processing read or a Trust snapshot.
+    owned.set(
+      contribution.id,
+      current
+        ? Date.parse(contribution.updatedAt) > Date.parse(current.updatedAt)
+          ? updateContributionStatus(current, contribution)
+          : current
+        : receiptFromContribution(contribution, identityFence),
+    );
+  }
+  const latest = [...owned.values()].sort(
+    (left, right) =>
+      right.submittedAt.localeCompare(left.submittedAt) ||
+      right.contributionId.localeCompare(left.contributionId),
+  );
+  // A bounded server page is not deletion evidence for older cached contributions.
+  return [
+    ...latest,
+    ...receipts.filter((receipt) => receipt.identityFence !== identityFence),
+  ].slice(0, MAXIMUM_CONTRIBUTION_RECEIPTS);
 }
 
 export function updateContributionStatus(

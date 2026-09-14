@@ -83,6 +83,7 @@ export interface JobContributionStatus {
 export interface JobContributionStore {
   ping(): Promise<void>;
   create(command: CreateJobContributionCommand): Promise<JobContributionStatus>;
+  list(ownerUserId: string): Promise<JobContributionStatus[]>;
   get(ownerUserId: string, contributionId: string): Promise<JobContributionStatus | null>;
   cancel?(
     command: CancelJobContributionCommand,
@@ -115,6 +116,7 @@ export interface JobContributionCapabilityPolicyLoader {
 export interface JobContributions {
   ping(): Promise<void>;
   contribute(command: CreateJobContributionCommand): Promise<JobContributionStatus>;
+  list(ownerUserId: string): Promise<JobContributionStatus[]>;
   get(ownerUserId: string, contributionId: string): Promise<JobContributionStatus | null>;
   cancel?(command: CancelJobContributionCommand): Promise<JobContributionStatus | null>;
 }
@@ -541,6 +543,17 @@ export class JobContributionService implements JobContributions {
       now,
     });
     if (!decision.allowed) throw new JobContributionCapabilityDisabledError();
+  }
+
+  async list(ownerUserId: string): Promise<JobContributionStatus[]> {
+    if (!UUID_V7_PATTERN.test(ownerUserId)) {
+      throw new TypeError("The contribution history owner is invalid");
+    }
+    try {
+      return (await this.store.list(ownerUserId)).map((item) => Object.freeze({ ...item }));
+    } catch (error) {
+      throw new JobContributionUnavailableError("JOB_STORE_READ", error);
+    }
   }
 
   async get(ownerUserId: string, contributionId: string): Promise<JobContributionStatus | null> {

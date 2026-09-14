@@ -126,6 +126,7 @@ interface BackgroundResponse {
   ok: boolean;
   error?: string;
   ownerAction?: string;
+  sharedJobsState?: string;
   delivery: { contribution: { ready: boolean; reason: string } };
   queue: { blocked: number; pending: number; stopped: number };
   receipts: { contributionId: string }[];
@@ -837,6 +838,178 @@ describe("warm background worker signed-policy readiness", () => {
     expect(result).not.toHaveProperty("receipts");
     expect(result).not.toHaveProperty("capture");
     expect(result).not.toHaveProperty("queue");
+  });
+
+  it("restores missing receipts only on explicit shared-job refresh, without dispatch or polling", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      response({
+        items: [
+          {
+            id: ownerContributionId,
+            state: "awaiting_trust",
+            submittedAt: now,
+            updatedAt: now,
+          },
+        ],
+      }),
+    );
+    const worker = await background(fetcher, true);
+    worker.local.set(CONTRIBUTION_RECEIPTS_KEY, []);
+    expect((await worker.status()).sharedJobsState).toBe("cached");
+    expect(fetcher).not.toHaveBeenCalled();
+    const restored = await worker.send({ action: "shared_jobs_refresh" });
+    expect(restored).toMatchObject({
+      ok: true,
+      sharedJobsState: "refreshed",
+      receipts: [{ contributionId: ownerContributionId, state: "awaiting_trust" }],
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/v1/jobs/contributions",
+    );
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
+    await worker.status();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it.each([404, 429, 503])(
+    "keeps same-owner cached receipts on history HTTP %i without claiming empty success",
+    async (status) => {
+      const worker = await background(async () => response({ private: "redacted" }, status), true);
+      const result = await worker.send({ action: "shared_jobs_refresh" });
+      expect(result.sharedJobsState).toBe("unavailable");
+      expect(result.receipts).toHaveLength(1);
+      expect(result.receipts[0]?.contributionId).toBe(ownerContributionId);
+      expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+      expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
+      expect(JSON.stringify(result)).not.toContain("redacted");
+    },
+  );
+
+  it("does not interpret authentication failure as an empty history or remove stored receipts", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const worker = await background(fetcher, true);
+    const api = await import("../lib/protocol");
+    vi.mocked(api.authenticatedApiSession).mockRejectedValue(new Error("token_request_failed"));
+    vi.mocked(api.authenticationStatus).mockResolvedValue({
+      configured: true,
+      authenticated: false,
+      apiConfigured: true,
+      refreshAvailable: true,
+    });
+    const result = await worker.status();
+    expect(result).toMatchObject({ sharedJobsState: "sign_in_required", receipts: [] });
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("reports malformed local receipt storage as unavailable without rewriting it", async () => {
+    const worker = await background(vi.fn<typeof fetch>(), true);
+    const malformed = [{ forbidden: "must-not-surface" }];
+    worker.local.set(CONTRIBUTION_RECEIPTS_KEY, malformed);
+    const result = await worker.status();
+    expect(result).toMatchObject({ sharedJobsState: "storage_unavailable", receipts: [] });
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(malformed);
+    expect(JSON.stringify(result)).not.toContain("must-not-surface");
+  });
+
+  it("refuses an array-valued history state without poisoning or replacing cached receipts", async () => {
+    const worker = await background(
+      async () =>
+        response({
+          items: [
+            { id: ownerContributionId, state: ["published"], submittedAt: now, updatedAt: now },
+          ],
+        }),
+      true,
+    );
+    const result = await worker.send({ action: "shared_jobs_refresh" });
+    expect(result).toMatchObject({ ok: false, sharedJobsState: "rejected" });
+    expect(result.receipts).toEqual([
+      expect.objectContaining({ state: "awaiting_independent_verification" }),
+    ]);
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+  });
+
+  it("settles storage failures instead of hanging or declaring an empty account", async () => {
+    const worker = await background(vi.fn<typeof fetch>(), true);
+    worker.browser.storage.local.get.mockRejectedValue(new Error("private-storage-error"));
+    worker.browser.storage.session.get.mockRejectedValue(new Error("private-session-error"));
+    const result = await worker.status();
+    expect(result).toMatchObject({
+      ok: false,
+      sharedJobsState: "storage_unavailable",
+      receipts: [],
+    });
+    expect(JSON.stringify(result)).not.toContain("private-");
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+  });
+
+  it.each(["logout", "login"] as const)(
+    "does not commit or render stale history after %s",
+    async (action) => {
+      const started = deferred<void>();
+      const release = deferred<void>();
+      const worker = await background(async () => {
+        started.resolve();
+        await release.promise;
+        return response({
+          items: [
+            { id: ownerContributionId, state: "published", submittedAt: now, updatedAt: now },
+          ],
+        });
+      }, true);
+      const loading = worker.send({ action: "shared_jobs_refresh" });
+      await started.promise;
+      await worker.send({ action });
+      release.resolve();
+      const result = await loading;
+      expect(result.ok).toBe(false);
+      expect(result).not.toHaveProperty("receipts");
+      expect(result).not.toHaveProperty("sharedJobsState");
+      expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(
+        action === "logout" ? [] : worker.originalReceipts,
+      );
+      expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(
+        action === "logout" ? [] : worker.originalQueue,
+      );
+    },
+  );
+
+  it("merges an older history read without overwriting newer processing or Trust refreshes", async () => {
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const later = "2026-09-05T12:00:21.000Z";
+    const worker = await background(async (url) => {
+      if (String(url).includes("/trust/")) return response(trustResponse(2, "accepted", later));
+      if (String(url).endsWith(ownerContributionId))
+        return response({
+          id: ownerContributionId,
+          state: "published",
+          submittedAt: now,
+          updatedAt: later,
+        });
+      started.resolve();
+      await release.promise;
+      return response({
+        items: [
+          { id: ownerContributionId, state: "awaiting_trust", submittedAt: now, updatedAt: now },
+        ],
+      });
+    }, true);
+    const loading = worker.send({ action: "shared_jobs_refresh" });
+    await started.promise;
+    await worker.send({ action: "contribution_refresh", contributionId: ownerContributionId });
+    await worker.send({ action: "trust_refresh", contributionId: ownerContributionId });
+    release.resolve();
+    expect((await loading).receipts).toEqual([
+      expect.objectContaining({
+        state: "published",
+        updatedAt: later,
+        trust: expect.objectContaining({ state: "accepted", version: 2 }),
+      }),
+    ]);
   });
 
   it("ignores an older processing read completed after cancellation while retaining Trust fields", async () => {

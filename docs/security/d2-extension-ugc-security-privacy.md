@@ -248,6 +248,15 @@ decision rationale remain in the [Phase 2 record](../product/delivery/phase-2-ex
 
 ## Retention and deletion
 
+- D2-066's explicit owner-history refresh restores at most the latest 25 minimal contribution
+  receipts after sign-in, using managed identity and the existing `jobs:contribute` scope. The
+  server accepts no caller-supplied owner, selects Jobs-owned rows only for the authenticated
+  owner and returns identifiers/state/timestamps under `no-store`. The client uses its bounded,
+  redirect-refusing background transport and account/session-fenced storage; no polling, raw
+  posting payload, new durable data, or authority expansion is introduced. Logout continues
+  clearing all local receipts/queue/session state, and late responses cannot restore cleared
+  data. Authentication/storage/network errors are distinct from empty history. Engineering
+  rationale and deployment/installed acceptance remain in the single Phase 2 decision record.
 - Normal contributions retain zero raw page snapshots.
 - Pending device intents are removed after acknowledged terminal handling or after 24 hours. The
   product owner selected this minimum practical offline-retry window for the Phase 2 candidate on

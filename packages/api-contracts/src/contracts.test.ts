@@ -139,6 +139,54 @@ describe("Job contribution intake contract", () => {
   });
 });
 
+describe("Job contribution owner history contract", () => {
+  const validate = compileComponentValidator("JobContributionHistory");
+  const contribution = {
+    id: "019c0000-0000-7000-8000-000000000010",
+    state: "awaiting_trust",
+    submittedAt: "2026-09-01T12:00:00.000Z",
+    updatedAt: "2026-09-01T12:01:00.000Z",
+  };
+
+  it("declares an owner-authenticated, bodyless no-store read with no caller filters", () => {
+    const route = contract.paths["/jobs/contributions"].get;
+    expect(route.security).toEqual([{ oidc: ["jobs:contribute"] }]);
+    expect(route).not.toHaveProperty("parameters");
+    expect(route).not.toHaveProperty("requestBody");
+    expect(route.responses["200"].headers["Cache-Control"].schema.enum).toEqual(["no-store"]);
+    expect(route.responses).toHaveProperty("503");
+  });
+
+  it("accepts genuine empty history and at most 25 minimal status records", () => {
+    expect(validate({ items: [] })).toBe(true);
+    expect(validate({ items: [contribution] })).toBe(true);
+    expect(validate({ items: Array.from({ length: 25 }, () => contribution) })).toBe(true);
+    expect(validate({ items: Array.from({ length: 26 }, () => contribution) })).toBe(false);
+  });
+
+  it("rejects malformed responses and confidential fields at either level", () => {
+    for (const value of [
+      null,
+      {},
+      [],
+      { items: null },
+      { items: [], ownerUserId: contribution.id },
+    ]) {
+      expect(validate(value)).toBe(false);
+    }
+    for (const extra of [
+      { ownerUserId: contribution.id },
+      { requestHash: "a".repeat(64) },
+      { payload: { title: "private association" } },
+      { reviewerId: contribution.id },
+      { state: "accepted" },
+      { submittedAt: "invalid" },
+    ]) {
+      expect(validate({ items: [{ ...contribution, ...extra }] })).toBe(false);
+    }
+  });
+});
+
 describe("UGC contribution consent contract", () => {
   const validateGrant = compileComponentValidator("GrantUgcContributionConsentRequest");
   const validateResponse = compileComponentValidator("UgcContributionConsentGrant");

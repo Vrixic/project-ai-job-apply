@@ -854,6 +854,31 @@
       }
     },
     "/jobs/contributions": {
+      "get": {
+        "operationId": "listJobContributions",
+        "description": "Returns at most 25 of the active authenticated owner's most recently submitted contributions, ordered by submittedAt and id descending. Accepts no query parameters or request body. Returns the same minimal owner-safe processing projection as individual status reads, not Trust or publication approval.",
+        "security": [{ "oidc": ["jobs:contribute"] }],
+        "responses": {
+          "200": {
+            "description": "The authenticated owner's bounded contribution history",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/JobContributionHistory" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      },
       "post": {
         "operationId": "createJobContribution",
         "security": [{ "oidc": ["jobs:contribute"] }],
@@ -3467,6 +3492,18 @@
           },
           "submittedAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "JobContributionHistory": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 25,
+            "items": { "$ref": "#/components/schemas/JobContribution" }
+          }
         },
         "additionalProperties": false
       },

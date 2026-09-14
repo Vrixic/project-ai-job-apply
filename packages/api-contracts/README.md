@@ -28,6 +28,13 @@ Both canonical content and preview digests bind that exact client surface/versio
 uses the fixed public-safe processing-state enum and still excludes reasons, evidence, internal
 identifiers, and reviewer data; a state does not itself claim canonical publication truth.
 
+The additive D2-066 `GET /jobs/contributions` recovers recent owner history without requiring a
+locally retained contribution identifier. It accepts no body or query and uses `jobs:contribute`.
+`JobContributionHistory` contains only `items`, with at most 25 existing `JobContribution`
+summaries in descending submitted-time/identifier order. Responses are `no-store`, account-owned,
+and contain no posting text or contributor/reviewer identities. Existing single-item/create
+contracts are unchanged; rollout requires the new exact authenticated route and compatible Gateway.
+
 The anonymous `GET /extension/contribution-capability-policy` contract returns one exact bounded
 signed envelope for extension fail-closed gating. It is explicitly `no-store`, contains no signing
 secret or pinned public-key material, and declares a fixed `503` availability boundary. Client

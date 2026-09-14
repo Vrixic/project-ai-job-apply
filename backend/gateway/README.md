@@ -15,6 +15,14 @@ The gateway must not perform long-running AI, ingestion, or browser work. It cre
 
 ## Phase 2 implementation and deployment boundary
 
+D2-066 adds exact bodyless/queryless `GET /v1/jobs/contributions` under `jobs:contribute`.
+Profile resolves the authenticated internal owner; Jobs returns the latest 25 minimal summaries.
+The Gateway validates shape, chronology, ordering and uniqueness and returns `no-store`.
+Failures are availability errors, never successful empty history. The route requires the existing
+D2 contribution activation boundary and a corresponding Terraform/Gateway release; no new scope,
+reviewer authority, provider setting or database migration is required. The Phase 2 register
+distinguishes local implementation from deployment and installed account-history recovery.
+
 The Phase 2 routes are wired through application composition, the Lambda method/path allowlist,
 and independently gated Terraform routes. Repository defaults remain dark; the controlled
 Greenhouse-only development exception is recorded in the

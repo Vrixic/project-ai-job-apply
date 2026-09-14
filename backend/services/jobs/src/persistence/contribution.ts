@@ -69,7 +69,7 @@ function timestamp(value: Date | string): string {
   return parsed.toISOString();
 }
 
-function status(row: ContributionRow): JobContributionStatus {
+function status(row: Omit<ContributionRow, "requestHash">): JobContributionStatus {
   return Object.freeze({
     id: row.id,
     state: row.state,
@@ -311,5 +311,27 @@ export class PostgresJobContributionStore implements JobContributionStore {
       WHERE contribution.id = ${contributionId} AND contribution.owner_user_id = ${ownerUserId}
     `;
     return row ? status(row) : null;
+  }
+
+  async list(ownerUserId: string): Promise<JobContributionStatus[]> {
+    const rows = await this.client<Omit<ContributionRow, "requestHash">[]>`
+      SELECT contribution.id, COALESCE(latest.state, contribution.state) AS state,
+        contribution.created_at AS "submittedAt",
+        COALESCE(latest.occurred_at, contribution.updated_at) AS "updatedAt"
+      FROM (
+        SELECT id, state, created_at, updated_at
+        FROM jobs.job_contributions
+        WHERE owner_user_id = ${ownerUserId}
+        ORDER BY created_at DESC, id DESC LIMIT 25
+      ) AS contribution
+      LEFT JOIN LATERAL (
+        SELECT event.state, event.occurred_at
+        FROM jobs.job_contribution_state_events AS event
+        WHERE event.contribution_id = contribution.id
+        ORDER BY (event.state = 'consent_invalid') DESC, event.occurred_at DESC, event.id DESC LIMIT 1
+      ) AS latest ON true
+      ORDER BY contribution.created_at DESC, contribution.id DESC
+    `;
+    return rows.map(status);
   }
 }

@@ -21,6 +21,7 @@ import type {
   FileTrustAppealRequest,
   GrantUgcContributionConsentRequest,
   JobContribution,
+  JobContributionHistory,
   JobReport,
   JobReportSummary,
   JobSearchPage,
@@ -80,8 +81,8 @@ import {
   InvalidModerationCursorError,
   JobAlreadyReportedError,
   type JobCatalogReader,
-  JobContributionConsentRequiredError,
   JobContributionCancellationConflictError,
+  JobContributionConsentRequiredError,
   JobContributionIdempotencyConflictError,
   type JobContributions,
   JobContributionUnavailableError,
@@ -877,6 +878,7 @@ const validateCreateJobReport = compileComponentValidator("CreateJobReportReques
 const validateJobReport = compileComponentValidator("JobReport");
 const validateCreateJobContribution = compileComponentValidator("CreateJobContributionRequest");
 const validateJobContribution = compileComponentValidator("JobContribution");
+const validateJobContributionHistory = compileComponentValidator("JobContributionHistory");
 const validateOwnerTrustCase = compileComponentValidator("OwnerTrustCase");
 const validateReviewerTrustCase = compileComponentValidator("ReviewerTrustCase");
 const validateReviewerTrustQueueRequest = compileComponentValidator(
@@ -1077,6 +1079,22 @@ function exactJobContribution(value: unknown): value is JobContribution {
     exactCanonicalDateTime(contribution.updatedAt) &&
     Date.parse(contribution.updatedAt) >= Date.parse(contribution.submittedAt)
   );
+}
+
+function exactJobContributionHistory(value: unknown): value is JobContributionHistory {
+  if (!validateJobContributionHistory(value)) return false;
+  const { items } = value as JobContributionHistory;
+  const ids = new Set<string>();
+  return items.every((item, index) => {
+    if (!exactJobContribution(item) || ids.has(item.id)) return false;
+    ids.add(item.id);
+    const previous = items[index - 1];
+    return (
+      !previous ||
+      previous.submittedAt > item.submittedAt ||
+      (previous.submittedAt === item.submittedAt && previous.id > item.id)
+    );
+  });
 }
 
 function projectPrivateSavedPageCapture(
@@ -1986,6 +2004,28 @@ class CandidateController {
       throw new JobContributionUnavailableError("JOB_RESPONSE_CONTRACT");
     }
     return contribution as JobContribution;
+  }
+
+  @Get("/jobs/contributions")
+  @Header("cache-control", "no-store")
+  async listJobContributions(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<JobContributionHistory> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      request.body !== undefined ||
+      (request.headers["content-length"] !== undefined &&
+        request.headers["content-length"] !== "0") ||
+      request.headers["transfer-encoding"] !== undefined
+    ) {
+      throw new HttpException("Job contribution history input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.identity.resolve(request, "jobs:contribute");
+    const history = { items: await this.jobContributions.list(user.id) };
+    if (!exactJobContributionHistory(history)) {
+      throw new JobContributionUnavailableError("JOB_RESPONSE_CONTRACT");
+    }
+    return history;
   }
 
   @Get("/jobs/contributions/:contributionId")

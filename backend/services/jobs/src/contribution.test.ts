@@ -36,7 +36,38 @@ class MemoryStore implements JobContributionStore {
   async get(ownerUserId: string, contributionId: string) {
     return ownerUserId && contributionId === this.record.id ? this.record : null;
   }
+  async list(ownerUserId: string) {
+    return this.command?.ownerUserId === ownerUserId ? [this.record] : [];
+  }
 }
+
+describe("owner contribution history", () => {
+  it("reads only the requested owner without depending on intake policy and returns isolated records", async () => {
+    const store = new MemoryStore();
+    const created = command();
+    await store.create(created);
+    const service = new JobContributionService(store);
+    const history = await service.list(created.ownerUserId);
+    expect(history).toEqual([store.record]);
+    expect(history[0]).not.toBe(store.record);
+    expect(Object.isFrozen(history[0])).toBe(true);
+    expect(await service.list(uuidv7())).toEqual([]);
+  });
+
+  it("rejects invalid owner identity and never turns a failed read into empty success", async () => {
+    const store = new MemoryStore();
+    const service = new JobContributionService(store);
+    await expect(service.list("not-an-owner")).rejects.toBeInstanceOf(TypeError);
+    store.list = async () => {
+      throw new Error("private database contents");
+    };
+    await expect(service.list(uuidv7())).rejects.toMatchObject({
+      name: "JobContributionUnavailableError",
+      code: "JOB_STORE_READ",
+      message: "Job contribution intake is temporarily unavailable",
+    });
+  });
+});
 
 function seal(value: CreateJobContributionCommand): CreateJobContributionCommand {
   value.input.observation.contentSha256 = createHash("sha256")

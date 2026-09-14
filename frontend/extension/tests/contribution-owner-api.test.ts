@@ -3,7 +3,9 @@ import {
   appealEvidenceDigest,
   cancelContribution,
   fileContributionAppeal,
+  getContributionHistory,
   getContributionStatus,
+  getOwnerTrustStatus,
   OWNER_ACTION_TIMEOUT_MILLISECONDS,
   withdrawContribution,
 } from "../lib/contribution-owner-api";
@@ -27,6 +29,133 @@ const response = (status: number, body: unknown) =>
 
 describe("owner contribution transport", () => {
   afterEach(() => vi.useRealTimers());
+  const historyItem = {
+    id,
+    state: "awaiting_trust",
+    submittedAt: trust.createdAt,
+    updatedAt: trust.updatedAt,
+  };
+
+  it("loads one bounded owner history page through the cookie-free exact authenticated GET", async () => {
+    const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.test/v1/jobs/contributions");
+      expect(init).toMatchObject({
+        method: "GET",
+        cache: "no-store",
+        credentials: "omit",
+        redirect: "error",
+      });
+      expect(init?.body).toBeUndefined();
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer synthetic-token");
+      return response(200, { items: [historyItem] });
+    });
+    await expect(
+      getContributionHistory("synthetic-token", "https://api.test", fetcher),
+    ).resolves.toEqual({ outcome: "ok", value: { items: [historyItem] } });
+    expect(fetcher).toHaveBeenCalledOnce();
+    await expect(
+      getContributionHistory("synthetic-token", "https://api.test", async () =>
+        response(200, { items: [] }),
+      ),
+    ).resolves.toEqual({ outcome: "ok", value: { items: [] } });
+  });
+
+  it.each([
+    null,
+    [],
+    { items: [], owner: "forbidden" },
+    { items: "invalid" },
+    { items: [historyItem, historyItem] },
+    {
+      items: Array.from({ length: 26 }, (_, index) => ({
+        ...historyItem,
+        id: `018f0000-0000-7000-8000-${String(30 - index).padStart(12, "0")}`,
+      })),
+    },
+    { items: [{ ...historyItem, ownerUserId: "forbidden" }] },
+    { items: [{ ...historyItem, id: "invalid" }] },
+    { items: [{ ...historyItem, state: "unknown" }] },
+    { items: [{ ...historyItem, updatedAt: "2026-09-01T12:01:00Z" }] },
+    { items: [{ ...historyItem, updatedAt: "2026-09-01T11:59:00.000Z" }] },
+    { items: [historyItem, { ...historyItem, id: "018f0000-0000-7000-8000-000000000005" }] },
+    {
+      items: [
+        historyItem,
+        {
+          ...historyItem,
+          id: "018f0000-0000-7000-8000-000000000005",
+          submittedAt: "2026-09-01T12:01:00.000Z",
+        },
+      ],
+    },
+  ])(
+    "rejects a malformed or out-of-order history page %# without exposing its body",
+    async (value) => {
+      await expect(
+        getContributionHistory("token", "https://api.test", async () => response(200, value)),
+      ).resolves.toEqual({ outcome: "rejected" });
+    },
+  );
+
+  it.each([401, 403, 404, 429, 503])(
+    "does not mistake history HTTP %i for an empty account",
+    async (status) => {
+      const result = await getContributionHistory("token", "https://api.test", async () =>
+        response(status, { private: "must-not-surface" }),
+      );
+      expect(result.outcome).not.toBe("ok");
+      expect(result).not.toHaveProperty("value");
+      expect(JSON.stringify(result)).not.toContain("must-not-surface");
+    },
+  );
+
+  it.each([
+    { processing: ["queued"], trust: ["accepted"] },
+    { processing: [["queued"]], trust: [["accepted"]] },
+    { processing: { toString: "queued" }, trust: { toString: "accepted" } },
+    { processing: null, trust: null },
+    { processing: false, trust: false },
+    { processing: 1, trust: 1 },
+  ])("rejects non-string Processing and Trust states without coercion %#", async (states) => {
+    const item = { ...historyItem, state: states.processing };
+    await expect(
+      getContributionStatus(id, "token", "https://api.test", async () => response(200, item)),
+    ).resolves.toEqual({ outcome: "rejected" });
+    await expect(
+      getContributionHistory("token", "https://api.test", async () =>
+        response(200, { items: [item] }),
+      ),
+    ).resolves.toEqual({ outcome: "rejected" });
+    await expect(
+      getOwnerTrustStatus(id, "token", "https://api.test", async () =>
+        response(200, { ...trust, state: states.trust }),
+      ),
+    ).resolves.toEqual({ outcome: "rejected" });
+  });
+
+  it.each(["headers", "body"])("bounds a stalled history %s read", async (stage) => {
+    vi.useFakeTimers();
+    const fetcher =
+      stage === "headers"
+        ? vi.fn(() => new Promise<Response>(() => undefined))
+        : vi.fn(
+            async () =>
+              new Response(new ReadableStream({ start() {} }), {
+                headers: { "content-type": "application/json", "cache-control": "no-store" },
+              }),
+          );
+    const reading = getContributionHistory("token", "https://api.test", fetcher);
+    await vi.advanceTimersByTimeAsync(OWNER_ACTION_TIMEOUT_MILLISECONDS);
+    await expect(reading).resolves.toEqual({ outcome: "unavailable" });
+  });
+
+  it("rejects a noncanonical individual timestamp before it can poison local history", async () => {
+    await expect(
+      getContributionStatus(id, "token", "https://api.test", async () =>
+        response(200, { ...historyItem, updatedAt: "2026-09-01T12:01:00Z" }),
+      ),
+    ).resolves.toEqual({ outcome: "rejected" });
+  });
   it("cancels with one stable replay identity and accepts only an exact ended authorization", async () => {
     const value = {
       id,

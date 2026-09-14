@@ -75,7 +75,9 @@
           <span id="contributions-status" class="summary-status">Review status</span>
         </summary>
         <div class="disclosure-content">
-          <p>User-initiated refresh only. No background status polling.</p>
+          <p>Load your latest 25 contributions from this account. Sign out clears this device's receipts, not the server's shared jobs. No background status polling.</p>
+          <button id="refresh-shared-jobs" class="quiet" type="button" disabled>Refresh shared jobs</button>
+          <p id="shared-jobs-status" role="status" aria-live="polite" tabindex="-1"></p>
           <div id="contribution-list"></div>
           <p id="owner-action-status" role="status" aria-live="polite" tabindex="-1"></p>
         </div>

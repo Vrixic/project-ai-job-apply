@@ -201,6 +201,9 @@ describeClient("Jobs queued contribution intake persistence (%s client)", (mode)
       occurredAt: new Date(Date.now() + 1000),
     });
     expect((await store.get(ownerA, cancel.contributionId))?.state).toBe("consent_invalid");
+    expect((await store.list(ownerA)).find((item) => item.id === cancel.contributionId)).toEqual(
+      await store.get(ownerA, cancel.contributionId),
+    );
     const [unchanged] = await client<Array<{ payload: unknown; state: string; verified: boolean }>>`
       SELECT payload, state, EXISTS (SELECT 1 FROM jobs.job_contribution_independent_verifications
         WHERE contribution_id = ${cancel.contributionId}) AS verified
@@ -398,6 +401,10 @@ describeClient("Jobs queued contribution intake persistence (%s client)", (mode)
       state: "normalized",
       updatedAt: normalizedAt.toISOString(),
     });
+    expect((await store.list(ownerA)).find((item) => item.id === first.id)).toEqual(
+      await store.get(ownerA, first.id),
+    );
+    expect((await store.list(ownerB)).some((item) => item.id === first.id)).toBe(false);
 
     await expect(
       store.create({
@@ -405,5 +412,38 @@ describeClient("Jobs queued contribution intake persistence (%s client)", (mode)
         input: { ...initial.input, posting: { ...initial.input.posting, title: "Changed" } },
       }),
     ).rejects.toBeInstanceOf(JobContributionIdempotencyConflictError);
+  });
+
+  it("lists at most 25 newest owner rows with deterministic tied timestamps and no private payload", async () => {
+    const created = [];
+    const fixedTime = new Date(Date.now() + 60_000);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(fixedTime);
+    try {
+      for (let index = 0; index < 28; index += 1) {
+        const input = command(ownerA);
+        input.idempotencyKey = `history-${input.input.contributionId}`;
+        created.push(await store.create(input));
+      }
+      const foreign = command(ownerB);
+      foreign.idempotencyKey = `history-${foreign.input.contributionId}`;
+      const foreignStatus = await store.create(foreign);
+      const history = await store.list(ownerA);
+      expect(history).toEqual(
+        created.sort((left, right) => right.id.localeCompare(left.id)).slice(0, 25),
+      );
+      expect(history).toHaveLength(25);
+      expect(history.every((item) => item.submittedAt === fixedTime.toISOString())).toBe(true);
+      expect(history.some((item) => item.id === foreignStatus.id)).toBe(false);
+      for (const item of history) {
+        expect(Object.keys(item).sort()).toEqual(["id", "state", "submittedAt", "updatedAt"]);
+      }
+      expect(JSON.stringify(history)).not.toContain(ownerA);
+      expect(JSON.stringify(history)).not.toContain(ownerB);
+      expect(JSON.stringify(history)).not.toContain("Synthetic Contribution Company");
+      expect(await store.list(uuidv7())).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

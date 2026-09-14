@@ -8,6 +8,7 @@ import { extensionConfiguration } from "../lib/config";
 import {
   cancelContribution,
   fileContributionAppeal,
+  getContributionHistory,
   getContributionStatus,
   getOwnerTrustStatus,
   withdrawContribution,
@@ -15,6 +16,7 @@ import {
 import {
   CONTRIBUTION_RECEIPTS_KEY,
   type ContributionReceipt,
+  mergeContributionHistory,
   parseContributionReceipts,
   receiptFromContribution,
   receiptsForIdentity,
@@ -318,7 +320,11 @@ async function readContributionReceipts(generation: number): Promise<Contributio
     CONTRIBUTION_RECEIPTS_KEY
   ];
   assertIdentityGeneration(generation);
-  return parseContributionReceipts(stored);
+  const parsed = parseContributionReceipts(stored);
+  if (stored !== undefined && (!Array.isArray(stored) || parsed.length !== stored.length)) {
+    throw new Error("contribution_history_unavailable");
+  }
+  return parsed;
 }
 
 function contributionReceipts(generation = identityGeneration): Promise<ContributionReceipt[]> {
@@ -330,6 +336,69 @@ async function writeContributionReceipts(
   generation: number,
 ): Promise<void> {
   await writeLocalRecords(CONTRIBUTION_RECEIPTS_KEY, receipts, generation);
+}
+
+type SharedJobsState =
+  | "cached"
+  | "refreshed"
+  | "sign_in_required"
+  | "storage_unavailable"
+  | "unavailable"
+  | "rejected";
+
+function sharedJobsFailure(error: unknown): SharedJobsState {
+  const message = error instanceof Error ? error.message : "";
+  return [
+    "authentication_required",
+    "reauthentication_required",
+    "configuration_required",
+    "token_request_failed",
+    "invalid_token_response",
+    "invalid_token_identity",
+    "identity_changed",
+    "required_scope_missing",
+  ].includes(message)
+    ? "sign_in_required"
+    : "storage_unavailable";
+}
+
+async function sharedJobsSnapshot(generation: number): Promise<{
+  receipts: ContributionReceipt[];
+  sharedJobsState: SharedJobsState;
+}> {
+  try {
+    const session = await authenticatedApiSession();
+    assertIdentityGeneration(generation);
+    return {
+      receipts: receiptsForIdentity(await contributionReceipts(generation), session.identityFence),
+      sharedJobsState: "cached",
+    };
+  } catch (error) {
+    // Hide records when ownership/storage cannot be established, but never call that empty history.
+    return { receipts: [], sharedJobsState: sharedJobsFailure(error) };
+  }
+}
+
+async function refreshSharedJobs(generation: number): Promise<SharedJobsState> {
+  if (!extensionConfiguration.apiOrigin) return "unavailable";
+  const session = await authenticatedApiSession();
+  assertIdentityGeneration(generation);
+  const result = await getContributionHistory(
+    session.accessToken,
+    extensionConfiguration.apiOrigin,
+  );
+  assertIdentityGeneration(generation);
+  const currentSession = await authenticatedApiSession();
+  if (currentSession.identityFence !== session.identityFence) throw new Error("identity_changed");
+  if (result.outcome !== "ok") {
+    return result.outcome === "rejected" ? "rejected" : "unavailable";
+  }
+  await withLocalMutation(generation, async () => {
+    const current = await readContributionReceipts(generation);
+    const merged = mergeContributionHistory(current, result.value.items, session.identityFence);
+    await writeContributionReceipts(merged, generation);
+  });
+  return "refreshed";
 }
 
 async function dispatchPending(
@@ -668,6 +737,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
   const logoutClearing = message.action === "logout" ? clearLocalForLogout() : undefined;
   void logoutClearing?.catch(() => undefined);
   void (async () => {
+    let historyResult: SharedJobsState | undefined;
     try {
       await storageBoundaryStartup;
       if (identityAction) {
@@ -685,6 +755,8 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
       } else if (message.action === "refresh") {
         assertIdentityGeneration(generation);
         await refresh();
+      } else if (message.action === "shared_jobs_refresh") {
+        historyResult = await refreshSharedJobs(generation);
       } else if (message.action === "clear_queue") await updatePendingQueue(generation, () => []);
       else if (message.action === "clear_stopped") {
         await updatePendingQueue(generation, (queue) =>
@@ -743,19 +815,17 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
           status: await authenticationStatus(),
         };
       }
-      const queue = await pendingQueue();
-      let receipts: ContributionReceipt[] = [];
-      try {
-        const session = await authenticatedApiSession();
-        receipts = receiptsForIdentity(await contributionReceipts(), session.identityFence);
-      } catch {
-        /* signed-out responses never expose fenced receipts */
-      }
+      const queue = await pendingQueue(generation);
+      const history = await sharedJobsSnapshot(generation);
       return {
         delivery: await deliveryReadiness(await activeStoredCapture()),
-        ok: true,
+        ok: historyResult === undefined || historyResult === "refreshed",
         queue: summarizeQueue(queue),
-        receipts,
+        ...history,
+        sharedJobsState:
+          history.sharedJobsState === "cached"
+            ? (historyResult ?? "cached")
+            : history.sharedJobsState,
         status: await authenticationStatus(),
       };
     } catch (error) {
@@ -764,17 +834,33 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         delivery: await deliveryReadiness(await activeStoredCapture()),
         error: safeActionErrorMessage(error, message.action),
         ok: false,
+        ...(["shared_jobs_refresh", "status", "pending", "refresh", "login", "logout"].includes(
+          message.action,
+        )
+          ? { sharedJobsState: sharedJobsFailure(error), receipts: [] }
+          : {}),
         status: await authenticationStatus(),
       };
     }
-  })().then((response) => {
-    if (generation !== identityGeneration) {
+  })()
+    .then((response) => {
+      if (generation !== identityGeneration) {
+        sendResponse({
+          error: safeActionErrorMessage(new Error("identity_changed"), message.action),
+          ok: false,
+          ...("contributionId" in message ? { ownerAction: "rejected" as const } : {}),
+        });
+      } else sendResponse(response);
+    })
+    .catch(() => {
       sendResponse({
-        error: safeActionErrorMessage(new Error("identity_changed"), message.action),
         ok: false,
-        ...("contributionId" in message ? { ownerAction: "rejected" as const } : {}),
+        error:
+          "Extension storage is unavailable. Close and reopen the extension, then try again. Saved data was not cleared.",
+        ...(generation === identityGeneration
+          ? { sharedJobsState: "storage_unavailable", receipts: [] }
+          : {}),
       });
-    } else sendResponse(response);
-  });
+    });
   return true;
 });

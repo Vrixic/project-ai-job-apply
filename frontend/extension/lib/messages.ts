@@ -11,6 +11,7 @@ export type ExtensionMessage =
         | "logout"
         | "pending"
         | "refresh"
+        | "shared_jobs_refresh"
         | "retry"
         | "retry_stopped"
         | "status";
@@ -38,6 +39,7 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
       "logout",
       "pending",
       "refresh",
+      "shared_jobs_refresh",
       "retry",
       "retry_stopped",
       "status",

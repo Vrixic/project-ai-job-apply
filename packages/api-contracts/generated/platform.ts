@@ -300,7 +300,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** @description Returns at most 25 of the active authenticated owner's most recently submitted contributions, ordered by submittedAt and id descending. Accepts no query parameters or request body. Returns the same minimal owner-safe processing projection as individual status reads, not Trust or publication approval. */
+        get: operations["listJobContributions"];
         put?: never;
         post: operations["createJobContribution"];
         delete?: never;
@@ -1224,6 +1225,9 @@ export interface components {
             submittedAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        JobContributionHistory: {
+            items: components["schemas"]["JobContribution"][];
         };
         ContributionCapabilityPolicy: {
             /** @constant */
@@ -2564,6 +2568,31 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listJobContributions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authenticated owner's bounded contribution history */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobContributionHistory"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

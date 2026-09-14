@@ -25,6 +25,16 @@ browser-store distribution are not approved. See the current
 
 ## Implemented source boundary
 
+- D2-066 adds explicit **Refresh shared jobs** recovery of the latest 25 contributions from
+  authenticated owner-only history. Logout still clears local receipts and pending items. A
+  subsequent sign-in can reload acknowledged contributions without resubmitting them; requests
+  and receipt commits remain account/session-fenced. The list distinguishes sign-in requirements,
+  storage/API failure and successful empty results. Only identifiers, processing state and
+  timestamps are returned; Trust remains a separate explicit refresh. This source change needs
+  its corresponding Gateway/route deployment and configured extension rebuild before installed
+  use. The [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md#task-register)
+  owns deployment and installed acceptance.
+
 - D2-061 retains complete supported descriptions, including literal plaintext comparison symbols
   (`<`, `>`, `<=`, `>=`), up to 50,000 UTF-16 code units after whitespace normalization. Inspection
   checks the full text before repeated-heading removal; oversized text or structured description

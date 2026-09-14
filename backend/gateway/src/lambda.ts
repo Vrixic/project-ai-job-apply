@@ -65,8 +65,8 @@ import { createConfiguredD2TrustRuntime } from "./d2-trust-runtime.js";
 import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
 import {
   configuredUgcContributionPolicyVersion,
-  ProfileJobContributionConsentVerifier,
   ProfileJobContributionConsentRevoker,
+  ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
@@ -317,6 +317,13 @@ function allowedRoute(
     return { acceptsBody: false, protected: false };
   }
   if (d2Routes.candidateContribution) {
+    if (
+      method === "GET" &&
+      path === "/v1/jobs/contributions" &&
+      exactD2RouteKey(routeKey, "GET /v1/jobs/contributions")
+    ) {
+      return { acceptsBody: false, protected: true };
+    }
     if (
       method === "POST" &&
       CONTRIBUTION_CANCEL_PATH_PATTERN.test(path) &&

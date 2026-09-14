@@ -1,4 +1,9 @@
-import type { JobContribution, OwnerTrustCase } from "@ai-job-apply/api-contracts";
+import type {
+  JobContribution,
+  JobContributionHistory,
+  OwnerTrustCase,
+} from "@ai-job-apply/api-contracts";
+import { MAXIMUM_CONTRIBUTION_RECEIPTS } from "./contribution-receipts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
@@ -38,7 +43,9 @@ function exactNoStoreJson(response: Response): boolean {
   );
 }
 function timestamp(value: unknown): value is string {
-  return typeof value === "string" && Number.isFinite(Date.parse(value));
+  if (typeof value !== "string") return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
 }
 function exactContribution(value: unknown, id: string): value is JobContribution {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -47,7 +54,8 @@ function exactContribution(value: unknown, id: string): value is JobContribution
     Object.keys(r).sort().join("\0") ===
       ["id", "state", "submittedAt", "updatedAt"].sort().join("\0") &&
     r.id === id &&
-    CONTRIBUTION_STATES.has(String(r.state)) &&
+    typeof r.state === "string" &&
+    CONTRIBUTION_STATES.has(r.state) &&
     timestamp(r.submittedAt) &&
     timestamp(r.updatedAt)
   );
@@ -73,7 +81,8 @@ function exactTrust(value: unknown, id: string): value is OwnerTrustCase {
     typeof r.id === "string" &&
     UUID.test(r.id) &&
     r.contributionId === id &&
-    TRUST_STATES.has(String(r.state)) &&
+    typeof r.state === "string" &&
+    TRUST_STATES.has(r.state) &&
     typeof r.policyVersion === "string" &&
     typeof r.version === "number" &&
     Number.isSafeInteger(r.version) &&
@@ -190,6 +199,49 @@ export function getContributionStatus(
     new URL(`/v1/jobs/contributions/${encodeURIComponent(id)}`, origin),
     { headers: headers(token), method: "GET" },
     (value): value is JobContribution => exactContribution(value, id),
+    fetcher,
+  );
+}
+
+export function getContributionHistory(
+  token: string,
+  origin: string,
+  fetcher: typeof fetch = fetch,
+) {
+  return request(
+    new URL("/v1/jobs/contributions", origin),
+    { headers: headers(token), method: "GET" },
+    (value): value is JobContributionHistory => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+      const page = value as Record<string, unknown>;
+      if (
+        Object.keys(page).join("\0") !== "items" ||
+        !Array.isArray(page.items) ||
+        page.items.length > MAXIMUM_CONTRIBUTION_RECEIPTS
+      )
+        return false;
+      const ids = new Set<string>();
+      let previous: JobContribution | undefined;
+      for (const item of page.items) {
+        if (
+          !item ||
+          typeof item !== "object" ||
+          Array.isArray(item) ||
+          typeof item.id !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(item.id) ||
+          !exactContribution(item, item.id) ||
+          ids.has(item.id) ||
+          item.updatedAt < item.submittedAt ||
+          (previous &&
+            (item.submittedAt > previous.submittedAt ||
+              (item.submittedAt === previous.submittedAt && item.id >= previous.id)))
+        )
+          return false;
+        ids.add(item.id);
+        previous = item;
+      }
+      return true;
+    },
     fetcher,
   );
 }

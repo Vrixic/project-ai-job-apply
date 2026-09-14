@@ -307,6 +307,9 @@ export async function createSyntheticAssuranceApplication() {
       async get() {
         return unused("JobContributions.get");
       },
+      async list() {
+        return unused("JobContributions.list");
+      },
     },
     moderation: new SyntheticAssuranceModeration(),
     savedJobs: new SyntheticAssuranceSavedJobs(),

@@ -50,6 +50,28 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Shared-jobs recovery (`2026-09-14`, D2-066 In progress): the user reports an empty
+**Your shared jobs** list on every account. Source inspection confirms that this is a local
+receipt list, explicit logout clears all receipts, and there is no server history route to
+recover them after sign-in. Session/refresh/storage failures can also be mislabeled as empty.
+These are implementation gaps, not evidence that server contributions were deleted; the exact
+installed trigger is not yet established. Implement an explicit authenticated refresh of the
+latest 25 owner-only contribution summaries, retaining logout cleanup and account fencing.
+Do not resubmit, clear storage, or repeat the Mintlify recovery. The Mintlify owner readback and
+fresh-rights preparation remain pending until history can be retrieved.
+
+Repository implementation now passes 422 extension tests, 57 contract tests, 49 Jobs contribution
+tests, 124 Gateway tests and eight real PostgreSQL integration tests across plain and Drizzle
+clients. Typechecks, strict response regeneration and 76 Terraform mocked community tests pass.
+The new route uses the existing D2 JWT/scope and throttling boundary; the database schema and
+workers are unchanged. Full repository verification, immutable Gateway/route deployment,
+configured rebuild and installed account-history recovery remain pending. Local PostgreSQL was
+stopped after the tests; Docker Desktop and WSL are shut down with the data volume retained.
+Independent cross-boundary review also found and corrected enum coercion that could admit an
+array-valued status and break rendering. Wire and local parsers now require actual strings;
+malformed-state regressions and a repeated full extension suite pass. No malformed live response
+was observed, so this is not asserted as the installed incident's exact trigger.
+
 Current Mintlify recovery checkpoint (`2026-09-14`, D2-065 In progress): the missing/null Ashby
 workplace-type correction and Mintlify-only registration are deployed and verified from `f12c289`
 at state `341`. Gateway/scheduled/Trust versions are `66`/`29`/`22`; existing boards, selectors,
@@ -697,6 +719,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-063 | Bind the web crawler setting to its actual Turbo build/cache inputs. | Complete | Platform engineering; QA/automation | D2-009; D2-062 | Completed 2026-09-13. Web-only hashed configuration, real Turbo dry runs and Next header regressions pass 11 focused tests, typecheck and independent review. Full verifier `c4a0ea` passes, including 638 web tests and 20 builds. Candidate-only `27a987b` is READY at the existing stable origin; exact source/region/runtime and five credentialless HTTP checks pass. Current false/noindex behavior and runtime-only Auth0 credentials remain intact. Local ignored-env rebuild limitations are documented. |
 | D2-064 | Refuse redirects in the backward-compatible private saved-page transport before disposable rights preparation. | Complete | Platform engineering; QA/automation | D2-018; D2-020 | Completed 2026-09-14 for source/local build. Private POST now uses redirect error, matching contribution/consent requests. The exact-destination/stable-key/no-acknowledgement/no-payload-rewrite/fixed-error regression passes; 17 focused and all 369 extension tests plus typecheck pass. Configured build `2da6a7` preserves public settings and manifest. Browser reload/private-capture execution remain D2-020; no new UI, scope, contract, backend release or account mutation. |
 | D2-065 | Add the approved Mintlify development verification board and recover the existing disposable submission. | In progress | Platform engineering; QA/automation | D2-016; D2-020; D2-035 | Started 2026-09-14 after explicit scoped approval. Mapper and Mintlify-only registry are deployed and verified from f12c289 at state 341, Gateway/scheduled/Trust 66/29/22, zero drift and 13 OK alarms. Exactly one inspected unavailable hold was requeued once. Owner processing/Trust readback remains pending; no resubmission, all-board activation, reviewer change, publication or store expansion. |
+| D2-066 | Recover account-owned shared-job history after local receipts are cleared and distinguish loading/authentication errors from empty results. | In progress | Platform engineering; client engineering; QA/automation | D2-005; D2-015; D2-065 | Started 2026-09-14 after the installed empty-list report. Bounded owner-only history and explicit extension refresh are source-tested, including plain/Drizzle PostgreSQL integration. Logout purge and session fencing are preserved. Final verification, deployment/rebuild and installed recovery acceptance remain pending. |
 
 ### D2-063 — Web crawler build input
 
@@ -3019,6 +3042,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-14 | Diagnosed empty account lists as local-only receipt recovery and misleading error-state gaps; implemented bounded owner history, explicit client refresh and the exact authenticated Terraform route. Preserved logout purge, owner isolation, Trust snapshots and pending submissions. | D2-066 | Local extension 409/27 files, contracts 57, Jobs 49, Gateway 124, PostgreSQL 8 (plain/Drizzle), typechecks, stable regeneration and Terraform 76 pass. Deployment/rebuild/installed recovery are pending. No new contribution, deletion, provider or reviewer operation. Docker/WSL stopped; local volume retained. |
 | 2026-09-14 | Checked the post-recovery provider-hold view and synchronized the deployment records. Owner-side processing/Trust confirmation is the next required input; do not resubmit the job. | D2-065; D2-020 | Version29 Inspect fcb2e6 at 20:23:29Z: zero eligible held rows; retryable/unavailable/mismatch/closed/duplicate/other all zero. This is not owner-state or publication acceptance. Independent documentation QA resolves 1168 local file links across three changed docs, verifies the task-register anchor and passes diff checks. |
 | 2026-09-14 | Deployed the compatible missing/null workplace-type fix, then the separately reviewed Mintlify-only registry update. Gateway, original boards/hosts, reviewers, database and production/store scope are unchanged. Requeued exactly one inspected unavailable hold once; owner processing/Trust readback and fresh rights acceptance remain pending. | D2-065; D2-020 | Source f12c289; worker plan 683da3577ceb34bdfeb8c1f58c23ce89ce74d12e4e8863bb9bc745a6135c68a8 verifies at state 340; two-resource Mintlify plan 613bc2835c298afbf23c3a1b31ca2925292041065adf53c060dd7ab0adcdf241 verifies at state 341, versions 66/29/22. Final zero-drift baseline 413fb2ebefd04009792da1517144255e84497c2d29eece90d37b4dd26c23ca02, genuine sidecar a4ea21ee2f323209bea1dac05070e69e76181947fa303ddda4854b74f4383282. Artifact 4c8313b74f361d8d8bb7a7a2e2ec938a864b275a9b026e8269ef047c1584cbfa; full infrastructure validation, 586 ingestion tests, 1239 workflow tests/eight skipped, dependency audit, deterministic builds, 328 assertions on both PowerShell hosts, 76 Terraform tests and four-pair runtime parsing pass. Inspect 605c54: one unavailable hold; Retry 5299c3: one requeued. Health e7400b: 13/13 alarms OK. No raw provider body, new submission, case decision or account deletion; Docker/WSL not needed or started. |
 | 2026-09-14 | Started explicitly approved Mintlify-only activation/recovery. Added exact registry-only plan support and development-only budget headroom paired with full environment enforcement; existing production/signed and reviewer boundaries remain unchanged. The posting is listed and acquisition succeeds; mapping rejects absent/non-string optional workplace type. Correct missing/null handling and repeat the exact preflight before deployment. | D2-065 | Pure guard passes 328 assertions on both PowerShell7 and Windows PowerShell5.1. Terraform1.16.2 mocked community suite `a72aeb` passes 76/76, validate `097e6c`, fmt/diff pass. Broader checks are rerunning with the approved portable Terraform after dirty-source and incorrect executable prerequisites stopped earlier runs. Local additive configuration `562fc2`: four source/registration pairs, existing entries/selectors preserved, 2684 encoded characters and 3645 environment bytes. No cloud/application mutation or new acceptance. |
@@ -3268,6 +3292,16 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+On `2026-09-14`, D2-066 selects an explicit **Refresh shared jobs** action backed by Jobs-owned
+history rather than retaining confidential receipts after logout. The read returns at most the
+latest 25 minimal contribution summaries (identifier, processing state and timestamps), matching
+the existing local receipt bound. It uses `jobs:contribute`, resolves the owner from the managed
+identity, refuses caller-supplied ownership/query data and returns `no-store`. Existing persistence
+and the owner/creation index are reused; no new data collection, migration, background polling,
+automatic re-submission or provider/Trust authority is introduced. Late history responses must
+not cross account/logout boundaries or overwrite newer processing/Trust snapshots. Authentication,
+storage and network failures must be shown separately from a successful empty history result.
 
 On `2026-09-14`, the owner explicitly approves Mintlify-only development registration and recovery
 of the existing held contribution. Reuse the accepted hosted-Ashby variant, preserve all existing

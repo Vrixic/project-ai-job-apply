@@ -174,6 +174,7 @@ describe("API Gateway Lambda boundary", () => {
     ["private capture create", "POST", "/v1/saved-job-captures"],
     ["private capture read", "GET", "/v1/saved-job-captures/019d04cf-1f80-7000-8000-000000000010"],
     ["contribution create", "POST", "/v1/jobs/contributions"],
+    ["contribution history", "GET", "/v1/jobs/contributions"],
     ["contribution status", "GET", "/v1/jobs/contributions/019d04cf-1f80-7000-8000-000000000010"],
     ["owner Trust read", "GET", "/v1/trust/contributions/019d04cf-1f80-7000-8000-000000000010"],
     ["reviewer Trust open", "POST", "/v1/admin/trust/cases"],
@@ -207,6 +208,46 @@ describe("API Gateway Lambda boundary", () => {
       expect(inject).not.toHaveBeenCalled();
     },
   );
+
+  it("requires exact authenticated queryless and bodyless history routing", async () => {
+    const inject = vi
+      .fn()
+      .mockResolvedValue({ statusCode: 200, body: '{"items":[]}', headers: {} });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge: createInvocationPrincipalBridge(),
+      d2Routes: { candidateContribution: true },
+    });
+    const exact = () =>
+      routedEvent("GET", "/v1/jobs/contributions", {
+        headers: { authorization: "Bearer opaque-api-gateway-token" },
+      });
+    expect((await invoke(handler, exact())).statusCode).toBe(200);
+    expect(inject).toHaveBeenCalledOnce();
+    inject.mockClear();
+    const fallback = exact();
+    fallback.routeKey = "$default";
+    fallback.requestContext.routeKey = "$default";
+    const mismatch = exact();
+    mismatch.requestContext.routeKey = "POST /v1/jobs/contributions";
+    const unauthenticated = exact();
+    delete unauthenticated.requestContext.authorizer;
+    for (const input of [fallback, mismatch]) {
+      expect((await invoke(handler, input)).statusCode).toBe(404);
+    }
+    expect((await invoke(handler, unauthenticated)).statusCode).toBe(401);
+    for (const input of [
+      { ...exact(), rawQueryString: "ownerUserId=private" },
+      { ...exact(), rawQueryString: "cursor=anything" },
+      { ...exact(), body: "{}" },
+      { ...exact(), body: "e30=", isBase64Encoded: true },
+    ]) {
+      expect((await invoke(handler, input)).statusCode).toBe(400);
+    }
+    expect(inject).not.toHaveBeenCalled();
+  });
 
   it("keeps private capture independent from every contribution and Trust route gate", async () => {
     const principalBridge = createInvocationPrincipalBridge();

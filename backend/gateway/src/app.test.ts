@@ -79,7 +79,10 @@ import type {
   UgcContributionConsent,
   UgcContributionConsentStore,
 } from "@ai-job-apply/profile-service";
-import { UgcContributionConsentConflictError } from "@ai-job-apply/profile-service";
+import {
+  AccountQuarantinedError,
+  UgcContributionConsentConflictError,
+} from "@ai-job-apply/profile-service";
 import {
   assertCandidateRightsAuthentication,
   type CandidateRightsPolicy,
@@ -92,7 +95,7 @@ import {
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { privacySafeRequestFailure } from "./app.module.js";
 import { createGatewayApplication } from "./application.js";
 import {
@@ -578,6 +581,18 @@ class MemoryJobContributions implements JobContributions {
   async get(ownerUserId: string, contributionId: string): Promise<JobContribution | null> {
     const record = this.records.get(contributionId);
     return record?.ownerUserId === ownerUserId ? record.contribution : null;
+  }
+
+  async list(ownerUserId: string): Promise<JobContribution[]> {
+    if (this.failure) throw this.failure;
+    return [...this.records.values()]
+      .filter((record) => record.ownerUserId === ownerUserId)
+      .map((record) => record.contribution)
+      .sort(
+        (left, right) =>
+          right.submittedAt.localeCompare(left.submittedAt) || right.id.localeCompare(left.id),
+      )
+      .slice(0, 25);
   }
 }
 
@@ -2262,6 +2277,151 @@ describe("candidate API", () => {
       }
     } finally {
       matchAssessments.assess = original;
+    }
+  });
+
+  it("recovers only the current owner's newest bounded contribution history", async () => {
+    const ownerToken = await issuer.issue("history-owner", {
+      scope: "jobs:contribute profile:read",
+    });
+    const otherToken = await issuer.issue("history-other", { scope: "jobs:contribute" });
+    const headers = { authorization: `Bearer ${ownerToken}` };
+    const owner = (await app.inject({ method: "GET", url: "/v1/me", headers })).json();
+    const expected = Array.from({ length: 28 }, (_, index) => ({
+      id: `019c0000-0000-7000-8000-${String(index).padStart(12, "0")}`,
+      state: "awaiting_trust" as const,
+      submittedAt: "2026-09-01T12:00:00.000Z",
+      updatedAt: "2026-09-01T12:01:00.000Z",
+    }));
+    for (const contribution of expected) {
+      jobContributions.records.set(contribution.id, { ownerUserId: owner.id, contribution });
+    }
+    const result = await app.inject({ method: "GET", url: "/v1/jobs/contributions", headers });
+    expect(result.statusCode).toBe(200);
+    expect(result.headers["cache-control"]).toBe("no-store");
+    expect(result.json()).toEqual({ items: expected.reverse().slice(0, 25) });
+    expect(result.body).not.toContain(owner.id);
+    const foreign = await app.inject({
+      method: "GET",
+      url: "/v1/jobs/contributions",
+      headers: { authorization: `Bearer ${otherToken}` },
+    });
+    expect(foreign.statusCode).toBe(200);
+    expect(foreign.json()).toEqual({ items: [] });
+    expect(foreign.body).not.toContain(expected[0]?.id);
+  });
+
+  it("rejects history without exact contribution scope or with caller-controlled filters/body", async () => {
+    expect((await app.inject({ method: "GET", url: "/v1/jobs/contributions" })).statusCode).toBe(
+      401,
+    );
+    for (const scope of ["jobs:read", "jobs:write", "profile:read"]) {
+      const token = await issuer.issue(`history-${scope}`, { scope });
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: "/v1/jobs/contributions",
+            headers: { authorization: `Bearer ${token}` },
+          })
+        ).statusCode,
+      ).toBe(403);
+    }
+    const token = await issuer.issue("history-input", { scope: "jobs:contribute" });
+    const headers = { authorization: `Bearer ${token}` };
+    const list = vi.spyOn(jobContributions, "list");
+    try {
+      for (const suffix of [
+        "?ownerUserId=other",
+        "?cursor=value",
+        "?limit=100",
+        "?state=published",
+      ]) {
+        expect(
+          (await app.inject({ method: "GET", url: `/v1/jobs/contributions${suffix}`, headers }))
+            .statusCode,
+        ).toBe(400);
+      }
+      expect(
+        (await app.inject({ method: "GET", url: "/v1/jobs/contributions", headers, payload: {} }))
+          .statusCode,
+      ).toBe(400);
+      expect(list).not.toHaveBeenCalled();
+    } finally {
+      list.mockRestore();
+    }
+  });
+
+  it("checks Profile active-owner resolution before reading contribution history", async () => {
+    const token = await issuer.issue("history-quarantined", { scope: "jobs:contribute" });
+    const resolve = vi
+      .spyOn(store, "resolveUser")
+      .mockRejectedValueOnce(new AccountQuarantinedError());
+    const list = vi.spyOn(jobContributions, "list");
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/jobs/contributions",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json().code).toBe("account_quarantined");
+      expect(list).not.toHaveBeenCalled();
+    } finally {
+      resolve.mockRestore();
+      list.mockRestore();
+    }
+  });
+
+  it("fails history closed for dependency errors, malformed projections, duplicates and misordering", async () => {
+    const token = await issuer.issue("history-malformed", { scope: "jobs:contribute" });
+    const request = {
+      method: "GET" as const,
+      url: "/v1/jobs/contributions",
+      headers: { authorization: `Bearer ${token}` },
+    };
+    const list = vi.spyOn(jobContributions, "list");
+    const item: JobContribution = {
+      id: uuidv7(),
+      state: "queued",
+      submittedAt: "2026-09-01T12:00:00.000Z",
+      updatedAt: "2026-09-01T12:00:00.000Z",
+    };
+    try {
+      list.mockRejectedValueOnce(
+        new JobContributionUnavailableError(
+          "JOB_STORE_READ",
+          new Error("private database contents"),
+        ),
+      );
+      const failure = await app.inject(request);
+      expect(failure.statusCode).toBe(503);
+      expect(failure.body).not.toContain("private database contents");
+      for (const items of [
+        [{ ...item, ownerUserId: "private-owner" }],
+        [{ ...item, updatedAt: "2026-08-31T12:00:00.000Z" }],
+        [item, item],
+        [
+          item,
+          {
+            ...item,
+            id: uuidv7(),
+            submittedAt: "2026-09-02T12:00:00.000Z",
+            updatedAt: "2026-09-02T12:00:00.000Z",
+          },
+        ],
+        [item, { ...item, id: uuidv7() }],
+        Array.from({ length: 26 }, () => item),
+      ]) {
+        list.mockResolvedValueOnce(items);
+        const response = await app.inject(request);
+        expect(response.statusCode).toBe(503);
+        expect(response.headers["cache-control"]).toBe("no-store");
+        expect(response.body).not.toContain("private-owner");
+        expect(response.body).not.toContain(item.id);
+      }
+    } finally {
+      list.mockRestore();
     }
   });
 

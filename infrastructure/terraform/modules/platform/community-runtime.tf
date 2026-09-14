@@ -33,6 +33,7 @@ locals {
   d2_trust_signal_dead_letter_name    = "${var.name}-${var.environment}-d2-trust-signals-dead-letter"
   d2_candidate_routes = {
     "POST /v1/jobs/contributions"                                   = ["jobs:contribute"]
+    "GET /v1/jobs/contributions"                                    = ["jobs:contribute"]
     "GET /v1/jobs/contributions/{contributionId}"                   = ["jobs:contribute"]
     "POST /v1/jobs/contributions/{contributionId}/cancel"           = ["jobs:contribute"]
     "POST /v1/profile/ugc-contribution-consents"                    = ["jobs:contribute"]
