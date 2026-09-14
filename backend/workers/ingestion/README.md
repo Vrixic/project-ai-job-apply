@@ -14,6 +14,13 @@ provider verifier without treating candidate-supplied content as catalog truth.
 
 ## Implemented boundaries
 
+Current D2-065 checkpoint: worker `f12c289` and the approved Mintlify-only fourth verification pair
+are deployed and verified at state `341`, Gateway/scheduled/Trust `66`/`29`/`22`, with zero drift
+and 13 OK alarms. Existing boards/hosts and reviewer authority are unchanged. One existing
+provider-held item was requeued once; follow-up inspection finds zero provider holds, while owner
+processing/Trust readback is pending. See the
+[current delivery checkpoint](../../../docs/product/delivery/phase-2-extension-and-community.md#task-register).
+
 - `page-preview-compatibility.ts` — D2-061 retains both frozen 12,000-character v1 representations
   and adds complete descriptions up to 50,000 UTF-16 code units, derived only from independently
   fetched provider evidence. Full HTML-preview text is whitespace-normalized and size-checked
@@ -80,7 +87,7 @@ provider verifier without treating candidate-supplied content as catalog truth.
   Missing/null provider `workplaceType` omits optional `workMode`; unknown strings and other
   malformed types still reject. Work mode is never guessed from location or legacy `isRemote`.
   This compatibility correction passes 586 ingestion tests and a bounded exact Mintlify preflight;
-  its development worker release and Mintlify-only registration are tracked under D2-065.
+  its development worker release and Mintlify-only registration verify at state 341 under D2-065.
   Public API documentation provides only board acquisition; general polling response/count caps
   remain unchanged. An unlisted record causes catalog withdrawal, not a claim of employer closure.
   D2-059's Ashby-specific `pollExact` is implemented and locally verified at `09cc3fa`:
