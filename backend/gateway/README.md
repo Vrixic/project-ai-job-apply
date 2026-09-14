@@ -20,8 +20,10 @@ Profile resolves the authenticated internal owner; Jobs returns the latest 25 mi
 The Gateway validates shape, chronology, ordering and uniqueness and returns `no-store`.
 Failures are availability errors, never successful empty history. The route requires the existing
 D2 contribution activation boundary and a corresponding Terraform/Gateway release; no new scope,
-reviewer authority, provider setting or database migration is required. The Phase 2 register
-distinguishes local implementation from deployment and installed account-history recovery.
+reviewer authority, provider setting or database migration is required. On September 14, source1293
+is deployed at Gateway67; final state343 verifies zero meaningful changes and unchanged scheduled/
+Trust workers29/22. Installed explicit account-history refresh is user-confirmed. The Phase 2
+register tracks the separate remaining acceptance gates.
 
 The Phase 2 routes are wired through application composition, the Lambda method/path allowlist,
 and independently gated Terraform routes. Repository defaults remain dark; the controlled

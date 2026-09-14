@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
+import { parseEnv } from "node:util";
 
 export const CANDIDATE_RIGHTS_SESSION_ORIGIN = "http://localhost:3000";
 export const CANDIDATE_RIGHTS_SESSION_CALLBACK = `${CANDIDATE_RIGHTS_SESSION_ORIGIN}/auth/callback`;
@@ -82,6 +83,24 @@ function validateConfiguration({ issuer, audience, clientId, clientSecret }) {
     clientSecret.length > 4096 ||
     hasControlCharacters(clientSecret, true)
   ) {
+    reject();
+  }
+}
+
+export function parseCandidateRightsEnvironment(text) {
+  if (typeof text !== "string") reject();
+  try {
+    // A Windows UTF-8 file may begin with a BOM. Do not normalize embedded markers or values.
+    const settings = parseEnv(text.startsWith("\uFEFF") ? text.slice(1) : text);
+    const configuration = {
+      issuer: `https://${settings.AUTH0_DOMAIN}/`,
+      audience: settings.AUTH0_AUDIENCE,
+      clientId: settings.AUTH0_CLIENT_ID,
+      clientSecret: settings.AUTH0_CLIENT_SECRET,
+    };
+    validateConfiguration(configuration);
+    return Object.freeze(configuration);
+  } catch {
     reject();
   }
 }

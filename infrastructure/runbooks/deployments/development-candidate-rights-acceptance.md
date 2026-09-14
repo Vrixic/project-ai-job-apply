@@ -215,6 +215,8 @@ void chrome.runtime.sendMessage({
   const queue = result?.queue;
   console.log(JSON.stringify({
     ok: result?.ok === true,
+    error: typeof result?.error === "string" ? result.error : null,
+    privateSaveReason: result?.delivery?.privateSave?.reason ?? null,
     pending: Number.isInteger(queue?.pending) ? queue.pending : null,
     stopped: Number.isInteger(queue?.stopped) ? queue.stopped : null,
     blocked: Number.isInteger(queue?.blocked) ? queue.blocked : null,
@@ -231,11 +233,25 @@ dispatch and an empty queue are not final persisted-data evidence: the subsequen
 must actually contain the private capture. Leave it present until that export/deletion test.
 No private-save control is being added back to the product UI.
 
+Keep the popup's developer console open before repeating **Inspect current tab**, then keep the
+same provider tab selected. Opening or focusing another window can invalidate the exact tab/URL
+binding. A status-only `chrome.runtime.sendMessage({ action: "status" })` read can report fixed
+readiness reasons and queue counts without enqueueing; omit receipts, capture contents and all
+identity/session values from any diagnostic output. Normal status handling can refresh the session
+and perform existing local retention housekeeping. `preview_required` means the current inspection
+is absent or stale. It does not establish that an earlier failed save stopped before dispatch.
+There is no owner capture-list/count route: preserve an ambiguous attempt rather than guessing IDs
+or replaying the save. Use validated export coverage to resolve whether a private capture exists;
+the nonempty D2 guard stops before deletion if it does not. Report only fixed errors/aggregates.
+
 The maintained handoff replaces historical ignored cookie-extraction helpers. Do not launch an old
 browser profile, decrypt a candidate session cookie, reuse an old subject/attestation, or widen client
 scopes. Check that existing `frontend/web/.env.local` candidate issuer, client ID and audience match
 the deployed Gateway. The helper uses the already registered exact
 `http://localhost:3000/auth/callback`; port 3000 must be free. No Auth0/Vercel setting is changed.
+The parser accepts one leading UTF-8 BOM from a Windows-written environment file, while retaining
+the same strict hostname/client validation. It does not rewrite the file or normalize embedded
+markers into valid credential/configuration values.
 
 ```powershell
 pnpm --filter @ai-job-apply/auth build

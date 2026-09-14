@@ -9,6 +9,7 @@ import {
   CANDIDATE_RIGHTS_SESSION_ORIGIN,
   CANDIDATE_RIGHTS_SESSION_SCOPES,
   CandidateRightsSessionError,
+  parseCandidateRightsEnvironment,
   startCandidateRightsSession,
 } from "../lib/candidate-rights-session.mjs";
 
@@ -21,6 +22,58 @@ const refreshToken = "SYNTHETIC_REFRESH_TOKEN_NEVER_RENDER";
 const subject = "auth0|synthetic-disposable-only";
 const owner = "Synthetic test owner";
 const failure = "Candidate rights sign-in could not be completed. Start a fresh session.";
+const syntheticEnvironment = [
+  "AUTH0_DOMAIN=candidate-session.example.test",
+  `AUTH0_AUDIENCE=${audience}`,
+  `AUTH0_CLIENT_ID=${clientId}`,
+  `AUTH0_CLIENT_SECRET=${clientSecret}`,
+  "UNRELATED_SETTING=not-session-configuration",
+].join("\r\n");
+
+test("environment parsing accepts a single leading UTF-8 BOM without promoting unrelated settings", () => {
+  const plain = parseCandidateRightsEnvironment(syntheticEnvironment);
+  const withBom = parseCandidateRightsEnvironment(`\uFEFF${syntheticEnvironment}`);
+  assert.deepEqual(withBom, plain);
+  assert.deepEqual(plain, { issuer, audience, clientId, clientSecret });
+  assert.equal(Object.isFrozen(plain), true);
+});
+
+test("environment parsing preserves strict configuration validation and fixed safe errors", () => {
+  const invalid = [
+    undefined,
+    {},
+    "",
+    `\uFEFF\uFEFF${syntheticEnvironment}`,
+    syntheticEnvironment.replace(
+      "candidate-session.example.test",
+      "https://candidate-session.example.test",
+    ),
+    syntheticEnvironment.replace(
+      "candidate-session.example.test",
+      "candidate-session.example.test/path",
+    ),
+    syntheticEnvironment.replace(
+      "candidate-session.example.test",
+      "candidate-session.\uFEFFexample.test",
+    ),
+    `# Synthetic settings\r\n\uFEFF${syntheticEnvironment}`,
+    syntheticEnvironment.replace(audience, "unrelated-api"),
+    syntheticEnvironment.replace(clientId, "short"),
+    syntheticEnvironment.replace(clientSecret, "short"),
+  ];
+  for (const environment of invalid) {
+    assert.throws(
+      () => parseCandidateRightsEnvironment(environment),
+      (error) => {
+        assert.equal(error instanceof CandidateRightsSessionError, true);
+        assert.equal(error.message, failure);
+        assert.equal(error.message.includes(clientSecret), false);
+        return true;
+      },
+    );
+  }
+});
+
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwk = {
   ...publicKey.export({ format: "jwk" }),

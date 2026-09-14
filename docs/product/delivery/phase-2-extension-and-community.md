@@ -50,37 +50,37 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
-Shared-jobs recovery (`2026-09-14`, D2-066 In progress): the user reports an empty
-**Your shared jobs** list on every account. Source inspection confirms that this is a local
-receipt list, explicit logout clears all receipts, and there is no server history route to
-recover them after sign-in. Session/refresh/storage failures can also be mislabeled as empty.
-These are implementation gaps, not evidence that server contributions were deleted; the exact
-installed trigger is not yet established. Implement an explicit authenticated refresh of the
-latest 25 owner-only contribution summaries, retaining logout cleanup and account fencing.
-Do not resubmit, clear storage, or repeat the Mintlify recovery. The Mintlify owner readback and
-fresh-rights preparation remain pending until history can be retrieved.
+Shared-jobs recovery (`2026-09-14`, D2-066 Complete): the user confirms existing contributions
+appear after **Refresh shared jobs** in the reloaded configured extension. Recovery is explicitly
+user-initiated, not automatic loading or background polling. The new authenticated history route
+returns the latest 25 owner-only summaries; logout cleanup and account/session fencing remain.
+The former local-only receipt list and misleading empty/error states were implementation gaps,
+not evidence that server contributions were deleted. The original installed trigger remains
+unconfirmed. No resubmission, storage clearing or repeated Mintlify recovery is needed.
 
 Repository implementation now passes 422 extension tests, 57 contract tests, 49 Jobs contribution
 tests, 124 Gateway tests and eight real PostgreSQL integration tests across plain and Drizzle
 clients. Typechecks, strict response regeneration and 76 Terraform mocked community tests pass.
 The new route uses the existing D2 JWT/scope and throttling boundary; the database schema and
 workers are unchanged. Full repository verification and the configured extension rebuild pass.
-Gateway source `739ccdc` is immutably published and verified, but is not deployed. The saved plan
-contains exactly one new owner-history route, its existing-budget stage entry and the Gateway
-function/alias update, plus one route-ID output addition. Independently reviewed guards and 42
-negative-plan cases pass; six additional cases reject unexpected state/live logging or tracing.
-The final pre-apply state read cannot refresh the cached SSO token (`InvalidGrantException`).
-No Apply was attempted; existing development services and submissions remain unchanged. Renew
-`ai-job-apply-development-admin` with `aws sso login`, then generate/review a fresh plan and finish
-deployment verification before asking for an installed extension reload. Installed account-history
-recovery and the same Mintlify entry's owner readback remain pending. Local PostgreSQL was stopped
-after the tests; Docker Desktop and WSL are shut down with the data volume retained. The PC remains on.
+After SSO renewal, source `1293b126` (the same implementation as `739ccdc`, plus documentation)
+is published and deployed once. The exact plan adds the owner-history route, its existing 5/5
+budget stage entry and Gateway function/alias update, plus one route-ID output. Gateway is now
+`67`; scheduled/Trust workers remain `29`/`22`. Live route/scope, no logging/tracing, health and
+anonymous `401` checks pass. Initial verification refused only observed API metadata: null/empty
+request models and the auto-deployed stage ID, alongside the already permitted RDS backup clock.
+A separately reviewed refresh-only state synchronization records those observations, not another
+application release. Final state `343` verifies zero meaningful changes through the unchanged
+maintained baseline checker. Provider configuration, reviewer assignments, database schema and
+production/store darkness are unchanged. The configured extension is rebuilt with unchanged
+public settings and permissions. Docker Desktop/WSL are off, the local data volume is retained,
+and the PC remains on.
 Independent cross-boundary review also found and corrected enum coercion that could admit an
 array-valued status and break rendering. Wire and local parsers now require actual strings;
 malformed-state regressions and a repeated full extension suite pass. No malformed live response
 was observed, so this is not asserted as the installed incident's exact trigger.
 
-Current Mintlify recovery checkpoint (`2026-09-14`, D2-065 In progress): the missing/null Ashby
+Current Mintlify recovery checkpoint (`2026-09-14`, D2-065 Complete): the missing/null Ashby
 workplace-type correction and Mintlify-only registration are deployed and verified from `f12c289`
 at state `341`. Gateway/scheduled/Trust versions are `66`/`29`/`22`; existing boards, selectors,
 Gateway artifact, reviewer assignments and production/store darkness are preserved. Four
@@ -92,8 +92,24 @@ or other holds. One fingerprint-bound recovery on version `29` requeued exactly 
 submission (`5299c3`). No resubmission, case decision, publication or account deletion occurred.
 Follow-up Inspect (`fcb2e6`, `20:23:29Z`) reports zero eligible provider-held rows and zero counts
 for every hold reason. This bounded hold view does not establish the owner-visible terminal state.
-Owner processing/Trust readback remains pending. Requeueing alone does not prove provider
-verification, Trust acceptance or publication. Continue with the same disposable entry.
+The owner subsequently confirms Processing `awaiting trust` / Trust `needs review`, closing the
+provider-verification recovery and owner-readback gate. The owner then withdraws this same test
+contribution and confirms Trust `withdrawn`; the separately refreshed Processing snapshot still
+reads `awaiting trust`. Record the withdrawal as successful without claiming the Jobs projection
+has settled. No publication or reviewer decision was needed. D2-020 remains open.
+
+Disposable private-capture preparation (`2026-09-14`, D2-020): the documented one-time command
+returns `ok:false` with no queue counts. A later status-only query confirms the correct extension
+context, authenticated/configured API, empty queue and `preview_required`. This proves the current
+preview binding is unavailable, not that the initial command performed no write. Do not enqueue
+again blindly; resolve persisted capture coverage through the same owner's validated export before
+another save. The export's nonempty D2 coverage guard stops before deletion when a required record
+is absent. Fresh rights Status at state `343` passes policy, backup, authorized Auth0, empty queues,
+healthy alarms and idle compute. No export or deletion has run. Local sign-in preparation exposes
+and fixes a UTF-8 BOM parsing defect: Node's environment parser treated the marker as part of
+`AUTH0_DOMAIN`. The corrected helper strips only one leading marker, preserves strict validation,
+passes 51 session/bridge tests and matches the configured candidate issuer/client/audience to the
+deployed Gateway. Credentials and Auth0 configuration are not changed. Fresh disposable MFA is next.
 
 Earlier preparation and diagnosis (superseded by the deployed checkpoint above):
 
@@ -726,8 +742,8 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-062 | Align hosted extension-support instructions with the installed owner controls. | Complete | Platform engineering; QA/automation | D2-017; D2-022 | Completed 2026-09-13. Exact current labels and explicit withdrawal/appeal confirmation pass four focused tests, all 630 web tests and the full verifier including 20 builds. Candidate-only `e930ad2` is READY at the existing stable origin, with hosted copy and five credentialless route/header checks passing. No authentication, queue, API or permission change. |
 | D2-063 | Bind the web crawler setting to its actual Turbo build/cache inputs. | Complete | Platform engineering; QA/automation | D2-009; D2-062 | Completed 2026-09-13. Web-only hashed configuration, real Turbo dry runs and Next header regressions pass 11 focused tests, typecheck and independent review. Full verifier `c4a0ea` passes, including 638 web tests and 20 builds. Candidate-only `27a987b` is READY at the existing stable origin; exact source/region/runtime and five credentialless HTTP checks pass. Current false/noindex behavior and runtime-only Auth0 credentials remain intact. Local ignored-env rebuild limitations are documented. |
 | D2-064 | Refuse redirects in the backward-compatible private saved-page transport before disposable rights preparation. | Complete | Platform engineering; QA/automation | D2-018; D2-020 | Completed 2026-09-14 for source/local build. Private POST now uses redirect error, matching contribution/consent requests. The exact-destination/stable-key/no-acknowledgement/no-payload-rewrite/fixed-error regression passes; 17 focused and all 369 extension tests plus typecheck pass. Configured build `2da6a7` preserves public settings and manifest. Browser reload/private-capture execution remain D2-020; no new UI, scope, contract, backend release or account mutation. |
-| D2-065 | Add the approved Mintlify development verification board and recover the existing disposable submission. | In progress | Platform engineering; QA/automation | D2-016; D2-020; D2-035 | Started 2026-09-14 after explicit scoped approval. Mapper and Mintlify-only registry are deployed and verified from f12c289 at state 341, Gateway/scheduled/Trust 66/29/22, zero drift and 13 OK alarms. Exactly one inspected unavailable hold was requeued once. Owner processing/Trust readback remains pending; no resubmission, all-board activation, reviewer change, publication or store expansion. |
-| D2-066 | Recover account-owned shared-job history after local receipts are cleared and distinguish loading/authentication errors from empty results. | In progress | Platform engineering; client engineering; QA/automation | D2-005; D2-015; D2-065 | Started 2026-09-14 after the installed empty-list report. Bounded owner-only history and explicit extension refresh pass full repository checks, configured rebuild and plain/Drizzle PostgreSQL integration. Gateway `739ccdc` is published, not deployed. SSO token refresh blocks the final state check; no Apply occurred. Renew AWS SSO, finish the exact Gateway/route release, then obtain installed history recovery acceptance. Logout purge and session fencing are preserved. |
+| D2-065 | Add the approved Mintlify development verification board and recover the existing disposable submission. | Complete | Platform engineering; QA/automation | D2-016; D2-020; D2-035 | Completed 2026-09-14 for the scoped deployment/recovery and owner readback. Mapper/registry f12c289 verified at state 341; one inspected hold was requeued once. After history recovery the owner confirms awaiting trust / needs review, then the authorized test withdrawal returns Trust withdrawn (Processing still awaiting trust). No resubmission, all-board activation, reviewer decision, publication or store expansion. Fresh rights acceptance remains D2-020. |
+| D2-066 | Recover account-owned shared-job history after local receipts are cleared and distinguish loading/authentication errors from empty results. | Complete | Platform engineering; client engineering; QA/automation | D2-005; D2-015; D2-065 | Completed 2026-09-14: full repository checks, configured rebuild and plain/Drizzle PostgreSQL integration pass. Gateway/route source1293 deploys once; final state343 verifies Gateway67/scheduled29/Trust22 and zero meaningful changes after separately reviewed metadata-only synchronization. The user confirms existing contributions appear after explicit Refresh shared jobs. No automatic loading/polling, logout-purge weakening, account mixing, resubmission or reviewer/provider change. |
 
 ### D2-063 — Web crawler build input
 
@@ -3050,6 +3066,9 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-14 | Fixed the disposable sign-in helper's Windows BOM parser before opening a live session. | D2-020 | Exactly three helper/test files change; one leading marker is removed before Node parseEnv and the existing strict validator. Session/bridge suite51/51 and Auth build pass4b3094; independent parser review/tests pass. Real local configuration matches Gateway candidate issuer/client/audience7b6229 without emitting secrets or rewriting the environment file. No OAuth session, export or deletion has run at this checkpoint. |
+| 2026-09-14 | Renewed AWS SSO, deployed owner-history recovery once and completed installed acceptance. Synchronized only observed Terraform metadata, preserving the original application release and receipts. | D2-066 | Source1293 publication receipt221c796cd374e638ee65a8341c69e8a5bd3a56e5a6d68538acd5b4b7d1085f64; exact release plan5d6b3ca743b38c8aadc85960a437aa6bbb2f06dcfdb404000f8e7c706fbbed6d applies at342. Independently reviewed refresh-only plan5d06f46caed10c3b7ca8aabed8344fef692634691ff280168c650b37fcc6b579 records three observations, zero desired resource/output changes, at343. Its separate receipt23efb0336d0879dc0e8898b4d8977dbf392aa846bc7dfb7046ae63cf17e5efa8 and final Verify c422af confirm Gateway67/scheduled29/Trust22, live health/scope/no-logging and no application reapply. Maintained canonical baseline07257ab991f82e14245278fe9e1f2fa60ca941bdd69de04dcd2cfe26e566071e, genuine sidecarca54998a5ccd38a9b188606f192c9860e2ff9a84ffc1a5b4ea91195f5a05bbe0. Configured extension settings/permissions unchanged; user confirms explicit refresh restores existing history. |
+| 2026-09-14 | Closed Mintlify recovery with owner readback and recorded the disposable test's successful Trust withdrawal. Private capture remains unconfirmed; do not repeat an ambiguous save. | D2-065; D2-020 | User: awaiting trust / needs review, then awaiting trust / withdrawn. Private command: okfalse/null counts. Status-only: correct extension context, authenticated/API configured, preview_required, pending/stopped/blocked all0. This is not proof of capture absence. Read-only rights Status72ff77 at343: policy/backup/Auth0 bound, empty queues, healthy alarms, zero active compute. Existing session helper tests49/49 pass; Windows BOM diagnosisa07477 identifies the first environment key parsing defect before sign-in. No export, deletion, further contribution or case decision. |
 | 2026-09-14 | Diagnosed empty account lists as local-only receipt recovery and misleading error-state gaps; implemented bounded owner history, explicit client refresh and the exact authenticated Terraform route. Preserved logout purge, owner isolation, Trust snapshots and pending submissions. | D2-066 | Local extension 409/27 files, contracts 57, Jobs 49, Gateway 124, PostgreSQL 8 (plain/Drizzle), typechecks, stable regeneration and Terraform 76 pass. Deployment/rebuild/installed recovery are pending. No new contribution, deletion, provider or reviewer operation. Docker/WSL stopped; local volume retained. |
 | 2026-09-14 | Finished D2-066 source verification and immutable publication; independently reviewed the exact owner-history deployment plan. | D2-066 | Full repository verifier and configured build pass; extension now 422/27 files. Gateway `739ccdc` publication verifies. The new GET uses existing JWT `jobs:contribute`, rate/burst 5/5, and no request tracing. Provider representation alignment is limited to known region and the new route's computed empty logging default, with explicit post-Apply state/live checks. The subsequent pre-apply state pull fails cached SSO refresh with `InvalidGrantException`; no Apply or submission mutation occurred. AWS CLI cached role credentials still work, but do not establish Terraform backend access. AWS SSO renewal, fresh plan/release verification and installed history readback remain pending. |
 | 2026-09-14 | Checked the post-recovery provider-hold view and synchronized the deployment records. Owner-side processing/Trust confirmation is the next required input; do not resubmit the job. | D2-065; D2-020 | Version29 Inspect fcb2e6 at 20:23:29Z: zero eligible held rows; retryable/unavailable/mismatch/closed/duplicate/other all zero. This is not owner-state or publication acceptance. Independent documentation QA resolves 1168 local file links across three changed docs, verifies the task-register anchor and passes diff checks. |
@@ -3311,6 +3330,23 @@ and the owner/creation index are reused; no new data collection, migration, back
 automatic re-submission or provider/Trust authority is introduced. Late history responses must
 not cross account/logout boundaries or overwrite newer processing/Trust snapshots. Authentication,
 storage and network failures must be shown separately from a successful empty history result.
+
+The September 14 deployed acceptance confirms the explicit refresh behavior; it does not add
+automatic history loading. The release's API request-model normalization and auto-deploy stage ID
+are observational metadata, so use a separately reviewed refresh-only state synchronization with
+unchanged resource/output values and an independent receipt. Do not reapply the application or
+weaken the maintained zero-drift guard. Normalization in the temporary verifier is limited to
+observed Terraform serialization (the exact ingestion guard's typed value wrappers, omitted false
+output-sensitivity flags, the two disabled null route outputs and refresh-only empty resource graph),
+while binding both raw and native state representations. The final maintained verification passes.
+
+For the disposable private-capture refusal, preserve ambiguity: a failed response can follow a
+successful dispatch, and an empty queue is not a persistence query. The later preview_required
+status supports restoring the current-page inspection, not blindly sending another private save.
+Use the existing owner export to establish capture coverage; missing coverage must stop before
+deletion. Fix only leading UTF-8 BOM handling in the local sign-in helper, keeping the existing
+strict issuer/client validation and credentials unchanged. These decisions do not authorize a
+main/appeal account, SQL seeding, token extraction, publication or expanded provider access.
 
 On `2026-09-14`, the owner explicitly approves Mintlify-only development registration and recovery
 of the existing held contribution. Reuse the accepted hosted-Ashby variant, preserve all existing

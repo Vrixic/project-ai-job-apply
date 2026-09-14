@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { parseEnv } from "node:util";
-import { startCandidateRightsSession } from "./lib/candidate-rights-session.mjs";
+import {
+  parseCandidateRightsEnvironment,
+  startCandidateRightsSession,
+} from "./lib/candidate-rights-session.mjs";
 import {
   buildIdentityAttestation,
   runSessionOperator,
@@ -44,15 +46,12 @@ async function close() {
 }
 
 try {
-  const settings = parseEnv(
+  const configuration = parseCandidateRightsEnvironment(
     await readFile(fileURLToPath(new URL("../frontend/web/.env.local", import.meta.url)), "utf8"),
   );
-  clientSecret = settings.AUTH0_CLIENT_SECRET;
+  clientSecret = configuration.clientSecret;
   session = await startCandidateRightsSession({
-    issuer: `https://${settings.AUTH0_DOMAIN}/`,
-    audience: settings.AUTH0_AUDIENCE,
-    clientId: settings.AUTH0_CLIENT_ID,
-    clientSecret,
+    ...configuration,
     async onConfirmed(confirmed) {
       if (identity || closing) throw new Error("session_already_bound");
       const attestation = buildIdentityAttestation(confirmed);

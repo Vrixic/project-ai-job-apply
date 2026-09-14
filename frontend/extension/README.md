@@ -31,10 +31,11 @@ browser-store distribution are not approved. See the current
   and receipt commits remain account/session-fenced. The list distinguishes sign-in requirements,
   storage/API failure and successful empty results. Only identifiers, processing state and
   timestamps are returned; Trust remains a separate explicit refresh. The configured rebuild and
-  full repository checks pass; its Gateway artifact is published, but the route/Gateway deployment
-  is awaiting AWS SSO renewal. Do not reload for installed acceptance until that deployment is
-  verified. The [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md#task-register)
-  owns deployment and installed acceptance.
+  full repository checks pass. Source1293's route/Gateway release verifies at state343 with
+  Gateway67 and unchanged workers29/22. The user confirms existing history loads after pressing
+  Refresh shared jobs in the reloaded extension; history does not automatically load after sign-in.
+  D2-066 is Complete. The [Phase 2 register](../../docs/product/delivery/phase-2-extension-and-community.md#task-register)
+  owns the separate remaining phase acceptance gates.
 
 - D2-061 retains complete supported descriptions, including literal plaintext comparison symbols
   (`<`, `>`, `<=`, `>=`), up to 50,000 UTF-16 code units after whitespace normalization. Inspection
