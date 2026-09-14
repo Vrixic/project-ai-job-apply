@@ -318,6 +318,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Mintlify-only activation/recovery is approved (`2026-09-14`, D2-065 In progress). Preserve the
+  existing boards, hosts, application artifacts and reviewer authority. The initial bounded public
+  preflight returned no usable observation, so diagnosis precedes activation. Implement exact
+  registry-only plan validation plus measured development-only configuration headroom with a full
+  environment size guard. No cloud or queued-item mutation yet; no all-board or publication approval.
+  [Current task and rationale](phase-2-extension-and-community.md#task-register).
+
 - Disposable Mintlify diagnosis (`2026-09-14`, D2-020/D2-016): the supplied Ashby posting uses a
   board absent from live version `27` configuration. Exact-account/artifact-bound read confirms
   sources/registrations 3/3, Ashby 1/1, Mintlify 0/0. The verifier rejects missing exact board

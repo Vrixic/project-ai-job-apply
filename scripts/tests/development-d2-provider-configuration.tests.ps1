@@ -73,8 +73,10 @@ function New-FixtureChange {
       before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{} } }
 }
 function New-ConfigurationFixture {
-  param([bool]$Maintenance = $false, [object]$Selection = $configuration)
+  param([bool]$Maintenance = $false, [object]$Selection = $configuration,
+    [AllowNull()][object]$BaselineSelection = $null, [int[]]$UpdatedIndices = @(0, 1, 2, 3))
   $inputVariables = Copy-D2RuntimeValue $variables
+  if ($null -ne $BaselineSelection) { $inputVariables = New-D2ProviderConfigurationVariables $inputVariables $BaselineSelection }
   if ($Maintenance) { $inputVariables.d2_community_runtime.value | Add-Member maintenance_mode $true }
   $resources = [Collections.Generic.List[object]]::new()
   foreach ($kind in @('gateway', 'd2_community_scheduled')) {
@@ -95,6 +97,7 @@ function New-ConfigurationFixture {
       $environment | Add-Member D2_CONTRIBUTION_ROUTES_ENABLED (-not $Maintenance).ToString().ToLowerInvariant()
       $environment | Add-Member D2_TRUST_REVIEWER_ROUTES_ENABLED (-not $Maintenance).ToString().ToLowerInvariant()
     }
+    if ($null -ne $BaselineSelection) { $environment = Get-D2ProviderExpectedEnvironment $environment $BaselineSelection $scheduled }
     $functionValue = [pscustomobject]@{
       arn = $arn; function_name = $name; version = '61'; qualified_arn = "$arn`:61"; qualified_invoke_arn = 'exact-qualified-invoke'
       s3_bucket = 'synthetic-private-artifacts'; s3_key = "exact-$kind-key"; s3_object_version = "exact-$kind-version"
@@ -132,7 +135,7 @@ function New-ConfigurationFixture {
   $plan.applyable = $true
   $plan.variables = New-D2ProviderConfigurationVariables $inputVariables $Selection
   $plan | Add-Member prior_state ([pscustomobject]@{ values = [pscustomobject]@{ root_module = Copy-D2RuntimeValue $rootModule } })
-  for ($index = 0; $index -lt 4; $index++) {
+  foreach ($index in $UpdatedIndices) {
     $record = $plan.resource_changes[$index]
     $record.change.actions = @('update')
     if ($record.type -ceq 'aws_lambda_function') {
@@ -155,6 +158,27 @@ function Sync-PlannedValue {
   param([object]$Fixture, [int]$Index)
   $Fixture.Plan.planned_values.root_module.child_modules[0].resources[$Index].values = Copy-D2RuntimeValue $Fixture.Plan.resource_changes[$Index].change.after
 }
+
+$null = Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ AA = ('x' * 4094) }); $passed++
+$null = Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ AA = ([string][char]0x00e9 * 2047) }); $passed++
+$null = Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ AA = ('x' * 2045); BB = ('x' * 2047) }); $passed++
+foreach ($oversized in @(
+    [pscustomobject]@{ AA = ('x' * 4095) },
+    [pscustomobject]@{ AA = ([string][char]0x00e9 * 2048) },
+    [pscustomobject]@{ AA = ('x' * 2046); BB = ('x' * 2047) }
+  )) {
+  Assert-Rejected { Assert-D2ProviderEnvironmentBudget $oversized } 'exact environment budget includes all UTF8 keys and values'
+}
+$wideKey = [pscustomobject]@{}
+$wideKey | Add-Member ([string][char]0x00e9 * 2048) 'x'
+Assert-Rejected { Assert-D2ProviderEnvironmentBudget $wideKey } 'environment key UTF8 bytes are counted'
+foreach ($invalid in @([pscustomobject]@{ AA = 1 }, [pscustomobject]@{ AA = $null }, [pscustomobject]@{ AA = [string][char]0xd800 })) {
+  Assert-Rejected { Assert-D2ProviderEnvironmentBudget $invalid } 'environment values require bounded well-formed UTF8 strings'
+}
+$safeBudgetError = ''
+try { Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ PRIVATE_VALUE_MARKER = ('synthetic-private-value-' * 200) }) }
+catch { $safeBudgetError = $_.Exception.Message }
+Assert-True ($safeBudgetError -ceq 'D2ProviderEnvironmentBudgetRejected') 'environment budget error never reflects names or values'
 
 $old = Read-D2ProviderConfigurationRegistries $variables.d2_community_runtime.value
 Assert-True ($old.Sources -is [array] -and $old.Sources.Count -eq 1 -and $old.Registrations -is [array] -and $old.Registrations.Count -eq 1) 'single existing GH arrays retain shape'
@@ -195,6 +219,152 @@ foreach ($maintenance in @($false, $true)) {
   $result = Assert-Fixture $leverFixture
   Assert-True ($result.ChangedResources -eq 4 -and $result.ExistingSourcesPreserved) 'global Lever-only addition with three hosts accepted'
 }
+$boardSelection = Copy-D2RuntimeValue $configuration
+$boardSelection.provider_sources_json = ConvertTo-FixtureJson (@($sources) + @(
+    [pscustomobject]@{ schemaVersion = 1; provider = 'ashby'; sourceId = 'ashby-fourth'; enabled = $true
+      jobBoardName = 'FourthBoard'; companyName = 'Fourth Example'; verifiedCompanyDomain = 'fourth.example.com' }
+  ))
+$boardSelection.provider_verification_registrations_json = ConvertTo-FixtureJson (@($registrations) + @(
+    [pscustomobject]@{ sourceId = 'ashby-fourth'; provider = 'ashby'; pageVariant = 'ashby-job-board-v1'; atsTenant = 'fourthboard'; sourcePolicyVersion = 'policy-v1' }
+  ))
+foreach ($maintenance in @($false, $true)) {
+  $boardFixture = New-ConfigurationFixture -Maintenance $maintenance -Selection $boardSelection -BaselineSelection $configuration -UpdatedIndices @(2, 3)
+  $frozen = Get-D2RuntimeDigest $boardFixture
+  $result = Assert-Fixture $boardFixture
+  Assert-True ($result.ChangedResources -eq 2 -and $result.ManagedResources -eq 10 -and $result.ExistingSourcesPreserved -and -not $result.DeploymentOrApprovalPerformed) 'fourth same-provider board requires only scheduled function and alias'
+  Assert-True ((Get-D2RuntimeDigest $boardFixture) -ceq $frozen) 'registry-only validation is pure'
+  Assert-True ((Get-D2RuntimeMaintenance (Get-D2RuntimeConfiguration $boardFixture.Plan.variables)) -eq $maintenance) 'registry-only update preserves maintenance'
+  foreach ($index in @(0, 1)) {
+    Assert-True ((ConvertTo-DeploymentCanonicalValue $boardFixture.Plan.resource_changes[$index]) -ceq (ConvertTo-DeploymentCanonicalValue $boardFixture.Baseline.resource_changes[$index])) 'Gateway function and alias remain exact no-ops'
+  }
+  $added = Read-D2ProviderConfigurationRegistries $boardFixture.Plan.variables.d2_community_runtime.value
+  Assert-True ($added.Sources.Count -eq 4 -and $added.Registrations.Count -eq 4 -and $added.Sources[3].jobBoardName -ceq 'FourthBoard' -and $added.Registrations[3].atsTenant -ceq 'fourthboard') 'board token case is preserved while registration tenant is normalized'
+}
+$boardFixture = New-ConfigurationFixture -Selection $boardSelection -BaselineSelection $configuration -UpdatedIndices @(2, 3)
+foreach ($index in @(0, 1)) {
+  $bad = Copy-D2RuntimeValue $boardFixture
+  $missingAddress = $bad.Plan.resource_changes[$index].address
+  foreach ($nativePlan in @($bad.Plan, $bad.Baseline)) {
+    $nativePlan.resource_changes = @($nativePlan.resource_changes | Where-Object { $_.address -cne $missingAddress })
+    $nativePlan.planned_values.root_module.child_modules[0].resources = @($nativePlan.planned_values.root_module.child_modules[0].resources | Where-Object { $_.address -cne $missingAddress })
+  }
+  $bad.Plan.prior_state.values.root_module.child_modules[0].resources = @($bad.Plan.prior_state.values.root_module.child_modules[0].resources | Where-Object { $_.address -cne $missingAddress })
+  Assert-Rejected { Assert-Fixture $bad } 'registry-only cannot consistently omit a required unchanged Gateway resource'
+}
+Assert-Rejected { Assert-Fixture (New-ConfigurationFixture -Selection $boardSelection -BaselineSelection $configuration) } 'registry-only plan cannot include otherwise unnecessary Gateway pair updates'
+foreach ($missing in @(2, 3)) {
+  $indices = @(2, 3) | Where-Object { $_ -ne $missing }
+  Assert-Rejected { Assert-Fixture (New-ConfigurationFixture -Selection $boardSelection -BaselineSelection $configuration -UpdatedIndices $indices) } 'both scheduled function and alias are required'
+}
+Assert-Rejected { Assert-Fixture (New-ConfigurationFixture -UpdatedIndices @(2, 3)) } 'provider and domain expansion cannot use the registry-only resource set'
+$hostBaseline = Copy-D2RuntimeValue $configuration
+$hostBaseline.development_contribution_domains = $null
+Assert-Rejected { Assert-Fixture (New-ConfigurationFixture -Selection $boardSelection -BaselineSelection $hostBaseline -UpdatedIndices @(2, 3)) } 'domain-only selector change still requires Gateway pair'
+$null = Assert-Fixture (New-ConfigurationFixture -Selection $boardSelection -BaselineSelection $hostBaseline); $passed++
+$providerOrder = Copy-D2RuntimeValue $boardSelection
+$providerOrder.development_contribution_providers = @('greenhouse', 'ashby', 'lever')
+Assert-Rejected { Assert-Fixture (New-ConfigurationFixture -Selection $providerOrder -BaselineSelection $configuration -UpdatedIndices @(2, 3)) } 'provider-only encoded selector change still requires Gateway pair'
+$null = Assert-Fixture (New-ConfigurationFixture -Selection $providerOrder -BaselineSelection $configuration); $passed++
+foreach ($mutation in @(
+    @{ Name = 'Gateway function unexpected update'; Edit = { param($x) $x.Plan.resource_changes[0].change.actions = @('update') } },
+    @{ Name = 'Gateway alias unexpected update'; Edit = { param($x) $x.Plan.resource_changes[1].change.actions = @('update') } },
+    @{ Name = 'Gateway hidden env delta'; Edit = { param($x) $x.Plan.resource_changes[0].change.after.environment[0].variables.RELEASE_SHA = 'changed'; Sync-PlannedValue $x 0 } },
+    @{ Name = 'Gateway hidden alias delta'; Edit = { param($x) $x.Plan.resource_changes[1].change.after.function_version = '62'; Sync-PlannedValue $x 1 } },
+    @{ Name = 'Gateway unknown no-op'; Edit = { param($x) $x.Plan.resource_changes[0].change.after_unknown | Add-Member version $true } },
+    @{ Name = 'missing no-op inventory'; Edit = { param($x) $x.Plan.resource_changes = @($x.Plan.resource_changes | Select-Object -Skip 1) } },
+    @{ Name = 'scheduled replacement'; Edit = { param($x) $x.Plan.resource_changes[2].change.actions = @('delete', 'create') } },
+    @{ Name = 'scheduled replacement path'; Edit = { param($x) $x.Plan.resource_changes[2].change | Add-Member replace_paths @(@('role')) } },
+    @{ Name = 'scheduled provider wrapper'; Edit = { param($x) $x.Plan.resource_changes[2].provider_name = 'other' } },
+    @{ Name = 'scheduled planned wrapper'; Edit = { param($x) $x.Plan.planned_values.root_module.child_modules[0].resources[2].schema_version = 1 } },
+    @{ Name = 'scheduled sensitive metadata'; Edit = { param($x) $x.Plan.resource_changes[2].change.before_sensitive | Add-Member role $true; $x.Plan.resource_changes[2].change.after_sensitive | Add-Member role $true } },
+    @{ Name = 'scheduled identity metadata'; Edit = { param($x) $x.Plan.resource_changes[2].change | Add-Member before_identity ([pscustomobject]@{ altered = $true }) } },
+    @{ Name = 'scheduled artifact delta'; Edit = { param($x) $x.Plan.resource_changes[2].change.after.s3_object_version = 'changed'; Sync-PlannedValue $x 2 } },
+    @{ Name = 'scheduled reviewer delta'; Edit = { param($x) $x.Plan.resource_changes[2].change.after.environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON = '[{}]'; Sync-PlannedValue $x 2 } },
+    @{ Name = 'scheduled unknown artifact'; Edit = { param($x) $x.Plan.resource_changes[2].change.after_unknown | Add-Member code_sha256 $true } },
+    @{ Name = 'scheduled missing unknown'; Edit = { param($x) $x.Plan.resource_changes[2].change.after_unknown.PSObject.Properties.Remove('version') } },
+    @{ Name = 'scheduled typed unknown'; Edit = { param($x) $x.Plan.resource_changes[2].change.after_unknown.version = 'true' } },
+    @{ Name = 'scheduled known function version'; Edit = { param($x) $x.Plan.resource_changes[2].change.after | Add-Member version '62'; Sync-PlannedValue $x 2 } },
+    @{ Name = 'scheduled known alias version'; Edit = { param($x) $x.Plan.resource_changes[3].change.after | Add-Member function_version '62'; Sync-PlannedValue $x 3 } },
+    @{ Name = 'scheduled alias weights'; Edit = { param($x) $x.Plan.resource_changes[3].change.after.routing_config = @([pscustomobject]@{ additional_version_weights = [pscustomobject]@{ '60' = 0.1 } }); Sync-PlannedValue $x 3 } },
+    @{ Name = 'scheduled IAM change'; Edit = { param($x) $x.Plan.resource_changes[2].change.after.role = 'changed'; Sync-PlannedValue $x 2 } },
+    @{ Name = 'scheduled network change'; Edit = { param($x) $x.Plan.resource_changes[2].change.after.vpc_config[0].subnet_ids[0] = 'changed'; Sync-PlannedValue $x 2 } },
+    @{ Name = 'scheduled budget change'; Edit = { param($x) $x.Plan.resource_changes[2].change.after.reserved_concurrent_executions = 2; Sync-PlannedValue $x 2 } },
+    @{ Name = 'Trust no-op change'; Edit = { param($x) $x.Plan.resource_changes[4].change.after.source_code_hash = 'changed'; Sync-PlannedValue $x 4 } },
+    @{ Name = 'changed plan source'; Edit = { param($x) $x.Plan.configuration.preserved[0] = 'changed' } },
+    @{ Name = 'output change'; Edit = { param($x) $x.Plan.planned_values.outputs.exact.value = 'changed' } }
+  )) {
+  $bad = Copy-D2RuntimeValue $boardFixture
+  & $mutation.Edit $bad
+  Assert-Rejected { Assert-Fixture $bad } ('registry-only ' + $mutation.Name)
+}
+foreach ($index in @(0, 2)) {
+  foreach ($field in @('arn', 'function_name')) {
+    $bad = Copy-D2RuntimeValue $boardFixture
+    foreach ($value in @($bad.Baseline.resource_changes[$index].change.before, $bad.Baseline.resource_changes[$index].change.after,
+        $bad.Baseline.planned_values.root_module.child_modules[0].resources[$index].values,
+        $bad.Plan.prior_state.values.root_module.child_modules[0].resources[$index].values,
+        $bad.Plan.resource_changes[$index].change.before, $bad.Plan.resource_changes[$index].change.after)) { $value.$field = 'wrong-target' }
+    Sync-PlannedValue $bad $index
+    Assert-Rejected { Assert-Fixture $bad } 'registry-only both Gateway and scheduled identities remain independently bound'
+  }
+}
+Assert-Rejected { Assert-D2ProviderConfigurationPlan $boardFixture.Plan $boardFixture.Baseline $boardFixture.Configuration '999988887777' } 'registry-only exact account remains caller-bound'
+foreach ($index in @(0, 2)) {
+  foreach ($padding in @(('x' * 4090), ([string][char]0x00e9 * 2040))) {
+    $bad = Copy-D2RuntimeValue $boardFixture
+    # Keep every before/after map and no-op record synchronized. Only the full
+    # Lambda environment budget, not a plan inconsistency, should reject this.
+    foreach ($value in @($bad.Baseline.resource_changes[$index].change.before, $bad.Baseline.resource_changes[$index].change.after,
+        $bad.Baseline.planned_values.root_module.child_modules[0].resources[$index].values,
+        $bad.Plan.prior_state.values.root_module.child_modules[0].resources[$index].values,
+        $bad.Plan.resource_changes[$index].change.before, $bad.Plan.resource_changes[$index].change.after)) {
+      $value.environment[0].variables | Add-Member SYNTHETIC_PADDING $padding
+    }
+    Sync-PlannedValue $bad $index
+    Assert-Rejected { Assert-Fixture $bad } 'full before/after environment cap also binds unchanged Gateway'
+  }
+}
+$grown = Copy-D2RuntimeValue $boardFixture
+$beforeEnvironmentBytes = 0
+foreach ($property in $grown.Plan.resource_changes[2].change.before.environment[0].variables.PSObject.Properties) {
+  $beforeEnvironmentBytes += [Text.Encoding]::UTF8.GetByteCount($property.Name) + [Text.Encoding]::UTF8.GetByteCount($property.Value)
+}
+$padding = 'x' * (4096 - $beforeEnvironmentBytes - 'SYNTHETIC_PADDING'.Length)
+foreach ($value in @($grown.Baseline.resource_changes[2].change.before, $grown.Baseline.resource_changes[2].change.after,
+    $grown.Baseline.planned_values.root_module.child_modules[0].resources[2].values,
+    $grown.Plan.prior_state.values.root_module.child_modules[0].resources[2].values,
+    $grown.Plan.resource_changes[2].change.before, $grown.Plan.resource_changes[2].change.after)) {
+  $value.environment[0].variables | Add-Member SYNTHETIC_PADDING $padding
+}
+Sync-PlannedValue $grown 2
+$null = Assert-D2ProviderEnvironmentBudget $grown.Plan.resource_changes[2].change.before.environment[0].variables; $passed++
+$growthError = ''
+try { $null = Assert-Fixture $grown } catch { $growthError = $_.Exception.Message }
+Assert-True ($growthError -ceq 'D2ProviderEnvironmentBudgetRejected') 'valid 4096-byte baseline refuses registry growth beyond full environment limit'
+foreach ($edit in @(
+    { param($x) $x.sources[2].companyName = 'changed' },
+    { param($x) $x.registrations[2].sourcePolicyVersion = 'policy-v2' },
+    { param($x) $x.registrations[3].atsTenant = 'FourthBoard' },
+    { param($x) $x.sources[3].jobBoardName = 'exampleashby'; $x.registrations[3].atsTenant = 'exampleashby' }
+  )) {
+  $selection = Copy-D2RuntimeValue $boardSelection
+  $wrapper = ConvertFrom-D2RuntimeJson ('{"sources":' + $selection.provider_sources_json + ',"registrations":' + $selection.provider_verification_registrations_json + '}')
+  & $edit $wrapper
+  $selection.provider_sources_json = ConvertTo-FixtureJson $wrapper.sources
+  $selection.provider_verification_registrations_json = ConvertTo-FixtureJson $wrapper.registrations
+  Assert-Rejected { Assert-Fixture (New-ConfigurationFixture -Selection $selection -BaselineSelection $configuration -UpdatedIndices @(2, 3)) } 'registry-only preserves old entries and normalized unique tenant binding'
+}
+$boardRuntime = (New-D2ProviderConfigurationVariables $variables $boardSelection).d2_community_runtime.value
+$parts = (ConvertTo-FixtureJson $boardSelection.development_contribution_providers) +
+  (ConvertTo-FixtureJson $boardSelection.development_contribution_domains) +
+  $boardRuntime.trust_evidence_allowlist_json + $boardRuntime.provider_sources_json +
+  $boardRuntime.provider_verification_registrations_json
+$reviewerPadding = 2100 - [Text.Encoding]::UTF8.GetByteCount($parts) - 4
+Assert-True ($reviewerPadding -gt 0) 'generated fourth-board fixture fits the reviewed 2800 encoded budget'
+$boardRuntime.trust_reviewer_assignments_json = '["' + ('x' * $reviewerPadding) + '"]'
+$null = Assert-D2ProviderAdditiveConfiguration $configuration $boardRuntime $boardSelection; $passed++
+$boardRuntime.trust_reviewer_assignments_json = '["' + ('x' * ($reviewerPadding + 1)) + '"]'
+Assert-Rejected { Assert-D2ProviderAdditiveConfiguration $configuration $boardRuntime $boardSelection } 'combined development configuration refuses 2804 encoded characters'
 $missingAshby = Copy-D2RuntimeValue $leverSelection
 $missingAshby.development_contribution_providers += 'ashby'
 $missingAshby.development_contribution_domains += 'jobs.ashbyhq.com'

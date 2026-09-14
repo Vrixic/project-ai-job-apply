@@ -66,8 +66,13 @@ the signature requirement. Dark policy-only deployments still require signed con
 
 The development mode does not change managed OIDC/scopes, selected provider registries,
 independent verification, Trust assignments/evidence, worker limits, alarms, role separation,
-or production/store release boundaries. Configuration remains bounded to 2,400 encoded bytes.
-Staging, production, and default development behavior retain signed-policy verification.
+or production/store release boundaries. The selected JSON configuration is bounded to 2,800
+base64-encoded bytes only in explicit development contribution mode; signed configurations retain
+the 2,400-byte limit. Independently, the complete scheduled Lambda environment (every configured
+key and value, including runtime policy and resource identifiers) must fit the
+[4,096-byte Lambda limit](https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html),
+measured as UTF-8 rather than character count. Staging, production, and default development
+behavior retain signed-policy verification.
 
 `development_contribution_providers` is an optional list of unique exact `greenhouse`, `lever`,
 and `ashby` names, defaulting to `["greenhouse"]` for backward compatibility. An explicit `[]`
@@ -89,8 +94,9 @@ is intersected with the selected provider and its immutable descriptor, not a re
 either. In particular, global Lever can be selected while `jobs.eu.lever.co` remains denied.
 This neither activates providers nor establishes representative-fixture or publication acceptance.
 Matching exact source/verification registrations and the extension's separate detector-domain
-policy remain required. The added JSON counts toward the existing 2,400-byte encoded configuration
-budget, and maintenance retains the restriction while pausing execution.
+policy remain required. The added JSON counts toward the development-only 2,800-byte encoded
+configuration budget and the complete scheduled environment's 4,096-byte limit. Maintenance
+retains the restriction while pausing execution.
 
 The gateway and reconciler are the only producers for the platform-CMK-encrypted outbox queue.
 The durable orchestrator is outside the VPC and invokes an exact activity version; database

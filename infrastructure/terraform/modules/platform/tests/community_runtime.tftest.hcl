@@ -1178,7 +1178,7 @@ run "d2_development_domain_configuration_budget_boundary_without_restriction" {
       policy_endpoint_enabled           = false
       signed_policy_json                = ""
       signed_public_keys_json           = ""
-      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 2 - length(join("", [
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 2 - length(join("", [
         var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
         var.d2_active_runtime_fixture.provider_sources_json,
         var.d2_active_runtime_fixture.provider_verification_registrations_json
@@ -1187,7 +1187,7 @@ run "d2_development_domain_configuration_budget_boundary_without_restriction" {
   }
   assert {
     condition     = !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON")
-    error_message = "The existing 2400-byte encoded configuration boundary must pass without an omitted restriction's bytes."
+    error_message = "The development-only 2800-byte encoded configuration boundary must pass without an omitted restriction's bytes."
   }
 }
 
@@ -1201,7 +1201,7 @@ run "d2_development_domain_configuration_budget_includes_restriction" {
       policy_endpoint_enabled           = false
       signed_policy_json                = ""
       signed_public_keys_json           = ""
-      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 2 - length(join("", [
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 2 - length(join("", [
         var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
         var.d2_active_runtime_fixture.provider_sources_json,
         var.d2_active_runtime_fixture.provider_verification_registrations_json
@@ -1644,4 +1644,199 @@ run "d2_maintenance_still_requires_reviewer_assignments" {
     d2_community_runtime = merge(var.d2_active_runtime_fixture, { maintenance_mode = true, trust_reviewer_assignments_json = "[]" })
   }
   expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_signed_configuration_accepts_2400_encoded_bytes" {
+  command = plan
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 2 - length(join("", [
+        var.d2_active_runtime_fixture.signed_policy_json,
+        var.d2_active_runtime_fixture.signed_public_keys_json,
+        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+        var.d2_active_runtime_fixture.provider_sources_json,
+        var.d2_active_runtime_fixture.provider_verification_registrations_json
+      ]))))
+    })
+  }
+  assert {
+    condition     = contains(keys(aws_lambda_function.d2_community_scheduled[0].environment[0].variables), "JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON")
+    error_message = "Signed configuration must still accept its existing 2400-byte encoded boundary."
+  }
+}
+
+run "d2_signed_configuration_rejects_2404_encoded_bytes" {
+  command = plan
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 1801 - 2 - length(join("", [
+        var.d2_active_runtime_fixture.signed_policy_json,
+        var.d2_active_runtime_fixture.signed_public_keys_json,
+        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+        var.d2_active_runtime_fixture.provider_sources_json,
+        var.d2_active_runtime_fixture.provider_verification_registrations_json
+      ]))))
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_scheduled_complete_environment_counts_utf8_keys_and_values" {
+  command = plan
+  override_resource {
+    target          = aws_secretsmanager_secret.database_url
+    override_during = plan
+    values = {
+      arn = "arn:aws:secretsmanager:us-east-2:111122223333:secret:synthetic-db"
+    }
+  }
+  override_resource {
+    target          = aws_sqs_queue.d2_trust_signal[0]
+    override_during = plan
+    values = {
+      arn = "arn:aws:sqs:us-east-2:111122223333:synthetic-signals"
+      url = "https://sqs.us-east-2.amazonaws.com/111122223333/synthetic-signals"
+    }
+  }
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      policy_endpoint_enabled           = false
+      signed_policy_json                = ""
+      signed_public_keys_json           = ""
+      # 100 supplementary-plane characters add 300 UTF-8 bytes beyond character count.
+      trust_evidence_allowlist_json = format("[\"%s\"]%s", join("", [for index in range(100) : "😀"]), substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 104 - length(join("", [
+        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+        var.d2_active_runtime_fixture.provider_sources_json,
+        var.d2_active_runtime_fixture.provider_verification_registrations_json
+      ]))))
+    })
+  }
+  assert {
+    condition = (
+      local.d2_community_scheduled_environment_bytes == 3598 &&
+      local.d2_community_scheduled_environment_bytes == 300 + sum([for key, value in aws_lambda_function.d2_community_scheduled[0].environment[0].variables : length(key) + length(value)]) &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables == local.d2_community_scheduled_environment
+    )
+    error_message = "The full scheduled environment must preserve every value and count exact UTF-8 bytes, including key names and Unicode."
+  }
+}
+
+run "d2_scheduled_rejects_full_environment_excess_outside_selected_json" {
+  command = plan
+  override_resource {
+    target          = aws_secretsmanager_secret.database_url
+    override_during = plan
+    values = {
+      arn = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply-development-database-url-synthetic"
+    }
+  }
+  override_resource {
+    target          = aws_sqs_queue.d2_trust_signal[0]
+    override_during = plan
+    values = {
+      arn = "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-development-d2-trust-signals"
+      url = "https://sqs.us-east-2.amazonaws.com/111122223333/ai-job-apply-development-d2-trust-signals"
+    }
+  }
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled              = true
+      policy_endpoint_enabled                        = false
+      signed_policy_json                             = ""
+      signed_public_keys_json                        = ""
+      processing_policy_version                      = join("", [for index in range(100) : "a"])
+      processing_worker_id                           = join("", [for index in range(100) : "a"])
+      contribution_delivery_worker_id                = join("", [for index in range(100) : "a"])
+      trust_delivery_worker_id                       = join("", [for index in range(100) : "a"])
+      trust_policy_version                           = join("", [for index in range(100) : "a"])
+      processing_max_attempts                        = 5
+      contribution_delivery_max_attempts             = 5
+      trust_delivery_max_attempts                    = 5
+      processing_retry_delay_milliseconds            = [86400000, 86400000, 86400000, 86400000]
+      contribution_delivery_retry_delay_milliseconds = [86400000, 86400000, 86400000, 86400000]
+      trust_delivery_retry_delay_milliseconds        = [86400000, 86400000, 86400000, 86400000]
+      # The selected fields still total exactly 2800 encoded bytes. Longer valid
+      # runtime settings outside that list exhaust the independent full-env limit.
+      trust_evidence_allowlist_json = format("[\"%s\"]%s", join("", [for index in range(100) : "😀"]), substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 104 - length(join("", [
+        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+        var.d2_active_runtime_fixture.provider_sources_json,
+        var.d2_active_runtime_fixture.provider_verification_registrations_json
+      ]))))
+    })
+  }
+  expect_failures = [aws_lambda_function.d2_community_scheduled]
+}
+
+run "d2_scheduled_accepts_4096_total_environment_bytes" {
+  command = plan
+  override_resource {
+    target          = aws_secretsmanager_secret.database_url
+    override_during = plan
+    values = {
+      arn = "arn:aws:secretsmanager:us-east-2:111122223333:secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  override_resource {
+    target          = aws_sqs_queue.d2_trust_signal[0]
+    override_during = plan
+    values = {
+      arn = "arn:aws:sqs:us-east-2:111122223333:synthetic-signals"
+      url = "https://sqs.us-east-2.amazonaws.com/111122223333/synthetic-signals"
+    }
+  }
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      policy_endpoint_enabled           = false
+      signed_policy_json                = ""
+      signed_public_keys_json           = ""
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 2 - length(join("", [
+        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+        var.d2_active_runtime_fixture.provider_sources_json,
+        var.d2_active_runtime_fixture.provider_verification_registrations_json
+      ]))))
+    })
+  }
+  assert {
+    condition     = local.d2_community_scheduled_environment_bytes == 4096
+    error_message = "The complete scheduled environment must accept exactly 4096 UTF-8 bytes."
+  }
+}
+
+run "d2_scheduled_rejects_4097_total_environment_bytes" {
+  command = plan
+  override_resource {
+    target          = aws_secretsmanager_secret.database_url
+    override_during = plan
+    values = {
+      arn = "arn:aws:secretsmanager:us-east-2:111122223333:secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  override_resource {
+    target          = aws_sqs_queue.d2_trust_signal[0]
+    override_during = plan
+    values = {
+      arn = "arn:aws:sqs:us-east-2:111122223333:synthetic-signals"
+      url = "https://sqs.us-east-2.amazonaws.com/111122223333/synthetic-signals"
+    }
+  }
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      policy_endpoint_enabled           = false
+      signed_policy_json                = ""
+      signed_public_keys_json           = ""
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 2 - length(join("", [
+        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+        var.d2_active_runtime_fixture.provider_sources_json,
+        var.d2_active_runtime_fixture.provider_verification_registrations_json
+      ]))))
+    })
+  }
+  expect_failures = [aws_lambda_function.d2_community_scheduled]
 }

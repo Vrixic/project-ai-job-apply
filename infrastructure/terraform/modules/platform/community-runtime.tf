@@ -85,6 +85,38 @@ locals {
       retryDelayMilliseconds = var.d2_community_runtime.trust_delivery_retry_delay_milliseconds
     }
   }
+  d2_community_scheduled_environment = local.d2_community_deployed ? merge({
+    NODE_ENV                     = "production"
+    RELEASE_SHA                  = var.d2_community_runtime.artifact_sha256
+    DATABASE_SECRET_ID           = aws_secretsmanager_secret.database_url.arn
+    D2_COMMUNITY_RUNTIME_ENABLED = tostring(local.d2_community_operational)
+    D2_TRUST_SIGNAL_QUEUE_URL    = aws_sqs_queue.d2_trust_signal[0].url
+    }, local.d2_community_enabled ? {
+    D2_COMMUNITY_ACCOUNT_ID                               = data.aws_caller_identity.current.account_id
+    D2_COMMUNITY_REGION                                   = data.aws_region.current.region
+    D2_COMMUNITY_SCHEDULE_RULE_ARN                        = local.d2_community_schedule_rule_arn
+    D2_TRUST_SIGNAL_QUEUE_ARN                             = aws_sqs_queue.d2_trust_signal[0].arn
+    D2_COMMUNITY_RUNTIME_POLICY_JSON                      = jsonencode(local.d2_runtime_policy)
+    D2_COMMUNITY_PROVIDER_ACTIVATION_ALLOWED              = tostring(var.d2_community_runtime.provider_activation_allowed)
+    D2_COMMUNITY_PROVIDER_SOURCES_JSON                    = var.d2_community_runtime.provider_sources_json
+    D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON = var.d2_community_runtime.provider_verification_registrations_json
+    D2_TRUST_REVIEWER_ASSIGNMENTS_JSON                    = var.d2_community_runtime.trust_reviewer_assignments_json
+    D2_TRUST_EVIDENCE_ALLOWLIST_JSON                      = var.d2_community_runtime.trust_evidence_allowlist_json
+    D2_TRUST_POLICY_VERSION                               = var.d2_community_runtime.trust_policy_version
+    D2_TRUST_APPEAL_WINDOW_MILLISECONDS                   = tostring(var.d2_community_runtime.trust_appeal_window_milliseconds)
+    D2_TRUST_SYSTEM_ACTOR_ID                              = var.d2_community_runtime.trust_system_actor_id
+    } : {}, local.d2_development_contribution_environment,
+    local.d2_community_enabled && !local.d2_development_contributions_enabled ? {
+      JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON      = var.d2_community_runtime.signed_policy_json
+      JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON = var.d2_community_runtime.signed_public_keys_json
+    } : {}
+  ) : {}
+  # Terraform length counts characters, not UTF-8 bytes. Decode the base64 length
+  # arithmetically, excluding padding, to count every configured key and value.
+  d2_community_scheduled_environment_bytes = sum(concat([0], [
+    for encoded in flatten([for key, value in local.d2_community_scheduled_environment : [base64encode(key), base64encode(value)]]) :
+    length(encoded) / 4 * 3 - length(regexall("=", encoded))
+  ]))
 }
 
 data "aws_iam_policy_document" "d2_community_lambda_assume" {
@@ -280,32 +312,7 @@ resource "aws_lambda_function" "d2_community_scheduled" {
   kms_key_arn                    = aws_kms_key.platform.arn
 
   environment {
-    variables = merge({
-      NODE_ENV                     = "production"
-      RELEASE_SHA                  = var.d2_community_runtime.artifact_sha256
-      DATABASE_SECRET_ID           = aws_secretsmanager_secret.database_url.arn
-      D2_COMMUNITY_RUNTIME_ENABLED = tostring(local.d2_community_operational)
-      D2_TRUST_SIGNAL_QUEUE_URL    = aws_sqs_queue.d2_trust_signal[0].url
-      }, local.d2_community_enabled ? {
-      D2_COMMUNITY_ACCOUNT_ID                               = data.aws_caller_identity.current.account_id
-      D2_COMMUNITY_REGION                                   = data.aws_region.current.region
-      D2_COMMUNITY_SCHEDULE_RULE_ARN                        = local.d2_community_schedule_rule_arn
-      D2_TRUST_SIGNAL_QUEUE_ARN                             = aws_sqs_queue.d2_trust_signal[0].arn
-      D2_COMMUNITY_RUNTIME_POLICY_JSON                      = jsonencode(local.d2_runtime_policy)
-      D2_COMMUNITY_PROVIDER_ACTIVATION_ALLOWED              = tostring(var.d2_community_runtime.provider_activation_allowed)
-      D2_COMMUNITY_PROVIDER_SOURCES_JSON                    = var.d2_community_runtime.provider_sources_json
-      D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON = var.d2_community_runtime.provider_verification_registrations_json
-      D2_TRUST_REVIEWER_ASSIGNMENTS_JSON                    = var.d2_community_runtime.trust_reviewer_assignments_json
-      D2_TRUST_EVIDENCE_ALLOWLIST_JSON                      = var.d2_community_runtime.trust_evidence_allowlist_json
-      D2_TRUST_POLICY_VERSION                               = var.d2_community_runtime.trust_policy_version
-      D2_TRUST_APPEAL_WINDOW_MILLISECONDS                   = tostring(var.d2_community_runtime.trust_appeal_window_milliseconds)
-      D2_TRUST_SYSTEM_ACTOR_ID                              = var.d2_community_runtime.trust_system_actor_id
-      } : {}, local.d2_development_contribution_environment,
-      local.d2_community_enabled && !local.d2_development_contributions_enabled ? {
-        JOB_CONTRIBUTION_CAPABILITY_POLICY_JSON      = var.d2_community_runtime.signed_policy_json
-        JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON = var.d2_community_runtime.signed_public_keys_json
-      } : {}
-    )
+    variables = local.d2_community_scheduled_environment
   }
 
   vpc_config {
@@ -326,7 +333,13 @@ resource "aws_lambda_function" "d2_community_scheduled" {
     log_group             = aws_cloudwatch_log_group.application.name
   }
 
-  lifecycle { create_before_destroy = true }
+  lifecycle {
+    create_before_destroy = true
+    precondition {
+      condition     = local.d2_community_scheduled_environment_bytes <= 4096
+      error_message = "The complete scheduled D2 Lambda environment must not exceed 4096 UTF-8 bytes across all configured keys and values."
+    }
+  }
 
   depends_on = [
     aws_iam_role_policy.d2_community_scheduled,

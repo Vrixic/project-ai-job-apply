@@ -50,6 +50,32 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Mintlify activation approved (`2026-09-14`, D2-065): the owner's `yes` authorizes adding only
+Mintlify to development verification and recovering the existing submission. Preserve the three
+existing board registrations, provider/host selectors, immutable application artifacts, reviewer
+assignments and production/store darkness. Work is In progress: independently check the supplied
+posting through the existing bounded Ashby adapter, admit an exact two-resource registry-only
+plan, and deploy only after that saved plan is reviewed. No new submission or publication decision
+is authorized by this recovery. The first read-only preflight returned no usable observation;
+diagnosis continues before activation, without treating that failure as proof of posting closure.
+
+The subsequent bounded preflight separates acquisition from mapping: HTTP `200`, no redirect,
+JSON/API v1, 190,768 bytes and 19 records; the exact supplied posting appears once and is listed.
+Production source parsing and enabled-registry checks pass, but strict record mapping rejects it.
+An earlier diagnostic setup failed before networking and is not provider-failure evidence. Isolate
+the mapper field before activation; do not bypass it or interpret missing output as closure.
+The exact additive local configuration preserves the old three entries and measures 2,684 encoded
+characters / 3,645 full-environment UTF-8 bytes (`562fc2`), within the new bounded limits. Local
+configuration preparation is not deployment or provider-verification acceptance.
+
+Measured current configuration uses 2,244 base64-encoded characters for the selected configuration
+parts and 3,317 UTF-8 bytes for all scheduled environment keys/values. The fourth board exceeds
+the conservative 2,400-character selection budget while remaining within Lambda's full environment
+capacity. Implement a development-only 2,800-character allowance with an independent exact
+4,096-byte full-environment check; retain the signed/default 2,400 limit and individual registry
+bounds. This is not an unbounded registry or resource-capacity increase. See the
+[single rationale](#decisions-and-scope-changes).
+
 Disposable Mintlify diagnosis (`2026-09-14`, D2-020/D2-016): the supplied public URL identifies a
 hosted Ashby posting on the Mintlify board. Read-only exact-account inspection at `17:13:36Z`
 (`072301`) verifies scheduled version `27` against the reviewed state-339 artifact: runtime and
@@ -643,6 +669,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-062 | Align hosted extension-support instructions with the installed owner controls. | Complete | Platform engineering; QA/automation | D2-017; D2-022 | Completed 2026-09-13. Exact current labels and explicit withdrawal/appeal confirmation pass four focused tests, all 630 web tests and the full verifier including 20 builds. Candidate-only `e930ad2` is READY at the existing stable origin, with hosted copy and five credentialless route/header checks passing. No authentication, queue, API or permission change. |
 | D2-063 | Bind the web crawler setting to its actual Turbo build/cache inputs. | Complete | Platform engineering; QA/automation | D2-009; D2-062 | Completed 2026-09-13. Web-only hashed configuration, real Turbo dry runs and Next header regressions pass 11 focused tests, typecheck and independent review. Full verifier `c4a0ea` passes, including 638 web tests and 20 builds. Candidate-only `27a987b` is READY at the existing stable origin; exact source/region/runtime and five credentialless HTTP checks pass. Current false/noindex behavior and runtime-only Auth0 credentials remain intact. Local ignored-env rebuild limitations are documented. |
 | D2-064 | Refuse redirects in the backward-compatible private saved-page transport before disposable rights preparation. | Complete | Platform engineering; QA/automation | D2-018; D2-020 | Completed 2026-09-14 for source/local build. Private POST now uses redirect error, matching contribution/consent requests. The exact-destination/stable-key/no-acknowledgement/no-payload-rewrite/fixed-error regression passes; 17 focused and all 369 extension tests plus typecheck pass. Configured build `2da6a7` preserves public settings and manifest. Browser reload/private-capture execution remain D2-020; no new UI, scope, contract, backend release or account mutation. |
+| D2-065 | Add the approved Mintlify development verification board and recover the existing disposable submission. | In progress | Platform engineering; QA/automation | D2-016; D2-020; D2-035 | Started 2026-09-14 after explicit scoped approval. Implement registry-only two-resource plan validation and a measured development configuration budget with full-environment enforcement. Exact public-provider preflight, reviewed deployment/readback and existing-hold recovery remain pending; no all-board, reviewer, publication, production or store expansion. |
 
 ### D2-063 — Web crawler build input
 
@@ -2965,6 +2992,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-14 | Started explicitly approved Mintlify-only activation/recovery. Added exact registry-only plan support and development-only budget headroom paired with full environment enforcement; existing production/signed and reviewer boundaries remain unchanged. The posting is listed and acquisition succeeds, but mapping rejects; diagnose before deployment. | D2-065 | Pure guard passes 328 PowerShell7 assertions; final Windows PowerShell5.1 and broader checks pending. Terraform1.16.2 mocked community suite `a72aeb` passes 76/76, validate `097e6c`, fmt/diff pass. Local additive configuration `562fc2`: four source/registration pairs, existing entries/selectors preserved, 2684 encoded characters and 3645 environment bytes. No cloud/application mutation or new acceptance. |
 | 2026-09-14 | Identified the supplied disposable posting's Mintlify board as absent from the live verifier. Supported-host detection does not imply every employer board is configured. Recommended adding only this board and recovering the existing hold, pending explicit activation/recovery authority. | D2-020; D2-016 | Exact-account, reviewed-artifact-bound configuration read `072301`, 17:13:36Z: version27, runtime/provider enabled, sources/registrations 3/3, Ashby 1/1, Mintlify 0/0. [Verifier registration guard](../../../backend/workers/ingestion/src/contribution-verification.ts) returns unavailable before provider fetch. Public-page lookup returns only a JS shell; no provider API verification, live mutation, resubmission or new acceptance claimed. |
 | 2026-09-14 | The disposable owner's next refresh reaches awaiting independent verification, with no cached Trust result. Corrected the normal-wait assumption: initial failed verification is parked, not automatically retried by the five-minute schedule. Requested the public posting URL before scoped diagnosis/recovery; no repeated submission or case decision. | D2-020 | Exact-account/source-artifact-bound Inspect `dc151d`, scheduled version 27, 17:05:54Z: one eligible unavailable/retryable hold; mismatch, closed, duplicate and other zero. Aggregate only; no owner attribution, raw rows, provider request, Retry, account/export/deletion or cloud configuration change. [Processing](../../../backend/services/jobs/src/contribution-processing.ts), [parking](../../../backend/services/jobs/src/contribution-processing-runner.ts), [diagnostic](../../../scripts/operate-development-d2-provider-recovery.ps1). |
 | 2026-09-14 | Recorded the disposable contribution's queued/refresh-to-check snapshot and inspected normal scheduled processing without retrying or deciding a case. Found and corrected missing redirect refusal on the separate private-capture transport; documented existing owner-operated preparation without restoring a private-save button or extracting tokens. | D2-020; D2-064 | User report; `df71ca`: version 27, five-minute enabled schedule, six alias invocations/zero observed Lambda errors or throttles over 16:23:39Z–16:53:39Z, 13 alarms OK. SELECT-only `1bf87c`: zero eligible provider-held rows. 17 focused/369 extension tests, typecheck, source review and configured build `2da6a7` pass. No browser reload, new capture, fresh-MFA login, export, deletion, queue mutation or publication decision. |
@@ -3211,6 +3239,21 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+On `2026-09-14`, the owner explicitly approves Mintlify-only development registration and recovery
+of the existing held contribution. Reuse the accepted hosted-Ashby variant, preserve all existing
+boards/hosts and application artifacts, and require independent provider verification before Trust.
+Registry-only additions need only the scheduled function and alias; forcing an unrelated Gateway
+release adds no value. Extend the exact plan checker for that two-resource shape while preserving
+the existing four-resource selector-change path. Measured configuration headroom justifies raising
+only development's conservative selected-parts budget from 2,400 to 2,800 encoded characters, paired
+with an exact complete UTF-8 key/value environment cap of 4,096 bytes. Signed/default behavior
+retains 2,400. This follows [AWS's environment limit](https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html)
+and does not relax provider response, registry-count, payload, retry, identity or publication checks.
+The verified company identity comes from Mintlify's [official site](https://www.mintlify.com/) and
+[careers page](https://www.mintlify.com/careers); the source preserves board case `Mintlify` and the
+verification registration uses normalized tenant `mintlify`. No new capture fixture variant or
+browser-store/provider-family activation is implied.
 
 For the disposable contribution reported queued on `2026-09-14`, retain its normal processing
 until its Trust case exists. Early cancellation would remove eligibility before the required Trust

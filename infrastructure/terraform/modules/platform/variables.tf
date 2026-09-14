@@ -849,7 +849,7 @@ variable "d2_community_runtime" {
         var.d2_community_runtime.trust_evidence_allowlist_json,
         var.d2_community_runtime.provider_sources_json,
         var.d2_community_runtime.provider_verification_registrations_json
-      ]))) <= 2400 &&
+      ]))) <= (var.environment == "development" && var.d2_community_runtime.development_contributions_enabled ? 2800 : 2400) &&
       can(regex("^[a-z0-9][a-z0-9._-]{2,99}$", var.d2_community_runtime.trust_policy_version)) &&
       var.d2_community_runtime.trust_appeal_window_milliseconds >= 1 &&
       var.d2_community_runtime.trust_appeal_window_milliseconds <= 31536000000 &&

@@ -167,8 +167,23 @@ function Assert-D2ProviderAdditiveConfiguration {
     $After.trust_reviewer_assignments_json, $After.trust_evidence_allowlist_json,
     $After.provider_sources_json, $After.provider_verification_registrations_json
   )
-  if ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($parts -join ''))).Length -gt 2400) {
+  if ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($parts -join ''))).Length -gt 2800) {
     throw 'D2ProviderConfigurationBudgetRejected'
+  }
+}
+
+function Assert-D2ProviderEnvironmentBudget {
+  param([object]$Environment)
+  if ($Environment -isnot [pscustomobject]) { throw 'D2ProviderEnvironmentBudgetRejected' }
+  $bytes = 0
+  $encoding = [Text.UTF8Encoding]::new($false, $true)
+  foreach ($property in $Environment.PSObject.Properties) {
+    if ($property.Value -isnot [string] -or $property.Name.Length -gt 4096 -or $property.Value.Length -gt 4096) {
+      throw 'D2ProviderEnvironmentBudgetRejected'
+    }
+    try { $bytes += $encoding.GetByteCount($property.Name) + $encoding.GetByteCount($property.Value) }
+    catch { throw 'D2ProviderEnvironmentBudgetRejected' }
+    if ($bytes -gt 4096) { throw 'D2ProviderEnvironmentBudgetRejected' }
   }
 }
 
@@ -262,10 +277,23 @@ function Assert-D2ProviderConfigurationPlan {
   # independently permits only the documented computed clock/observation fields.
   $originalBaseline = Get-RestoreRoleBeforeRefreshResources $Baseline
   Assert-D2ProviderConfigurationValueEqual $originalPrior $originalBaseline
-  $expectedAddresses = @(
+  $providerAddresses = @(
     'module.platform.aws_lambda_function.gateway[0]', 'module.platform.aws_lambda_alias.gateway[0]',
     'module.platform.aws_lambda_function.d2_community_scheduled[0]', 'module.platform.aws_lambda_alias.d2_community_scheduled[0]'
   )
+  foreach ($address in $providerAddresses) {
+    if (-not $baselineMap.ContainsKey($address)) { throw 'D2ProviderRequiredResourceMissing' }
+  }
+  # Registry additions always change the scheduled function and its immutable alias.
+  # Gateway receives only selectors, so require its pair exactly when those inputs change.
+  # Preserve array order: the selectors are encoded into environment JSON in that order.
+  $expectedAddresses = @($providerAddresses[2], $providerAddresses[3])
+  foreach ($field in @('development_contribution_providers', 'development_contribution_domains')) {
+    if ((ConvertTo-DeploymentCanonicalValue $oldSelection.$field) -cne (ConvertTo-DeploymentCanonicalValue $Configuration.$field)) {
+      $expectedAddresses = $providerAddresses
+      break
+    }
+  }
   $changed = @($Plan.resource_changes | Where-Object { (@($_.change.actions) -join ',') -cne 'no-op' })
   # Arrays themselves expose an Address method; use explicit member projection on both hosts.
   Assert-D2ProviderConfigurationValueEqual @($changed | ForEach-Object { $_.address } | Sort-Object -CaseSensitive) @($expectedAddresses | Sort-Object -CaseSensitive)
@@ -307,6 +335,26 @@ function Assert-D2ProviderConfigurationPlan {
     Assert-D2ProviderConfigurationValueEqual $record.change.after $plannedMap[$record.address]
     Assert-D2ProviderConfigurationValueEqual $record.change.before_sensitive $record.change.after_sensitive
     $unknowns = @(Get-GatewayUnknownTrueLeafPaths $record.change.after_unknown | Sort-Object -CaseSensitive)
+    # A registry-only change must still bind the unchanged Gateway pair to the exact
+    # development identity and baseline selectors; no-op is not a weaker identity check.
+    if ($providerAddresses -ccontains $record.address) {
+      $scheduled = $record.address -cmatch '\.d2_community_scheduled\[0\]$'
+      $functionName = if ($scheduled) { 'ai-job-apply-development-d2-community-scheduled' } else { 'ai-job-apply-development-gateway' }
+      $original = $record.change.before
+      if ($record.type -ceq 'aws_lambda_function') {
+        if ($original.function_name -cne $functionName -or $original.arn -cne "arn:aws:lambda:us-east-2:$ExpectedAccountId`:function:$functionName" -or
+            @($original.environment).Count -ne 1 -or @($record.change.after.environment).Count -ne 1 -or
+            $original.environment[0].variables.D2_DEPLOYMENT_ENVIRONMENT -cne 'development' -or
+            $original.environment[0].variables.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED -cne 'true' -or
+            $original.version -isnot [string] -or $original.version -cnotmatch '^[1-9][0-9]*$') { throw 'D2ProviderFunctionBindingRejected' }
+        Assert-D2ProviderEnvironmentBudget $original.environment[0].variables
+        Assert-D2ProviderEnvironmentBudget $record.change.after.environment[0].variables
+        Assert-D2ProviderConfigurationValueEqual $original.environment[0].variables (Get-D2ProviderExpectedEnvironment $original.environment[0].variables $oldSelection $scheduled)
+      } elseif ($record.type -ceq 'aws_lambda_alias') {
+        if ($original.name -cne 'development' -or $original.function_name -cne $functionName -or
+            $original.function_version -isnot [string] -or $original.function_version -cnotmatch '^[1-9][0-9]*$') { throw 'D2ProviderAliasBindingRejected' }
+      } else { throw 'D2ProviderTargetTypeRejected' }
+    }
     if ($expectedAddresses -cnotcontains $record.address) {
       if ((@($record.change.actions) -join ',') -cne 'no-op' -or $unknowns.Count -ne 0) { throw 'D2ProviderNonTargetChanged' }
       Assert-D2ProviderConfigurationValueEqual $record.change.before $record.change.after
@@ -315,15 +363,7 @@ function Assert-D2ProviderConfigurationPlan {
     if ((@($record.change.actions) -join ',') -cne 'update') { throw 'D2ProviderNonUpdateRejected' }
     $before = Copy-D2RuntimeValue $record.change.before
     $after = Copy-D2RuntimeValue $record.change.after
-    $scheduled = $record.address -cmatch '\.d2_community_scheduled\[0\]$'
-    $functionName = if ($scheduled) { 'ai-job-apply-development-d2-community-scheduled' } else { 'ai-job-apply-development-gateway' }
     if ($record.type -ceq 'aws_lambda_function') {
-      if ($before.function_name -cne $functionName -or $before.arn -cne "arn:aws:lambda:us-east-2:$ExpectedAccountId`:function:$functionName" -or
-          @($before.environment).Count -ne 1 -or @($after.environment).Count -ne 1 -or
-          $before.environment[0].variables.D2_DEPLOYMENT_ENVIRONMENT -cne 'development' -or
-          $before.environment[0].variables.D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED -cne 'true' -or
-          $before.version -isnot [string] -or $before.version -cnotmatch '^[1-9][0-9]*$') { throw 'D2ProviderFunctionBindingRejected' }
-      Assert-D2ProviderConfigurationValueEqual $before.environment[0].variables (Get-D2ProviderExpectedEnvironment $before.environment[0].variables $oldSelection $scheduled)
       $expectedEnvironment = Get-D2ProviderExpectedEnvironment $before.environment[0].variables $Configuration $scheduled
       Assert-D2ProviderConfigurationValueEqual $after.environment[0].variables $expectedEnvironment
       $before.environment[0].variables = $expectedEnvironment
@@ -333,9 +373,7 @@ function Assert-D2ProviderConfigurationPlan {
         $before.PSObject.Properties.Remove($field)
       }
     } elseif ($record.type -ceq 'aws_lambda_alias') {
-      if ($before.name -cne 'development' -or $before.function_name -cne $functionName -or
-          $before.function_version -isnot [string] -or $before.function_version -cnotmatch '^[1-9][0-9]*$' -or
-          $null -ne $after.PSObject.Properties['function_version']) { throw 'D2ProviderAliasBindingRejected' }
+      if ($null -ne $after.PSObject.Properties['function_version']) { throw 'D2ProviderAliasBindingRejected' }
       Assert-D2ProviderConfigurationValueEqual $unknowns @('function_version')
       $before.PSObject.Properties.Remove('function_version')
     } else { throw 'D2ProviderTargetTypeRejected' }
@@ -345,7 +383,7 @@ function Assert-D2ProviderConfigurationPlan {
     throw 'D2ProviderManagedInventoryIncomplete'
   }
   return [pscustomobject]@{
-    Kind = 'development-d2-provider-configuration-plan-validation'; ChangedResources = 4
+    Kind = 'development-d2-provider-configuration-plan-validation'; ChangedResources = $changed.Count
     ManagedResources = $priorMap.Count; ExistingSourcesPreserved = $true
     ConfigurationSha256 = Get-D2RuntimeDigest $Configuration
     DeploymentOrApprovalPerformed = $false
