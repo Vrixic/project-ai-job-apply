@@ -134,9 +134,12 @@ acceptance. The sole assignment and rationale record remains the
 On 2026-09-14, read-only inspection confirms the existing stable alias
 `https://ai-job-apply-admin-applydash2026-5637.vercel.app` belongs to this admin project and
 returns an unauthenticated Vercel-protected `302` with `no-store`. Its current deployment is older
-than the preview below, and hosted environment keys remain absent. The next step is exact hosted
-callback/logout/web-origin setup in the existing human appeal application, followed by secure
-appeals-only configuration and reviewed deployment/alias binding. The shorter
+than the preview below, and hosted environment keys remain absent. The owner has now confirmed
+the exact hosted callback/logout/web-origin entries; public authorization reaches the expected
+Auth0 login page without credentials. All 174 admin tests, typecheck, production build and exact Vercel preflight
+pass. Permission to reuse the existing encrypted client secret from its expired local-only setup
+is still required before secure appeals-only configuration and reviewed deployment/alias binding.
+Use deployment-only runtime variables, not project-wide environment settings. The shorter
 `https://ai-job-apply-admin.vercel.app` returns `200` without Vercel protection and is not selected.
 No new branch, paid protection upgrade, role or repeated local identity setup is required.
 The [single Phase 2 decisions record](../../docs/product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes)

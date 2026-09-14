@@ -330,10 +330,13 @@ This is the master record for the delivery phases defined in the [product and sy
 - Next hosted appeal input (`2026-09-14`): the existing stable admin alias
   `https://ai-job-apply-admin-applydash2026-5637.vercel.app` is already Vercel-protected;
   exact project/alias inspection and an unauthenticated 302/no-store probe pass. Zero hosted
-  environment keys remain configured. Append that host's exact callback/logout/web origins to
-  the existing human appeal Auth0 application, then securely configure and deploy the appeals-only
-  candidate. The alias currently targets an older deployment. No paid upgrade, new branch,
-  credential, role or repeat identity setup is requested; no provider state changed.
+  environment keys remain configured. The user now confirms the exact Auth0 entries were added,
+  and a public no-cookie authorization probe reaches the expected login page. Exact Vercel
+  preflight, all 174 admin tests, typecheck and production build pass. Deployment-only runtime variables will isolate
+  the appeals candidate; the alias currently targets an older deployment. Before accessing the
+  encrypted secret retained from the expired local-only setup, obtain permission to reuse only
+  the existing client secret for this protected hosted development target. No new secret, role,
+  paid upgrade or branch is needed; no agent-side credentials or provider state changed.
   [Exact entries and single rationale](phase-2-extension-and-community.md#decisions-and-scope-changes)
 
 - Installed Ashby description acceptance (`2026-09-13`, D2-035/D2-061): the user confirms that
