@@ -318,6 +318,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Disposable verification follow-up (`2026-09-14`, D2-020): the owner now reports awaiting
+  independent verification / refresh to check. Initial failed verification parks instead of
+  automatically retrying on the schedule. Exact-account/artifact-bound Inspect on version `27`
+  finds one unavailable/retryable hold and no mismatch/closed/duplicate/other holds; it does not
+  identify the owner's item or prove a provider outage. The next needed input is the public posting
+  URL to check exact registration/acquisition before scoped recovery. No Retry, provider fetch,
+  resubmission, cancellation, decision, export or deletion; Phase 2 remains In progress.
+  [Current diagnosis](phase-2-extension-and-community.md#task-register).
+
 - Disposable contribution preparation (`2026-09-14`, D2-020/D2-064): the owner reports queued /
   refresh to check. Scheduled version `27` is healthy and enabled every five minutes; six observed
   alias runs have zero Lambda errors/throttles, all 13 alarms are OK, and read-only provider-hold

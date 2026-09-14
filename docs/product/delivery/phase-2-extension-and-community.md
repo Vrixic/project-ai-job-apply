@@ -50,6 +50,22 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Disposable verification follow-up (`2026-09-14`, D2-020): the owner's next read reports Processing
+`awaiting independent verification` and Trust `refresh to check`. The latter is an absent cached
+Trust result, not a review decision. Source inspection confirms that initial unsuccessful provider
+verification parks the item; ordinary scheduled batches do not automatically retry this initial
+hold. The prior five-minute schedule guidance is therefore insufficient for this state.
+Exact-account, immutable-artifact-bound **Inspect only** on scheduled version `27` at
+`17:05:54Z` returns one eligible hold: unavailable `1`, retryable `1`, and mismatch/closed/duplicate/
+other `0` (`dc151d`). This is aggregate evidence, not an owner/item binding. “Unavailable” can include
+an unregistered employer board or absent exact observation, not just a provider outage. Request the
+public posting URL used by the disposable account to distinguish those cases before choosing a
+scoped recovery. No Retry, provider fetch, resubmission, cancellation, Trust decision, export or
+deletion was performed. Keep the existing item unchanged. See the
+[processing transition](../../../backend/services/jobs/src/contribution-processing.ts),
+[queue parking](../../../backend/services/jobs/src/contribution-processing-runner.ts), and
+[bounded read-only diagnostic](../../../scripts/operate-development-d2-provider-recovery.ps1).
+
 Disposable contribution preparation (`2026-09-14`, D2-020): the user reports Processing `queued`
 and Trust `refresh to check` after the disposable-account preparation instructions. This confirms
 the reported intake snapshot, not an identified live Trust case or completed rights test. Read-only
@@ -2929,6 +2945,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-14 | The disposable owner's next refresh reaches awaiting independent verification, with no cached Trust result. Corrected the normal-wait assumption: initial failed verification is parked, not automatically retried by the five-minute schedule. Requested the public posting URL before scoped diagnosis/recovery; no repeated submission or case decision. | D2-020 | Exact-account/source-artifact-bound Inspect `dc151d`, scheduled version 27, 17:05:54Z: one eligible unavailable/retryable hold; mismatch, closed, duplicate and other zero. Aggregate only; no owner attribution, raw rows, provider request, Retry, account/export/deletion or cloud configuration change. [Processing](../../../backend/services/jobs/src/contribution-processing.ts), [parking](../../../backend/services/jobs/src/contribution-processing-runner.ts), [diagnostic](../../../scripts/operate-development-d2-provider-recovery.ps1). |
 | 2026-09-14 | Recorded the disposable contribution's queued/refresh-to-check snapshot and inspected normal scheduled processing without retrying or deciding a case. Found and corrected missing redirect refusal on the separate private-capture transport; documented existing owner-operated preparation without restoring a private-save button or extracting tokens. | D2-020; D2-064 | User report; `df71ca`: version 27, five-minute enabled schedule, six alias invocations/zero observed Lambda errors or throttles over 16:23:39Z–16:53:39Z, 13 alarms OK. SELECT-only `1bf87c`: zero eligible provider-held rows. 17 focused/369 extension tests, typecheck, source review and configured build `2da6a7` pass. No browser reload, new capture, fresh-MFA login, export, deletion, queue mutation or publication decision. |
 | 2026-09-14 | Recorded disposable-account test/deletion authorization, verified the deployed rights boundary read-only, and replaced unsafe historical sign-in mechanics with a maintained standard OAuth/PKCE handoff. Added a D2-only nonempty coverage stop before deletion and bounded memory-only attestation input, preserving legacy file/D1 behavior. No fresh account was selected, seeded, exported or deleted. | D2-020; D2-057 | Status `e14539`: state 339, bound rights/backup/Auth0, empty queues, healthy alarms, zero active compute; client/Gateway-66 binding `eed573`. Both PowerShell hosts: 33 prerequisite +85 export +94 coverage +43 attestation assertions. Node: 83 export +49 session/bridge tests. Scope and rationale stay in the single decisions section; existing recovery/hosting/provider checks are not repeated. |
 | 2026-09-14 | Completed hosted appeal-console access acceptance after the owner confirms Sign out plus stable-root reload returns the sign-in link without the review queue. Prior hosted sign-in and authenticated empty-queue checks remain accepted; no repetition needed. Separate case-decision and other Phase 2 gates remain open. | D2-026; D2-030; D2-R12 | User `yes` to the exact logout/reload check; [session-gated console](../../../frontend/admin/app/page.tsx) at protected source `211e59d`. Aggregate observed UI/session clearing only, not cross-device/token revocation. No code, deployment, role, case or cloud change. |
