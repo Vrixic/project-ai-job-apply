@@ -330,8 +330,11 @@ This is the master record for the delivery phases defined in the [product and sy
   Fresh independent provider evidence supports exactly one acceptance; independent readback
   `81588c` at `2026-09-13T22:58:41.094Z` confirms `accepted` / version `2` after seven bounded
   requests and one decision. Existing agent scopes/roles and separate human appeals are unchanged.
-  Processing publication and website visibility/details/source remain unconfirmed: check the
-  existing signed-in owner session, without another decision, submission or approval request.
+  On September 14 the owner reports Processing `published` alongside Trust `needs review`.
+  The owner publication check is confirmed. Source inspection and an exact synthetic reproduction
+  show that Refresh processing preserves the separately cached Trust value; 41 focused tests pass.
+  Request Refresh Trust once to establish its current owner-visible state. Website
+  visibility/details/source remain unconfirmed; do not repeat the decision or submission.
   No other Ashby review, takedown, new role, production or store authority is included.
   [Installed acceptance](phase-2-extension-and-community.md#d2-061--complete-description-capture)
 

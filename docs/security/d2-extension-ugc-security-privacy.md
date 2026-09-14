@@ -1,7 +1,7 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-13
+- Last updated: 2026-09-14
 - Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
@@ -142,8 +142,10 @@ one decision with an independent `accepted` / version `2` readback. Existing Gre
 initial/takedown, approved global-Lever initial review, exact roles/scopes and independent human
 appeals remain unchanged. No other Ashby review, Ashby takedown, production or store authority is
 included. Scope and rationale remain in the [single Phase 2 record](../product/delivery/phase-2-extension-and-community.md#delegated-reviewer-assignment).
-Accepted fixtures, development activation and this decision do not establish publication;
-processing publication and website acceptance remain under [D2-035](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout).
+Accepted fixtures, development activation and this decision do not themselves establish publication.
+On September 14 the owner separately reports Processing `published` with Trust `needs review`;
+the latter may be the independently cached display and needs a separate Trust refresh. Website
+acceptance remains under [D2-035](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout).
 The optional `D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON` further intersects descriptor authority
 with an exact fixed-host subset, re-read at intake and before publication preparation/renewal.
 It is rejected outside explicit development; absence preserves descriptor hosts, while `[]`
