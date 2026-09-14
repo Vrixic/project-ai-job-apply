@@ -339,7 +339,10 @@ test("normal S256 OAuth code exchange resolves only after same-browser explicit 
     for (const secret of [clientSecret, refreshToken, f.issued.access_token, f.issued.id_token])
       assert.equal(rendered.includes(secret), false);
     assert.match(response.headers["cache-control"], /no-store/u);
-    assert.equal(response.headers["referrer-policy"], "no-referrer");
+    assert.equal(
+      response.headers["referrer-policy"],
+      response.body.includes('<form method="post"') ? "same-origin" : "no-referrer",
+    );
     assert.match(response.headers["content-security-policy"], /frame-ancestors 'none'/u);
   }
 });
@@ -361,6 +364,34 @@ test("wrong callback state, duplicate state/code, wrong cookie and callback repl
   assert.equal((await f.callback()).status, 400);
   assert.equal(f.requests.length, 1);
   assert.equal(f.results.length, 0);
+});
+
+test("form pages preserve same-origin POSTs while null origins still fail closed", async (t) => {
+  const f = await fixture(t);
+  assert.equal(f.initial.headers["referrer-policy"], "same-origin");
+  const rejected = await f.call("/authorize", {
+    method: "POST",
+    cookie: f.cookie,
+    origin: "null",
+    form: { csrf: csrf(f.initial) },
+  });
+  assert.equal(rejected.status, 400);
+  assert.equal(f.requests.length, 0);
+  const preview = await f.ready();
+  assert.equal(preview.headers["referrer-policy"], "same-origin");
+  assert.equal(
+    (
+      await f.call("/confirm", {
+        method: "POST",
+        cookie: f.cookie,
+        origin: "null",
+        form: { csrf: csrf(preview), authorizedOwner: owner, disposable: "yes" },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(f.results.length, 0);
+  assert.equal((await f.confirm(preview)).status, 200);
 });
 
 test("no confirmation before sign-in, from another origin/browser, or with a stale/missing CSRF", async (t) => {

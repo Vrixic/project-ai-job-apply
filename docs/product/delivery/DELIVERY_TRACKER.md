@@ -9,6 +9,10 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 14 D2-020 follow-up: the local disposable sign-in form's referrer/origin conflict is
+corrected, with 52 session/bridge tests passing. Fresh browser sign-in and candidate-rights
+execution remain pending; no export or deletion ran. See the [Phase 2 task register](phase-2-extension-and-community.md#task-register).
+
 | ID | Delivery | Status | Start | Completion | Living task document |
 |---|---|---|---|---|---|
 | D0 | Product, data, and legal foundation | Complete | 2026-07-27 | 2026-08-12 | [Phase 0 tasks](phase-0-foundation.md) |

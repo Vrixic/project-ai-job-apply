@@ -50,6 +50,15 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Candidate-rights sign-in correction (`2026-09-14`, D2-020 still open): the user reports immediate
+failure on the local sign-in button, before Auth0. The helper served native POST forms with
+`Referrer-Policy: no-referrer`, which makes their Origin null under the Fetch Standard while
+the handler correctly requires the exact loopback origin. Only the two root form pages now use
+`same-origin`; redirects and non-form responses retain `no-referrer`. Exact origin, transaction
+cookie, CSRF, PKCE and fresh-MFA checks remain unchanged. The maintained session/bridge suite
+passes 52 tests, including null-origin refusal and both form-page headers. Installed browser
+acceptance remains pending. No export, deletion or cloud change ran for this correction.
+
 Shared-jobs recovery (`2026-09-14`, D2-066 Complete): the user confirms existing contributions
 appear after **Refresh shared jobs** in the reloaded configured extension. Recovery is explicitly
 user-initiated, not automatic loading or background polling. The new authenticated history route
@@ -3320,6 +3329,12 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+On `2026-09-14`, fix the candidate-rights form/header conflict at the response boundary rather
+than accepting null origins or removing CSRF checks. Same-origin referrers are restricted to the
+query-free local root form pages; external redirects and callback responses retain no-referrer.
+This follows the [Fetch Origin-header algorithm](https://fetch.spec.whatwg.org/#origin-header).
+No Auth0 configuration or credential change is needed for this local pre-authorization defect.
 
 On `2026-09-14`, D2-066 selects an explicit **Refresh shared jobs** action backed by Jobs-owned
 history rather than retaining confidential receipts after logout. The read returns at most the

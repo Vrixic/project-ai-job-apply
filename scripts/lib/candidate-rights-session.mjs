@@ -498,6 +498,7 @@ export async function startCandidateRightsSession(options) {
             page(
               `<p>Verified account: <strong>${escapeHtml(pending.label)}</strong></p><p>Exact account ID: ${escapeHtml(pending.subject)}</p><p>This test permanently deletes this account and its candidate data. Never use your main account, a real candidate, or the appeal/reviewer account.</p><form method="post" action="/confirm"><input type="hidden" name="csrf" value="${secrets.csrf}"><label>Your name as the authorized test owner <input name="authorizedOwner" required maxlength="100" autocomplete="off"></label><p><label><input type="checkbox" name="disposable" value="yes" required> I authorize only this disposable account, containing generated synthetic data only, for the rights test and permanent deletion. It is not my main or appeal/reviewer account.</label></p><button type="submit">Use this disposable account</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel without running tests</button></form>`,
             ),
+            { "Referrer-Policy": "same-origin" },
           );
           return;
         }
@@ -518,6 +519,9 @@ export async function startCandidateRightsSession(options) {
         {
           "Set-Cookie": transactionCookie(secrets.cookie),
           "Content-Security-Policy": authorizationCsp,
+          // no-referrer makes native form POST Origin null (Fetch Standard 3.2).
+          // Preserve the exact-origin check; never send referrers cross-origin.
+          "Referrer-Policy": "same-origin",
         },
       );
       return;
