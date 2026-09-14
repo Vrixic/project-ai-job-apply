@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -318,6 +318,24 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## D2 — Extension and community loop
 
+- Provider website acceptance (`2026-09-14`, D2-035): the user confirms both requested Ashby
+  and Supermove/global-Lever checks. Both supplied jobs are found, descriptions load, Ashby's
+  full text includes Technology Stack and Benefits, and the source links open the correct
+  provider postings. D2-035 is Complete for controlled-development contributions, joining the
+  previously confirmed capture, delivery, independent review and published/accepted statuses.
+  Hosted human appeals, fresh rights, broader installed lifecycle and final release gates remain;
+  Phase 2 stays In progress. No repeated provider check, submission, review or deployment is needed.
+  [Acceptance and remaining work](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
+
+- Next hosted appeal input (`2026-09-14`): the existing stable admin alias
+  `https://ai-job-apply-admin-applydash2026-5637.vercel.app` is already Vercel-protected;
+  exact project/alias inspection and an unauthenticated 302/no-store probe pass. Zero hosted
+  environment keys remain configured. Append that host's exact callback/logout/web origins to
+  the existing human appeal Auth0 application, then securely configure and deploy the appeals-only
+  candidate. The alias currently targets an older deployment. No paid upgrade, new branch,
+  credential, role or repeat identity setup is requested; no provider state changed.
+  [Exact entries and single rationale](phase-2-extension-and-community.md#decisions-and-scope-changes)
+
 - Installed Ashby description acceptance (`2026-09-13`, D2-035/D2-061): the user confirms that
   the expanded description now includes everything, answering the Technology Stack/Benefits
   check after the configured rebuild. The installed full-description preview check is complete.
@@ -335,7 +353,8 @@ This is the master record for the delivery phases defined in the [product and sy
   show that Refresh processing preserves the separately cached Trust value; 41 focused tests pass.
   After the separate Refresh Trust action, the owner confirms Processing `published` and Trust
   `accepted`. This closes the installed owner-status check and resolves the displayed discrepancy.
-  Website visibility/details/source remain unconfirmed; do not repeat the status check, decision
+  The subsequent September 14 reply confirms both supplied Ashby and Lever website
+  visibility/details/source checks, completing D2-035. Do not repeat these checks, the decision
   or submission.
   No other Ashby review, takedown, new role, production or store authority is included.
   [Installed acceptance](phase-2-extension-and-community.md#d2-061--complete-description-capture)
@@ -1171,6 +1190,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-14 | D2 | D2-035 completes for controlled-development Lever/Ashby contributions after the user confirms both supplied website journeys: jobs found, descriptions available, Ashby final sections present and correct provider-source navigation. Prior installed delivery, evidence-bound review and published/accepted statuses are retained. Phase 2 remains In progress behind separate acceptance gates. | User reply “checks passes”; [provider completion](phase-2-extension-and-community.md#d2-035--complete-multi-provider-development-contributions), [remaining inputs](phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs). No new runtime write, decision, submission or deployment. |
 | 2026-09-12 | D2 | Approved Ashby development deployment verifies from `61a23de`: state `336`, Gateway/scheduled/Trust `65`/`25`/`19`, three sources/registrations, four hosts and zero drift. Code releases precede additive configuration. The matching unpacked client is rebuilt with typecheck, 317 tests and four readiness cases passing. D2-R22 closes for acquisition/source binding/deployment; D2-035 installed and broader acceptance stay open. All 13 D2 alarms OK; Trust queue/DLQ approximate counts zero. Existing provider/reviewer/runtime boundaries are preserved; no migration, queue clearing, general ingestion/EU/production/store activation or branch was added. | Final `33d264`, independent `a8be19`, health `d073e0`, client `56a488` / `5890e0` / `a7da0a`; [rollout and limitations](phase-2-extension-and-community.md#d2-035--ashby-development-rollout) |
 | 2026-09-12 | D2 | User renews SSO; read-only STS confirms the exact configured development account/SSO role in us-east-2, closing D2-R15 for the current session. Continue the already approved Ashby code release and separate scoped activation. Login is not deployment or installed acceptance. | STS `83e125`; [recorded activation scope](phase-2-extension-and-community.md#decisions-and-scope-changes) |
 | 2026-09-12 | D2 | Owner approves Ashby development deployment/activation with normal unpacked-client follow-through; production/store/EU and reviewer authority stay unchanged. Read-only STS requires SSO renewal (D2-R15 reopened), not repeated deployment approval. Existing additive guard passes 251 assertions and exact hosted client support is confirmed. No cloud write, migration, client activation or new branch occurred. Phase 2 remains In progress. | STS `fbed61`; guard `709359`; client `028eff`; [recorded scope/rationale](phase-2-extension-and-community.md#decisions-and-scope-changes) |

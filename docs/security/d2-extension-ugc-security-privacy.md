@@ -145,8 +145,11 @@ included. Scope and rationale remain in the [single Phase 2 record](../product/d
 Accepted fixtures, development activation and this decision do not themselves establish publication.
 On September 14 the owner separately reports Processing `published` with Trust `needs review`;
 the subsequent separate Trust refresh confirms Processing `published` / Trust `accepted`, resolving
-the retained display discrepancy. This is installed owner-status acceptance, not website, broader
-browser or release acceptance. Website acceptance remains under [D2-035](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout).
+the retained display discrepancy. The subsequent September 14 user confirmation closes the
+supplied Ashby and Supermove website checks: visibility, descriptions (including Ashby's final
+sections) and correct source navigation. [D2-035](../product/delivery/phase-2-extension-and-community.md#d2-035--ashby-development-rollout)
+is Complete for controlled development. No broader browser, reviewer authority, production or
+store acceptance is inferred.
 The optional `D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON` further intersects descriptor authority
 with an exact fixed-host subset, re-read at intake and before publication preparation/renewal.
 It is rejected outside explicit development; absence preserves descriptor hosts, while `[]`

@@ -81,8 +81,8 @@ meaningful Terraform changes. Existing Greenhouse and Supermove/global-Lever reg
 preserved; only the supplied hosted Ashby board is added. The four allowed hosts are the two
 Greenhouse hosts, `jobs.lever.co` and `jobs.ashbyhq.com`. EU Lever, custom-domain detection,
 production and store distribution remain disabled. D2-R22's acquisition/source-binding/deployment
-blocker is closed; Ashby Trust-decision/publication acceptance remains under
-D2-035 and is not implied by activation. The earlier 12,000-character cutoff is corrected by
+blocker is closed; the separately confirmed provider journeys complete D2-035 on September 14,
+not by inference from activation. The earlier 12,000-character cutoff is corrected by
 [D2-061](docs/product/delivery/phase-2-extension-and-community.md#d2-061--complete-description-capture), which
 implements complete capture within the existing 50,000-character limit and explicit refusal of
 oversized text or encoded requests. The actual supplied-page read-only check preserves all
@@ -96,10 +96,11 @@ evidence supports one initial acceptance, with an independent `accepted` / versi
 on September 13. On September 14 the user reports Processing `published`, confirming the owner
 publication check, alongside a retained Trust `needs review` display. After the separate Refresh
 Trust action, the user confirms Processing `published` and Trust `accepted`, closing the installed
-owner-status check and resolving that display discrepancy. Website visibility/details/source
-remain unconfirmed. Do not repeat the status check, acceptance decision, submission or queue clearing.
-The user now reports Processing `published` and Trust `accepted` for the reviewed Lever
-contribution; its website visibility/details/source journey is not yet confirmed. General
+owner-status check and resolving that display discrepancy. The user subsequently confirms both
+supplied Ashby and Supermove/global-Lever website journeys: jobs found, descriptions available
+(including Ashby's final sections), and correct provider-source navigation. D2-035 is Complete
+for controlled development; broader browser and release acceptance remain separate. Do not repeat
+the website/status checks, acceptance decisions, submissions or queue clearing. General
 provider ingestion remains dark, separate from D2 independent verification. Phase 2 is still
 In progress.
 

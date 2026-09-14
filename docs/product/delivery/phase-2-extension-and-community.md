@@ -29,8 +29,9 @@ Lever server activation verifies on 2026-09-11. The first installed Lever attemp
 `Request rejected`; D2-058's client correction is now verified and rebuilt. On September 12 the
 user first reports `Processing: awaiting trust` and `Trust: needs review`, then confirms
 `Processing: published` and `Trust: accepted` after the approved initial review. This closes
-the owner-status check for the supplied Supermove/global-Lever contribution, not its website
-visibility/details/source check. This mode requires no signing key, remote policy
+the owner-status check for the supplied Supermove/global-Lever contribution. On September 14,
+the user also confirms both supplied Lever and Ashby website visibility/details/source checks.
+This mode requires no signing key, remote policy
 request, expiry, or renewal. The Greenhouse extension's reload, sign-in, and successful job addition are user-confirmed on
 2026-09-08. Production and extension-store distribution remain dark. A provider family name is
 not fixture evidence or activation authority.
@@ -38,8 +39,8 @@ not fixture evidence or activation authority.
 | Provider | Variant ID | Exact current-page hosts | Initial evidence state | Activation state |
 |---|---|---|---|---|
 | Greenhouse | `greenhouse-board-v1` | `boards.greenhouse.io`, `job-boards.greenhouse.io` | Authorized sanitized fixture accepted 2026-09-03 | Persistent development mode deployed under D2-033; installed reload, sign-in, and job addition user-confirmed 2026-09-08; production/store dark |
-| Lever | `lever-posting-v1` | `jobs.lever.co`; EU host remains excluded from accepted activation scope | Global-host sanitized fixture and representative structure accepted 2026-09-11; no EU representative claim | Global-Lever scope first verified at `333` is preserved by the latest state-`336` Ashby rollout, with only Supermove independently registered for Lever. The user confirms Processing `published` and Trust `accepted` on September 12 after D2-058 and the approved initial review. Website visibility/details/source remain unconfirmed; production/store dark |
-| Ashby | `ashby-job-board-v1` | `jobs.ashbyhq.com` | Hosted-page sanitized fixture and representative structure accepted 2026-09-11; no custom-domain or rendered-hydration claim | State-336 development activation is preserved by D2-061's state-339 worker update, Gateway/scheduled/Trust `66`/`27`/`21`. D2-R22's acquisition/source-binding/deployment blocker is closed. Installed full-description preview and delivery-to-review (`awaiting trust` / `needs review`) are user-confirmed on 2026-09-13. The separately approved initial decision reads back accepted/version 2 on September 13; the owner confirms published/accepted after Refresh Trust on September 14, leaving website acceptance under D2-035; production/store dark |
+| Lever | `lever-posting-v1` | `jobs.lever.co`; EU host remains excluded from accepted activation scope | Global-host sanitized fixture and representative structure accepted 2026-09-11; no EU representative claim | Global-Lever scope first verified at `333` is preserved by the latest state-`336` Ashby rollout, with only Supermove independently registered for Lever. The user confirms Processing `published` and Trust `accepted` on September 12 after D2-058 and the approved initial review. Website visibility, description and correct provider-source navigation are user-confirmed on September 14; production/store dark |
+| Ashby | `ashby-job-board-v1` | `jobs.ashbyhq.com` | Hosted-page sanitized fixture and representative structure accepted 2026-09-11; no custom-domain or rendered-hydration claim | State-336 development activation is preserved by D2-061's state-339 worker update, Gateway/scheduled/Trust `66`/`27`/`21`. D2-R22's acquisition/source-binding/deployment blocker is closed. Installed full-description preview and delivery-to-review (`awaiting trust` / `needs review`) are user-confirmed on 2026-09-13. The separately approved initial decision reads back accepted/version 2 on September 13; the owner confirms published/accepted after Refresh Trust on September 14, then confirms website visibility, full description and correct provider-source navigation, completing D2-035; production/store dark |
 
 The first detector reads only the explicitly activated current tab and extracts a strict bounded
 allowlist. It does not claim support for custom domains, embedded variants, authenticated pages,
@@ -62,10 +63,26 @@ The two buttons update independent stored snapshots: Refresh processing leaves c
 unchanged. Source inspection, five synthetic diagnostic assertions and 41 focused tests confirm
 that behavior. After the separate Refresh Trust action, the user confirms Processing `published`
 and Trust `accepted`. The installed owner-status check is complete and the displayed discrepancy
-is resolved; no backend regression is established. Next confirm the supplied Ashby and Lever jobs'
-website visibility, full descriptions and source links. Cross-browser parity remains separate.
+is resolved; no backend regression is established. The subsequent September 14 reply confirms
+both requested website checks: Ashby's full description includes Technology Stack and Benefits,
+Supermove's description loads, and both provider source links open the correct supplied posting.
+D2-035 is Complete for these controlled-development provider journeys. Cross-browser parity,
+hosted human appeals and the other phase-level acceptance items remain separate.
 Do not repeat the decision, approval, preview or owner-status check, resubmit the job, clear the
 queue or broaden reviewer authority.
+
+Next hosted appeal step (`2026-09-14`): read-only Vercel inspection verifies the existing non-Zach
+account and exact `frontend/admin` project, with zero hosted environment keys. The existing stable
+alias `https://ai-job-apply-admin-applydash2026-5637.vercel.app` belongs to that project and returns
+an unauthenticated `302` to Vercel with `no-store`. The shorter production domain returns `200`
+and is not the selected protected host. Use the existing protected alias: no paid upgrade, new
+branch, domain assignment or protection change is needed. The alias currently points to an older
+admin deployment, not the latest `b3da818` preview. Before activation, the owner must append the
+exact hosted callback/logout/web-origin entries to the existing dedicated human appeal Auth0
+client; retain localhost entries, MFA and the two appeal/read scopes. Then securely configure the
+appeals-only hosted environment with a distinct session secret and deploy/bind the reviewed admin
+candidate to that alias. No credentials, Auth0 settings, deployment or alias were changed by this
+inspection. The exact binding and rationale are in the [single decisions section](#decisions-and-scope-changes).
 
 Completed build correction (`2026-09-13`, D2-063): Vercel's build warning exposed one real
 build-input gap. `PUBLIC_JOB_INDEXING_ENABLED` is read by Next's build-time header generation,
@@ -481,7 +498,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
 | D2-001 | Implement Manifest V3 identity, side panel/popup, background worker, and secure API session. | Implemented; controlled development | Platform engineering | D0 identity; D1 gateway | The MV3 shell, dedicated Auth0 public-client session boundary, background worker, popup/side-panel surface, trusted-context-only storage, and logout/account fencing are implemented. Known cancellation, callback/state, token-exchange, missing-scope, refresh, and revocation failures map to actionable fixed messages while unknown failures remain non-disclosing. Initial installed-Edge PKCE login exists; the remaining lifecycle/browser evidence stays under D2-012. |
-| D2-002 | Implement current-page job detection for Greenhouse, Lever, and Ashby. | Implemented; three scoped variants accepted | Platform engineering; QA/automation | D2-011 | Accepted Greenhouse, global Lever and hosted Ashby fixtures exercise the inspector/detectors. Three-provider development server activation verifies at `336`. Installed Ashby full-description preview and delivery-to-review are user-confirmed on 2026-09-13; the separately approved initial decision reads back accepted/version 2; the owner confirms published/accepted after Refresh Trust on September 14; website acceptance remains under D2-035. Lever is user-confirmed published/accepted; website visibility/details/source remain unconfirmed. EU/custom-domain and rendered-hydration acceptance are not claimed. |
+| D2-002 | Implement current-page job detection for Greenhouse, Lever, and Ashby. | Implemented; three scoped variants accepted | Platform engineering; QA/automation | D2-011 | Accepted Greenhouse, global Lever and hosted Ashby fixtures exercise the inspector/detectors. Three-provider development server activation verifies at `336`. Installed Ashby full-description preview and delivery-to-review are user-confirmed on 2026-09-13; the separately approved initial decision reads back accepted/version 2; the owner confirms published/accepted after Refresh Trust on September 14; the subsequent user reply confirms both Ashby and Lever website visibility, descriptions and exact source navigation, completing D2-035. Lever is also user-confirmed published/accepted. EU/custom-domain and rendered-hydration acceptance are not claimed. |
 | D2-003 | Implement an explicit public-add preview with field-level visibility and removal. | Implemented; controlled development | Platform engineering; product owner | D2-006 contribution API; D0 consent | Under ADR-029, one **Add job to shared database** command follows the exact preview; the extension shows no private-save action or redundant approval checkbox. The preview prioritizes job content, separates location and grounded work type, makes every absent optional field explicit, separates source details, reports exact selection counts, and honors optional-field removal. Development delivery requires explicit mode enablement plus identity, API, retention, independent detector, and preview-authorization readiness; other environments retain signed-policy enforcement. |
 | D2-004 | Implement local sanitization, narrow optional host permissions, and privacy-safe telemetry. | Implemented; controlled development | Platform engineering; security engineering | D0 threat/privacy review | Strict local sanitization, activeTab-only/default-zero provider hosts, trusted storage, zero telemetry, and release-source checks are implemented. The development exception does not replace accountable production/store approval under D2-010. |
 | D2-005 | Implement idempotent upload and safe offline pending-contribution retry. | Implemented; controlled development | Platform engineering | D2-006 | Stable authorization-receipt/contribution keys, bounded durable retry, restart recovery, stopped/all-item removal, and logout/account fencing are implemented. The versioned fence is a one-way digest of exact bounded Auth0 token identity claims: it is stable across full reauthentication to the same account and rejects a refresh or delivery under a different account without storing the raw subject. Local authentication/readiness deferrals are visible without consuming a network attempt; terminal retries remain distinct from account-fenced items, which cannot cross identities. D2-033 removes policy fetch/expiry/renewal only in explicit development mode while preserving exact client `0.2.0` and accepted Greenhouse scope; production/store remain dark. Historical installed acceptance on 2026-09-05 recorded one acknowledgement, zero pending/stopped, and two account-held items untouched. The user confirms reload, sign-in, and successful job addition in the rebuilt development candidate on 2026-09-08. Offline/retry and broader browser lifecycle acceptance remain separate; do not automatically resubmit old items. |
@@ -514,7 +531,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-032 | Privately verify the local human appeal session against the independently supplied identity before backend assignment. | Complete | Platform engineering | D2-030 | A default-dark, finite-window localhost server action checks SDK MFA freshness, exact issuer/subject/client, independently verified RS256 API token, and only appeal/read scopes. No browser-supplied identity, token export, refresh, Gateway call, role, or case mutation. Exclusive-create aggregate proof remains in the current-user-only ignored setup directory; private binding fingerprints never enter browser output. All 148 admin tests/11 files, typecheck, formatting/lint, independent source review, and the full repository verifier/fresh admin build pass. Actual human verification passes at `2026-09-08T13:19:45Z` before the separately authorized assignment under D2-030. |
 | D2-033 | Remove recurring development contribution signing, policy fetching, and renewal. | Complete | Platform engineering | D2-005, D2-006, D2-014 | Persistent development mode is deployed from `90f3740` at state `287` after Jobs `0021`, with exact artifact/environment readback, zero drift, and unauthenticated boundary checks passing. The user confirms installed reload, successful sign-in, and successful job addition on 2026-09-08. This closes development adoption, not provider/Trust verification, website publication, or the wider browser lifecycle; production/store and unsupported providers stay dark. See details below. |
 | D2-034 | Replace the expired mobile parser exception with a narrow, verified dependency security patch. | Complete | Platform engineering | D2-033 | The user-approved exact `image-size@1.2.1` patch passes independent review, 121 parser and 15 audit regressions, frozen installation, mobile checks, complete dependency audit, and the full repository verifier. Two matching no-cache migration-image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings pass; the reviewed image was used for Jobs `0021`. No exception renewal, broad suppression, or mobile/public-launch acceptance. |
-| D2-035 | Extend persistent development contribution support to independently enabled Lever and Ashby providers. | In progress | Platform engineering; QA/automation | D2-002, D2-011, D2-014, D2-020, D2-033 | D2-061 complete-description code verifies at `339`, Gateway/scheduled/Trust `66`/`27`/`21`, source `edf0194`, zero drift. The approved state-336 three-source/four-host activation and exact Ashby profile binding are preserved. D2-R22 is closed for acquisition/source binding/deployment. Reviewer roles, general ingestion/shared limits, leases, migrations and triggers are unchanged; EU/production/store remain disabled. Lever is user-confirmed published/accepted, but website details/source remain unconfirmed. On 2026-09-13 the user confirms both the complete installed Ashby description and delivery-to-review: Processing awaiting trust / Trust needs review. The subsequent single-contribution initial approval and fresh evidence-bound decision independently read back accepted/version 2. On September 14, after the separate Trust refresh, the owner confirms Processing published / Trust accepted, closing the installed owner-status check. Website acceptance remains unconfirmed. No repeat preview/status check or resubmission is needed. See [complete-description release and follow-up](#d2-061--complete-description-capture) and [activation](#d2-035--ashby-development-rollout). |
+| D2-035 | Extend persistent development contribution support to independently enabled Lever and Ashby providers. | Complete | Platform engineering; QA/automation | D2-002, D2-011, D2-014, D2-020, D2-033 | D2-061 complete-description code verifies at `339`, Gateway/scheduled/Trust `66`/`27`/`21`, source `edf0194`, zero drift. The approved state-336 three-source/four-host activation and exact Ashby profile binding are preserved. D2-R22 is closed for acquisition/source binding/deployment. Reviewer roles, general ingestion/shared limits, leases, migrations and triggers are unchanged; EU/production/store remain disabled. Lever is user-confirmed published/accepted. On 2026-09-13 the user confirms both the complete installed Ashby description and delivery-to-review: Processing awaiting trust / Trust needs review. The subsequent single-contribution initial approval and fresh evidence-bound decision independently read back accepted/version 2. On September 14, after the separate Trust refresh, the owner confirms Processing published / Trust accepted, closing the installed owner-status check. The subsequent September 14 reply confirms both supplied Ashby and Supermove website visibility, descriptions (including Ashby's final sections) and correct provider-source navigation. D2-035 completes on 2026-09-14 for controlled development; wider phase gates remain separate. No repeat preview/status/website check or resubmission is needed. See [complete-description release and follow-up](#d2-061--complete-description-capture) and [activation](#d2-035--ashby-development-rollout). |
 | D2-036 | Add repeatable current-schema logical backup/restore coverage with nonempty D2 data. | Complete | Platform engineering | D2-020, D2-035 | Completed 2026-09-08 at 42 migrations; rerun successfully on September 9 against D2-039's 44-migration source. The generated-only command performs real dump/restore, matches all 68 relation row sets including 18 nonempty D2 relations, and verifies restored owner/lease/publication/authorization behavior with exact disposable-container cleanup. This is local logical recovery, not cloud restore or provider acceptance. See details below. |
 | D2-037 | Patch release-blocking dependency advisories surfaced by the current registry audit. | Complete | Platform engineering | D2-016, D2-035 | Compatible dependency repairs and exact Vercel patch packaging pass the full repository verifier and focused guards. Exact source `42b9686` is released to the existing candidate/admin Vercel targets and development AWS migration/Gateway/D2 workers. Migration exits 0 with seven success records; state 290 runs Gateway/scheduled/Trust 55/17/13 with zero drift, 13 healthy alarms and unchanged development scope. No audit exemptions or production/store activation. |
 | D2-038 | Bind candidate-deletion replay to an authenticated, isolated AWS restore target. | Complete | Platform engineering | D2-020, D2-036; D2-052; D2-053 | Completed 2026-09-11: the original 44-migration/68-relation PITR passes strict Inspect `70881` and Replay `87268` under `6eb7a86`, with one historical marker/one already-reconciled restored subject and no documents or new reconciliation. Exact executor/PITR cleanup and final Platform `329`/Bootstrap `21` permission removal verify zero drift. The separate single-tag correction is D2-052/D2-053; replay changes no S3 object, recovery ledger or Auth0 state. Fresh nonempty deletion acceptance remains separate. See [final evidence](#d2-038--isolated-deletion-recovery). |
@@ -785,9 +802,16 @@ no repeat decision, deployment, resubmission, data clearing or credentials are r
 
 The subsequent owner refresh on `2026-09-14` confirms Processing `published` and Trust `accepted`.
 This completes the installed Ashby owner-status check and resolves the retained Trust-display
-discrepancy without another decision, submission, code change or deployment. Website visibility,
-full description and exact provider-source navigation remain unconfirmed for Ashby and Lever;
-the completed Greenhouse website journey must not be repeated as a substitute.
+discrepancy without another decision, submission, code change or deployment.
+
+Website acceptance (`2026-09-14`): the user's reply “checks passes” confirms both requested
+journeys at the existing candidate website. The supplied Ashby job is found, its full description
+includes Technology Stack and Benefits, and its Ashby source link opens the correct posting.
+The supplied Supermove job is found, its description loads, and its Lever source link opens the
+correct posting. Together with the earlier installed capture, delivery, independent review and
+published/accepted confirmations, this completes D2-035 for controlled development. These are
+user-confirmed checks, not a new automated browser run or general cross-browser/store acceptance.
+Do not repeat these journeys or the completed Greenhouse website check.
 
 ### D2-060 — Plaintext description compatibility
 
@@ -923,9 +947,10 @@ This is a local configured build, not installed adoption; no further rebuild is 
 D2-R22 is closed for acquisition/source binding/deployment. At this rollout, installed Ashby
 preview, delivery and separately authorized Trust/website acceptance remained under D2-035.
 September 13 subsequently closes full-description preview, delivery-to-review and one explicitly
-authorized evidence-bound initial acceptance; processing publication and website acceptance remain.
-Lever's already-confirmed published/accepted status must not trigger another submission or decision;
-its website visibility/details/source check remains separate. Production/store/EU/custom domains,
+authorized evidence-bound initial acceptance. On September 14, the owner confirms Ashby
+published/accepted and both supplied Ashby/Lever website visibility, descriptions and exact source
+navigation, completing D2-035's controlled-development acceptance. No repeated submission or
+decision is needed. Production/store/EU/custom domains,
 human accessibility, broader lifecycle/load and final acceptance remain gated. Docker/WSL were
 not started. No new branch, GitHub Actions change, migration, application submission or review
 decision was part of this rollout. The rationale stays in the single existing
@@ -2141,7 +2166,13 @@ remained open. Both now pass as recorded above.
 
 ### D2-035 — Complete multi-provider development contributions
 
-- Current review continuation (`2026-09-12`): the user reports `awaiting trust` / `needs review`
+- Completed `2026-09-14`: the user confirms both supplied Ashby and Supermove website checks,
+  including description availability/completeness and correct provider-source navigation.
+  This closes the final provider-journey acceptance after the independently verified deployments,
+  installed capture/delivery and accepted/published owner statuses. D2-035 is Complete for the
+  approved three-provider/four-host development scope; wider phase gates remain separate.
+  The dated implementation and review chronology below is retained as history.
+- Review continuation (`2026-09-12`): the user reports `awaiting trust` / `needs review`
   after D2-058, then approves initial-only agent review of approved global-Lever development
   contributions, preserving the distinct human appeal reviewer. Boundary `cd9ce0` confirms the
   exact account, Gateway alias `63`, full environment, Greenhouse/global-Lever provider settings,
@@ -2486,8 +2517,8 @@ for initial review. This authorizes the existing delegated agent to inspect the 
 independent provider evidence and accept this contribution only if the evidence supports it,
 through the existing version/digest-bound audited decision API. It does not approve the outcome
 in advance. Subsequent fresh-evidence review submits one initial acceptance; independent readback
-`81588c` at `2026-09-13T22:58:41.094Z` confirms `accepted` / version `2`. Processing publication
-and website acceptance remain pending. Preserve the human as the separate appeal
+`81588c` at `2026-09-13T22:58:41.094Z` confirms `accepted` / version `2`. Subsequent owner
+published/accepted and supplied-job website checks are confirmed on September 14. Preserve the human as the separate appeal
 reviewer, existing credentials/roles/grants and earlier Greenhouse/global-Lever scope. No other
 Ashby contribution, Ashby-wide unattended review, Ashby takedown, human appeal action, new role,
 production or store authority is included; do not repeat this approval request.
@@ -2507,7 +2538,8 @@ boundary inspection and current independent readable evidence support one initia
 Only one decision POST occurs; existing roles and human appeals remain unchanged. No repeated
 decision, submission or new scope/secret request is needed. The user now confirms Processing
 `published` and Trust `accepted` for the supplied contribution, closing only the owner-status check.
-Website visibility/details/source remain unconfirmed. See [execution evidence](#d2-035--complete-multi-provider-development-contributions)
+The subsequent September 14 reply also confirms its website visibility/details/source journey.
+See [execution evidence](#d2-035--complete-multi-provider-development-contributions)
 and the single rationale in [Decisions and scope changes](#decisions-and-scope-changes).
 
 On 2026-09-06 the product owner selected **Codex as the initial/takedown reviewer** and
@@ -2772,6 +2804,13 @@ visibility confirmations. D2-019/D2-039 are Complete for controlled Greenhouse d
 do not repeat that check or infer all-job/cross-browser coverage. Its evidence is retained in
 [D2-055's owner follow-up](#d2-055--catalog-details-and-synthetic-fixture-retirement).
 
+The supplied Ashby and Supermove/global-Lever website checks are also Complete on `2026-09-14`:
+the user confirms both jobs are found, their descriptions load (including Ashby's final sections),
+and their provider links open the correct postings. D2-035 is Complete for controlled development;
+the earlier accepted/published owner statuses and review decisions need no repetition. These
+completed provider journeys are removed from the remaining-input table, not counted as broader
+browser, hosted appeal, production or store acceptance.
+
 Resumed continuation on 2026-09-08: the user confirmed both requested inputs. Development STS
 now succeeds in the exact configured account/region, and fresh authority permits reuse of the
 existing encrypted initial/takedown reviewer credential. D2-R14/D2-R15 are Closed. The first
@@ -2830,8 +2869,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
-| Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three Greenhouse decisions and separately approved Lever initial decision pass. The current D2-054 admin preview is deployed/protected at `b3da818`; zero project environment variables confirms hosted Auth0 is unconfigured. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Configure the existing dedicated human appeal client for one exact protected stable host with `ADMIN_AUTHORIZATION_PROFILE=appeals`, distinct hosted session secret and server-only settings, then complete hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case or borrow the human session. |
-| Lever and Ashby website acceptance | Lever is user-confirmed published/accepted. Ashby acquisition/source binding closes D2-R22; D2-061's compatible complete-description workers verify at `339`, Gateway/scheduled/Trust `66`/`27`/`21`. The user confirms the complete installed Ashby description and, after the queued-status follow-up, Processing awaiting trust / Trust needs review on 2026-09-13. Installed delivery-to-review is complete; three providers/four hosts and reviewer roles are unchanged. | Single-contribution initial approval and evidence-bound acceptance are complete (independent accepted/version-2 readback `81588c`). After the separate Trust refresh on September 14, the owner confirms Processing published / Trust accepted. Check website visibility/details/source for the supplied Ashby and Lever jobs; do not repeat owner-status checks, decisions or approvals. Preserve the existing agent identity and independent human appeal reviewer. Preview and queued-status checks are complete: do not repeat them, resubmit, sign out or clear the queue. Website publication remains separate. Confirm Lever website visibility/details/source without repeating its completed status/submission/decision. No repeated deployment approval is needed. EU/custom/production/store remain excluded. See [complete-description release and owner follow-up](#d2-061--complete-description-capture). |
+| Hosted reviewer, takedown and human appeal acceptance | All three assignments remain unchanged; the delegated agent's three Greenhouse decisions and separately approved Lever initial decision pass. The current D2-054 admin preview is deployed/protected at `b3da818`; zero project environment variables confirms hosted Auth0 is unconfigured. Prior human identity/fresh-MFA/two-scope checks and the user-confirmed empty local appeal queue remain distinct evidence. | Append the exact callback/logout/web origins for the already-protected `https://ai-job-apply-admin-applydash2026-5637.vercel.app` to the existing dedicated human appeal client. Preserve local entries. Then configure the hosted environment with `ADMIN_AUTHORIZATION_PROFILE=appeals`, distinct hosted session secret and server-only settings, deploy the reviewed admin candidate and bind the existing alias (currently pointing to an older deployment), then complete hosted reviewer and separately authorized takedown/human appeal journeys. Preserve evidence/version binding and independent roles; do not manufacture a case or borrow the human session. |
 | Fresh candidate-rights acceptance | D2-051's Gateway `423d63b` and core `2ff32ef`/version `14` releases are verified and resumed. Final recovery cleanup verifies Platform `329`/Bootstrap `21` with zero drift. The restored-only Replay found one already-reconciled historical subject and no documents. Dark ingestion remains disabled. | Complete separately scoped fresh user export/deletion acceptance; neither deployment nor the idempotent isolated Replay substitutes for it. Preserve queued work, retained durable/terminal obligations and all four false ingestion activation flags. |
 | Installed authentication and full lifecycle | Initial Edge login and contribution acknowledgement pass; the user also confirms development-mode reload, sign-in, and successful job addition on 2026-09-08. The latest confirmation does not specify a browser or establish cross-browser parity. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete branded Chrome/Edge login cancellation, refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. |
 | Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
@@ -2844,6 +2882,8 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-14 | Located an existing protected stable admin alias, eliminating the need for a new branch, hostname purchase or protection upgrade. Hosted Auth0 remains unconfigured; exact callback/logout/web-origin setup in the existing human appeal client is the next operator input. | D2-030; D2-015 | Read-only exact-project/domain/deployment/alias/environment inspection `087035` / `763212` / `96ccfa` / `ca1a5e`; two no-cookie/no-redirect HEAD probes `5325d2`. Protected alias returns 302/no-store to Vercel; short production domain returns 200 and is excluded. Zero env keys, no credential access or provider write. [Selected host and rationale](#decisions-and-scope-changes). |
+| 2026-09-14 | Completed both supplied-provider website journeys and D2-035 for controlled development. Ashby and Supermove are found, descriptions load, Ashby's final Technology Stack/Benefits sections are present, and both source links open the correct postings. Removed the completed website check from remaining inputs; Phase 2 remains In progress. | D2-035; D2-061 | User confirms both requested checks with “checks passes.” [Website acceptance](#d2-061--complete-description-capture). No new runtime/catalog write, decision, role, submission, rebuild or automated browser result. |
 | 2026-09-14 | Closed the installed Ashby owner-status check after the separate Trust refresh returns Processing published / Trust accepted. The retained Trust-display discrepancy is resolved; website visibility/details/source remains the next provider acceptance step. | D2-035; D2-023 | Explicit user confirmation for the same Ashby entry. No new decision, submission, role, code, deployment or broader Phase 2 completion claim. [Current acceptance](#d2-061--complete-description-capture). |
 | 2026-09-14 | The owner reports Ashby Processing published with Trust needs review. Recorded owner publication as confirmed while retaining the Trust-display discrepancy for one separate Trust refresh. Independent source review and local reproduction show that refreshing processing preserves the cached Trust snapshot. | D2-035; D2-023 | User status report; diagnostic `f641d9` passes five assertions and 41 focused tests. [Separate action dispatch](../../../frontend/extension/entrypoints/background.ts), [independent stored projections](../../../frontend/extension/lib/contribution-receipts.ts). No live request, new decision, data mutation, rebuild or broader completion claim. |
 | 2026-09-13 | Recorded single-contribution Ashby initial-review approval, inspected complete fresh independent evidence, and submitted exactly one acceptance. Separate readback confirms accepted/version 2. Existing roles, credentials and independent human appeals are unchanged; publication remains unconfirmed. | D2-030; D2-035 | Boundary `11d07f`, Inspect `33cea8`, Decide/readback `81588c` at `22:58:41.094Z`; 46 offline operator tests and independent operator review pass. Aggregate-only local result retained; no provider text or case/owner identifiers committed. [Current acceptance](#d2-061--complete-description-capture), [single rationale](#decisions-and-scope-changes). |
@@ -3079,6 +3119,30 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For hosted human appeals on `2026-09-14`, select the already-owned protected stable alias
+`https://ai-job-apply-admin-applydash2026-5637.vercel.app`. Exact project/alias metadata and an
+unauthenticated no-cookie HEAD confirm the admin binding and Vercel protection. Reusing this host
+avoids a paid protection upgrade, new branch or domain while preserving candidate/admin isolation.
+Do not use the shorter unprotected production domain, wildcard callbacks, candidate credentials
+or the agent's machine credential. The existing dedicated human appeal client requires these
+additional exact entries, preserving its already working localhost entries:
+
+| Auth0 application setting | Hosted entry |
+|---|---|
+| Allowed Callback URLs | `https://ai-job-apply-admin-applydash2026-5637.vercel.app/auth/callback` |
+| Allowed Logout URLs | `https://ai-job-apply-admin-applydash2026-5637.vercel.app` |
+| Allowed Web Origins | `https://ai-job-apply-admin-applydash2026-5637.vercel.app` |
+
+Use server-only `ADMIN_AUTHORIZATION_PROFILE=appeals`, the existing dedicated client and a fresh
+hosted session secret; do not copy the local session secret or setup-verification window.
+Scope credentials to the selected admin preview target only. Rebind only the protected alias;
+do not promote an identity-enabled deployment to production or let the excluded short domain
+inherit it. Other previews and the short production domain must remain identity-dark.
+The stable alias currently points to an older deployment. A reviewed admin deployment and exact
+alias/environment/protection readback are still required before hosted sign-in acceptance.
+This selects the deployment binding, not a case decision or expansion of the human's two scopes.
+The owner must perform the Auth0 dashboard change; no Management API or human session is borrowed.
 
 For D2-030/D2-035 on `2026-09-13`, the user's `approve it` authorizes initial Trust review of
 the supplied Ashby contribution already reported as `awaiting trust` / `needs review` in
@@ -3662,6 +3726,12 @@ These are local checks; deployed migration, human review, and publication eviden
 
 ## Completion record
 
+- Provider-journey completion (`2026-09-14`): D2-035 is Complete for controlled development.
+  Both supplied Ashby and Supermove website checks pass by explicit user confirmation after
+  installed capture/delivery, independent review and published/accepted owner statuses.
+  Description completeness and exact provider-source navigation are included. The phase stays
+  In progress behind the [remaining acceptance items](#remaining-acceptance-and-operator-inputs);
+  this is not broader browser, hosted appeal, production or store acceptance.
 - Installed preview checkpoint (`2026-09-13`): the user confirms the complete Ashby description,
   including the requested Technology Stack/Benefits sections. This closes the D2-061 installed
   preview handoff under D2-035. Current owner Processing/Trust status and delivery/review/website

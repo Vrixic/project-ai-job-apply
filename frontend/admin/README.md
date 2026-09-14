@@ -131,6 +131,17 @@ acceptance. The sole assignment and rationale record remains the
 
 ## Vercel hosting boundary
 
+On 2026-09-14, read-only inspection confirms the existing stable alias
+`https://ai-job-apply-admin-applydash2026-5637.vercel.app` belongs to this admin project and
+returns an unauthenticated Vercel-protected `302` with `no-store`. Its current deployment is older
+than the preview below, and hosted environment keys remain absent. The next step is exact hosted
+callback/logout/web-origin setup in the existing human appeal application, followed by secure
+appeals-only configuration and reviewed deployment/alias binding. The shorter
+`https://ai-job-apply-admin.vercel.app` returns `200` without Vercel protection and is not selected.
+No new branch, paid protection upgrade, role or repeated local identity setup is required.
+The [single Phase 2 decisions record](../../docs/product/delivery/phase-2-extension-and-community.md#decisions-and-scope-changes)
+owns the exact entries and rationale; this inspection changed no external state or credentials.
+
 The current protected identity-dark preview is built from `b3da818` (2026-09-11):
 [admin preview](https://ai-job-apply-admin-5lytaj3kw-applydash2026-5637.vercel.app).
 Exact source/project readback, `iad1`/Node 24 and three Vercel-protected `302`/`no-store` checks
