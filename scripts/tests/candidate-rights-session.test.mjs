@@ -290,6 +290,26 @@ test("requested scopes exactly match the candidate web source, without contribut
   assert.equal(CANDIDATE_RIGHTS_SESSION_SCOPES.includes("trust:"), false);
 });
 
+test("local rejection diagnostics identify root binding without reflecting private input", async (t) => {
+  const diagnostics = [];
+  const f = await fixture(t, { options: { onDiagnostic: (code) => diagnostics.push(code) } });
+  for (const [options, code] of [
+    [{}, "root_cookie_missing"],
+    [{ cookie: `candidate_rights_operator_transaction=${clientSecret}` }, "root_cookie_mismatch"],
+    [{ host: "wrong.example.test" }, "request_boundary_rejected"],
+  ]) {
+    const response = await f.call("/", options);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.includes(code), true);
+    assert.equal(response.body.includes(clientSecret), false);
+    assert.equal(diagnostics.at(-1), code);
+  }
+  assert.equal(new CandidateRightsSessionError(clientSecret).diagnostic, "request_rejected");
+  assert.equal(f.requests.length, 0);
+  assert.equal(f.results.length, 0);
+  assert.equal((await f.call("/", { cookie: f.cookie })).status, 200);
+});
+
 test("normal S256 OAuth code exchange resolves only after same-browser explicit disposable confirmation", async (t) => {
   const f = await fixture(t);
   const auth = await f.authorize();

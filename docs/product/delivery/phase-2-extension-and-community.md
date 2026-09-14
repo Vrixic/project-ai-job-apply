@@ -59,6 +59,14 @@ cookie, CSRF, PKCE and fresh-MFA checks remain unchanged. The maintained session
 passes 52 tests, including null-origin refusal and both form-page headers. Installed browser
 acceptance remains pending. No export, deletion or cloud change ran for this correction.
 
+Follow-up: the user still reports the generic rejection at the exact root after a fresh session
+and direct address entry. The header correction does not establish resolution of this root-page
+failure; a cookie-binding explanation remains a hypothesis. The helper now emits allowlisted
+local rejection codes only (request boundary, missing/mismatched root cookie, generic rejection
+or unexpected local error), never raw headers, URLs, exception text or credentials. All 53
+session/bridge tests pass. The next browser request must identify the failed check before another
+behavior change. No rights execution has started.
+
 Shared-jobs recovery (`2026-09-14`, D2-066 Complete): the user confirms existing contributions
 appear after **Refresh shared jobs** in the reloaded configured extension. Recovery is explicitly
 user-initiated, not automatic loading or background polling. The new authenticated history route

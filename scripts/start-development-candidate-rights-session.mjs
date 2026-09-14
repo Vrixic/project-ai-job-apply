@@ -52,6 +52,9 @@ try {
   clientSecret = configuration.clientSecret;
   session = await startCandidateRightsSession({
     ...configuration,
+    onDiagnostic(diagnostic) {
+      report("local-sign-in-request-rejected", { diagnostic, candidateDataChanged: false });
+    },
     async onConfirmed(confirmed) {
       if (identity || closing) throw new Error("session_already_bound");
       const attestation = buildIdentityAttestation(confirmed);

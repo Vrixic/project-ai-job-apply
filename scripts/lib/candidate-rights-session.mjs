@@ -12,16 +12,24 @@ export const CANDIDATE_RIGHTS_TOKEN_MAXIMUM_BYTES = 65_536;
 const COOKIE_NAME = "candidate_rights_operator_transaction";
 const MFA_ACR = "http://schemas.openid.net/pape/policies/2007/06/multi-factor";
 const ERROR_MESSAGE = "Candidate rights sign-in could not be completed. Start a fresh session.";
+const REQUEST_DIAGNOSTICS = new Set([
+  "request_rejected",
+  "request_boundary_rejected",
+  "root_cookie_missing",
+  "root_cookie_mismatch",
+  "unexpected_local_error",
+]);
 
 export class CandidateRightsSessionError extends Error {
-  constructor() {
+  constructor(diagnostic = "request_rejected") {
     super(ERROR_MESSAGE);
     this.name = "CandidateRightsSessionError";
+    this.diagnostic = REQUEST_DIAGNOSTICS.has(diagnostic) ? diagnostic : "request_rejected";
   }
 }
 
-function reject() {
-  throw new CandidateRightsSessionError();
+function reject(diagnostic) {
+  throw new CandidateRightsSessionError(diagnostic);
 }
 
 function abortable(promise, signal) {
@@ -317,9 +325,10 @@ function writeResponse(response, status, body, extraHeaders = {}) {
 export async function startCandidateRightsSession(options) {
   if (!options || typeof options !== "object") reject();
   validateConfiguration(options);
-  const { issuer, audience, clientId, onConfirmed, onClosed } = options;
+  const { issuer, audience, clientId, onConfirmed, onClosed, onDiagnostic } = options;
   if (onConfirmed !== undefined && typeof onConfirmed !== "function") reject();
   if (onClosed !== undefined && typeof onClosed !== "function") reject();
+  if (onDiagnostic !== undefined && typeof onDiagnostic !== "function") reject();
   if (
     (options.verifyTokens ||
       options.fetchImpl ||
@@ -363,8 +372,21 @@ export async function startCandidateRightsSession(options) {
     resolveClosed = resolve;
   });
   const server = createServer((request, response) => {
-    void handle(request, response).catch(() => {
-      if (!response.headersSent) writeResponse(response, 400, page(`<p>${ERROR_MESSAGE}</p>`));
+    void handle(request, response).catch((error) => {
+      const diagnostic =
+        error instanceof CandidateRightsSessionError && REQUEST_DIAGNOSTICS.has(error.diagnostic)
+          ? error.diagnostic
+          : "unexpected_local_error";
+      // Fixed local codes only: never forward request headers, URLs or exception messages.
+      void Promise.resolve()
+        .then(() => onDiagnostic?.(diagnostic))
+        .catch(() => {});
+      if (!response.headersSent)
+        writeResponse(
+          response,
+          400,
+          page(`<p>${ERROR_MESSAGE}</p><p>Diagnostic: ${diagnostic}</p>`),
+        );
       else response.end();
     });
   });
@@ -476,7 +498,7 @@ export async function startCandidateRightsSession(options) {
       !request.url.startsWith("/") ||
       request.url.startsWith("//")
     )
-      reject();
+      reject("request_boundary_rejected");
     const url = new URL(request.url, CANDIDATE_RIGHTS_SESSION_ORIGIN);
     if (url.origin !== CANDIDATE_RIGHTS_SESSION_ORIGIN || url.hash) reject();
     if (!secrets || ["closed", "confirmed", "failed"].includes(phase)) {
@@ -488,7 +510,8 @@ export async function startCandidateRightsSession(options) {
       return;
     }
     if (request.method === "GET" && url.pathname === "/" && !url.search) {
-      if (browserBound && !equalSecret(cookieValue(request), secrets.cookie)) reject();
+      if (browserBound && !equalSecret(cookieValue(request), secrets.cookie))
+        reject(cookieValue(request) === undefined ? "root_cookie_missing" : "root_cookie_mismatch");
       if (phase !== "ready") {
         if (!equalSecret(cookieValue(request), secrets.cookie)) reject();
         if (phase === "confirm") {
