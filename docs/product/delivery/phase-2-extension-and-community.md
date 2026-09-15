@@ -50,6 +50,13 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Web-client scope correction (`2026-09-15`, D2-071/D2-028): owner confirms jobs:contribute
+was missing and has been added to ApplyDash Web Development's user-delegated access to the
+ai-job-apply-api development API. This addresses an observed configuration gap; fresh-token
+acceptance is still required. No extension-client, reviewer, M2M or production grant change was
+requested. Start fresh disposable sign-in, then the separately reviewed authorized workload.
+No workload has run. Temporary development API lifetime restoration to 600 seconds remains due.
+
 Scope finding after clock correction (`2026-09-15`, D2-071/D2-028): source `bf2562d` passes
 lifetime and fresh-MFA checks but returns `token_scopes_rejected`, confirmed by owner and operator.
 The helper uses the existing candidate web client and requires jobs:read, jobs:contribute and

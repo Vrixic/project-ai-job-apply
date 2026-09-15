@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 web-client grant correction: owner confirms jobs:contribute was missing and is
+now added to ApplyDash Web Development's user-delegated API access. This is owner-confirmed
+configuration, not fresh-token or workload evidence. Start a fresh disposable sign-in; preserve
+existing permissions and reviewer/M2M boundaries. No workload has run. Restore temporary
+development API lifetime to 600 seconds after workload/cleanup.
+
 September 15 fresh sign-in now passes token lifetime and fresh-MFA checks, then reports
 `token_scopes_rejected` in both owner and operator output. Required API scopes are jobs:read,
 jobs:contribute and profile:write; unexpected returned scopes also reject. The helper uses the
