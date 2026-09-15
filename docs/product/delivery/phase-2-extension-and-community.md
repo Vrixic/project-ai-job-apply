@@ -50,6 +50,15 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Temporary lifetime correction (`2026-09-15`, D2-071/D2-028): owner reports web ID-token
+expiration 36,000 seconds and API expiration 600 seconds. The latter cannot satisfy the helper's
+25-minute admission requirement. Owner confirms the requested development API-only increase to
+1,800 seconds; this is owner-reported configuration, not independently inspected or fresh-token
+evidence. The temporary increase applies to newly issued tokens for that API, not only this
+helper. Preserve ID-token, implicit-flow and production settings. Restore API expiration to
+600 seconds after workload and cleanup, including explicitly revisiting restoration if the test
+is abandoned. Restoration remains outstanding. No workload has run; next is fresh sign-in.
+
 Live workload sign-in diagnostic (`2026-09-15`, D2-071/D2-028): source `1341c9e` returns
 `token_lifetime_insufficient` in both the owner page and fixed operator output, then closes
 with reason `failed`. The check requires valid access and ID expiration claims with more than

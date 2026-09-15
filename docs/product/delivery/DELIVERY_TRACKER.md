@@ -9,6 +9,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 token-lifetime correction: the owner reports ID-token lifetime 36,000 seconds
+and development API access-token lifetime 600 seconds, then confirms the requested temporary
+API-only increase to 1,800 seconds. Fresh issuance and workload acceptance remain unverified.
+Restore the development API lifetime to 600 seconds after workload/cleanup; restoration is
+outstanding. Production, ID-token lifetime and browser/implicit-flow settings are unchanged by
+the requested scope. No workload has run yet.
+
 September 15 live D2 sign-in diagnostic: `token_lifetime_insufficient` is confirmed in both
 the owner page and operator output. The helper requires access and ID tokens with more than
 25 minutes remaining for its 20-minute bounded workload plus buffer. Which token is insufficient
