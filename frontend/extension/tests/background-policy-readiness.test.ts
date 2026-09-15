@@ -127,7 +127,10 @@ interface BackgroundResponse {
   error?: string;
   ownerAction?: string;
   sharedJobsState?: string;
-  delivery: { contribution: { ready: boolean; reason: string } };
+  delivery: {
+    contribution: { ready: boolean; reason: string };
+    privateSave: { ready: boolean; reason: string };
+  };
   queue: { blocked: number; pending: number; stopped: number };
   receipts: { contributionId: string }[];
 }
@@ -233,7 +236,23 @@ async function background(
       onInstalled: { addListener: vi.fn() },
     },
     storage: { local: storageArea(local), session: storageArea(session) },
-    tabs: { query: vi.fn(async () => [{ id: 7, url: currentCapture.sourceUrl }]) },
+    windows: {
+      getLastFocused: vi.fn(async (_options: chrome.windows.QueryOptions) => ({
+        id: 11,
+        type: "normal",
+      })),
+    },
+    tabs: {
+      query: vi.fn(async (_query: chrome.tabs.QueryInfo) => [
+        { id: 7, url: currentCapture.sourceUrl },
+      ]),
+      get: vi.fn(async (_id: number) => ({ id: 7, url: currentCapture.sourceUrl })),
+    },
+    scripting: {
+      executeScript: vi.fn(async () => [
+        { result: { canonicalUrl: currentCapture.sourceUrl, title: currentCapture.title } },
+      ]),
+    },
     alarms: { create: vi.fn(), clear: vi.fn(async () => true), onAlarm: { addListener: vi.fn() } },
   };
   vi.stubGlobal("chrome", browser);
@@ -287,6 +306,164 @@ describe("warm background worker signed-policy readiness", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it("resolves the browser window rather than focused DevTools for inspection, readiness and enqueue", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => contributionResponse(url, init));
+    const worker = await background(fetcher, true);
+    worker.browser.tabs.query.mockImplementation(async (query) =>
+      query.windowId === 11 && query.currentWindow === undefined
+        ? [{ id: 7, url: capture.sourceUrl }]
+        : [{ id: 99, url: "devtools://devtools/bundled/inspector.html" }],
+    );
+    expect((await worker.send({ action: "capture" })).ok).toBe(true);
+    expect(worker.browser.scripting.executeScript).toHaveBeenCalledWith(
+      expect.objectContaining({ target: { tabId: 7 } }),
+    );
+    expect((await worker.status()).delivery.privateSave.ready).toBe(true);
+    expect(
+      (await worker.send({ action: "enqueue", intent: "contribute", approvedFields: ["title"] }))
+        .ok,
+    ).toBe(true);
+    for (const [query] of worker.browser.tabs.query.mock.calls)
+      expect(query).toEqual({ active: true, windowId: 11 });
+    for (const args of worker.browser.windows.getLastFocused.mock.calls)
+      expect(args).toEqual([{ windowTypes: ["normal", "popup"] }]);
+  });
+
+  it.each(["missing", "rejected", "devtools", "no_tab", "ambiguous_tabs"])(
+    "refuses %s browser-window resolution without fallback or enqueue",
+    async (condition) => {
+      const fetcher = vi.fn<typeof fetch>();
+      const worker = await background(fetcher, true);
+      if (condition === "missing")
+        worker.browser.windows.getLastFocused.mockResolvedValue({ id: -1, type: "normal" });
+      if (condition === "devtools")
+        worker.browser.windows.getLastFocused.mockResolvedValue({ id: 99, type: "devtools" });
+      if (condition === "rejected")
+        worker.browser.windows.getLastFocused.mockRejectedValue(new Error("private-window-error"));
+      if (condition === "no_tab") worker.browser.tabs.query.mockResolvedValue([]);
+      if (condition === "ambiguous_tabs")
+        worker.browser.tabs.query.mockResolvedValue([
+          { id: 7, url: capture.sourceUrl },
+          { id: 8, url: capture.sourceUrl },
+        ]);
+      expect((await worker.status()).delivery.privateSave.reason).toBe("preview_required");
+      expect((await worker.send({ action: "capture" })).ok).toBe(false);
+      const result = await worker.send({
+        action: "enqueue",
+        intent: "private_save",
+        approvedFields: ["title"],
+      });
+      expect(result.ok).toBe(false);
+      expect(JSON.stringify(result)).not.toContain("private-window-error");
+      expect(worker.browser.scripting.executeScript).not.toHaveBeenCalled();
+      expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["navigation", "tab_switch"])(
+    "retains exact preview binding after %s in the selected browser window",
+    async (change) => {
+      const fetcher = vi.fn<typeof fetch>();
+      const worker = await background(fetcher, true);
+      expect((await worker.send({ action: "capture" })).ok).toBe(true);
+      worker.browser.tabs.query.mockResolvedValue([
+        {
+          id: change === "tab_switch" ? 8 : 7,
+          url: change === "navigation" ? `${capture.sourceUrl}4` : capture.sourceUrl,
+        },
+      ]);
+      expect((await worker.status()).delivery.privateSave.reason).toBe("preview_required");
+      expect(
+        (
+          await worker.send({
+            action: "enqueue",
+            intent: "private_save",
+            approvedFields: ["title"],
+          })
+        ).ok,
+      ).toBe(false);
+      expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it("saves the exact private preview despite DevTools focus without public contribution writes", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      return response(
+        {
+          schemaVersion: 1,
+          id: body.captureId,
+          source: body.source,
+          snapshot: body.snapshot,
+          capturedAt: body.capturedAt,
+          savedAt: now,
+        },
+        201,
+      );
+    });
+    const worker = await background(fetcher, true);
+    worker.local.set(PENDING_QUEUE_KEY, []);
+    worker.browser.tabs.query.mockImplementation(async (query) =>
+      query.windowId === 11
+        ? [{ id: 7, url: capture.sourceUrl }]
+        : [{ id: 99, url: "devtools://devtools/bundled/inspector.html" }],
+    );
+    expect((await worker.send({ action: "capture" })).ok).toBe(true);
+    const result = await worker.send({
+      action: "enqueue",
+      intent: "private_save",
+      approvedFields: ["title"],
+    });
+    expect(result).toMatchObject({ ok: true, queue: { pending: 0, stopped: 0, blocked: 0 } });
+    expect(fetcher).toHaveBeenCalledOnce();
+    const sent = fetcher.mock.calls[0];
+    if (!sent) throw new Error("Expected private capture request");
+    const [url, init] = sent;
+    expect(String(url)).toBe("https://api.example.test/v1/saved-job-captures");
+    expect(init).toMatchObject({ method: "POST", redirect: "error" });
+    const body = JSON.parse(String(init?.body));
+    expect(body.snapshot).toEqual({ title: capture.title });
+    expect(body.source.sourceUrl).toBe(capture.sourceUrl);
+    expect(body).not.toHaveProperty("consent");
+    expect(body).not.toHaveProperty("approval");
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual([]);
+  });
+
+  it("accepts a valid popup browser window with ID zero", async () => {
+    const worker = await background(vi.fn<typeof fetch>(), true);
+    worker.browser.windows.getLastFocused.mockResolvedValue({ id: 0, type: "popup" });
+    expect((await worker.status()).delivery.privateSave.ready).toBe(true);
+    expect(worker.browser.tabs.query).toHaveBeenCalledWith({ active: true, windowId: 0 });
+  });
+
+  it("cannot restore an inspected preview after logout supersedes window inspection", async () => {
+    const worker = await background(vi.fn<typeof fetch>(), true);
+    const started = deferred<void>();
+    const release = deferred<void>();
+    worker.browser.scripting.executeScript.mockImplementationOnce(async () => {
+      started.resolve();
+      await release.promise;
+      return [{ result: { canonicalUrl: capture.sourceUrl, title: capture.title } }];
+    });
+    const inspecting = worker.send({ action: "capture" });
+    await started.promise;
+    await worker.send({ action: "logout" });
+    release.resolve();
+    expect((await inspecting).ok).toBe(false);
+    expect(worker.session.has("d2LastJobCaptureV1")).toBe(false);
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual([]);
+  });
+
+  it("refuses navigation during browser-window inspection without replacing the prior preview", async () => {
+    const worker = await background(vi.fn<typeof fetch>(), true);
+    const previous = structuredClone(worker.session.get("d2LastJobCaptureV1"));
+    worker.browser.tabs.get.mockResolvedValue({ id: 7, url: `${capture.sourceUrl}4` });
+    expect((await worker.send({ action: "capture" })).ok).toBe(false);
+    expect(worker.session.get("d2LastJobCaptureV1")).toEqual(previous);
   });
 
   it("refuses oversized selected UTF-8 fields before queue persistence or consent and keeps the preview", async () => {

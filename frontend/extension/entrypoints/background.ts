@@ -175,10 +175,29 @@ function unavailable(reason: DeliveryReadinessReason) {
 }
 
 async function activeStoredCapture(): Promise<SanitizedJobCapture | undefined> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = await activeBrowserTab();
   const stored = await chrome.storage.session.get(LAST_CAPTURE_KEY);
   const last = stored[LAST_CAPTURE_KEY] as LastCapture | undefined;
   return last && tab?.id === last.tabId && tab.url === last.tabUrl ? last.capture : undefined;
+}
+
+async function activeBrowserTab(): Promise<chrome.tabs.Tab | undefined> {
+  // A service worker's current window can be detached DevTools. Resolve a browser
+  // window explicitly; do not fall back to a previously captured or arbitrary tab.
+  try {
+    const window = await chrome.windows.getLastFocused({ windowTypes: ["normal", "popup"] });
+    if (
+      !Number.isInteger(window.id) ||
+      window.id === undefined ||
+      window.id < 0 ||
+      (window.type !== "normal" && window.type !== "popup")
+    )
+      return undefined;
+    const tabs = await chrome.tabs.query({ active: true, windowId: window.id });
+    return tabs.length === 1 ? tabs[0] : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function deliveryReadiness(
@@ -624,7 +643,7 @@ async function ownerAction(
 async function captureCurrentPage(
   generation: number,
 ): Promise<{ capture: SanitizedJobCapture; ok: true } | { error: string; ok: false }> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = await activeBrowserTab();
   if (!tab?.id || !tab.url) return { error: "No inspectable active page.", ok: false };
   const decision = capabilityForPage(
     tab.url,
@@ -669,7 +688,7 @@ async function enqueue(
   approvedFields: readonly CaptureField[],
   generation: number,
 ) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = await activeBrowserTab();
   const stored = await chrome.storage.session.get(LAST_CAPTURE_KEY);
   const last = stored[LAST_CAPTURE_KEY] as LastCapture | undefined;
   if (!last || !tab?.id || last.tabId !== tab.id || last.tabUrl !== tab.url) {

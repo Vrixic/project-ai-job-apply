@@ -242,7 +242,11 @@ No private-save control is being added back to the product UI.
 
 Keep the popup's developer console open before repeating **Inspect current tab**, then keep the
 same provider tab selected. Opening or focusing another window can invalidate the exact tab/URL
-binding. A status-only `chrome.runtime.sendMessage({ action: "status" })` read can report fixed
+binding. The corrected client explicitly selects the last focused normal/browser-popup window,
+excluding detached DevTools, for inspection/readiness/enqueue; it still requires the same inspected
+tab and URL, with no fallback to a stale capture. Reload the rebuilt extension before using that
+fix. Switching to a different browser tab/window or navigating the page still requires inspection.
+A status-only `chrome.runtime.sendMessage({ action: "status" })` read can report fixed
 readiness reasons and queue counts without enqueueing; omit receipts, capture contents and all
 identity/session values from any diagnostic output. Normal status handling can refresh the session
 and perform existing local retention housekeeping. `preview_required` means the current inspection

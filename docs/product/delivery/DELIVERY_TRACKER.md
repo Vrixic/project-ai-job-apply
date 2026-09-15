@@ -16,6 +16,10 @@ deletion request; the account remains intact and exports retain configured expir
 title-only private capture on that same disposable owner, then obtain fresh MFA and a new plan.
 Do not add another public contribution or replay old queues. Phase 2 remains In progress. See the
 [Phase 2 task register](phase-2-extension-and-community.md#task-register).
+The preparation follow-up finds a preview/save window mismatch when popup DevTools has focus.
+The client now explicitly resolves a browser window while preserving exact inspected-tab/URL
+checks. All 434 extension tests, typecheck and the configured rebuild pass; installed preparation
+awaits the user. Overnight work is restricted to tasks needing no human confirmation.
 
 | ID | Delivery | Status | Start | Completion | Living task document |
 |---|---|---|---|---|---|

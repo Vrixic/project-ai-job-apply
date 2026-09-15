@@ -25,6 +25,11 @@ browser-store distribution are not approved. See the current
 
 ## Implemented source boundary
 
+- Current-page inspection, readiness and enqueue resolve the most recently focused browser
+  window (normal or browser popup), excluding detached DevTools, then its sole active tab.
+  Saves still require the exact inspected tab ID/URL and session fence. Missing windows or tabs
+  fail closed; there is no fallback to stored tabs, additional permission or private-save UI.
+
 - D2-066 adds explicit **Refresh shared jobs** recovery of the latest 25 contributions from
   authenticated owner-only history. Logout still clears local receipts and pending items. A
   subsequent sign-in can reload acknowledged contributions without resubmitting them; requests

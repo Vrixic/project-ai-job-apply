@@ -50,6 +50,23 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Disposable private-capture preparation follow-up: the explicit combined inspection/save command
+returns `No inspectable active page` before enqueue. The owner then confirms the preview is
+visible, but the save-only command returns the fixed current-page-inspection refusal. Do not
+claim another export or capture succeeded. All three background tab-resolution paths currently
+use the worker's `currentWindow`, which can point at detached DevTools rather than the inspected
+browser. The corrective client path selects the most recently focused normal/browser-popup
+window explicitly, then its sole active tab; missing windows, invalid types/IDs and query failures
+remain unavailable. Exact stored tab ID/URL, activeTab permissions and session fences are unchanged.
+Local verification passes 434 extension tests, including 61 readiness cases, and typecheck.
+The configured extension rebuild passes, with the new resolver bundled and all six manifest
+permissions unchanged. The positive private-save regression sends only the owner private-capture
+route and leaves an empty acknowledged queue; it does not create consent/public contributions.
+Full repository verification and installed acceptance remain pending; no cloud deployment
+or permission expansion is needed. The user requests overnight work without human input and
+PC shutdown only once no autonomous Phase 2 task remains. Do not attempt further owner capture,
+fresh-MFA rights execution or human review while the user is unavailable.
+
 Current D2-020 blocker (`2026-09-14`, 23:04 Eastern): the same disposable account is freshly
 confirmed under source `f0df930`. Plan
 `a145f2d60d8c46760004b64fb06fcc2fd989c41ee7e00d8991af8ee084540f0d` passes independent review
@@ -3374,6 +3391,13 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+For D2-020 private-capture preparation, resolve a browser window explicitly instead of using a
+service worker's context-dependent current window. Keep normal and browser-popup windows
+supported, exclude DevTools, and never fall back to the stored tab or enumerate unrelated tabs.
+Retain exact inspected-tab/URL and account checks. This uses the existing
+[Chrome windows API](https://developer.chrome.com/docs/extensions/reference/api/windows#method-getLastFocused)
+without adding manifest permissions or a private-save product button.
 
 On `2026-09-14`, fix the candidate-rights form/header conflict at the response boundary rather
 than accepting null origins or removing CSRF checks. Same-origin referrers are restricted to the
