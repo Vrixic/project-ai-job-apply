@@ -48,6 +48,16 @@ describe("popup and side-panel source assurance", () => {
     expect(css).not.toMatch(/font-size:\s*(?:9|10|11)px/gu);
   });
 
+  it("keeps disclosure keyboard focus inside the clipped card", async () => {
+    const css = await readFile(new URL("popup.css", staticRoot), "utf8");
+    expect(css).toMatch(
+      /\.disclosure\s*>\s*summary:focus-visible\s*\{[^}]*outline-offset:\s*-4px;/u,
+    );
+    expect(css).toMatch(
+      /button,\s*input,\s*textarea,\s*summary\s*\{\s*scroll-margin-block:\s*8px;/u,
+    );
+  });
+
   it("renders complete grounded field states with reversible expansion and dynamic selection", async () => {
     const source = await readFile(entrypoint, "utf8");
     expect(source).toContain('jobHeading.textContent = "Job details"');

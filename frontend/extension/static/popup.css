@@ -180,6 +180,13 @@ summary {
   touch-action: manipulation;
 }
 
+button,
+input,
+textarea,
+summary {
+  scroll-margin-block: 8px;
+}
+
 button {
   background: var(--accent);
   border: 1px solid var(--accent);
@@ -445,6 +452,11 @@ button:disabled {
 
 .disclosure > summary:hover {
   background: #f7f9f6;
+}
+
+.disclosure > summary:focus-visible {
+  /* Keep the ring inside the rounded disclosure's overflow clip. */
+  outline-offset: -4px;
 }
 
 .disclosure > summary::marker {

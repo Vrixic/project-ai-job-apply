@@ -25,6 +25,11 @@ browser-store distribution are not approved. See the current
 
 ## Implemented source boundary
 
+- Queue and shared-job section headers keep keyboard focus inside their clipped cards. From
+  **Inspect current tab** with no preview, Tab reaches **Delivery queue**, then **Your shared jobs**.
+  Press Enter or Space on a section header to expand it; Tab then reaches its enabled controls.
+  Shift+Tab moves backward. The signed-out history refresh remains disabled, as intended.
+
 - Failed sign-in resolves shared-job readiness from the current fenced session instead of treating
   browser-specific cancellation text as a history-storage error. Signed-out users see a sign-in
   requirement; actual storage failures remain unavailable. No history fetch or authentication

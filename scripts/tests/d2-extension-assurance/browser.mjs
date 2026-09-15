@@ -53,6 +53,107 @@ async function inspectSyntheticCapture(popup) {
   await popup.locator("#preview:not([hidden])").waitFor();
 }
 
+async function keyboardFocusGeometry(page, selector) {
+  return page.locator(selector).evaluate((element) => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    const width = Number.parseFloat(style.outlineWidth);
+    const extent = width + Number.parseFloat(style.outlineOffset);
+    const ring = {
+      left: rect.left - extent,
+      right: rect.right + extent,
+      top: rect.top - extent,
+      bottom: rect.bottom + extent,
+    };
+    let clipped = false;
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const parentStyle = getComputedStyle(parent);
+      const bounds = parent.getBoundingClientRect();
+      const clipsX = /^(clip|hidden|scroll|auto)$/u.test(parentStyle.overflowX);
+      const clipsY = /^(clip|hidden|scroll|auto)$/u.test(parentStyle.overflowY);
+      if (
+        (clipsX && (ring.left < bounds.left - 0.5 || ring.right > bounds.right + 0.5)) ||
+        (clipsY && (ring.top < bounds.top - 0.5 || ring.bottom > bounds.bottom + 0.5))
+      )
+        clipped = true;
+    }
+    return {
+      focused: document.activeElement === element && element.matches(":focus-visible"),
+      outlined: style.outlineStyle !== "none" && width > 0,
+      clipped,
+      ring,
+      inViewport:
+        ring.left >= -0.5 &&
+        ring.right <= innerWidth + 0.5 &&
+        ring.top >= -0.5 &&
+        ring.bottom <= innerHeight + 0.5,
+    };
+  });
+}
+
+async function assertSequentialHistoryAccess(context, extensionId, surface) {
+  const page = await openAssurancePopup(context, extensionId, "configured-long", surface);
+  await page.setViewportSize({ width: surface === "popup" ? 448 : 320, height: 600 });
+  assert(await page.locator("#preview").isHidden(), `${surface} keyboard fixture has a preview`);
+  // Establish the user's reported starting point only; every subsequent focus move uses Tab.
+  await page.locator("#inspect").focus();
+  const expectVisibleFocus = async (selector) => {
+    const focus = await keyboardFocusGeometry(page, selector);
+    assert(focus.focused, `${surface} sequential keyboard focus did not reach ${selector}`);
+    assert(focus.outlined, `${surface} ${selector} lacks a visible focus outline`);
+    assert(!focus.clipped, `${surface} ${selector} focus outline is clipped by an ancestor`);
+    assert(
+      focus.inViewport,
+      `${surface} ${selector} focus outline is outside the viewport ${JSON.stringify(focus.ring)}`,
+    );
+  };
+  await page.keyboard.press("Tab");
+  await expectVisibleFocus("#queue-panel > summary");
+  // Reproduce the former external ring inside the overflow-clipped card in this page only.
+  const oldStyle = await page.addStyleTag({
+    content: ".disclosure > summary:focus-visible { outline-offset: 2px !important; }",
+  });
+  assert(
+    (await keyboardFocusGeometry(page, "#queue-panel > summary")).clipped,
+    `${surface} focus geometry misses the former clipped-outline regression`,
+  );
+  await oldStyle.evaluate((element) => element.remove());
+  await expectVisibleFocus("#queue-panel > summary");
+  await page.keyboard.press("Tab");
+  await expectVisibleFocus("#contributions-panel > summary");
+  const panel = page.locator("#contributions-panel");
+  assert(!(await panel.evaluate((element) => element.open)), `${surface} history starts expanded`);
+  await page.keyboard.press("Enter");
+  assert(await panel.evaluate((element) => element.open), `${surface} Enter cannot expand history`);
+  await page.keyboard.press("Space");
+  assert(
+    !(await panel.evaluate((element) => element.open)),
+    `${surface} Space cannot collapse history`,
+  );
+  await page.keyboard.press("Space");
+  assert(await panel.evaluate((element) => element.open), `${surface} Space cannot expand history`);
+  await page.keyboard.press("Tab");
+  await expectVisibleFocus("#refresh-shared-jobs");
+  // Returning through the same native order must not trap or skip either summary.
+  await page.keyboard.press("Shift+Tab");
+  await expectVisibleFocus("#contributions-panel > summary");
+  await page.keyboard.press("Shift+Tab");
+  await expectVisibleFocus("#queue-panel > summary");
+  await page.keyboard.press("Shift+Tab");
+  await expectVisibleFocus("#inspect");
+  await page.keyboard.press("Tab");
+  await expectVisibleFocus("#queue-panel > summary");
+  await page.keyboard.press("Tab");
+  await expectVisibleFocus("#contributions-panel > summary");
+  await page.keyboard.press("Tab");
+  await expectVisibleFocus("#refresh-shared-jobs");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(
+    () => document.querySelector("#contributions-status")?.textContent === "No shared jobs",
+  );
+  await page.close();
+}
+
 async function inspectLayout(popup, width, zoom = 1) {
   await popup.setViewportSize({ width, height: 900 });
   await popup.evaluate((nextZoom) => {
@@ -226,6 +327,7 @@ try {
         ownerAction: message?.action === "enqueue" ? "ok" : undefined,
         queue: { blocked: 0, pending: 0, stopped: 0 },
         receipts: [],
+        sharedJobsState: message?.action === "shared_jobs_refresh" ? "refreshed" : "cached",
         status,
       };
     };
@@ -234,6 +336,10 @@ try {
       value: response,
     });
   });
+
+  for (const surface of ["popup", "sidepanel"]) {
+    await assertSequentialHistoryAccess(context, extensionId, surface);
+  }
 
   const popup = await openAssurancePopup(context, extensionId, "unconfigured-long");
   assert(await popup.locator("#inspect").isEnabled(), "inspection is gated by delivery setup");
@@ -415,7 +521,7 @@ try {
   assert(sensitiveStorageAbsent, "synthetic page artifacts were retained in extension storage");
 
   process.stdout.write(
-    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v4", browserName, browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 3, sidePanelScenarios: 1, preferredPopupWidth, layoutProfiles, externalRequestsAllowed: 0, externalRequestsBlocked, operationalPolicyRequestsBlocked, unexpectedExternalRequests, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, axeViolations: popupAxeViolations + sidePanelAxeViolations, axeSurfaces: 2, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: 3, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
+    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v4", browserName, browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 4, sidePanelScenarios: 2, sequentialKeyboardSurfaces: 2, clippedFocusNegativeControls: 2, preferredPopupWidth, layoutProfiles, externalRequestsAllowed: 0, externalRequestsBlocked, operationalPolicyRequestsBlocked, unexpectedExternalRequests, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, axeViolations: popupAxeViolations + sidePanelAxeViolations, axeSurfaces: 2, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: 3, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
   );
 } finally {
   await context?.close();

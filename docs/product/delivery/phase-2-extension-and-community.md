@@ -50,6 +50,16 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Keyboard acceptance finding (`2026-09-15`, D2-015/D2-068): the owner reports Tab appears to
+stop at Inspect current tab and cannot reach Your shared jobs in Chrome. Do not mark keyboard
+acceptance complete. Source review finds the disclosure cards clip overflow while their summary
+focus ring is drawn outside the card. Existing browser assurance directly focused summaries and
+did not prove sequential Tab access. The correction insets the ring; new real-browser regression
+must test the actual route through both section summaries into Refresh shared jobs.
+The real sequential test additionally finds that native focus scrolling can leave the refresh
+button's outline below a 600-pixel viewport. Focusable controls now request an eight-pixel block
+scroll margin; retain the strict viewport check rather than accepting the partly hidden ring.
+
 Chrome authenticated parity (`2026-09-15`, D2-012/D2-015): after the requested sign-in,
 explicit Refresh session and Refresh shared jobs with the same existing disposable account used
 in Edge, the owner reports no errors and **No shared jobs**. These UI sign-in/refresh/empty-history
@@ -878,6 +888,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-065 | Add the approved Mintlify development verification board and recover the existing disposable submission. | Complete | Platform engineering; QA/automation | D2-016; D2-020; D2-035 | Completed 2026-09-14 for the scoped deployment/recovery and owner readback. Mapper/registry f12c289 verified at state 341; one inspected hold was requeued once. After history recovery the owner confirms awaiting trust / needs review, then the authorized test withdrawal returns Trust withdrawn (Processing still awaiting trust). No resubmission, all-board activation, reviewer decision, publication or store expansion. Fresh rights acceptance remains D2-020. |
 | D2-066 | Recover account-owned shared-job history after local receipts are cleared and distinguish loading/authentication errors from empty results. | Complete | Platform engineering; client engineering; QA/automation | D2-005; D2-015; D2-065 | Completed 2026-09-14: full repository checks, configured rebuild and plain/Drizzle PostgreSQL integration pass. Gateway/route source1293 deploys once; final state343 verifies Gateway67/scheduled29/Trust22 and zero meaningful changes after separately reviewed metadata-only synchronization. The user confirms existing contributions appear after explicit Refresh shared jobs. No automatic loading/polling, logout-purge weakening, account mixing, resubmission or reviewer/provider change. |
 | D2-067 | Show actual signed-out history readiness after cancelled sign-in instead of a storage failure. | Complete | Client engineering; QA/automation | D2-012; D2-015; D2-066 | Chrome owner clearing/cancellation behavior passes but displays History unavailable. Failed login now reads the existing fenced session/history snapshot rather than interpreting browser-specific errors as storage failure. Signed-out state becomes Sign in required; true storage errors remain distinct, current-owner receipts remain fenced and logout wins late responses. Five new background cases pass in the 66-test suite; popup regression passes in 20 tests. All 440 extension tests, typecheck, independent review, configured rebuild and full repository verifier pass (20 builds, 19 cached). On 2026-09-15 the owner confirms Sign in required after reloading source121e4fb and cancelling sign-in in Chrome, completing installed wording acceptance. No API, permissions, session mutation, provider or deployment change. |
+| D2-068 | Make keyboard focus visible through clipped queue/shared-job disclosures and verify sequential Tab access. | In progress | Client engineering; QA/automation | D2-015; D2-023; D2-067 | Owner reports navigation stops visibly after Inspect. Summary focus outline is outside an overflow-clipped card; inset ring preserves native details semantics. Source regression and actual Edge/Chrome-for-Testing matrix pass: Tab/Shift+Tab and Enter/Space reach queue/shared-job headers and Refresh shared jobs in both popup and side panel. An eight-pixel scroll margin prevents viewport clipping. Old-style negative controls detect the regression; both browsers have zero axe violations. All 441 extension tests, configured rebuild and full repository verifier pass; installed owner acceptance remains pending. No positive tabindex, permissions or data/API changes. |
 
 ### D2-063 — Web crawler build input
 
@@ -3196,6 +3207,23 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Keyboard source/browser verification completed (`2026-09-15`, D2-068): the
+[focus styles](../../../frontend/extension/static/popup.css),
+[source regression](../../../frontend/extension/tests/popup-accessibility.test.ts) and
+[sequential browser checks](../../../scripts/tests/d2-extension-assurance/browser.mjs) pass.
+Each maintained Edge/Chrome-for-Testing run covers popup and side panel, forward/backward Tab,
+Enter/Space disclosure activation and Enter history refresh; two old-style negative controls
+detect clipped focus. Both browsers report zero axe violations and no external traffic or
+telemetry. All 441 extension tests across 27 files and `scripts/verify-phase0.ps1` pass, including
+20 successful build tasks (19 cached). The configured extension is rebuilt. Installed Chrome
+owner confirmation remains pending; this does not complete human assistive-technology acceptance.
+
+Keyboard finding started (`2026-09-15`, D2-068): user cannot visibly navigate past Inspect in
+Chrome. Added an inset disclosure focus ring and source regression; five source-accessibility
+tests pass. Added bounded sequential-browser regression work rather than treating direct focus
+or a CSS presence check as keyboard reachability evidence. Browser/full checks and installed
+acceptance remain pending. No new permissions, tab-order override, API or candidate-data action.
 
 Chrome authenticated parity accepted (`2026-09-15`): owner reports no errors and an empty shared
 history after the same-account Chrome sign-in/session-refresh/history-read sequence already passed

@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 keyboard finding: Chrome Tab navigation appears to stop after Inspect current tab.
+D2-068 addresses clipped section-header focus indicators and adds actual sequential Tab coverage;
+Edge/Chrome-for-Testing popup and side-panel checks, all 441 extension tests, the configured
+rebuild and full repository verifier pass. Installed owner keyboard confirmation remains pending.
+
 September 15 Chrome authenticated parity: the owner reports no errors and **No shared jobs**
 after the same disposable-account sign-in, session refresh and history read used in Edge. Those
 UI journeys pass in both browsers. Token rotation/replay, revocation, distinct-account/offline/
