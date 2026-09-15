@@ -9,6 +9,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 authenticated D2 workload passes: one contribution, one owner read, one replay,
+one expected conflict, one withdrawal and two grant revocations; cleanup succeeds with zero
+server failures/ambiguous writes and no recovery required. The exact 19:26:42.824–19:35:46.960Z
+window contains 64 requests over 544,136 ms. Cloud metric corroboration is pending publication;
+no moderation, publication or capacity acceptance is claimed. Asked the owner to restore the
+temporary development API lifetime from 1,800 to 600 seconds; confirmation is outstanding.
+
 September 15 D2 workload sign-in succeeds: the owner confirms the disposable account and the
 helper returns a prepared scope. The exact reviewed single-contribution processing-to-review
 workload is now running, with publication and account deletion excluded. No success or cleanup

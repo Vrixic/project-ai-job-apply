@@ -50,6 +50,16 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Authenticated processing workload passed (`2026-09-15`, D2-028): the exact single execution
+from `6ac4a4f` reports successful processing-to-review and cleanup, one contribution/replay/conflict/
+withdrawal, two grants and revocations, zero server failures/ambiguous writes, and no recovery.
+Retained aggregate-only result: 64 requests, 544,136 ms, 19:26:42.824–19:35:46.960Z, request latency
+p50/p95/max 280/389/3,694 ms, 24 processing polls and 30 cleanup polls. The ignored aggregate file
+SHA-256 is `17a57214eb63cbe24ea702c36955b33c0f5ea7a2689da97e9387e6a2a1b8056f`;
+the encrypted exact recovery record has a completion marker. Matching cloud metrics await
+publication. No moderation, publication or capacity acceptance is inferred. Asked the owner to
+restore temporary API expiration from 1,800 to 600 seconds; confirmation remains outstanding.
+
 Authenticated workload started (`2026-09-15`, D2-028/D2-069/D2-070/D2-071): the owner confirms
 the disposable account; source `6ac4a4f` returns a prepared exact scope after verified lifetime,
 fresh MFA and required scopes. The operator sends the matching digest and fixed processing
@@ -1000,8 +1010,8 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-067 | Show actual signed-out history readiness after cancelled sign-in instead of a storage failure. | Complete | Client engineering; QA/automation | D2-012; D2-015; D2-066 | Chrome owner clearing/cancellation behavior passes but displays History unavailable. Failed login now reads the existing fenced session/history snapshot rather than interpreting browser-specific errors as storage failure. Signed-out state becomes Sign in required; true storage errors remain distinct, current-owner receipts remain fenced and logout wins late responses. Five new background cases pass in the 66-test suite; popup regression passes in 20 tests. All 440 extension tests, typecheck, independent review, configured rebuild and full repository verifier pass (20 builds, 19 cached). On 2026-09-15 the owner confirms Sign in required after reloading source121e4fb and cancelling sign-in in Chrome, completing installed wording acceptance. No API, permissions, session mutation, provider or deployment change. |
 | D2-068 | Make keyboard focus visible through clipped queue/shared-job disclosures and verify sequential Tab access. | Complete | Client engineering; QA/automation | D2-015; D2-023; D2-067 | Owner reports navigation stops visibly after Inspect. Summary focus outline is outside an overflow-clipped card; inset ring preserves native details semantics. Source regression and actual Edge/Chrome-for-Testing matrix pass: Tab/Shift+Tab and Enter/Space reach queue/shared-job headers and Refresh shared jobs in both popup and side panel. An eight-pixel scroll margin prevents viewport clipping. Old-style negative controls detect the regression; both browsers have zero axe violations. All 441 extension tests, configured rebuild and full repository verifier pass. Owner confirms installed Chrome keyboard reachability and activation after reload on 2026-09-15 at source 14dc339. No positive tabindex, permissions or data/API changes. |
 | D2-069 | Provide a purpose-bound local sign-in and recoverable single-execution handoff for the approved disposable workload. | Complete | Platform engineering; QA/automation | D2-028; D2-020 | Completed 2026-09-15 for source/local operation readiness: separate fixed D2 scopes and Mintlify title/source, same-browser verified confirmation, no refresh token/deletion operation, exact scope review and one-shot execution. CurrentUser DPAPI plus protected ACLs preserve token-free recovery before dispatch; verified cleanup marks completion without overwriting scope. Credentials clear on close; no automatic recovery/re-execution. Independent review, 87 session/operator/recovery tests (including real Windows encryption), full repository verifier and 20 builds pass. Actual sign-in/workload and matching deployed aggregates remain D2-028; no live workload or account mutation has occurred. |
-| D2-070 | Recover a missing pre-authorization local cookie without rebinding an active sign-in. | In progress | Platform engineering; QA/automation | D2-069 | Source fix and local verification complete 2026-09-15: ready-only cookie/CSRF rotation replaces eager first-GET binding; stale forms and mismatched in-flight cookies remain refused. Independent review, 65 focused shared rights/D2 tests and the full repository verifier pass, including 20 builds (19 cached). Fresh human sign-in acceptance remains pending. No workload was dispatched from the failed session. |
-| D2-071 | Diagnose local workload token-exchange and validation failures without exposing credentials or weakening authentication. | In progress | Platform engineering; QA/automation | D2-069; D2-070 | Started 2026-09-15 after the fresh helper returned a generic callback failure. Fixed reason codes and operator closure reporting are implemented; independent review, all 94 session/operator/recovery tests and full repository verification pass (34 test tasks, 20 builds). Actual live failure cause remains unknown until fresh sign-in. No workload was dispatched. |
+| D2-070 | Recover a missing pre-authorization local cookie without rebinding an active sign-in. | Complete | Platform engineering; QA/automation | D2-069 | Completed 2026-09-15: ready-only cookie/CSRF rotation, stale-form/in-flight rejection tests and full verifier pass. The owner subsequently completes same-browser disposable sign-in and confirmation; its approved workload succeeds. No post-authorization guard was relaxed. |
+| D2-071 | Diagnose local workload token-exchange and validation failures without exposing credentials or weakening authentication. | Complete | Platform engineering; QA/automation | D2-069; D2-070 | Completed 2026-09-15: fixed diagnostic codes, redaction and 99 session/operator/recovery tests plus full verifier pass. Owner-corrected temporary API lifetime, Windows clock drift and missing web-client jobs:contribute grant are followed by successful verified sign-in, confirmation and workload. Exact discarded MFA claim remains unknown; no freshness/scope check was bypassed. Temporary API lifetime restoration remains separately tracked under D2-028. |
 
 ### D2-063 — Web crawler build input
 
@@ -3320,6 +3330,14 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Live authenticated workload passed (`2026-09-15`, D2-028): one reviewed run acknowledges one
+contribution, observes processing-to-review, validates one replay and conflict, withdraws the
+exact pending-review case and revokes both test grants. Its 64 requests report zero server errors
+and ambiguous writes; cleanup succeeds and recovery is not required. An encrypted recovery
+completion marker is present. Only the aggregate result is retained for metric inspection;
+no account label, token or raw candidate/provider artifact is included. Cloud corroboration
+and owner-confirmed restoration of the temporary API lifetime remain pending.
 
 MFA diagnostics and clock correction (`2026-09-15`, D2-071): owner confirms completing MFA.
 Read-only clock inspection found an unsynchronized PC approximately 1.28 seconds behind; after
