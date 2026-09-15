@@ -50,6 +50,11 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Edge keyboard parity accepted (`2026-09-15`, D2-015/D2-068): the owner confirms the same
+installed keyboard route works after Edge reload, including visible focus and Enter activation
+of Refresh shared jobs. This adds Edge parity to the completed Chrome correction at `14dc339`.
+No new job, account action or rebuild was needed. Human screen-reader acceptance remains open.
+
 Keyboard correction accepted (`2026-09-15`, D2-068): after reloading the configured extension,
 the owner confirms the requested Chrome keyboard route reaches and activates Refresh shared jobs
 through the Delivery queue and Your shared jobs headers. D2-068 is Complete at source `14dc339`.
@@ -3206,13 +3211,18 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 |---|---|---|
 | Takedown and human appeal-decision acceptance | Hosted sign-in, authenticated empty appeal-queue read and logout/root-reload checks are user-confirmed Complete on September 14 at protected `211e59d`. Assignments remain unchanged, the short public alias stays identity-dark and persistent project env keys remain zero. | Separately authorized takedown/human appeal-decision journeys remain. Do not repeat hosted-access checks or manufacture a case to test access. Preserve independent reviewers and evidence/version binding; no new secret, repeated reuse approval, borrowed human session or expanded reviewer role is needed. |
 | Installed authentication and full lifecycle | September 15 owner checks confirm login cancellation, authenticated sign-in, explicit session refresh and successful empty history read in both Chrome and Edge. D2-068 also has installed Chrome keyboard confirmation. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete deeper refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. Do not repeat the accepted basic sign-in/cancellation/history checks. |
-| Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. | Perform the documented assistive-technology journey in the exact candidate and record findings/decisions here; automated checks alone are not human review. |
+| Human accessibility acceptance | Keyboard/reflow/geometry and automated axe checks pass. The owner confirms the installed shared-history keyboard route in both Chrome and Edge on September 15. | Next, use Windows Narrator in the installed Edge extension to check section names, expanded/collapsed state, refresh-button name and the refresh-result announcement. Record aggregate findings here; this bounded check does not alone cover preview fields, error states or all assistive-technology acceptance. |
 | Authenticated load and abuse acceptance | Paced public-policy and unauthenticated-boundary workload passed. Separate paused-intake and active-processing-to-review runners pass 29 synthetic regressions. D2-045's matching inspector profiles are implemented and verified, including strict aggregates, metric coverage and settled queues. | Use explicitly scoped disposable authenticated candidates for a bounded development workload and matching server aggregates. The active runner follows the existing five-minute schedule, never approves a case, and is not throughput/publication acceptance. No production traffic, raw tokens, personal payloads, or invented provider truth. |
 | Alarm notification receipt | Thirteen D2 alarms are healthy; guarded synthetic alarm/OK exercise and preflight are implemented. | Run the exercise last and obtain recipient confirmation of both ALARM and recovery; healthy alarm state is not proof of delivery. |
 | Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-062's current-control instructions are deployed and verified at candidate source `e930ad2`. | Name a monitored support channel, capture the exact installed listing screenshots, and obtain exact-candidate/accountable/store approval before distribution. |
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Edge keyboard follow-up accepted (`2026-09-15`, D2-015/D2-068): owner reports Yes it works
+after the requested Edge reload and keyboard-only shared-history navigation/activation. Both
+installed browsers now pass this route. Next is the distinct screen-reader announcement check;
+do not request another repetition of the accepted keyboard-only or authentication checks.
 
 Installed keyboard correction accepted (`2026-09-15`, D2-068): owner answers Yes to reaching
 and activating Refresh shared jobs using the prescribed Chrome Tab/Enter route after reload.

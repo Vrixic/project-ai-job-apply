@@ -9,6 +9,10 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 Edge keyboard follow-up: the owner confirms visible focus and keyboard activation
+of Refresh shared jobs after reload. The reported D2-068 route now passes in installed Chrome
+and Edge. Screen-reader review remains open; Phase 2 is still In progress.
+
 September 15 keyboard finding: Chrome Tab navigation appears to stop after Inspect current tab.
 D2-068 addresses clipped section-header focus indicators and adds actual sequential Tab coverage;
 Edge/Chrome-for-Testing popup and side-panel checks, all 441 extension tests, the configured
