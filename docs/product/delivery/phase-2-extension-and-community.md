@@ -50,6 +50,15 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Chrome same-account post-restart recovery accepted (`2026-09-15`, D2-012/D2-015): after the
+signed-out restart checkpoint, owner signs into the same disposable account and explicitly
+refreshes shared history. Owner reports one saved receipt, successful latest-shared-jobs-loaded
+message and Processing withdrawn. Retain aggregate/status evidence only, not the contribution
+identifier. Trust refresh to check is an unrefreshed display, not a Trust-state result. This
+completes the empty-queue Chrome restart/reauthentication/history journey without resubmission;
+offline reads, queued delivery durability, token replay/revocation and other browser coverage
+remain separate. Next is a no-submission offline history read/recovery check.
+
 Chrome restart checkpoint (`2026-09-15`, D2-012/D2-015): owner selects Chrome and reports
 Delivery queue zero pending/zero stopped before the instructed `chrome://restart`. Afterward,
 owner reports Session signed out with Inspection is ready. Sign in before adding a shared job.

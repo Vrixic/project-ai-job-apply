@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 Chrome same-account restart recovery passes: after restart sign-out, the owner
+signs back in and explicitly refreshes history, receiving one existing contribution with
+Processing withdrawn and the successful latest-shared-jobs-loaded message. Trust is unrefreshed,
+not a current Trust observation. No resubmission was requested. Offline reads/queue delivery,
+token replay/revocation and broader lifecycle acceptance remain separate.
+
 September 15 Chrome restart checkpoint: owner reports zero pending/stopped queue items before
 the instructed restart, then Session signed out and Inspection is ready; sign in before adding
 a shared job. This passes the installed restart signed-out UI checkpoint, not token revocation,
