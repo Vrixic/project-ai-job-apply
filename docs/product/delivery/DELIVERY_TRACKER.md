@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 Chrome restart checkpoint: owner reports zero pending/stopped queue items before
+the instructed restart, then Session signed out and Inspection is ready; sign in before adding
+a shared job. This passes the installed restart signed-out UI checkpoint, not token revocation,
+offline queued delivery or same-account post-restart recovery. No new submission was requested.
+
 September 15 D2-028 closes: the bounded authenticated processing-to-review workload and its
 exact-window AWS corroboration pass. Cloud evidence matches 64 API requests and one expected 4xx,
 zero API 5xx/observed Lambda errors/throttles, drained queue/DLQ, 16 OK alarms, no log-error or

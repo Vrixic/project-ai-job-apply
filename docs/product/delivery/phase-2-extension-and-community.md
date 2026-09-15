@@ -50,6 +50,14 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Chrome restart checkpoint (`2026-09-15`, D2-012/D2-015): owner selects Chrome and reports
+Delivery queue zero pending/zero stopped before the instructed `chrome://restart`. Afterward,
+owner reports Session signed out with Inspection is ready. Sign in before adding a shared job.
+This is installed UI evidence of restart requiring reauthentication; it does not inspect stored
+tokens, prove provider revocation, queued-item durability or post-restart account recovery.
+No submission, retry, removal or storage clearing was requested. Next is sign-in to the same
+disposable account and explicit shared-history refresh; broader lifecycle gates remain open.
+
 Exact-window cloud corroboration passed (`2026-09-15`, D2-028): the maintained development
 inspector returns AggregateCorroborated true for the retained runner aggregate, with 64 API
 requests/one expected 4xx/zero 5xx, zero observed Lambda errors/throttles, RDS maximum CPU 7.14%
