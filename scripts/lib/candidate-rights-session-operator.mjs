@@ -18,6 +18,47 @@ const planKeys = [
   "ReviewedZeroDriftPlanSha256",
 ];
 const sha256 = /^[a-f0-9]{64}$/u;
+const coverageNames = [
+  "consentCount",
+  "contributionApprovalCount",
+  "contributionCount",
+  "privateCaptureCount",
+  "trustCaseCount",
+  "trustCaseEventCount",
+];
+
+export function sanitizeMissingCoverage(value) {
+  return Array.isArray(value) &&
+    value.length >= 1 &&
+    value.length <= coverageNames.length &&
+    new Set(value).size === value.length &&
+    value.every((name) => coverageNames.includes(name))
+    ? [...value]
+    : null;
+}
+
+export function sanitizeOperatorFailure(value) {
+  if (
+    exactKeys(value, ["outcome", "reason", "missingCoverage"]) &&
+    value.outcome === "failed" &&
+    value.reason === "d2_coverage_missing"
+  ) {
+    const missingCoverage = sanitizeMissingCoverage(value.missingCoverage);
+    if (missingCoverage) {
+      const error = new Error("d2_coverage_missing");
+      error.missingCoverage = Object.freeze(missingCoverage);
+      return error;
+    }
+  }
+  const reasons = ["identity_not_fresh", "source_not_ready", "operator_failed_check_recovery"];
+  return new Error(
+    exactKeys(value, ["outcome", "reason"]) &&
+      value.outcome === "failed" &&
+      reasons.includes(value.reason)
+      ? value.reason
+      : "operator_failed_check_recovery",
+  );
+}
 
 function exactKeys(value, keys) {
   return (
@@ -263,17 +304,7 @@ export async function runSessionOperator({
         return;
       }
       if (code !== 0) {
-        const reasons = [
-          "d2_coverage_missing",
-          "identity_not_fresh",
-          "source_not_ready",
-          "operator_failed_check_recovery",
-        ];
-        reject(
-          new Error(
-            reasons.includes(parsed?.reason) ? parsed.reason : "operator_failed_check_recovery",
-          ),
-        );
+        reject(sanitizeOperatorFailure(parsed));
       } else done(parsed);
     });
   });

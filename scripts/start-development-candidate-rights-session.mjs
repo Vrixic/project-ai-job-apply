@@ -8,6 +8,7 @@ import {
 import {
   buildIdentityAttestation,
   runSessionOperator,
+  sanitizeMissingCoverage,
   validateSessionCommand,
 } from "./lib/candidate-rights-session-operator.mjs";
 
@@ -151,7 +152,14 @@ input.on("line", async (line) => {
       "identity_not_fresh",
       "source_not_ready",
     ];
-    report(safe.includes(error.message) ? error.message : "session-command-failed");
+    const missingCoverage =
+      error.message === "d2_coverage_missing"
+        ? sanitizeMissingCoverage(error.missingCoverage)
+        : null;
+    report(
+      safe.includes(error.message) ? error.message : "session-command-failed",
+      missingCoverage ? { missingCoverage } : {},
+    );
     if (executionAttempted) await close();
   } finally {
     busy = false;

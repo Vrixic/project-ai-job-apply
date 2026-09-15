@@ -9,11 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
-September 14 D2-020 follow-up: the local disposable sign-in form's referrer/origin conflict is
-corrected, with 52 session/bridge tests passing. Fresh browser sign-in and candidate-rights
-execution remain pending; no export or deletion ran. See the [Phase 2 task register](phase-2-extension-and-community.md#task-register).
-The root-page rejection persists after restart; fixed-code diagnostics are added and all 53
-session/bridge tests pass. The live cause remains unconfirmed, not resolved by the header fix.
+September 14 D2-020 follow-up: disposable sign-in and explicit account confirmation now succeed.
+One independently reviewed execution validates an export but stops at `d2_coverage_missing`
+before grant waiting, identity refresh or any deletion request. The account remains intact and the
+export retains its configured expiry. Missing categories were discarded by the reporting bridge;
+do not infer private-capture absence or repeat a save. Phase 2 remains In progress. See the
+[Phase 2 task register](phase-2-extension-and-community.md#task-register).
 
 | ID | Delivery | Status | Start | Completion | Living task document |
 |---|---|---|---|---|---|

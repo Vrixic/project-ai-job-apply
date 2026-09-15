@@ -182,6 +182,13 @@ Missing D2 coverage stops before grant waiting, identity refresh or any deletion
 export remains subject to its configured expiry; prepare the missing disposable data before a new
 fresh-MFA/reviewed run. Do not label an empty-account deletion as nonempty Phase 2 acceptance.
 
+The session bridge reports only allowlisted missing counter names with `d2_coverage_missing`;
+never forward the raw exception text or export body. An older run that returned only the reason
+does not establish which category was empty. Do not infer private-capture absence or replay an
+ambiguous save from that generic result. The completed coverage refusal is pre-deletion, not an
+ambiguous deletion; any subsequent diagnostic export still requires a new confirmed fresh-MFA
+session and separately reviewed plan, and must not claim the old export's missing counts.
+
 ## Disposable-account preparation and local sign-in
 
 Prepare the disposable account's nonempty D2 records before fresh MFA. Use the installed extension

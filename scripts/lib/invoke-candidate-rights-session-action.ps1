@@ -2,6 +2,25 @@
 # tokens and the candidate client secret are process-only environment inputs to the maintained operator.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+function ConvertTo-SafeSessionFailure {
+  param([string]$Message)
+  $failure = [ordered]@{ outcome = 'failed'; reason = 'operator_failed_check_recovery' }
+  $prefix = 'D2 acceptance stopped before account deletion: nonempty export coverage is required for '
+  $suffix = ". Prepare the authorized disposable account's missing D2 test records, then obtain fresh MFA and a new reviewed run. The existing export remains subject to its configured expiry."
+  if ($Message.Length -le 1024 -and $Message -cmatch ('\A' + [regex]::Escape($prefix) + '(?<names>[A-Za-z, ]+)' + [regex]::Escape($suffix) + '\z')) {
+    $names = @($Matches.names -csplit ', ')
+    $allowed = @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount')
+    if ($names.Count -ge 1 -and $names.Count -le 6 -and
+        @($names | Where-Object { $_ -cnotin $allowed }).Count -eq 0 -and
+        @($names | Select-Object -Unique).Count -eq $names.Count) {
+      $failure.reason = 'd2_coverage_missing'
+      $failure.missingCoverage = $names
+    }
+  }
+  elseif ($Message -like 'The disposable identity is not an exact current*') { $failure.reason = 'identity_not_fresh' }
+  elseif ($Message -match 'clean|origin/main|merged') { $failure.reason = 'source_not_ready' }
+  return [pscustomobject]$failure
+}
 try {
   $inputJson = [Console]::In.ReadToEnd()
   if ($inputJson.Length -gt 16384) { throw 'Invalid session request.' }
@@ -35,10 +54,6 @@ try {
   $result = & $operator @parameters
   $result | ConvertTo-Json -Depth 10 -Compress
 } catch {
-  $reason = 'operator_failed_check_recovery'
-  if ($_.Exception.Message -like 'D2 acceptance stopped before account deletion:*') { $reason = 'd2_coverage_missing' }
-  elseif ($_.Exception.Message -like 'The disposable identity is not an exact current*') { $reason = 'identity_not_fresh' }
-  elseif ($_.Exception.Message -match 'clean|origin/main|merged') { $reason = 'source_not_ready' }
-  [pscustomobject]@{ outcome = 'failed'; reason = $reason } | ConvertTo-Json -Compress
+  ConvertTo-SafeSessionFailure $_.Exception.Message | ConvertTo-Json -Compress
   exit 1
 }

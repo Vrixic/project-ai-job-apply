@@ -5,6 +5,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   buildIdentityAttestation,
+  sanitizeMissingCoverage,
+  sanitizeOperatorFailure,
   sanitizeOperatorResult,
   validatePlanOptions,
   validateSessionCommand,
@@ -53,6 +55,121 @@ const identity = () => ({
   accessToken: "generated-access-secret",
   idToken: "generated-id-secret",
   refreshToken: "generated-refresh-secret",
+});
+
+test("missing coverage failures retain only unique allowlisted names", () => {
+  const names = Object.keys(receipt().ExportCoverage).filter((key) => key !== "valid");
+  for (const missingCoverage of [["privateCaptureCount"], names]) {
+    const error = sanitizeOperatorFailure({
+      outcome: "failed",
+      reason: "d2_coverage_missing",
+      missingCoverage,
+    });
+    assert.equal(error.message, "d2_coverage_missing");
+    assert.deepEqual(error.missingCoverage, missingCoverage);
+    assert.notEqual(error.missingCoverage, missingCoverage);
+    assert.deepEqual(sanitizeMissingCoverage(error.missingCoverage), missingCoverage);
+  }
+  for (const missingCoverage of [
+    undefined,
+    null,
+    "privateCaptureCount",
+    [],
+    ["generated-secret"],
+    ["privateCaptureCount", "privateCaptureCount"],
+    ["PrivateCaptureCount"],
+    ["privateCaptureCount\n"],
+    [1],
+    [...names, "privateCaptureCount"],
+  ]) {
+    assert.equal(sanitizeMissingCoverage(missingCoverage), null);
+    const error = sanitizeOperatorFailure({
+      outcome: "failed",
+      reason: "d2_coverage_missing",
+      missingCoverage,
+    });
+    assert.equal(error.message, "operator_failed_check_recovery");
+    assert.equal(error.missingCoverage, undefined);
+    assert.equal(JSON.stringify(error).includes("generated-secret"), false);
+  }
+  for (const value of [
+    null,
+    {},
+    [],
+    { outcome: "failed", reason: "d2_coverage_missing" },
+    {
+      outcome: "failed",
+      reason: "d2_coverage_missing",
+      missingCoverage: ["privateCaptureCount"],
+      token: "generated-secret",
+    },
+    { outcome: "success", reason: "source_not_ready" },
+    { outcome: "failed", reason: "generated-secret" },
+  ]) {
+    const error = sanitizeOperatorFailure(value);
+    assert.equal(error.message, "operator_failed_check_recovery");
+    assert.equal(error.missingCoverage, undefined);
+  }
+  for (const reason of [
+    "identity_not_fresh",
+    "source_not_ready",
+    "operator_failed_check_recovery",
+  ]) {
+    assert.equal(sanitizeOperatorFailure({ outcome: "failed", reason }).message, reason);
+  }
+});
+
+test("PowerShell missing-coverage parser rejects altered or sensitive diagnostics", () => {
+  const prefix =
+    "D2 acceptance stopped before account deletion: nonempty export coverage is required for ";
+  const suffix =
+    ". Prepare the authorized disposable account's missing D2 test records, then obtain fresh MFA and a new reviewed run. The existing export remains subject to its configured expiry.";
+  const messages = [
+    `${prefix}privateCaptureCount${suffix}`,
+    `${prefix}consentCount, contributionCount${suffix}`,
+    `${prefix}privateCaptureCount, privateCaptureCount${suffix}`,
+    `${prefix}generated-secret${suffix}`,
+    `${prefix}PrivateCaptureCount${suffix}`,
+    `${prefix}privateCaptureCount${suffix}\n`,
+    `${prefix}privateCaptureCount${suffix} generated-secret`,
+    `${prefix}privateCaptureCount`,
+    `${prefix}${suffix}`,
+    `${prefix}${"x".repeat(1100)}${suffix}`,
+  ];
+  // Extract only the pure function from the AST. Never invoke the bridge/operator or cloud.
+  const script = `$tokens = $null; $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Get-Location) 'scripts/lib/invoke-candidate-rights-session-action.ps1'), [ref]$tokens, [ref]$errors)
+    if ($errors.Count -ne 0) { throw 'Parse failure' }
+    $function = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'ConvertTo-SafeSessionFailure' }, $false)
+    . ([scriptblock]::Create($function.Extent.Text))
+    $messages = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    @($messages | ForEach-Object { ConvertTo-SafeSessionFailure $_ }) | ConvertTo-Json -Depth 4 -Compress`;
+  const run = spawnSync(
+    process.platform === "win32" ? "pwsh.exe" : "pwsh",
+    ["-NoProfile", "-Command", script],
+    {
+      cwd: root,
+      encoding: "utf8",
+      input: JSON.stringify(messages),
+      windowsHide: true,
+      timeout: 10000,
+    },
+  );
+  assert.equal(run.status, 0);
+  assert.equal(`${run.stdout}${run.stderr}`.includes("generated-secret"), false);
+  const results = JSON.parse(run.stdout);
+  assert.deepEqual(results[0], {
+    outcome: "failed",
+    reason: "d2_coverage_missing",
+    missingCoverage: ["privateCaptureCount"],
+  });
+  assert.deepEqual(results[1], {
+    outcome: "failed",
+    reason: "d2_coverage_missing",
+    missingCoverage: ["consentCount", "contributionCount"],
+  });
+  for (const result of results.slice(2))
+    assert.deepEqual(result, { outcome: "failed", reason: "operator_failed_check_recovery" });
 });
 
 test("only exact public plan arguments are accepted", () => {

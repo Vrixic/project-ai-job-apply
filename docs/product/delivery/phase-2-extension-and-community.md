@@ -50,22 +50,46 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Latest D2-020 checkpoint (`2026-09-14`): after cancellation of the wrong-account session, the
+user completes fresh sign-in and privately confirms the disposable account/permanent-deletion
+scope. The maintained helper reports `disposable-account-confirmed` with no token retention.
+Earlier root diagnostics identify `root_cookie_missing`; the reason the browser omitted that
+cookie is unproven. Session expiry explains the absence of a listener only as a possible cause,
+not an observed exit reason. The subsequent successful journey closes the immediate sign-in gate.
+
+Plan `cb897648a083d5c660a47023ac45729c22bbab53424fbda1dc43551e7032846e`, from clean source
+`f7d27a0`, independently passes review against state `343`, Gateway `67`/core `14`, the exact D2
+policy, 29 snapshots with 35-day retention, ten empty queues, 57 healthy alarms and zero compute.
+One Execute returns `d2_coverage_missing`: export creation/replay/download/schema validation are
+reached, but at least one of the six required coverage counters is zero. The guard stops before
+grant waiting, identity refresh or any deletion request. The disposable account remains intact;
+the generated export remains under its configured expiry. No lifecycle completion receipt exists.
+The reporting bridge lost the missing-category names, so do not claim which counter is empty,
+replay the ambiguous private save, or retry Execute in that closed session. D2-020 remains open.
+
+The follow-up bridge correction preserves only 1–6 unique, exact allowlisted missing-counter
+names from the maintained fixed coverage refusal. PowerShell and Node independently validate the
+error shape; malformed, duplicate, extra or sensitive fields are not reflected. The combined
+session/bridge suite passes 55 tests (eight bridge tests). No lifecycle/coverage guard is changed.
+This improves the next run's reporting; it cannot recover the prior run's discarded categories.
+
 Candidate-rights sign-in correction (`2026-09-14`, D2-020 still open): the user reports immediate
 failure on the local sign-in button, before Auth0. The helper served native POST forms with
 `Referrer-Policy: no-referrer`, which makes their Origin null under the Fetch Standard while
 the handler correctly requires the exact loopback origin. Only the two root form pages now use
 `same-origin`; redirects and non-form responses retain `no-referrer`. Exact origin, transaction
 cookie, CSRF, PKCE and fresh-MFA checks remain unchanged. The maintained session/bridge suite
-passes 52 tests, including null-origin refusal and both form-page headers. Installed browser
-acceptance remains pending. No export, deletion or cloud change ran for this correction.
+passes 52 tests, including null-origin refusal and both form-page headers. At that checkpoint,
+installed browser acceptance remained pending and no export, deletion or cloud change had run.
 
 Follow-up: the user still reports the generic rejection at the exact root after a fresh session
 and direct address entry. The header correction does not establish resolution of this root-page
 failure; a cookie-binding explanation remains a hypothesis. The helper now emits allowlisted
 local rejection codes only (request boundary, missing/mismatched root cookie, generic rejection
 or unexpected local error), never raw headers, URLs, exception text or credentials. All 53
-session/bridge tests pass. The next browser request must identify the failed check before another
-behavior change. No rights execution has started.
+session/bridge tests pass. At that checkpoint, the next browser request needed to identify the
+failed check before another behavior change, and no rights execution had started. The latest
+checkpoint above supersedes those pending observations.
 
 Shared-jobs recovery (`2026-09-14`, D2-066 Complete): the user confirms existing contributions
 appear after **Refresh shared jobs** in the reloaded configured extension. Recovery is explicitly
