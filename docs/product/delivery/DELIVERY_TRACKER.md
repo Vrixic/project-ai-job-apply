@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 Edge authenticated follow-up: sign-in, explicit session refresh and explicit owner
+history read pass on another existing disposable account. History returns a successful empty
+result (**No shared jobs**), with no job submission. Current Chrome parity and deeper token,
+revocation/cross-account/offline and accessibility checks remain separate.
+
 September 15 Edge follow-up: the owner also reports **Sign in required** after the requested
 unpacked installation and cancelled sign-in. Signed-out cancellation wording now passes in
 both Chrome and Edge; authenticated lifecycle and human accessibility gates remain open.

@@ -50,6 +50,14 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Edge authenticated read check (`2026-09-15`, D2-012/D2-015): using another existing disposable
+account, the owner reports successful sign-in, successful explicit Refresh session, continued
+signed-in state and no error. Subsequent explicit Refresh shared jobs returns **No shared jobs**
+with the successful latest-history-loaded message. This is a successful authenticated empty read,
+not unavailable history. No contribution was requested. It proves this UI refresh/read journey,
+not refresh-token rotation/replay rejection, provider revocation or cross-account isolation.
+Current Chrome sign-in/refresh/history parity for this same account is the next check.
+
 Edge cancellation acceptance (`2026-09-15`, D2-012/D2-015): after the requested unpacked
 installation and sign-in cancellation without credentials, the owner reports **Sign in required**.
 This closes the signed-out cancellation/wording check in Edge as well as Chrome. Exact browser
@@ -3181,6 +3189,11 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Edge authenticated read accepted (`2026-09-15`): another existing disposable account signs in,
+explicitly refreshes its session and loads an empty owner history successfully. Recorded only
+those owner-reported aggregate outcomes; no account identifiers, tokens, new jobs or deletions.
+The initial History not loaded label was the expected explicit-refresh state, not a defect.
 
 Edge cancellation checked (`2026-09-15`): owner installs the existing configured unpacked build
 following the supplied steps, cancels sign-in without entering credentials, and reports
