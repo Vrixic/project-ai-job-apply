@@ -9,6 +9,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 D2-028 closes: the bounded authenticated processing-to-review workload and its
+exact-window AWS corroboration pass. Cloud evidence matches 64 API requests and one expected 4xx,
+zero API 5xx/observed Lambda errors/throttles, drained queue/DLQ, 16 OK alarms, no log-error or
+forbidden-pattern matches, idle ECS and zero Terraform drift. One optional ScheduledBatchFailed
+series remains unknown rather than treated as zero. Cleanup succeeds and the owner confirms API
+lifetime restored to 600 seconds. Broader processing/moderation/publication/capacity acceptance
+is not inferred; Phase 2 remains In progress behind its other recorded gates.
+
 September 15 temporary identity-setting cleanup: owner confirms the development API access-token
 lifetime is restored from 1,800 to 600 seconds after successful workload cleanup. This is
 owner-confirmed configuration restoration; no new token was requested to inspect its lifetime.
