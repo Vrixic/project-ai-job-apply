@@ -50,6 +50,13 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Fresh sign-in MFA finding (`2026-09-15`, D2-071/D2-028): after the owner-confirmed lifetime
+adjustment, the helper emits `token_mfa_rejected` and closes with reason `failed`. Its lifetime
+check passed, but the combined verified MFA-method/authentication-time guard rejected. This does
+not establish whether a challenge was absent, or an authentication timestamp was missing/stale.
+Ask whether this specific sign-in included a completed MFA challenge before selecting a scoped
+correction. No workload ran; temporary API lifetime restoration to 600 seconds remains due.
+
 Temporary lifetime correction (`2026-09-15`, D2-071/D2-028): owner reports web ID-token
 expiration 36,000 seconds and API expiration 600 seconds. The latter cannot satisfy the helper's
 25-minute admission requirement. Owner confirms the requested development API-only increase to

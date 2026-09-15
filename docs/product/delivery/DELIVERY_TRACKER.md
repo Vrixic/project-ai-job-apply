@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 fresh sign-in after the temporary lifetime adjustment now fails with
+`token_mfa_rejected`, confirmed by owner and operator output. The lifetime check passes;
+fresh MFA-method/authentication-time evidence does not. No workload ran and the helper closed.
+Determine whether the latest sign-in presented and completed an MFA challenge before changing
+tenant configuration or retrying. Temporary API lifetime restoration to 600 seconds remains due.
+
 September 15 token-lifetime correction: the owner reports ID-token lifetime 36,000 seconds
 and development API access-token lifetime 600 seconds, then confirms the requested temporary
 API-only increase to 1,800 seconds. Fresh issuance and workload acceptance remain unverified.
