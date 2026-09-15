@@ -25,6 +25,11 @@ browser-store distribution are not approved. See the current
 
 ## Implemented source boundary
 
+- Failed sign-in resolves shared-job readiness from the current fenced session instead of treating
+  browser-specific cancellation text as a history-storage error. Signed-out users see a sign-in
+  requirement; actual storage failures remain unavailable. No history fetch or authentication
+  bypass is added, and logout still supersedes late responses.
+
 - Current-page inspection, readiness and enqueue resolve the most recently focused browser
   window (normal or browser popup), excluding detached DevTools, then its sole active tab.
   Saves still require the exact inspected tab ID/URL and session fence. Missing windows or tabs

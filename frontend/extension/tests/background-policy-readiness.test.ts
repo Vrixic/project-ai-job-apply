@@ -1017,6 +1017,89 @@ describe("warm background worker signed-policy readiness", () => {
     expect(result).not.toHaveProperty("queue");
   });
 
+  it.each(["The user did not approve access.", "authorization_cancelled"])(
+    "keeps signed-out history sign-in-required after cancelled login: %s",
+    async (message) => {
+      const fetcher = vi.fn<typeof fetch>();
+      const worker = await background(fetcher, true);
+      const api = await import("../lib/protocol");
+      vi.mocked(api.login).mockRejectedValueOnce(new Error(message));
+      vi.mocked(api.authenticatedApiSession).mockRejectedValue(
+        new Error("authentication_required"),
+      );
+      vi.mocked(api.authenticationStatus).mockResolvedValue({
+        configured: true,
+        authenticated: false,
+        apiConfigured: true,
+        refreshAvailable: false,
+      });
+      const result = await worker.send({ action: "login" });
+      expect(result).toMatchObject({
+        ok: false,
+        sharedJobsState: "sign_in_required",
+        receipts: [],
+        status: { authenticated: false },
+      });
+      expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains only the current owner's receipts when an authenticated login cancels", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const worker = await background(fetcher, true);
+    const api = await import("../lib/protocol");
+    vi.mocked(api.login).mockRejectedValueOnce(new Error("authorization_cancelled"));
+    const result = await worker.send({ action: "login" });
+    expect(result).toMatchObject({ ok: false, sharedJobsState: "cached" });
+    expect(result.receipts).toEqual([
+      expect.objectContaining({ contributionId: ownerContributionId }),
+    ]);
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("does not hide a genuine receipt-storage failure behind cancelled login", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const worker = await background(fetcher, true);
+    const api = await import("../lib/protocol");
+    vi.mocked(api.login).mockRejectedValueOnce(new Error("authorization_cancelled"));
+    worker.browser.storage.local.get.mockRejectedValue(new Error("private-storage-error"));
+    const result = await worker.send({ action: "login" });
+    expect(result).toMatchObject({
+      ok: false,
+      sharedJobsState: "storage_unavailable",
+      receipts: [],
+    });
+    expect(JSON.stringify(result)).not.toContain("private-storage-error");
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("drops a late cancelled-login snapshot when logout supersedes it", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const worker = await background(fetcher, true);
+    const api = await import("../lib/protocol");
+    const started = deferred<void>();
+    const release = deferred<void>();
+    vi.mocked(api.login).mockImplementationOnce(async () => {
+      started.resolve();
+      await release.promise;
+      throw new Error("authorization_cancelled");
+    });
+    const signingIn = worker.send({ action: "login" });
+    await started.promise;
+    await worker.send({ action: "logout" });
+    release.resolve();
+    const result = await signingIn;
+    expect(result.ok).toBe(false);
+    expect(result).not.toHaveProperty("receipts");
+    expect(result).not.toHaveProperty("sharedJobsState");
+    expect(result).not.toHaveProperty("capture");
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual([]);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("restores missing receipts only on explicit shared-job refresh, without dispatch or polling", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       response({

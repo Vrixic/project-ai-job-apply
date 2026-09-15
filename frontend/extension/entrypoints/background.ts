@@ -849,6 +849,13 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
       };
     } catch (error) {
       if (identityAction && identityTransition === generation) identityTransition = undefined;
+      // A cancelled browser sign-in is not a history-storage failure. Resolve the
+      // actual session instead of classifying browser-specific error text; keep
+      // ownership fencing and genuine storage failures in the snapshot path.
+      const history =
+        message.action === "login"
+          ? await sharedJobsSnapshot(generation)
+          : { sharedJobsState: sharedJobsFailure(error), receipts: [] };
       return {
         delivery: await deliveryReadiness(await activeStoredCapture()),
         error: safeActionErrorMessage(error, message.action),
@@ -856,7 +863,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         ...(["shared_jobs_refresh", "status", "pending", "refresh", "login", "logout"].includes(
           message.action,
         )
-          ? { sharedJobsState: sharedJobsFailure(error), receipts: [] }
+          ? history
           : {}),
         status: await authenticationStatus(),
       };

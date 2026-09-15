@@ -160,6 +160,27 @@ describe("popup retained-session lifecycle", () => {
     );
   });
 
+  it("keeps cancelled sign-in distinct from unavailable history", async () => {
+    const status = { ...expiredSession, refreshAvailable: false };
+    const sendMessage = await popup(status);
+    sendMessage.mockResolvedValueOnce({
+      ok: false,
+      status,
+      error: "Authentication action cancelled.",
+      ...{ receipts: [], sharedJobsState: "sign_in_required" },
+    });
+    button("login").click();
+    await idle();
+    expect(sendMessage).toHaveBeenLastCalledWith({ action: "login" });
+    expect(document.querySelector("#contributions-status")?.textContent).toBe("Sign in required");
+    expect(document.querySelector("#detail")?.textContent).toBe("Authentication action cancelled.");
+    expect(document.body.textContent).not.toContain("History unavailable");
+    expect(button("refresh-shared-jobs").disabled).toBe(true);
+    expect(button("login").hidden).toBe(false);
+    expect(button("logout").hidden).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("keeps saved receipt controls visible when history loading fails", async () => {
     const status = { ...expiredSession, authenticated: true };
     const sendMessage = await popup(status);
