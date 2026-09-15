@@ -50,6 +50,13 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Edge cancellation acceptance (`2026-09-15`, D2-012/D2-015): after the requested unpacked
+installation and sign-in cancellation without credentials, the owner reports **Sign in required**.
+This closes the signed-out cancellation/wording check in Edge as well as Chrome. Exact browser
+versions, successful current Edge authentication, refresh rotation/replay, provider revocation,
+cross-account/offline/restart and human assistive-technology checks remain separate. No account
+creation, job submission or additional rights lifecycle was requested.
+
 D2-067 installed acceptance (`2026-09-15`): after the requested Chrome reload and cancelled
 sign-in, the owner confirms **Sign in required**. The misleading-history correction is Complete
 at source `121e4fb`; do not repeat the Chrome wording check. Broader D2-012/D2-015 browser,
@@ -3174,6 +3181,11 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Edge cancellation checked (`2026-09-15`): owner installs the existing configured unpacked build
+following the supplied steps, cancels sign-in without entering credentials, and reports
+**Sign in required**. Recorded only this installed cancellation result under D2-012/D2-015;
+no authenticated Edge session, new candidate data, callback-setting change or full parity claim.
 
 Installed wording accepted (`2026-09-15`, D2-067): owner reports **Sign in required** following
 the requested Chrome reload and cancellation check for rebuilt `121e4fb`. Marked D2-067 Complete
