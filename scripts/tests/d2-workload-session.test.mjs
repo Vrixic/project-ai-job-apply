@@ -54,7 +54,7 @@ function http(path, cookie, form) {
 const csrf = (response) => /name="csrf" value="([^"]+)"/u.exec(response.body)?.[1];
 const jwt = (value) => `e30.${Buffer.from(JSON.stringify(value)).toString("base64url")}.c2ln`;
 
-async function fixture(t, mutate = () => {}) {
+async function fixture(t, mutate = () => {}, proofChanges = {}) {
   const oldMode = process.env.NODE_ENV;
   process.env.NODE_ENV = "test";
   let authorization;
@@ -114,6 +114,7 @@ async function fixture(t, mutate = () => {}) {
         subject: claims.id.sub,
         authenticatedAt: claims.id.auth_time,
         authenticationMethods: claims.id.amr,
+        ...proofChanges,
       },
     }),
     onConfirmed: (bundle) => {
@@ -216,6 +217,18 @@ for (const [name, mutate] of Object.entries({
   missingMfa: (c) => {
     c.id.amr = ["pwd"];
   },
+  invalidAuthTime: (c) => {
+    c.id.auth_time = "PRIVATE_AUTH_TIME";
+  },
+  futureAuthTime: (c) => {
+    c.id.auth_time = Math.floor(Date.now() / 1000) + 60;
+  },
+  staleAuthTime: (c) => {
+    c.id.auth_time = Math.floor(Date.now() / 1000) - 901;
+  },
+  predatesAuthTime: (c) => {
+    c.id.auth_time = Math.floor(Date.now() / 1000) - 60;
+  },
   wrongNonce: (c) => {
     c.id.nonce = "wrong";
   },
@@ -236,19 +249,37 @@ for (const [name, mutate] of Object.entries({
     const expected = name.startsWith("short")
       ? "token_lifetime_insufficient"
       : name === "missingMfa"
-        ? "token_mfa_rejected"
-        : name === "unexpectedRefresh"
-          ? "token_response_rejected"
-          : name.startsWith("wrong")
-            ? "token_claims_rejected"
-            : "token_scopes_rejected";
+        ? "token_mfa_method_missing"
+        : name === "invalidAuthTime"
+          ? "token_auth_time_invalid"
+          : name === "futureAuthTime"
+            ? "token_auth_time_future"
+            : name === "staleAuthTime"
+              ? "token_auth_time_stale"
+              : name === "predatesAuthTime"
+                ? "token_auth_time_predates_session"
+                : name === "unexpectedRefresh"
+                  ? "token_response_rejected"
+                  : name.startsWith("wrong")
+                    ? "token_claims_rejected"
+                    : "token_scopes_rejected";
     assert.match(result.body, new RegExp(`Diagnostic: ${expected}`, "u"));
     assert.deepEqual(f.diagnostics, [expected]);
-    assert.doesNotMatch(result.body, /SYNTHETIC|auth0\|synthetic-workload/u);
+    assert.doesNotMatch(result.body, /SYNTHETIC|PRIVATE_AUTH_TIME|auth0\|synthetic-workload/u);
     assert.equal(f.confirmed, undefined);
     await f.session.closed;
   });
 }
+
+test("verified MFA proof disagreement emits only the fixed mismatch diagnostic", async (t) => {
+  const f = await fixture(t, () => {}, { authenticatedAt: 1 });
+  const result = await f.callback();
+  assert.equal(result.status, 400);
+  assert.match(result.body, /Diagnostic: token_auth_time_mismatch/u);
+  assert.deepEqual(f.diagnostics, ["token_auth_time_mismatch"]);
+  assert.equal(f.confirmed, undefined);
+  await f.session.closed;
+});
 
 test("D2 refuses caller-selected profile, purpose, scopes or callback", async () => {
   for (const key of ["profile", "purpose", "scope", "scopes", "callback", "redirectUri"]) {

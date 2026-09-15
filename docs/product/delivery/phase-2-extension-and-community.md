@@ -50,6 +50,24 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Clock-sync follow-up (`2026-09-15`, D2-071/D2-028): owner confirms Windows Sync now.
+Three subsequent read-only NTP samples measure approximately 4–10 milliseconds offset, removing
+the observed 1.28-second drift. The time-service status query reports not started, so ongoing
+automatic synchronization is not established. No persistent service configuration was changed.
+All 99 session/operator/recovery tests and full repository verification pass; fresh sign-in is pending.
+This is not evidence of the discarded token's contents or successful MFA acceptance. Restore
+the temporary API lifetime to 600 seconds after workload/cleanup.
+
+MFA challenge confirmation and clock finding (`2026-09-15`, D2-071/D2-028): owner confirms
+the latest sign-in completed MFA. Read-only Windows time status reports unsynchronized Local
+CMOS Clock, and three `time.windows.com` stripchart samples show the PC approximately 1.28 seconds
+behind. A one-second future authentication timestamp is rejected by the existing helper guard;
+this is a plausible cause, not proof about the discarded token. Separate fixed diagnostic codes
+now distinguish method absence, invalid/future/stale/pre-session time and verifier disagreement;
+78 focused tests pass, full verification is in progress. Requested owner Windows time sync without
+changing any MFA guard, provider setting or workload scope. No workload ran. Temporary API
+lifetime restoration to 600 seconds remains outstanding.
+
 Fresh sign-in MFA finding (`2026-09-15`, D2-071/D2-028): after the owner-confirmed lifetime
 adjustment, the helper emits `token_mfa_rejected` and closes with reason `failed`. Its lifetime
 check passed, but the combined verified MFA-method/authentication-time guard rejected. This does
@@ -3277,6 +3295,17 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+MFA diagnostics and clock correction (`2026-09-15`, D2-071): owner confirms completing MFA.
+Read-only clock inspection found an unsynchronized PC approximately 1.28 seconds behind; after
+owner Windows Sync now, independent samples measure 4–10 milliseconds offset. This removes an
+observed environmental issue without proving the failed token's actual timestamp. The helper
+now separates method absence and authentication-time reasons using fixed codes only; all existing
+acceptance predicates remain unchanged. Independent review, 99 session/operator/recovery tests,
+1,177 local Markdown file links and the full repository verifier pass (34 test tasks, 20 builds).
+Invalid/missing claims rejected by the shared signature verifier still report verification failure;
+injected-verifier regressions are not evidence of real provider claims. Fresh live sign-in remains
+required. No workload ran; development API lifetime restoration to 600 seconds remains due.
 
 Workload sign-in diagnostics implemented (`2026-09-15`, D2-071): the
 [shared helper](../../../scripts/lib/candidate-rights-session.mjs) now reports fixed categories

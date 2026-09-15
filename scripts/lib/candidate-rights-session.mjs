@@ -37,6 +37,12 @@ const REQUEST_DIAGNOSTICS = new Set([
   "token_claims_rejected",
   "token_lifetime_insufficient",
   "token_mfa_rejected",
+  "token_mfa_method_missing",
+  "token_auth_time_invalid",
+  "token_auth_time_future",
+  "token_auth_time_predates_session",
+  "token_auth_time_stale",
+  "token_auth_time_mismatch",
   "token_scopes_rejected",
   "token_exchange_timeout",
 ]);
@@ -181,17 +187,18 @@ function validateVerifiedTokens(tokens, verified, expected, profile) {
     id.exp <= now + profile.minimumLifetimeSeconds
   )
     reject("token_lifetime_insufficient");
+  if (!Number.isSafeInteger(id.auth_time)) reject("token_auth_time_invalid");
+  if (id.auth_time > now) reject("token_auth_time_future");
+  if (now - id.auth_time > 900) reject("token_auth_time_stale");
+  if (id.auth_time < Math.floor(expected.startedAt / 1000) - 5)
+    reject("token_auth_time_predates_session");
+  if (idProof.authenticatedAt !== id.auth_time) reject("token_auth_time_mismatch");
   if (
-    !Number.isSafeInteger(id.auth_time) ||
-    id.auth_time > now ||
-    id.auth_time < Math.floor(expected.startedAt / 1000) - 5 ||
-    now - id.auth_time > 900 ||
-    idProof.authenticatedAt !== id.auth_time ||
     !Array.isArray(id.amr) ||
     !id.amr.includes("mfa") ||
     !idProof.authenticationMethods?.includes("mfa")
   )
-    reject("token_mfa_rejected");
+    reject("token_mfa_method_missing");
   if (
     !Array.isArray(accessPrincipal.scopes) ||
     !accessPrincipal.scopes.includes("profile:write") ||

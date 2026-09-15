@@ -9,6 +9,19 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 clock-sync follow-up: owner confirms Windows Sync now. Three read-only NTP samples
+now measure approximately 4–10 milliseconds offset, versus 1.28 seconds before. This removes the
+observed offset, not proof of a successful sign-in. All 99 session/operator/recovery tests and
+full repository verification pass; fresh human sign-in remains pending. API lifetime restoration
+remains due.
+
+September 15 MFA follow-up: owner confirms completing the challenge. Read-only Windows time
+status reports unsynchronized Local CMOS Clock; three NTP samples put the PC approximately
+1.28 seconds behind. This can trigger the helper's strict future-authentication-time guard,
+but the failed token was not retained, so causation is unconfirmed. Fixed MFA subdiagnostics
+are being verified; the owner is asked to synchronize Windows time. No guard was relaxed,
+no workload ran, and restoration of API lifetime to 600 seconds remains outstanding.
+
 September 15 fresh sign-in after the temporary lifetime adjustment now fails with
 `token_mfa_rejected`, confirmed by owner and operator output. The lifetime check passes;
 fresh MFA-method/authentication-time evidence does not. No workload ran and the helper closed.

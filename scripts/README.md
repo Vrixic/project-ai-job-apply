@@ -33,6 +33,9 @@ both AWS environments accepted the steady-state serverless runtime.
   verification, claims, lifetime, MFA and scopes. The operator receives the same safe category
   and a bounded closure reason. Never request tokens, full callback URLs or provider error bodies
   to diagnose a failed sign-in; no workload is dispatched by the sign-in step.
+  MFA failures distinguish missing MFA method from invalid, future, stale or pre-session
+  authentication time and verifier disagreement. For a future-time failure, inspect Windows time
+  synchronization before changing identity-provider settings; do not bypass the freshness guard.
 
 - `install-terraform-toolchain.ps1` — Installs isolated Windows Terraform 1.16.2 for current local
   deployment plus 1.9.8 for explicit historical plan reading. Requires PowerShell 7 and GPG;
