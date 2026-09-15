@@ -50,6 +50,13 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Chrome authenticated parity (`2026-09-15`, D2-012/D2-015): after the requested sign-in,
+explicit Refresh session and Refresh shared jobs with the same existing disposable account used
+in Edge, the owner reports no errors and **No shared jobs**. These UI sign-in/refresh/empty-history
+journeys now pass in both browsers. This does not establish token rotation/replay rejection,
+revocation, distinct-account isolation, offline delivery, restart durability or human screen-reader
+acceptance. No new job or account deletion was requested.
+
 Edge authenticated read check (`2026-09-15`, D2-012/D2-015): using another existing disposable
 account, the owner reports successful sign-in, successful explicit Refresh session, continued
 signed-in state and no error. Subsequent explicit Refresh shared jobs returns **No shared jobs**
@@ -3189,6 +3196,11 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Chrome authenticated parity accepted (`2026-09-15`): owner reports no errors and an empty shared
+history after the same-account Chrome sign-in/session-refresh/history-read sequence already passed
+in Edge. Retained only aggregate outcomes. Next check is keyboard/assistive-technology behavior;
+the remaining authentication/security matrix is not marked complete from these UI checks.
 
 Edge authenticated read accepted (`2026-09-15`): another existing disposable account signs in,
 explicitly refreshes its session and loads an empty owner history successfully. Recorded only

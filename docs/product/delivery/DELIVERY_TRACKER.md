@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 Chrome authenticated parity: the owner reports no errors and **No shared jobs**
+after the same disposable-account sign-in, session refresh and history read used in Edge. Those
+UI journeys pass in both browsers. Token rotation/replay, revocation, distinct-account/offline/
+restart and human accessibility acceptance remain separate; Phase 2 remains In progress.
+
 September 15 Edge authenticated follow-up: sign-in, explicit session refresh and explicit owner
 history read pass on another existing disposable account. History returns a successful empty
 result (**No shared jobs**), with no job submission. Current Chrome parity and deeper token,
