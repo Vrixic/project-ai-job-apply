@@ -50,6 +50,15 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Authenticated workload started (`2026-09-15`, D2-028/D2-069/D2-070/D2-071): the owner confirms
+the disposable account; source `6ac4a4f` returns a prepared exact scope after verified lifetime,
+fresh MFA and required scopes. The operator sends the matching digest and fixed processing
+confirmation once. Bounds remain one Mintlify contribution, one concurrent request, 192 maximum
+requests and twenty minutes, with exact owner withdrawal and both test-grant revocations; no
+publication, account deletion or reviewer decision is authorized. The runner reports started,
+not completed. Preserve encrypted recovery if ambiguous. Cloud aggregates and temporary API
+lifetime restoration to 600 seconds remain outstanding.
+
 Web-client scope correction (`2026-09-15`, D2-071/D2-028): owner confirms jobs:contribute
 was missing and has been added to ApplyDash Web Development's user-delegated access to the
 ai-job-apply-api development API. This addresses an observed configuration gap; fresh-token

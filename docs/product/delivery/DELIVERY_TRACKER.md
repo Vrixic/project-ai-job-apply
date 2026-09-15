@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 D2 workload sign-in succeeds: the owner confirms the disposable account and the
+helper returns a prepared scope. The exact reviewed single-contribution processing-to-review
+workload is now running, with publication and account deletion excluded. No success or cleanup
+claim is made before its result. Matching cloud metrics follow completion; temporary API lifetime
+restoration to 600 seconds remains outstanding.
+
 September 15 web-client grant correction: owner confirms jobs:contribute was missing and is
 now added to ApplyDash Web Development's user-delegated API access. This is owner-confirmed
 configuration, not fresh-token or workload evidence. Start a fresh disposable sign-in; preserve
