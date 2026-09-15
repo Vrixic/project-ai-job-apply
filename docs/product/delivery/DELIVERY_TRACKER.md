@@ -12,7 +12,9 @@ This is the master record for the delivery phases defined in the [product and sy
 September 15 keyboard finding: Chrome Tab navigation appears to stop after Inspect current tab.
 D2-068 addresses clipped section-header focus indicators and adds actual sequential Tab coverage;
 Edge/Chrome-for-Testing popup and side-panel checks, all 441 extension tests, the configured
-rebuild and full repository verifier pass. Installed owner keyboard confirmation remains pending.
+rebuild and full repository verifier pass. The owner now confirms installed Chrome keyboard
+access and activation after reload, completing D2-068. Human screen-reader acceptance and the
+remaining Phase 2 gates are separate.
 
 September 15 Chrome authenticated parity: the owner reports no errors and **No shared jobs**
 after the same disposable-account sign-in, session refresh and history read used in Edge. Those
