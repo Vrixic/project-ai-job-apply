@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 scope decision: the product owner explicitly defers manual screen-reader testing
+and removes it as a Phase 2/product-launch prerequisite. It is not passed evidence. Existing
+keyboard, focus, reflow and automated accessibility protections remain required and unchanged;
+independent store requirements and other release approvals are not waived by this decision.
+
 September 15 Edge keyboard follow-up: the owner confirms visible focus and keyboard activation
 of Refresh shared jobs after reload. The reported D2-068 route now passes in installed Chrome
 and Edge. Screen-reader review remains open; Phase 2 is still In progress.

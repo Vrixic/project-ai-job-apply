@@ -40,8 +40,11 @@ Every box applies independently to Chrome and Edge unless the evidence explicitl
   lasts no longer than its signed expiry, and web/catalog remain available.
 - [ ] Permission rationale, user-data form, privacy notice, subprocessor register, support/removal
   channels, screenshots, and listing copy match the exact binary and deployed endpoints.
-- [ ] Accessibility, keyboard/zoom/screen-reader, malicious-page, offline/restart, update, rollback,
+- [ ] Accessibility, keyboard/zoom, malicious-page, offline/restart, update, rollback,
   kill-switch, load/abuse, alert, and incident-response evidence passes.
+  Manual screen-reader testing is owner-deferred, not passed, under the September 15
+  [Phase 2 scope decision](../../../docs/product/delivery/phase-2-extension-and-community.md#task-register).
+  Independent store requirements are unchanged.
 - [ ] Product owner and accountable security/privacy/legal reviewers accept the exact candidate.
 - [ ] Chrome Web Store and Microsoft Edge Add-ons review approve the submitted candidate.
 

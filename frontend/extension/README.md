@@ -256,27 +256,24 @@ release candidate.
 
 ## Remaining activation gates
 
-- Hosted Ashby server/source activation and the earlier D2-060 configured rebuild are complete;
-  the user confirms description availability. D2-061 below owns the newly reported cutoff.
-  Complete full-preview/delivery and Processing/Trust/website acceptance on the observed
-  `jobs.ashbyhq.com` posting, not the unsupported custom careers page.
-  Representative fixtures and bounded API acquisition do not establish installed rendered capture,
-  delivery or publication. Existing reviewer powers are unchanged; this rollout authorizes no
-  Ashby Trust decision. Global Lever's supplied job is user-confirmed published/accepted, with
-  website detail/source acceptance still pending. Do not repeat its submission or decision.
-  EU Lever and custom domains remain excluded; no store or production activation is implied.
-- D2-061's full-description correction is development-deployed and the configured client is rebuilt.
-  Reload the extension, refresh the Ashby page, inspect it and expand Description; confirm that
-  Technology Stack and Benefits are present. Installed full-description acceptance remains open
-  under D2-035. No sign-out, queue clearing or resubmission is needed; already approved/acknowledged
-  contributions are not rewritten or automatically resubmitted.
-- Broader live lifecycle acceptance remains separate from the user's 2026-09-11 confirmation of
-  the reported Greenhouse job's published/accepted status and website search/detail/source display.
-  That completed journey should not be requested again.
-- Remaining installed Chrome/Edge Auth0 lifecycle, cancellation, rotation/replay, logout,
-  revocation and cross-account/offline/restart conformance; initial installed Edge login passes.
-- Accountable UGC, permission, privacy, security, accessibility, and store approval.
-- Final archive, malicious-page, offline/replay, deployed rollback, alert, and kill-switch evidence.
+The [Phase 2 remaining-input table](../../docs/product/delivery/phase-2-extension-and-community.md#remaining-acceptance-and-operator-inputs)
+owns current acceptance. Earlier release checkpoints above are historical, not instructions to
+repeat completed work.
+
+- Supplied Greenhouse, global-Lever and hosted-Ashby publication, website description and source
+  navigation are user-confirmed. Ashby's complete description is accepted. Do not repeat these
+  submissions, decisions or checks. EU Lever/custom domains and production/store remain excluded.
+- Chrome and Edge sign-in, cancellation, explicit session refresh, empty shared-history read and
+  the corrected keyboard route are user-confirmed on September 15. Deeper rotation/replay,
+  revocation, cross-account and offline/restart acceptance remains separate.
+- Fresh nonempty disposable export/deletion is complete under D2-020, including the private-capture
+  compatibility API. Do not recreate or reuse the deleted test account.
+- Nonempty takedown/human appeal, bounded authenticated load/abuse and final alarm-recipient
+  acceptance remain. Existing reviewer separation and exact provider scope are unchanged.
+- Monitored support contact, exact store candidate/screenshots and accountable release/store
+  approval remain. The owner deferred manual screen-reader testing on September 15; retain
+  keyboard/reflow/semantic protections and automated accessibility coverage without claiming that
+  unperformed test passed or waiving independent store requirements.
 
 Synthetic detector unit tests prove only local invariants. They are not provider evidence and do
 not make the extension live-ready or store-ready.
