@@ -9,11 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
-September 14 D2-020 follow-up: disposable sign-in and explicit account confirmation now succeed.
-One independently reviewed execution validates an export but stops at `d2_coverage_missing`
-before grant waiting, identity refresh or any deletion request. The account remains intact and the
-export retains its configured expiry. Missing categories were discarded by the reporting bridge;
-do not infer private-capture absence or repeat a save. Phase 2 remains In progress. See the
+September 14 D2-020 follow-up: the subsequent fresh confirmed-account run identifies exactly
+`privateCaptureCount` as missing; the other five D2 categories are nonempty. This resolves the
+earlier private-save ambiguity as of the validated export. Both reviewed runs stopped before any
+deletion request; the account remains intact and exports retain configured expiry. Prepare one
+title-only private capture on that same disposable owner, then obtain fresh MFA and a new plan.
+Do not add another public contribution or replay old queues. Phase 2 remains In progress. See the
 [Phase 2 task register](phase-2-extension-and-community.md#task-register).
 
 | ID | Delivery | Status | Start | Completion | Living task document |

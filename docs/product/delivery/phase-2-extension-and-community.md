@@ -50,6 +50,19 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Current D2-020 blocker (`2026-09-14`, 23:04 Eastern): the same disposable account is freshly
+confirmed under source `f0df930`. Plan
+`a145f2d60d8c46760004b64fb06fcc2fd989c41ee7e00d8991af8ee084540f0d` passes independent review
+against unchanged state `343`, exact policy/aliases, backups and health. One Execute returns
+`d2_coverage_missing` with exactly `privateCaptureCount`. This validated export establishes zero
+private captures and nonempty consent, contribution approval, contribution, Trust case and Trust
+event categories; exact positive counts are not emitted. It resolves the earlier save ambiguity
+as of this export. No deletion request, grant-expiry wait or identity refresh ran. The account
+remains intact; the export retains configured expiry. Prepare one title-only private capture on
+the same disposable owner through the existing extension compatibility action, with fresh exact
+current-page inspection. Do not add another public contribution, replay old queue items or clear
+storage. Fresh MFA and a new reviewed lifecycle remain necessary after preparation.
+
 Latest D2-020 checkpoint (`2026-09-14`): after cancellation of the wrong-account session, the
 user completes fresh sign-in and privately confirms the disposable account/permanent-deletion
 scope. The maintained helper reports `disposable-account-confirmed` with no token retention.
