@@ -9,6 +9,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 latest D2-020 outcome: the fresh nonempty disposable lifecycle completes without
+recovery at state `343`. One export includes consent/approval/contribution/private capture/Trust
+case/event counts `1/1/1/1/1/2`; expiry, cancellation, final MFA confirmation, seven-owner deletion
+and Auth0 reconciliation pass. Receipt `1f3510394bed41f0378bbe47cf6fdbf35805e9c3aa3e24b4ef77c435cee157ed`
+records zero persistent test identities, ten empty queues, 57 healthy alarms and zero compute.
+Do not repeat the private save or rights lifecycle. Other browser, human review, workload,
+notification and accountable-release gates remain; Phase 2 is not complete. Details are in the
+[Phase 2 task register](phase-2-extension-and-community.md#task-register).
+
 September 15 D2-020: installed title-only private-save returns success with an empty queue.
 The fresh same-disposable-account plan passes independent review at unchanged state `343`;
 one execution closes with `identity_not_fresh`, not a lifecycle receipt. Final deletion confirmation
