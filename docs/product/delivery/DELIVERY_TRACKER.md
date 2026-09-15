@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 temporary identity-setting cleanup: owner confirms the development API access-token
+lifetime is restored from 1,800 to 600 seconds after successful workload cleanup. This is
+owner-confirmed configuration restoration; no new token was requested to inspect its lifetime.
+Matching CloudWatch corroboration remains pending metric publication.
+
 September 15 authenticated D2 workload passes: one contribution, one owner read, one replay,
 one expected conflict, one withdrawal and two grant revocations; cleanup succeeds with zero
 server failures/ambiguous writes and no recovery required. The exact 19:26:42.824–19:35:46.960Z

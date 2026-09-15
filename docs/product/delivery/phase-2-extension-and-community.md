@@ -50,6 +50,12 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Temporary API setting restored (`2026-09-15`, D2-028): owner confirms Maximum Access Token
+Lifetime for development ai-job-apply-api is restored to 600 seconds after the successful run
+and cleanup. ID-token, implicit-flow and production settings were outside the requested change.
+Restoration is owner-confirmed, not independently checked through another token request. No
+active workload/helper remains. Matching cloud metric corroboration is pending publication.
+
 Authenticated processing workload passed (`2026-09-15`, D2-028): the exact single execution
 from `6ac4a4f` reports successful processing-to-review and cleanup, one contribution/replay/conflict/
 withdrawal, two grants and revocations, zero server failures/ambiguous writes, and no recovery.
