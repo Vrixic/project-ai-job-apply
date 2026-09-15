@@ -12,8 +12,9 @@ This is the master record for the delivery phases defined in the [product and sy
 September 15 Chrome check: owner sign-out, local preview/contribution-list clearing and remaining
 signed out after cancelling Auth0 pass. Misleading `History unavailable` wording is corrected
 under D2-067 using actual session/history readiness; all 440 extension tests, independent review,
-configured rebuild and full repository verifier pass. Installed corrected wording awaits reload
-and cancellation only. This is not token-rotation/revocation or cross-browser completion.
+configured rebuild and full repository verifier pass. The owner confirms **Sign in required**
+after Chrome reload/cancellation, completing D2-067. This is not token-rotation/revocation or
+cross-browser completion.
 
 September 15 latest D2-020 outcome: the fresh nonempty disposable lifecycle completes without
 recovery at state `343`. One export includes consent/approval/contribution/private capture/Trust

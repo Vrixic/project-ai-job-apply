@@ -50,6 +50,11 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+D2-067 installed acceptance (`2026-09-15`): after the requested Chrome reload and cancelled
+sign-in, the owner confirms **Sign in required**. The misleading-history correction is Complete
+at source `121e4fb`; do not repeat the Chrome wording check. Broader D2-012/D2-015 browser,
+token lifecycle and accessibility requirements remain separate.
+
 Chrome manual lifecycle check (`2026-09-15`, D2-012/D2-015): the owner confirms Sign out,
 cleared prior preview/contribution entries, and continued signed-out state after closing sign-in.
 Browser is Chrome; its exact version is not supplied. The resulting `History unavailable` label
@@ -850,7 +855,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-064 | Refuse redirects in the backward-compatible private saved-page transport before disposable rights preparation. | Complete | Platform engineering; QA/automation | D2-018; D2-020 | Completed 2026-09-14 for source/local build. Private POST now uses redirect error, matching contribution/consent requests. The exact-destination/stable-key/no-acknowledgement/no-payload-rewrite/fixed-error regression passes; 17 focused and all 369 extension tests plus typecheck pass. Configured build `2da6a7` preserves public settings and manifest. Browser reload/private-capture execution remain D2-020; no new UI, scope, contract, backend release or account mutation. |
 | D2-065 | Add the approved Mintlify development verification board and recover the existing disposable submission. | Complete | Platform engineering; QA/automation | D2-016; D2-020; D2-035 | Completed 2026-09-14 for the scoped deployment/recovery and owner readback. Mapper/registry f12c289 verified at state 341; one inspected hold was requeued once. After history recovery the owner confirms awaiting trust / needs review, then the authorized test withdrawal returns Trust withdrawn (Processing still awaiting trust). No resubmission, all-board activation, reviewer decision, publication or store expansion. Fresh rights acceptance remains D2-020. |
 | D2-066 | Recover account-owned shared-job history after local receipts are cleared and distinguish loading/authentication errors from empty results. | Complete | Platform engineering; client engineering; QA/automation | D2-005; D2-015; D2-065 | Completed 2026-09-14: full repository checks, configured rebuild and plain/Drizzle PostgreSQL integration pass. Gateway/route source1293 deploys once; final state343 verifies Gateway67/scheduled29/Trust22 and zero meaningful changes after separately reviewed metadata-only synchronization. The user confirms existing contributions appear after explicit Refresh shared jobs. No automatic loading/polling, logout-purge weakening, account mixing, resubmission or reviewer/provider change. |
-| D2-067 | Show actual signed-out history readiness after cancelled sign-in instead of a storage failure. | In progress | Client engineering; QA/automation | D2-012; D2-015; D2-066 | Chrome owner clearing/cancellation behavior passes but displays History unavailable. Failed login now reads the existing fenced session/history snapshot rather than interpreting browser-specific errors as storage failure. Signed-out state becomes Sign in required; true storage errors remain distinct, current-owner receipts remain fenced and logout wins late responses. Five new background cases pass in the 66-test suite; popup regression passes in 20 tests. All 440 extension tests, typecheck, independent review, configured rebuild and full repository verifier pass (20 builds, 19 cached). Installed wording acceptance remains pending. No API, permissions, session mutation, provider or deployment change. |
+| D2-067 | Show actual signed-out history readiness after cancelled sign-in instead of a storage failure. | Complete | Client engineering; QA/automation | D2-012; D2-015; D2-066 | Chrome owner clearing/cancellation behavior passes but displays History unavailable. Failed login now reads the existing fenced session/history snapshot rather than interpreting browser-specific errors as storage failure. Signed-out state becomes Sign in required; true storage errors remain distinct, current-owner receipts remain fenced and logout wins late responses. Five new background cases pass in the 66-test suite; popup regression passes in 20 tests. All 440 extension tests, typecheck, independent review, configured rebuild and full repository verifier pass (20 builds, 19 cached). On 2026-09-15 the owner confirms Sign in required after reloading source121e4fb and cancelling sign-in in Chrome, completing installed wording acceptance. No API, permissions, session mutation, provider or deployment change. |
 
 ### D2-063 — Web crawler build input
 
@@ -3169,6 +3174,10 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Installed wording accepted (`2026-09-15`, D2-067): owner reports **Sign in required** following
+the requested Chrome reload and cancellation check for rebuilt `121e4fb`. Marked D2-067 Complete
+and synchronized the master summary. No new account, contribution, export/deletion or deployment.
 
 Chrome cancellation follow-up (`2026-09-15`): owner confirms signed-out state, local preview/list
 clearing and continued signed-out state after cancelling Auth0, but reports `History unavailable`.
