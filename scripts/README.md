@@ -29,6 +29,10 @@ both AWS environments accepted the steady-state serverless runtime.
   form token; an earlier unbound page request cannot permanently block the human browser.
   Once Sign in is pressed, keep the same browser and cookies through callback and confirmation.
   Missing/mismatched cookies during an active sign-in require a fresh helper session, not a bypass.
+  Failed exchanges report fixed diagnostic categories for transport, response, signature
+  verification, claims, lifetime, MFA and scopes. The operator receives the same safe category
+  and a bounded closure reason. Never request tokens, full callback URLs or provider error bodies
+  to diagnose a failed sign-in; no workload is dispatched by the sign-in step.
 
 - `install-terraform-toolchain.ps1` — Installs isolated Windows Terraform 1.16.2 for current local
   deployment plus 1.9.8 for explicit historical plan reading. Requires PowerShell 7 and GPG;

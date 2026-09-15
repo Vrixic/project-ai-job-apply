@@ -22,6 +22,55 @@ const refreshToken = "SYNTHETIC_REFRESH_TOKEN_NEVER_RENDER";
 const subject = "auth0|synthetic-disposable-only";
 const owner = "Synthetic test owner";
 const failure = "Candidate rights sign-in could not be completed. Start a fresh session.";
+
+for (const [name, overrides, expected] of [
+  [
+    "transport",
+    {
+      fetchResponse: () => {
+        throw new Error("PRIVATE_PROVIDER_DETAIL");
+      },
+    },
+    "token_transport_failed",
+  ],
+  [
+    "response",
+    { fetchResponse: () => new Response("PRIVATE_PROVIDER_DETAIL", { status: 503 }) },
+    "token_response_rejected",
+  ],
+  [
+    "verification",
+    {
+      options: {
+        verifyTokens: () => {
+          throw new Error("PRIVATE_PROVIDER_DETAIL");
+        },
+      },
+    },
+    "token_verification_failed",
+  ],
+  [
+    "deadline",
+    { fetchResponse: () => new Promise(() => {}), options: { tokenTimeoutMs: 25 } },
+    "token_exchange_timeout",
+  ],
+]) {
+  test(`callback ${name} exposes only a fixed diagnostic to browser and operator`, async (t) => {
+    const diagnostics = [];
+    const f = await fixture(t, {
+      ...overrides,
+      options: { ...overrides.options, onDiagnostic: (code) => diagnostics.push(code) },
+    });
+    await f.authorize();
+    const response = await f.callback();
+    assert.equal(response.status, 400);
+    assert.match(response.body, new RegExp(`Diagnostic: ${expected}`, "u"));
+    assert.doesNotMatch(response.body, /PRIVATE_PROVIDER_DETAIL|SYNTHETIC/u);
+    assert.deepEqual(diagnostics, [expected]);
+    assert.equal(f.results.length, 0);
+    assert.deepEqual(await f.session.closed, { reason: "failed" });
+  });
+}
 const syntheticEnvironment = [
   "AUTH0_DOMAIN=candidate-session.example.test",
   `AUTH0_AUDIENCE=${audience}`,

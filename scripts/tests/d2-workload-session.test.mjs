@@ -60,8 +60,10 @@ async function fixture(t, mutate = () => {}) {
   let authorization;
   let claims;
   let confirmed;
+  const diagnostics = [];
   const session = await startD2WorkloadSession({
     ...config,
+    onDiagnostic: (code) => diagnostics.push(code),
     fetchImpl: async (_url, options) => {
       const form = new URLSearchParams(options.body);
       assert.equal(form.get("redirect_uri"), "http://localhost:3000/auth/callback");
@@ -129,6 +131,7 @@ async function fixture(t, mutate = () => {}) {
   authorization = new URL(redirect.headers.location);
   return {
     session,
+    diagnostics,
     initial,
     cookie,
     authorization,
@@ -228,7 +231,20 @@ for (const [name, mutate] of Object.entries({
 })) {
   test(`D2 rejects ${name} before confirming`, async (t) => {
     const f = await fixture(t, mutate);
-    assert.equal((await f.callback()).status, 400);
+    const result = await f.callback();
+    assert.equal(result.status, 400);
+    const expected = name.startsWith("short")
+      ? "token_lifetime_insufficient"
+      : name === "missingMfa"
+        ? "token_mfa_rejected"
+        : name === "unexpectedRefresh"
+          ? "token_response_rejected"
+          : name.startsWith("wrong")
+            ? "token_claims_rejected"
+            : "token_scopes_rejected";
+    assert.match(result.body, new RegExp(`Diagnostic: ${expected}`, "u"));
+    assert.deepEqual(f.diagnostics, [expected]);
+    assert.doesNotMatch(result.body, /SYNTHETIC|auth0\|synthetic-workload/u);
     assert.equal(f.confirmed, undefined);
     await f.session.closed;
   });

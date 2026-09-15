@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseEnv } from "node:util";
 import {
   parseCandidateRightsEnvironment,
+  safeSessionDiagnostic,
   startD2WorkloadSession,
 } from "./lib/candidate-rights-session.mjs";
 import {
@@ -12,6 +13,22 @@ import {
   D2_WORKLOAD_TITLE,
   PROCESSING_CONFIRMATION,
 } from "./lib/d2-workload-session-operator.mjs";
+
+export function d2SignInDiagnostic(value) {
+  return {
+    outcome: "workload-sign-in-request-rejected",
+    diagnostic: safeSessionDiagnostic(value),
+    candidateDataChanged: false,
+  };
+}
+export function d2SignInClosed(reason) {
+  return {
+    outcome: "workload-sign-in-closed",
+    reason: ["confirmed", "cancelled", "timeout", "failed", "closed"].includes(reason)
+      ? reason
+      : "closed",
+  };
+}
 
 export function parseD2WorkloadCommand(line) {
   if (typeof line !== "string" || Buffer.byteLength(line, "utf8") > 1024)
@@ -96,8 +113,8 @@ async function main() {
     );
     session = await startD2WorkloadSession({
       ...configuration,
-      onDiagnostic() {
-        report({ outcome: "workload-sign-in-request-rejected", candidateDataChanged: false });
+      onDiagnostic(diagnostic) {
+        report(d2SignInDiagnostic(diagnostic));
       },
       onConfirmed(identity) {
         if (closing || operator) throw new Error("session_already_bound");
@@ -129,6 +146,7 @@ async function main() {
         }, 4 * 60_000);
       },
       onClosed({ reason }) {
+        report(d2SignInClosed(reason));
         if (reason !== "confirmed") void close();
       },
     });

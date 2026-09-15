@@ -31,7 +31,19 @@ const REQUEST_DIAGNOSTICS = new Set([
   "root_cookie_missing",
   "root_cookie_mismatch",
   "unexpected_local_error",
+  "token_transport_failed",
+  "token_response_rejected",
+  "token_verification_failed",
+  "token_claims_rejected",
+  "token_lifetime_insufficient",
+  "token_mfa_rejected",
+  "token_scopes_rejected",
+  "token_exchange_timeout",
 ]);
+
+export function safeSessionDiagnostic(value) {
+  return REQUEST_DIAGNOSTICS.has(value) ? value : "request_rejected";
+}
 
 export class CandidateRightsSessionError extends Error {
   constructor(diagnostic = "request_rejected") {
@@ -163,6 +175,32 @@ function validateVerifiedTokens(tokens, verified, expected, profile) {
   const apiAudiences = Array.isArray(access.aud) ? access.aud : [access.aud];
   const idAudiences = Array.isArray(id.aud) ? id.aud : [id.aud];
   if (
+    !Number.isSafeInteger(access.exp) ||
+    !Number.isSafeInteger(id.exp) ||
+    access.exp <= now + profile.minimumLifetimeSeconds ||
+    id.exp <= now + profile.minimumLifetimeSeconds
+  )
+    reject("token_lifetime_insufficient");
+  if (
+    !Number.isSafeInteger(id.auth_time) ||
+    id.auth_time > now ||
+    id.auth_time < Math.floor(expected.startedAt / 1000) - 5 ||
+    now - id.auth_time > 900 ||
+    idProof.authenticatedAt !== id.auth_time ||
+    !Array.isArray(id.amr) ||
+    !id.amr.includes("mfa") ||
+    !idProof.authenticationMethods?.includes("mfa")
+  )
+    reject("token_mfa_rejected");
+  if (
+    !Array.isArray(accessPrincipal.scopes) ||
+    !accessPrincipal.scopes.includes("profile:write") ||
+    accessPrincipal.scopes.some((scope) => !profile.scopes.split(" ").includes(scope)) ||
+    typeof access.scope !== "string" ||
+    !access.scope.split(" ").includes("profile:write")
+  )
+    reject("token_scopes_rejected");
+  if (
     typeof subject !== "string" ||
     subject.length === 0 ||
     subject.length > 256 ||
@@ -211,7 +249,7 @@ function validateVerifiedTokens(tokens, verified, expected, profile) {
       ) ||
       scopes.some((scope) => !profile.scopes.split(" ").includes(scope))
     )
-      reject();
+      reject("token_scopes_rejected");
   }
   // The label is shown only in the no-store local confirmation response; it is never logged.
   const label =
@@ -487,6 +525,7 @@ async function startSession(options, profile) {
     const tokenAbort = new AbortController();
     const signal = AbortSignal.any([cancellation.signal, tokenAbort.signal]);
     const timer = setTimeout(() => tokenAbort.abort(), tokenTimeoutMs);
+    let diagnostic = "token_transport_failed";
     try {
       const response = await abortable(
         fetchImpl(new URL("oauth/token", issuer), {
@@ -508,6 +547,7 @@ async function startSession(options, profile) {
         }),
         signal,
       );
+      diagnostic = "token_response_rejected";
       if (
         response.status !== 200 ||
         response.redirected ||
@@ -518,6 +558,7 @@ async function startSession(options, profile) {
         await readBounded(response.body, CANDIDATE_RIGHTS_TOKEN_MAXIMUM_BYTES, signal),
         profile,
       );
+      diagnostic = "token_verification_failed";
       const verified = await abortable(
         verifyTokens({
           issuer,
@@ -529,6 +570,7 @@ async function startSession(options, profile) {
         signal,
       );
       if (signal.aborted || !secrets || phase !== "exchanging") reject();
+      diagnostic = "token_claims_rejected";
       return validateVerifiedTokens(
         tokens,
         verified,
@@ -540,6 +582,15 @@ async function startSession(options, profile) {
           startedAt,
         },
         profile,
+      );
+    } catch (error) {
+      const specific = error instanceof CandidateRightsSessionError ? error.diagnostic : undefined;
+      reject(
+        tokenAbort.signal.aborted
+          ? "token_exchange_timeout"
+          : specific && specific !== "request_rejected"
+            ? specific
+            : diagnostic,
       );
     } finally {
       tokenAbort.abort();
@@ -662,12 +713,23 @@ async function startSession(options, profile) {
         secrets.clientSecret = "";
         secrets.csrf = randomBytes(32).toString("base64url");
         writeResponse(response, 303, "", { Location: "/" });
-      } catch {
+      } catch (error) {
         phase = "failed";
         pending = undefined;
-        writeResponse(response, 400, page(`<p>${errorMessage}</p>`), {
-          "Set-Cookie": transactionCookie("", 0),
-        });
+        const diagnostic = safeSessionDiagnostic(
+          error instanceof CandidateRightsSessionError ? error.diagnostic : undefined,
+        );
+        void Promise.resolve()
+          .then(() => onDiagnostic?.(diagnostic))
+          .catch(() => {});
+        writeResponse(
+          response,
+          400,
+          page(`<p>${errorMessage}</p><p>Diagnostic: ${diagnostic}</p>`),
+          {
+            "Set-Cookie": transactionCookie("", 0),
+          },
+        );
         response.once("finish", () => {
           void close("failed");
         });

@@ -2,9 +2,31 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  d2SignInClosed,
+  d2SignInDiagnostic,
   parseD2WorkloadCommand,
   parseD2WorkloadPublicSettings,
 } from "../start-development-d2-workload-session.mjs";
+
+test("sign-in diagnostic and closure output retain only fixed allowlisted values", () => {
+  assert.equal(
+    d2SignInDiagnostic("token_lifetime_insufficient").diagnostic,
+    "token_lifetime_insufficient",
+  );
+  for (const value of ["private-token-example", { token: "private" }, null, "toString"]) {
+    assert.deepEqual(d2SignInDiagnostic(value), {
+      outcome: "workload-sign-in-request-rejected",
+      diagnostic: "request_rejected",
+      candidateDataChanged: false,
+    });
+    assert.deepEqual(d2SignInClosed(value), {
+      outcome: "workload-sign-in-closed",
+      reason: "closed",
+    });
+  }
+  for (const reason of ["confirmed", "cancelled", "timeout", "failed", "closed"])
+    assert.equal(d2SignInClosed(reason).reason, reason);
+});
 
 const confirmation = "RUN-D2-DISPOSABLE-PROCESSING-TO-REVIEW-V1";
 test("workload stdin accepts only exact reviewed execution or cancellation", () => {

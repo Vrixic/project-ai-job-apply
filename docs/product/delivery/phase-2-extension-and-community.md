@@ -50,6 +50,13 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Sign-in follow-up (`2026-09-15`, D2-071): the fresh helper on `f70d3ae` returns the generic
+D2 failure page without a diagnostic, and its process exits without a request-rejection log.
+This page is emitted by the callback exchange/validation catch; the actual failed check is
+unknown. Add fixed transport/token/verified-claim diagnostics without raw provider messages,
+tokens, account identifiers or URLs. Do not weaken checks or claim another cookie failure.
+No reviewed workload execution or candidate-data mutation occurred.
+
 Local sign-in finding (`2026-09-15`, D2-070): owner reports `root_cookie_missing` on the
 D2 workload helper. Source binds the first unauthenticated root GET, so a later missing cookie
 cannot recover even before authorization. The actual first request's origin is not established;
@@ -927,6 +934,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-068 | Make keyboard focus visible through clipped queue/shared-job disclosures and verify sequential Tab access. | Complete | Client engineering; QA/automation | D2-015; D2-023; D2-067 | Owner reports navigation stops visibly after Inspect. Summary focus outline is outside an overflow-clipped card; inset ring preserves native details semantics. Source regression and actual Edge/Chrome-for-Testing matrix pass: Tab/Shift+Tab and Enter/Space reach queue/shared-job headers and Refresh shared jobs in both popup and side panel. An eight-pixel scroll margin prevents viewport clipping. Old-style negative controls detect the regression; both browsers have zero axe violations. All 441 extension tests, configured rebuild and full repository verifier pass. Owner confirms installed Chrome keyboard reachability and activation after reload on 2026-09-15 at source 14dc339. No positive tabindex, permissions or data/API changes. |
 | D2-069 | Provide a purpose-bound local sign-in and recoverable single-execution handoff for the approved disposable workload. | Complete | Platform engineering; QA/automation | D2-028; D2-020 | Completed 2026-09-15 for source/local operation readiness: separate fixed D2 scopes and Mintlify title/source, same-browser verified confirmation, no refresh token/deletion operation, exact scope review and one-shot execution. CurrentUser DPAPI plus protected ACLs preserve token-free recovery before dispatch; verified cleanup marks completion without overwriting scope. Credentials clear on close; no automatic recovery/re-execution. Independent review, 87 session/operator/recovery tests (including real Windows encryption), full repository verifier and 20 builds pass. Actual sign-in/workload and matching deployed aggregates remain D2-028; no live workload or account mutation has occurred. |
 | D2-070 | Recover a missing pre-authorization local cookie without rebinding an active sign-in. | In progress | Platform engineering; QA/automation | D2-069 | Source fix and local verification complete 2026-09-15: ready-only cookie/CSRF rotation replaces eager first-GET binding; stale forms and mismatched in-flight cookies remain refused. Independent review, 65 focused shared rights/D2 tests and the full repository verifier pass, including 20 builds (19 cached). Fresh human sign-in acceptance remains pending. No workload was dispatched from the failed session. |
+| D2-071 | Diagnose local workload token-exchange and validation failures without exposing credentials or weakening authentication. | In progress | Platform engineering; QA/automation | D2-069; D2-070 | Started 2026-09-15 after the fresh helper returned a generic callback failure. Fixed reason codes and operator closure reporting are implemented; independent review, all 94 session/operator/recovery tests and full repository verification pass (34 test tasks, 20 builds). Actual live failure cause remains unknown until fresh sign-in. No workload was dispatched. |
 
 ### D2-063 — Web crawler build input
 
@@ -3245,6 +3253,17 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Workload sign-in diagnostics implemented (`2026-09-15`, D2-071): the
+[shared helper](../../../scripts/lib/candidate-rights-session.mjs) now reports fixed categories
+for exchange transport, response, signature verification, claims, lifetime, MFA, scopes and timeout.
+The [launcher](../../../scripts/start-development-d2-workload-session.mjs) sanitizes diagnostics
+and closure reasons again. Raw exceptions, provider responses, callback URLs and tokens are never
+reflected. Existing validation, scopes, lifetime and MFA requirements remain unchanged. Independent
+review, 94 session/operator/recovery tests, 1,175 existing local Markdown file links and the complete
+repository verifier pass (34 test tasks and 20 builds; opt-in integrations remain separate).
+The previous generic failure does not establish a missing grant or insufficient lifetime. The next
+fresh human sign-in will supply the safe diagnostic if it fails; no workload has been dispatched.
 
 Pre-authorization cookie recovery corrected (`2026-09-15`, D2-070): the shared local helper
 can issue fresh cookie/form credentials while ready, so an earlier unbound landing-page request
