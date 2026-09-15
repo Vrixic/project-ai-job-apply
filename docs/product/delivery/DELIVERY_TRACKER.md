@@ -9,6 +9,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 fresh sign-in now passes token lifetime and fresh-MFA checks, then reports
+`token_scopes_rejected` in both owner and operator output. Required API scopes are jobs:read,
+jobs:contribute and profile:write; unexpected returned scopes also reject. The helper uses the
+candidate web application, not the extension client. Inspect that application's user-delegated
+grant before retrying; preserve existing permissions and do not add reviewer/M2M authority.
+No workload ran. Temporary API lifetime restoration remains outstanding.
+
 September 15 clock-sync follow-up: owner confirms Windows Sync now. Three read-only NTP samples
 now measure approximately 4–10 milliseconds offset, versus 1.28 seconds before. This removes the
 observed offset, not proof of a successful sign-in. All 99 session/operator/recovery tests and

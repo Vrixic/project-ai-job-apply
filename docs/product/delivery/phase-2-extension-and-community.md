@@ -50,6 +50,15 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Scope finding after clock correction (`2026-09-15`, D2-071/D2-028): source `bf2562d` passes
+lifetime and fresh-MFA checks but returns `token_scopes_rejected`, confirmed by owner and operator.
+The helper uses the existing candidate web client and requires jobs:read, jobs:contribute and
+profile:write; unrequested scopes also reject. The actual missing/extra scope is not retained.
+Next inspect the web client's user-delegated API grant; retain existing legitimate permissions,
+do not enable all permissions or add reviewer/M2M access, and investigate user RBAC/Actions only
+if the application grant already contains the required scopes. No workload ran; the helper closed.
+Temporary development API lifetime restoration to 600 seconds remains due.
+
 Clock-sync follow-up (`2026-09-15`, D2-071/D2-028): owner confirms Windows Sync now.
 Three subsequent read-only NTP samples measure approximately 4–10 milliseconds offset, removing
 the observed 1.28-second drift. The time-service status query reports not started, so ongoing
