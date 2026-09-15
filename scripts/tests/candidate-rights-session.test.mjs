@@ -293,6 +293,7 @@ test("requested scopes exactly match the candidate web source, without contribut
 test("local rejection diagnostics identify root binding without reflecting private input", async (t) => {
   const diagnostics = [];
   const f = await fixture(t, { options: { onDiagnostic: (code) => diagnostics.push(code) } });
+  await f.authorize();
   for (const [options, code] of [
     [{}, "root_cookie_missing"],
     [{ cookie: `candidate_rights_operator_transaction=${clientSecret}` }, "root_cookie_mismatch"],
@@ -308,6 +309,55 @@ test("local rejection diagnostics identify root binding without reflecting priva
   assert.equal(f.requests.length, 0);
   assert.equal(f.results.length, 0);
   assert.equal((await f.call("/", { cookie: f.cookie })).status, 200);
+});
+
+test("ready root rebinds a new browser, rotates old form credentials and preserves same-browser reload", async (t) => {
+  const f = await fixture(t);
+  const replacement = await f.call("/");
+  assert.equal(replacement.status, 200);
+  const replacementCookie = replacement.headers["set-cookie"][0].split(";")[0];
+  assert.notEqual(replacementCookie, f.cookie);
+  assert.notEqual(csrf(replacement), csrf(f.initial));
+  const reload = await f.call("/", { cookie: replacementCookie });
+  assert.equal(csrf(reload), csrf(replacement));
+  assert.equal(reload.headers["set-cookie"][0].split(";")[0], replacementCookie);
+  for (const [cookie, formToken] of [
+    [f.cookie, csrf(f.initial)],
+    [replacementCookie, csrf(f.initial)],
+  ]) {
+    assert.equal(
+      (
+        await f.call("/authorize", {
+          method: "POST",
+          cookie,
+          origin: CANDIDATE_RIGHTS_SESSION_ORIGIN,
+          form: { csrf: formToken },
+        })
+      ).status,
+      400,
+    );
+  }
+  const mismatch = await f.call("/", { cookie: "candidate_rights_operator_transaction=stale" });
+  assert.equal(mismatch.status, 200);
+  const latestCookie = mismatch.headers["set-cookie"][0].split(";")[0];
+  assert.notEqual(latestCookie, replacementCookie);
+  assert.notEqual(csrf(mismatch), csrf(replacement));
+  assert.equal(
+    (
+      await f.call("/authorize", {
+        method: "POST",
+        cookie: latestCookie,
+        origin: CANDIDATE_RIGHTS_SESSION_ORIGIN,
+        form: { csrf: csrf(mismatch) },
+      })
+    ).status,
+    303,
+  );
+  assert.equal((await f.call("/")).status, 400);
+  assert.equal((await f.call("/", { cookie: replacementCookie })).status, 400);
+  assert.equal((await f.call("/", { cookie: latestCookie })).status, 200);
+  assert.equal(f.requests.length, 0);
+  assert.equal(f.results.length, 0);
 });
 
 test("normal S256 OAuth code exchange resolves only after same-browser explicit disposable confirmation", async (t) => {
@@ -416,10 +466,10 @@ test("form pages preserve same-origin POSTs while null origins still fail closed
 
 test("no confirmation before sign-in, from another origin/browser, or with a stale/missing CSRF", async (t) => {
   const f = await fixture(t);
-  assert.equal((await f.call("/")).status, 400);
   assert.equal((await f.call("/", { cookie: f.cookie })).status, 200);
   assert.equal((await f.confirm(f.initial)).status, 400);
   const preview = await f.ready();
+  assert.equal((await f.call("/")).status, 400);
   const form = { csrf: csrf(preview), authorizedOwner: owner, disposable: "yes" };
   for (const opts of [
     {},

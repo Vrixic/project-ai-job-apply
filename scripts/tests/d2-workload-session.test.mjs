@@ -265,3 +265,29 @@ test("D2 rechecks the 25-minute token budget at human confirmation", async (t) =
     Date.now = originalNow;
   }
 });
+
+test("D2 initial probe can hand off to the human browser only before authorization", async (t) => {
+  const session = await startD2WorkloadSession(config);
+  t.after(() => session.close());
+  const probe = await http("/");
+  const probeCookie = probe.headers["set-cookie"][0].split(";")[0];
+  const human = await http("/");
+  const humanCookie = human.headers["set-cookie"][0].split(";")[0];
+  assert.equal(human.status, 200);
+  assert.notEqual(humanCookie, probeCookie);
+  assert.notEqual(csrf(human), csrf(probe));
+  const reload = await http("/", humanCookie);
+  assert.equal(csrf(reload), csrf(human));
+  assert.equal(reload.headers["set-cookie"][0].split(";")[0], humanCookie);
+  assert.equal((await http("/authorize", probeCookie, { csrf: csrf(probe) })).status, 400);
+  assert.equal((await http("/authorize", humanCookie, { csrf: csrf(probe) })).status, 400);
+  assert.equal((await http("/authorize", humanCookie, { csrf: csrf(human) })).status, 303);
+  const absent = await http("/");
+  assert.equal(absent.status, 400);
+  assert.match(absent.body, /root_cookie_missing/u);
+  assert.equal(absent.headers["set-cookie"], undefined);
+  const mismatch = await http("/", probeCookie);
+  assert.equal(mismatch.status, 400);
+  assert.match(mismatch.body, /root_cookie_mismatch/u);
+  assert.equal((await http("/", humanCookie)).status, 200);
+});

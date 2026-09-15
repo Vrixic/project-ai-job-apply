@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 local sign-in finding: `root_cookie_missing` prevents opening the D2 helper.
+D2-070 corrects premature binding on the first unauthenticated page GET, while preserving strict
+cookie/CSRF/state checks after authorization starts. Independent review, focused regressions and
+the full repository verifier pass. No workload was dispatched; fresh local sign-in remains pending.
+
 September 15 D2 workload preparation: the owner authorizes one disposable Mintlify contribution,
 withdrawal and cleanup, not publication or account deletion. D2-069 adds a separate memory-only
 sign-in/operator handoff so tokens need not be copied. Implementation, independent review,

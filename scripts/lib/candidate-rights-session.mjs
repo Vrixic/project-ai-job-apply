@@ -410,7 +410,6 @@ async function startSession(options, profile) {
   const verifyTokens = options.verifyTokens ?? defaultTokenVerifier;
   const startedAt = Date.now();
   let phase = "ready";
-  let browserBound = false;
   let secrets = {
     clientSecret: options.clientSecret,
     cookie: randomBytes(32).toString("base64url"),
@@ -573,10 +572,11 @@ async function startSession(options, profile) {
       return;
     }
     if (request.method === "GET" && url.pathname === "/" && !url.search) {
-      if (browserBound && !equalSecret(cookieValue(request), secrets.cookie))
-        reject(cookieValue(request) === undefined ? "root_cookie_missing" : "root_cookie_mismatch");
       if (phase !== "ready") {
-        if (!equalSecret(cookieValue(request), secrets.cookie)) reject();
+        if (!equalSecret(cookieValue(request), secrets.cookie))
+          reject(
+            cookieValue(request) === undefined ? "root_cookie_missing" : "root_cookie_mismatch",
+          );
         if (phase === "confirm") {
           writeResponse(
             response,
@@ -597,7 +597,13 @@ async function startSession(options, profile) {
         );
         return;
       }
-      browserBound = true;
+      // A link preview/probe must not bind an OAuth transaction before the human starts it.
+      // Rebinding is allowed only before /authorize; rotate both form and cookie credentials.
+      // A same-browser reload preserves its form. Later phases never adopt another browser.
+      if (!equalSecret(cookieValue(request), secrets.cookie)) {
+        secrets.cookie = randomBytes(32).toString("base64url");
+        secrets.csrf = randomBytes(32).toString("base64url");
+      }
       writeResponse(
         response,
         200,

@@ -25,6 +25,10 @@ both AWS environments accepted the steady-state serverless runtime.
   The existing rights helper/scopes are unchanged and reject workload-purpose attestations.
   Tests run sequentially under `pnpm test:candidate-rights-session` because both helpers use the
   same already configured `http://localhost:3000/auth/callback`; do not run them together.
+  Before sign-in starts, reopening the landing page may issue a fresh transaction cookie and
+  form token; an earlier unbound page request cannot permanently block the human browser.
+  Once Sign in is pressed, keep the same browser and cookies through callback and confirmation.
+  Missing/mismatched cookies during an active sign-in require a fresh helper session, not a bypass.
 
 - `install-terraform-toolchain.ps1` — Installs isolated Windows Terraform 1.16.2 for current local
   deployment plus 1.9.8 for explicit historical plan reading. Requires PowerShell 7 and GPG;
