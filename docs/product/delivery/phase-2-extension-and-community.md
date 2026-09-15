@@ -50,6 +50,14 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Live workload sign-in diagnostic (`2026-09-15`, D2-071/D2-028): source `1341c9e` returns
+`token_lifetime_insufficient` in both the owner page and fixed operator output, then closes
+with reason `failed`. The check requires valid access and ID expiration claims with more than
+25 minutes remaining; the workload deadline is 20 minutes. The specific token and configured
+lifetime remain unknown. Next inspect the development web client's ID-token expiration and
+development API access-token lifetime; do not change production settings, relax verification or
+blindly retry. No workload or candidate-data mutation occurred.
+
 Sign-in follow-up (`2026-09-15`, D2-071): the fresh helper on `f70d3ae` returns the generic
 D2 failure page without a diagnostic, and its process exits without a request-rejection log.
 This page is emitted by the callback exchange/validation catch; the actual failed check is

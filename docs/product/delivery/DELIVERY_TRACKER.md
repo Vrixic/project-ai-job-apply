@@ -9,6 +9,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 live D2 sign-in diagnostic: `token_lifetime_insufficient` is confirmed in both
+the owner page and operator output. The helper requires access and ID tokens with more than
+25 minutes remaining for its 20-minute bounded workload plus buffer. Which token is insufficient
+is not established. Read the development web application's ID-token expiration and the API's
+access-token expiration before choosing a scoped correction; no authentication setting changed
+and no workload was dispatched. The failed helper is closed.
+
 September 15 D2 sign-in follow-up: the fresh helper returns the generic failure page and exits
 without a rejection diagnostic. The callback exchange/validation catch renders that page;
 the specific transport, token or identity-check failure is not yet established. D2-071 adds
