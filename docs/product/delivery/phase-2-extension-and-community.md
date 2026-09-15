@@ -50,6 +50,15 @@ QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
 
+Disposable workload authority (`2026-09-15`, D2-028/D2-069): the owner approves one test
+contribution for the supplied Mintlify posting using the current disposable account, followed by
+withdrawal and cleanup. Publication, account deletion, use of the deleted rights-test account,
+reviewer actions and another provider/source remain excluded. The exact title-only preview is
+Backend Engineer at `https://jobs.ashbyhq.com/Mintlify/4da2f7a2-3d5a-4652-bf01-aed59f4cb72b`;
+the public provider page title was checked read-only. D2-069 supplies separate in-memory sign-in
+and single-execution scope binding. The human must confirm the actual authenticated disposable
+account locally; no token or raw identity is requested in chat.
+
 Owner scope decision (`2026-09-15`): manual screen-reader testing is deferred and is no longer
 a Phase 2/product-launch prerequisite at the owner's explicit request. Do not request Narrator
 confirmation again or record the unperformed test as passed. This decision supersedes earlier
@@ -909,6 +918,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-066 | Recover account-owned shared-job history after local receipts are cleared and distinguish loading/authentication errors from empty results. | Complete | Platform engineering; client engineering; QA/automation | D2-005; D2-015; D2-065 | Completed 2026-09-14: full repository checks, configured rebuild and plain/Drizzle PostgreSQL integration pass. Gateway/route source1293 deploys once; final state343 verifies Gateway67/scheduled29/Trust22 and zero meaningful changes after separately reviewed metadata-only synchronization. The user confirms existing contributions appear after explicit Refresh shared jobs. No automatic loading/polling, logout-purge weakening, account mixing, resubmission or reviewer/provider change. |
 | D2-067 | Show actual signed-out history readiness after cancelled sign-in instead of a storage failure. | Complete | Client engineering; QA/automation | D2-012; D2-015; D2-066 | Chrome owner clearing/cancellation behavior passes but displays History unavailable. Failed login now reads the existing fenced session/history snapshot rather than interpreting browser-specific errors as storage failure. Signed-out state becomes Sign in required; true storage errors remain distinct, current-owner receipts remain fenced and logout wins late responses. Five new background cases pass in the 66-test suite; popup regression passes in 20 tests. All 440 extension tests, typecheck, independent review, configured rebuild and full repository verifier pass (20 builds, 19 cached). On 2026-09-15 the owner confirms Sign in required after reloading source121e4fb and cancelling sign-in in Chrome, completing installed wording acceptance. No API, permissions, session mutation, provider or deployment change. |
 | D2-068 | Make keyboard focus visible through clipped queue/shared-job disclosures and verify sequential Tab access. | Complete | Client engineering; QA/automation | D2-015; D2-023; D2-067 | Owner reports navigation stops visibly after Inspect. Summary focus outline is outside an overflow-clipped card; inset ring preserves native details semantics. Source regression and actual Edge/Chrome-for-Testing matrix pass: Tab/Shift+Tab and Enter/Space reach queue/shared-job headers and Refresh shared jobs in both popup and side panel. An eight-pixel scroll margin prevents viewport clipping. Old-style negative controls detect the regression; both browsers have zero axe violations. All 441 extension tests, configured rebuild and full repository verifier pass. Owner confirms installed Chrome keyboard reachability and activation after reload on 2026-09-15 at source 14dc339. No positive tabindex, permissions or data/API changes. |
+| D2-069 | Provide a purpose-bound local sign-in and recoverable single-execution handoff for the approved disposable workload. | Complete | Platform engineering; QA/automation | D2-028; D2-020 | Completed 2026-09-15 for source/local operation readiness: separate fixed D2 scopes and Mintlify title/source, same-browser verified confirmation, no refresh token/deletion operation, exact scope review and one-shot execution. CurrentUser DPAPI plus protected ACLs preserve token-free recovery before dispatch; verified cleanup marks completion without overwriting scope. Credentials clear on close; no automatic recovery/re-execution. Independent review, 87 session/operator/recovery tests (including real Windows encryption), full repository verifier and 20 builds pass. Actual sign-in/workload and matching deployed aggregates remain D2-028; no live workload or account mutation has occurred. |
 
 ### D2-063 — Web crawler build input
 
@@ -3227,6 +3237,18 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Disposable workload handoff implemented (`2026-09-15`, D2-069):
+[launcher](../../../scripts/start-development-d2-workload-session.mjs),
+[one-shot controller](../../../scripts/lib/d2-workload-session-operator.mjs) and
+[encrypted recovery](../../../scripts/lib/d2-workload-recovery.mjs) pass independent review and
+87 maintained session/operator/recovery tests, including real Windows CurrentUser DPAPI roundtrip,
+protected ACLs, digest readback and no-overwrite completion. Shared rights profiles remain tested;
+purpose-tagged D2 identities cannot authorize a rights attestation. The complete repository verifier
+passes, including all 441 extension tests and 20 build tasks (19 cached). Local settings validate
+without printing values. No token extraction, account deletion, live workload, deployment or new
+branch occurred. Only generated local recovery-test artifacts were removed. Next is human local
+disposable-account confirmation, then the already authorized exact reviewed single execution.
 
 Remaining implementation audit (`2026-09-15`): independent read-only review of D2-012/D2-015,
 D2-028 and the composed Trust lifecycle finds existing implementations and tests, not an absent

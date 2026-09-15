@@ -6,6 +6,26 @@ both AWS environments accepted the steady-state serverless runtime.
 
 ## Local setup and identity
 
+- `start-development-d2-workload-session.mjs` — Separate fixed-purpose loopback sign-in for the
+  approved single Mintlify disposable workload. Uses existing web-client identity configuration
+  plus the extension's exact development API origin and UGC version. Requests only
+  `openid profile email jobs:read jobs:contribute profile:write`, with fresh MFA and sufficient
+  token lifetime. The local confirmation shows the exact title/source and excludes publication
+  and account deletion. Credentials stay in memory; never extract extension/browser tokens.
+  The operator supplies only the returned scope digest and fixed processing confirmation on
+  stdin. One execution is permitted; ambiguous outcomes require scoped recovery, not a rerun.
+  Before dispatch, an immutable, CurrentUser-DPAPI-encrypted, token-free scope is flushed under
+  `infrastructure/terraform/environments/development/.terraform/development-d2-workload-session`.
+  Directory/files are current-user-only and refuse links/overwrites; successful cleanup adds an
+  immutable `.complete` marker. On failure preserve those files. An operator can enumerate the
+  opaque `scope-*.dpapi` filenames and compute their SHA-256 privately, then use
+  `readD2RecoveryScope({fileName, sha256})` from `lib/d2-workload-recovery.mjs` to recover the exact
+  scope in process memory for read-only inspection and separately scoped cleanup. Never print the
+  decrypted scope or blindly rerun the original workload. Session tokens are cleared on close.
+  The existing rights helper/scopes are unchanged and reject workload-purpose attestations.
+  Tests run sequentially under `pnpm test:candidate-rights-session` because both helpers use the
+  same already configured `http://localhost:3000/auth/callback`; do not run them together.
+
 - `install-terraform-toolchain.ps1` — Installs isolated Windows Terraform 1.16.2 for current local
   deployment plus 1.9.8 for explicit historical plan reading. Requires PowerShell 7 and GPG;
   verifies HashiCorp's signing fingerprint, signature and pinned archive checksums before execution.

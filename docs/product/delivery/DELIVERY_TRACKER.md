@@ -9,6 +9,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 15 D2 workload preparation: the owner authorizes one disposable Mintlify contribution,
+withdrawal and cleanup, not publication or account deletion. D2-069 adds a separate memory-only
+sign-in/operator handoff so tokens need not be copied. Implementation, independent review,
+87 session/operator/recovery tests and the full repository verifier pass. The helper requires
+local disposable-account confirmation before the separate reviewed execution; no live workload
+or account mutation has occurred.
+
 September 15 scope decision: the product owner explicitly defers manual screen-reader testing
 and removes it as a Phase 2/product-launch prerequisite. It is not passed evidence. Existing
 keyboard, focus, reflow and automated accessibility protections remain required and unchanged;

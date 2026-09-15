@@ -6,6 +6,19 @@ export const CANDIDATE_RIGHTS_SESSION_ORIGIN = "http://localhost:3000";
 export const CANDIDATE_RIGHTS_SESSION_CALLBACK = `${CANDIDATE_RIGHTS_SESSION_ORIGIN}/auth/callback`;
 export const CANDIDATE_RIGHTS_SESSION_SCOPES =
   "openid profile email offline_access documents:read documents:write jobs:read jobs:write profile:read profile:write";
+export const D2_WORKLOAD_SESSION_SCOPES =
+  "openid profile email jobs:read jobs:contribute profile:write";
+export const D2_WORKLOAD_SESSION_PROFILE = "d2_disposable_contribution_workload_v1";
+const RIGHTS_PROFILE = Object.freeze({
+  scopes: CANDIDATE_RIGHTS_SESSION_SCOPES,
+  minimumLifetimeSeconds: 120,
+  refreshRequired: true,
+});
+const WORKLOAD_PROFILE = Object.freeze({
+  scopes: D2_WORKLOAD_SESSION_SCOPES,
+  minimumLifetimeSeconds: 25 * 60,
+  refreshRequired: false,
+});
 export const CANDIDATE_RIGHTS_SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 export const CANDIDATE_RIGHTS_TOKEN_TIMEOUT_MS = 10_000;
 export const CANDIDATE_RIGHTS_TOKEN_MAXIMUM_BYTES = 65_536;
@@ -140,7 +153,7 @@ async function defaultTokenVerifier({ issuer, audience, clientId, accessToken, i
 }
 
 /** Decode only the exact JWTs already checked by the shared signature/issuer/audience verifiers. */
-function validateVerifiedTokens(tokens, verified, expected) {
+function validateVerifiedTokens(tokens, verified, expected, profile) {
   const { accessPrincipal, idProof } = verified ?? {};
   if (!accessPrincipal || !idProof) reject();
   const access = decodeVerifiedClaims(tokens.access_token);
@@ -169,8 +182,8 @@ function validateVerifiedTokens(tokens, verified, expected) {
     (access.azp !== undefined && access.azp !== expected.clientId) ||
     !Number.isSafeInteger(access.exp) ||
     !Number.isSafeInteger(id.exp) ||
-    access.exp <= now + 120 ||
-    id.exp <= now + 120 ||
+    access.exp <= now + profile.minimumLifetimeSeconds ||
+    id.exp <= now + profile.minimumLifetimeSeconds ||
     !Number.isSafeInteger(id.iat) ||
     id.iat > now + 5 ||
     !Number.isSafeInteger(id.auth_time) ||
@@ -183,13 +196,22 @@ function validateVerifiedTokens(tokens, verified, expected) {
     !idProof.authenticationMethods?.includes("mfa") ||
     !Array.isArray(accessPrincipal.scopes) ||
     !accessPrincipal.scopes.includes("profile:write") ||
-    accessPrincipal.scopes.some(
-      (scope) => !CANDIDATE_RIGHTS_SESSION_SCOPES.split(" ").includes(scope),
-    ) ||
+    accessPrincipal.scopes.some((scope) => !profile.scopes.split(" ").includes(scope)) ||
     typeof access.scope !== "string" ||
     !access.scope.split(" ").includes("profile:write")
   ) {
     reject();
+  }
+  if (profile === WORKLOAD_PROFILE) {
+    const required = ["jobs:read", "jobs:contribute", "profile:write"];
+    const scopes = access.scope.split(" ");
+    if (
+      required.some(
+        (scope) => !accessPrincipal.scopes.includes(scope) || !scopes.includes(scope),
+      ) ||
+      scopes.some((scope) => !profile.scopes.split(" ").includes(scope))
+    )
+      reject();
   }
   // The label is shown only in the no-store local confirmation response; it is never logged.
   const label =
@@ -199,7 +221,12 @@ function validateVerifiedTokens(tokens, verified, expected) {
   return {
     accessToken: tokens.access_token,
     idToken: tokens.id_token,
-    refreshToken: tokens.refresh_token,
+    ...(profile.refreshRequired
+      ? { refreshToken: tokens.refresh_token }
+      : {
+          purpose: "d2_workload",
+          profile: D2_WORKLOAD_SESSION_PROFILE,
+        }),
     subject,
     issuer: expected.issuer,
     expiresAt: new Date(Math.min(access.exp, id.exp) * 1000).toISOString(),
@@ -232,7 +259,7 @@ async function readBounded(stream, maximumBytes, signal) {
   }
 }
 
-function tokenResponse(bytes) {
+function tokenResponse(bytes, profile) {
   let value;
   try {
     value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
@@ -253,7 +280,12 @@ function tokenResponse(bytes) {
     Array.isArray(value) ||
     Object.keys(value).some((key) => !allowed.includes(key)) ||
     value.token_type !== "Bearer" ||
-    !["access_token", "id_token", "refresh_token"].every(
+    (profile === WORKLOAD_PROFILE && Object.hasOwn(value, "refresh_token")) ||
+    !(
+      profile.refreshRequired
+        ? ["access_token", "id_token", "refresh_token"]
+        : ["access_token", "id_token"]
+    ).every(
       (key) =>
         typeof value[key] === "string" &&
         value[key].length > 0 &&
@@ -294,8 +326,8 @@ async function readForm(request) {
   );
 }
 
-function page(body) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disposable candidate rights test</title></head><body><main><h1>Disposable candidate rights test</h1>${body}</main></body></html>`;
+function renderPage(body, title = "Disposable candidate rights test") {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body><main><h1>${title}</h1>${body}</main></body></html>`;
 }
 
 function writeResponse(response, status, body, extraHeaders = {}) {
@@ -323,6 +355,31 @@ function writeResponse(response, status, body, extraHeaders = {}) {
  * after close settles and is not awaited, so caller cleanup may safely call close() again.
  */
 export async function startCandidateRightsSession(options) {
+  return startSession(options, RIGHTS_PROFILE);
+}
+
+/** Separate fixed-purpose handoff; it cannot authorize candidate-rights account deletion. */
+export async function startD2WorkloadSession(options) {
+  if (
+    !options ||
+    ["profile", "purpose", "scopes", "scope", "callback", "redirectUri"].some((key) =>
+      Object.hasOwn(options, key),
+    )
+  )
+    reject();
+  return startSession(options, WORKLOAD_PROFILE);
+}
+
+async function startSession(options, profile) {
+  const page = (body) =>
+    renderPage(
+      body,
+      profile === WORKLOAD_PROFILE ? "D2 disposable contribution workload" : undefined,
+    );
+  const errorMessage =
+    profile === WORKLOAD_PROFILE
+      ? "D2 workload sign-in could not be completed. Start a fresh session."
+      : ERROR_MESSAGE;
   if (!options || typeof options !== "object") reject();
   validateConfiguration(options);
   const { issuer, audience, clientId, onConfirmed, onClosed, onDiagnostic } = options;
@@ -385,7 +442,7 @@ export async function startCandidateRightsSession(options) {
         writeResponse(
           response,
           400,
-          page(`<p>${ERROR_MESSAGE}</p><p>Diagnostic: ${diagnostic}</p>`),
+          page(`<p>${errorMessage}</p><p>Diagnostic: ${diagnostic}</p>`),
         );
       else response.end();
     });
@@ -460,6 +517,7 @@ export async function startCandidateRightsSession(options) {
         reject();
       const tokens = tokenResponse(
         await readBounded(response.body, CANDIDATE_RIGHTS_TOKEN_MAXIMUM_BYTES, signal),
+        profile,
       );
       const verified = await abortable(
         verifyTokens({
@@ -472,13 +530,18 @@ export async function startCandidateRightsSession(options) {
         signal,
       );
       if (signal.aborted || !secrets || phase !== "exchanging") reject();
-      return validateVerifiedTokens(tokens, verified, {
-        issuer,
-        audience,
-        clientId,
-        nonce: secrets.nonce,
-        startedAt,
-      });
+      return validateVerifiedTokens(
+        tokens,
+        verified,
+        {
+          issuer,
+          audience,
+          clientId,
+          nonce: secrets.nonce,
+          startedAt,
+        },
+        profile,
+      );
     } finally {
       tokenAbort.abort();
       clearTimeout(timer);
@@ -519,7 +582,9 @@ export async function startCandidateRightsSession(options) {
             response,
             200,
             page(
-              `<p>Verified account: <strong>${escapeHtml(pending.label)}</strong></p><p>Exact account ID: ${escapeHtml(pending.subject)}</p><p>This test permanently deletes this account and its candidate data. Never use your main account, a real candidate, or the appeal/reviewer account.</p><form method="post" action="/confirm"><input type="hidden" name="csrf" value="${secrets.csrf}"><label>Your name as the authorized test owner <input name="authorizedOwner" required maxlength="100" autocomplete="off"></label><p><label><input type="checkbox" name="disposable" value="yes" required> I authorize only this disposable account, containing generated synthetic data only, for the rights test and permanent deletion. It is not my main or appeal/reviewer account.</label></p><button type="submit">Use this disposable account</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel without running tests</button></form>`,
+              profile === WORKLOAD_PROFILE
+                ? `<p>Verified account: <strong>${escapeHtml(pending.label)}</strong></p><p>Exact account ID: ${escapeHtml(pending.subject)}</p><p>One Mintlify workload: Backend Engineer, https://jobs.ashbyhq.com/Mintlify/4da2f7a2-3d5a-4652-bf01-aed59f4cb72b. The operator creates one contribution, withdraws it and revokes both contribution authorization grants used for its normal and conflicting-idempotency checks. No publication or account deletion is authorized. Never use your main or appeal/reviewer account.</p><form method="post" action="/confirm"><input type="hidden" name="csrf" value="${secrets.csrf}"><label>Your name as the authorized test owner <input name="authorizedOwner" required maxlength="100" autocomplete="off"></label><p><label><input type="checkbox" name="disposable" value="yes" required> I authorize this disposable account for this single Mintlify contribution workload, withdrawal and revocation of both test grants only, not account deletion or publication.</label></p><button type="submit">Use this disposable account</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel without running tests</button></form>`
+                : `<p>Verified account: <strong>${escapeHtml(pending.label)}</strong></p><p>Exact account ID: ${escapeHtml(pending.subject)}</p><p>This test permanently deletes this account and its candidate data. Never use your main account, a real candidate, or the appeal/reviewer account.</p><form method="post" action="/confirm"><input type="hidden" name="csrf" value="${secrets.csrf}"><label>Your name as the authorized test owner <input name="authorizedOwner" required maxlength="100" autocomplete="off"></label><p><label><input type="checkbox" name="disposable" value="yes" required> I authorize only this disposable account, containing generated synthetic data only, for the rights test and permanent deletion. It is not my main or appeal/reviewer account.</label></p><button type="submit">Use this disposable account</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel without running tests</button></form>`,
             ),
             { "Referrer-Policy": "same-origin" },
           );
@@ -537,7 +602,9 @@ export async function startCandidateRightsSession(options) {
         response,
         200,
         page(
-          `<p>Sign in yourself using a disposable candidate account. No test data is created and nothing is deleted until you explicitly confirm the verified account.</p><form method="post" action="/authorize"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Sign in with fresh MFA</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel</button></form>`,
+          profile === WORKLOAD_PROFILE
+            ? `<p>Sign in yourself using the approved disposable candidate account for one Mintlify contribution workload, withdrawal and revocation of both test grants. No account deletion or publication is authorized. No test starts until you explicitly confirm the verified account.</p><form method="post" action="/authorize"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Sign in with fresh MFA</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel</button></form>`
+            : `<p>Sign in yourself using a disposable candidate account. No test data is created and nothing is deleted until you explicitly confirm the verified account.</p><form method="post" action="/authorize"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Sign in with fresh MFA</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel</button></form>`,
         ),
         {
           "Set-Cookie": transactionCookie(secrets.cookie),
@@ -592,7 +659,7 @@ export async function startCandidateRightsSession(options) {
       } catch {
         phase = "failed";
         pending = undefined;
-        writeResponse(response, 400, page(`<p>${ERROR_MESSAGE}</p>`), {
+        writeResponse(response, 400, page(`<p>${errorMessage}</p>`), {
           "Set-Cookie": transactionCookie("", 0),
         });
         response.once("finish", () => {
@@ -640,7 +707,7 @@ export async function startCandidateRightsSession(options) {
         client_id: clientId,
         redirect_uri: CANDIDATE_RIGHTS_SESSION_CALLBACK,
         audience,
-        scope: CANDIDATE_RIGHTS_SESSION_SCOPES,
+        scope: profile.scopes,
         state: secrets.state,
         nonce: secrets.nonce,
         code_challenge: createHash("sha256").update(secrets.verifier).digest("base64url"),
@@ -669,7 +736,7 @@ export async function startCandidateRightsSession(options) {
       owner.length > 100 ||
       hasControlCharacters(owner) ||
       /zach\s*becker/iu.test(owner) ||
-      Date.parse(pending.expiresAt) <= Date.now() + 120_000 ||
+      Date.parse(pending.expiresAt) <= Date.now() + profile.minimumLifetimeSeconds * 1000 ||
       Date.parse(pending.authTime) < Date.now() - 900_000
     )
       reject();

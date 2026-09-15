@@ -1,7 +1,7 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-14
+- Last updated: 2026-09-15
 - Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
@@ -13,6 +13,23 @@ additional provider, reviewer, production, or browser-store authority; human app
 separate.
 
 ## Minimum data flow
+
+The D2-069 local workload helper is a separate, fixed-purpose development operator, not an
+extension session reader or deployed endpoint. It reuses the existing candidate web client's
+loopback callback with PKCE, nonce/state, same-browser confirmation, verified tokens and fresh MFA,
+but requests only `openid profile email jobs:read jobs:contribute profile:write`; no refresh,
+document, reviewer or account-deletion operation is exposed. The confirmation binds one exact
+title-only Mintlify workload with bounded duplicate/conflict probes, withdrawal and grant
+revocation. Access/ID tokens stay in memory and are never printed or written. Purpose-tagged
+workload identity cannot become a candidate-rights deletion attestation. Before dispatch, a
+token-free exact scope is persisted with CurrentUser DPAPI and current-user-only ACLs in an ignored
+recovery directory. It includes the pseudonymous identity digest and approved public projection,
+not the raw subject, account label or credentials. Files are immutable, bounded and link-refusing;
+cleanup appends a completion marker. Read-only in-memory decryption supports exact-run inspection
+after process loss, never automatic re-execution. Keep recovery material private and preserve
+unfinished records until separately scoped cleanup; successful-run retention remains local
+operator evidence, not public telemetry. The Phase 2 record owns
+authorization, recovery behavior and actual execution status; sign-in is not workload completion.
 
 ```text
 explicit current-tab action
