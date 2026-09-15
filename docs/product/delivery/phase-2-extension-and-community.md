@@ -4,7 +4,7 @@
 - Start: 2026-09-01
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-09-14
+- Last updated: 2026-09-15
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d2--extension-and-community-loop)
 
 ## Objective
@@ -49,6 +49,20 @@ requires new variant behavior, fixtures, authorization, scans, human sanitizatio
 QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
+
+September 15 D2-020 checkpoint: the owner reports the one-time title-only private-save command
+returned `ok=true`, no error, and zero pending/stopped/blocked items after the rebuilt extension
+was reloaded. Do not repeat that save; durable private-capture coverage still needs a validated
+export result. The same disposable account is freshly confirmed. Plan `5c46d30377b893e360acff390f8213bf4d20e8c48f19e52f8659ee53b31a766b`
+passes independent review at source `910a09a`, state `343`, Gateway `67`/core `14`, 30 snapshots
+with 35-day retention, ten empty queues, 57 healthy alarms and zero active compute. One Execute
+then returns `identity_not_fresh` and the session closes. No completed lifecycle receipt or final
+deletion confirmation is established; the fixed sequence checks this identity before confirmation.
+The bridge does not expose intermediate coverage or the exact failed identity predicate, so do not
+claim coverage counts, exact export progress, or a completed cancellation from elapsed time alone.
+Use a new same-account MFA session and reviewed plan, with no repeated capture/contribution.
+Independent review also confirms the deployed policy digest identifies the original `aca0762`
+blob; `af95bd4` only reformatted identical JSON values. Preserve that original runtime digest.
 
 Disposable private-capture preparation follow-up: the explicit combined inspection/save command
 returns `No inspectable active page` before enqueue. The owner then confirms the preview is

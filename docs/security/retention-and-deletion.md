@@ -105,8 +105,12 @@ and an opportunity to export data or cancel the request. Inaccessible backup cop
 
 Repository-owner direction for Phase 2 selects the immutable
 [`d2-development-synthetic-v1`](policies/candidate-rights.d2-development-synthetic-v1.json)
-engineering policy for the disposable development acceptance only. Its exact UTF-8/LF file
-SHA-256 is `7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf`.
+engineering policy for the disposable development acceptance only. The original UTF-8/LF Git blob
+at `aca0762` has the deployed SHA-256
+`7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf`.
+Commit `af95bd4` reformatted arrays without changing parsed policy values. The current formatted
+file is therefore not byte-identical to the original digest; retain the original immutable policy
+binding rather than silently replacing the deployed digest with a formatting-only hash.
 It fixes a 3,600-second export artifact, 300-second exact-version download grant, 900-second
 recent-MFA window, one-day defense-in-depth S3 lifecycle, and the product-decided 35-day backup
 window. Its exact ordered owner inventory adds Trust to the prior D1 owners. It authorizes

@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -8,6 +8,13 @@ Program completion: Not completed
 This is the master record for the delivery phases defined in the [product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#20-delivery-roadmap). It intentionally tracks actual start and completion dates rather than predicted schedules.
 
 ## Summary
+
+September 15 D2-020: installed title-only private-save returns success with an empty queue.
+The fresh same-disposable-account plan passes independent review at unchanged state `343`;
+one execution closes with `identity_not_fresh`, not a lifecycle receipt. Final deletion confirmation
+was not reached. Do not repeat the capture or infer intermediate export coverage; obtain a fresh
+same-account MFA session and a new reviewed run. Original policy digest provenance is clarified
+without changing runtime policy. Phase 2 remains In progress; the checkpoint below is historical.
 
 September 14 D2-020 follow-up: the subsequent fresh confirmed-account run identifies exactly
 `privateCaptureCount` as missing; the other five D2 categories are nonempty. This resolves the
