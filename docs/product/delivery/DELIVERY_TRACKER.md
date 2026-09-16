@@ -9,6 +9,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 integrated follow-through: `d11ec2e` is pushed on main, with no new branch.
+D2-075 is Complete for the requested preview behavior. Candidate deployment
+`dpl_G8MKUPqvD1GqpzohfhPwU4ka76uh` is READY at that exact source in `iad1` on both existing
+aliases. The stable support page returns 200 with all-field instructions and no obsolete opt-out
+copy; all eight baseline headers are present and anonymous entitlements remains 401/no-store.
+No AWS, identity or store activation changed. D2-074 awaits clarification whether the disposable
+Mintlify contribution was already submitted; do not create a duplicate.
+
 September 16 testing workflow: the agent verifies changes, including available browser UI
 automation, before requesting final human review. This is recorded in [repository instructions](../../../AGENTS.md).
 Earlier human input is limited to unavoidable identity, authorization or independent decisions.
@@ -19,7 +27,7 @@ available sanitized public job fields when Add is clicked. No automatic upload d
 new data category or queued-payload rewrite. Keep rows aligned and update oversized-payload/help
 copy. All 473 extension tests, typecheck, four support-page tests and both product browser checks
 pass; the configured extension is rebuilt. The full repository verifier passed, and hosted
-help rollout is tracked separately.
+help rollout is now verified at `d11ec2e` as recorded above.
 
 September 16 D2-075: missing/unknown extension preview work type now defaults to In person,
 without a badge or explanation per the owner's follow-up. Explicit Remote/Hybrid values are preserved. The default is not sent

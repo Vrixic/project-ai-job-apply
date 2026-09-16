@@ -3518,6 +3518,17 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Integrated UI/help rollout (`2026-09-16`): source `d11ec2e` is committed and pushed on main,
+without an agent branch. D2-075 is Complete for its bounded preview scope. Exact candidate-only
+Vercel preflight validates the authorized account/project and clean source; the dry-run manifest
+contains 129 allowlisted files and zero unexpected files. Deployment
+`dpl_G8MKUPqvD1GqpzohfhPwU4ka76uh` reads back READY at that source in `iad1`, with both existing
+candidate aliases. Stable `/extension-support` returns 200, includes the all-field Add guidance,
+and excludes the old optional-field removal instruction. All eight baseline headers are present;
+anonymous `/api/platform/entitlements` remains 401/no-store. No AWS, identity, admin or store
+activation changed. D2-074 submission status is requested before any possible duplicate action;
+its live takedown/independent appeal remains unexecuted.
+
 Agent-first testing decision (`2026-09-16`): owner requires agent verification before human
 testing, with human review last. Persisted in [repository instructions](../../../AGENTS.md)
 to prevent using the owner as the first debugging pass. Run relevant checks and available UI
