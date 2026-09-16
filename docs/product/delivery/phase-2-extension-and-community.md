@@ -3524,6 +3524,17 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Catalog-check clarification (`2026-09-16`): owner reports no active jobs for the Mintlify company
+filter. This proves only the visible active-search result, not absence of historical catalog data.
+Inspection of `PostgresContributionPublicationReconciler.remove` shows that terminal reconciliation
+updates only the exact contribution reconciliation; it does not withdraw provider sources or
+delete canonical jobs. The existing PostgreSQL integration explicitly asserts active canonical
+status, null source withdrawal and unchanged provider content after contribution removal (not
+rerun in this step). Correct the earlier expectation: D2-074 tests contribution takedown/appeal,
+not provider-job deletion. Preserve independent provider truth even if the source is shared.
+No live initial decision, takedown or appeal was submitted. A truthful, purpose-bound development
+test basis is still required for takedown; do not invent a safety/rights allegation about Mintlify.
+
 Disposable intake confirmed (`2026-09-16`): owner reports one acknowledged contribution queued.
 AWS account binding and healthy Gateway `67` read back successfully. A new ignored read-only
 helper binds the existing delegated reviewer credential, exact scopes, receipt prefix and

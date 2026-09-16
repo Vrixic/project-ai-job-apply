@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 catalog clarification: owner finds no active Mintlify jobs. That is an active-search
+observation only. Code inspection confirms contribution removal preserves independently verified
+canonical/source data; D2-074 must not claim job deletion. No live review decision was submitted.
+The takedown test still needs a truthful development-test evidence basis, not a fabricated
+allegation against the posting or employer.
+
 September 16 disposable submission confirmed: the owner's one contribution advances from queued
 to a server-confirmed exact-source `needs_review` case/version 1 with fresh provider evidence.
 The read-only check submits zero decisions. Gateway `67` is healthy. Catalog isolation remains
