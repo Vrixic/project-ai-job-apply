@@ -30,7 +30,7 @@ export function safeActionErrorMessage(error: unknown, action: string): string {
     return "The delivery queue is full. Retry pending items or remove stopped items.";
   }
   if (message === "contribution_request_too_large") {
-    return "Selected fields exceed the 64 KiB delivery limit. Deselect Description or another optional field, then add the job again. No shortened text was shared.";
+    return "Job details exceed the 64 KiB delivery limit. This job cannot be added. No shortened text was shared.";
   }
   if (message === "token_request_failed") {
     return action === "login"

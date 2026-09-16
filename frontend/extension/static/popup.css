@@ -297,21 +297,13 @@ button:disabled {
   padding: 11px 0;
 }
 
-.field-row[data-field-kind="optional"],
+.field-row[data-field-kind="included"],
 .field-row[data-field-kind="unavailable"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.field-selection {
-  cursor: pointer;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 22px minmax(0, 1fr);
-  min-width: 0;
-}
-
-.field-row[data-field-kind="unavailable"] .field-selection {
-  cursor: not-allowed;
+.field-row[data-field-kind="display"] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .field-content {
@@ -379,7 +371,7 @@ button:disabled {
   color: var(--accent);
   font-size: 12px;
   min-height: 34px;
-  margin-left: 30px;
+  margin-left: 0;
   padding: 6px 8px;
   justify-self: start;
 }

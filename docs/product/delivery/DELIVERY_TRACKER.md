@@ -9,6 +9,39 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 testing workflow: the agent verifies changes, including available browser UI
+automation, before requesting final human review. This is recorded in [repository instructions](../../../AGENTS.md).
+Earlier human input is limited to unavoidable identity, authorization or independent decisions.
+Isolated Chrome/Edge checks use simulated sessions/API responses, not live publication proof.
+
+September 16 owner-directed field simplification: remove preview checkboxes and include all
+available sanitized public job fields when Add is clicked. No automatic upload during inspection,
+new data category or queued-payload rewrite. Keep rows aligned and update oversized-payload/help
+copy. All 473 extension tests, typecheck, four support-page tests and both product browser checks
+pass; the configured extension is rebuilt. The full repository verifier passed, and hosted
+help rollout is tracked separately.
+
+September 16 D2-075: missing/unknown extension preview work type now defaults to In person,
+without a badge or explanation per the owner's follow-up. Explicit Remote/Hybrid values are preserved. The default is not sent
+as verified provider data. All 472 extension tests, typecheck and Edge/Chrome product checks pass;
+the configured extension is rebuilt. Full repository verification passes. The owner's subsequent
+row-alignment fix matches adjacent field text without extra labels; final browser/build validation
+covers that CSS delta separately. D2-074's
+disposable test remains pending without resubmission or review mutation.
+
+September 16 D2-074 source selected: disposable-account sign-in is user-confirmed. The owner's
+Mintlify Applied AI Engineer URL has one listed exact provider-feed match. Next is one explicit
+preview-approved contribution; catalog isolation must be checked before any review decision.
+The test remains single-contribution development-only, with the owner independently resolving
+the appeal. No existing shared-job removal or broader Ashby authority is granted.
+
+September 16 D2-074 started: owner authorizes one disposable development contribution for
+takedown followed by an independent human appeal. Existing shared jobs must remain untouched.
+Read-only live Gateway `67` inspection confirms development, three reviewer assignments and zero
+takedown/appeal evidence entries. No contribution or decision was created. Next prerequisite is
+the disposable contributor's own sign-in, distinct from the human appeal reviewer; no borrowed
+session, role expansion or production activation is authorized.
+
 September 16 D2-073 hosted follow-through: verified implementation is committed and pushed on
 shared `main` as `cd896b2`. Candidate deployment `dpl_6Y6v1zC8rm2QDb9w2n2HiA8DyP1t`
 is READY at the stable alias with that exact source and `iad1`. Updated support copy returns 200,

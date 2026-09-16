@@ -4,13 +4,13 @@ Status: copy draft only; do not upload or publish.
 
 ## Short description
 
-Preview selected public job details before adding them to a shared, verified job database.
+Preview public job details before adding them to a shared, verified job database.
 
 ## Detailed description
 
 ApplyDash Job Capture is designed to inspect only the current job page you explicitly choose. It
-shows the structured public fields it detected, separates location from work type, and lets you
-remove optional fields before pressing **Add job to shared database**. That button is the explicit
+shows the structured public fields it detected and separates location from work type. Pressing
+**Add job to shared database** sends all available captured public fields. That button is the explicit
 command; there is no separate private-save mode or redundant approval checkbox.
 
 The design uses temporary current-tab access rather than persistent browsing access. It does not

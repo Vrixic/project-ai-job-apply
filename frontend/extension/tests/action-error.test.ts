@@ -9,7 +9,7 @@ describe("extension privacy-safe action errors", () => {
     [
       "contribution_request_too_large",
       "enqueue",
-      "Selected fields exceed the 64 KiB delivery limit. Deselect Description or another optional field, then add the job again. No shortened text was shared.",
+      "Job details exceed the 64 KiB delivery limit. This job cannot be added. No shortened text was shared.",
     ],
     [
       "development_contribution_disabled",

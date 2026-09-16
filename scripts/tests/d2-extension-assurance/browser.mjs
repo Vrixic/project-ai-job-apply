@@ -447,12 +447,13 @@ try {
     "selection changes are not exposed as an async status",
   );
   const initialSelectionSummary = (await selectionSummary.textContent())?.trim();
-  const firstOptional = popup.locator("input[data-field]").first();
-  await firstOptional.uncheck();
-  const changedSelectionSummary = (await selectionSummary.textContent())?.trim();
   assert(
-    Boolean(initialSelectionSummary) && initialSelectionSummary !== changedSelectionSummary,
-    "selection summary does not update after optional-field removal",
+    (await popup.locator('#field-list input[type="checkbox"]').count()) === 0,
+    "field opt-outs remain",
+  );
+  assert(
+    initialSelectionSummary?.includes("All available public job fields included"),
+    "preview does not disclose inclusion of all available public job fields",
   );
 
   const expanders = popup.locator("button[data-expand-field]");
@@ -545,6 +546,24 @@ try {
   const missingPopup = await openAssurancePopup(context, extensionId, "unconfigured-missing");
   await inspectSyntheticCapture(missingPopup);
   const unavailableFields = missingPopup.locator('[data-field-kind="unavailable"]');
+  const assumedWorkType = missingPopup.locator('[data-field-kind="display"]');
+  assert((await assumedWorkType.count()) === 1, "missing work type needs the in-person default");
+  const workTypeLabel = await assumedWorkType.locator(".field-label").boundingBox();
+  const locationLabel = await missingPopup
+    .locator('.field-label:text-is("Location")')
+    .boundingBox();
+  assert(
+    workTypeLabel && locationLabel && Math.abs(workTypeLabel.x - locationLabel.x) < 1,
+    "default work type must align with the adjacent optional field labels",
+  );
+  assert(
+    (await assumedWorkType.innerText()).replace(/\s+/gu, " ").trim() === "Work type In person",
+    "missing work type does not show the concise in-person default",
+  );
+  assert(
+    (await assumedWorkType.locator("input").count()) === 0,
+    "assumption is selectable as fact",
+  );
   assert((await unavailableFields.count()) >= 2, "missing grounded fields are not disclosed");
   assert(
     await unavailableFields.evaluateAll((rows) =>

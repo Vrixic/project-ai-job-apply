@@ -46,6 +46,22 @@ API change normally uses `evolve-platform-contracts`, `build-vertical-slice`, an
 Read the relevant source before answering repository-specific questions. Clearly distinguish
 implemented, locally verified, deployed, planned, and externally blocked behavior.
 
+## Agent testing before human review
+
+Test changed features before asking the user to test them. Run relevant automated checks and,
+for user-facing changes, exercise the actual UI with available browser automation. Fix failures
+and repeat the affected checks before handoff. Human review is the final acceptance step, not
+the first debugging pass.
+
+State which build and environment were tested, and distinguish simulated authentication/API
+responses from live end-to-end behavior. If browser control or another prerequisite is
+unavailable, explain the specific gap without claiming verification. Ask for earlier human
+input only when needed for sign-in/MFA, an independent decision, required authorization, or
+another genuinely unavailable capability; complete all safe independent checks first.
+
+Do not reopen owner-removed manual testing of development-only Delivery queue or Your shared
+jobs panels. Keep the phase document updated with results and remaining human-only steps.
+
 ## Local runtime hygiene
 
 When a Docker-dependent step is complete and no immediately following step needs Docker, stop the

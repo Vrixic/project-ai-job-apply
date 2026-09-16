@@ -42,7 +42,7 @@ describe("popup and side-panel source assurance", () => {
     expect(css).toContain("min-width: 28rem");
     expect(css).toContain("width: 28rem");
     expect(css).toContain("min-height: 37.5rem");
-    expect(css).toContain("grid-template-columns: 22px minmax(0, 1fr)");
+    expect(css).not.toContain(".field-selection");
     expect(css).not.toContain("outline: none");
     expect(css).not.toContain("transition: all");
     expect(css).not.toMatch(/font-size:\s*(?:9|10|11)px/gu);
@@ -68,9 +68,9 @@ describe("popup and side-panel source assurance", () => {
     expect(source).toContain('expandButton.setAttribute("aria-controls", valueId)');
     expect(source).toContain('expandButton.setAttribute("aria-expanded", "false")');
     expect(source).toContain("function updateSelectionSummary(): void");
-    expect(source).toContain("5 required fields always included");
+    expect(source).toContain("All available public job fields included");
     expect(source).toContain('"Next action: Add job to shared database"');
-    expect(source).toContain('appendField(jobGroup, "Work type"');
+    expect(source).toMatch(/appendField\(\s*jobGroup,\s*"Work type"/u);
   });
 
   it("fails the single public-add action closed and confirms destructive clearing", async () => {

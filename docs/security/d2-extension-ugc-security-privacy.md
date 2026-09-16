@@ -72,8 +72,9 @@ canonical provider plaintext nor applies to other providers.
 The complete contribution's JSON encoding must also fit the unchanged 65,536-byte UTF-8 Gateway
 body limit, including metadata and escaping. Client preflight refuses an oversized request before
 queue insertion or consent creation, with a final serialization check before transmission. Field
-selection remains editable so the user can deselect optional content and explicitly retry; no field
-is silently shortened or removed, and existing queued approvals remain unchanged. The character
+selection is fixed to all available sanitized public fields under the September 16 owner decision;
+oversized payloads are refused without a per-field opt-out. No field is silently shortened or
+removed, and existing queued approvals remain unchanged. The character
 bound does not guarantee wire-byte fit. D2-061 passes 368 client and 574 ingestion tests locally;
 its compatible development worker release and configured-client rebuild are verified. Installed
 full-description acceptance remains under D2-035. The browser-free

@@ -78,10 +78,10 @@ for rationale and acceptance; retain automated underlying security/reliability t
 - The complete serialized contribution also must fit the unchanged Gateway limit of 65,536 UTF-8
   bytes, including JSON escaping and metadata. The client checks the exact body before queue
   insertion or consent creation and again at transmission. Oversize refusal preserves the preview
-  and editable field selection so the user can deselect optional fields and explicitly try again;
-  it never silently truncates, drops fields, or rewrites an existing queued intent. The character
-  and wire-byte limits are distinct, so some Unicode/escaped descriptions need deselection even
-  when their character count is within range. No API shape, SQL, provider or runtime authority changes.
+  without silently truncating, dropping fields, or rewriting an existing queued intent. Per-field
+  opt-outs are removed: Add sends all available captured public fields after preview. Jobs whose
+  complete payload exceeds the wire limit cannot be added, even if within the character limit.
+  No API shape, SQL, provider or runtime authority changes.
 
 - A popup and side-panel product shell with one explicit **Add job to shared database** action
   after a field-level preview. The extension does not present a separate private-save action or a
@@ -134,7 +134,8 @@ for rationale and acceptance; retain automated underlying security/reliability t
   into grounded work type `Remote` and location `NORAM`.
 - One field-level preview for the explicit public-add command. Optional-field removal is honored;
   required source identity fields remain visible and cannot be silently removed. Pressing the add
-  button is the user's instruction to enqueue only the selected public fields.
+  button is the user's instruction to enqueue all available captured public fields, without
+  per-field checkboxes. Inspecting the page alone never enqueues a contribution.
 - A bounded-attempt persistent local queue with one stable client intent/Idempotency-Key,
   exponential retry, service-worker restart recovery, pseudonymous account fencing, expiry, and
   explicit stopped/all-item removal. The fence is a one-way digest of bounded Auth0 token identity

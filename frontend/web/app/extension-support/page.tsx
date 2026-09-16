@@ -21,8 +21,8 @@ export default function ExtensionSupportPage() {
         <p className="eyebrow">Browser extension help</p>
         <h1>Control every job contribution.</h1>
         <p className="lede">
-          Inspect a public job, review the fields you want to share, and understand the result of
-          your add action without sharing private information.
+          Inspect a public job, review its details, and understand the result of your add action
+          without sharing private information.
         </p>
       </header>
 
@@ -41,11 +41,11 @@ export default function ExtensionSupportPage() {
             <h3>Inspect and review</h3>
             <p>
               Open a supported public job page and choose Inspect current tab. Review the detected
-              fields and remove any optional fields you do not want to share.
+              details. Adding the job sends all available public job fields shown in the preview.
             </p>
           </div>
           <div>
-            <h3>Add the selected fields</h3>
+            <h3>Add the job</h3>
             <p>
               Sign in if prompted, then choose Add job to shared database once. Read the result
               shown in the extension. If delivery is pending or unconfirmed, do not repeatedly add
@@ -83,8 +83,8 @@ export default function ExtensionSupportPage() {
         <h2 id="privacy-heading">Protect your information</h2>
         <p>
           Do not send access tokens, passwords, browser storage, raw page HTML, or private candidate
-          documents when troubleshooting. The extension is designed to send only the public fields
-          you selected after an explicit add command.
+          documents when troubleshooting. The extension sends the available public job fields shown
+          in the preview only after an explicit add command.
         </p>
       </section>
 

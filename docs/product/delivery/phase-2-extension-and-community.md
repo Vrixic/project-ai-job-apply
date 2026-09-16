@@ -1137,6 +1137,58 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   not a development build or a default-dark fixture presented as a functional released product.
   Public/store activation and the monitored support-channel requirement remain separate gates.
 
+### D2-074 — Disposable development takedown and independent appeal
+
+- State: In progress
+- Started: 2026-09-16
+- Owner: Platform engineering; product owner as independent appeal reviewer
+- Authority: owner approved one disposable development test contribution, its takedown and
+  subsequent independent human appeal. Existing shared jobs must remain untouched. This is
+  lifecycle acceptance, not another diagnostic-panel or empty-queue access test.
+- Read-only baseline: AWS development access works; the active Gateway alias is `development`,
+  version `67`, with three configured reviewers, zero evidence-allowlist entries and zero
+  verified-requester takedown reviewers. No credential value or identity attribute is retained.
+- Execution boundary: bind one new contribution and its separate disposable contributor;
+  verify no existing catalog entry is affected before any publication/reconciliation; retain
+  idempotent recovery scope. Do not reuse the completed Mintlify workload or its sign-in helper,
+  which explicitly excludes publication and automatically withdraws its contribution.
+- Takedown and appeal require separately bound evidence purposes. Do not use an initial-review
+  digest as authority for either action, invent a real-world allegation, change reviewer roles,
+  bypass provider verification or borrow the human appeal session. Any test evidence must be
+  explicitly identified as development-only and confined to the exact test contribution.
+- Contributor sign-in is user-confirmed. The owner supplied the exact Mintlify hosted-Ashby
+  [Applied AI Engineer posting](https://jobs.ashbyhq.com/Mintlify/ec55d98f-6e94-4ffb-9a55-4adad39297c3)
+  for this approved disposable test. A read-only public posting-API check finds one exact listed
+  match with the same canonical URL. This scopes the test to that new contribution, not broader
+  Ashby takedown authority. Existing-catalog isolation is not yet verified; check it before any
+  initial acceptance or takedown decision. Next is one explicit preview-approved submission from
+  the disposable account. Do not ask for credentials or tokens in chat. No test job has been submitted,
+  no case decided, and no runtime configuration changed. Human resolution and exact-scope cleanup
+  remain required before marking this journey complete.
+
+### D2-075 — Default missing preview work type to in-person
+
+- State: Complete
+- Started: 2026-09-16
+- Completed: 2026-09-16
+- Scope: owner requests in-person as the fallback when the posting does not state remote work.
+  Preserve explicit Remote and Hybrid values; display explicit on-site as In person. Missing or
+  unknown work type displays only In person, not Unavailable. The owner explicitly removed the
+  Assumed badge and explanatory paragraph; no extra work-type option is introduced.
+- Decision: this is a preview fallback, not independently verified employer data. Do not mutate
+  the captured provider fields or submit an inferred on-site field that could contradict the
+  verification feed. The fallback row is presentation-only. Following the owner's subsequent
+  field simplification, no preview rows have checkboxes; all available captured public fields,
+  including explicit work types, accompany the Add action. No API/schema/database or live job update.
+- Verification: all 473 extension tests pass, including five cases for missing, unknown, on-site,
+  remote and hybrid values and outbound selected-field checks. Typecheck passes after correcting
+  an optional-property test fixture. Edge and Chrome product checks explicitly verify the
+  default row is not selectable as a captured field. The configured extension is rebuilt;
+  the broader repository verifier passes. The subsequent CSS-only alignment adjustment is
+  separately checked in both product browsers and rebuilt. The final all-field UI also passes
+  the complete repository verifier. No resubmission of
+  an already acknowledged contribution is authorized by this display fix.
+
 ### D2-063 — Web crawler build input
 
 Started `2026-09-13`. The bounded path is public build configuration → Turbo environment/cache
@@ -3465,6 +3517,66 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Agent-first testing decision (`2026-09-16`): owner requires agent verification before human
+testing, with human review last. Persisted in [repository instructions](../../../AGENTS.md)
+to prevent using the owner as the first debugging pass. Run relevant checks and available UI
+automation, repair failures, and report exact coverage before handoff. Human sign-in/MFA,
+independent appeal decisions and required action authorizations remain human-controlled.
+Direct signed-in browser control is unavailable in this session; the existing isolated
+Chrome/Edge extension harness supplies actual UI interaction with simulated sessions and API
+responses, not live delivery/publication evidence. No additional manual diagnostic-panel tests
+are requested. Full repository verification exits zero, including all 20 build tasks; hosted
+help rollout and the nonempty independent appeal remain separate unfinished work.
+
+Fixed public-field inclusion (`2026-09-16`): owner removes per-field opt-outs. The preview now
+has no field checkboxes; the explicit Add action includes every available sanitized public field.
+This supersedes ADR-029's optional-field removal presentation only, with the decision recorded
+here rather than a second rationale document. Inspection alone never sends data. Existing queued
+payloads, account fencing, immutable command receipts and independent verification are unchanged.
+Missing/unsafe fields remain absent; default in-person presentation is not converted to provider
+evidence. Oversized complete payloads fail without silent omission or obsolete deselection advice.
+All field rows now share the same alignment. Store/help sources are aligned; hosted help needs
+a subsequent rollout. All 473 extension tests, extension typecheck, four support-page tests and
+Edge/Chrome product browser checks pass. The configured extension is rebuilt. Full repository
+verification subsequently passes with exit zero, including all 20 build tasks.
+
+D2-075 row alignment (`2026-09-16`): owner screenshot shows the default Work type row sitting
+left of the checkbox-backed field text. Match their 32-pixel text inset and single-column layout
+without adding a checkbox, badge or explanation. Add an actual browser geometry assertion against
+the adjacent Location label and rebuild. The preceding complete repository verifier exits zero;
+the final CSS/browser-assertion delta is checked separately, not claimed as part of that run.
+
+D2-075 copy simplified (`2026-09-16`): owner rejects the assumption badge and explanation.
+Display only Work type / In person for the fallback and remove the extra summary annotation.
+Explicit Remote/Hybrid values and existing captured-field transport remain unchanged. Update
+unit/browser assertions and rebuild the extension; no new work-type enum or backend change.
+
+D2-075 client ready (`2026-09-16`): 472 extension tests, extension typecheck and both product
+browser checks pass; configured development bundle rebuilt. Fixed the old formatting-sensitive
+source assertion and the new test fixture's exact optional-property typing. Reloading the
+installed extension and inspecting again applies the preview change; no backend release or
+existing job rewrite is needed. Full repository verification remains in progress, not passed.
+
+D2-075 started (`2026-09-16`): implement the owner's missing-work-type default as a clearly
+labelled in-person preview assumption. Explicit Remote/Hybrid values are preserved, and provider
+capture/verification semantics remain unchanged. Add five regression cases and run product
+browser and repository checks. D2-074 is not abandoned; no test contribution or review mutation
+is inferred from this display change.
+
+D2-074 source selected (`2026-09-16`): owner confirms disposable-account sign-in and supplies
+the exact Mintlify Applied AI Engineer posting. The provider feed confirms one listed matching
+posting and canonical URL; no candidate session or private data was accessed. Use this only for
+the approved single-contribution development journey. Catalog isolation and separately scoped
+decision evidence remain prerequisites to review mutations; no existing job is approved for
+removal and the agent must not resolve the human appeal.
+
+D2-074 started (`2026-09-16`): recorded explicit owner approval for the bounded disposable
+takedown/appeal journey. Inspected the existing workload and Trust application/runtime code;
+the workload helper cannot be repurposed as publication authority, and live Gateway `67` has
+no configured takedown or appeal evidence. AWS identity and active alias reads succeed. All
+checks are read-only; existing shared jobs, reviewer assignments and cloud settings are unchanged.
+The next human prerequisite is separate disposable-contributor authentication.
 
 D2-073 hosted copy deployed (`2026-09-16`): verified code and tests are integrated and pushed
 on shared `main` at `cd896b298bb361631e37f1ce60fb765232c8085f`, without extra branches.

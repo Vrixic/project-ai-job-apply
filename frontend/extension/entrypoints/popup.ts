@@ -182,7 +182,7 @@ function renderDeliveryReadiness(): void {
     return;
   }
   deliveryReadiness.textContent = currentDelivery.contribution.ready
-    ? "Ready to add the selected public fields."
+    ? "Ready to add all available public job fields."
     : readinessCopy[currentDelivery.contribution.reason];
 }
 
@@ -244,8 +244,7 @@ function renderStatus(response: ExtensionResponse): void {
           job_contribution_unavailable: "Contribution service unavailable",
           network_error: "Network unavailable",
           request_rejected: "Request rejected",
-          request_too_large:
-            "Selected fields too large; inspect again and deselect optional fields",
+          request_too_large: "Job details exceed the delivery size limit",
           retry_exhausted: "Retries exhausted",
           retryable: "Delivery unavailable",
           ugc_contribution_consent_unavailable: "Consent service unavailable",
@@ -390,7 +389,7 @@ function appendField(
   options: {
     expandable?: "description" | "source-url";
     field?: CaptureField;
-    kind: "required" | "system";
+    kind: "required" | "system" | "display";
     translateNo?: boolean;
     unavailableMessage?: string;
   },
@@ -399,7 +398,8 @@ function appendField(
   const valueId = `capture-field-${fieldSequence++}`;
   const missing = options.field !== undefined && !value;
   row.className = "field-row";
-  row.dataset.fieldKind = missing ? "unavailable" : options.field ? "optional" : options.kind;
+  row.dataset.fieldKind = missing ? "unavailable" : options.field ? "included" : options.kind;
+  if (options.field) row.dataset.field = options.field;
 
   const content = document.createElement("span");
   content.className = "field-content";
@@ -413,9 +413,10 @@ function appendField(
   requirement.textContent = options.field
     ? missing
       ? "Unavailable"
-      : "Optional"
+      : "Included"
     : "Always included";
-  labelLine.append(heading, requirement);
+  labelLine.append(heading);
+  if (options.kind !== "display") labelLine.append(requirement);
   const body = document.createElement("span");
   body.className = `field-value${missing ? " not-detected" : ""}`;
   body.id = valueId;
@@ -423,20 +424,7 @@ function appendField(
   if (options.translateNo) body.translate = false;
   content.append(labelLine, body);
 
-  if (options.field) {
-    const selection = document.createElement("label");
-    selection.className = "field-selection";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = !missing;
-    checkbox.disabled = missing;
-    checkbox.dataset.field = options.field;
-    checkbox.addEventListener("change", updateSelectionSummary);
-    selection.append(checkbox, content);
-    row.append(selection);
-  } else {
-    row.append(content);
-  }
+  row.append(content);
 
   const expandable =
     !missing &&
@@ -471,16 +459,18 @@ function appendField(
 }
 
 function selectedFields(): CaptureField[] {
-  return [...fieldList.querySelectorAll<HTMLInputElement>("input[data-field]:checked")].map(
-    (input) => input.dataset.field as CaptureField,
+  return CAPTURE_FIELDS.filter(
+    (field) =>
+      field !== "title" &&
+      Boolean(currentCapture?.[field]) &&
+      (field !== "workMode" || Boolean(displayWorkMode(currentCapture?.workMode))),
   );
 }
 
 function displayWorkMode(value: SanitizedJobCapture["workMode"]): string | undefined {
   if (value === "remote") return "Remote";
   if (value === "hybrid") return "Hybrid";
-  if (value === "on_site") return "On-site";
-  if (value === "unknown") return "Unknown";
+  if (value === "on_site") return "In person";
   return undefined;
 }
 
@@ -489,26 +479,21 @@ function updateSelectionSummary(): void {
     selectionSummary.textContent = "";
     return;
   }
-  const detectedOptional = CAPTURE_FIELDS.filter(
-    (field) => field !== "title" && Boolean(currentCapture?.[field]),
-  ).length;
-  const selectedOptional = selectedFields().length;
-  const missing = CAPTURE_FIELDS.length - detectedOptional - 1;
+  const includedFields = selectedFields().length;
+  const assumedWorkMode = !displayWorkMode(currentCapture.workMode);
+  const missing = CAPTURE_FIELDS.length - includedFields - 1 - Number(assumedWorkMode);
   const nextAction = currentDelivery?.contribution.ready
     ? "Next action: Add job to shared database"
     : "Delivery unavailable: review readiness below";
-  selectionSummary.textContent = `5 required fields always included · ${selectedOptional} of ${detectedOptional} detected optional fields selected · ${nextAction}${
+  selectionSummary.textContent = `All available public job fields included · ${nextAction}${
     missing > 0 ? ` · ${missing} unavailable for sharing` : ""
   }`;
 
   const sourceSummary = fieldList.querySelector<HTMLElement>("#source-summary");
   if (sourceSummary) {
-    const externalJobId = fieldList.querySelector<HTMLInputElement>(
-      'input[data-field="externalJobId"]',
-    );
     sourceSummary.textContent = !currentCapture.externalJobId
       ? "4 always included · External job ID unavailable for sharing"
-      : `4 always included · External job ID ${externalJobId?.checked ? "selected" : "not selected"}`;
+      : "Source details and external job ID included";
   }
   updateControlState();
 }
@@ -529,10 +514,13 @@ function renderCapture(capture: SanitizedJobCapture): void {
   appendField(jobGroup, "Title", capture.title, { kind: "required" });
   appendField(jobGroup, "Company", capture.company, { field: "company", kind: "system" });
   appendField(jobGroup, "Location", capture.location, { field: "location", kind: "system" });
-  appendField(jobGroup, "Work type", displayWorkMode(capture.workMode), {
-    field: "workMode",
-    kind: "system",
-  });
+  const workMode = displayWorkMode(capture.workMode);
+  appendField(
+    jobGroup,
+    "Work type",
+    workMode ?? "In person",
+    workMode ? { field: "workMode", kind: "system" } : { kind: "display" },
+  );
   appendField(jobGroup, "Description", capture.description, {
     expandable: "description",
     field: "description",

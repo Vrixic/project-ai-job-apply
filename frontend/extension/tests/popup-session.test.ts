@@ -374,6 +374,88 @@ describe("popup retained-session lifecycle", () => {
     expect(document.body.textContent).not.toContain("private-provider-error");
   });
 
+  it.each([
+    [undefined, "In person", true],
+    ["unknown", "In person", true],
+    ["on_site", "In person", false],
+    ["remote", "Remote", false],
+    ["hybrid", "Hybrid", false],
+  ] as const)(
+    "renders work type %s without sharing an assumption",
+    async (workMode, label, assumed) => {
+      const status = { ...expiredSession, authenticated: true };
+      const sendMessage = await popup(status);
+      const capture = sanitizeSnapshot(
+        {
+          canonicalUrl: "https://jobs.lever.co/example/123",
+          title: "Engineer",
+          ...(workMode === undefined ? {} : { workMode }),
+        },
+        "lever",
+        "lever-posting-v1",
+      );
+      sendMessage.mockResolvedValueOnce({
+        ok: true,
+        status,
+        ...{ capture, delivery: { contribution: { ready: true, reason: "ready" } } },
+      });
+      button("inspect").click();
+      await idle();
+      const row = [...document.querySelectorAll(".field-row")].find(
+        (element) => element.querySelector(".field-label")?.textContent === "Work type",
+      );
+      expect(row?.textContent).toContain(label);
+      expect(row?.textContent).not.toContain("Unavailable");
+      expect(row?.getAttribute("data-field-kind")).toBe(assumed ? "display" : "included");
+      expect(row?.querySelector("input")).toBeNull();
+      if (assumed) expect(row?.textContent).toBe("Work typeIn person");
+      expect(document.querySelector("#selection-summary")?.textContent).not.toContain("assumed");
+      button("contribute").click();
+      await idle();
+      expect(sendMessage).toHaveBeenLastCalledWith({
+        action: "enqueue",
+        approvedFields: assumed ? [] : ["workMode"],
+        intent: "contribute",
+      });
+      expect(capture?.workMode).toBe(workMode);
+    },
+  );
+
+  it("includes every available public field without per-field opt-outs or automatic delivery", async () => {
+    const status = { ...expiredSession, authenticated: true };
+    const sendMessage = await popup(status);
+    const capture = sanitizeSnapshot(
+      {
+        canonicalUrl: "https://jobs.lever.co/example/123",
+        title: "Engineer",
+        company: "Example",
+        location: "Example City",
+        workMode: "remote",
+        description: "Public job description",
+        externalJobId: "123",
+      },
+      "lever",
+      "lever-posting-v1",
+    );
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      status,
+      ...{ capture, delivery: { contribution: { ready: true, reason: "ready" } } },
+    });
+    button("inspect").click();
+    await idle();
+    expect(document.querySelectorAll('#field-list input[type="checkbox"]')).toHaveLength(0);
+    expect(document.querySelector("#field-list")?.textContent).not.toContain("Optional");
+    expect(sendMessage).toHaveBeenLastCalledWith({ action: "capture" });
+    button("contribute").click();
+    await idle();
+    expect(sendMessage).toHaveBeenLastCalledWith({
+      action: "enqueue",
+      intent: "contribute",
+      approvedFields: ["company", "location", "workMode", "description", "externalJobId"],
+    });
+  });
+
   it("shows unsupported optional text as unavailable and submits only visible selected fields", async () => {
     const status = { ...expiredSession, authenticated: true };
     const sendMessage = await popup(status);
@@ -401,10 +483,8 @@ describe("popup retained-session lifecycle", () => {
     });
     button("inspect").click();
     await idle();
-    const description = document.querySelector<HTMLInputElement>('input[data-field="description"]');
-    expect(description?.checked).toBe(false);
-    expect(description?.disabled).toBe(true);
-    const row = description?.closest(".field-row");
+    const row = document.querySelector('[data-field="description"]');
+    expect(row?.querySelector("input")).toBeNull();
     expect(row?.getAttribute("data-field-kind")).toBe("unavailable");
     expect(row?.textContent).toContain("Not available for sharing");
     expect(document.body.textContent).not.toContain("Synthetic threshold");
@@ -441,10 +521,9 @@ describe("popup retained-session lifecycle", () => {
     });
     button("inspect").click();
     await idle();
-    const description = document.querySelector<HTMLInputElement>('input[data-field="description"]');
-    expect(description?.checked).toBe(true);
-    expect(description?.disabled).toBe(false);
-    expect(description?.closest(".field-row")?.textContent).toContain(publicDescription);
+    const description = document.querySelector('[data-field="description"]');
+    expect(description?.querySelector("input")).toBeNull();
+    expect(description?.textContent).toContain(publicDescription);
     expect(button("contribute").disabled).toBe(false);
     button("contribute").click();
     await idle();
@@ -479,13 +558,12 @@ describe("popup retained-session lifecycle", () => {
       });
       button("inspect").click();
       await idle();
-      const checkbox = document.querySelector<HTMLInputElement>('input[data-field="description"]');
-      const row = checkbox?.closest(".field-row");
+      const row = document.querySelector('[data-field="description"]');
       const value = row?.querySelector<HTMLElement>(".field-value");
       const toggle = row?.querySelector<HTMLButtonElement>(
         'button[data-expand-field="description"]',
       );
-      expect(checkbox?.checked).toBe(true);
+      expect(row?.querySelector("input")).toBeNull();
       expect(value?.textContent).toBe(publicDescription);
       expect(value?.classList.contains("is-collapsed")).toBe(true);
       toggle?.click();
@@ -514,7 +592,7 @@ describe("popup retained-session lifecycle", () => {
     },
   );
 
-  it("keeps a wire-oversized full preview editable after the background refuses delivery", async () => {
+  it("keeps a wire-oversized full preview intact after the background refuses delivery", async () => {
     const status = { ...expiredSession, authenticated: true };
     const sendMessage = await popup(status);
     const publicDescription = "漢".repeat(50_000);
@@ -535,24 +613,20 @@ describe("popup retained-session lifecycle", () => {
     button("inspect").click();
     await idle();
     const error =
-      "Selected fields exceed the 64 KiB delivery limit. Deselect Description or another optional field, then add the job again. No shortened text was shared.";
+      "Job details exceed the 64 KiB delivery limit. This job cannot be added. No shortened text was shared.";
     sendMessage.mockResolvedValueOnce({ ok: false, status, error });
     button("contribute").click();
     await idle();
     expect(document.querySelector("#detail")?.textContent).toBe(error);
-    const checkbox = document.querySelector<HTMLInputElement>('input[data-field="description"]');
-    expect(checkbox?.closest(".field-row")?.querySelector(".field-value")?.textContent).toBe(
-      publicDescription,
-    );
-    expect(checkbox?.disabled).toBe(false);
-    checkbox?.click();
-    expect(checkbox?.checked).toBe(false);
+    const row = document.querySelector('[data-field="description"]');
+    expect(row?.querySelector(".field-value")?.textContent).toBe(publicDescription);
+    expect(row?.querySelector("input")).toBeNull();
     expect(button("contribute").disabled).toBe(false);
     button("contribute").click();
     await idle();
     expect(sendMessage).toHaveBeenLastCalledWith({
       action: "enqueue",
-      approvedFields: [],
+      approvedFields: ["description"],
       intent: "contribute",
     });
   });
@@ -581,13 +655,10 @@ describe("popup retained-session lifecycle", () => {
       });
       button("inspect").click();
       await idle();
-      const checkbox = document.querySelector<HTMLInputElement>('input[data-field="description"]');
-      expect(checkbox?.disabled).toBe(true);
-      expect(checkbox?.checked).toBe(false);
-      expect(checkbox?.closest(".field-row")?.textContent).toContain(message);
-      expect(checkbox?.closest(".field-row")?.textContent).toContain(
-        "No shortened description will be shared.",
-      );
+      const row = document.querySelector('[data-field="description"]');
+      expect(row?.querySelector("input")).toBeNull();
+      expect(row?.textContent).toContain(message);
+      expect(row?.textContent).toContain("No shortened description will be shared.");
       button("contribute").click();
       await idle();
       expect(sendMessage).toHaveBeenLastCalledWith({

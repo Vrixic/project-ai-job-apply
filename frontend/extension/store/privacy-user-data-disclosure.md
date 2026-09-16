@@ -13,7 +13,7 @@ No telemetry or advertising SDK is configured.
 Only after the user chooses **Inspect current tab**, the bundled reader derives an allowlisted
 public-job capture: canonical HTTPS URL, provider/variant and adapter version, capture time, title,
 company, location, work type, description, and public external job identifier when present. The
-user sees the contribution preview, can remove optional fields, and explicitly commands delivery
+user sees the contribution preview and explicitly commands delivery of all available public fields
 by pressing **Add job to shared database**. No second approval checkbox is required.
 
 The extension must not collect or transmit raw DOM/HTML, browsing history, cookies, request

@@ -484,7 +484,7 @@ describe("warm background worker signed-policy readiness", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.error).toBe(
-      "Selected fields exceed the 64 KiB delivery limit. Deselect Description or another optional field, then add the job again. No shortened text was shared.",
+      "Job details exceed the 64 KiB delivery limit. This job cannot be added. No shortened text was shared.",
     );
     expect(fetcher).not.toHaveBeenCalled();
     expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
