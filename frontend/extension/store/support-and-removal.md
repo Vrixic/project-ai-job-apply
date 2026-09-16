@@ -2,10 +2,10 @@
 
 The web source includes a static `/extension-support` route. D2-073 updates its copy to the
 end-user inspect/preview/add flow, acknowledgement-versus-publication distinction and truthful
-support availability, without instructions for development-only diagnostics. This updated copy
-still requires hosted rollout; earlier local/hosted evidence applies to the previous page at
+support availability, without instructions for development-only diagnostics. Source `cd896b2`
+is deployed and verified on 2026-09-16 at
 `https://ai-job-apply-candidate.vercel.app/extension-support`. The stable production alias serves
-the expected page with the required security and no-index headers. No monitored public support,
+the updated page with HTTP 200 and the required security and no-index headers. No monitored public support,
 rights-request, or takedown channel is approved for this candidate. No placeholder address or
 personal contact should be placed in a store listing.
 

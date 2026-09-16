@@ -9,6 +9,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-073 hosted follow-through: verified implementation is committed and pushed on
+shared `main` as `cd896b2`. Candidate deployment `dpl_6Y6v1zC8rm2QDb9w2n2HiA8DyP1t`
+is READY at the stable alias with that exact source and `iad1`. Updated support copy returns 200,
+omits diagnostic instructions and the placeholder contact, and retains security/noindex headers;
+the unauthenticated entitlements route remains 401/no-store. No Auth0, AWS or admin change.
+Final release screenshots and remaining human/release acceptance are still open; support-email
+setup stays deferred.
+
 September 16 owner deferral: support-email setup, verification and monitoring are deferred to
 launch preparation. Do not request this input again during current Phase 2 implementation or
 treat it as an immediate blocker. Keep the draft placeholder inactive; this is deferred, not passed.

@@ -58,8 +58,8 @@ direction, not passed. The authoritative decision and rationale are in
 [Development-only extension diagnostics](#development-only-extension-diagnostics).
 D2-073 production/store exclusion and per-intent action feedback are implemented and locally
 verified on September 16. Only explicit development builds retain the diagnostic HTML. Remaining
-D2-073 release work is hosted support-copy alignment and exact final listing screenshots/materials;
-support-email setup is owner-deferred to launch preparation.
+D2-073 release work is exact final listing screenshots/materials; updated support copy is now hosted.
+Support-email setup is owner-deferred to launch preparation.
 
 Installed Edge restart recovery accepted (`2026-09-15`, D2-012/D2-015): owner reports zero
 pending/stopped items, confirms Session signed out after the instructed restart, and confirms
@@ -1131,8 +1131,10 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   passed, then verification resumed from formatting through typechecks, tests, all 20 builds,
   Compose and product-scope validation. The four support-page tests and 638 web tests pass;
   1,186 checked local Markdown targets exist.
-- Support/listing/privacy source copy now describes the end-user flow. Remaining:
-  hosted support-copy rollout and exact final release screenshots/materials.
+- Support/listing/privacy source copy now describes the end-user flow. Source `cd896b2` is hosted
+  on the stable candidate alias and verified on 2026-09-16. Remaining:
+  exact final release screenshots/materials, which must use the eventual approved enabled artifact,
+  not a development build or a default-dark fixture presented as a functional released product.
   Public/store activation and the monitored support-channel requirement remain separate gates.
 
 ### D2-063 — Web crawler build input
@@ -3456,13 +3458,24 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
 | Takedown and human appeal-decision acceptance | Hosted sign-in, authenticated empty appeal-queue read and logout/root-reload checks are user-confirmed Complete on September 14 at protected `211e59d`. Assignments remain unchanged, the short public alias stays identity-dark and persistent project env keys remain zero. | Separately authorized takedown/human appeal-decision journeys remain. Do not repeat hosted-access checks or manufacture a case to test access. Preserve independent reviewers and evidence/version binding; no new secret, repeated reuse approval, borrowed human session or expanded reviewer role is needed. |
-| End-user extension release boundary | D2-073 production/store diagnostic exclusion and exact per-intent feedback pass 467 extension tests and isolated Edge/Chrome product checks. Core sign-in, inspect/preview/add and provider publication exist. | Deploy the updated support copy and align final release screenshots/materials. No further manual diagnostic-panel testing; preserve automated authentication, account isolation and retry regressions. |
+| End-user extension release boundary | D2-073 production/store diagnostic exclusion and exact per-intent feedback pass 467 extension tests and isolated Edge/Chrome product checks. Updated support copy is deployed from `cd896b2`. Core sign-in, inspect/preview/add and provider publication exist. | Align final release screenshots/materials with the eventual approved enabled artifact. No further manual diagnostic-panel testing; preserve automated authentication, account isolation and retry regressions. |
 | Accessibility scope (manual screen reader deferred) | Keyboard/reflow/geometry and automated axe checks pass. The owner confirms the installed shared-history keyboard route in both Chrome and Edge on September 15. | Manual screen-reader testing is explicitly deferred by the owner and is not a Phase 2/product-launch blocker or passed test. Preserve existing accessibility controls and automated coverage; independent store requirements remain separate. |
 | Alarm notification receipt | Thirteen D2 alarms are healthy; guarded synthetic alarm/OK exercise and preflight are implemented. | Run the exercise last and obtain recipient confirmation of both ALARM and recovery; healthy alarm state is not proof of delivery. |
-| Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-062's current-control instructions are deployed and verified at candidate source `e930ad2`. | Support-email setup/verification/monitoring is owner-deferred to launch preparation, not an immediate Phase 2 implementation blocker. Keep the placeholder inactive and do not request confirmation now. Final installed listing screenshots and exact-candidate/accountable/store approval remain release work. |
+| Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-073's end-user instructions are deployed and verified at candidate source `cd896b2`. | Support-email setup/verification/monitoring is owner-deferred to launch preparation, not an immediate Phase 2 implementation blocker. Keep the placeholder inactive and do not request confirmation now. Final installed listing screenshots and exact-candidate/accountable/store approval remain release work. |
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+D2-073 hosted copy deployed (`2026-09-16`): verified code and tests are integrated and pushed
+on shared `main` at `cd896b298bb361631e37f1ce60fb765232c8085f`, without extra branches.
+Exact non-Zach identity matches the prior accepted candidate receipt; clean-source preflight and
+the closed 129-file upload boundary pass. Deployment `dpl_6Y6v1zC8rm2QDb9w2n2HiA8DyP1t`
+is READY with the exact source, region `iad1`, and stable candidate aliases. The stable
+`/extension-support` returns 200 with the new end-user instructions, no diagnostic-panel copy,
+no placeholder email and all eight checked security/noindex headers. Unauthenticated
+`/api/platform/entitlements` remains 401/no-store. No response body, session, token or identity
+attribute is retained. No Auth0/project environment, admin, AWS, provider activation or store
+publication changes. Final enabled-artifact screenshots and human/release acceptance remain.
 
 Support-channel work deferred by owner (`2026-09-16`): move inbox setup, address confirmation,
 delivery checks and monitoring to launch preparation. Do not pause current implementation or
