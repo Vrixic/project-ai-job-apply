@@ -9,7 +9,10 @@ import {
 import type postgres from "postgres";
 import { type TrustReviewerAssignment, trustReviewerId } from "./trust-reviewer-authority.js";
 
-type ConfiguredEvidencePurpose = TrustEvidencePurpose | "verified_requester_takedown";
+type ConfiguredEvidencePurpose =
+  | TrustEvidencePurpose
+  | "verified_requester_takedown"
+  | "development_test_takedown";
 
 function evidenceKey(
   contributionId: string,
@@ -76,6 +79,17 @@ export function createConfiguredD2TrustRuntime(
           verifiedRequesterReviewers.has(reviewerId) &&
           evidence.has(
             evidenceKey(contributionId, evidenceDigestSha256, "verified_requester_takedown"),
+          )
+        );
+      },
+    },
+    developmentTestTakedownAuthority: {
+      async authorize({ reviewerId, contributionId, evidenceDigestSha256 }) {
+        return (
+          configuration.developmentTestTakedownEnabled === true &&
+          reviewerRoles.get(reviewerId)?.has("takedown_reviewer") === true &&
+          evidence.has(
+            evidenceKey(contributionId, evidenceDigestSha256, "development_test_takedown"),
           )
         );
       },

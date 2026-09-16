@@ -43,7 +43,10 @@ export type InitialReviewReasonCode = Extract<
 >;
 export type TakedownReasonCode = Extract<
   TrustReasonCode,
-  "verified_requester_takedown" | "credible_safety_risk" | "rights_or_policy_violation"
+  | "verified_requester_takedown"
+  | "credible_safety_risk"
+  | "rights_or_policy_violation"
+  | "development_test_removal"
 >;
 
 export type TrustApplicationErrorCode =
@@ -171,6 +174,8 @@ export interface TrustApplicationDependencies {
   contributorAccountAuthority?: ContributorAccountAuthorityPort;
   reviewerAuthority?: ReviewerAuthorityPort;
   verifiedRequesterTakedownAuthority?: VerifiedRequesterTakedownAuthorityPort;
+  /** Deny by default; runtime must bind development, exact contribution and test evidence. */
+  developmentTestTakedownAuthority?: VerifiedRequesterTakedownAuthorityPort;
   contributionEvidence?: ContributionEligibilityEvidencePort;
   approvedPolicy?: ApprovedTrustPolicyPort;
   systemActorId?: string;
@@ -283,6 +288,7 @@ export class TrustApplicationService {
   private readonly contributorAccountAuthority: ContributorAccountAuthorityPort;
   private readonly reviewerAuthority: ReviewerAuthorityPort;
   private readonly verifiedRequesterTakedownAuthority: VerifiedRequesterTakedownAuthorityPort;
+  private readonly developmentTestTakedownAuthority: VerifiedRequesterTakedownAuthorityPort;
   private readonly contributionEvidence: ContributionEligibilityEvidencePort;
   private readonly approvedPolicy: ApprovedTrustPolicyPort;
   private readonly systemActorId: string | null;
@@ -295,6 +301,8 @@ export class TrustApplicationService {
     this.reviewerAuthority = dependencies.reviewerAuthority ?? denyReviewerAuthority;
     this.verifiedRequesterTakedownAuthority =
       dependencies.verifiedRequesterTakedownAuthority ?? denyVerifiedRequesterAuthority;
+    this.developmentTestTakedownAuthority =
+      dependencies.developmentTestTakedownAuthority ?? denyVerifiedRequesterAuthority;
     this.contributionEvidence =
       dependencies.contributionEvidence ?? unavailableContributionEvidence;
     this.approvedPolicy = dependencies.approvedPolicy ?? unavailableApprovedPolicy;
@@ -523,7 +531,16 @@ export class TrustApplicationService {
     this.validateTakedownReason(input.reasonCode);
     await this.authorizeReviewer(reviewerId, "takedown_reviewer");
     const current = await this.requireReviewerCase(caseId, expectedVersion);
-    if (input.reasonCode === "verified_requester_takedown") {
+    if (input.reasonCode === "development_test_removal") {
+      const authorized = await dependency(() =>
+        this.developmentTestTakedownAuthority.authorize({
+          reviewerId,
+          contributionId: current.contributionId,
+          evidenceDigestSha256,
+        }),
+      );
+      if (!authorized) throw new TrustApplicationError("access_denied");
+    } else if (input.reasonCode === "verified_requester_takedown") {
       const authorized = await dependency(() =>
         this.verifiedRequesterTakedownAuthority.authorize({
           reviewerId,
@@ -716,6 +733,7 @@ export class TrustApplicationService {
       "verified_requester_takedown",
       "credible_safety_risk",
       "rights_or_policy_violation",
+      "development_test_removal",
     ];
     if (!valid.includes(reasonCode)) invalidRequest();
   }

@@ -106,6 +106,7 @@ const trustEvidencePurposes = [
   "takedown",
   "appeal_resolution",
   "verified_requester_takedown",
+  "development_test_takedown",
 ] as const;
 const lowercaseUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const lowercaseUuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -188,6 +189,7 @@ const d2TrustEvidenceSchema = z
   });
 
 export interface D2LambdaGatewayTrustConfiguration {
+  developmentTestTakedownEnabled?: boolean;
   reviewerAssignments: readonly z.infer<typeof d2TrustReviewerAssignmentSchema>[];
   evidenceAllowlist: readonly z.infer<typeof d2TrustEvidenceSchema>[];
   policyVersion: string;
@@ -356,6 +358,12 @@ export function loadD2LambdaGatewayConfig(
     if (new Set(evidenceKeys).size !== evidenceKeys.length) {
       throw new Error("Trust evidence assignments must be unique");
     }
+    const developmentTestTakedownEnabled = evidenceAllowlist.some((evidence) =>
+      evidence.purposes.includes("development_test_takedown"),
+    );
+    if (developmentTestTakedownEnabled && !explicitDevelopment) {
+      throw new Error("Test takedown evidence requires explicit development contributions");
+    }
     const appealWindowMilliseconds = Number(value.D2_TRUST_APPEAL_WINDOW_MILLISECONDS);
     if (
       !Number.isSafeInteger(appealWindowMilliseconds) ||
@@ -365,6 +373,7 @@ export function loadD2LambdaGatewayConfig(
       throw new Error("The Trust appeal window is outside the technical bound");
     }
     trust = Object.freeze({
+      ...(developmentTestTakedownEnabled ? { developmentTestTakedownEnabled: true } : {}),
       reviewerAssignments: Object.freeze(reviewerAssignments),
       evidenceAllowlist: Object.freeze(evidenceAllowlist),
       policyVersion: value.D2_TRUST_POLICY_VERSION as string,

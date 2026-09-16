@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-076: owner-approved development-only test removal is implemented locally with
+a distinct audit reason and exact contribution/evidence authorization, denied outside explicit
+development mode. Focused tests and all eight fresh PostgreSQL Trust integrations pass. Current
+restore manifest advances to 45 migrations/68 relations; cloud remains unchanged. Full repository
+verification, compatible deployment and the independent human appeal remain unfinished.
+
 September 16 catalog clarification: owner finds no active Mintlify jobs. That is an active-search
 observation only. Code inspection confirms contribution removal preserves independently verified
 canonical/source data; D2-074 must not claim job deletion. No live review decision was submitted.

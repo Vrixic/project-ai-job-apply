@@ -6,6 +6,17 @@ const CONTRIBUTION_ID = "019c0000-0000-7000-8000-000000000102";
 const DIGEST = "a".repeat(64);
 
 describe("Phase 2 Trust API contracts", () => {
+  it("recognizes the distinct test reason without accepting caller-supplied authorization", () => {
+    const validate = compileComponentValidator("TakeDownTrustCaseRequest");
+    const command = {
+      expectedVersion: 2,
+      reasonCode: "development_test_removal",
+      evidenceDigestSha256: DIGEST,
+    };
+    expect(validate(command)).toBe(true);
+    expect(validate({ ...command, developmentTestTakedownEnabled: true })).toBe(false);
+    expect(validate({ ...command, reasonCode: "test_anything" })).toBe(false);
+  });
   it("keeps owner routes scoped, private, strict, and identity-free", () => {
     const owner = contract.paths["/trust/contributions/{contributionId}"].get;
     const withdraw = contract.paths["/trust/contributions/{contributionId}/withdraw"].post;

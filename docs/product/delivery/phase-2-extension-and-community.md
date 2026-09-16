@@ -1195,6 +1195,34 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   the complete repository verifier. No resubmission of
   an already acknowledged contribution is authorized by this display fix.
 
+### D2-076 — Explicit development-only test takedown
+
+- State: In progress
+- Started: 2026-09-16
+- Authority/decision: owner approves a distinct development-only test reason for D2-074. Do not
+  mislabel the Mintlify posting as abusive or assert a rights allegation. No production feature,
+  reviewer role expansion, provider deletion or automatic appeal decision is authorized.
+- Path: existing reviewer takedown API → Trust authorization → atomic case/event/outbox
+  transaction → existing Jobs contribution reconciliation. Human appeal remains independent.
+- Implementation: additive `development_test_removal` reason in API/domain/export contracts,
+  Trust policy and forward migration `0005`; a separate default-deny authority binds the exact
+  contribution and evidence digest under `development_test_takedown`. Configuration rejects that
+  evidence purpose unless explicit development contributions and development environment both
+  hold. Ordinary takedown evidence cannot authorize the test reason; no end-user UI option is added.
+- Local evidence: 58 contract, 63 Trust, 108 configuration, six exact-runtime boundary tests,
+  ten domain, 17 event-contract and 39 restore-verifier tests pass. All eight Trust PostgreSQL
+  integrations pass on a fresh disposable database, including migration replay, distinct audit
+  reason and independent appeal reversal. The generated database was removed; Docker and WSL
+  stopped. Full repository verification and deployment are not yet complete.
+- Rollout: preserve prior source-bound 44-migration verification; the new source manifest has
+  45 migrations/68 relations. Apply the additive migration before enabling the runtime reason;
+  deploy compatible Gateway/export readers before creating any test event. Retain historical
+  records. Runtime rollback to an older binary must first disable the exact test authorization;
+  persisted test events require compatible export readers. Never roll back migration history.
+- Live scope/cleanup: configure only the exact approved disposable contribution and reviewed
+  test-evidence digest, execute once with version fencing, and remove its temporary test-purpose
+  configuration after the independent appeal/cleanup. No test authorization is deployed yet.
+
 ### D2-063 — Web crawler build input
 
 Started `2026-09-13`. The bounded path is public build configuration → Turbo environment/cache
@@ -3523,6 +3551,13 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Development test reason (`2026-09-16`, D2-076): owner approves the isolated test-only path.
+Implemented a distinct auditable reason and exact development/configuration/evidence authority,
+with a forward-only migration rather than rewriting older records or reusing a real allegation.
+Focused contract/runtime/unit and fresh PostgreSQL migration/lifecycle tests pass. Updated current
+restore source boundary to 45 migrations while retaining exact historical release recognition.
+No cloud schema/runtime, live case, reviewer assignment or production activation changed.
 
 Catalog-check clarification (`2026-09-16`): owner reports no active jobs for the Mintlify company
 filter. This proves only the visible active-search result, not absence of historical catalog data.

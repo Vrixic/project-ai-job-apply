@@ -289,6 +289,10 @@
         {
           "version": "0004_accepted_independent_evidence",
           "checksum": "79a67de27d02d506bcecc72a20063ba9c128291fdf5db0cf97fe5f12eaf88b2a"
+        },
+        {
+          "version": "0005_development_test_removal",
+          "checksum": "08efd96729abf698ec51c6cb4354ac7050bcbb65b9ab52e1b1dfae022c5cbe67"
         }
       ],
       "relations": [

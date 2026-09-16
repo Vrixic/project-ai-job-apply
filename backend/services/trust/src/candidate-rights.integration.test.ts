@@ -42,7 +42,7 @@ describeWithDatabase("Trust candidate rights ownership", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Trust migrations through 0004_accepted_independent_evidence applied and verified.",
+      "Trust migrations through 0005_development_test_removal applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });

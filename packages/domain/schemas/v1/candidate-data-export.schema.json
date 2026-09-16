@@ -1063,6 +1063,7 @@
         "verified_requester_takedown",
         "credible_safety_risk",
         "rights_or_policy_violation",
+        "development_test_removal",
         "new_or_corrected_evidence",
         "decision_upheld",
         "decision_reversed"

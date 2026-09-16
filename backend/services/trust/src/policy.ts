@@ -21,6 +21,7 @@ export const trustReasonCodes = Object.freeze([
   "verified_requester_takedown",
   "credible_safety_risk",
   "rights_or_policy_violation",
+  "development_test_removal",
   "new_or_corrected_evidence",
   "decision_upheld",
   "decision_reversed",
@@ -266,7 +267,8 @@ export function takeDownContribution(
     reasonCode:
       | "verified_requester_takedown"
       | "credible_safety_risk"
-      | "rights_or_policy_violation";
+      | "rights_or_policy_violation"
+      | "development_test_removal";
     evidenceDigestSha256: string;
     occurredAt: Date;
   },

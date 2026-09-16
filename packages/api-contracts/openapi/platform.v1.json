@@ -3897,7 +3897,8 @@
             "enum": [
               "verified_requester_takedown",
               "credible_safety_risk",
-              "rights_or_policy_violation"
+              "rights_or_policy_violation",
+              "development_test_removal"
             ]
           },
           "evidenceDigestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }

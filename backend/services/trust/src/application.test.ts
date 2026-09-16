@@ -725,53 +725,57 @@ describe("TrustApplicationService", () => {
     expect(store.mutationCount).toBe(0);
   });
 
-  it("requires verified-requester authority for that exact takedown reason", async () => {
-    const store = new MemoryTrustStore();
-    const fixture = openFixture(store);
-    store.cases.set(
-      fixture.caseId,
-      decideContributionReview(fixture.trustCase, {
-        reviewerId: fixture.reviewerId,
-        outcome: "accepted",
-        reasonCode: "independently_verified",
-        evidenceDigestSha256,
-        independentEvidenceDigestSha256: evidenceDigestSha256,
-        occurredAt: later,
-      }).trustCase,
-    );
-    const base = {
-      store,
-      reviewerAuthority: allowReviewers(),
-      contributionEvidence: contributionEvidence({
-        contributionId: fixture.contributionId,
-        contributorUserId: fixture.contributorUserId,
-      }),
-      now: () => new Date("2026-09-01T14:00:00.000Z"),
-    };
-    await expect(
-      new TrustApplicationService(base).takeDownAcceptedContribution({
+  it.each(["verified_requester_takedown", "development_test_removal"] as const)(
+    "requires separate authority for the exact %s reason",
+    async (reasonCode) => {
+      const store = new MemoryTrustStore();
+      const fixture = openFixture(store);
+      store.cases.set(
+        fixture.caseId,
+        decideContributionReview(fixture.trustCase, {
+          reviewerId: fixture.reviewerId,
+          outcome: "accepted",
+          reasonCode: "independently_verified",
+          evidenceDigestSha256,
+          independentEvidenceDigestSha256: evidenceDigestSha256,
+          occurredAt: later,
+        }).trustCase,
+      );
+      const base = {
+        store,
+        reviewerAuthority: allowReviewers(),
+        contributionEvidence: contributionEvidence({
+          contributionId: fixture.contributionId,
+          contributorUserId: fixture.contributorUserId,
+        }),
+        now: () => new Date("2026-09-01T14:00:00.000Z"),
+      };
+      await expect(
+        new TrustApplicationService(base).takeDownAcceptedContribution({
+          reviewerId: uuidv7(),
+          caseId: fixture.caseId,
+          expectedVersion: 2,
+          reasonCode,
+          evidenceDigestSha256,
+        }),
+      ).rejects.toSatisfy((error: unknown) => expectCode(error, "access_denied"));
+      expect(store.mutationCount).toBe(0);
+
+      const takenDown = await new TrustApplicationService({
+        ...base,
+        verifiedRequesterTakedownAuthority: allowVerifiedRequesters(),
+        developmentTestTakedownAuthority: allowVerifiedRequesters(),
+      }).takeDownAcceptedContribution({
         reviewerId: uuidv7(),
         caseId: fixture.caseId,
         expectedVersion: 2,
-        reasonCode: "verified_requester_takedown",
+        reasonCode,
         evidenceDigestSha256,
-      }),
-    ).rejects.toSatisfy((error: unknown) => expectCode(error, "access_denied"));
-    expect(store.mutationCount).toBe(0);
-
-    const takenDown = await new TrustApplicationService({
-      ...base,
-      verifiedRequesterTakedownAuthority: allowVerifiedRequesters(),
-    }).takeDownAcceptedContribution({
-      reviewerId: uuidv7(),
-      caseId: fixture.caseId,
-      expectedVersion: 2,
-      reasonCode: "verified_requester_takedown",
-      evidenceDigestSha256,
-    });
-    expect(takenDown.state).toBe("taken_down");
-    expect(takenDown).not.toHaveProperty("jobMutation");
-  });
+      });
+      expect(takenDown.state).toBe("taken_down");
+      expect(takenDown).not.toHaveProperty("jobMutation");
+    },
+  );
 
   it("rejects the adverse-decision reviewer from resolving the appeal", async () => {
     const store = new MemoryTrustStore();

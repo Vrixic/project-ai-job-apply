@@ -1350,7 +1350,7 @@ export interface components {
         TakeDownTrustCaseRequest: {
             expectedVersion: number;
             /** @enum {string} */
-            reasonCode: "verified_requester_takedown" | "credible_safety_risk" | "rights_or_policy_violation";
+            reasonCode: "verified_requester_takedown" | "credible_safety_risk" | "rights_or_policy_violation" | "development_test_removal";
             evidenceDigestSha256: string;
         };
         ResolveTrustAppealRequest: {

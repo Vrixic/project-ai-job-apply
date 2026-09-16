@@ -270,6 +270,7 @@ function Get-D2RuntimeMigrationMessages {
   $labels = [ordered]@{ profile = 'Database'; jobs = 'Jobs'; documents = 'Documents'; matching = 'Matching'; billing = 'Billing'; trust = 'Trust' }
   $messages = [Collections.Generic.List[string]]::new()
   $count = 0
+  $expectedCount = 44
   foreach ($owner in $labels.Keys) {
     $raw = @(& git -C $RepositoryRoot show "$SourceSha`:backend/services/$owner/src/migrate.ts" 2>$null)
     if ($LASTEXITCODE -ne 0 -or $raw.Count -eq 0) { throw 'D2RuntimeMigrationSourceUnavailable' }
@@ -284,13 +285,14 @@ function Get-D2RuntimeMigrationMessages {
       if (-not $versions[$index].StartsWith(('{0:D4}_' -f ($index + 1)), [StringComparison]::Ordinal)) { throw 'D2RuntimeMigrationInventoryInvalid' }
     }
     if (($owner -ceq 'jobs' -and $versions[-1] -cne '0023_contribution_verification_refresh') -or
-        ($owner -ceq 'trust' -and $versions[-1] -cne '0004_accepted_independent_evidence')) { throw 'D2RuntimeMigrationBoundaryNot44' }
+        ($owner -ceq 'trust' -and $versions[-1] -cnotin @('0004_accepted_independent_evidence','0005_development_test_removal'))) { throw 'D2RuntimeMigrationBoundaryUnsupported' }
+    if ($owner -ceq 'trust' -and $versions[-1] -ceq '0005_development_test_removal') { $expectedCount = 45 }
     $statement = 'console.log(`' + $labels[$owner] + ' migrations through ${migrationVersions.at(-1)} applied and verified.`);'
     if ([regex]::Matches($source, 'console\.log\s*\(').Count -ne 1 -or -not $source.Contains($statement)) { throw 'D2RuntimeMigrationLogContractInvalid' }
     $messages.Add("$($labels[$owner]) migrations through $($versions[-1]) applied and verified.")
     $count += $versions.Count
   }
-  if ($count -ne 44) { throw 'D2RuntimeMigrationBoundaryNot44' }
+  if ($count -ne $expectedCount) { throw 'D2RuntimeMigrationBoundaryUnsupported' }
   $messages.Add('All service-owned database migrations applied and verified.')
   return $messages.ToArray()
 }

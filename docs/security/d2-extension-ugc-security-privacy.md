@@ -14,6 +14,13 @@ separate.
 
 ## Minimum data flow
 
+The owner-approved D2-076 acceptance path uses the distinct `development_test_removal` audit
+reason, not a safety/rights allegation. It requires the existing takedown reviewer role plus a
+separate exact contribution/evidence allowlist purpose, accepted only in explicit development
+mode. No caller-supplied boolean grants authority, no public UI exposes it, and production/staging
+configuration rejects it. Appeal resolution remains independent and provider evidence remains
+separate. Remove the temporary exact test authorization after acceptance; preserve audit history.
+
 The D2-069 local workload helper is a separate, fixed-purpose development operator, not an
 extension session reader or deployed endpoint. It reuses the existing candidate web client's
 loopback callback with PKCE, nonce/state, same-browser confirmation, verified tokens and fresh MFA,

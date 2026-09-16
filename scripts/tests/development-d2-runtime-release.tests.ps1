@@ -282,7 +282,7 @@ Assert-True ($declaredRootNames -ccontains 'deploy_applications' -and $declaredR
   $declaredRootNames -ccontains 'deploy_gateway_lambda' -and $declaredRootNames -cnotcontains 'runtime_activation_allowed') 'Fixtures drifted from actual root authority variable shape.'
 $messages = @(Get-D2RuntimeMigrationMessages $repositoryRoot $head)
 Assert-True ($messages.Count -eq 7 -and $messages[1] -ceq 'Jobs migrations through 0023_contribution_verification_refresh applied and verified.' -and
-  $messages[5] -ceq 'Trust migrations through 0004_accepted_independent_evidence applied and verified.') 'Actual source is not the exact current44 boundary.'
+  $messages[5] -cin @('Trust migrations through 0004_accepted_independent_evidence applied and verified.','Trust migrations through 0005_development_test_removal applied and verified.')) 'Actual source is not a supported exact migration boundary.'
 # Full actual readback function, with a closed synthetic AWS port. No account, body, log or
 # credential fixture is read from disk; all objects below are generated identifiers only.
 $ExpectedAccountId = $account; $region = 'us-east-2'; $StateBucket = 'synthetic-state'; $SourceSha = $sourceSha

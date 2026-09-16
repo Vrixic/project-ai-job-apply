@@ -483,6 +483,35 @@ describe("Phase 2 Lambda gateway configuration", () => {
     ).toThrow("signed capability and consent policies");
   });
 
+  it("allows exact test evidence only in explicit development mode", () => {
+    const testEvidence = {
+      ...trustEnvironment,
+      D2_TRUST_EVIDENCE_ALLOWLIST_JSON: JSON.stringify([
+        {
+          contributionId: "019d04cf-1f80-7000-8000-000000000010",
+          evidenceDigestSha256: "a".repeat(64),
+          purposes: ["development_test_takedown"],
+        },
+      ]),
+    };
+    for (const environment of [undefined, "production", "staging", "development"]) {
+      expect(() =>
+        loadD2LambdaGatewayConfig({
+          ...testEvidence,
+          ...(environment ? { D2_DEPLOYMENT_ENVIRONMENT: environment } : {}),
+        }),
+      ).toThrow("Test takedown evidence requires explicit development contributions");
+    }
+    expect(
+      loadD2LambdaGatewayConfig({
+        ...testEvidence,
+        D2_DEPLOYMENT_ENVIRONMENT: "development",
+        D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED: "true",
+        UGC_CONTRIBUTION_POLICY_VERSION: "synthetic-ugc-v1",
+      }).trust?.developmentTestTakedownEnabled,
+    ).toBe(true);
+  });
+
   it("requires a complete bounded Trust authority and policy for candidate or reviewer routes", () => {
     expect(() =>
       loadD2LambdaGatewayConfig({

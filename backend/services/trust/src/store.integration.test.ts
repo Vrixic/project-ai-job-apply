@@ -44,7 +44,7 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Trust migrations through 0004_accepted_independent_evidence applied and verified.",
+      "Trust migrations through 0005_development_test_removal applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
     await store.ping();
@@ -52,6 +52,59 @@ describeWithDatabase("PostgreSQL UGC trust foundation", () => {
 
   afterAll(async () => {
     await client.end();
+  });
+
+  it("persists a distinct test removal and retains independent appeal enforcement", async () => {
+    const caseId = uuidv7();
+    const contributionId = uuidv7();
+    const base = Date.now() - 10_000;
+    await store.open({
+      caseId,
+      contributionId,
+      contributorUserId: owner,
+      systemActorId: systemActor,
+      policy: { version: "development-test-v1", appealWindowMilliseconds: 86_400_000 },
+      occurredAt: new Date(base),
+    });
+    await store.review(caseId, 1, {
+      reviewerId: firstReviewer,
+      outcome: "accepted",
+      reasonCode: "independently_verified",
+      evidenceDigestSha256: "a".repeat(64),
+      independentEvidenceDigestSha256: "a".repeat(64),
+      occurredAt: new Date(base + 1000),
+    });
+    await store.takeDown(caseId, 2, {
+      reviewerId: firstReviewer,
+      reasonCode: "development_test_removal",
+      evidenceDigestSha256: "b".repeat(64),
+      occurredAt: new Date(base + 2000),
+    });
+    const [event] = await client<
+      { reason: string }[]
+    >`SELECT reason_code AS reason FROM trust.case_events WHERE case_id=${caseId} AND case_version=3`;
+    expect(event?.reason).toBe("development_test_removal");
+    await store.appeal(caseId, 3, {
+      contributorUserId: owner,
+      evidenceDigestSha256: "c".repeat(64),
+      occurredAt: new Date(base + 3000),
+    });
+    await expect(
+      store.resolveAppeal(caseId, 4, {
+        reviewerId: firstReviewer,
+        outcome: "upheld",
+        evidenceDigestSha256: "d".repeat(64),
+        occurredAt: new Date(base + 4000),
+      }),
+    ).rejects.toThrow();
+    const result = await store.resolveAppeal(caseId, 4, {
+      reviewerId: appealReviewer,
+      outcome: "reversed",
+      evidenceDigestSha256: "d".repeat(64),
+      independentEvidenceDigestSha256: "a".repeat(64),
+      occurredAt: new Date(base + 4000),
+    });
+    expect(result).toMatchObject({ state: "accepted", version: 5, appealCount: 1 });
   });
 
   it("preserves historical acceptance without manufacturing a basis during the forward migration", async () => {
