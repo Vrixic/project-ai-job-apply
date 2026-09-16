@@ -30,7 +30,8 @@ listing.
 - Final approved product name and publisher identity
 - Final approval of the candidate icon set and text-free 440-by-280-pixel promotional tile; the
   optional 1400-by-560-pixel marquee image remains omitted
-- Chrome and Edge screenshots with no synthetic-only or unsupported claims
+- Chrome and Edge screenshots of the exact end-user build, excluding development-only delivery
+  queue/shared-history panels and any synthetic-only or unsupported claims
 - Approved privacy-policy URL and monitored support channel; the hosted support-route candidate is
   `https://ai-job-apply-candidate.vercel.app/extension-support`
 - Category, locale, territory, pricing, and accessibility dispositions

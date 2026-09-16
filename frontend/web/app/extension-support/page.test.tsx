@@ -7,13 +7,12 @@ beforeAll(() => vi.stubGlobal("React", React));
 afterAll(() => vi.unstubAllGlobals());
 
 describe("extension support page", () => {
-  it("states the development boundary and actionable queue meanings", () => {
+  it("states the development boundary and end-user add flow", () => {
     const markup = renderToStaticMarkup(<ExtensionSupportPage />);
     expect(markup).toContain("Development access only");
-    expect(markup).toContain("Pending");
-    expect(markup).toContain("Stopped");
-    expect(markup).toContain("Held for another account");
-    expect(markup).toContain("Retry stopped");
+    expect(markup).toContain("Inspect current tab");
+    expect(markup).toContain("Add job to shared database once");
+    expect(markup).toContain("Acknowledgement is not publication");
     expect(markup).toContain("Manage an accepted contribution");
     expect(markup).toContain("No monitored public support channel is active");
   });
@@ -26,15 +25,19 @@ describe("extension support page", () => {
     expect(markup).not.toMatch(/[—–]/u);
   });
 
-  it("names the installed contribution controls and requires explicit owner actions", () => {
+  it("never directs end users to development diagnostics or invents a support channel", () => {
     const markup = renderToStaticMarkup(<ExtensionSupportPage />);
-    expect(markup).toContain("Open Your shared jobs in the extension.");
-    expect(markup).toContain("Choose Refresh processing to load the current processing state");
-    expect(markup).toContain("Refresh Trust to load the current Trust state.");
-    expect(markup).toContain("choose Withdraw when available and confirm removal");
-    expect(markup).toContain("from Trust eligibility.");
-    expect(markup).toContain("choose Appeal when available, enter supporting evidence");
-    expect(markup).toContain("Confirm &amp; submit appeal and confirm the submission prompt.");
+    for (const diagnostic of [
+      "Your shared jobs",
+      "Delivery queue",
+      "Retry stopped",
+      "Refresh processing",
+      "Refresh Trust",
+    ]) {
+      expect(markup).not.toContain(diagnostic);
+    }
+    expect(markup).toContain("before public release");
+    expect(markup).toContain("No public support channel is currently active");
     expect(markup).not.toContain("Recent contributions");
     expect(markup).not.toContain("Choose Refresh to");
   });

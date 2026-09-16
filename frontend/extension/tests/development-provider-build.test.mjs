@@ -64,6 +64,63 @@ afterEach(async () => {
 });
 
 describe("isolated real extension provider builds", () => {
+  it.each([undefined, "false", "true"])(
+    "includes diagnostic HTML only for explicit development mode %s",
+    async (mode) => {
+      const candidate = await fixture();
+      if (mode === undefined) delete candidate.environment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS;
+      else candidate.environment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS = mode;
+      candidate.build();
+      for (const file of ["popup.html", "sidepanel.html"]) {
+        const html = await readFile(join(candidate.root, "dist", file), "utf8");
+        for (const marker of [
+          'id="queue-panel"',
+          'id="contributions-panel"',
+          'id="appeal-dialog"',
+          "Your shared jobs",
+          "Delivery queue",
+          "DEVELOPMENT_DIAGNOSTICS_START",
+        ]) {
+          expect(html.includes(marker)).toBe(mode === "true");
+        }
+        expect(html).toContain('id="inspect"');
+        expect(html).toContain('id="contribute"');
+        expect(html).toContain(
+          `data-extension-surface="${file === "popup.html" ? "popup" : "side-panel"}"`,
+        );
+      }
+    },
+    35_000,
+  );
+
+  it.each(["missing", "duplicate", "escaped", "unquoted"])(
+    "rejects a %s diagnostics template boundary before replacing output",
+    async (failure) => {
+      const candidate = await fixture();
+      candidate.environment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS = "false";
+      const templatePath = join(candidate.root, "static/popup.html");
+      const template = await readFile(templatePath, "utf8");
+      const marker = "<!-- DEVELOPMENT_DIAGNOSTICS_START -->";
+      await writeFile(
+        templatePath,
+        failure === "missing"
+          ? template.replace(marker, "")
+          : failure === "duplicate"
+            ? template + marker
+            : failure === "escaped"
+              ? `${template}<details id='queue-panel'></details>`
+              : `${template}<details id=queue-panel></details>`,
+      );
+      await mkdir(join(candidate.root, "dist"));
+      await writeFile(join(candidate.root, "dist/sentinel.txt"), "preserve existing build");
+      expect(() => candidate.build()).toThrow(/diagnostics/u);
+      expect(await readFile(join(candidate.root, "dist/sentinel.txt"), "utf8")).toBe(
+        "preserve existing build",
+      );
+    },
+    35_000,
+  );
+
   it.each([
     { name: "default Greenhouse", value: undefined, expected: ["greenhouse"] },
     { name: "Lever", value: '["lever"]', expected: ["lever"] },

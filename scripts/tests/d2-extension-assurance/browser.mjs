@@ -6,7 +6,34 @@ import axe from "axe-core";
 import { chromium } from "playwright-core";
 
 const root = resolve(import.meta.dirname, "../../..");
-const extension = join(root, "frontend", "extension", "dist");
+const extension = process.env.D2_EXTENSION_DIST
+  ? resolve(process.env.D2_EXTENSION_DIST)
+  : join(root, "frontend", "extension", "dist");
+const builtManifest = JSON.parse(await readFile(join(extension, "manifest.json"), "utf8"));
+const inferredUiMode =
+  builtManifest.name === "ApplyDash Job Capture (Development)"
+    ? "development"
+    : builtManifest.name === "ApplyDash Job Capture (Default Dark)"
+      ? "product"
+      : undefined;
+if (!inferredUiMode) throw new Error("Unknown D2 extension artifact mode");
+const uiMode = process.env.D2_EXTENSION_UI_MODE || inferredUiMode;
+if (!["product", "development"].includes(uiMode)) throw new Error("Invalid D2 extension UI mode");
+if (uiMode !== inferredUiMode)
+  throw new Error("D2 extension artifact does not match requested UI mode");
+const developmentUi = uiMode === "development";
+for (const surface of ["popup", "sidepanel"]) {
+  const html = await readFile(join(extension, `${surface}.html`), "utf8");
+  for (const id of ["queue-panel", "contributions-panel", "appeal-form"]) {
+    assert(
+      html.includes(`id="${id}"`) === developmentUi,
+      `${surface} ${id} violates ${uiMode} output boundary`,
+    );
+  }
+  if (!developmentUi) {
+    assert(!/Your shared jobs|Delivery queue/u.test(html), `${surface} includes diagnostic copy`);
+  }
+}
 const fixture = await readFile(
   join(import.meta.dirname, "fixtures", "provider-pages.html"),
   "utf8",
@@ -323,7 +350,17 @@ try {
       }
       return {
         delivery,
-        ok: true,
+        ok: !(message?.action === "enqueue" && scenario.endsWith("rejected")),
+        error:
+          message?.action === "enqueue" && scenario.endsWith("rejected")
+            ? "The request was rejected."
+            : undefined,
+        deliveryOutcome:
+          message?.action === "enqueue"
+            ? scenario.endsWith("pending")
+              ? "pending"
+              : "acknowledged"
+            : undefined,
         ownerAction: message?.action === "enqueue" ? "ok" : undefined,
         queue: { blocked: 0, pending: 0, stopped: 0 },
         receipts: [],
@@ -338,7 +375,31 @@ try {
   });
 
   for (const surface of ["popup", "sidepanel"]) {
-    await assertSequentialHistoryAccess(context, extensionId, surface);
+    if (developmentUi) await assertSequentialHistoryAccess(context, extensionId, surface);
+    for (const [scenario, expected] of [
+      ["configured-long", "Job received for review."],
+      ["configured-pending", "Job saved on this device, but delivery is not confirmed."],
+      ["configured-rejected", "The request was rejected."],
+    ]) {
+      const productPage = await openAssurancePopup(context, extensionId, scenario, surface);
+      for (const selector of ["#queue-panel", "#contributions-panel", "#appeal-form"]) {
+        assert(
+          (await productPage.locator(selector).count()) === (developmentUi ? 1 : 0),
+          `${surface} ${selector} DOM boundary failed`,
+        );
+      }
+      await inspectSyntheticCapture(productPage);
+      assert(
+        await productPage.locator("#contribute").isEnabled(),
+        `${surface} add action disabled`,
+      );
+      await productPage.locator("#contribute").click();
+      await productPage.waitForFunction(
+        (text) => document.querySelector("#detail")?.textContent?.includes(text),
+        expected,
+      );
+      await productPage.close();
+    }
   }
 
   const popup = await openAssurancePopup(context, extensionId, "unconfigured-long");
@@ -414,7 +475,10 @@ try {
     "long-value expand control does not reference a value",
   );
 
-  for (const disclosureId of ["source-details", "queue-panel", "contributions-panel"]) {
+  for (const disclosureId of [
+    "source-details",
+    ...(developmentUi ? ["queue-panel", "contributions-panel"] : []),
+  ]) {
     const disclosure = popup.locator(`#${disclosureId}`);
     assert((await disclosure.count()) === 1, `${disclosureId} disclosure is missing`);
     const summary = disclosure.locator(":scope > summary");
@@ -521,7 +585,7 @@ try {
   assert(sensitiveStorageAbsent, "synthetic page artifacts were retained in extension storage");
 
   process.stdout.write(
-    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v4", browserName, browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 4, sidePanelScenarios: 2, sequentialKeyboardSurfaces: 2, clippedFocusNegativeControls: 2, preferredPopupWidth, layoutProfiles, externalRequestsAllowed: 0, externalRequestsBlocked, operationalPolicyRequestsBlocked, unexpectedExternalRequests, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, axeViolations: popupAxeViolations + sidePanelAxeViolations, axeSurfaces: 2, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: 3, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
+    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v5", browserName, uiMode, browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 7, sidePanelScenarios: 5, addOutcomeScenarios: 6, diagnosticBoundarySurfaces: 2, sequentialKeyboardSurfaces: developmentUi ? 2 : 0, clippedFocusNegativeControls: developmentUi ? 2 : 0, preferredPopupWidth, layoutProfiles, externalRequestsAllowed: 0, externalRequestsBlocked, operationalPolicyRequestsBlocked, unexpectedExternalRequests, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, axeViolations: popupAxeViolations + sidePanelAxeViolations, axeSurfaces: 2, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: developmentUi ? 3 : 1, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
   );
 } finally {
   await context?.close();

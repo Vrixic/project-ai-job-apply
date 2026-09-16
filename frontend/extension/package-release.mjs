@@ -150,6 +150,14 @@ export async function validateReleaseFiles({ distDirectory, packageVersion, poli
     }
     if (
       name.endsWith(".html") &&
+      /DEVELOPMENT_DIAGNOSTICS_|\b(?:queue-panel|contributions-panel|appeal-dialog)\b/iu.test(
+        data.toString("utf8"),
+      )
+    ) {
+      throw new Error(`Development diagnostics HTML cannot be store-packaged: ${name}`);
+    }
+    if (
+      name.endsWith(".html") &&
       /<script\b[^>]*\bsrc\s*=\s*["'](?:https?:|\/\/)/iu.test(data.toString("utf8"))
     ) {
       throw new Error(`Remote HTML script is forbidden: ${name}`);

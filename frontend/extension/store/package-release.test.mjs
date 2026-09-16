@@ -89,6 +89,23 @@ afterEach(async () => {
 });
 
 describe("extension release packaging", () => {
+  it.each(
+    ["popup.html", "sidepanel.html"].flatMap((file) =>
+      ["queue-panel", "contributions-panel", "appeal-dialog"].map((id) => ({ file, id })),
+    ),
+  )("rejects diagnostic $id in $file even when hidden", async ({ file, id }) => {
+    const { dist, firstOutput } = await fixture();
+    await writeFile(join(dist, file), `<section hidden id='${id}'></section>`);
+    await expect(
+      createReleaseArchive({
+        distDirectory: dist,
+        outputDirectory: firstOutput,
+        packageVersion: "0.2.0",
+        policy,
+      }),
+    ).rejects.toThrow("Development diagnostics HTML cannot be store-packaged");
+  });
+
   it("rejects development JavaScript even if a default-dark manifest was copied over it", async () => {
     const { dist, firstOutput } = await fixture();
     await writeFile(

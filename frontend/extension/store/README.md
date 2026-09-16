@@ -20,7 +20,9 @@ Chrome and Edge installed-browser evidence, authorized provider fixtures, a moni
 channel, an accountably selected and identically configured UGC policy version, final listing
 assets, and browser-store review remain external gates. The source `/extension-support` route is
 hosted and accepted at `https://ai-job-apply-candidate.vercel.app/extension-support`; that does not
-constitute a monitored support-channel or store-readiness claim.
+constitute a monitored support-channel or store-readiness claim. D2-073 updates the source copy
+to exclude development-only diagnostic-panel instructions; that revision still awaits hosted
+rollout. End-user archives omit both diagnostic panels, and packaging rejects their presence.
 
 The default-dark archive pins no contribution capability signing key. A release candidate that can
 receive signed capability data must embed only the accountably approved Ed25519 public-key mapping;

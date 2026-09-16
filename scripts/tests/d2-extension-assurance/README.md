@@ -1,5 +1,22 @@
 # D2 Extension Release Assurance
 
+## End-user artifact check
+
+Run `node scripts/tests/d2-extension-assurance/product.mjs` from the repository root for D2-073.
+It copies only build sources into a bounded temporary directory, excludes workstation `.env.local`
+and `EXTENSION_*` values, builds the real nondevelopment artifact, validates two identical
+default-dark packages, then runs the Edge/Chrome-for-Testing matrix against that isolated output.
+The installed development `dist` and browser profiles are not changed. Temporary artifacts are
+removed after completion. This proves UI/package behavior with synthetic responses, not managed
+identity, publication or store approval.
+
+The matrix accepts `D2_EXTENSION_DIST` for an exact artifact directory and
+`D2_EXTENSION_UI_MODE=product|development` to require the expected manifest/UI boundary. Without
+an explicit mode it derives the mode only from one of the two known generated manifest names.
+Product output must omit queue/history/appeal diagnostics from both HTML and the rendered DOM;
+six add-outcome scenarios cover acknowledged, pending and rejected feedback across both surfaces.
+Development-only keyboard/disclosure regressions remain automated, not a manual launch gate.
+
 This source-side verifier inspects the exact unpacked Manifest V3 output produced by the extension
 build. It fails closed on undeclared or excessive permissions, persistent content scripts, broad
 page access, remote executable-code hooks, unsafe CSP, source maps, credential-like material, and a

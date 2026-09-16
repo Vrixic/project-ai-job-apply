@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -8,6 +8,69 @@ Program completion: Not completed
 This is the master record for the delivery phases defined in the [product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#20-delivery-roadmap). It intentionally tracks actual start and completion dates rather than predicted schedules.
 
 ## Summary
+
+September 16 owner deferral: support-email setup, verification and monitoring are deferred to
+launch preparation. Do not request this input again during current Phase 2 implementation or
+treat it as an immediate blocker. Keep the draft placeholder inactive; this is deferred, not passed.
+
+September 16 support contact: owner supplied `applydash@tobedecided.com` as a temporary
+placeholder. Recorded in the Phase 2 work log and support draft, not activated as a public
+contact. Confirmation/replacement and monitoring remain launch requirements; unrelated
+implementation can continue.
+
+September 16 D2-073 implementation is locally verified on the shared worktree: nondevelopment artifacts
+exclude diagnostic HTML, the popup tolerates absent panels and reports the exact add intent's
+outcome, and support/listing/privacy sources align with the end-user flow. All 467 extension tests
+and isolated product browser checks in Edge and Chrome-for-Testing pass; packaging rejects leaked
+diagnostic controls. Repository verification passes after correcting one test-helper lint error
+and resuming from formatting through typechecks, tests, all 20 builds and Compose/scope validation.
+No manual panel testing, account mutation or public
+release is requested. Hosted support-copy rollout and final release requirements remain separate.
+
+September 15 owner scope decision: Your shared jobs and Delivery queue are development/debug
+panels, not end-user features. Additional manual panel tests are stopped and their unfinished
+UI acceptance checks are removed from launch requirements, not counted as passed. D2-073 tracks
+their actual exclusion from production/store builds and aligned end-user support/screenshots.
+Keep automated underlying security/reliability coverage; focus on the shipped inspect/preview/add
+journey and launch requirements. The single decision/rationale lives in
+[Phase 2](phase-2-extension-and-community.md#development-only-extension-diagnostics).
+
+September 15 Edge empty-queue restart recovery passes: owner reports zero pending/stopped,
+confirms Session signed out after restart, then confirms the existing withdrawn contribution
+and successful history-load message after same-account sign-in and explicit refresh. Together
+with Chrome, this closes the two-browser empty-queue restart/reauthentication/history check.
+No queued-item durability or provider revocation is inferred. Owner has no second existing
+test account, so installed cross-account acceptance remains pending, not passed or removed.
+
+September 15 Edge offline-history acceptance passes: owner confirms the existing contribution
+remains visible with the saved-receipts-kept offline error, then successful latest-shared-jobs
+loading online with that entry still visible. Together with Chrome, this closes the two-browser
+offline-history retention/recovery check under D2-072/D2-015. This does not prove queued offline
+delivery, cross-account isolation or managed token replay/revocation. Next is preparing the
+separate account-isolation check without creating an account or resubmitting a job.
+
+September 15 continuation: D2-072's installed Chrome offline-history and online-recovery check
+is closed. Next is the corresponding installed Edge check using existing same-account history,
+not a new contribution. Edge offline acceptance remains unverified until the owner reports it;
+managed token replay/revocation, queued delivery and release/review gates remain separate.
+The stale remaining-input request to rerun D2-028's completed authenticated workload is removed;
+the extension README now reflects that completion and the accepted Chrome history journey.
+
+September 15 D2-072 completes: after the rebuilt extension's Chrome offline retest, the owner
+confirms the existing withdrawn entry stays visible alongside the saved-receipts-kept error.
+After restoring No throttling, explicit refresh reports latest shared jobs loaded and retains
+the entry. This closes installed Chrome offline-history retention and online recovery only;
+queued offline delivery, token replay/revocation and broader browser acceptance remain separate.
+Phase 2 remains In progress. No resubmission or storage clearing was requested.
+
+September 15 Chrome offline history finding: owner confirms the withdrawn entry disappeared
+while Offline was selected and returned after restoring No throttling; explicit online refresh
+also retained it. D2-072 separates cached display from proactive OAuth refresh and preserves
+same-owner receipts on failed history refresh while the local session remains valid. Expired,
+missing and superseded sessions still hide confidential history. All 447 extension tests,
+typecheck, configured rebuild, independent review and full repository verification pass;
+installed retest remains pending. Phase 2 remains
+In progress; no submission, removal or storage clearing is needed for this check.
 
 September 15 Chrome same-account restart recovery passes: after restart sign-out, the owner
 signs back in and explicitly refreshes history, receiving one existing contribution with

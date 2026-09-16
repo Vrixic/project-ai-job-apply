@@ -21,8 +21,8 @@ export default function ExtensionSupportPage() {
         <p className="eyebrow">Browser extension help</p>
         <h1>Control every job contribution.</h1>
         <p className="lede">
-          Understand delivery states, retry safely, and manage an accepted contribution without
-          sharing job details with a support channel.
+          Inspect a public job, review the fields you want to share, and understand the result of
+          your add action without sharing private information.
         </p>
       </header>
 
@@ -30,32 +30,33 @@ export default function ExtensionSupportPage() {
         <h2 id="development-access-heading">Development access only</h2>
         <p>
           The extension is not available for public installation or browser store distribution. This
-          page documents the current controlled development build.
+          page describes the intended end-user contribution flow, not development diagnostics.
         </p>
       </aside>
 
       <section className="extension-support-section" aria-labelledby="delivery-heading">
-        <h2 id="delivery-heading">Read the delivery queue</h2>
+        <h2 id="delivery-heading">Add a public job</h2>
         <div className="extension-support-definitions">
           <div>
-            <h3>Pending</h3>
+            <h3>Inspect and review</h3>
             <p>
-              The selected fields remain on this device. Sign in if requested, then choose Retry
-              now. A manual retry skips only the scheduled wait.
+              Open a supported public job page and choose Inspect current tab. Review the detected
+              fields and remove any optional fields you do not want to share.
             </p>
           </div>
           <div>
-            <h3>Stopped</h3>
+            <h3>Add the selected fields</h3>
             <p>
-              Delivery reached a terminal state. Choose Retry stopped only after the stated issue is
-              resolved, or remove the item from this device.
+              Sign in if prompted, then choose Add job to shared database once. Read the result
+              shown in the extension. If delivery is pending or unconfirmed, do not repeatedly add
+              the same job or clear browser storage to try to force delivery.
             </p>
           </div>
           <div>
-            <h3>Held for another account</h3>
+            <h3>Acknowledgement is not publication</h3>
             <p>
-              The item cannot move to a different identity. Sign back into the original account or
-              remove it and create a new contribution while using the current account.
+              Receiving a contribution does not immediately publish it. Independent provider
+              verification and any required review must complete before it enters the catalog.
             </p>
           </div>
         </div>
@@ -63,21 +64,11 @@ export default function ExtensionSupportPage() {
 
       <section className="extension-support-section" aria-labelledby="rights-heading">
         <h2 id="rights-heading">Manage an accepted contribution</h2>
-        <ol className="extension-support-steps">
-          <li>Open Your shared jobs in the extension.</li>
-          <li>
-            Choose Refresh processing to load the current processing state, then Refresh Trust to
-            load the current Trust state.
-          </li>
-          <li>
-            To request withdrawal, choose Withdraw when available and confirm removal of this
-            contribution from Trust eligibility.
-          </li>
-          <li>
-            To request an appeal, choose Appeal when available, enter supporting evidence, then
-            choose Confirm &amp; submit appeal and confirm the submission prompt.
-          </li>
-        </ol>
+        <p>
+          Public withdrawal, appeal and takedown instructions will be provided with the verified
+          support channel before public release. Development diagnostic controls are not part of the
+          end-user extension. No public support channel is currently active.
+        </p>
         <p>
           Uninstalling the extension removes local software, but it does not withdraw an already
           accepted server contribution. Candidate export and account deletion remain available in

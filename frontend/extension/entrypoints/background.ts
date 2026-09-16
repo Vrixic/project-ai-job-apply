@@ -386,7 +386,9 @@ async function sharedJobsSnapshot(generation: number): Promise<{
   sharedJobsState: SharedJobsState;
 }> {
   try {
-    const session = await authenticatedApiSession();
+    // Cached display must not depend on a proactive OAuth exchange. This still rejects
+    // expired/missing sessions and fences records to the currently authenticated owner.
+    const session = await authenticatedApiSession({ refreshIfNeeded: false });
     assertIdentityGeneration(generation);
     return {
       receipts: receiptsForIdentity(await contributionReceipts(generation), session.identityFence),
@@ -729,7 +731,31 @@ async function enqueue(
     if (queue.length >= MAXIMUM_QUEUE_ITEMS) throw new Error("queue_capacity_reached");
     return [...queue, created];
   });
-  return dispatchPending(false, generation);
+  await dispatchPending(false, generation);
+  // Report this exact add command, not aggregate queue counts or an older receipt.
+  // An already-running dispatch may not have included the newly persisted intent.
+  return withLocalMutation(generation, async () => {
+    const queue = await readPendingQueue(generation);
+    const pending = queue.find(
+      (item) => item.id === created.id && item.identityFence === created.identityFence,
+    );
+    const acknowledged =
+      intent === "contribute" &&
+      (await readContributionReceipts(generation)).some(
+        (receipt) =>
+          receipt.contributionId === created.id && receipt.identityFence === created.identityFence,
+      );
+    const deliveryOutcome = acknowledged
+      ? "acknowledged"
+      : pending?.state === "terminal"
+        ? "stopped"
+        : pending?.state === "blocked"
+          ? "blocked"
+          : pending?.state === "pending"
+            ? "pending"
+            : "unconfirmed";
+    return { queue: summarizeQueue(queue), deliveryOutcome };
+  });
 }
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -789,12 +815,12 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
           status: await authenticationStatus(),
         };
       } else if (message.action === "enqueue") {
-        const queue = await enqueue(message.intent, message.approvedFields, generation);
+        const deliveryResult = await enqueue(message.intent, message.approvedFields, generation);
         const session = await authenticatedApiSession();
         return {
           delivery: await deliveryReadiness(await activeStoredCapture()),
           ok: true,
-          queue,
+          ...deliveryResult,
           receipts: receiptsForIdentity(await contributionReceipts(), session.identityFence),
           status: await authenticationStatus(),
         };
@@ -853,9 +879,12 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
       // actual session instead of classifying browser-specific error text; keep
       // ownership fencing and genuine storage failures in the snapshot path.
       const history =
-        message.action === "login"
+        message.action === "login" || message.action === "shared_jobs_refresh"
           ? await sharedJobsSnapshot(generation)
           : { sharedJobsState: sharedJobsFailure(error), receipts: [] };
+      if (message.action === "shared_jobs_refresh" && history.sharedJobsState === "cached") {
+        history.sharedJobsState = "unavailable";
+      }
       return {
         delivery: await deliveryReadiness(await activeStoredCapture()),
         error: safeActionErrorMessage(error, message.action),

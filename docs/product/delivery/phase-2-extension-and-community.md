@@ -4,7 +4,7 @@
 - Start: 2026-09-01
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-09-15
+- Last updated: 2026-09-16
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d2--extension-and-community-loop)
 
 ## Objective
@@ -49,6 +49,61 @@ requires new variant behavior, fixtures, authorization, scans, human sanitizatio
 QA representativeness acceptance, and an updated kill-switch policy.
 
 ## Task register
+
+Product-scope correction (`2026-09-15`): **Your shared jobs** and **Delivery queue** are
+development/debug surfaces, not end-user product features. Stop additional manual acceptance
+exercises on these panels, including the proposed second-account/history and queue-panel
+journeys. Their unfinished manual UI checks are Removed from launch requirements by owner
+direction, not passed. The authoritative decision and rationale are in
+[Development-only extension diagnostics](#development-only-extension-diagnostics).
+D2-073 production/store exclusion and per-intent action feedback are implemented and locally
+verified on September 16. Only explicit development builds retain the diagnostic HTML. Remaining
+D2-073 release work is hosted support-copy alignment and exact final listing screenshots/materials;
+support-email setup is owner-deferred to launch preparation.
+
+Installed Edge restart recovery accepted (`2026-09-15`, D2-012/D2-015): owner reports zero
+pending/stopped items, confirms Session signed out after the instructed restart, and confirms
+the existing withdrawn entry returns with successful latest-shared-jobs-loaded messaging after
+same-account sign-in and explicit refresh. This joins the completed Chrome empty-queue journey;
+do not repeat either. No token inspection, provider revocation, queued-item durability or
+cross-account coverage is inferred. Owner reports no second existing test account, leaving that
+installed isolation check pending without account creation, waiver or data mutation.
+
+Installed Edge offline-history acceptance (`2026-09-15`, D2-072/D2-015): owner confirms the
+same-account existing contribution loads before testing, remains visible alongside Shared jobs
+could not be loaded / Saved receipts were kept while offline, and remains visible after online
+refresh reports Your latest shared jobs were loaded. Chrome and Edge history retention/recovery
+are now both owner-confirmed; do not repeat those checks. No contribution identifiers or account
+details are retained. Queued offline delivery, cross-account isolation and managed token
+replay/revocation remain separate. Next requires confirming availability of a second existing
+test account for account isolation; no account creation, deletion or new submission is requested.
+
+Next installed-browser action (`2026-09-15`, D2-012/D2-015): use Edge with the rebuilt unpacked
+extension and the same current disposable account to load the existing withdrawn contribution,
+then check offline history retention and online recovery. Chrome acceptance under D2-072 is
+already closed and must not be repeated. This preparation authorizes no new contribution,
+queue retry, removal, account deletion or storage clearing. Edge results remain unverified.
+
+D2-072 installed Chrome acceptance (`2026-09-15`): owner reports the offline error
+Shared jobs could not be loaded / Saved receipts were kept and confirms the existing withdrawn
+entry remains visible. After restoring No throttling and explicitly refreshing shared jobs,
+owner confirms the latest-shared-jobs-loaded message and retained entry. D2-072 is Complete,
+combining the recorded local checks/rebuild with this installed retention/recovery evidence.
+No job identifiers or account details are retained. This is not queued offline delivery,
+token replay/revocation, Edge parity or overall Phase 2 completion; those gates remain separate.
+
+Chrome offline history finding (`2026-09-15`, D2-072/D2-015): owner confirms the existing
+withdrawn contribution disappeared during the service-worker DevTools Offline history check.
+It returned after No throttling was restored, before an explicit refresh, and remained after
+that refresh. Recovery is observed, but offline cached-display acceptance has not passed.
+Source inspection finds cached snapshots unnecessarily perform proactive OAuth refresh; the
+history-refresh exception path also returns an empty list instead of resolving current local
+ownership. The exact installed failure's token expiry/transport cause was not captured and is
+not asserted. D2-072 removes network refresh from cached snapshots and resolves current-owner
+receipts after a failed explicit history refresh, without accepting expired/missing sessions.
+All 447 extension tests, typecheck, configured rebuild, independent read-only review and full
+repository verification pass. Installed retest remains pending; no new contribution, queue
+retry, storage clearing or cloud mutation is needed.
 
 Chrome same-account post-restart recovery accepted (`2026-09-15`, D2-012/D2-015): after the
 signed-out restart checkpoint, owner signs into the same disposable account and explicitly
@@ -1047,6 +1102,38 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 | D2-069 | Provide a purpose-bound local sign-in and recoverable single-execution handoff for the approved disposable workload. | Complete | Platform engineering; QA/automation | D2-028; D2-020 | Completed 2026-09-15 for source/local operation readiness: separate fixed D2 scopes and Mintlify title/source, same-browser verified confirmation, no refresh token/deletion operation, exact scope review and one-shot execution. CurrentUser DPAPI plus protected ACLs preserve token-free recovery before dispatch; verified cleanup marks completion without overwriting scope. Credentials clear on close; no automatic recovery/re-execution. Independent review, 87 session/operator/recovery tests (including real Windows encryption), full repository verifier and 20 builds pass. Actual sign-in/workload and matching deployed aggregates remain D2-028; no live workload or account mutation has occurred. |
 | D2-070 | Recover a missing pre-authorization local cookie without rebinding an active sign-in. | Complete | Platform engineering; QA/automation | D2-069 | Completed 2026-09-15: ready-only cookie/CSRF rotation, stale-form/in-flight rejection tests and full verifier pass. The owner subsequently completes same-browser disposable sign-in and confirmation; its approved workload succeeds. No post-authorization guard was relaxed. |
 | D2-071 | Diagnose local workload token-exchange and validation failures without exposing credentials or weakening authentication. | Complete | Platform engineering; QA/automation | D2-069; D2-070 | Completed 2026-09-15: fixed diagnostic codes, redaction and 99 session/operator/recovery tests plus full verifier pass. Owner-corrected temporary API lifetime, Windows clock drift and missing web-client jobs:contribute grant are followed by successful verified sign-in, confirmation and workload. Exact discarded MFA claim remains unknown; no freshness/scope check was bypassed. Temporary API lifetime restoration remains separately tracked under D2-028. |
+| D2-072 | Preserve valid-session cached shared-job history during offline refresh failures. | Complete | Platform engineering; QA/automation | D2-066; D2-015 | Completed 2026-09-15. Local snapshot no longer performs proactive token exchange; failed explicit history refresh resolves fenced cached receipts. Missing/expired sessions and storage failures still hide history. All 447 extension tests, typecheck, configured rebuild, independent review and full repository verification pass. Owner confirms installed Chrome retains the withdrawn entry with an offline error, then successfully reloads history online with the entry preserved. Broader browser and queued-delivery gates remain separate. |
+
+### D2-073 — Exclude diagnostic panels from the end-user extension
+
+- State: In progress
+- Started: 2026-09-16
+- Owner: Client engineering; QA/automation
+- Scope: implement the owner decision in [Development-only extension diagnostics](#development-only-extension-diagnostics).
+- Acceptance: production/store popup and side panel contain neither Your shared jobs nor Delivery
+  queue; diagnostic controls are available only in explicit development builds, not through an
+  end-user toggle. Verify the exact release output with automated checks. Preserve internal
+  retry/idempotency, ownership and authentication controls, and concise feedback for the user's
+  add action without exposing a diagnostic queue/history UI. Update support copy, store materials
+  and screenshots to describe only the shipped product. No repeated human diagnostic-panel tests.
+- Local implementation verified: [build](../../../frontend/extension/build.mjs) removes the
+  diagnostic HTML from nondevelopment popup and side-panel output; only explicit development
+  builds retain it. [Packaging](../../../frontend/extension/package-release.mjs) rejects leaked
+  diagnostic controls. The popup supports their absence and reports the exact add intent's
+  acknowledgement, pending, stopped, held or unconfirmed outcome, not aggregate queue counts.
+- Automated evidence (2026-09-16): 467 extension tests pass. The isolated
+  [product assurance runner](../../../scripts/tests/d2-extension-assurance/product.mjs) passes
+  in Edge and Chrome-for-Testing with both diagnostic surfaces absent, six add-outcome scenarios
+  per browser, zero axe violations and zero external requests. Two packages of the same build
+  produce identical archive hashes; this is not an independent-rebuild claim. Configured local
+  development output is preserved. No manual diagnostic-panel test is requested.
+- Repository verification passes after the cleanup-helper lint fix: earlier operator suites
+  passed, then verification resumed from formatting through typechecks, tests, all 20 builds,
+  Compose and product-scope validation. The four support-page tests and 638 web tests pass;
+  1,186 checked local Markdown targets exist.
+- Support/listing/privacy source copy now describes the end-user flow. Remaining:
+  hosted support-copy rollout and exact final release screenshots/materials.
+  Public/store activation and the monitored support-channel requirement remain separate gates.
 
 ### D2-063 — Web crawler build input
 
@@ -3271,6 +3358,18 @@ original local deadline is unchanged.
 
 ## Remaining acceptance and operator inputs
 
+The owner's September 15 [diagnostic-panel scope decision](#development-only-extension-diagnostics)
+supersedes older requests below for additional manual Your shared jobs or Delivery queue testing.
+Do not ask for another test account, offline history refresh, queue-panel retry or restart exercise
+to accept those development-only surfaces. D2-073's actual production exclusion and focused
+automated regression coverage replace those UI launch gates; core security/reliability is retained.
+
+Current completion correction (`2026-09-15`): D2-028's bounded authenticated workload,
+exact-window cloud corroboration, cleanup and temporary API-lifetime restoration are Complete.
+Do not rerun that workload. D2-020's fresh nonempty candidate-rights lifecycle and D2-072's
+Chrome offline-history retention/recovery are also Complete. Older dated entries below remain
+historical; broader browser and release gates are not closed by these results.
+
 This is the outstanding acceptance list, not a claim that the corresponding source is absent.
 Keep approved Greenhouse/global-Lever/hosted-Ashby development separate from production/store release. Do not
 use an expired signed policy as authority or promote the workflow's machine identity to a decision reviewer.
@@ -3357,14 +3456,86 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Remaining item | Existing implementation | Required next action / recommended choice |
 |---|---|---|
 | Takedown and human appeal-decision acceptance | Hosted sign-in, authenticated empty appeal-queue read and logout/root-reload checks are user-confirmed Complete on September 14 at protected `211e59d`. Assignments remain unchanged, the short public alias stays identity-dark and persistent project env keys remain zero. | Separately authorized takedown/human appeal-decision journeys remain. Do not repeat hosted-access checks or manufacture a case to test access. Preserve independent reviewers and evidence/version binding; no new secret, repeated reuse approval, borrowed human session or expanded reviewer role is needed. |
-| Installed authentication and full lifecycle | September 15 owner checks confirm login cancellation, authenticated sign-in, explicit session refresh and successful empty history read in both Chrome and Edge. D2-068 also has installed Chrome keyboard confirmation. Automated protocol and Chrome-for-Testing/Edge layout tests pass. | Complete deeper refresh rotation/replay, logout/revocation, cross-account and offline/restart journeys with disposable accounts; retain aggregate results only. Do not repeat the accepted basic sign-in/cancellation/history checks. |
+| End-user extension release boundary | D2-073 production/store diagnostic exclusion and exact per-intent feedback pass 467 extension tests and isolated Edge/Chrome product checks. Core sign-in, inspect/preview/add and provider publication exist. | Deploy the updated support copy and align final release screenshots/materials. No further manual diagnostic-panel testing; preserve automated authentication, account isolation and retry regressions. |
 | Accessibility scope (manual screen reader deferred) | Keyboard/reflow/geometry and automated axe checks pass. The owner confirms the installed shared-history keyboard route in both Chrome and Edge on September 15. | Manual screen-reader testing is explicitly deferred by the owner and is not a Phase 2/product-launch blocker or passed test. Preserve existing accessibility controls and automated coverage; independent store requirements remain separate. |
-| Authenticated load and abuse acceptance | Paced public-policy and unauthenticated-boundary workload passed. Separate paused-intake and active-processing-to-review runners pass 29 synthetic regressions. D2-045's matching inspector profiles are implemented and verified, including strict aggregates, metric coverage and settled queues. | Use explicitly scoped disposable authenticated candidates for a bounded development workload and matching server aggregates. The active runner follows the existing five-minute schedule, never approves a case, and is not throughput/publication acceptance. No production traffic, raw tokens, personal payloads, or invented provider truth. |
 | Alarm notification receipt | Thirteen D2 alarms are healthy; guarded synthetic alarm/OK exercise and preflight are implemented. | Run the exercise last and obtain recipient confirmation of both ALARM and recovery; healthy alarm state is not proof of delivery. |
-| Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-062's current-control instructions are deployed and verified at candidate source `e930ad2`. | Name a monitored support channel, capture the exact installed listing screenshots, and obtain exact-candidate/accountable/store approval before distribution. |
+| Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-062's current-control instructions are deployed and verified at candidate source `e930ad2`. | Support-email setup/verification/monitoring is owner-deferred to launch preparation, not an immediate Phase 2 implementation blocker. Keep the placeholder inactive and do not request confirmation now. Final installed listing screenshots and exact-candidate/accountable/store approval remain release work. |
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Support-channel work deferred by owner (`2026-09-16`): move inbox setup, address confirmation,
+delivery checks and monitoring to launch preparation. Do not pause current implementation or
+ask for this input again now. Retain `applydash@tobedecided.com` only as the inactive draft
+placeholder. Deferral is not operational acceptance; no public contact link is activated.
+
+Temporary support contact recorded (`2026-09-16`): owner supplied `applydash@tobedecided.com`
+for now. Keep it as a draft placeholder, not a verified monitored inbox or an active public
+contact link. Before launch, confirm or replace the address and check receipt/monitoring.
+This does not block unrelated Phase 2 implementation or complete the support-channel gate.
+The existing [support draft](../../../frontend/extension/store/support-and-removal.md) and
+master tracker are synchronized; no new decision document or live configuration is created.
+
+D2-073 verification finished (`2026-09-16`): resumed maintained verifier exits zero, including
+typechecks, dependency-security regressions, repository tests, 20 successful builds and final
+Compose/scope checks. No Docker engine start was needed. Product browser checks also pass after
+the helper fix. Requested the owner's monitored public support address/URL; none is invented.
+Hosted copy and final release materials remain outstanding, so Phase 2 is still In progress.
+
+D2-073 product boundary verified (`2026-09-16`): nondevelopment popup and side-panel HTML now
+omit both diagnostic panels and their appeal dialog; store packaging rejects their inclusion.
+All 467 extension tests and the isolated product browser matrix pass in Edge and Chrome-for-Testing.
+The product runner preserves local development settings/output, makes no external requests, and
+cleans only its validated generated scratch directory. Support, privacy and listing sources align
+with the end-user flow; hosted rollout and final screenshots remain open. The first full verifier
+run found one cleanup-helper lint error; fixed without weakening cleanup path validation, with
+lint and both product browser checks passing again. Remaining verifier stages resumed from
+formatting rather than rerunning unchanged operator suites. No further human diagnostic tests.
+
+D2-073 implementation started (`2026-09-16`): build-time diagnostic block exclusion, safe popup
+initialization without diagnostic DOM, exact per-intent add feedback and release-package guards
+are being implemented on the shared worktree with no extra branches. Support-page source now
+describes inspect/preview/add and distinguishes acknowledgement from publication; four focused
+support tests pass. The actual hosted copy is not yet updated. Automated product-build/browser
+and full repository verification remain pending; no manual diagnostic-panel checks are requested.
+
+Owner-directed launch refocus (`2026-09-15`): record both diagnostic panels as development-only,
+remove their remaining manual UI exercises from launch requirements (not passed), and add D2-073
+for their actual exclusion from end-user builds. Keep the single decision/rationale in this
+document, with pointers from the master tracker and extension README. No code, build, backend
+queue, persisted data or authentication behavior changes in this documentation-only step.
+
+Edge empty-queue restart recovery completed (`2026-09-15`, D2-012/D2-015): record the owner's
+zero pending/stopped baseline, post-restart signed-out UI and same-account restored withdrawn
+entry after successful explicit history refresh. Both browser restart/read-recovery journeys
+now pass. The unavailable second account blocks only installed cross-account acceptance;
+no new account is requested and no broader lifecycle completion is claimed.
+
+Edge offline-history retest passed (`2026-09-15`, D2-072/D2-015): owner reports the fixed offline
+message with contribution retained and the successful online history-load message with the same
+entry retained. Record status-only evidence in both trackers and update the extension README.
+No source change or repeated workload is needed; broader lifecycle tasks stay In progress.
+
+D2-072 installed retest completed (`2026-09-15`): owner confirms retained withdrawn entry
+during offline history failure, followed by successful explicit history refresh after restoring
+No throttling. Mark D2-072 Complete and synchronize the master tracker. Retain only these
+status-level observations; no resubmission, removal, queue retry or storage clearing was requested.
+No further implementation change or repeated workload is needed to close this specific defect.
+
+D2-072 local verification completed (`2026-09-15`): extension suite 447/447, typecheck,
+configured unpacked build and independent read-only review pass. The maintained
+`scripts/verify-phase0.ps1` exits 0, including 33 typecheck tasks and 20 build tasks (unchanged
+packages may use Turbo cache), source tests and Compose configuration validation without
+starting Docker/WSL. Local Markdown targets and `git diff --check` pass. No database integration
+or deployed/browser acceptance is inferred. Owner is asked to reload, load existing history,
+perform one brief Offline history refresh, then restore No throttling without any submission.
+
+D2-072 offline-history repair started (`2026-09-15`): reproduced the proactive-refresh failure
+path with generated sessions and receipts. See
+[protocol tests](../../../frontend/extension/tests/protocol.test.ts),
+[worker tests](../../../frontend/extension/tests/background-policy-readiness.test.ts) and
+[popup tests](../../../frontend/extension/tests/popup-session.test.ts). No live account data is
+retained in fixtures. Installed offline disappearance is not marked passed by local tests.
 
 Bounded workload cloud corroboration completed (`2026-09-15`, D2-028): after the five-minute
 metric-publication interval, `inspect-development-workload-and-cost.ps1 -Action Measure
@@ -3780,6 +3951,36 @@ public job, replay the old private command without the rebuild, clear queues or 
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+### Development-only extension diagnostics
+
+Accepted by the product owner on `2026-09-15`: **Your shared jobs** and **Delivery queue** are
+debug/development sections and will not be present or visible to end users in the product.
+Reason: the user-facing purpose is to inspect a public job, review selected fields and add it;
+exposing internal history/queue diagnostics and repeatedly testing those panels creates friction
+without advancing that launch experience. This is the single authoritative rationale; do not
+create additional decision documents for it.
+
+Stop additional human-loop tests of those sections now. Remove their unfinished manual UI
+acceptance exercises from the Phase 2/product-launch checklist rather than mark them passed.
+Keep prior evidence as history. Do not require a second account for the cancelled diagnostic
+history check. Retain automated security, ownership, retry, idempotency and data-loss protections
+for the underlying product operation; hiding a panel does not delete its backend or waive these
+controls. End users still need clear, truthful success/failure feedback on the add action, without
+the diagnostic panels or an implication that acknowledgement means publication.
+
+D2-073 owns explicit development-only rendering and verified exclusion from production/store
+artifacts, including popup and side panel, plus aligned support/store materials. This decision
+does not claim that current code already implements that separation or approve public release.
+Focus remaining work on this production boundary, the actual product journey, and concrete
+support, operational and release requirements—not further diagnostic-panel test sessions.
+
+On `2026-09-15`, D2-072 separates cached receipt display from proactive network authentication:
+an unexpired locally bound session is sufficient to display its existing owner-only receipts.
+API requests still refresh proactively, and expired/missing sessions cannot display receipts.
+This avoids hiding valid cached history merely because OAuth is offline without weakening
+logout, cross-account isolation, expiry or remote authorization. Do not retain UI records by
+blindly ignoring empty responses, which could expose the previous account's history.
 
 For D2-020 private-capture preparation, resolve a browser window explicitly instead of using a
 service worker's context-dependent current window. Keep normal and browser-popup windows

@@ -144,6 +144,35 @@ describe("extension Auth0 protocol lifecycle", () => {
     vi.useRealTimers();
   });
 
+  it("reads a still-valid local session without proactive refresh for cached display", async () => {
+    const session = await storedSession();
+    installChrome({ initialSession: session });
+    const fetchMock = vi.fn().mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("fetch", fetchMock);
+    const api = await protocol();
+    await expect(api.authenticatedApiSession({ refreshIfNeeded: false })).resolves.toEqual({
+      accessToken: session.accessToken,
+      identityFence: session.identityFence,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Ordinary API callers retain proactive refresh and fail when the exchange is offline.
+    await expect(api.authenticatedApiSession()).rejects.toThrow("token_request_failed");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each(["expired", "missing"])("rejects %s sessions even for cached display", async (kind) => {
+    const session = await storedSession();
+    installChrome({
+      initialSession: kind === "expired" ? { ...session, expiresAt: Date.now() - 1 } : undefined,
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      (await protocol()).authenticatedApiSession({ refreshIfNeeded: false }),
+    ).rejects.toThrow("authentication_required");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("fails closed when interactive authorization is cancelled", async () => {
     const browser = installChrome({});
     const fetchMock = vi.fn();

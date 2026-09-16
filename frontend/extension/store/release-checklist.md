@@ -17,6 +17,11 @@ Every box applies independently to Chrome and Edge unless the evidence explicitl
 
 ## Product, privacy, and operations
 
+- [ ] End-user popup/side-panel artifacts omit development-only Your shared jobs, Delivery queue
+  and their diagnostic dialogs/controls. Automated package and product-flow tests verify the
+  boundary; no additional manual diagnostic-panel acceptance is required under D2-073.
+- [ ] Listing screenshots and hosted help show only the actual shipped inspect/preview/add flow
+  and truthful action feedback, never development diagnostics as end-user features.
 - [ ] Authorized provider fixtures and independent variant acceptance exist for every enabled rule.
 - [ ] `EXTENSION_DETECTOR_ACTIVATION_JSON` contains only the reviewed exact extension version and
   complete provider/variant/domain maps; enabled tuples match accepted fixtures, and the archive

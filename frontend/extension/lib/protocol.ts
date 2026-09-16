@@ -338,7 +338,7 @@ async function refreshSession(generation: number): Promise<void> {
   );
 }
 
-export async function authenticatedApiSession(): Promise<{
+export async function authenticatedApiSession({ refreshIfNeeded = true } = {}): Promise<{
   accessToken: string;
   identityFence: string;
 }> {
@@ -350,7 +350,7 @@ export async function authenticatedApiSession(): Promise<{
   if (!current) {
     throw new Error("authentication_required");
   }
-  if (current.expiresAt <= Date.now() + 30_000) {
+  if (refreshIfNeeded && current.expiresAt <= Date.now() + 30_000) {
     await refresh();
     current = await readSession();
     assertSessionGeneration(generation);

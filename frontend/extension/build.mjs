@@ -117,6 +117,30 @@ const configured =
   clientId.length > 0 &&
   audience === "ai-job-apply-api";
 
+const popupTemplate = await readFile(join(extensionRoot, "static", "popup.html"), "utf8");
+const diagnosticsStart = "<!-- DEVELOPMENT_DIAGNOSTICS_START -->";
+const diagnosticsEnd = "<!-- DEVELOPMENT_DIAGNOSTICS_END -->";
+const startIndex = popupTemplate.indexOf(diagnosticsStart);
+const endIndex = popupTemplate.indexOf(diagnosticsEnd);
+if (
+  startIndex < 0 ||
+  endIndex <= startIndex ||
+  popupTemplate.indexOf(diagnosticsStart, startIndex + 1) !== -1 ||
+  popupTemplate.indexOf(diagnosticsEnd, endIndex + 1) !== -1
+) {
+  throw new Error("The development diagnostics template boundary is invalid");
+}
+const productHtml =
+  popupTemplate.slice(0, startIndex) + popupTemplate.slice(endIndex + diagnosticsEnd.length);
+const diagnosticsHtml = popupTemplate.slice(startIndex, endIndex);
+for (const id of ["queue-panel", "contributions-panel", "appeal-dialog"]) {
+  const idAttribute = new RegExp(`\\bid\\s*=\\s*(?:["']${id}["']|${id}(?=[\\s>]))`, "iu");
+  if (!idAttribute.test(diagnosticsHtml) || idAttribute.test(productHtml)) {
+    throw new Error("Development diagnostics must stay inside their template boundary");
+  }
+}
+const popupHtml = developmentContributions ? popupTemplate : productHtml;
+
 await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(outputDirectory, { recursive: true });
 
@@ -189,7 +213,6 @@ const manifest = {
 };
 
 await writeFile(join(outputDirectory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-const popupHtml = await readFile(join(extensionRoot, "static", "popup.html"), "utf8");
 const sidePanelHtml = popupHtml.replace(
   'data-extension-surface="popup"',
   'data-extension-surface="side-panel"',

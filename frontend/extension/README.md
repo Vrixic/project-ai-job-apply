@@ -25,6 +25,19 @@ browser-store distribution are not approved. See the current
 
 ## Implemented source boundary
 
+Product scope: **Your shared jobs** and **Delivery queue** are development-only diagnostics,
+not end-user features. D2-073 removes their HTML from nondevelopment popup and side-panel
+builds; only explicit development mode retains them. Packaging rejects diagnostic HTML in a
+store archive. End-user add feedback reports the exact intent's delivery result, not queue totals.
+Stop additional human-loop tests of those panels.
+See the single [owner decision](../../docs/product/delivery/phase-2-extension-and-community.md#development-only-extension-diagnostics)
+for rationale and acceptance; retain automated underlying security/reliability tests.
+
+- Cached shared-job display reads only the current unexpired local session, without proactive
+  OAuth refresh. A failed explicit history refresh retains same-owner cached receipts when that
+  session is still valid. Expired/missing sessions and unreadable storage still hide history;
+  network actions keep proactive refresh and existing authorization. No background history polling.
+
 - Queue and shared-job section headers keep keyboard focus inside their clipped cards. From
   **Inspect current tab** with no preview, Tab reaches **Delivery queue**, then **Your shared jobs**.
   Press Enter or Space on a section header to expand it; Tab then reaches its enabled controls.
@@ -265,11 +278,15 @@ repeat completed work.
   submissions, decisions or checks. EU Lever/custom domains and production/store remain excluded.
 - Chrome and Edge sign-in, cancellation, explicit session refresh, empty shared-history read and
   the corrected keyboard route are user-confirmed on September 15. Deeper rotation/replay,
-  revocation, cross-account and offline/restart acceptance remains separate.
+  revocation, cross-account and queued offline/restart acceptance remains separate. Chrome and Edge
+  empty-queue restart/reauthentication and D2-072 offline-history retention/online recovery are
+  now owner-confirmed in both browsers;
+  this is not acceptance of queued offline delivery, cross-account isolation or token replay.
 - Fresh nonempty disposable export/deletion is complete under D2-020, including the private-capture
   compatibility API. Do not recreate or reuse the deleted test account.
-- Nonempty takedown/human appeal, bounded authenticated load/abuse and final alarm-recipient
-  acceptance remain. Existing reviewer separation and exact provider scope are unchanged.
+- Nonempty takedown/human appeal and final alarm-recipient acceptance remain. D2-028's bounded
+  authenticated workload, exact-window cloud corroboration and cleanup pass; do not rerun it.
+  Existing reviewer separation and exact provider scope are unchanged.
 - Monitored support contact, exact store candidate/screenshots and accountable release/store
   approval remain. The owner deferred manual screen-reader testing on September 15; retain
   keyboard/reflow/semantic protections and automated accessibility coverage without claiming that

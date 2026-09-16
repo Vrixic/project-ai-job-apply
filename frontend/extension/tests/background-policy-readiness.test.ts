@@ -123,6 +123,7 @@ function trustResponse(version: number, state = "needs_review", updatedAt = now)
 }
 
 interface BackgroundResponse {
+  deliveryOutcome?: string;
   ok: boolean;
   error?: string;
   ownerAction?: string;
@@ -321,10 +322,14 @@ describe("warm background worker signed-policy readiness", () => {
       expect.objectContaining({ target: { tabId: 7 } }),
     );
     expect((await worker.status()).delivery.privateSave.ready).toBe(true);
-    expect(
-      (await worker.send({ action: "enqueue", intent: "contribute", approvedFields: ["title"] }))
-        .ok,
-    ).toBe(true);
+    const added = await worker.send({
+      action: "enqueue",
+      intent: "contribute",
+      approvedFields: ["title"],
+    });
+    expect(added.ok).toBe(true);
+    expect(added.deliveryOutcome).toBe("acknowledged");
+    expect(added.queue.blocked).toBe(1);
     for (const [query] of worker.browser.tabs.query.mock.calls)
       expect(query).toEqual({ active: true, windowId: 11 });
     for (const args of worker.browser.windows.getLastFocused.mock.calls)
@@ -927,7 +932,8 @@ describe("warm background worker signed-policy readiness", () => {
     });
     await enqueued.promise;
     release.resolve();
-    await Promise.all([retry, adding]);
+    const [, added] = await Promise.all([retry, adding]);
+    expect(added.deliveryOutcome).toBe("pending");
     const remaining = worker.local.get(PENDING_QUEUE_KEY) as { id: string; state: string }[];
     expect(remaining).toHaveLength(2);
     expect(remaining.filter((item) => item.state === "pending")).toHaveLength(1);
@@ -1146,6 +1152,34 @@ describe("warm background worker signed-policy readiness", () => {
       expect(JSON.stringify(result)).not.toContain("redacted");
     },
   );
+
+  it("keeps cached owner receipts on offline history transport failure", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("private-network-error"));
+    const worker = await background(fetcher, true);
+    const result = await worker.send({ action: "shared_jobs_refresh" });
+    expect(result).toMatchObject({ ok: false, sharedJobsState: "unavailable" });
+    expect(result.receipts).toHaveLength(1);
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(JSON.stringify(result)).not.toContain("private-network-error");
+  });
+
+  it("keeps still-authenticated cached receipts when proactive token refresh fails offline", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const worker = await background(fetcher, true);
+    const api = await import("../lib/protocol");
+    vi.mocked(api.authenticatedApiSession).mockImplementation(async (options) => {
+      if (!options || options.refreshIfNeeded !== false) throw new Error("token_request_failed");
+      return { accessToken: "synthetic-token", identityFence };
+    });
+    const result = await worker.send({ action: "shared_jobs_refresh" });
+    expect(result).toMatchObject({ ok: false, sharedJobsState: "unavailable" });
+    expect(result.receipts).toHaveLength(1);
+    expect(worker.local.get(CONTRIBUTION_RECEIPTS_KEY)).toEqual(worker.originalReceipts);
+    expect(worker.local.get(PENDING_QUEUE_KEY)).toEqual(worker.originalQueue);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 
   it("does not interpret authentication failure as an empty history or remove stored receipts", async () => {
     const fetcher = vi.fn<typeof fetch>();

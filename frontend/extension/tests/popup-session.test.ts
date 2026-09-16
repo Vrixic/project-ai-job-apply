@@ -93,6 +93,97 @@ describe("popup retained-session lifecycle", () => {
     expect(button("inspect").disabled).toBe(false);
   });
 
+  it.each([
+    ["acknowledged", "Job received for review."],
+    ["pending", "delivery is not confirmed"],
+    ["stopped", "Job delivery stopped"],
+    ["blocked", "held for the original signed-in account"],
+    ["unconfirmed", "Job delivery could not be confirmed"],
+    [undefined, "Job delivery could not be confirmed"],
+  ])(
+    "runs the product add flow without diagnostic panels: %s",
+    async (deliveryOutcome, expected) => {
+      for (const selector of ["#queue-panel", "#contributions-panel", "#appeal-dialog"]) {
+        document.querySelector(selector)?.remove();
+      }
+      const status = { ...expiredSession, authenticated: true };
+      const sendMessage = await popup(status);
+      const capture = sanitizeSnapshot(
+        { canonicalUrl: "https://jobs.lever.co/example/123", title: "Engineer" },
+        "lever",
+        "lever-posting-v1",
+      );
+      sendMessage.mockResolvedValueOnce({
+        ok: true,
+        status,
+        ...{
+          capture,
+          delivery: {
+            contribution: { ready: true, reason: "ready" },
+            privateSave: { ready: true, reason: "ready" },
+          },
+        },
+      });
+      button("inspect").click();
+      await idle();
+      expect(button("contribute").disabled).toBe(false);
+      sendMessage.mockResolvedValueOnce({
+        ok: true,
+        status,
+        ...{
+          deliveryOutcome,
+          queue: { pending: 3, stopped: 2, blocked: 1 },
+          receipts: [
+            { contributionId: "018f0000-0000-7000-8000-000000000004", state: "published" },
+          ],
+        },
+      });
+      button("contribute").click();
+      await idle();
+      expect(document.querySelector("#detail")?.textContent).toContain(expected);
+      expect(document.body.textContent).not.toContain("3 pending");
+      expect(document.body.textContent).not.toContain("Processing: published");
+      expect(document.querySelector("#queue-panel")).toBeNull();
+      expect(document.querySelector("#contributions-panel")).toBeNull();
+      expect(sendMessage).toHaveBeenLastCalledWith({
+        action: "enqueue",
+        intent: "contribute",
+        approvedFields: [],
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains the product preview and reports an add failure without diagnostic panels", async () => {
+    for (const selector of ["#queue-panel", "#contributions-panel", "#appeal-dialog"])
+      document.querySelector(selector)?.remove();
+    const status = { ...expiredSession, authenticated: true };
+    const sendMessage = await popup(status);
+    sendMessage.mockResolvedValueOnce({
+      ok: true,
+      status,
+      ...{
+        capture: sanitizeSnapshot(
+          { canonicalUrl: "https://jobs.lever.co/example/123", title: "Engineer" },
+          "lever",
+          "lever-posting-v1",
+        ),
+        delivery: {
+          contribution: { ready: true, reason: "ready" },
+          privateSave: { ready: true, reason: "ready" },
+        },
+      },
+    });
+    button("inspect").click();
+    await idle();
+    sendMessage.mockResolvedValueOnce({ ok: false, status, error: "The action did not complete." });
+    button("contribute").click();
+    await idle();
+    expect(document.querySelector("#detail")?.textContent).toBe("The action did not complete.");
+    expect(document.querySelector<HTMLElement>("#preview")?.hidden).toBe(false);
+    expect(document.body.textContent).not.toContain("Job received for review");
+  });
+
   it("loads shared jobs only after its explicit button and distinguishes missing local history", async () => {
     const status = { ...expiredSession, authenticated: true };
     const sendMessage = await popup(status);
@@ -178,6 +269,36 @@ describe("popup retained-session lifecycle", () => {
     expect(button("refresh-shared-jobs").disabled).toBe(true);
     expect(button("login").hidden).toBe(false);
     expect(button("logout").hidden).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a loaded withdrawn entry through offline failure and online recovery", async () => {
+    const status = { ...expiredSession, authenticated: true };
+    const sendMessage = await popup(status);
+    for (const sharedJobsState of ["refreshed", "unavailable", "refreshed"] as const) {
+      sendMessage.mockResolvedValueOnce({
+        ok: sharedJobsState === "refreshed",
+        status,
+        ...{
+          receipts: [
+            { contributionId: "018f0000-0000-7000-8000-000000000004", state: "withdrawn" },
+          ],
+          sharedJobsState,
+        },
+      });
+      button("refresh-shared-jobs").click();
+      await idle();
+      expect(document.querySelector("#contributions-status")?.textContent).toBe("1 saved");
+      expect(document.querySelector("#contribution-list")?.textContent).toContain(
+        "Processing: withdrawn",
+      );
+      expect(document.querySelector("#shared-jobs-status")?.textContent).toContain(
+        sharedJobsState === "unavailable"
+          ? "Saved receipts were kept"
+          : "Your latest shared jobs were loaded",
+      );
+    }
+    expect(sendMessage).toHaveBeenCalledTimes(4);
     expect(fetch).not.toHaveBeenCalled();
   });
 

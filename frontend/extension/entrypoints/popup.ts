@@ -39,6 +39,7 @@ interface QueueStatus {
 }
 
 interface ExtensionResponse {
+  deliveryOutcome?: "acknowledged" | "pending" | "stopped" | "blocked" | "unconfirmed";
   capture?: SanitizedJobCapture;
   delivery?: DeliveryReadiness;
   error?: string;
@@ -70,7 +71,7 @@ const node = <T extends Element>(selector: string): T => {
 
 const authStatus = node<HTMLElement>("#auth-status");
 const detail = node<HTMLElement>("#detail");
-const queueStatus = node<HTMLElement>("#queue-status");
+const queueStatus = document.querySelector<HTMLElement>("#queue-status");
 const preview = node<HTMLElement>("#preview");
 const previewHeading = node<HTMLElement>("#preview-heading");
 const fieldList = node<HTMLElement>("#field-list");
@@ -81,22 +82,22 @@ const refreshButton = node<HTMLButtonElement>("#refresh");
 const logoutButton = node<HTMLButtonElement>("#logout");
 const inspectButton = node<HTMLButtonElement>("#inspect");
 const contributeButton = node<HTMLButtonElement>("#contribute");
-const retryButton = node<HTMLButtonElement>("#retry");
-const retryStoppedButton = node<HTMLButtonElement>("#retry-stopped");
-const clearStoppedButton = node<HTMLButtonElement>("#clear-stopped");
-const clearQueueButton = node<HTMLButtonElement>("#clear-queue");
+const retryButton = document.querySelector<HTMLButtonElement>("#retry");
+const retryStoppedButton = document.querySelector<HTMLButtonElement>("#retry-stopped");
+const clearStoppedButton = document.querySelector<HTMLButtonElement>("#clear-stopped");
+const clearQueueButton = document.querySelector<HTMLButtonElement>("#clear-queue");
 const main = node<HTMLElement>("main");
-const queuePanel = node<HTMLDetailsElement>("#queue-panel");
-const contributionsPanel = node<HTMLDetailsElement>("#contributions-panel");
-const contributionsStatus = node<HTMLElement>("#contributions-status");
-const contributionList = node<HTMLElement>("#contribution-list");
-const sharedJobsRefreshButton = node<HTMLButtonElement>("#refresh-shared-jobs");
-const sharedJobsStatus = node<HTMLElement>("#shared-jobs-status");
-const ownerActionStatus = node<HTMLElement>("#owner-action-status");
-const appealDialog = node<HTMLDialogElement>("#appeal-dialog");
-const appealForm = node<HTMLFormElement>("#appeal-form");
-const appealEvidence = node<HTMLTextAreaElement>("#appeal-evidence");
-const cancelAppeal = node<HTMLButtonElement>("#cancel-appeal");
+const contributionsPanel = document.querySelector<HTMLDetailsElement>("#contributions-panel");
+const queuePanel = document.querySelector<HTMLDetailsElement>("#queue-panel");
+const contributionsStatus = document.querySelector<HTMLElement>("#contributions-status");
+const contributionList = document.querySelector<HTMLElement>("#contribution-list");
+const sharedJobsRefreshButton = document.querySelector<HTMLButtonElement>("#refresh-shared-jobs");
+const sharedJobsStatus = document.querySelector<HTMLElement>("#shared-jobs-status");
+const ownerActionStatus = document.querySelector<HTMLElement>("#owner-action-status");
+const appealDialog = document.querySelector<HTMLDialogElement>("#appeal-dialog");
+const appealForm = document.querySelector<HTMLFormElement>("#appeal-form");
+const appealEvidence = document.querySelector<HTMLTextAreaElement>("#appeal-evidence");
+const cancelAppeal = document.querySelector<HTMLButtonElement>("#cancel-appeal");
 
 const readinessCopy: Record<DeliveryReadinessReason, string> = {
   development_capture_disabled:
@@ -154,8 +155,8 @@ function controls(): HTMLButtonElement[] {
     clearQueueButton,
     sharedJobsRefreshButton,
     ...fieldList.querySelectorAll<HTMLButtonElement>("button"),
-    ...contributionList.querySelectorAll<HTMLButtonElement>("button"),
-  ];
+    ...(contributionList?.querySelectorAll<HTMLButtonElement>("button") ?? []),
+  ].filter((button): button is HTMLButtonElement => button !== null);
 }
 
 function updateControlState(): void {
@@ -164,7 +165,7 @@ function updateControlState(): void {
 
   inspectButton.disabled = false;
   contributeButton.disabled = !currentCapture || currentDelivery?.contribution.ready !== true;
-  sharedJobsRefreshButton.disabled = !authenticated;
+  if (sharedJobsRefreshButton) sharedJobsRefreshButton.disabled = !authenticated;
 }
 
 function setBusy(nextBusy: boolean, action?: string): void {
@@ -219,7 +220,15 @@ function renderStatus(response: ExtensionResponse): void {
   if (response.delivery) currentDelivery = response.delivery;
   renderDeliveryReadiness();
 
-  if (response.queue) {
+  if (
+    response.queue &&
+    queueStatus &&
+    retryButton &&
+    retryStoppedButton &&
+    clearStoppedButton &&
+    clearQueueButton &&
+    queuePanel
+  ) {
     const failure = response.queue.lastError
       ? {
           contribution_capability_policy_unavailable:
@@ -252,7 +261,7 @@ function renderStatus(response: ExtensionResponse): void {
     if (response.queue.stopped + response.queue.blocked > 0) queuePanel.open = true;
   }
   if (response.receipts) renderReceipts(response.receipts, response.sharedJobsState);
-  if (response.ownerAction) {
+  if (response.ownerAction && ownerActionStatus && contributionsPanel) {
     ownerActionStatus.textContent = {
       ok: "Contribution information updated.",
       not_found: "No owner-visible record is available yet. Refresh again after processing.",
@@ -272,6 +281,7 @@ function renderReceipts(
   receipts: ContributionReceipt[],
   state: ExtensionResponse["sharedJobsState"] = "cached",
 ): void {
+  if (!contributionList || !contributionsStatus || !sharedJobsStatus) return;
   contributionList.replaceChildren();
   contributionsStatus.textContent =
     receipts.length > 0
@@ -331,6 +341,7 @@ function renderReceipts(
       button.textContent = label;
       button.addEventListener("click", () => {
         if (action === "appeal") {
+          if (!appealDialog || !appealEvidence) return;
           appealContributionId = receipt.contributionId;
           appealEvidence.value = "";
           appealDialog.showModal();
@@ -586,7 +597,18 @@ function renderCapture(capture: SanitizedJobCapture): void {
 function successMessage(action: string, response: ExtensionResponse): string | undefined {
   if (!response.ok) return undefined;
   if (action === "enqueue") {
-    return "The selected public fields were added to the shared job review queue.";
+    switch (response.deliveryOutcome) {
+      case "acknowledged":
+        return "Job received for review. Provider verification happens before publication.";
+      case "pending":
+        return "Job saved on this device, but delivery is not confirmed. ApplyDash will retry automatically; do not add it again.";
+      case "stopped":
+        return "Job delivery stopped and has not been confirmed. Contact support before adding it again.";
+      case "blocked":
+        return "Job delivery is held for the original signed-in account. Sign in with that account; do not add it again.";
+      default:
+        return "Job delivery could not be confirmed. Do not add it again until its status is resolved.";
+    }
   }
   if (action === "retry") return "Queued delivery was retried. Review the queue counts below.";
   if (action === "retry_stopped") {
@@ -604,7 +626,12 @@ async function invoke(message: Record<string, unknown>): Promise<ExtensionRespon
   try {
     const response = (await chrome.runtime.sendMessage(message)) as ExtensionResponse;
     renderStatus(response);
-    if (action === "shared_jobs_refresh" && response.sharedJobsState) {
+    if (
+      action === "shared_jobs_refresh" &&
+      response.sharedJobsState &&
+      contributionsPanel &&
+      sharedJobsStatus
+    ) {
       contributionsPanel.open = true;
       sharedJobsStatus.focus();
     }
@@ -640,13 +667,13 @@ logoutButton.addEventListener("click", () => {
   renderReceipts([], "sign_in_required");
   void invoke({ action: "logout" });
 });
-sharedJobsRefreshButton.addEventListener(
+sharedJobsRefreshButton?.addEventListener(
   "click",
   () => void invoke({ action: "shared_jobs_refresh" }),
 );
 inspectButton.addEventListener("click", () => void invoke({ action: "capture" }));
-retryButton.addEventListener("click", () => void invoke({ action: "retry" }));
-retryStoppedButton.addEventListener("click", () => {
+retryButton?.addEventListener("click", () => void invoke({ action: "retry" }));
+retryStoppedButton?.addEventListener("click", () => {
   if (
     window.confirm(
       "Retry stopped deliveries now? The original selected fields and idempotency keys will be reused.",
@@ -655,8 +682,8 @@ retryStoppedButton.addEventListener("click", () => {
     void invoke({ action: "retry_stopped" });
   }
 });
-clearStoppedButton.addEventListener("click", () => void invoke({ action: "clear_stopped" }));
-clearQueueButton.addEventListener("click", () => {
+clearStoppedButton?.addEventListener("click", () => void invoke({ action: "clear_stopped" }));
+clearQueueButton?.addEventListener("click", () => {
   if (window.confirm("Remove every pending and stopped item from this device?")) {
     void invoke({ action: "clear_queue" });
   }
@@ -666,13 +693,14 @@ contributeButton.addEventListener("click", () => {
     void invoke({ action: "enqueue", approvedFields: selectedFields(), intent: "contribute" });
   }
 });
-cancelAppeal.addEventListener("click", () => appealDialog.close());
-appealDialog.addEventListener("close", () => {
-  appealEvidence.value = "";
+cancelAppeal?.addEventListener("click", () => appealDialog?.close());
+appealDialog?.addEventListener("close", () => {
+  if (appealEvidence) appealEvidence.value = "";
   appealContributionId = undefined;
 });
-appealForm.addEventListener("submit", async (event) => {
+appealForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!appealEvidence || !appealDialog) return;
   const evidenceText = appealEvidence.value;
   const contributionId = appealContributionId;
   if (
