@@ -3518,6 +3518,15 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Appeal readiness checks (`2026-09-16`): all 62 Trust unit tests and all 32 reviewer-console tests
+pass before requesting live human review. Inspected coverage includes separate appeal/provider
+evidence, stale-proof refusal, adverse-reviewer exclusion, verified-requester authority refusal
+and fresh takedown confirmation bound to the loaded case version. These are local generated
+tests, not deployed lifecycle or fresh PostgreSQL evidence. Removed two residual field-removal
+descriptions from the extension README/security flow to match the all-field Add implementation.
+The next live action still depends on the disposable contribution's submission status; no
+duplicate contribution, takedown, appeal or reviewer authority change was attempted.
+
 Integrated UI/help rollout (`2026-09-16`): source `d11ec2e` is committed and pushed on main,
 without an agent branch. D2-075 is Complete for its bounded preview scope. Exact candidate-only
 Vercel preflight validates the authorized account/project and clean source; the dry-run manifest

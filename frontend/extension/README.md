@@ -132,7 +132,7 @@ for rationale and acceptance; retain automated underlying security/reliability t
   fragments, trackers, and local/private
   targets. A work arrangement embedded in a combined location such as `Remote-NORAM` is separated
   into grounded work type `Remote` and location `NORAM`.
-- One field-level preview for the explicit public-add command. Optional-field removal is honored;
+- One field-level preview for the explicit public-add command. All available public fields are included;
   required source identity fields remain visible and cannot be silently removed. Pressing the add
   button is the user's instruction to enqueue all available captured public fields, without
   per-field checkboxes. Inspecting the page alone never enqueues a contribution.
@@ -151,7 +151,7 @@ for rationale and acceptance; retain automated underlying security/reliability t
   digest-bound command authorization through the existing v1 Profile consent endpoint and then
   calls `POST /v1/jobs/contributions`. The authorization receipt is an audit, replay, attribution,
   and withdrawal control; it is not a claim that a public posting needs permission to be read. The
-  transport maps only selected fields, accepts only exact `no-store` server receipts, persists the
+  transport maps only the immutable command's allowed public fields, accepts only exact `no-store` server receipts, persists the
   server-issued receipt across ambiguous retries, and uses separate stable idempotency keys. The
   backward-compatible private-capture transport remains implemented but is not exposed by the
   public-add-only extension surface. Its authenticated POST now refuses redirects, matching the

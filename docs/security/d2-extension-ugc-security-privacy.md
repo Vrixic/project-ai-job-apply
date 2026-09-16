@@ -1,7 +1,7 @@
 # Phase 2 Extension and UGC Security/Privacy Delta
 
 - Status: Engineering design; accountable approval pending
-- Last updated: 2026-09-15
+- Last updated: 2026-09-16
 - Decision boundary: [ADR-028](../adr/028-extension-ugc-ownership-and-processing.md) and
   [ADR-029](../adr/029-one-step-public-job-addition.md)
 
@@ -34,7 +34,7 @@ authorization, recovery behavior and actual execution status; sign-in is not wor
 ```text
 explicit current-tab action
   → local provider detector and strict field sanitizer
-  → candidate preview and field removal
+  → candidate preview of all available sanitized public job fields
   → explicit Add job to shared database command
   → extension background session + bounded pending queue
   → authenticated gateway (`jobs:contribute`)
@@ -45,7 +45,7 @@ explicit current-tab action
 ```
 
 The normal path stores no raw DOM or page snapshot. Allowed contribution values are the canonical
-source URL and selected structured public fields needed to identify and verify the posting. URLs
+source URL and available structured public fields needed to identify and verify the posting. URLs
 must use HTTPS, remove credentials/fragments/tracking parameters, reject local/private/link-local
 targets, and match an enabled supported provider/domain rule. Text must be bounded, normalized,
 free of markup/control characters, and never interpreted as instructions.

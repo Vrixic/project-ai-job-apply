@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 appeal preparation: 62 Trust unit tests and 32 reviewer-console tests pass.
+These local checks cover authority/evidence/version guards, not the outstanding live independent
+appeal. Residual optional-field descriptions are corrected to match all-field Add behavior.
+Disposable-contribution submission status remains the immediate human input before live action.
+
 September 16 integrated follow-through: `d11ec2e` is pushed on main, with no new branch.
 D2-075 is Complete for the requested preview behavior. Candidate deployment
 `dpl_G8MKUPqvD1GqpzohfhPwU4ka76uh` is READY at that exact source in `iad1` on both existing
