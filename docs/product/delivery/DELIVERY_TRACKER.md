@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 disposable submission confirmed: the owner's one contribution advances from queued
+to a server-confirmed exact-source `needs_review` case/version 1 with fresh provider evidence.
+The read-only check submits zero decisions. Gateway `67` is healthy. Catalog isolation remains
+unproved: anonymous sitemap is 401 and the reviewer has no candidate catalog scope. Prepare a
+separately authenticated read-only check without expanding reviewer authority or resubmitting.
+
 September 16 appeal preparation: 62 Trust unit tests and 32 reviewer-console tests pass.
 These local checks cover authority/evidence/version guards, not the outstanding live independent
 appeal. Residual optional-field descriptions are corrected to match all-field Add behavior.

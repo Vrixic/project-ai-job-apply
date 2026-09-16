@@ -1161,9 +1161,15 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   for this approved disposable test. A read-only public posting-API check finds one exact listed
   match with the same canonical URL. This scopes the test to that new contribution, not broader
   Ashby takedown authority. Existing-catalog isolation is not yet verified; check it before any
-  initial acceptance or takedown decision. Next is one explicit preview-approved submission from
-  the disposable account. Do not ask for credentials or tokens in chat. No test job has been submitted,
-  no case decided, and no runtime configuration changed. Human resolution and exact-scope cleanup
+  initial acceptance or takedown decision. The owner confirms one submission on September 16.
+  A fresh read-only reviewer check at `22:13:49Z` finds exactly one queued review case matching
+  the reported receipt prefix, exact provider URL and title: `needs_review`, version 1, with
+  provider evidence verified at `22:10:37.226Z`. No next queue page exists. No case was decided
+  and no runtime configuration changed. The anonymous sitemap refuses access (401); it is not
+  catalog-isolation evidence. The reviewer grant has no candidate catalog-read scope, so do not
+  broaden it or forge an authorizer context to inspect the catalog. A separately authenticated
+  read-only catalog check remains necessary. Do not ask for credentials or tokens in chat.
+  Human resolution and exact-scope cleanup
   remain required before marking this journey complete.
 
 ### D2-075 — Default missing preview work type to in-person
@@ -3517,6 +3523,17 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Disposable intake confirmed (`2026-09-16`): owner reports one acknowledged contribution queued.
+AWS account binding and healthy Gateway `67` read back successfully. A new ignored read-only
+helper binds the existing delegated reviewer credential, exact scopes, receipt prefix and
+Mintlify source; it exposes aggregates only and contains no decision endpoint. Strict JWT
+verification initially refuses a future issued-at boundary; the existing two-second propagation
+wait resolves it without relaxing verification. Five requests then confirm one exact-source
+`needs_review` case/version 1 with fresh evidence and no next page. Zero review mutations.
+Anonymous public sitemap returns 401, so catalog isolation remains unproved; no candidate scope
+is added to the reviewer and no synthetic authorizer is used. The prior submission-status input
+is resolved; proceed with authenticated read-only catalog isolation before acceptance/takedown.
 
 Appeal readiness checks (`2026-09-16`): all 62 Trust unit tests and all 32 reviewer-console tests
 pass before requesting live human review. Inspected coverage includes separate appeal/provider
