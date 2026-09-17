@@ -3552,6 +3552,14 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Migration packaging follow-through (`2026-09-16`, D2-076): corrected the Dockerfile and
+publication runtime smoke gates to require all 45 migrations, including Trust `0005`.
+The previous hard-coded 44-migration boundary would have rejected the new image before
+publication. Publisher guard suites pass under Windows PowerShell 5 and PowerShell 7.
+Updated current packaging/runbook instructions without relabelling historical 44-migration
+deployment evidence. Full repository verification is running; no cloud change or live decision
+has been made by this correction.
+
 Development test reason (`2026-09-16`, D2-076): owner approves the isolated test-only path.
 Implemented a distinct auditable reason and exact development/configuration/evidence authority,
 with a forward-only migration rather than rewriting older records or reusing a real allegation.

@@ -9,6 +9,10 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-076 packaging follow-through: the migration image build and publication smoke
+checks now require Trust `0005` and 45 migrations. Both PowerShell publisher guard suites pass.
+Full verification and compatible deployment remain outstanding; cloud state is unchanged.
+
 September 16 D2-076: owner-approved development-only test removal is implemented locally with
 a distinct audit reason and exact contribution/evidence authorization, denied outside explicit
 development mode. Focused tests and all eight fresh PostgreSQL Trust integrations pass. Current

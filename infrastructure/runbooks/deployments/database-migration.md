@@ -16,7 +16,7 @@ service and must return to zero running tasks after every migration.
 - For the Phase 2 package, require the exact
   `d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1` manifest, the ordered Profile,
   Jobs, Documents, Matching, Billing, and Trust runners, ten declared schemas, 68 declared regular
-  relations, and 44 checksum-bound migrations, including Jobs `0023` and Trust `0004` before enabling
+  relations, and 45 checksum-bound migrations, including Jobs `0023` and Trust `0005` before enabling
   the compatible Gateway or either D2 worker. Reject older D1 package and
   receipt boundaries.
 - Before Jobs `0023`/Trust `0004`, pause D2 contribution/reviewer writes and both workers through
@@ -29,6 +29,14 @@ service and must return to zero running tasks after every migration.
   downgrade/forward-recovery strategy, and aggregate-only observability.
 
 ## Deploy the task definition
+
+For the additive D2-076 Trust `0005` release, keep the exact development-test authorization
+absent until migration verification and compatible Gateway and candidate-export activity
+deployment finish. The migration preserves existing reason codes and records; it does not
+authorize any live case decision. Persisted test-removal events require compatible export
+readers even after the temporary test authorization is removed. The Jobs `0023`/Trust `0004`
+breaking-writer retirement instructions below describe that earlier cutover; do not infer a
+new breaking-writer change from the additive `0005` migration or bypass existing release guards.
 
 Create a refresh-backed Terraform plan with the exact digest URI. The plan may replace only the
 one-off migration task definition and narrow execution-secret policy when required. Review and
