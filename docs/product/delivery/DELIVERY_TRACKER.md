@@ -9,6 +9,10 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-076 release preflight: development image-repository checks pass without writes.
+Full verification found a stale migration-test log expectation; corrected to Trust `0005`,
+with revalidation pending. No deployment or live review decision has occurred.
+
 September 16 D2-076 local recovery: the 45-migration logical dump/restore exercise passes,
 including 68 exact relation row sets, unchanged source and successful disposable cleanup.
 This is local evidence only; the new schema and test authority are not deployed.

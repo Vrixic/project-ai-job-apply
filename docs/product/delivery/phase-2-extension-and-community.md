@@ -3552,6 +3552,12 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Release preflight (`2026-09-16`, D2-076): AWS read-only publication Status confirms the exact
+development repository is Terraform-owned, immutable, scan-on-push and customer-KMS encrypted.
+Zero images were published and no migration ran. The full verifier exposed a stale Trust `0004`
+expected log in the migration-operator test; corrected it to `0005` while preserving historical
+source tests. Full verification must pass before deployment.
+
 Current-schema local recovery (`2026-09-16`, D2-076): updated the maintained logical-recovery
 runner to assert 45 migrations and exact Trust `0005`. `pnpm test:d2-recovery` passes with
 68 exact relation row sets, 18 nonempty D2 relations, unchanged source, two read-only-write
