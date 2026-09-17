@@ -1294,10 +1294,26 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   The fresh isolated composed PostgreSQL suite passes all three lifecycles, including publish →
   takedown → owner appeal → distinct-reviewer reversal → restored publication with preserved
   canonical provider truth. The disposable cluster is removed; Docker Desktop and WSL are stopped.
-- Remaining: complete repository/recovery/package checks, commit and publish compatible immutable
-  migration and D2 worker artifacts, apply `0024` before resuming processing, verify backfill and
-  zero drift, then obtain only the final exact owner Processing/Trust readback. Do not repeat the
-  accepted appeal, contribution submission or takedown.
+- Repository verification (2026-09-17): on a fresh local Postgres 16 volume, Jobs unit tests
+  (391/391), typecheck and the Jobs integration suite (100/100, including the restoration
+  lifecycle file) pass; migration `0024` applies and verifies cleanly via `db:migrate`. The prior
+  local integration run showed two unrelated failures in
+  `contribution-processing.integration.test.ts` (lease-recovery/backlog-count assertions) caused
+  by stale rows in a reused Postgres container from an earlier session, not by this change;
+  recreating the container (`docker compose down -v postgres`) resolved them. The pinned Terraform
+  1.16.2 toolchain was missing from this machine (only 1.9.8 was on PATH), which failed
+  `infrastructure:validate`; running `scripts/install-terraform-toolchain.ps1` and selecting it via
+  `scripts/use-deployment-terraform.ps1` fixed this local-machine gap. With both fixed, the full
+  `pnpm check` gate (skills/infrastructure validation, all D2/D1 operator suites, format, lint,
+  typecheck, dependency security, and all 34 Turbo build/test tasks) passes clean. The disposable
+  Postgres/Redis/OTEL stack is removed and Docker Desktop/WSL are stopped.
+- Remaining: publish compatible immutable Gateway/D2 worker artifacts and apply `0024` against the
+  real development AWS account (`713881805761`, `us-east-2`), verify backfill and zero drift, then
+  obtain only the final exact owner Processing/Trust readback for contribution `01a0ac45`. This is
+  a live cloud deployment and database migration against real infrastructure; per
+  `skills/deploy-aws-platform` and standing safety practice, it requires the owner's explicit
+  go-ahead before executing, not just an implementation directive. Do not repeat the accepted
+  appeal, contribution submission or takedown.
 
 ### D2-075 — Default missing preview work type to in-person
 
