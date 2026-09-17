@@ -1196,6 +1196,33 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   Jobs reconciliation, independent human appeal resolution and exact temporary-evidence cleanup
   remain outstanding; do not infer those from the Trust readback.
 
+### D2-078 — Preserve appeal submission results and prevent duplicate dispatch
+
+- State: In progress
+- Started: 2026-09-17
+- Owner: Client engineering; QA/automation
+- Finding: after the owner reports submitting the exact D2-074 appeal, read-only server inspection
+  returns `taken_down`, version `3`, `appealed=false`, with the appeal window still open. A bounded
+  development Gateway log page between 16:40Z and 17:00Z records one exact appeal POST and HTTP
+  `409`; pagination remains, so this is not an exhaustive request count. No request body, token
+  or identity is retained. The response code alone does not prove a stale version rather than
+  another state conflict. No automatic retry is authorized by this observation.
+- Client finding: Refresh Trust replaces the prior appeal outcome with generic refresh success.
+  Appeal hashing also lacks a caught error and a pending-submit guard. Repair only those paths;
+  preserve ownership, server version checks and independent reviewer roles. Do not add more
+  manual development-panel acceptance or change the production diagnostic exclusion.
+- Implementation: appeal-specific outcomes survive Trust refresh; one pending-submit guard
+  covers hashing and dispatch, caught hash failures remain visible inside the modal, and logout
+  clears retained appeal feedback. No background retry, owner impersonation, backend or contract
+  change is introduced.
+- Verification: read-only helper passes 27 offline assertions; six new popup regressions and all
+  479 extension tests pass, with typecheck and repository formatting clean. The configured
+  development extension is rebuilt. Actual Edge and Chrome-for-Testing each pass four synthetic
+  appeal scenarios (popup/side panel, success/conflict), including outcome retention after refresh
+  and exactly one digest-only submission. External requests, telemetry and axe violations are
+  zero; temporary profiles are cleaned. These use mocked API responses, not live appeal filing.
+  Full repository verification remains pending; live filing/resolution remain D2-074.
+
 ### D2-075 — Default missing preview work type to in-person
 
 - State: Complete

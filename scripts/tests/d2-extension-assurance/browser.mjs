@@ -80,6 +80,47 @@ async function inspectSyntheticCapture(popup) {
   await popup.locator("#preview:not([hidden])").waitFor();
 }
 
+async function assertAppealFeedback(context, extensionId, surface, outcome) {
+  const page = await openAssurancePopup(
+    context,
+    extensionId,
+    `configured-appeal-${outcome}`,
+    surface,
+  );
+  await page.locator("#contributions-panel > summary").click();
+  await page.getByRole("button", { name: "Appeal", exact: true }).click();
+  await page.locator("#appeal-evidence").fill("Synthetic approved lifecycle appeal evidence.");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Confirm & submit appeal", exact: true }).click();
+  const expected =
+    outcome === "conflict"
+      ? "Appeal not recorded: the server reported a conflict."
+      : "Appeal recorded. An independent reviewer must resolve it.";
+  await page.waitForFunction(
+    (message) => document.querySelector("#owner-action-status")?.textContent?.includes(message),
+    expected,
+  );
+  await page.getByRole("button", { name: "Refresh Trust", exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector("#inspect")?.disabled);
+  assert(
+    (await page.locator("#owner-action-status").textContent())?.includes(expected),
+    `${surface} Trust refresh lost the ${outcome} appeal outcome`,
+  );
+  const trustText = await page.locator(".contribution-receipt").innerText();
+  assert(
+    trustText.includes(
+      outcome === "conflict" ? "Trust: taken down" : "Trust: appeal pending · appealed",
+    ),
+    `${surface} ${outcome} appeal showed an incorrect Trust state`,
+  );
+  const calls = await page.evaluate(() => globalThis.__appealAssurance);
+  assert(
+    calls.submissions === 1 && calls.trustRefreshes === 1 && calls.digestOnly,
+    `${surface} appeal was repeated or sent raw evidence`,
+  );
+  await page.close();
+}
+
 async function keyboardFocusGeometry(page, selector) {
   return page.locator(selector).evaluate((element) => {
     const style = getComputedStyle(element);
@@ -300,6 +341,10 @@ try {
     const scenario = new URLSearchParams(location.search).get("assurance") ?? "unconfigured-long";
     const configured = scenario.startsWith("configured");
     const missing = scenario.endsWith("missing");
+    const appealScenario = scenario.includes("appeal-");
+    let appealed = false;
+    const appealCalls = { submissions: 0, trustRefreshes: 0, digestOnly: true };
+    globalThis.__appealAssurance = appealCalls;
     const longDescription = `${"A grounded synthetic responsibility statement. ".repeat(24)}End.`;
     const longUrl = `https://boards.greenhouse.io/synthetic/jobs/12345?${new URLSearchParams({
       department: "platform-engineering-and-reliability-".repeat(8),
@@ -339,6 +384,42 @@ try {
       },
     };
     const response = async (message) => {
+      if (appealScenario) {
+        if (message?.action === "appeal") {
+          appealCalls.submissions += 1;
+          appealCalls.digestOnly &&=
+            /^[a-f0-9]{64}$/u.test(message.evidenceDigestSha256) &&
+            !JSON.stringify(message).includes("Synthetic approved lifecycle appeal evidence.");
+          appealed = !scenario.endsWith("conflict");
+        }
+        if (message?.action === "trust_refresh") appealCalls.trustRefreshes += 1;
+        return {
+          ok: true,
+          status,
+          delivery,
+          queue: { blocked: 0, pending: 0, stopped: 0 },
+          sharedJobsState: "cached",
+          ownerAction:
+            message?.action === "appeal"
+              ? appealed
+                ? "ok"
+                : "version_conflict"
+              : message?.action === "trust_refresh"
+                ? "ok"
+                : undefined,
+          receipts: [
+            {
+              contributionId: "00000000-0000-4000-8000-000000000001",
+              state: "published",
+              trust: {
+                appealed,
+                state: appealed ? "appeal_pending" : "taken_down",
+                version: appealed ? 4 : 3,
+              },
+            },
+          ],
+        };
+      }
       if (message?.action === "capture") {
         return {
           capture,
@@ -376,6 +457,11 @@ try {
 
   for (const surface of ["popup", "sidepanel"]) {
     if (developmentUi) await assertSequentialHistoryAccess(context, extensionId, surface);
+    if (developmentUi) {
+      for (const outcome of ["conflict", "success"]) {
+        await assertAppealFeedback(context, extensionId, surface, outcome);
+      }
+    }
     for (const [scenario, expected] of [
       ["configured-long", "Job received for review."],
       ["configured-pending", "Job saved on this device, but delivery is not confirmed."],
@@ -603,6 +689,22 @@ try {
   assert(unexpectedExternalRequests === 0, "the harness observed unexpected external traffic");
   assert(sensitiveStorageAbsent, "synthetic page artifacts were retained in extension storage");
 
+  if (developmentUi) {
+    process.stdout.write(
+      `${JSON.stringify({
+        profile: "d2_extension_appeal_feedback_browser_v1",
+        browserName,
+        browserExecuted: true,
+        syntheticResponses: true,
+        surfaces: 2,
+        appealScenarios: 4,
+        conflictFeedbackRetained: 2,
+        successFeedbackRetained: 2,
+        digestOnlySubmissions: 4,
+        liveAppealsSubmitted: 0,
+      })}\n`,
+    );
+  }
   process.stdout.write(
     `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v5", browserName, uiMode, browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 7, sidePanelScenarios: 5, addOutcomeScenarios: 6, diagnosticBoundarySurfaces: 2, sequentialKeyboardSurfaces: developmentUi ? 2 : 0, clippedFocusNegativeControls: developmentUi ? 2 : 0, preferredPopupWidth, layoutProfiles, externalRequestsAllowed: 0, externalRequestsBlocked, operationalPolicyRequestsBlocked, unexpectedExternalRequests, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, axeViolations: popupAxeViolations + sidePanelAxeViolations, axeSurfaces: 2, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: developmentUi ? 3 : 1, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
   );

@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 17 appeal diagnosis: the disposable owner's reported submission has not changed the
+server case (`taken_down`, version `3`, `appealed=false`); the appeal window remains open.
+Bounded Gateway logs show an exact appeal POST returning HTTP 409. D2-078 addresses the client
+feedback that a subsequent Trust refresh overwrites, plus submit/hash failure handling. No
+appeal replay or reviewer resolution was executed; D2-074 and Phase 2 remain In progress.
+
 September 17 D2-074 advances: the owner confirms the exact disposable Mintlify contribution
 is published/accepted. A fresh source-`423a048` baseline confirms state `356` and zero changes.
 One approved test takedown succeeds with independent `taken_down`/version-3 readback and no

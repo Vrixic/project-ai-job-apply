@@ -16,6 +16,9 @@ an explicit mode it derives the mode only from one of the two known generated ma
 Product output must omit queue/history/appeal diagnostics from both HTML and the rendered DOM;
 six add-outcome scenarios cover acknowledged, pending and rejected feedback across both surfaces.
 Development-only keyboard/disclosure regressions remain automated, not a manual launch gate.
+Development artifacts also exercise the real appeal dialog on popup and side panel with synthetic
+success and conflict responses. They check digest-only single submission and preservation of the
+appeal-specific result after Refresh Trust. This does not contact Trust or prove live appeal acceptance.
 
 This source-side verifier inspects the exact unpacked Manifest V3 output produced by the extension
 build. It fails closed on undeclared or excessive permissions, persistent content scripts, broad

@@ -138,6 +138,8 @@ const busyCopy: Record<string, string> = {
 let currentCapture: SanitizedJobCapture | undefined;
 let currentDelivery: DeliveryReadiness | undefined;
 let appealContributionId: string | undefined;
+let appealSubmitting = false;
+let appealOutcome: string | undefined;
 let busy = false;
 let authenticated = false;
 let fieldSequence = 0;
@@ -156,6 +158,7 @@ function controls(): HTMLButtonElement[] {
     sharedJobsRefreshButton,
     ...fieldList.querySelectorAll<HTMLButtonElement>("button"),
     ...(contributionList?.querySelectorAll<HTMLButtonElement>("button") ?? []),
+    ...(appealForm?.querySelectorAll<HTMLButtonElement>("button") ?? []),
   ].filter((button): button is HTMLButtonElement => button !== null);
 }
 
@@ -188,6 +191,7 @@ function renderDeliveryReadiness(): void {
 
 function renderSessionStatus(status: AuthStatus): void {
   authenticated = status.authenticated;
+  if (!authenticated) appealOutcome = undefined;
   if (!authenticated) renderReceipts([], "sign_in_required");
   authStatus.textContent = status.configured
     ? status.authenticated
@@ -261,13 +265,16 @@ function renderStatus(response: ExtensionResponse): void {
   }
   if (response.receipts) renderReceipts(response.receipts, response.sharedJobsState);
   if (response.ownerAction && ownerActionStatus && contributionsPanel) {
-    ownerActionStatus.textContent = {
+    const latestOutcome = {
       ok: "Contribution information updated.",
       not_found: "No owner-visible record is available yet. Refresh again after processing.",
       unavailable: "The service is unavailable. Your saved receipt was kept; try again later.",
       version_conflict: "The record changed. Refresh Trust status before trying again.",
       rejected: "The request was not accepted. Refresh status before trying again.",
     }[response.ownerAction];
+    ownerActionStatus.textContent = appealOutcome
+      ? `${appealOutcome} ${latestOutcome}`
+      : latestOutcome;
     contributionsPanel.open = true;
     ownerActionStatus.focus();
   }
@@ -343,6 +350,7 @@ function renderReceipts(
           if (!appealDialog || !appealEvidence) return;
           appealContributionId = receipt.contributionId;
           appealEvidence.value = "";
+          appealForm?.querySelector("[data-appeal-error]")?.remove();
           appealDialog.showModal();
           appealEvidence.focus();
           return;
@@ -648,6 +656,8 @@ async function invoke(message: Record<string, unknown>): Promise<ExtensionRespon
 loginButton.addEventListener("click", () => void invoke({ action: "login" }));
 refreshButton.addEventListener("click", () => void invoke({ action: "refresh" }));
 logoutButton.addEventListener("click", () => {
+  appealOutcome = undefined;
+  if (ownerActionStatus) ownerActionStatus.textContent = "";
   currentCapture = undefined;
   currentDelivery = undefined;
   preview.hidden = true;
@@ -688,7 +698,7 @@ appealDialog?.addEventListener("close", () => {
 });
 appealForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (!appealEvidence || !appealDialog) return;
+  if (!appealEvidence || !appealDialog || appealSubmitting || busy) return;
   const evidenceText = appealEvidence.value;
   const contributionId = appealContributionId;
   if (
@@ -697,9 +707,53 @@ appealForm?.addEventListener("submit", async (event) => {
     !window.confirm("Submit this appeal evidence digest now?")
   )
     return;
-  const evidenceDigestSha256 = await appealEvidenceDigest(evidenceText);
-  appealDialog.close();
-  void invoke({ action: "appeal", confirmed: true, contributionId, evidenceDigestSha256 });
+  appealSubmitting = true;
+  setBusy(true, "appeal");
+  let dispatched = false;
+  try {
+    const evidenceDigestSha256 = await appealEvidenceDigest(evidenceText);
+    appealDialog.close();
+    dispatched = true;
+    const response = await invoke({
+      action: "appeal",
+      confirmed: true,
+      contributionId,
+      evidenceDigestSha256,
+    });
+    const confirmed =
+      response.ok &&
+      response.receipts?.some(
+        (receipt) => receipt.contributionId === contributionId && receipt.trust?.appealed,
+      );
+    appealOutcome = !authenticated
+      ? undefined
+      : confirmed
+        ? "Appeal recorded. An independent reviewer must resolve it."
+        : response.ownerAction === "version_conflict"
+          ? "Appeal not recorded: the server reported a conflict. Refresh Trust and contact the operator before submitting again."
+          : "Appeal submission was not confirmed. Refresh Trust and contact the operator before submitting again.";
+    if (ownerActionStatus && authenticated && appealOutcome) {
+      ownerActionStatus.textContent = appealOutcome;
+      ownerActionStatus.focus();
+    }
+  } catch {
+    const message = dispatched
+      ? "Appeal submission was not confirmed. Refresh Trust and contact the operator before submitting again."
+      : "Appeal could not be prepared. Nothing was submitted. Your text is still available; try again.";
+    detail.textContent = message;
+    // Keep the failure inside the modal so it is visible while the modal remains open.
+    let failure = appealForm.querySelector<HTMLElement>("[data-appeal-error]");
+    if (!failure) {
+      failure = document.createElement("p");
+      failure.dataset.appealError = "true";
+      failure.setAttribute("role", "alert");
+      appealForm.append(failure);
+    }
+    failure.textContent = message;
+  } finally {
+    appealSubmitting = false;
+    setBusy(false);
+  }
 });
 
 renderDeliveryReadiness();
