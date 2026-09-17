@@ -1198,8 +1198,9 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 
 ### D2-078 — Preserve appeal submission results and prevent duplicate dispatch
 
-- State: In progress
+- State: Complete
 - Started: 2026-09-17
+- Completed: 2026-09-17
 - Owner: Client engineering; QA/automation
 - Finding: after the owner reports submitting the exact D2-074 appeal, read-only server inspection
   returns `taken_down`, version `3`, `appealed=false`, with the appeal window still open. A bounded
@@ -1221,7 +1222,13 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   appeal scenarios (popup/side panel, success/conflict), including outcome retention after refresh
   and exactly one digest-only submission. External requests, telemetry and axe violations are
   zero; temporary profiles are cleaned. These use mocked API responses, not live appeal filing.
-  Full repository verification remains pending; live filing/resolution remain D2-074.
+  Source `7bb12bd` passes the full maintained repository verifier and all 20 builds (19 cached;
+  extension rebuilt). A final configured-artifact browser rerun passes both browsers. Separate
+  default-dark product builds/packages also pass both browsers with diagnostic panels absent;
+  that is not enabled-release/store acceptance. Live filing/resolution remain D2-074. After the
+  server read confirms no appeal and an open window, the owner is asked to reload, finish a fresh
+  Trust refresh, submit the existing appeal once and report the immediate message. No job
+  resubmission or automatic appeal retry occurs.
 
 ### D2-075 — Default missing preview work type to in-person
 
