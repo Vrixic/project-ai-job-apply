@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-076 verification follow-through: corrected migration/recovery checks pass;
+remaining verifier stages complete with 33 typecheck, 34 package-test and 20 build tasks successful.
+Opt-in integration skips are not counted as passes. Immutable publication/deployment is next;
+Phase 2 remains In progress.
+
 September 16 D2-076 recovery consumers: updated exact-manifest bindings in the recovery
 executor/operator together, with 299 focused tests and 697 replay guards passing. These are
 local checks; compatible cloud deployment and independent appeal acceptance remain open.

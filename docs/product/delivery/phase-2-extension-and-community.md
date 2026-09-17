@@ -3552,6 +3552,14 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Verification closure before publication (`2026-09-16`, D2-076): after correcting the two
+current-schema expectations and recovery digest, the affected operator checks pass and the
+remaining repository verifier stages pass individually: formatting, lint, 33 typecheck tasks,
+dependency-security regressions, 34 package-test tasks, 20 build tasks, Auth0 setup guards,
+Compose configuration and removed-scope scan. Opt-in integrations skipped by unit commands
+remain skipped; the separately executed eight Trust integrations and 45-migration local recovery
+provide the recorded database evidence. Build command exits zero. Cloud deployment remains open.
+
 Recovery consumer alignment (`2026-09-16`, D2-076): package verification exposed the old
 44-migration manifest digest in the TypeScript recovery executor and PowerShell operator.
 Both now bind the exact current 45-migration manifest; regenerated only synthetic fixture
