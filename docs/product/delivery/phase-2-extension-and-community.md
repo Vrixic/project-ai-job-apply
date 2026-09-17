@@ -1143,13 +1143,16 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 - Started: 2026-09-16
 - Owner: Platform engineering; product owner as independent appeal reviewer
 - Authority: owner approved one disposable development test contribution, its takedown and
-  subsequent independent human appeal. Existing shared jobs must remain untouched. This is
+  subsequent independent human appeal. The owner subsequently approves the normal verified-provider
+  refresh of the exact supplied Mintlify Applied AI Engineer posting if already present;
+  unrelated shared jobs must remain untouched. This is
   lifecycle acceptance, not another diagnostic-panel or empty-queue access test.
 - Read-only baseline: AWS development access works; the active Gateway alias is `development`,
   version `67`, with three configured reviewers, zero evidence-allowlist entries and zero
   verified-requester takedown reviewers. No credential value or identity attribute is retained.
 - Execution boundary: bind one new contribution and its separate disposable contributor;
-  verify no existing catalog entry is affected before any publication/reconciliation; retain
+  confine publication/reconciliation to that exact provider identity and preserve its canonical
+  record during contribution takedown; retain
   idempotent recovery scope. Do not reuse the completed Mintlify workload or its sign-in helper,
   which explicitly excludes publication and automatically withdraws its contribution.
 - Takedown and appeal require separately bound evidence purposes. Do not use an initial-review
@@ -3558,6 +3561,12 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Exact-posting refresh approved (`2026-09-16`, D2-074): the owner approves initial publication's
+normal verified-provider refresh only for the supplied Mintlify Applied AI Engineer posting.
+This closes the preceding scope question; it does not authorize unrelated-job changes,
+canonical/source deletion, broader reviewer permissions or an agent appeal decision. Continue
+the exact contribution/version/evidence-bound development test and record live outcomes separately.
 
 Catalog boundary clarification (`2026-09-16`, D2-074): read-only code review finds no maintained
 all-state exact-source diagnostic suitable for this case without a new execution path. Repeating

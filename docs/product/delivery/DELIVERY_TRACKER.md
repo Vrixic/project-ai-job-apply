@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-074 scope approved: the owner permits the normal verified-provider refresh
+only for the supplied Mintlify Applied AI Engineer posting during initial publication.
+Unrelated jobs stay untouched; contribution takedown preserves canonical/source data and the
+appeal remains an independent human decision. This resolves the preceding scope question,
+not live lifecycle acceptance.
+
 September 16 D2-074 scope clarification: takedown preserves canonical/provider records, but
 initial publication can refresh an existing matching job from verified provider data. The
 owner's existing-jobs-untouched instruction requires clarification for that exact Mintlify
