@@ -405,7 +405,7 @@ run "d2_development_contributions_work_without_signatures_or_policy_endpoint" {
       aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_SOURCES_JSON == var.d2_community_runtime.provider_sources_json &&
       aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_COMMUNITY_PROVIDER_VERIFICATION_REGISTRATIONS_JSON == var.d2_community_runtime.provider_verification_registrations_json &&
       aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON == var.d2_community_runtime.trust_reviewer_assignments_json &&
-      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_TRUST_EVIDENCE_ALLOWLIST_JSON == var.d2_community_runtime.trust_evidence_allowlist_json &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_TRUST_EVIDENCE_ALLOWLIST_JSON == "[]" &&
       !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTIONS_ENABLED") &&
       !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_DEPLOYMENT_ENVIRONMENT") &&
       aws_lambda_function.d2_trust_signal[0].environment[0].variables.D2_COMMUNITY_PROCESSING_POLICY_VERSION == var.d2_community_runtime.processing_policy_version &&
@@ -1712,7 +1712,29 @@ run "d2_signed_configuration_rejects_2404_encoded_bytes" {
   expect_failures = [var.d2_community_runtime]
 }
 
-run "d2_scheduled_complete_environment_counts_utf8_keys_and_values" {
+run "d2_decision_evidence_is_gateway_only" {
+  command = plan
+  variables {
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      trust_evidence_allowlist_json = jsonencode([{
+        contributionId       = "019d04cf-1f80-7000-8000-000000000001"
+        evidenceDigestSha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        purposes             = ["development_test_takedown"]
+      }])
+    })
+  }
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_EVIDENCE_ALLOWLIST_JSON == var.d2_community_runtime.trust_evidence_allowlist_json &&
+      length(jsondecode(aws_lambda_function.gateway[0].environment[0].variables.D2_TRUST_EVIDENCE_ALLOWLIST_JSON)) == 1 &&
+      aws_lambda_function.d2_community_scheduled[0].environment[0].variables.D2_TRUST_EVIDENCE_ALLOWLIST_JSON == "[]" &&
+      !contains(keys(aws_lambda_function.d2_trust_signal[0].environment[0].variables), "D2_TRUST_EVIDENCE_ALLOWLIST_JSON")
+    )
+    error_message = "Reviewer decision evidence must remain exact on Gateway and grant no decision authority to either worker."
+  }
+}
+
+run "d2_scheduled_complete_environment_counts_serialized_utf8_and_escaping" {
   command = plan
   override_resource {
     target          = aws_secretsmanager_secret.database_url
@@ -1737,8 +1759,8 @@ run "d2_scheduled_complete_environment_counts_utf8_keys_and_values" {
       signed_policy_json                = ""
       signed_public_keys_json           = ""
       # 100 supplementary-plane characters add 300 UTF-8 bytes beyond character count.
-      trust_evidence_allowlist_json = format("[\"%s\"]%s", join("", [for index in range(100) : "😀"]), substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 104 - length(join("", [
-        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+      trust_reviewer_assignments_json = format("[\"%s\"]%s", join("", [for index in range(100) : "😀"]), substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 104 - length(join("", [
+        var.d2_active_runtime_fixture.trust_evidence_allowlist_json,
         var.d2_active_runtime_fixture.provider_sources_json,
         var.d2_active_runtime_fixture.provider_verification_registrations_json
       ]))))
@@ -1746,11 +1768,12 @@ run "d2_scheduled_complete_environment_counts_utf8_keys_and_values" {
   }
   assert {
     condition = (
-      local.d2_community_scheduled_environment_bytes == 3598 &&
-      local.d2_community_scheduled_environment_bytes == 300 + sum([for key, value in aws_lambda_function.d2_community_scheduled[0].environment[0].variables : length(key) + length(value)]) &&
+      local.d2_community_scheduled_environment_bytes == 300 + length(jsonencode(local.d2_community_scheduled_environment)) &&
+      local.d2_community_scheduled_environment_bytes > 300 + sum([for key, value in aws_lambda_function.d2_community_scheduled[0].environment[0].variables : length(key) + length(value)]) &&
+      jsondecode(local.d2_community_scheduled_environment.D2_TRUST_REVIEWER_ASSIGNMENTS_JSON)[0] == join("", [for index in range(100) : "😀"]) &&
       aws_lambda_function.d2_community_scheduled[0].environment[0].variables == local.d2_community_scheduled_environment
     )
-    error_message = "The full scheduled environment must preserve every value and count exact UTF-8 bytes, including key names and Unicode."
+    error_message = "The full scheduled environment must preserve Unicode and count UTF-8 serialized JSON, including delimiters and nested-JSON escaping."
   }
 }
 
@@ -1791,8 +1814,8 @@ run "d2_scheduled_rejects_full_environment_excess_outside_selected_json" {
       trust_delivery_retry_delay_milliseconds        = [86400000, 86400000, 86400000, 86400000]
       # The selected fields still total exactly 2800 encoded bytes. Longer valid
       # runtime settings outside that list exhaust the independent full-env limit.
-      trust_evidence_allowlist_json = format("[\"%s\"]%s", join("", [for index in range(100) : "😀"]), substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 104 - length(join("", [
-        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+      trust_reviewer_assignments_json = format("[\"%s\"]%s", join("", [for index in range(100) : "😀"]), substr(join("", [for index in range(1024) : "  "]), 0, 1800 - 104 - length(join("", [
+        var.d2_active_runtime_fixture.trust_evidence_allowlist_json,
         var.d2_active_runtime_fixture.provider_sources_json,
         var.d2_active_runtime_fixture.provider_verification_registrations_json
       ]))))
@@ -1807,7 +1830,7 @@ run "d2_scheduled_accepts_4096_total_environment_bytes" {
     target          = aws_secretsmanager_secret.database_url
     override_during = plan
     values = {
-      arn = "arn:aws:secretsmanager:us-east-2:111122223333:secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      arn = "arn:aws:secretsmanager:us-east-2:111122223333:secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   }
   override_resource {
@@ -1825,8 +1848,8 @@ run "d2_scheduled_accepts_4096_total_environment_bytes" {
       policy_endpoint_enabled           = false
       signed_policy_json                = ""
       signed_public_keys_json           = ""
-      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 2 - length(join("", [
-        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+      trust_reviewer_assignments_json = format("[\"synthetic\"]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 13 - length(join("", [
+        var.d2_active_runtime_fixture.trust_evidence_allowlist_json,
         var.d2_active_runtime_fixture.provider_sources_json,
         var.d2_active_runtime_fixture.provider_verification_registrations_json
       ]))))
@@ -1844,7 +1867,7 @@ run "d2_scheduled_rejects_4097_total_environment_bytes" {
     target          = aws_secretsmanager_secret.database_url
     override_during = plan
     values = {
-      arn = "arn:aws:secretsmanager:us-east-2:111122223333:secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      arn = "arn:aws:secretsmanager:us-east-2:111122223333:secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   }
   override_resource {
@@ -1862,12 +1885,16 @@ run "d2_scheduled_rejects_4097_total_environment_bytes" {
       policy_endpoint_enabled           = false
       signed_policy_json                = ""
       signed_public_keys_json           = ""
-      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 2 - length(join("", [
-        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+      trust_reviewer_assignments_json = format("[\"synthetic\"]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 13 - length(join("", [
+        var.d2_active_runtime_fixture.trust_evidence_allowlist_json,
         var.d2_active_runtime_fixture.provider_sources_json,
         var.d2_active_runtime_fixture.provider_verification_registrations_json
       ]))))
     })
   }
   expect_failures = [aws_lambda_function.d2_community_scheduled]
+  assert {
+    condition     = local.d2_community_scheduled_environment_bytes == 4097
+    error_message = "The rejection fixture must exceed the serialized UTF-8 environment limit by exactly one byte."
+  }
 }

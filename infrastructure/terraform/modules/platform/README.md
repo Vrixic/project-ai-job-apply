@@ -71,7 +71,10 @@ base64-encoded bytes only in explicit development contribution mode; signed conf
 the 2,400-byte limit. Independently, the complete scheduled Lambda environment (every configured
 key and value, including runtime policy and resource identifiers) must fit the
 [4,096-byte Lambda limit](https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html),
-measured as UTF-8 rather than character count. Staging, production, and default development
+measured as UTF-8 serialized JSON including delimiters and escaping, rather than raw
+key/value or character counts. The scheduled runtime receives an empty Trust decision-evidence
+allowlist: it can open/read cases using independent verification, but decision evidence is
+configured only on the Gateway. Staging, production, and default development
 behavior retain signed-policy verification.
 
 `development_contribution_providers` is an optional list of unique exact `greenhouse`, `lever`,

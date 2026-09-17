@@ -295,7 +295,7 @@ Both are included in maintained infrastructure and full repository verification.
   exactly two scheduled function/alias updates for a registry-only addition, or four
   Gateway/scheduled updates when provider/host selectors change. The development-only selected
   configuration budget is 3,000 encoded characters, with a separate 4,096-byte complete UTF-8
-  environment guard. All artifacts, Trust settings, schema,
+  serialized-JSON environment guard including delimiters and escaping. All artifacts, Trust settings, schema,
   maintenance, IAM/network and other variables stay unchanged. It performs no cloud operation;
   an operator must bind reviewed source/artifact receipts to actual aliases before application.
   `pnpm test:d2-provider-configuration` runs its generated positive/negative regressions and is

@@ -4,7 +4,7 @@
 - Start: 2026-09-01
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-09-16
+- Last updated: 2026-09-17
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d2--extension-and-community-loop)
 
 ## Objective
@@ -1282,6 +1282,15 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 - Safe stopping record: Docker and WSL are stopped. Recovery operations finished before the
   owner-requested PC shutdown. Live D2-074 lifecycle, independent human appeal and final release
   acceptance remain unfinished; this recovery does not complete Phase 2.
+- September 17 resumption: the owner cancels further PC shutdowns. The draft correction is now
+  implemented locally: serialized UTF-8 JSON size includes syntax and escaping, and scheduled
+  decision evidence is fixed to `[]` while Gateway keeps the exact configured value. PS7 passes
+  339 provider assertions, including exact boundaries and the rejected 4,266-byte regression.
+  Windows PowerShell 5 independently passes the same 339 assertions. All 78 mocked Terraform
+  tests, module validation, recursive formatting and serverless infrastructure validation pass.
+  Exact 4,096/4,097-byte fixtures now size scheduled-consumed fields; a separate nonempty
+  evidence fixture proves Gateway-only configuration. Gateway-only operator checks are underway.
+  AWS SSO works; no resumed deployment or case decision has occurred yet.
 
 ### D2-063 — Web crawler build input
 

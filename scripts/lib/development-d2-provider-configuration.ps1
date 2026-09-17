@@ -172,18 +172,39 @@ function Assert-D2ProviderAdditiveConfiguration {
   }
 }
 
-function Assert-D2ProviderEnvironmentBudget {
+function Get-D2ProviderEnvironmentSerializedBytes {
   param([object]$Environment)
   if ($Environment -isnot [pscustomobject]) { throw 'D2ProviderEnvironmentBudgetRejected' }
-  $bytes = 0
+  # Match Terraform jsonencode conservatively and consistently on PS 5/7.
+  # Braces, separators and escaped strings count; raw key/value sums do not.
+  $bytes = 2
+  $first = $true
   $encoding = [Text.UTF8Encoding]::new($false, $true)
   foreach ($property in $Environment.PSObject.Properties) {
     if ($property.Value -isnot [string] -or $property.Name.Length -gt 4096 -or $property.Value.Length -gt 4096) {
       throw 'D2ProviderEnvironmentBudgetRejected'
     }
+    if (-not $first) { $bytes++ }
+    $first = $false
+    $bytes += 5 # Four string delimiters and one colon.
     try { $bytes += $encoding.GetByteCount($property.Name) + $encoding.GetByteCount($property.Value) }
     catch { throw 'D2ProviderEnvironmentBudgetRejected' }
-    if ($bytes -gt 4096) { throw 'D2ProviderEnvironmentBudgetRejected' }
+    foreach ($value in @($property.Name, $property.Value)) {
+      foreach ($character in $value.ToCharArray()) {
+        $code = [int]$character
+        if ($code -eq 34 -or $code -eq 92 -or $code -in @(8, 9, 10, 12, 13)) { $bytes++ }
+        elseif ($code -lt 32 -or $code -in @(38, 60, 62)) { $bytes += 5 }
+        elseif ($code -in @(0x2028, 0x2029)) { $bytes += 3 }
+      }
+    }
+  }
+  return $bytes
+}
+
+function Assert-D2ProviderEnvironmentBudget {
+  param([object]$Environment)
+  if ((Get-D2ProviderEnvironmentSerializedBytes $Environment) -gt 4096) {
+    throw 'D2ProviderEnvironmentBudgetRejected'
   }
 }
 

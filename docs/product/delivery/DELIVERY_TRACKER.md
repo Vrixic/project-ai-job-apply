@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -8,6 +8,13 @@ Program completion: Not completed
 This is the master record for the delivery phases defined in the [product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#20-delivery-roadmap). It intentionally tracks actual start and completion dates rather than predicted schedules.
 
 ## Summary
+
+September 17 D2-077: work resumed after the owner cancelled further PC shutdowns. The
+serialized-environment size correction and Gateway-only reviewer evidence separation are
+implemented locally. PowerShell 7 and Windows PowerShell 5 each pass 339 assertions; all
+78 mocked Terraform tests pass. Gateway-only operator checks are in progress before a new
+reviewed deployment. AWS SSO is available. State `355`
+remains the last verified deployment; no new review decision has been submitted.
 
 September 16 D2-077 recovery (September 17 UTC): AWS rejected the proposed scheduled
 environment at 4,266 serialized bytes; the earlier 3,833-byte key/value calculation omitted

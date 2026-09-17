@@ -159,13 +159,25 @@ function Sync-PlannedValue {
   $Fixture.Plan.planned_values.root_module.child_modules[0].resources[$Index].values = Copy-D2RuntimeValue $Fixture.Plan.resource_changes[$Index].change.after
 }
 
-$null = Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ AA = ('x' * 4094) }); $passed++
-$null = Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ AA = ([string][char]0x00e9 * 2047) }); $passed++
-$null = Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ AA = ('x' * 2045); BB = ('x' * 2047) }); $passed++
+$null = Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ AA = ('x' * 4087) }); $passed++
+$null = Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ AA = ([string][char]0x00e9 * 2043) + 'x' }); $passed++
+$null = Assert-D2ProviderEnvironmentBudget ([pscustomobject]@{ AA = ('x' * 2039); BB = ('x' * 2040) }); $passed++
+Assert-True ((Get-D2ProviderEnvironmentSerializedBytes ([pscustomobject]@{ AA = ('x' * 4087) })) -eq 4096) 'exact serialized ASCII boundary'
+Assert-True ((Get-D2ProviderEnvironmentSerializedBytes ([pscustomobject]@{ AA = ('x' * 4088) })) -eq 4097) 'serialized ASCII boundary plus one'
+Assert-True ((Get-D2ProviderEnvironmentSerializedBytes ([pscustomobject]@{})) -eq 2) 'empty environment retains JSON braces'
+Assert-True ((Get-D2ProviderEnvironmentSerializedBytes ([pscustomobject]@{ A = '"\' })) -eq 12) 'quotes and backslashes are escaped'
+Assert-True ((Get-D2ProviderEnvironmentSerializedBytes ([pscustomobject]@{ A = ([string][char]0 + [char]10) })) -eq 16) 'control characters use correct escape lengths'
+Assert-True ((Get-D2ProviderEnvironmentSerializedBytes ([pscustomobject]@{ A = '<>&' })) -eq 26) 'Terraform HTML escaping is conservatively counted'
+Assert-True ((Get-D2ProviderEnvironmentSerializedBytes ([pscustomobject]@{ A = ([string][char]0x2028 + [char]0x2029) })) -eq 20) 'Unicode separators use six-byte escapes'
+# Synthetic shape reproduces the actual 3833 raw / 4266 serialized incident.
+# No real configuration values or contribution identifiers are retained.
+$quotedRuntime = [pscustomobject]@{ CONFIG = ('"' * 426) + ('x' * 3401) }
+Assert-True ((Get-D2ProviderEnvironmentSerializedBytes $quotedRuntime) -eq 4266) 'nested JSON overhead reproduces rejected AWS measurement'
+Assert-Rejected { Assert-D2ProviderEnvironmentBudget $quotedRuntime } 'raw 3833 bytes cannot bypass escaped serialized 4266 bytes'
 foreach ($oversized in @(
-    [pscustomobject]@{ AA = ('x' * 4095) },
-    [pscustomobject]@{ AA = ([string][char]0x00e9 * 2048) },
-    [pscustomobject]@{ AA = ('x' * 2046); BB = ('x' * 2047) }
+    [pscustomobject]@{ AA = ('x' * 4088) },
+    [pscustomobject]@{ AA = ([string][char]0x00e9 * 2044) },
+    [pscustomobject]@{ AA = ('x' * 2040); BB = ('x' * 2040) }
   )) {
   Assert-Rejected { Assert-D2ProviderEnvironmentBudget $oversized } 'exact environment budget includes all UTF8 keys and values'
 }
@@ -325,11 +337,8 @@ foreach ($index in @(0, 2)) {
   }
 }
 $grown = Copy-D2RuntimeValue $boardFixture
-$beforeEnvironmentBytes = 0
-foreach ($property in $grown.Plan.resource_changes[2].change.before.environment[0].variables.PSObject.Properties) {
-  $beforeEnvironmentBytes += [Text.Encoding]::UTF8.GetByteCount($property.Name) + [Text.Encoding]::UTF8.GetByteCount($property.Value)
-}
-$padding = 'x' * (4096 - $beforeEnvironmentBytes - 'SYNTHETIC_PADDING'.Length)
+$beforeEnvironmentBytes = Get-D2ProviderEnvironmentSerializedBytes $grown.Plan.resource_changes[2].change.before.environment[0].variables
+$padding = 'x' * (4096 - $beforeEnvironmentBytes - 'SYNTHETIC_PADDING'.Length - 6)
 foreach ($value in @($grown.Baseline.resource_changes[2].change.before, $grown.Baseline.resource_changes[2].change.after,
     $grown.Baseline.planned_values.root_module.child_modules[0].resources[2].values,
     $grown.Plan.prior_state.values.root_module.child_modules[0].resources[2].values,
