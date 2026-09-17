@@ -9,6 +9,10 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-076 recovery consumers: updated exact-manifest bindings in the recovery
+executor/operator together, with 299 focused tests and 697 replay guards passing. These are
+local checks; compatible cloud deployment and independent appeal acceptance remain open.
+
 September 16 D2-076 release preflight: development image-repository checks pass without writes.
 Full verification found a stale migration-test log expectation; corrected to Trust `0005`,
 with revalidation pending. No deployment or live review decision has occurred.

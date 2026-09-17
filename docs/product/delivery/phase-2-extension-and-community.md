@@ -3552,6 +3552,13 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Recovery consumer alignment (`2026-09-16`, D2-076): package verification exposed the old
+44-migration manifest digest in the TypeScript recovery executor and PowerShell operator.
+Both now bind the exact current 45-migration manifest; regenerated only synthetic fixture
+configuration/inspection digests. All 299 focused contract/Lambda tests and 697 PowerShell
+replay-boundary checks pass. Historical deployment receipts are unchanged; no cloud restore
+or candidate-data operation was executed. Remaining package tests/build are rerunning.
+
 Release preflight (`2026-09-16`, D2-076): AWS read-only publication Status confirms the exact
 development repository is Terraform-owned, immutable, scan-on-push and customer-KMS encrypted.
 Zero images were published and no migration ran. The full verifier exposed a stale Trust `0004`
