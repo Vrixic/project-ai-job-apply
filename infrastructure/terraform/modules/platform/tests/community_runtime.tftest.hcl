@@ -1180,7 +1180,7 @@ run "d2_development_domain_configuration_budget_boundary_without_restriction" {
       policy_endpoint_enabled           = false
       signed_policy_json                = ""
       signed_public_keys_json           = ""
-      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 2 - length(join("", [
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2250 - 2 - length(join("", [
         var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
         var.d2_active_runtime_fixture.provider_sources_json,
         var.d2_active_runtime_fixture.provider_verification_registrations_json
@@ -1188,8 +1188,16 @@ run "d2_development_domain_configuration_budget_boundary_without_restriction" {
     })
   }
   assert {
-    condition     = !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON")
-    error_message = "The development-only 2800-byte encoded configuration boundary must pass without an omitted restriction's bytes."
+    condition = (
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "D2_DEVELOPMENT_CONTRIBUTION_DOMAINS_JSON") &&
+      length(base64encode(join("", [
+        var.d2_community_runtime.trust_reviewer_assignments_json,
+        var.d2_community_runtime.trust_evidence_allowlist_json,
+        var.d2_community_runtime.provider_sources_json,
+        var.d2_community_runtime.provider_verification_registrations_json
+      ]))) == 3000
+    )
+    error_message = "The development-only 3000-character encoded configuration boundary must pass without an omitted restriction's bytes."
   }
 }
 
@@ -1203,7 +1211,28 @@ run "d2_development_domain_configuration_budget_includes_restriction" {
       policy_endpoint_enabled           = false
       signed_policy_json                = ""
       signed_public_keys_json           = ""
-      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2100 - 2 - length(join("", [
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2250 - 2 - length(join("", [
+        var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
+        var.d2_active_runtime_fixture.provider_sources_json,
+        var.d2_active_runtime_fixture.provider_verification_registrations_json
+      ]))))
+    })
+  }
+  expect_failures = [var.d2_community_runtime]
+}
+
+run "d2_development_configuration_rejects_3004_encoded_characters" {
+  command = plan
+  variables {
+    environment = "development"
+    d2_community_runtime = merge(var.d2_active_runtime_fixture, {
+      development_contributions_enabled = true
+      development_contribution_domains  = null
+      policy_endpoint_enabled           = false
+      signed_policy_json                = ""
+      signed_public_keys_json           = ""
+      # 2251 UTF-8 bytes encode to exactly 3004 Base64 characters.
+      trust_evidence_allowlist_json = format("[]%s", substr(join("", [for index in range(1024) : "  "]), 0, 2251 - 2 - length(join("", [
         var.d2_active_runtime_fixture.trust_reviewer_assignments_json,
         var.d2_active_runtime_fixture.provider_sources_json,
         var.d2_active_runtime_fixture.provider_verification_registrations_json

@@ -294,7 +294,7 @@ Both are included in maintained infrastructure and full repository verification.
   requires an explicit exact-domain subset, cross-bound sources/verification registrations and
   exactly two scheduled function/alias updates for a registry-only addition, or four
   Gateway/scheduled updates when provider/host selectors change. The development-only selected
-  configuration budget is 2,800 encoded characters, with a separate 4,096-byte complete UTF-8
+  configuration budget is 3,000 encoded characters, with a separate 4,096-byte complete UTF-8
   environment guard. All artifacts, Trust settings, schema,
   maintenance, IAM/network and other variables stay unchanged. It performs no cloud operation;
   an operator must bind reviewed source/artifact receipts to actual aliases before application.

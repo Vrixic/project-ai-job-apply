@@ -9,6 +9,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-077: the exact test-evidence configuration is 2,932 encoded characters, above
+the development-only conservative 2,800 limit but within Lambda's complete environment ceiling
+(scheduled 3,833/4,096 bytes). Preflight stops without deployment. Align the conservative
+development limit to 3,000 while retaining nondevelopment 2,400 and the hard 4,096-byte guard;
+all 77 mocked Terraform tests and 330 provider assertions on each PowerShell host pass.
+The exact rollout remains pending. No case decision has been submitted.
+
 September 16 D2-074 scope approved: the owner permits the normal verified-provider refresh
 only for the supplied Mintlify Applied AI Engineer posting during initial publication.
 Unrelated jobs stay untouched; contribution takedown preserves canonical/source data and the

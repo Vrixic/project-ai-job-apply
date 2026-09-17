@@ -66,7 +66,7 @@ the signature requirement. Dark policy-only deployments still require signed con
 
 The development mode does not change managed OIDC/scopes, selected provider registries,
 independent verification, Trust assignments/evidence, worker limits, alarms, role separation,
-or production/store release boundaries. The selected JSON configuration is bounded to 2,800
+or production/store release boundaries. The selected JSON configuration is bounded to 3,000
 base64-encoded bytes only in explicit development contribution mode; signed configurations retain
 the 2,400-byte limit. Independently, the complete scheduled Lambda environment (every configured
 key and value, including runtime policy and resource identifiers) must fit the
@@ -94,7 +94,7 @@ is intersected with the selected provider and its immutable descriptor, not a re
 either. In particular, global Lever can be selected while `jobs.eu.lever.co` remains denied.
 This neither activates providers nor establishes representative-fixture or publication acceptance.
 Matching exact source/verification registrations and the extension's separate detector-domain
-policy remain required. The added JSON counts toward the development-only 2,800-byte encoded
+policy remain required. The added JSON counts toward the development-only 3,000-byte encoded
 configuration budget and the complete scheduled environment's 4,096-byte limit. Maintenance
 retains the restriction while pausing execution.
 

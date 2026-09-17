@@ -167,7 +167,7 @@ function Assert-D2ProviderAdditiveConfiguration {
     $After.trust_reviewer_assignments_json, $After.trust_evidence_allowlist_json,
     $After.provider_sources_json, $After.provider_verification_registrations_json
   )
-  if ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($parts -join ''))).Length -gt 2800) {
+  if ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($parts -join ''))).Length -gt 3000) {
     throw 'D2ProviderConfigurationBudgetRejected'
   }
 }

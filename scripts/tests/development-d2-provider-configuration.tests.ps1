@@ -359,12 +359,14 @@ $parts = (ConvertTo-FixtureJson $boardSelection.development_contribution_provide
   (ConvertTo-FixtureJson $boardSelection.development_contribution_domains) +
   $boardRuntime.trust_evidence_allowlist_json + $boardRuntime.provider_sources_json +
   $boardRuntime.provider_verification_registrations_json
-$reviewerPadding = 2100 - [Text.Encoding]::UTF8.GetByteCount($parts) - 4
-Assert-True ($reviewerPadding -gt 0) 'generated fourth-board fixture fits the reviewed 2800 encoded budget'
+$reviewerPadding = 2250 - [Text.Encoding]::UTF8.GetByteCount($parts) - 4
+Assert-True ($reviewerPadding -gt 0) 'generated fourth-board fixture fits the reviewed 3000 encoded budget'
 $boardRuntime.trust_reviewer_assignments_json = '["' + ('x' * $reviewerPadding) + '"]'
+Assert-True ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($parts + $boardRuntime.trust_reviewer_assignments_json)).Length -eq 3000) 'exact encoded boundary is 3000 characters'
 $null = Assert-D2ProviderAdditiveConfiguration $configuration $boardRuntime $boardSelection; $passed++
 $boardRuntime.trust_reviewer_assignments_json = '["' + ('x' * ($reviewerPadding + 1)) + '"]'
-Assert-Rejected { Assert-D2ProviderAdditiveConfiguration $configuration $boardRuntime $boardSelection } 'combined development configuration refuses 2804 encoded characters'
+Assert-True ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($parts + $boardRuntime.trust_reviewer_assignments_json)).Length -eq 3004) 'one additional raw byte reaches 3004 encoded characters'
+Assert-Rejected { Assert-D2ProviderAdditiveConfiguration $configuration $boardRuntime $boardSelection } 'combined development configuration refuses 3004 encoded characters'
 $missingAshby = Copy-D2RuntimeValue $leverSelection
 $missingAshby.development_contribution_providers += 'ashby'
 $missingAshby.development_contribution_domains += 'jobs.ashbyhq.com'

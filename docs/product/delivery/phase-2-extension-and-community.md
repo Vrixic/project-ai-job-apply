@@ -1233,6 +1233,29 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   Exact test evidence and its configuration are prepared privately; no temporary evidence
   authority, initial decision, takedown or appeal has been executed.
 
+### D2-077 — Fit exact development test evidence within runtime limits
+
+- State: In progress
+- Started: 2026-09-16
+- Finding: the exact singleton test permission raises selected configuration from 2,684 to
+  2,932 base64 characters, exceeding the development-only conservative 2,800 limit. Existing
+  JSON is already compact. Both activation preflights refuse before generating a plan or
+  changing AWS; no test decision has occurred.
+- Decision: align only the conservative development allowance to 3,000, preserving the signed
+  nondevelopment allowance of 2,400 and complete Lambda environment ceiling of 4,096 UTF-8
+  bytes. The proposed scheduled environment is 3,833 bytes; Gateway is 2,850. Retain all reviewer,
+  provider, source and evidence bindings. This changes infrastructure validation, not application
+  binaries, credentials, roles or production activation. Test exact boundaries before deployment.
+- Verification: all 77 mocked Terraform community-runtime tests and module validation pass,
+  including exact 3,000/3,004 encoded and 4,096/4,097 full-environment boundaries, signed limits
+  and Unicode accounting. The maintained provider suite passes 330 assertions on each of
+  PowerShell 7 and Windows PowerShell 5;
+  the ignored exact-evidence operator passes 420 offline assertions and independent ancestry
+  review. Lifecycle execution tests pass 27 generated scenarios with no cloud calls.
+- Remaining: reviewed source-compatible rollout and D2-074
+  lifecycle acceptance. Existing application artifacts retain their original source identity;
+  no application bundle input changes in this infrastructure-only fix.
+
 ### D2-063 — Web crawler build input
 
 Started `2026-09-13`. The bounded path is public build configuration → Turbo environment/cache
