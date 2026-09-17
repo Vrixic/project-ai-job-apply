@@ -99,7 +99,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(45);
+    ).toBe(46);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact six-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -250,7 +250,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 6,
       relationCount: 68,
-      migrationCount: 45,
+      migrationCount: 46,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -384,6 +384,7 @@ describe("read-only aggregate restore verification", () => {
     {
       migrationCount: 41,
       omittedVersions: [
+        "0024_contribution_appeal_restoration",
         "0022_development_contribution_provider_leases",
         "0005_development_test_removal",
         "0023_contribution_verification_refresh",
@@ -393,6 +394,7 @@ describe("read-only aggregate restore verification", () => {
     {
       migrationCount: 42,
       omittedVersions: [
+        "0024_contribution_appeal_restoration",
         "0023_contribution_verification_refresh",
         "0005_development_test_removal",
         "0004_accepted_independent_evidence",

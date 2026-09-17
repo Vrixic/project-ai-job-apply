@@ -32,6 +32,7 @@ const migrationVersions = [
   "0021_development_contribution_operation_lease",
   "0022_development_contribution_provider_leases",
   "0023_contribution_verification_refresh",
+  "0024_contribution_appeal_restoration",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -1140,7 +1141,7 @@ try {
     }
   });
   const reprocessingMigration = migrations.find(
-    (migration) => migration.version === "0020_contribution_trust_reprocessing",
+    (migration) => migration.version === "0024_contribution_appeal_restoration",
   );
   if (!reprocessingMigration) throw new Error("Trust reprocessing migration is missing");
   const refreshMigration = migrations.find(
@@ -1177,6 +1178,29 @@ try {
         AND is_nullable = 'YES') AS present
   `;
   if (!marker?.present) throw new Error("Trust reprocessing decision marker is missing");
+  const [restorationShape] = await client<
+    Array<{ reconciliationConstraints: number; appealReasonConstraint: number }>
+  >`
+    SELECT
+      (SELECT count(*)::int FROM pg_constraint
+        WHERE conrelid = 'jobs.job_contribution_reconciliations'::regclass
+          AND convalidated AND (
+            (conname = 'job_contribution_reconciliations_kind_ck'
+              AND pg_get_constraintdef(oid, true) LIKE '%restoration%') OR
+            (conname = 'job_contribution_reconciliations_terminal_ck'
+              AND pg_get_constraintdef(oid, true) LIKE '%restoration%')
+          )) AS "reconciliationConstraints",
+      (SELECT count(*)::int FROM pg_constraint
+        WHERE conrelid = 'jobs.job_contribution_state_events'::regclass
+          AND conname = 'job_contribution_state_events_reason_ck' AND convalidated
+          AND pg_get_constraintdef(oid, true) LIKE '%appeal_reversal%') AS "appealReasonConstraint"
+  `;
+  if (
+    restorationShape?.reconciliationConstraints !== 2 ||
+    restorationShape.appealReasonConstraint !== 1
+  ) {
+    throw new Error("Contribution appeal restoration shape is invalid");
+  }
   const [refreshShape] = await client<
     Array<{
       columns: number;

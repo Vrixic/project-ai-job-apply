@@ -16,7 +16,7 @@ service and must return to zero running tasks after every migration.
 - For the Phase 2 package, require the exact
   `d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1` manifest, the ordered Profile,
   Jobs, Documents, Matching, Billing, and Trust runners, ten declared schemas, 68 declared regular
-  relations, and 45 checksum-bound migrations, including Jobs `0023` and Trust `0005` before enabling
+  relations, and 46 checksum-bound migrations, including Jobs `0024` and Trust `0005` before enabling
   the compatible Gateway or either D2 worker. Reject older D1 package and
   receipt boundaries.
 - Before Jobs `0023`/Trust `0004`, pause D2 contribution/reviewer writes and both workers through

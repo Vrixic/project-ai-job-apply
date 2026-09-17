@@ -562,4 +562,69 @@ describeWithDatabase("composed PostgreSQL D2 Trust-to-Jobs lifecycle", () => {
       dead: 0,
     });
   });
+
+  it("restores a published association after a distinct reviewer reverses its takedown", async () => {
+    const fixture = await createFixture();
+    const {
+      ownerUserId,
+      input: { contributionId },
+    } = fixture.command;
+    const accepted = await accept(fixture);
+    await deliver();
+    const publication = await assertPublished(fixture);
+
+    advance();
+    const takenDown = await trust.takeDownAcceptedContribution({
+      reviewerId: reviewers.initial,
+      caseId: fixture.caseId,
+      expectedVersion: accepted.version,
+      reasonCode: "rights_or_policy_violation",
+      evidenceDigestSha256: fixture.reviewDigest,
+    });
+    await deliver();
+    expect(await processingRunner.runBatch("composed:processing", advance(), 25)).toMatchObject({
+      claimed: 1,
+      completed: 1,
+      parked: 0,
+    });
+    expect(await intake.get(ownerUserId, contributionId)).toMatchObject({ state: "removed" });
+
+    advance();
+    const appealed = await trust.appealOwnerDecision({
+      contributorUserId: ownerUserId,
+      contributionId,
+      expectedVersion: takenDown.version,
+      evidenceDigestSha256: fixture.appealDigest,
+    });
+    await deliver();
+    const resolution = {
+      caseId: fixture.caseId,
+      expectedVersion: appealed.version,
+      outcome: "reversed" as const,
+      evidenceDigestSha256: fixture.appealDigest,
+    };
+    await expect(
+      trust.resolveAppeal({ ...resolution, reviewerId: reviewers.initial }),
+    ).rejects.toMatchObject({ code: "access_denied" });
+    advance();
+    const reversed = await trust.resolveAppeal({ ...resolution, reviewerId: reviewers.appeal });
+    expect(reversed.state).toBe("accepted");
+    await deliver();
+    expect(await processingRunner.runBatch("composed:processing", advance(), 25)).toMatchObject({
+      claimed: 1,
+      completed: 1,
+      parked: 0,
+      retried: 0,
+      dead: 0,
+    });
+    expect(await intake.get(ownerUserId, contributionId)).toMatchObject({ state: "published" });
+    expect(await processing.load(contributionId)).toMatchObject({
+      ownerState: "published",
+      publication,
+      trustDecision: { status: "accepted" },
+    });
+    expect((await catalog.getActiveJob(publication.jobId, now()))?.description).toBe(
+      fixture.evidence.providerObservation.description,
+    );
+  });
 });

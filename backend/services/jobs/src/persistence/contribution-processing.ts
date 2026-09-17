@@ -859,6 +859,146 @@ export class PostgresContributionProcessingStore implements ContributionProcessi
     });
   }
 
+  async restorePublication(
+    input: Parameters<ContributionProcessingStore["restorePublication"]>[0],
+  ): Promise<LoadedContributionProcessing> {
+    const developmentDescriptor = input.developmentOperationLease
+      ? developmentContributionDescriptorForLease(
+          input.capabilityPolicyVersion,
+          input.capabilityConfigurationDigestSha256,
+        )
+      : undefined;
+    if (
+      input.developmentOperationLease &&
+      (!developmentDescriptor ||
+        Date.parse(input.capabilityExpiresAt) - Date.parse(input.capabilityEvaluatedAt) !==
+          DEVELOPMENT_CONTRIBUTION_OPERATION_LEASE_MS ||
+        Date.parse(input.capabilityEvaluatedAt) > input.occurredAt.getTime() ||
+        Date.parse(input.capabilityExpiresAt) <= input.occurredAt.getTime())
+    ) {
+      throw new Error("Development restoration operation lease is invalid");
+    }
+    return this.client.begin(async (transaction) => {
+      await transaction`
+        SELECT pg_advisory_xact_lock(hashtext(${`jobs:contribution-reconcile:${input.contributionId}`}))
+      `;
+      const [gates] = await transaction<
+        Array<{
+          normalizationId: string;
+          verificationId: string;
+          trustDecisionId: string;
+          jobId: string;
+          sourceId: string;
+          provider: string;
+          pageVariant: string;
+          sourceUrl: string;
+          clientVersion: string;
+        }>
+      >`
+        SELECT publication.normalization_id AS "normalizationId",
+          publication.independent_verification_id AS "verificationId",
+          trust.id AS "trustDecisionId", publication.job_id AS "jobId",
+          publication.source_id AS "sourceId", contribution.provider,
+          contribution.page_variant AS "pageVariant", contribution.source_url AS "sourceUrl",
+          contribution.client_version AS "clientVersion"
+        FROM jobs.job_contributions AS contribution
+        JOIN jobs.job_contribution_reconciliations AS publication
+          ON publication.contribution_id = contribution.id
+          AND publication.kind = 'publication' AND publication.state = 'applied'
+        JOIN jobs.job_contribution_independent_verifications AS verification
+          ON verification.id = publication.independent_verification_id
+        JOIN jobs.job_contribution_reconciliations AS removal
+          ON removal.contribution_id = contribution.id
+          AND removal.kind = 'removal' AND removal.state = 'applied'
+          AND removal.terminal_reason = 'taken_down'
+        JOIN LATERAL (
+          SELECT decision.id, decision.status, decision.decided_at,
+            decision.evidence_digest_sha256
+          FROM jobs.job_contribution_trust_decisions AS decision
+          WHERE decision.contribution_id = contribution.id
+          ORDER BY decision.decided_at DESC, decision.id DESC LIMIT 1
+        ) AS trust ON trust.status = 'accepted'
+          AND trust.id <> publication.trust_decision_id
+          AND trust.decided_at >= removal.updated_at
+          AND trust.evidence_digest_sha256 = verification.evidence_digest_sha256
+        WHERE contribution.id = ${input.contributionId}
+          AND publication.job_id IS NOT NULL AND publication.source_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM jobs.job_contribution_state_events AS cancelled
+            WHERE cancelled.contribution_id = contribution.id AND cancelled.state = 'consent_invalid')
+          AND contribution.client_surface = 'browser_extension'
+          AND contribution.client_version IS NOT NULL
+      `;
+      if (!gates) throw new Error("Appeal restoration gates are not complete");
+      if (developmentDescriptor) {
+        const source = new URL(gates.sourceUrl);
+        if (
+          gates.provider !== developmentDescriptor.provider ||
+          gates.pageVariant !== developmentDescriptor.pageVariant ||
+          gates.clientVersion !== developmentDescriptor.clientVersion ||
+          source.protocol !== "https:" ||
+          source.username ||
+          source.password ||
+          source.port ||
+          !developmentDescriptor.domains.includes(source.hostname)
+        ) {
+          throw new Error("Development restoration descriptor does not match the contribution");
+        }
+      }
+      const [existing] = await transaction<
+        Array<{
+          trustDecisionId: string;
+          processingPolicyVersion: string;
+          capabilityPolicyVersion: string;
+          capabilityConfigurationDigestSha256: string;
+        }>
+      >`
+        SELECT trust_decision_id AS "trustDecisionId",
+          processing_policy_version AS "processingPolicyVersion",
+          capability_policy_version AS "capabilityPolicyVersion",
+          capability_configuration_digest_sha256 AS "capabilityConfigurationDigestSha256"
+        FROM jobs.job_contribution_reconciliations
+        WHERE contribution_id = ${input.contributionId} AND kind = 'restoration'
+          AND state = 'applied'
+      `;
+      if (existing) {
+        if (
+          existing.trustDecisionId !== gates.trustDecisionId ||
+          existing.processingPolicyVersion !== input.processingPolicyVersion ||
+          existing.capabilityPolicyVersion !== input.capabilityPolicyVersion ||
+          existing.capabilityConfigurationDigestSha256 !== input.capabilityConfigurationDigestSha256
+        ) {
+          throw new Error("Appeal restoration conflicts with immutable reconciliation");
+        }
+      } else {
+        await transaction`
+          INSERT INTO jobs.job_contribution_reconciliations (
+            id, contribution_id, kind, state, normalization_id, independent_verification_id,
+            trust_decision_id, job_id, source_id, terminal_reason, processing_policy_version,
+            capability_policy_version, capability_configuration_digest_sha256,
+            capability_evaluated_at, capability_expires_at, created_at, updated_at
+          ) VALUES (
+            ${uuidv7()}, ${input.contributionId}, 'restoration', 'applied',
+            ${gates.normalizationId}, ${gates.verificationId}, ${gates.trustDecisionId},
+            ${gates.jobId}, ${gates.sourceId}, NULL, ${input.processingPolicyVersion},
+            ${input.capabilityPolicyVersion}, ${input.capabilityConfigurationDigestSha256},
+            ${input.capabilityEvaluatedAt}, ${input.capabilityExpiresAt},
+            ${input.occurredAt}, ${input.occurredAt}
+          )
+        `;
+      }
+      await insertState(transaction, {
+        contributionId: input.contributionId,
+        state: "published",
+        reasonCode: "appeal_reversal",
+        processingPolicyVersion: input.processingPolicyVersion,
+        occurredAt: input.occurredAt,
+      });
+      const value = await loadWith(transaction, input.contributionId);
+      if (!value) throw new Error("Contribution disappeared during appeal restoration");
+      return value;
+    });
+  }
+
   async prepareTerminalReconciliation(
     input: Parameters<ContributionProcessingStore["prepareTerminalReconciliation"]>[0],
   ): Promise<PreparedTerminalReconciliation | null> {
@@ -1268,7 +1408,8 @@ export class PostgresContributionProcessingQueueStore implements ContributionPro
               (${input.outcome} = 'published' AND decision.status = 'accepted' AND EXISTS (
                 SELECT 1 FROM jobs.job_contribution_reconciliations AS reconciliation
                 WHERE reconciliation.contribution_id = decision.contribution_id
-                  AND reconciliation.kind = 'publication' AND reconciliation.state = 'applied'
+                  AND reconciliation.kind IN ('publication', 'restoration')
+                  AND reconciliation.state = 'applied'
                   AND reconciliation.trust_decision_id = decision.id
               )) OR (${input.outcome} = 'rejected' AND decision.status = 'rejected')
               OR (${input.outcome} IN ('withdrawn', 'taken_down') AND decision.status = ${input.outcome})

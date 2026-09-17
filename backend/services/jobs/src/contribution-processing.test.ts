@@ -232,6 +232,14 @@ class MemoryProcessingStore implements ContributionProcessingStore {
     return this.value;
   }
 
+  async restorePublication(
+    _input: Parameters<ContributionProcessingStore["restorePublication"]>[0],
+  ) {
+    this.value = { ...this.value, ownerState: "published" };
+    this.transitions.push({ state: "published", reasonCode: "appeal_reversal" });
+    return this.value;
+  }
+
   async prepareTerminalReconciliation(
     input: Parameters<ContributionProcessingStore["prepareTerminalReconciliation"]>[0],
   ) {
@@ -867,6 +875,53 @@ describe("ContributionProcessingService", () => {
       reason: "withdrawn",
       trustDecisionId: ids.decision,
       processingPolicyVersion: "synthetic-processing-v1",
+    });
+  });
+
+  it("restores a taken-down publication after an accepted appeal without rewriting provider truth", async () => {
+    const store = new MemoryProcessingStore({
+      ownerState: "removed",
+      trustDecision: {
+        status: "accepted",
+        contributionId: ids.contribution,
+        decisionId: "018f47a6-7b2c-7ee1-8c09-3ea174e80e2a",
+        policyVersion: "synthetic-trust-v1",
+        decidedAt: "2026-09-01T12:59:30.000Z",
+        independentEvidenceDigestSha256: "d".repeat(64),
+      },
+      publication: {
+        reconciliationId: ids.reconciliation,
+        jobId: ids.job,
+        sourceId: ids.source,
+        verificationId: ids.verification,
+      },
+    });
+    const restore = vi.spyOn(store, "restorePublication");
+    const consent = { verifyCurrent: vi.fn(async () => ({ status: "current" as const })) };
+    const verifier = { verify: vi.fn(async () => verified()) };
+    const reconciler = {
+      publish: vi.fn(async () => ({
+        jobId: ids.job,
+        sourceId: ids.source,
+        verificationId: ids.verification,
+      })),
+      remove: vi.fn(async () => undefined),
+    };
+
+    await expect(
+      service(store, { consent, independentVerifier: verifier, reconciler }).process(
+        ids.contribution,
+      ),
+    ).resolves.toBe("published");
+    expect(restore).toHaveBeenCalledOnce();
+    expect(consent.verifyCurrent).toHaveBeenCalledOnce();
+    expect(verifier.verify).not.toHaveBeenCalled();
+    expect(reconciler.publish).not.toHaveBeenCalled();
+    expect(reconciler.remove).not.toHaveBeenCalled();
+    expect(store.value.ownerState).toBe("published");
+    expect(store.transitions.at(-1)).toEqual({
+      state: "published",
+      reasonCode: "appeal_reversal",
     });
   });
 });

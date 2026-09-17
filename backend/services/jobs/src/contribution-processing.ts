@@ -43,6 +43,7 @@ export type ContributionOwnerReasonCode =
   | "trust_takedown"
   | "publication_gates_complete"
   | "publication_complete"
+  | "appeal_reversal"
   | "terminal_reconciliation_complete";
 
 export interface ContributionProcessingPolicy {
@@ -271,6 +272,16 @@ export interface ContributionProcessingStore {
     result: { status?: "published"; jobId: string; sourceId: string; verificationId: string };
     occurredAt: Date;
   }): Promise<LoadedContributionProcessing>;
+  restorePublication(input: {
+    contributionId: string;
+    processingPolicyVersion: string;
+    capabilityPolicyVersion: string;
+    capabilityConfigurationDigestSha256: string;
+    capabilityEvaluatedAt: string;
+    capabilityExpiresAt: string;
+    developmentOperationLease?: true;
+    occurredAt: Date;
+  }): Promise<LoadedContributionProcessing>;
   prepareTerminalReconciliation(input: {
     contributionId: string;
     reason: "withdrawn" | "taken_down";
@@ -486,7 +497,7 @@ export class ContributionProcessingService {
 
     const terminal = await this.reconcileTerminal(contribution);
     if (terminal) return terminal;
-    if (contribution.publication || contribution.ownerState === "published") return "published";
+    if (contribution.ownerState === "published") return "published";
 
     let capability = await this.authorizeCapability(contribution);
     if (capability === "unavailable") return "awaiting_capability_dependency";
@@ -497,6 +508,30 @@ export class ContributionProcessingService {
     if (consent === "invalid") {
       await this.recordState(contributionId, "consent_invalid", "consent_not_current");
       return "consent_invalid";
+    }
+
+    // A reversed takedown restores only the contribution's public association. The original
+    // provider-backed catalog publication remains intact, so do not rewrite it or silently bind
+    // the appeal to a newer provider proof. Current consent and capability are still required.
+    if (contribution.publication) {
+      if (contribution.trustDecision?.status !== "accepted") return "awaiting_trust";
+      const restorationCapability = capability;
+      contribution = await dependency(() =>
+        this.store.restorePublication({
+          contributionId,
+          processingPolicyVersion: this.policy.version,
+          capabilityPolicyVersion: restorationCapability.policyVersion,
+          capabilityConfigurationDigestSha256: restorationCapability.configurationDigestSha256,
+          capabilityEvaluatedAt: restorationCapability.evaluatedAt,
+          capabilityExpiresAt: restorationCapability.expiresAt,
+          ...(isDevelopmentContributionCapabilitySource(this.capability)
+            ? { developmentOperationLease: true as const }
+            : {}),
+          occurredAt: this.occurredAt(),
+        }),
+      );
+      assertLoaded(contribution, contributionId);
+      return "published";
     }
 
     if (!contribution.normalization) {
@@ -846,6 +881,7 @@ export class ContributionProcessingService {
   private async reconcileTerminal(
     contribution: LoadedContributionProcessing,
   ): Promise<"withdrawn" | "taken_down" | "removed" | null> {
+    if (contribution.trustDecision?.status === "accepted") return null;
     const terminal =
       contribution.trustDecision?.status === "withdrawn" ||
       contribution.trustDecision?.status === "taken_down"

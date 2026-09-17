@@ -1217,15 +1217,25 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   apply receipt `65684265ff27ca548d3a34cfc5c61b524ab4eda7c94f4b1aad2bf8f3ae642ece`;
   baseline `bf37698fa55f603a06900bf695ffae22da4fe1e3a460a9dbd251906e8ff62c5a`, metadata
   `706accad07c025a1612fcb26a9589ba89f9d2f1236e4efb1fa9b8b25b7fccddb`.
-  The human has not submitted an appeal decision; final reconciliation and removal of the exact
-  temporary appeal permission remain required.
-- Owner-reported limitation: the review console cannot display the submitted appeal explanation.
-  The current client deliberately sends only its SHA-256 digest and clears the original text;
-  this is not a missing-load error and the text cannot be recovered from that digest. Recommend
-  a bounded explanation readable only by the owner/authorized reviewers, with candidate export
-  and deletion coverage. Owner choice is requested before changing the stored-data scope.
-  The explanation in this conversation remains available for the current test, but must not be
-  presented as content recovered from the server or as a completed readable-appeal feature.
+  This pre-decision checkpoint is superseded by the independent completion below. Do not repeat
+  the appeal decision or redeploy its temporary evidence authority.
+- Owner decision: retain fingerprint-only appeal explanations for now. The current client sends
+  only the SHA-256 digest and clears the original text; reviewer-readable appeal text, additional
+  stored candidate data and its export/deletion surface are intentionally out of scope. The text
+  cannot be recovered from its digest and must never be presented as server-retrieved content.
+- Independent completion on September 17: the owner reports case
+  `45928575-dd1f-80a1-8924-c8d0a62a7082` accepted in the hosted appeal-only console. A separate
+  exact read returns `accepted`, version `5`, `appealed=true`. The temporary appeal-resolution
+  evidence entry is then removed with one reviewed Gateway-only update; state `358`, Gateway /
+  scheduled / Trust versions `73` / `30` / `23`, zero evidence entries and zero Terraform drift
+  are verified. No reviewer permission remains from this test.
+- Post-decision aggregate health records one published Trust delivery and one handled/copied Jobs
+  signal, with zero retries/dead letters/failures and all 13 D2 alarms OK. It also records zero
+  Jobs requeues or processing claims. Source inspection identifies a real lifecycle defect:
+  Jobs `0020` treats any historic publication as permanently satisfying a later accepted appeal,
+  so the already removed association cannot return to `published`. D2-079 owns the forward fix;
+  D2-074 remains In progress until that fix is deployed and the exact contribution is read back as
+  Processing `published` / Trust `accepted` without another decision or submission.
 
 ### D2-078 — Preserve appeal submission results and prevent duplicate dispatch
 
@@ -1260,6 +1270,34 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   server read confirms no appeal and an open window, the owner is asked to reload, finish a fresh
   Trust refresh, submit the existing appeal once and report the immediate message. No job
   resubmission or automatic appeal retry occurs.
+
+### D2-079 — Restore publication state after a reversed takedown
+
+- State: In progress
+- Started: 2026-09-17
+- Owner: Jobs/platform engineering
+- Finding: the accepted D2-074 appeal is copied into Jobs, but the previous
+  `contribution_requires_trust_processing` predicate considers the historic applied publication
+  final. The signal therefore records `requeued=0`; the contribution remains removed even though
+  Trust is accepted. This is a product lifecycle defect, not a reviewer, Auth0, provider or
+  browser failure.
+- Implementation: forward Jobs migration `0024_contribution_appeal_restoration` admits an
+  append-only `restoration` reconciliation tied to the exact accepted appeal decision. It wakes
+  only completed contributions with an applied takedown and no restoration for that decision.
+  Processing rechecks current consent and contribution capability, records `appeal_reversal`,
+  and restores the owner state to `published` without rewriting the original publication,
+  removal, provider evidence, canonical job or source. The migration transactionally backfills
+  already-copied affected decisions through the same database-guarded predicate. No API, event,
+  permission, stored candidate field or Trust state-machine change is introduced.
+- Local verification: Jobs unit/type checks pass (391 tests); migration `0024` applies and replays
+  with exact function/constraint verification; focused PostgreSQL persistence passes 10 tests.
+  The fresh isolated composed PostgreSQL suite passes all three lifecycles, including publish →
+  takedown → owner appeal → distinct-reviewer reversal → restored publication with preserved
+  canonical provider truth. The disposable cluster is removed; Docker Desktop and WSL are stopped.
+- Remaining: complete repository/recovery/package checks, commit and publish compatible immutable
+  migration and D2 worker artifacts, apply `0024` before resuming processing, verify backfill and
+  zero drift, then obtain only the final exact owner Processing/Trust readback. Do not repeat the
+  accepted appeal, contribution submission or takedown.
 
 ### D2-075 — Default missing preview work type to in-person
 
@@ -3744,6 +3782,13 @@ prove the browser/BFF failure cause. No reviewer decision was repeated or submit
 agent. Gateway `72`, state `357`, remains the verified boundary; independent human resolution,
 reconciliation and temporary-permission cleanup remain outstanding.
 
+Superseding appeal completion (`2026-09-17`, D2-074/D2-079): the owner subsequently records the
+exact version-fenced reversal as accepted. Independent API readback returns `accepted`, version
+`5`, `appealed=true`; the temporary evidence entry is removed, state `358` and zero drift pass.
+No reviewer permission remains. Post-decision health is clean but requeues zero Jobs work, exposing
+the separate publication-restoration defect now owned by D2-079. Do not repeat the appeal,
+submission or takedown; deploy the forward Jobs repair and verify only the restored owner state.
+
 Exact-posting refresh approved (`2026-09-16`, D2-074): the owner approves initial publication's
 normal verified-provider refresh only for the supplied Mintlify Applied AI Engineer posting.
 This closes the preceding scope question; it does not authorize unrelated-job changes,
@@ -5228,7 +5273,7 @@ These are local checks; deployed migration, human review, and publication eviden
 | D2-R9 | Closed | The dedicated D2 Trust workflow client and its exact `trust:review trust:case:open` grant are operator-confirmed. Its tenant-bound machine subject is bound only to `case_opener`; no secret is stored and the candidate-rights M2M identity remains separate. | Product owner; platform engineering | Preserve the workflow-only assignment and keep human decision roles separately assigned. |
 | D2-R10 | Closed | On September 11 the user confirms Processing `published`, Trust `accepted`, website search visibility and successful details/source display after D2-055. This closes the reported-job owner follow-up, not all historical or cross-browser coverage. Anonymous public-job routes remain disabled. | Platform engineering; QA/automation | Do not repeat the completed refresh, resubmit a contribution or repeat a decision. Hosted/human appeal and wider lifecycle acceptance remain separate. |
 | D2-R11 | Closed | Recurring development signing/policy fetch/expiry is removed from the deployed Gateway/scheduled runtime and rebuilt unpacked extension. The user confirms installed reload, successful sign-in, and successful job addition on 2026-09-08, closing this development adoption blocker. Exact scope, authentication, independent verification, and Trust remain enforced. | Platform engineering | Preserve the fixed development scope and remaining independent publication/lifecycle checks. No fresh contribution signing or renewal approval is needed. Production/store and unsupported providers remain disabled; do not automatically resubmit old items. |
-| D2-R12 | Open; appeal-decision journey acceptance pending | Hosted sign-in, authenticated empty appeal-queue read and logout/root-reload acceptance are user-confirmed Complete on September 14 at protected `211e59d`. Historical local identity/MFA/two-scope evidence and reviewer assignments remain unchanged; the excluded short domain is unchanged. | Product owner; platform engineering | Complete separate human appeal-decision acceptance when an appropriately authorized case exists. Do not repeat completed hosting checks or request new secrets/roles, manufacture cases merely to test access or borrow the human session. |
+| D2-R12 | Closed; hosted appeal decision accepted | Hosted sign-in, authenticated queue access, logout/root reload and one exact independent appeal reversal are user-confirmed. Separate API readback returns accepted/version 5, and the temporary appeal evidence entry is removed at state 358. | Product owner; platform engineering | Do not repeat the appeal or hosting checks. D2-079 separately owns the Jobs restoration defect exposed after the successful decision; closing reviewer acceptance does not claim restored publication or production/store release. |
 | D2-R13 | Closed | The expired mobile-only exception blocked initial publication attempts. The exact user-approved parser patch passes 136 focused tests, independent review, frozen installation, the full repository verifier, and the dependency audit without exceptions. Two matching no-cache migration-image builds, isolated smoke, and ECR scan COMPLETE with zero High/Critical findings now pass; that image was published and used successfully. | Platform engineering | Maintain the exact local patch until a compatible upstream fix is verified. No mobile/public-launch acceptance is implied. |
 | D2-R14 | Closed | The user confirmed reuse of the existing encrypted agent-reviewer credential on 2026-09-08 for the remaining Phase 2 development initial/takedown work. Private current-user access, unchanged encrypted bytes, and the live exact assignment pass. The historical collection window remains unchanged; the subsequent Auth0 refusal is separately tracked as R16. | Product owner; platform engineering | Preserve the existing roles and separate human appeal reviewer. No recurring contribution-policy approval or new secret is required for this unchanged assignment; do not borrow another identity, expand roles, or submit unsupported decisions. |
 | D2-R15 | Closed | The user's renewed session passes exact-account/SSO-role/us-east-2 STS check `83e125` for the approved Ashby deployment. Earlier expiry and completed recovery remain historical. | Platform engineering | Recheck credentials at actual cloud operations; continue the recorded deployment approval without requesting it again. No recovery drill or credential disclosure is needed. |

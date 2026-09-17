@@ -350,23 +350,23 @@ describeWithDatabase("durable contribution processing persistence", () => {
         WHERE contribution_id = ${contributionId}`,
     ).rejects.toThrow("append-only");
 
-    const withdrawalId = uuidv7();
+    const takedownId = uuidv7();
     value = await processing.recordTrustDecision({
       contributionId,
       decision: {
-        status: "withdrawn",
+        status: "taken_down",
         contributionId,
-        decisionId: withdrawalId,
+        decisionId: takedownId,
         policyVersion: "synthetic-trust-v1",
         decidedAt: "2026-09-01T13:05:00.000Z",
       },
       processingPolicyVersion: "synthetic-processing-v1",
       occurredAt: new Date("2026-09-01T13:05:00.000Z"),
     });
-    expect(value.ownerState).toBe("withdrawn");
+    expect(value.ownerState).toBe("taken_down");
     const removal = await processing.prepareTerminalReconciliation({
       contributionId,
-      reason: "withdrawn",
+      reason: "taken_down",
       processingPolicyVersion: "synthetic-processing-v1",
       occurredAt: new Date("2026-09-01T13:05:00.000Z"),
     });
@@ -396,6 +396,99 @@ describeWithDatabase("durable contribution processing persistence", () => {
       jobStatus: "active",
       withdrawnAt: null,
       contentHash: sourceContentSha256,
+    });
+
+    const removalClaimAt = new Date(queueNow.getTime() + 2_000);
+    const removalClaims = await queue.claim({
+      workerId: "worker:removal",
+      now: removalClaimAt,
+      claimExpiresAt: new Date(removalClaimAt.getTime() + 30_000),
+      limit: 25,
+    });
+    const removalClaim = removalClaims.find((item) => item.contributionId === contributionId);
+    if (!removalClaim) throw new Error("Expected removal completion claim");
+    await queue.complete({
+      item: removalClaim,
+      workerId: "worker:removal",
+      now: removalClaimAt,
+      outcome: "removed",
+    });
+
+    const appealDecisionId = uuidv7();
+    const appealAt = new Date(queueNow.getTime() + 3_000);
+    value = await processing.recordTrustDecision({
+      contributionId,
+      decision: {
+        status: "accepted",
+        contributionId,
+        decisionId: appealDecisionId,
+        policyVersion: "synthetic-trust-v1",
+        decidedAt: appealAt.toISOString(),
+        evidenceDigestSha256: "c".repeat(64),
+        independentEvidenceDigestSha256: evidenceDigestSha256,
+      },
+      processingPolicyVersion: "synthetic-processing-v1",
+      occurredAt: appealAt,
+    });
+    expect(value.ownerState).toBe("removed");
+    await expect(
+      queue.requeue({ contributionId, now: appealAt, signal: "trust_decision" }),
+    ).resolves.toBe(true);
+
+    value = await processing.restorePublication({
+      contributionId,
+      processingPolicyVersion: "synthetic-processing-v1",
+      capabilityPolicyVersion: "synthetic-capability-v1",
+      capabilityConfigurationDigestSha256: "f".repeat(64),
+      capabilityEvaluatedAt: appealAt.toISOString(),
+      capabilityExpiresAt: new Date(appealAt.getTime() + 60 * 60_000).toISOString(),
+      occurredAt: appealAt,
+    });
+    expect(value.ownerState).toBe("published");
+    await expect(intake.get(ownerId, contributionId)).resolves.toMatchObject({
+      state: "published",
+    });
+
+    const restorationClaims = await queue.claim({
+      workerId: "worker:restoration",
+      now: appealAt,
+      claimExpiresAt: new Date(appealAt.getTime() + 30_000),
+      limit: 25,
+    });
+    const restorationClaim = restorationClaims.find(
+      (item) => item.contributionId === contributionId,
+    );
+    if (!restorationClaim) throw new Error("Expected appeal-restoration claim");
+    await queue.complete({
+      item: restorationClaim,
+      workerId: "worker:restoration",
+      now: appealAt,
+      outcome: "published",
+    });
+    const [restored] = await client<
+      Array<{
+        publications: number;
+        removals: number;
+        restorations: number;
+        completedTrustDecisionId: string | null;
+      }>
+    >`
+      SELECT
+        (SELECT count(*)::int FROM jobs.job_contribution_reconciliations
+          WHERE contribution_id = ${contributionId} AND kind = 'publication' AND state = 'applied') AS publications,
+        (SELECT count(*)::int FROM jobs.job_contribution_reconciliations
+          WHERE contribution_id = ${contributionId} AND kind = 'removal' AND state = 'applied') AS removals,
+        (SELECT count(*)::int FROM jobs.job_contribution_reconciliations
+          WHERE contribution_id = ${contributionId} AND kind = 'restoration' AND state = 'applied'
+            AND trust_decision_id = ${appealDecisionId}) AS restorations,
+        (SELECT completed_trust_decision_id FROM jobs.job_contribution_processing_queue
+          WHERE contribution_id = ${contributionId}) AS "completedTrustDecisionId"
+    `;
+    expect(restored).toEqual({
+      publications: 1,
+      removals: 1,
+      restorations: 1,
+      completedTrustDecisionId: appealDecisionId,
     });
   });
 

@@ -147,6 +147,10 @@
         {
           "version": "0023_contribution_verification_refresh",
           "checksum": "ed90e3f451d5d1b5b1f8a1712ce3adb72351d577bc61a32a6da2c0ffd0a5f338"
+        },
+        {
+          "version": "0024_contribution_appeal_restoration",
+          "checksum": "e0b4beaead5a410216ac8c34817e1866b7986612a0d59f04dc9a448419933ac2"
         }
       ],
       "relations": [

@@ -50,7 +50,7 @@ if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -o
 
 $currentSuccessMarkers = @(
   "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
-  "Jobs migrations through 0023_contribution_verification_refresh applied and verified.",
+  "Jobs migrations through 0024_contribution_appeal_restoration applied and verified.",
   "Documents migrations through 0003_candidate_rights applied and verified.",
   "Matching migrations through 0003_private_saved_page_captures applied and verified.",
   "Billing migrations through 0002_candidate_rights applied and verified.",

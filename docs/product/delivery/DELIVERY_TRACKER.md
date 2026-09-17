@@ -9,6 +9,18 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 17 D2-074/D2-079: the owner reports case
+`45928575-dd1f-80a1-8924-c8d0a62a7082` accepted in the hosted independent-appeal console;
+separate exact readback confirms accepted/version `5`. The temporary appeal evidence entry is
+removed and state `358`, versions `73`/`30`/`23`, empty evidence authority and zero drift pass.
+Post-decision health is clean, but the copied accepted signal requeues zero Jobs work. D2-079
+implements forward Jobs `0024`: an exact-decision, append-only restoration after applied takedown,
+with current consent/capability checks and no provider/canonical rewrite. Jobs 391 unit tests,
+10 focused PostgreSQL persistence tests, migration apply/replay and all three fresh composed
+Trust-to-Jobs lifecycles pass locally. Docker/WSL are stopped. Repository verification,
+immutable artifacts, migration/runtime deployment, exact backfill readback and final owner
+Processing `published` / Trust `accepted` remain; do not repeat the appeal or submission.
+
 September 17 D2-074: the owner confirms Processing `removed` and Trust `appeal_pending`/appealed;
 an independent API read confirms version `4`. The owner loads the exact case and evidence in the
 hosted independent-reviewer console. Exact Gateway-only replacement of the temporary takedown

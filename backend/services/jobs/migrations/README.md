@@ -76,3 +76,7 @@ other service may modify these tables.
   provider observation before catalog identity exists, then permits one guarded linkage to the
   exact provider-created or reused job/source during atomic final reconciliation. Nullable staged
   identities retain their catalog foreign keys; probable duplicates roll back and remain parked.
+- `0024_contribution_appeal_restoration.sql` — Adds an append-only restoration reconciliation for
+  one accepted appeal after an applied takedown. It preserves the original publication/removal and
+  provider truth, wakes only exact unconsumed accepted appeal decisions, and backfills affected
+  completed queue rows through the same guarded predicate.

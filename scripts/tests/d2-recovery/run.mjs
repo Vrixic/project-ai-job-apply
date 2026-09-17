@@ -184,7 +184,7 @@ try {
   assert.equal(source.manifest.contributors.length, 6);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 10);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 68);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 45);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 46);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
@@ -284,7 +284,7 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 45,
+    migrationCount: 46,
     ownerCount: 6,
     schemaCount: 10,
     exactRelationRowSetsMatched: 68,

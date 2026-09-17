@@ -108,6 +108,13 @@ redecided or rebound. These finite source-freshness controls do not renew develo
 Independent provider proof is distinct from a reviewer's appeal evidence. Trust `0004` records
 that separate immutable acceptance basis, and only the exact accepted basis can publish.
 
+`0024_contribution_appeal_restoration` closes the published → taken down → appeal reversed
+lifecycle without rewriting provider truth. The accepted appeal wakes completed Jobs work, which
+rechecks current consent and contribution capability, appends one applied restoration
+reconciliation tied to the exact accepted decision, and returns the owner state to `published`.
+The original publication, takedown removal, provider evidence, canonical job, and source remain
+intact. A forward backfill wakes only already-copied accepted appeals after applied takedowns.
+
 The September 10 coordinated development checkpoint used source
 `2dd3aa21d2991bc97caebc3e90e785654eb9fb1e`; the Phase 2 register owns subsequent release updates.
 Migration revision 51 ran exactly once on 2026-09-10 with exit `0` and seven exact aggregate success
