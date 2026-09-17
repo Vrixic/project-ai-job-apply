@@ -3559,6 +3559,17 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Catalog boundary clarification (`2026-09-16`, D2-074): read-only code review finds no maintained
+all-state exact-source diagnostic suitable for this case without a new execution path. Repeating
+active website search cannot resolve historical identity. Absence is not required for takedown:
+`PostgresContributionPublicationReconciler.remove` changes the exact contribution reconciliation,
+not canonical jobs or provider sources. Initial publication is different: its verified provider
+observation can refresh an existing matching canonical/source record. The original instruction
+to leave existing shared jobs untouched does not unambiguously authorize that refresh. Ask the
+owner whether the exact Mintlify posting may receive this normal verified-provider refresh;
+do not infer permission for other jobs, deletion or broader reviewer authority. Retain the
+separate live pre/post preservation check and independent appeal. No decision was submitted.
+
 Compatible deployment and migration (`2026-09-16` local, D2-076): exact `e632bb0` publication
 and rollout preserve production/store darkness and existing reviewer/provider boundaries.
 Core Release's stale parent-role policy snapshots were reconciled through a reviewed

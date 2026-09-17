@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-074 scope clarification: takedown preserves canonical/provider records, but
+initial publication can refresh an existing matching job from verified provider data. The
+owner's existing-jobs-untouched instruction requires clarification for that exact Mintlify
+refresh before initial acceptance. No decision has been submitted; repeated active search
+would not resolve this boundary.
+
 September 16 D2-076 deployment follow-through: source `e632bb0` is deployed to the development
 Gateway and compatible D2/core workers. Core runtime `15` is resumed; Gateway/scheduled/Trust
 versions are `68`/`30`/`23`. The single current-schema migration succeeds and its maintained
