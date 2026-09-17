@@ -15,8 +15,13 @@ hosted independent-reviewer console. Exact Gateway-only replacement of the tempo
 evidence with separate appeal-resolution evidence verifies at state `357`, versions `72`/`30`/`23`,
 zero drift. No appeal decision is submitted. The owner also identifies that appeal explanations
 are not readable: current implementation sends only a digest. A bounded owner/reviewer-readable
-explanation with export/deletion coverage is recommended; that stored-data scope change awaits
-owner choice. Independent decision, reconciliation and temporary-permission cleanup remain.
+explanation with export/deletion coverage was recommended; the owner explicitly keeps
+fingerprint-only for now and defers readable explanations. After the reported reviewer failure,
+read-only inspection at 18:09 UTC still finds `appeal_pending`, version `4`. The complete bounded
+Gateway application-log query (17:35–18:09 UTC) finds no exact appeal-resolution POST; this does
+not establish the browser/BFF failure cause. After a fresh appeal-reviewer sign-in and MFA, the
+owner reports that the same case is `accepted`. This is human-console evidence pending an
+independent API readback; reconciliation and temporary-permission cleanup remain.
 
 September 17 appeal diagnosis: the disposable owner's reported submission has not changed the
 server case (`taken_down`, version `3`, `appealed=false`); the appeal window remains open.

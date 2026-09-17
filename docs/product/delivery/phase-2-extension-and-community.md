@@ -3728,6 +3728,22 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Appeal reversal submitted (`2026-09-17`, D2-074): after a fresh independent-reviewer sign-in and
+MFA, the owner loads the Mintlify appeal case and records the version-fenced **Reverse appeal**
+decision against the separately approved appeal-resolution evidence digest. The console reports
+case `45928575-dd1f-80a1-8924-c8d0a62a7082` as `accepted`. Treat this as human-console evidence
+until the clean-source guarded API read confirms the state/version. No readable appeal explanation
+is stored; the owner keeps fingerprint-only handling for now. Publication reconciliation and
+temporary appeal-evidence removal remain.
+
+Appeal-resolution failure inspection (`2026-09-17`, D2-074): after the owner reports failure
+without retaining the error message, a read-only exact-case GET confirms `appeal_pending`,
+version `4`, `appealed=true`, with the appeal window open at 18:09 UTC. Fully paginated Gateway
+application logs for 17:35–18:09 UTC contain no exact appeal-resolution POST. This does not
+prove the browser/BFF failure cause. No reviewer decision was repeated or submitted by the
+agent. Gateway `72`, state `357`, remains the verified boundary; independent human resolution,
+reconciliation and temporary-permission cleanup remain outstanding.
+
 Exact-posting refresh approved (`2026-09-16`, D2-074): the owner approves initial publication's
 normal verified-provider refresh only for the supplied Mintlify Applied AI Engineer posting.
 This closes the preceding scope question; it does not authorize unrelated-job changes,
@@ -4418,6 +4434,15 @@ public job, replay the old private command without the rebuild, clear queues or 
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+### Appeal explanation retention
+
+On `2026-09-17`, the owner explicitly chooses **Keep fingerprint-only for now**. Readable appeal
+explanation storage and reviewer display are deferred rather than added to Phase 2. Existing
+fingerprints cannot recover the submitted text; the console must not imply that reviewers can
+read it. This keeps the current data scope unchanged and follows the owner's preference to
+finish the existing lifecycle. Independent review still uses the available case/provider evidence
+and the separately supplied development-test explanation; no review outcome is predetermined.
 
 ### Development-only extension diagnostics
 
