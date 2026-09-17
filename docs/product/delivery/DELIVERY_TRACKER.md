@@ -9,6 +9,10 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-076 local recovery: the 45-migration logical dump/restore exercise passes,
+including 68 exact relation row sets, unchanged source and successful disposable cleanup.
+This is local evidence only; the new schema and test authority are not deployed.
+
 September 16 D2-076 packaging follow-through: the migration image build and publication smoke
 checks now require Trust `0005` and 45 migrations. Both PowerShell publisher guard suites pass.
 Full verification and compatible deployment remain outstanding; cloud state is unchanged.

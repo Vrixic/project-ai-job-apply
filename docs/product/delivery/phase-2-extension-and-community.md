@@ -3552,6 +3552,12 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 
 ## Work log
 
+Current-schema local recovery (`2026-09-16`, D2-076): updated the maintained logical-recovery
+runner to assert 45 migrations and exact Trust `0005`. `pnpm test:d2-recovery` passes with
+68 exact relation row sets, 18 nonempty D2 relations, unchanged source, two read-only-write
+denials and successful owned-container cleanup. This generated local PostgreSQL exercise does
+not replace cloud recovery evidence or prove deployment of the new schema.
+
 Migration packaging follow-through (`2026-09-16`, D2-076): corrected the Dockerfile and
 publication runtime smoke gates to require all 45 migrations, including Trust `0005`.
 The previous hard-coded 44-migration boundary would have rejected the new image before
