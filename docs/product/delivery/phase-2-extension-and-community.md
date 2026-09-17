@@ -1222,6 +1222,13 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 - Live scope/cleanup: configure only the exact approved disposable contribution and reviewed
   test-evidence digest, execute once with version fencing, and remove its temporary test-purpose
   configuration after the independent appeal/cleanup. No test authorization is deployed yet.
+- Deployment follow-through (September 16 local / September 17 UTC): compatible source
+  `e632bb04a912df13c1a423f664477183d1a97307` is deployed. Gateway/scheduled/Trust versions are
+  `68`/`30`/`23`; core activity/durable/terminal versions are `15`, resumed. The single migration
+  and maintained post-migration Verify succeed with zero drift and no active migration task.
+  This supersedes the earlier deployment-pending notes, not the unfinished live lifecycle.
+  Exact test evidence and its configuration are prepared privately; no temporary evidence
+  authority, initial decision, takedown or appeal has been executed.
 
 ### D2-063 — Web crawler build input
 
@@ -3551,6 +3558,37 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
 
 ## Work log
+
+Compatible deployment and migration (`2026-09-16` local, D2-076): exact `e632bb0` publication
+and rollout preserve production/store darkness and existing reviewer/provider boundaries.
+Core Release's stale parent-role policy snapshots were reconciled through a reviewed
+refresh-only plan at state `350`, not by repeating Release. Its verification was zero-change;
+the mapping-only Resume verifies at `351` with all core versions `15` and starts unpaused.
+The scheduled D2 worker also parses the evidence allowlist, so it requires compatible code
+before the new test purpose is enabled. Both D2 worker artifacts were updated at `352` and
+verified with Gateway/scheduled/Trust versions `68`/`30`/`23`, maintenance false and zero drift.
+The publisher passes 1,239 workflow tests with eight explicit skips, dependency audit and two
+matching builds; skips are not passes. No reviewer or evidence authority was expanded.
+
+The maintained migration operator executes exactly one task, exit zero, with seven aggregate
+success log records. Its subsequent Verify succeeds: zero active migration tasks, zero continuous
+ECS services and a fresh zero-drift baseline. Retained private evidence under development
+`.terraform/`: `development-document-migration/receipt-e632bb04a912-20260916-223047.json`
+SHA-256 `4e41723f87b64814ef9509c56c8980f3cbb012b6dfbae42e0a6c7238e9643019`;
+`zero-drift-e632bb04a912-20260916-223414.tfplan`
+SHA-256 `636bb45dad69dea19cc055fcee5a3b0b6a998f6f325d4d1066ffcbf94309eec3`,
+with `.baseline.json` SHA-256
+`be3321e4364af9b080a486e110079d646720e15a6fa2ea010fec7c04b550bd9c`.
+Preserve all earlier release/recovery attempts and immutable artifacts; do not rerun migration.
+
+The exact contribution-bound development-test statement/configuration are prepared with
+exclusive private writes after read-only case/source/version checks. No allegation of employer
+wrongdoing is made. The narrow ignored activation/removal operator passes 410 PowerShell 7
+and 405 Windows PowerShell assertions; this is local guard evidence, not applied authorization.
+Catalog isolation still requires a separately authenticated read-only check before a live case
+decision. Browser-control execution tools are unavailable in this session; no signed-in UI
+verification is claimed. Independent human appeal, temporary-authority cleanup and the existing
+final release/acceptance items remain. Docker and WSL were not needed for this follow-through.
 
 Verification closure before publication (`2026-09-16`, D2-076): after correcting the two
 current-schema expectations and recovery digest, the affected operator checks pass and the

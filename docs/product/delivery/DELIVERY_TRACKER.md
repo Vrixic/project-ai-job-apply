@@ -9,6 +9,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-076 deployment follow-through: source `e632bb0` is deployed to the development
+Gateway and compatible D2/core workers. Core runtime `15` is resumed; Gateway/scheduled/Trust
+versions are `68`/`30`/`23`. The single current-schema migration succeeds and its maintained
+Verify returns zero drift, seven aggregate success records and no active migration tasks or
+continuous ECS services. Exact development-test evidence is prepared privately, but its runtime
+authorization and all live test decisions remain unexecuted. Catalog-isolation verification,
+independent human appeal and final release/acceptance work remain; Phase 2 is In progress.
+
 September 16 D2-076 verification follow-through: corrected migration/recovery checks pass;
 remaining verifier stages complete with 33 typecheck, 34 package-test and 20 build tasks successful.
 Opt-in integration skips are not counted as passes. Immutable publication/deployment is next;
