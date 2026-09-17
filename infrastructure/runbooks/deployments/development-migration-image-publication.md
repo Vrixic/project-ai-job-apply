@@ -36,7 +36,7 @@ vulnerability scan, publish an image, or satisfy the publication/scan/recovery g
 
 The current package boundary is the Phase 2 manifest
 `d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1`: six ordered owners (Profile,
-Jobs, Documents, Matching, Billing, and Trust), ten schemas, 68 regular relations, and 45 exact
+Jobs, Documents, Matching, Billing, and Trust), ten schemas, 68 regular relations, and 46 exact
 checksum-bound migrations. The smoke gate also requires the Trust
 runner and every Phase 2 migration file, including Jobs `0024_contribution_appeal_restoration`
 and Trust `0005_development_test_removal`,
