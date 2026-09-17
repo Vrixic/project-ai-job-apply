@@ -1183,6 +1183,19 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   Trust acceptance alone does not prove Jobs publication. No resubmission or repeated diagnostic
   panel QA is requested. Direct signed-in browser control is unavailable in this session.
 
+- September 17 continuation: the owner confirms contribution `01a0ac45` is Processing
+  `published`, Trust `accepted`. Source `423a048` captures a fresh state-356 zero-change baseline
+  (`6f1c8fa32fa67d9b60a6db3a79429fbf4fc85f03d2ec0562b9f9e3187dac47b7`, metadata
+  `df0100780d74bbc5002dd788b02e299aa34745edf7bcbafd00a73e417450ee02`). The unchanged lifecycle
+  helper passes 27 offline assertions, then validates the exact live Gateway-71 environment,
+  assignment, accepted/version-2 case and fresh matching evidence before one test-takedown POST.
+  Separate API readback confirms `taken_down`, version `3`; the persisted attempt/completion
+  journals prevent repeat submission. No canonical deletion or human appeal was submitted.
+  The disposable owner is asked to file the truthful test appeal once using the existing
+  contribution. This is a necessary ownership action, not renewed diagnostic-panel QA.
+  Jobs reconciliation, independent human appeal resolution and exact temporary-evidence cleanup
+  remain outstanding; do not infer those from the Trust readback.
+
 ### D2-075 — Default missing preview work type to in-person
 
 - State: Complete

@@ -9,6 +9,12 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 17 D2-074 advances: the owner confirms the exact disposable Mintlify contribution
+is published/accepted. A fresh source-`423a048` baseline confirms state `356` and zero changes.
+One approved test takedown succeeds with independent `taken_down`/version-3 readback and no
+canonical deletion request. Disposable-owner appeal filing, independent human resolution,
+reconciliation and temporary-authority cleanup remain; Phase 2 is not complete.
+
 September 17 D2-077 is Complete: corrected source `44d078e` is verified in development at
 state `356`, Gateway/scheduled/Trust `71`/`30`/`23`, with zero planned changes. Exact decision
 evidence is configured only on Gateway; workers retain no decision-evidence authority. D2-074's
