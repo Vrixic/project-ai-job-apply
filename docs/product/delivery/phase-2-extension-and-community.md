@@ -1196,6 +1196,37 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   Jobs reconciliation, independent human appeal resolution and exact temporary-evidence cleanup
   remain outstanding; do not infer those from the Trust readback.
 
+- D2-074 follow-up on September 17: after the rebuilt-client retry, the owner confirms Processing
+  `removed`, Trust `appeal_pending`/appealed. Read-only reviewer inspection independently returns
+  `appeal_pending`, version `4`, `appealed=true`, with no new decision. The owner confirms that
+  the hosted independent reviewer can load this exact case and its provider evidence.
+- The single temporary Gateway evidence entry is replaced, not combined: the original
+  `development_test_takedown` permission is removed and a distinct `appeal_resolution` digest
+  is bound to the same contribution. The factual operator statement records the approved test,
+  initial acceptance/publication, test takedown and owner appeal, explicitly selecting no outcome
+  and granting the agent no appeal authority. Its SHA-256 is
+  `ffadbf8ee7494cebdbaf1a1229c8613c32e32188996e23312eaa0a6902d61599`;
+  configuration SHA-256 `bec828703579bba76fc80dfff43c4756fa76f3c25e32f84cbb69fa09ee9f3ceb`.
+  The bounded operator passes 508 PS7/503 PS5 generated assertions, zero cloud calls in tests.
+  Initial planning refuses changed local build ZIPs before mutation; exact deployed S3 versions
+  are retrieved and hash-verified, preserving the newer local copies privately. No cloud artifact
+  is republished. Native review permits exactly Gateway function/alias updates, one changed
+  environment key, same contribution and unchanged workers. One Apply then Verify succeeds at
+  state `357`, Gateway/scheduled/Trust `72`/`30`/`23`, zero changes, source `4213e06`.
+  Plan SHA-256 `23a22df43159755ea82b85d705f0606ad59b06d93ce480efc3b27b0651014b6b`;
+  apply receipt `65684265ff27ca548d3a34cfc5c61b524ab4eda7c94f4b1aad2bf8f3ae642ece`;
+  baseline `bf37698fa55f603a06900bf695ffae22da4fe1e3a460a9dbd251906e8ff62c5a`, metadata
+  `706accad07c025a1612fcb26a9589ba89f9d2f1236e4efb1fa9b8b25b7fccddb`.
+  The human has not submitted an appeal decision; final reconciliation and removal of the exact
+  temporary appeal permission remain required.
+- Owner-reported limitation: the review console cannot display the submitted appeal explanation.
+  The current client deliberately sends only its SHA-256 digest and clears the original text;
+  this is not a missing-load error and the text cannot be recovered from that digest. Recommend
+  a bounded explanation readable only by the owner/authorized reviewers, with candidate export
+  and deletion coverage. Owner choice is requested before changing the stored-data scope.
+  The explanation in this conversation remains available for the current test, but must not be
+  presented as content recovered from the server or as a completed readable-appeal feature.
+
 ### D2-078 — Preserve appeal submission results and prevent duplicate dispatch
 
 - State: Complete

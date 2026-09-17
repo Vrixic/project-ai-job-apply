@@ -9,6 +9,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 17 D2-074: the owner confirms Processing `removed` and Trust `appeal_pending`/appealed;
+an independent API read confirms version `4`. The owner loads the exact case and evidence in the
+hosted independent-reviewer console. Exact Gateway-only replacement of the temporary takedown
+evidence with separate appeal-resolution evidence verifies at state `357`, versions `72`/`30`/`23`,
+zero drift. No appeal decision is submitted. The owner also identifies that appeal explanations
+are not readable: current implementation sends only a digest. A bounded owner/reviewer-readable
+explanation with export/deletion coverage is recommended; that stored-data scope change awaits
+owner choice. Independent decision, reconciliation and temporary-permission cleanup remain.
+
 September 17 appeal diagnosis: the disposable owner's reported submission has not changed the
 server case (`taken_down`, version `3`, `appealed=false`); the appeal window remains open.
 Bounded Gateway logs show an exact appeal POST returning HTTP 409. D2-078 is Complete at
