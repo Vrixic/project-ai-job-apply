@@ -1033,7 +1033,7 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 |---|---|---|---|---|---|
 | D2-001 | Implement Manifest V3 identity, side panel/popup, background worker, and secure API session. | Implemented; controlled development | Platform engineering | D0 identity; D1 gateway | The MV3 shell, dedicated Auth0 public-client session boundary, background worker, popup/side-panel surface, trusted-context-only storage, and logout/account fencing are implemented. Known cancellation, callback/state, token-exchange, missing-scope, refresh, and revocation failures map to actionable fixed messages while unknown failures remain non-disclosing. Initial installed-Edge PKCE login exists; the remaining lifecycle/browser evidence stays under D2-012. |
 | D2-002 | Implement current-page job detection for Greenhouse, Lever, and Ashby. | Implemented; three scoped variants accepted | Platform engineering; QA/automation | D2-011 | Accepted Greenhouse, global Lever and hosted Ashby fixtures exercise the inspector/detectors. Three-provider development server activation verifies at `336`. Installed Ashby full-description preview and delivery-to-review are user-confirmed on 2026-09-13; the separately approved initial decision reads back accepted/version 2; the owner confirms published/accepted after Refresh Trust on September 14; the subsequent user reply confirms both Ashby and Lever website visibility, descriptions and exact source navigation, completing D2-035. Lever is also user-confirmed published/accepted. EU/custom-domain and rendered-hydration acceptance are not claimed. |
-| D2-003 | Implement an explicit public-add preview with field-level visibility and removal. | Implemented; controlled development | Platform engineering; product owner | D2-006 contribution API; D0 consent | Under ADR-029, one **Add job to shared database** command follows the exact preview; the extension shows no private-save action or redundant approval checkbox. The preview prioritizes job content, separates location and grounded work type, makes every absent optional field explicit, separates source details, reports exact selection counts, and honors optional-field removal. Development delivery requires explicit mode enablement plus identity, API, retention, independent detector, and preview-authorization readiness; other environments retain signed-policy enforcement. |
+| D2-003 | Implement an explicit public-add preview with visibility of all captured public fields. | Implemented; controlled development | Platform engineering; product owner | D2-006 contribution API; D0 consent | One **Add job to shared database** command follows the exact preview; the extension shows no private-save action or redundant approval checkbox. The September 16 owner decision supersedes optional-field removal and selection counts: all available captured public fields are included, without field checkboxes. The preview prioritizes job content, separates location/work type and source details, and identifies unavailable fields. Development delivery requires explicit mode enablement plus identity, API, retention, independent detector, and preview-authorization readiness; other environments retain signed-policy enforcement. |
 | D2-004 | Implement local sanitization, narrow optional host permissions, and privacy-safe telemetry. | Implemented; controlled development | Platform engineering; security engineering | D0 threat/privacy review | Strict local sanitization, activeTab-only/default-zero provider hosts, trusted storage, zero telemetry, and release-source checks are implemented. The development exception does not replace accountable production/store approval under D2-010. |
 | D2-005 | Implement idempotent upload and safe offline pending-contribution retry. | Implemented; controlled development | Platform engineering | D2-006 | Stable authorization-receipt/contribution keys, bounded durable retry, restart recovery, stopped/all-item removal, and logout/account fencing are implemented. The versioned fence is a one-way digest of exact bounded Auth0 token identity claims: it is stable across full reauthentication to the same account and rejects a refresh or delivery under a different account without storing the raw subject. Local authentication/readiness deferrals are visible without consuming a network attempt; terminal retries remain distinct from account-fenced items, which cannot cross identities. D2-033 removes policy fetch/expiry/renewal only in explicit development mode while preserving exact client `0.2.0` and accepted Greenhouse scope; production/store remain dark. Historical installed acceptance on 2026-09-05 recorded one acknowledgement, zero pending/stopped, and two account-held items untouched. The user confirms reload, sign-in, and successful job addition in the rebuilt development candidate on 2026-09-08. Offline/retry and broader browser lifecycle acceptance remain separate; do not automatically resubmit old items. |
 | D2-006 | Implement server normalization, verification, moderation, provenance, and deduplication. | Implemented; controlled development | Platform engineering | D1 catalog/trust | Durable normalization, deduplication, independent verification, provider-truth staging, atomic publication, provenance reconciliation and Trust moderation are implemented. State-`336` registrations preserve Greenhouse Remote/global-Lever Supermove and add only the supplied hosted Ashby board with bounded exact-board verification. Exact identities are reused; new postings require all gates and probable duplicates park. EU/production/store remain disabled. Activation authorizes no Ashby Trust decision. |
@@ -1174,6 +1174,14 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   read-only catalog check remains necessary. Do not ask for credentials or tokens in chat.
   Human resolution and exact-scope cleanup
   remain required before marking this journey complete.
+- September 17: source `44d078e` and fresh state-355/Gateway-70 baseline pass the exact runtime
+  boundary. Read-only inspection again finds the same version-1 case and matching provider
+  evidence. One initial decision is submitted with a persisted pre-dispatch journal; a separate
+  API read confirms `accepted`, version `2`. No canonical deletion, takedown or appeal occurs.
+  Subsequent Gateway-only test-evidence activation verifies at state `356`/Gateway `71` under
+  D2-077. Ask the owner for Processing and Trust on this existing disposable contribution;
+  Trust acceptance alone does not prove Jobs publication. No resubmission or repeated diagnostic
+  panel QA is requested. Direct signed-in browser control is unavailable in this session.
 
 ### D2-075 — Default missing preview work type to in-person
 
@@ -1235,8 +1243,9 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 
 ### D2-077 — Fit exact development test evidence within runtime limits
 
-- State: In progress
+- State: Complete
 - Started: 2026-09-16
+- Completed: 2026-09-17
 - Finding: the exact singleton test permission raises selected configuration from 2,684 to
   2,932 base64 characters, exceeding the development-only conservative 2,800 limit. Existing
   JSON is already compact. Both activation preflights refuse before generating a plan or
@@ -1291,6 +1300,21 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   Exact 4,096/4,097-byte fixtures now size scheduled-consumed fields; a separate nonempty
   evidence fixture proves Gateway-only configuration. Gateway-only operator checks are underway.
   AWS SSO works; no resumed deployment or case decision has occurred yet.
+- Final verification on September 17 supersedes the preceding pending status: exact source
+  `44d078e5c660b382146c29f0d3b8e925c426833f` passes 339 maintained provider assertions on each
+  PowerShell host, 78 mocked Terraform tests, module validation and formatting. The separate
+  Gateway-only operator passes 431 PS7 and 426 PS5 assertions, including rejection of scheduled
+  authority or updates. The native plan changes exactly Gateway function/alias, no creates or
+  deletes; Gateway environment is 3,141 serialized bytes and unchanged scheduled is 4,066.
+  Apply succeeds once and maintained verification returns state `356`, Gateway `71`, scheduled
+  `30`, Trust `23`, one exact Gateway evidence entry and zero meaningful changes. Runtime remains
+  active. Application artifact source remains `e632bb0`; no migrations or artifacts are republished.
+  Reviewed plan SHA-256 `03f66c038e23eddaf5dcd4efa8fafbf142fffec22084b0aceaeb3ace9bd630e2`;
+  apply receipt `d1f95a42ad02eb6a61167faf68f8b5f6e81cda079ed0719e6ee1fe0477cab40a`;
+  current baseline `1ec9be73a90ffbb50bfc735ef7b6762939bc227d594af99d37593694813f8868`,
+  metadata `0b3edbf021cda4353cf4b10f5c80ad7da1c2beb87a484958e79c5a41cbb8f7d1`.
+  D2-077 completes the size/isolation fix, not the separately tracked D2-074 lifecycle or its
+  temporary-evidence cleanup. The failed previous apply remains preserved and must never be retried.
 
 ### D2-063 — Web crawler build input
 
@@ -3215,6 +3239,11 @@ temporary test containers were removed, and Docker/WSL were stopped when testing
   [audit integrity](../../../scripts/lib/dependency-remediations.mjs).
 
 ## D2-023 installed narrow-layout acceptance
+
+The historical checkbox and selection-count assertions below describe the earlier accepted
+layout. The September 16 all-fields decision supersedes those controls: current previews have
+no field opt-outs and Add includes every available captured public field. Do not recreate
+checkboxes or reopen their manual acceptance; retain the recorded historical evidence.
 
 - [x] Required fields use valid non-form semantics and a compact inline marker; optional fields retain one correctly labelled, row-sized checkbox target. No marker, label, value, badge, or control overlaps or clips at effective widths from 320 through 480 CSS pixels.
 - [x] The preview prioritizes candidate-recognizable job content in this order: title, company, location, work type, and description. Provider, variant, client version, canonical URL, and external job ID remain visible in a clearly separated source-details group rather than competing with the job content. Exact combined values such as `Remote-NORAM` are separated into work type `Remote` and location `NORAM`.

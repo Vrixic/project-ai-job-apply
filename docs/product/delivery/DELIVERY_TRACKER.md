@@ -9,6 +9,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 17 D2-077 is Complete: corrected source `44d078e` is verified in development at
+state `356`, Gateway/scheduled/Trust `71`/`30`/`23`, with zero planned changes. Exact decision
+evidence is configured only on Gateway; workers retain no decision-evidence authority. D2-074's
+single approved Mintlify initial decision succeeds with a separate accepted/version-2 readback.
+Owner publication confirmation is requested before takedown; independent human appeal and
+temporary-authority cleanup remain. Phase 2 remains In progress, and no further PC shutdown
+is authorized.
+
 September 17 D2-077: work resumed after the owner cancelled further PC shutdowns. The
 serialized-environment size correction and Gateway-only reviewer evidence separation are
 implemented locally. PowerShell 7 and Windows PowerShell 5 each pass 339 assertions; all
