@@ -9,6 +9,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 16 D2-077 recovery (September 17 UTC): AWS rejected the proposed scheduled
+environment at 4,266 serialized bytes; the earlier 3,833-byte key/value calculation omitted
+JSON overhead. Activation partially changed only the Gateway. A separately reviewed rollback
+restored empty test evidence at state `355`, Gateway/scheduled/Trust `70`/`30`/`23`, with live
+controls checked and zero planned changes. No case decision was submitted. The failed apply
+is preserved and must not be retried. Correct serialized-size accounting and Gateway-only
+decision evidence remain to implement/test before a fresh activation. Phase 2 is In progress;
+the operator is stopping safely for the owner's requested PC shutdown.
+
 September 16 D2-077: the exact test-evidence configuration is 2,932 encoded characters, above
 the development-only conservative 2,800 limit but within Lambda's complete environment ceiling
 (scheduled 3,833/4,096 bytes). Preflight stops without deployment. Align the conservative

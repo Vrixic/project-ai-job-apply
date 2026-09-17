@@ -1255,6 +1255,33 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 - Remaining: reviewed source-compatible rollout and D2-074
   lifecycle acceptance. Existing application artifacts retain their original source identity;
   no application bundle input changes in this infrastructure-only fix.
+- Deployment correction, September 16 local / September 17 UTC: the preceding size and
+  boundary claims counted raw keys/values, not serialized environment JSON. AWS rejected
+  the scheduled update at **4,266 bytes**, despite the earlier 3,833-byte calculation.
+  The apply partially advanced Gateway to `69`; scheduled remained live at `30`, Trust at `23`.
+  Terraform state `354` retained the rejected scheduled evidence value even though immutable
+  `30` and `$LATEST` both matched the previous empty-evidence environment and were healthy.
+  No initial review, takedown or appeal decision was submitted. Do not retry that apply.
+- Recovery verified: a fresh exact-two-resource Gateway rollback removed its temporary test
+  evidence and reconciled the stale scheduled state. State `355`, Gateway `70`, scheduled `30`,
+  Trust `23`; zero evidence entries and zero meaningful changes in a fresh native plan.
+  Live function/alias, artifact, environment, concurrency, schedule and mapping checks pass.
+  Original failed attempt remains preserved. Private recovery plan
+  `restore-empty-cdac8a3a69d64db7aed58b68eaf6a728.tfplan` SHA-256
+  `563177a2c9ff6179e1ef45109b580baf3bddf293410189bc84aa492f521dad7a`;
+  apply receipt `1628a3eff81215468f431d3cd9dd040c850544abf71a94f4ac3428b5bed800f4`;
+  verification plan `11b9a0f168a928ab873ba6dcd695651b86fed9ac581d02eeaf9be3284b335a4f`.
+- Next implementation: count full serialized UTF-8 environment bytes, including nested-JSON
+  escaping, in Terraform and PowerShell. Keep 4,096 hard and 3,000/2,400 selected-config limits.
+  Scheduled workers open/read cases using independent verification, so their required decision
+  evidence field should remain `[]`; configure exact reviewer decision evidence only on Gateway.
+  An ignored draft exists but is **not applied or release-ready**. Recalibrate Terraform boundary
+  fixtures, test exact 4,096/4,097 and the 3,833-to-4,266 regression on PS5/PS7 and Terraform,
+  then use a new source-bound baseline and Gateway-only activation plan. Never reuse the failed
+  activation plan. Existing application artifacts retain source `e632bb0`.
+- Safe stopping record: Docker and WSL are stopped. Recovery operations finished before the
+  owner-requested PC shutdown. Live D2-074 lifecycle, independent human appeal and final release
+  acceptance remain unfinished; this recovery does not complete Phase 2.
 
 ### D2-063 — Web crawler build input
 
