@@ -57,9 +57,10 @@ journeys. Their unfinished manual UI checks are Removed from launch requirements
 direction, not passed. The authoritative decision and rationale are in
 [Development-only extension diagnostics](#development-only-extension-diagnostics).
 D2-073 production/store exclusion and per-intent action feedback are implemented and locally
-verified on September 16. Only explicit development builds retain the diagnostic HTML. Remaining
-D2-073 release work is exact final listing screenshots/materials; updated support copy is now hosted.
-Support-email setup is owner-deferred to launch preparation.
+verified on September 16. Only explicit development builds retain the diagnostic HTML. D2-073 is
+Complete for Phase 2 engineering scope; final listing screenshots, support-email setup, and store
+submission are explicitly deferred to a separate launch-preparation phase by owner decision on
+September 17 (see [decision record](#storeproduction-launch-remains-deferred)).
 
 Installed Edge restart recovery accepted (`2026-09-15`, D2-012/D2-015): owner reports zero
 pending/stopped items, confirms Session signed out after the instructed restart, and confirms
@@ -1106,8 +1107,9 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 
 ### D2-073 — Exclude diagnostic panels from the end-user extension
 
-- State: In progress
+- State: Complete for Phase 2 engineering scope; store/production release is separately deferred
 - Started: 2026-09-16
+- Completed: 2026-09-17 (engineering scope; see deferral below)
 - Owner: Client engineering; QA/automation
 - Scope: implement the owner decision in [Development-only extension diagnostics](#development-only-extension-diagnostics).
 - Acceptance: production/store popup and side panel contain neither Your shared jobs nor Delivery
@@ -1132,10 +1134,12 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   Compose and product-scope validation. The four support-page tests and 638 web tests pass;
   1,186 checked local Markdown targets exist.
 - Support/listing/privacy source copy now describes the end-user flow. Source `cd896b2` is hosted
-  on the stable candidate alias and verified on 2026-09-16. Remaining:
-  exact final release screenshots/materials, which must use the eventual approved enabled artifact,
-  not a development build or a default-dark fixture presented as a functional released product.
-  Public/store activation and the monitored support-channel requirement remain separate gates.
+  on the stable candidate alias and verified on 2026-09-16.
+- Owner decision (`2026-09-17`): production/store activation, the final release screenshots from
+  that enabled artifact, and the monitored support-channel requirement are explicitly deferred to a
+  separate future launch-preparation phase, not a Phase 2 closure blocker
+  ([decision record](#storeproduction-launch-remains-deferred)). This does not authorize enabling
+  the production/store build or claim any released product exists.
 
 ### D2-074 — Disposable development takedown and independent appeal
 
@@ -3776,9 +3780,9 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Takedown and human appeal-decision acceptance | Hosted sign-in, authenticated empty appeal-queue read and logout/root-reload checks are user-confirmed Complete on September 14 at protected `211e59d`. Assignments remain unchanged, the short public alias stays identity-dark and persistent project env keys remain zero. | Separately authorized takedown/human appeal-decision journeys remain. Do not repeat hosted-access checks or manufacture a case to test access. Preserve independent reviewers and evidence/version binding; no new secret, repeated reuse approval, borrowed human session or expanded reviewer role is needed. |
 | End-user extension release boundary | D2-073 production/store diagnostic exclusion and exact per-intent feedback pass 467 extension tests and isolated Edge/Chrome product checks. Updated support copy is deployed from `cd896b2`. Core sign-in, inspect/preview/add and provider publication exist. | Align final release screenshots/materials with the eventual approved enabled artifact. No further manual diagnostic-panel testing; preserve automated authentication, account isolation and retry regressions. |
 | Accessibility scope (manual screen reader deferred) | Keyboard/reflow/geometry and automated axe checks pass. The owner confirms the installed shared-history keyboard route in both Chrome and Edge on September 15. | Manual screen-reader testing is explicitly deferred by the owner and is not a Phase 2/product-launch blocker or passed test. Preserve existing accessibility controls and automated coverage; independent store requirements remain separate. |
-| Alarm notification receipt | Thirteen D2 alarms are healthy; guarded synthetic alarm/OK exercise and preflight are implemented. | Run the exercise last and obtain recipient confirmation of both ALARM and recovery; healthy alarm state is not proof of delivery. |
-| Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-073's end-user instructions are deployed and verified at candidate source `cd896b2`. | Support-email setup/verification/monitoring is owner-deferred to launch preparation, not an immediate Phase 2 implementation blocker. Keep the placeholder inactive and do not request confirmation now. Final installed listing screenshots and exact-candidate/accountable/store approval remain release work. |
-| Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. | Obtain the outstanding accountable dispositions without relabelling development evidence as production approval. Record any explicit scope deferral here. |
+| Alarm notification receipt | Thirteen D2 alarms are healthy; guarded synthetic alarm/OK exercise and preflight are implemented. Owner approves running it during this deployment session (`2026-09-17`). | Run the exercise last and obtain recipient confirmation of both ALARM and recovery; healthy alarm state is not proof of delivery. See [work log](#work-log) for the result. |
+| Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-073's end-user instructions are deployed and verified at candidate source `cd896b2`. Owner explicitly defers production/store activation to a separate launch-preparation phase (`2026-09-17`; [decision](#storeproduction-launch-remains-deferred)). | Not a Phase 2 closure blocker. When launch preparation resumes: support-email setup/verification/monitoring, final installed listing screenshots from the store-enabled artifact, and exact-candidate/accountable/store approval remain release work. |
+| Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. The product owner formally accepts this evidence on `2026-09-17` as an engineering-only disposition ([decision](#final-security-privacy-product-accountable-disposition)), not production security/privacy/legal approval. | Closed for Phase 2 engineering-completion purposes. Revisit if scope, providers, or production activation change. |
 
 ## Work log
 
@@ -4495,6 +4499,31 @@ public job, replay the old private command without the rebuild, clear queues or 
 | 2026-09-11 | Corrective core `2ff32ef` is released, state-only reconciled and resumed at `328`/versions `14` with zero drift, completing D2-051's code/deployment boundary without claiming a real concurrent SQL race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` pass; persisted request/ledger/operation completion agrees and differs from the tag, with three acknowledged/unclaimed dispatches and zero writes. Repair `45914` / `a9336e` passes its first writer/retirement pass, reserves attempt `1`, then refuses the second metadata read before Put. Exact `00fadf` readback confirms the original preimage/tags; the journal is preserved. A later two-pass read-only repetition succeeds but neither reproduces the cause nor renews authority. D2-053/R21 gate any further write. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact. Same PITR/temporary permissions remain; no Replay or historical mutation. | D2-038; D2-050; D2-051; D2-052; D2-053 | [Historical diagnosis and retained evidence](#d2-052--historical-completion-consistency), [retry deployment](#d2-051--deletion-retry-timestamps), [new blocker](#risks-and-blockers) |
 
 ## Decisions and scope changes
+
+### Final security/privacy/product accountable disposition
+
+On `2026-09-17`, the product owner formally accepts the current documented development-only
+engineering evidence for the Greenhouse/global-Lever/hosted-Ashby exception and the inherited D1
+gates as sufficient to close this accountable disposition item. This is explicitly an engineering
+acceptance, not production security, privacy, or legal approval; it does not authorize
+production/store activation, broaden the approved provider/host scope, or waive any still-required
+deployed acceptance evidence elsewhere in this document. Should scope, providers, or production
+activation change, this disposition must be revisited.
+
+### Store/production launch remains deferred
+
+On `2026-09-17`, the owner confirms production/store activation (enabling a public-facing extension
+build, final store-listing screenshots from that build, and Chrome Web Store submission) stays
+explicitly deferred to a separate future launch-preparation phase, consistent with the existing
+owner-deferred support-email decision. D2-073's remaining release work (exact final screenshots and
+store submission) is not in scope for closing Phase 2; Phase 2 closes as engineering-complete for
+this item, not launched.
+
+### Alarm notification receipt authorized
+
+On `2026-09-17`, the owner approves running the guarded synthetic ALARM/OK exercise against the live
+development account during this session and will confirm receipt of both notifications. See the
+[work log](#work-log) for execution evidence.
 
 ### Appeal explanation retention
 
