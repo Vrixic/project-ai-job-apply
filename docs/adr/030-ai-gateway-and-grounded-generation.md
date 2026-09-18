@@ -1,8 +1,9 @@
 # ADR-030: AI gateway and grounded generation
 
-Status: Proposed - the gateway, grounding, and review architecture await product-owner acceptance;
-model and provider selection are separately blocked on D3-012
+Status: Accepted (product owner, 2026-09-18) for the gateway, grounding, and review architecture;
+model and provider selection remain separately blocked on D3-012
 Date: 2026-09-18
+Accepted: 2026-09-18
 
 ## Context
 
