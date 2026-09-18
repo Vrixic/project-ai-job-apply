@@ -1143,8 +1143,9 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 
 ### D2-074 — Disposable development takedown and independent appeal
 
-- State: In progress
+- State: Complete
 - Started: 2026-09-16
+- Completed: 2026-09-18
 - Owner: Platform engineering; product owner as independent appeal reviewer
 - Authority: owner approved one disposable development test contribution, its takedown and
   subsequent independent human appeal. The owner subsequently approves the normal verified-provider
@@ -1277,8 +1278,9 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 
 ### D2-079 — Restore publication state after a reversed takedown
 
-- State: In progress
+- State: Complete
 - Started: 2026-09-17
+- Completed: 2026-09-18
 - Owner: Jobs/platform engineering
 - Finding: the accepted D2-074 appeal is copied into Jobs, but the previous
   `contribution_requires_trust_processing` predicate considers the historic applied publication
@@ -1337,9 +1339,11 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 - Post-resume health (2026-09-18): all 50 development alarms `OK`, Trust queue and DLQ empty, and
   the scheduled worker recorded three invocations with zero errors and zero throttles in the
   observed window. This is not proof that the exact contribution was restored.
-- Remaining: only the owner's Processing/Trust readback for contribution `01a0ac45` (expected
-  Processing `published`, Trust `accepted`). Do not repeat the appeal, submission or takedown. D2-079
-  moves to Complete, and D2-074 to Complete, once the owner reports that readback.
+- Owner readback (2026-09-18): the owner reports contribution `01a0ac45` as Processing `published`
+  and Trust `accepted`, appealed. This confirms the restoration end to end (publish → test takedown →
+  owner appeal → distinct-reviewer reversal → restored publication). No further appeal, submission or
+  takedown is needed; D2-079 and D2-074 are Complete. Retain aggregate status only, not identifiers
+  beyond the existing short prefix.
 
 ### D2-075 — Default missing preview work type to in-person
 
@@ -3802,8 +3806,8 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Takedown and human appeal-decision acceptance | Hosted sign-in, authenticated empty appeal-queue read and logout/root-reload checks are user-confirmed Complete on September 14 at protected `211e59d`. Assignments remain unchanged, the short public alias stays identity-dark and persistent project env keys remain zero. | Separately authorized takedown/human appeal-decision journeys remain. Do not repeat hosted-access checks or manufacture a case to test access. Preserve independent reviewers and evidence/version binding; no new secret, repeated reuse approval, borrowed human session or expanded reviewer role is needed. |
 | End-user extension release boundary | D2-073 production/store diagnostic exclusion and exact per-intent feedback pass 467 extension tests and isolated Edge/Chrome product checks. Updated support copy is deployed from `cd896b2`. Core sign-in, inspect/preview/add and provider publication exist. | Align final release screenshots/materials with the eventual approved enabled artifact. No further manual diagnostic-panel testing; preserve automated authentication, account isolation and retry regressions. |
 | Accessibility scope (manual screen reader deferred) | Keyboard/reflow/geometry and automated axe checks pass. The owner confirms the installed shared-history keyboard route in both Chrome and Edge on September 15. | Manual screen-reader testing is explicitly deferred by the owner and is not a Phase 2/product-launch blocker or passed test. Preserve existing accessibility controls and automated coverage; independent store requirements remain separate. |
-| Alarm notification receipt | All 50 development alarms are `OK`. The guarded synthetic exercise ran on `2026-09-18`: the canary reached `ALARM` and recovered to `OK` with one confirmed and zero pending subscriptions. | Owner confirms both the ALARM and recovery notifications arrived. Healthy alarm state and a successful publish are not proof of delivery. |
-| D2-079/D2-074 owner readback | Migration `0024`, worker and Gateway are deployed, D2 is resumed and zero-drift is verified ([record](#d2-079--restore-publication-state-after-a-reversed-takedown)). | Owner reports contribution `01a0ac45` as Processing `published` and Trust `accepted`. |
+| Alarm notification receipt | Open. All 50 development alarms are `OK`. The guarded synthetic exercise ran on `2026-09-18`: the canary reached `ALARM` and recovered, CloudWatch executed both SNS actions, and SNS reports 2 published, 2 delivered, 0 failed with one confirmed and zero pending email subscriptions. The owner reports **no email received**, so delivery is **not** proven. | Owner checks spam/junk and the mailbox of the subscribed address, or confirms which address should receive alerts. If the address is wrong or unusable, use the reviewed Subscribe action to add the correct one and rerun the exercise. Do not record the address. |
+| D2-079/D2-074 owner readback | Complete (`2026-09-18`): the owner reports contribution `01a0ac45` Processing `published`, Trust `accepted` after the deployed restoration ([record](#d2-079--restore-publication-state-after-a-reversed-takedown)). | None. |
 | Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-073's end-user instructions are deployed and verified at candidate source `cd896b2`. Owner explicitly defers production/store activation to a separate launch-preparation phase (`2026-09-17`; [decision](#storeproduction-launch-remains-deferred)). | Not a Phase 2 closure blocker. When launch preparation resumes: support-email setup/verification/monitoring, final installed listing screenshots from the store-enabled artifact, and exact-candidate/accountable/store approval remain release work. |
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. The product owner formally accepts this evidence on `2026-09-17` as an engineering-only disposition ([decision](#final-security-privacy-product-accountable-disposition)), not production security/privacy/legal approval. | Closed for Phase 2 engineering-completion purposes. Revisit if scope, providers, or production activation change. |
 
@@ -3814,8 +3818,10 @@ D2 processing is resumed with verified zero drift and healthy alarms. The owner'
 readback for the restored contribution is the only remaining D2-079/D2-074 evidence; see
 [D2-079](#d2-079--restore-publication-state-after-a-reversed-takedown) for the operator record.
 The synthetic ALARM/OK canary exercise ran once: the canary reached `ALARM` and recovered to `OK`
-with one confirmed subscription and no pending ones. Delivery is not claimed until the owner
-confirms both notifications arrived.
+with one confirmed subscription and no pending ones. CloudWatch executed both SNS actions and SNS
+reports 2 published, 2 delivered and 0 failed, but the owner reports no email arrived. Delivery is
+not proven and the gate stays open; email delivery to the mailbox is best effort past SNS's handoff.
+Owner confirms D2-079/D2-074's restored contribution as Processing `published`, Trust `accepted`.
 
 Appeal reversal submitted (`2026-09-17`, D2-074): after a fresh independent-reviewer sign-in and
 MFA, the owner loads the Mintlify appeal case and records the version-fenced **Reverse appeal**
