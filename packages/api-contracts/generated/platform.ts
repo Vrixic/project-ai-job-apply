@@ -2081,6 +2081,7 @@ export interface components {
         };
         PrepareApplicationPacketRequest: {
             expectedRevision: number;
+            form?: components["schemas"]["ApplicationFormBinding"];
             userEntries?: {
                 fieldKey: string;
                 value: string | number | boolean | (string | number | boolean)[] | null;

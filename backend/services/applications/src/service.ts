@@ -71,6 +71,8 @@ export interface PacketPreparationSource {
     ownerUserId: string;
     application: ApplicationRecord;
     userEntries: readonly UserEntry[];
+    /** The form structure the extension observed and mapped against, when known. */
+    form: FormBinding | null;
   }): Promise<PacketPreparation>;
 }
 
@@ -125,7 +127,11 @@ export interface ApplicationsApi {
   preparePacket(
     ownerUserId: string,
     applicationId: string,
-    request: { expectedRevision: number; userEntries?: readonly UserEntry[] },
+    request: {
+      expectedRevision: number;
+      userEntries?: readonly UserEntry[];
+      form?: FormBinding;
+    },
     idempotencyKey: string,
   ): Promise<Application>;
   approve(
@@ -254,7 +260,11 @@ export class ApplicationsService implements ApplicationsApi {
   async preparePacket(
     ownerUserId: string,
     applicationId: string,
-    request: { expectedRevision: number; userEntries?: readonly UserEntry[] },
+    request: {
+      expectedRevision: number;
+      userEntries?: readonly UserEntry[];
+      form?: FormBinding;
+    },
     idempotencyKey: string,
   ): Promise<Application> {
     const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
@@ -262,6 +272,7 @@ export class ApplicationsService implements ApplicationsApi {
       ownerUserId,
       application: current.application,
       userEntries: request.userEntries ?? [],
+      form: request.form ?? null,
     });
     const result = await this.dependencies.store.createPacket({
       ownerUserId,

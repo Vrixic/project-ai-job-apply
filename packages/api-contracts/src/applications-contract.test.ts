@@ -169,6 +169,11 @@ describe("Application command bodies", () => {
       validate({ expectedRevision: 1, userEntries: [{ fieldKey: "Bad Key", value: 1 }] }),
     ).toBe(false);
     expect(validate({ expectedRevision: 1, packetHash: hash })).toBe(false);
+    // The observed form binding is optional and must be complete when present.
+    const form = { adapterId: "greenhouse", variantId: "board-v1", formHash: hash };
+    expect(validate({ expectedRevision: 1, form })).toBe(true);
+    expect(validate({ expectedRevision: 1, form: { adapterId: "greenhouse" } })).toBe(false);
+    expect(validate({ expectedRevision: 1, form: { ...form, formHash: "abc" } })).toBe(false);
     expect(
       validate({
         expectedRevision: 1,

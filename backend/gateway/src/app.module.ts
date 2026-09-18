@@ -2507,6 +2507,7 @@ class ApplicationsController {
       {
         expectedRevision: body.expectedRevision,
         ...(body.userEntries ? { userEntries: body.userEntries } : {}),
+        ...(body.form ? { form: body.form } : {}),
       },
       commandKey,
     );

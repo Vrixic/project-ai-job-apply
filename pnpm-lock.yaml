@@ -149,6 +149,9 @@ importers:
       '@ai-job-apply/api-contracts':
         specifier: workspace:*
         version: link:../../../packages/api-contracts
+      '@ai-job-apply/domain':
+        specifier: workspace:*
+        version: link:../../../packages/domain
       '@ai-job-apply/event-contracts':
         specifier: workspace:*
         version: link:../../../packages/event-contracts
