@@ -75,7 +75,7 @@ $logReleaseSha = (& git -C $repositoryRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw "Could not resolve the current migration-source test commit." }
 $actualMessages = @(Get-MigrationAggregateSuccessMessages -ReleaseSourceSha $logReleaseSha)
 if (($actualMessages -join "`n") -cne ($currentSuccessMarkers -join "`n")) {
-  throw "The source-bound current migration contract does not match the exact seven expected events."
+  throw "The source-bound current migration contract does not match the exact eight expected events."
 }
 $logSourceFiles = @{}
 foreach ($path in @("backend/services/database-migrations/src/index.ts", "backend/services/database-migrations/src/main.ts") +
@@ -171,16 +171,16 @@ try {
     $script:logMessages = if ($logMode -ceq "historical") { $historicalSuccessMarkers } else { $currentSuccessMarkers }
     $script:logMode = $logMode; $script:logReadCount = 0
     switch ($logMode) {
-      "missing" { $script:logMessages = $currentSuccessMarkers[0..5] }
-      "duplicate" { $script:logMessages = @($currentSuccessMarkers[0]) + $currentSuccessMarkers[0..5] }
-      "reordered" { $script:logMessages = @($currentSuccessMarkers[1], $currentSuccessMarkers[0]) + $currentSuccessMarkers[2..6] }
+      "missing" { $script:logMessages = $currentSuccessMarkers[0..6] }
+      "duplicate" { $script:logMessages = @($currentSuccessMarkers[0]) + $currentSuccessMarkers[0..6] }
+      "reordered" { $script:logMessages = @($currentSuccessMarkers[1], $currentSuccessMarkers[0]) + $currentSuccessMarkers[2..7] }
       "extra" { $script:logMessages = @($currentSuccessMarkers) + @("unexpected") }
       "wrong-release" { $script:logMessages = $historicalSuccessMarkers }
     }
     $rejected = $false
     try { $result = Assert-TaskResultAndLogs -ClusterArn "synthetic" -TaskArn $script:logTask.taskArn -TaskDefinitionArn "synthetic-definition" } catch { $rejected = $true }
     if ($logMode -in @("current", "historical", "eventual")) {
-      $expectedCount = if ($logMode -ceq "historical") { 6 } else { 7 }
+      $expectedCount = if ($logMode -ceq "historical") { 6 } else { 8 }
       if ($rejected -or $result.AggregateSuccessLogCount -ne $expectedCount -or $result.Task.stoppedAt -ne $script:logTask.stoppedAt) {
         throw "Exact release-bound task logs were not validated: $logMode."
       }
