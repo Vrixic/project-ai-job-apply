@@ -14,6 +14,13 @@ import type {
   ReconciliationEvidence,
 } from "./attempt.js";
 import type { FieldValue, ProposedField } from "./field-policy.js";
+import {
+  attemptMetrics,
+  correctionMetrics,
+  type MetricSink,
+  safeRecord,
+  versionToken,
+} from "./metrics.js";
 import type { ArtifactHashes, CurrentBindings, FormBinding } from "./packet.js";
 import type {
   ApplicationRecord,
@@ -176,6 +183,8 @@ export interface ApplicationsServiceDependencies {
   packets: PacketPreparationSource;
   bindings: LiveBindingsSource;
   jobs: ApplicationJobGate;
+  /** Optional privacy-safe measurement sink. Failures never affect a request. */
+  metrics?: MetricSink;
   clock?: () => Date;
 }
 
@@ -195,6 +204,7 @@ export class ApplicationsService implements ApplicationsApi {
       canonicalJobId: jobId,
       idempotencyKey,
     });
+    if (!result.replayed) this.funnel("created");
     return toApiApplication(result.view);
   }
 
@@ -265,6 +275,24 @@ export class ApplicationsService implements ApplicationsApi {
         artifactHashes: preparation.artifactHashes,
       },
     });
+    if (!result.replayed) {
+      this.funnel("packet_prepared");
+      const next = result.view.currentPacket;
+      if (current.currentPacket && next) {
+        const dimensions = {
+          adapter: versionToken(next.form?.adapterId),
+          adapterVersion: "unknown",
+          variant: versionToken(next.form?.variantId),
+        };
+        for (const event of correctionMetrics(
+          current.currentPacket.fields,
+          next.fields,
+          dimensions,
+        )) {
+          safeRecord(this.dependencies.metrics, event);
+        }
+      }
+    }
     return toApiApplication(result.view);
   }
 
@@ -293,6 +321,18 @@ export class ApplicationsService implements ApplicationsApi {
       },
       current: live,
     });
+    if (!result.replayed) {
+      this.funnel("approved");
+      const packet = result.view.currentPacket;
+      const approval = result.view.approval;
+      if (packet && approval) {
+        safeRecord(this.dependencies.metrics, {
+          name: "review_latency_ms",
+          value: Math.max(0, approval.approvedAt.getTime() - packet.createdAt.getTime()),
+          dimensions: { stage: "review_to_approval" },
+        });
+      }
+    }
     return toApiApplication(result.view);
   }
 
@@ -354,6 +394,12 @@ export class ApplicationsService implements ApplicationsApi {
       adapterId: request.adapterId,
       adapterVersion: request.adapterVersion,
     });
+    if (!result.replayed) {
+      this.funnel(
+        result.kind === "started" ? "submission_started" : "approval_invalidated",
+        result.kind === "approval_invalidated" ? { reason: versionToken(result.reasons[0]) } : {},
+      );
+    }
     return result.kind === "started"
       ? {
           outcome: "started",
@@ -386,15 +432,15 @@ export class ApplicationsService implements ApplicationsApi {
     result: ApplicationSubmissionResultRequest,
     idempotencyKey: string,
   ): Promise<Application> {
-    return this.command(
-      this.dependencies.store.recordResult({
-        ownerUserId,
-        applicationId,
-        attemptId,
-        idempotencyKey,
-        result: toAdapterResult(result),
-      }),
-    );
+    const settled = await this.dependencies.store.recordResult({
+      ownerUserId,
+      applicationId,
+      attemptId,
+      idempotencyKey,
+      result: toAdapterResult(result),
+    });
+    if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
+    return toApiApplication(settled.view);
   }
 
   async reconcile(
@@ -404,15 +450,33 @@ export class ApplicationsService implements ApplicationsApi {
     reconciliation: ReconcileApplicationAttemptRequest,
     idempotencyKey: string,
   ): Promise<Application> {
-    return this.command(
-      this.dependencies.store.reconcile({
-        ownerUserId,
-        applicationId,
-        attemptId,
-        idempotencyKey,
-        reconciliation: toReconciliation(reconciliation),
-      }),
-    );
+    const settled = await this.dependencies.store.reconcile({
+      ownerUserId,
+      applicationId,
+      attemptId,
+      idempotencyKey,
+      reconciliation: toReconciliation(reconciliation),
+    });
+    if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
+    return toApiApplication(settled.view);
+  }
+
+  private funnel(stage: string, extra: { reason?: string } = {}): void {
+    safeRecord(this.dependencies.metrics, {
+      name: "application_funnel",
+      value: 1,
+      dimensions: { stage, ...extra },
+    });
+  }
+
+  private attemptSettled(view: ApplicationView, attemptId: string): void {
+    const attempt = view.attempts.find((candidate) => candidate.id === attemptId);
+    if (!attempt) return;
+    const variant = view.currentPacket?.form?.variantId ?? "unknown";
+    for (const event of attemptMetrics(attempt, variant)) {
+      safeRecord(this.dependencies.metrics, event);
+    }
+    if (view.application.status === "applied") this.funnel("applied");
   }
 
   private async command(pending: Promise<CommandResult>): Promise<Application> {

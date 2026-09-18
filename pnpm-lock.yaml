@@ -486,6 +486,12 @@ importers:
         specifier: 29.1.1
         version: 29.1.1
 
+  packages/ai-sdk:
+    dependencies:
+      '@ai-job-apply/domain':
+        specifier: workspace:*
+        version: link:../domain
+
   packages/api-contracts:
     dependencies:
       ajv:
