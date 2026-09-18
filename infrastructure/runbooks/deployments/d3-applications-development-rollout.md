@@ -2,7 +2,9 @@
 
 - Status: Steps 1-7 and 9 executed in development on 2026-09-18 (evidence on D3-015 in the
   [phase record](../../../docs/product/delivery/phase-3-application-preparation.md)). Steps 8 (deployed
-  acceptance) and the Auth0 prerequisite (5) are pending. Every step ran only through the guarded operators,
+  acceptance) is partially done: read-only synthetic probes passed (403 without scope, store-backed 404, non-allowlisted
+  route 404, 401 without a token); the full lifecycle below still needs a real token and a synthetic job. The Auth0
+  permissions were reported granted by the owner. Every step ran only through the guarded operators,
   with the saved-plan and reviewer checkpoints those operators define.
 - Scope: adds the Applications schema (migration `0001`) and releases a Gateway that composes the
   Applications runtime, in the isolated development account. No staging, no public exposure, no
