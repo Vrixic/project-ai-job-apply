@@ -508,6 +508,12 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/ats-sdk:
+    devDependencies:
+      jsdom:
+        specifier: 29.1.1
+        version: 29.1.1
+
   packages/auth:
     dependencies:
       jose:
