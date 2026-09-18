@@ -1370,8 +1370,9 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
 
 ### D2-076 — Explicit development-only test takedown
 
-- State: In progress
+- State: Complete
 - Started: 2026-09-16
+- Completed: 2026-09-18
 - Authority/decision: owner approves a distinct development-only test reason for D2-074. Do not
   mislabel the Mintlify posting as abusive or assert a rights allegation. No production feature,
   reviewer role expansion, provider deletion or automatic appeal decision is authorized.
@@ -1402,6 +1403,12 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   This supersedes the earlier deployment-pending notes, not the unfinished live lifecycle.
   Exact test evidence and its configuration are prepared privately; no temporary evidence
   authority, initial decision, takedown or appeal has been executed.
+- Completion (2026-09-18): the exact test takedown ran once with version fencing, the independent
+  appeal was reversed by a distinct reviewer, and the temporary test-purpose authority was replaced
+  and then removed (state `358`, zero evidence entries). The restored contribution is owner-confirmed
+  Processing `published`, Trust `accepted` ([D2-074](#d2-074--disposable-development-takedown-and-independent-appeal),
+  [D2-079](#d2-079--restore-publication-state-after-a-reversed-takedown)). The earlier line above that
+  no test takedown had run describes the pre-execution deployment checkpoint.
 
 ### D2-077 — Fit exact development test evidence within runtime limits
 
@@ -3806,7 +3813,7 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Takedown and human appeal-decision acceptance | Hosted sign-in, authenticated empty appeal-queue read and logout/root-reload checks are user-confirmed Complete on September 14 at protected `211e59d`. Assignments remain unchanged, the short public alias stays identity-dark and persistent project env keys remain zero. | Separately authorized takedown/human appeal-decision journeys remain. Do not repeat hosted-access checks or manufacture a case to test access. Preserve independent reviewers and evidence/version binding; no new secret, repeated reuse approval, borrowed human session or expanded reviewer role is needed. |
 | End-user extension release boundary | D2-073 production/store diagnostic exclusion and exact per-intent feedback pass 467 extension tests and isolated Edge/Chrome product checks. Updated support copy is deployed from `cd896b2`. Core sign-in, inspect/preview/add and provider publication exist. | Align final release screenshots/materials with the eventual approved enabled artifact. No further manual diagnostic-panel testing; preserve automated authentication, account isolation and retry regressions. |
 | Accessibility scope (manual screen reader deferred) | Keyboard/reflow/geometry and automated axe checks pass. The owner confirms the installed shared-history keyboard route in both Chrome and Edge on September 15. | Manual screen-reader testing is explicitly deferred by the owner and is not a Phase 2/product-launch blocker or passed test. Preserve existing accessibility controls and automated coverage; independent store requirements remain separate. |
-| Alarm notification receipt | Open. All 50 development alarms are `OK`. The guarded synthetic exercise ran on `2026-09-18`: the canary reached `ALARM` and recovered, CloudWatch executed both SNS actions, and SNS reports 2 published, 2 delivered, 0 failed with one confirmed and zero pending email subscriptions. The owner reports **no email received**, so delivery is **not** proven. | Owner checks spam/junk and the mailbox of the subscribed address, or confirms which address should receive alerts. If the address is wrong or unusable, use the reviewed Subscribe action to add the correct one and rerun the exercise. Do not record the address. |
+| Alarm notification receipt | Complete (`2026-09-18`). The guarded synthetic exercise ran once: the canary reached `ALARM` and recovered, CloudWatch executed both SNS actions and SNS reports 2 published, 2 delivered, 0 failed. The owner then reports the messages were in the mailbox (initially overlooked) and confirms delivery. | None. Do not record the address. |
 | D2-079/D2-074 owner readback | Complete (`2026-09-18`): the owner reports contribution `01a0ac45` Processing `published`, Trust `accepted` after the deployed restoration ([record](#d2-079--restore-publication-state-after-a-reversed-takedown)). | None. |
 | Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-073's end-user instructions are deployed and verified at candidate source `cd896b2`. Owner explicitly defers production/store activation to a separate launch-preparation phase (`2026-09-17`; [decision](#storeproduction-launch-remains-deferred)). | Not a Phase 2 closure blocker. When launch preparation resumes: support-email setup/verification/monitoring, final installed listing screenshots from the store-enabled artifact, and exact-candidate/accountable/store approval remain release work. |
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. The product owner formally accepts this evidence on `2026-09-17` as an engineering-only disposition ([decision](#final-security-privacy-product-accountable-disposition)), not production security/privacy/legal approval. | Closed for Phase 2 engineering-completion purposes. Revisit if scope, providers, or production activation change. |
@@ -3819,8 +3826,8 @@ readback for the restored contribution is the only remaining D2-079/D2-074 evide
 [D2-079](#d2-079--restore-publication-state-after-a-reversed-takedown) for the operator record.
 The synthetic ALARM/OK canary exercise ran once: the canary reached `ALARM` and recovered to `OK`
 with one confirmed subscription and no pending ones. CloudWatch executed both SNS actions and SNS
-reports 2 published, 2 delivered and 0 failed, but the owner reports no email arrived. Delivery is
-not proven and the gate stays open; email delivery to the mailbox is best effort past SNS's handoff.
+reports 2 published, 2 delivered and 0 failed. The owner first reports no email, then found
+the messages in the mailbox and confirms both were received, so delivery is confirmed.
 Owner confirms D2-079/D2-074's restored contribution as Processing `published`, Trust `accepted`.
 
 Appeal reversal submitted (`2026-09-17`, D2-074): after a fresh independent-reviewer sign-in and
