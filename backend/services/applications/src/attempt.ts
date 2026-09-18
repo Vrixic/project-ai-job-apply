@@ -1,0 +1,240 @@
+import { sha256Hex } from "./canonical.js";
+import type { ApprovalValidity } from "./packet.js";
+import type { ApplicationStatus } from "./state-machine.js";
+
+/**
+ * A submission attempt is write-ahead: `dispatched` is committed before any irreversible provider
+ * effect. After that point the outcome is unknown until confirmed, so nothing may dispatch again
+ * for the same packet scope until the result is confirmed or explicitly reconciled as not sent.
+ */
+export const attemptStatuses = [
+  "started",
+  "dispatched",
+  "confirmed",
+  "ambiguous",
+  "failed_no_effect",
+  "failed_requires_review",
+  "taken_over",
+  "abandoned",
+  "reconciled_not_submitted",
+] as const;
+export type AttemptStatus = (typeof attemptStatuses)[number];
+
+/** Statuses that occupy the (user, application, packet) submission scope. */
+export const scopeHoldingStatuses: readonly AttemptStatus[] = [
+  "started",
+  "dispatched",
+  "ambiguous",
+  "confirmed",
+  "taken_over",
+];
+
+export type ConfirmationEvidenceKind =
+  | "provider_confirmation_page"
+  | "provider_api_response"
+  | "user_attested";
+
+export interface ConfirmationEvidence {
+  kind: ConfirmationEvidenceKind;
+  observedAt: Date;
+  /** SHA-256 of the observed confirmation signal. The page body itself is never stored. */
+  fingerprintSha256: string;
+  adapterId?: string;
+  adapterVersion?: string;
+  providerReference?: string;
+}
+
+export interface ApplicationAttempt {
+  id: string;
+  applicationId: string;
+  packetId: string;
+  packetHash: string;
+  sequence: number;
+  scopeKey: string;
+  status: AttemptStatus;
+  adapterId: string;
+  adapterVersion: string;
+  startedAt: Date;
+  dispatchedAt?: Date;
+  resolvedAt?: Date;
+  evidence?: ConfirmationEvidence;
+}
+
+export class AttemptRefusedError extends Error {
+  readonly code:
+    | "NOT_APPROVED"
+    | "APPROVAL_INVALID"
+    | "ATTEMPT_IN_FLIGHT"
+    | "AMBIGUOUS_UNRECONCILED"
+    | "ALREADY_SUBMITTED"
+    | "ALREADY_DISPATCHED"
+    | "ILLEGAL_ATTEMPT_TRANSITION"
+    | "EVIDENCE_INVALID"
+    | "RECONCILIATION_REFUSED";
+
+  constructor(code: AttemptRefusedError["code"]) {
+    super(`Attempt refused: ${code}`);
+    this.name = "AttemptRefusedError";
+    this.code = code;
+  }
+}
+
+export function submissionScopeKey(
+  userId: string,
+  applicationId: string,
+  packetHash: string,
+): string {
+  return sha256Hex(`submission-scope.v1\n${userId}\n${applicationId}\n${packetHash}`);
+}
+
+export interface AttemptStartContext {
+  applicationStatus: ApplicationStatus;
+  approval: ApprovalValidity;
+  /** Existing attempts for the same application. Other packets never block a new packet. */
+  attempts: readonly Pick<ApplicationAttempt, "packetHash" | "status" | "sequence">[];
+  packetHash: string;
+}
+
+/** Throws unless a new attempt may start; otherwise returns the next attempt sequence number. */
+export function planAttemptStart(context: AttemptStartContext): number {
+  if (context.applicationStatus !== "approved") throw new AttemptRefusedError("NOT_APPROVED");
+  if (!context.approval.valid) throw new AttemptRefusedError("APPROVAL_INVALID");
+  for (const attempt of context.attempts) {
+    if (attempt.packetHash !== context.packetHash) continue;
+    if (attempt.status === "confirmed") throw new AttemptRefusedError("ALREADY_SUBMITTED");
+    if (attempt.status === "ambiguous") throw new AttemptRefusedError("AMBIGUOUS_UNRECONCILED");
+    if (scopeHoldingStatuses.includes(attempt.status)) {
+      throw new AttemptRefusedError("ATTEMPT_IN_FLIGHT");
+    }
+  }
+  return context.attempts.reduce((max, attempt) => Math.max(max, attempt.sequence), 0) + 1;
+}
+
+export function markDispatched(attempt: ApplicationAttempt, now: Date): ApplicationAttempt {
+  if (attempt.status === "dispatched" || attempt.dispatchedAt) {
+    throw new AttemptRefusedError("ALREADY_DISPATCHED");
+  }
+  if (attempt.status !== "started") throw new AttemptRefusedError("ILLEGAL_ATTEMPT_TRANSITION");
+  return { ...attempt, status: "dispatched", dispatchedAt: new Date(now.getTime()) };
+}
+
+export type AdapterSubmissionResult =
+  | { kind: "confirmed"; evidence: ConfirmationEvidence }
+  /** The provider explicitly rejected the form, so fields need review before any retry. */
+  | { kind: "validation_rejected" }
+  /** CAPTCHA/MFA or another direct-user challenge stopped the flow. */
+  | { kind: "challenge_required" }
+  /** Adapter refused before contacting the provider, for example a kill switch. */
+  | { kind: "precondition_failed" }
+  | { kind: "timeout" }
+  | { kind: "transport_error" }
+  | { kind: "unrecognized_response" }
+  | { kind: "adapter_crashed" };
+
+export type AttemptOutcome = Extract<
+  AttemptStatus,
+  "confirmed" | "ambiguous" | "failed_no_effect" | "failed_requires_review" | "taken_over"
+>;
+
+/**
+ * Maps an adapter result to an outcome. Anything that could have reached the provider after
+ * dispatch and is not an explicit rejection is ambiguous, never a plain failure.
+ */
+export function classifySubmissionResult(
+  attempt: Pick<ApplicationAttempt, "status">,
+  result: AdapterSubmissionResult,
+): AttemptOutcome {
+  const dispatched = attempt.status === "dispatched";
+  switch (result.kind) {
+    case "confirmed":
+      assertEvidence(result.evidence);
+      return dispatched ? "confirmed" : "ambiguous";
+    case "validation_rejected":
+      return dispatched ? "failed_requires_review" : "failed_no_effect";
+    case "challenge_required":
+      return "taken_over";
+    case "precondition_failed":
+      return dispatched ? "ambiguous" : "failed_no_effect";
+    case "timeout":
+    case "transport_error":
+    case "unrecognized_response":
+    case "adapter_crashed":
+      return dispatched ? "ambiguous" : "failed_no_effect";
+  }
+}
+
+const HASH = /^[a-f0-9]{64}$/;
+function hasControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+}
+
+export function assertEvidence(evidence: ConfirmationEvidence): void {
+  if (!HASH.test(evidence.fingerprintSha256) || Number.isNaN(evidence.observedAt.getTime())) {
+    throw new AttemptRefusedError("EVIDENCE_INVALID");
+  }
+  const reference = evidence.providerReference;
+  if (reference !== undefined && (reference.length > 200 || hasControlCharacter(reference))) {
+    throw new AttemptRefusedError("EVIDENCE_INVALID");
+  }
+}
+
+/** Crash/replay recovery: a stale attempt is resolved conservatively and never re-dispatched. */
+export function recoverStaleAttempt(
+  attempt: ApplicationAttempt,
+  now: Date,
+  staleAfterMs: number,
+): ApplicationAttempt {
+  if (attempt.status === "dispatched") {
+    const since = (attempt.dispatchedAt ?? attempt.startedAt).getTime();
+    if (now.getTime() - since >= staleAfterMs) {
+      return { ...attempt, status: "ambiguous", resolvedAt: new Date(now.getTime()) };
+    }
+  } else if (attempt.status === "started") {
+    if (now.getTime() - attempt.startedAt.getTime() >= staleAfterMs) {
+      return { ...attempt, status: "failed_no_effect", resolvedAt: new Date(now.getTime()) };
+    }
+  }
+  return attempt;
+}
+
+export type ReconciliationEvidence =
+  | { kind: "provider_confirmation"; evidence: ConfirmationEvidence }
+  | { kind: "provider_absence_verified"; observedAt: Date; fingerprintSha256: string }
+  | { kind: "user_attested_submitted"; evidence: ConfirmationEvidence }
+  | { kind: "user_attested_not_submitted"; acknowledgesDuplicateRisk: boolean };
+
+export function reconcileAttempt(
+  attempt: ApplicationAttempt,
+  reconciliation: ReconciliationEvidence,
+  now: Date,
+): ApplicationAttempt {
+  if (attempt.status !== "ambiguous" && attempt.status !== "taken_over") {
+    throw new AttemptRefusedError("ILLEGAL_ATTEMPT_TRANSITION");
+  }
+  const resolvedAt = new Date(now.getTime());
+  switch (reconciliation.kind) {
+    case "provider_confirmation":
+      assertEvidence(reconciliation.evidence);
+      return { ...attempt, status: "confirmed", resolvedAt, evidence: reconciliation.evidence };
+    case "user_attested_submitted":
+      assertEvidence(reconciliation.evidence);
+      if (reconciliation.evidence.kind !== "user_attested") {
+        throw new AttemptRefusedError("EVIDENCE_INVALID");
+      }
+      return { ...attempt, status: "confirmed", resolvedAt, evidence: reconciliation.evidence };
+    case "provider_absence_verified":
+      if (!HASH.test(reconciliation.fingerprintSha256)) {
+        throw new AttemptRefusedError("EVIDENCE_INVALID");
+      }
+      return { ...attempt, status: "reconciled_not_submitted", resolvedAt };
+    case "user_attested_not_submitted":
+      if (!reconciliation.acknowledgesDuplicateRisk) {
+        throw new AttemptRefusedError("RECONCILIATION_REFUSED");
+      }
+      return { ...attempt, status: "reconciled_not_submitted", resolvedAt };
+  }
+}

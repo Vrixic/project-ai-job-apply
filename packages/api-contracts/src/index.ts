@@ -85,6 +85,31 @@ export type SavedJobSnapshot = components["schemas"]["SavedJobSnapshot"];
 export type SavedJobPage = components["schemas"]["SavedJobPage"];
 export type MatchAssessment = components["schemas"]["MatchAssessment"];
 export type EntitlementSummary = components["schemas"]["EntitlementSummary"];
+export type ApplicationStatus = components["schemas"]["ApplicationStatus"];
+export type ApplicationCurrentAction = components["schemas"]["ApplicationCurrentAction"];
+export type ApplicationPacketField = components["schemas"]["ApplicationPacketField"];
+export type ApplicationFormBinding = components["schemas"]["ApplicationFormBinding"];
+export type ApplicationPacket = components["schemas"]["ApplicationPacket"];
+export type ApplicationApproval = components["schemas"]["ApplicationApproval"];
+export type ApplicationAttempt = components["schemas"]["ApplicationAttempt"];
+export type Application = components["schemas"]["Application"];
+export type ApplicationPage = components["schemas"]["ApplicationPage"];
+export type ApplicationHistoryEntry = components["schemas"]["ApplicationHistoryEntry"];
+export type ApplicationHistoryPage = components["schemas"]["ApplicationHistoryPage"];
+export type CreateApplicationRequest = components["schemas"]["CreateApplicationRequest"];
+export type ApplicationSearchRequest = components["schemas"]["ApplicationSearchRequest"];
+export type PrepareApplicationPacketRequest =
+  components["schemas"]["PrepareApplicationPacketRequest"];
+export type ApproveApplicationPacketRequest =
+  components["schemas"]["ApproveApplicationPacketRequest"];
+export type ApplicationRevisionRequest = components["schemas"]["ApplicationRevisionRequest"];
+export type StartApplicationSubmissionRequest =
+  components["schemas"]["StartApplicationSubmissionRequest"];
+export type ApplicationSubmissionStart = components["schemas"]["ApplicationSubmissionStart"];
+export type ApplicationSubmissionResultRequest =
+  components["schemas"]["ApplicationSubmissionResultRequest"];
+export type ReconcileApplicationAttemptRequest =
+  components["schemas"]["ReconcileApplicationAttemptRequest"];
 export type ProblemDetails = components["schemas"]["ProblemDetails"];
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });

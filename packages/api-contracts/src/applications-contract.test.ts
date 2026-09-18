@@ -1,0 +1,271 @@
+import { randomUUID } from "node:crypto";
+import { describe, expect, it } from "vitest";
+import { compileComponentValidator, contract } from "./index.js";
+
+const hash = "a".repeat(64);
+const now = "2026-09-18T12:00:00.000Z";
+
+function application(overrides: Record<string, unknown> = {}) {
+  return {
+    id: randomUUID(),
+    canonicalJobId: randomUUID(),
+    status: "review_required",
+    revision: 2,
+    currentAction: "review_and_approve",
+    attempts: [],
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+describe("Applications OpenAPI contract", () => {
+  it("guards every route with an exact applications scope and no-store responses", () => {
+    const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
+      path.startsWith("/applications"),
+    );
+    expect(applicationPaths.length).toBe(12);
+    for (const [, item] of applicationPaths) {
+      for (const operation of Object.values(item) as Array<{
+        security: Array<{ oidc: string[] }>;
+        responses: Record<string, { headers?: Record<string, unknown> }>;
+        parameters?: Array<{ name: string }>;
+      }>) {
+        const scopes = operation.security.flatMap((entry) => entry.oidc);
+        expect(scopes).toHaveLength(1);
+        expect(["applications:read", "applications:write"]).toContain(scopes[0]);
+        const success = Object.entries(operation.responses).find(([code]) => code.startsWith("2"));
+        expect(success?.[1].headers).toHaveProperty("Cache-Control");
+      }
+    }
+  });
+
+  it("requires an idempotency key on every state-changing command", () => {
+    const commands = Object.entries(contract.paths)
+      .filter(([path]) => path.startsWith("/applications"))
+      .flatMap(([path, item]) =>
+        Object.entries(item as Record<string, { parameters?: Array<{ name: string }> }>).map(
+          ([method, operation]) => ({ path, method, operation }),
+        ),
+      );
+    const withoutKey = commands
+      .filter(({ operation }) => !operation.parameters?.some((p) => p.name === "Idempotency-Key"))
+      .map(({ method, path }) => `${method.toUpperCase()} ${path}`)
+      .sort();
+    // Reads and the once-only write-ahead dispatch (which the store makes exactly-once itself).
+    expect(withoutKey).toEqual([
+      "GET /applications/{applicationId}",
+      "GET /applications/{applicationId}/history",
+      "POST /applications/search",
+      "POST /applications/{applicationId}/attempts/{attemptId}/dispatch",
+    ]);
+  });
+
+  it("has no route, schema, or enum that models a post-submission hiring outcome", () => {
+    const serialized = JSON.stringify(
+      Object.fromEntries(
+        Object.entries(contract.paths).filter(([p]) => p.startsWith("/applications")),
+      ),
+    ).concat(
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(contract.components.schemas).filter(
+            ([name]) => name.startsWith("Application") || name.includes("Application"),
+          ),
+        ),
+      ),
+    );
+    // `validation_rejected` is a provider form-validation result, not a hiring decision.
+    const found = serialized
+      .replaceAll("validation_rejected", "")
+      .match(/interview|offer|reject|recruiter|hired|shortlist/gi);
+    expect(found).toBeNull();
+  });
+});
+
+describe("Application read models", () => {
+  const validate = compileComponentValidator("Application");
+
+  it("accepts a minimal application and a full packet/approval/attempt view", () => {
+    expect(validate(application())).toBe(true);
+    expect(
+      validate(
+        application({
+          status: "applied",
+          currentAction: "none",
+          currentPacket: {
+            id: randomUUID(),
+            version: 1,
+            packetHash: hash,
+            jobRevision: hash,
+            form: { adapterId: "greenhouse", variantId: "synthetic-v1", formHash: hash },
+            fields: [
+              {
+                fieldKey: "contact.email",
+                value: "candidate@example.test",
+                origin: "confirmed_fact",
+                sourceFactIds: [randomUUID()],
+                confidence: 0.99,
+                disposition: "auto",
+                reasons: [],
+                requiresReview: false,
+              },
+            ],
+            artifactHashes: { resume: hash },
+            createdAt: now,
+          },
+          approval: {
+            id: randomUUID(),
+            packetHash: hash,
+            acknowledgedFieldKeys: [],
+            approvedAt: now,
+            expiresAt: now,
+          },
+          attempts: [
+            {
+              id: randomUUID(),
+              sequence: 1,
+              status: "confirmed",
+              adapterId: "greenhouse",
+              adapterVersion: "1.0.0",
+              startedAt: now,
+              dispatchedAt: now,
+              resolvedAt: now,
+              confirmation: { kind: "provider_confirmation_page", observedAt: now },
+            },
+          ],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects unknown statuses, outcome fields, extra properties, and bad revisions", () => {
+    expect(validate(application({ status: "interviewing" }))).toBe(false);
+    expect(validate(application({ interviewStatus: "scheduled" }))).toBe(false);
+    expect(validate(application({ offer: "extended" }))).toBe(false);
+    expect(validate(application({ revision: 0 }))).toBe(false);
+    expect(validate(application({ currentAction: "wait_for_recruiter" }))).toBe(false);
+  });
+});
+
+describe("Application command bodies", () => {
+  it("creates only from a job identifier", () => {
+    const validate = compileComponentValidator("CreateApplicationRequest");
+    expect(validate({ jobId: randomUUID() })).toBe(true);
+    expect(validate({ jobId: "nope" })).toBe(false);
+    expect(validate({ jobId: randomUUID(), status: "applied" })).toBe(false);
+  });
+
+  it("prepares a packet with bounded candidate entries and no server-owned fields", () => {
+    const validate = compileComponentValidator("PrepareApplicationPacketRequest");
+    expect(validate({ expectedRevision: 1 })).toBe(true);
+    expect(
+      validate({
+        expectedRevision: 1,
+        userEntries: [{ fieldKey: "job.relocation", value: true }],
+      }),
+    ).toBe(true);
+    expect(
+      validate({ expectedRevision: 1, userEntries: [{ fieldKey: "Bad Key", value: 1 }] }),
+    ).toBe(false);
+    expect(validate({ expectedRevision: 1, packetHash: hash })).toBe(false);
+    // The observed form binding is optional and must be complete when present.
+    const form = { adapterId: "greenhouse", variantId: "board-v1", formHash: hash };
+    expect(validate({ expectedRevision: 1, form })).toBe(true);
+    expect(validate({ expectedRevision: 1, form: { adapterId: "greenhouse" } })).toBe(false);
+    expect(validate({ expectedRevision: 1, form: { ...form, formHash: "abc" } })).toBe(false);
+    expect(
+      validate({
+        expectedRevision: 1,
+        userEntries: Array.from({ length: 101 }, () => ({ fieldKey: "job.relocation", value: 1 })),
+      }),
+    ).toBe(false);
+  });
+
+  it("approves one exact packet hash with explicit acknowledgements", () => {
+    const validate = compileComponentValidator("ApproveApplicationPacketRequest");
+    const valid = {
+      expectedRevision: 3,
+      packetHash: hash,
+      acknowledgedFieldKeys: ["authorization.us_authorized"],
+    };
+    expect(validate(valid)).toBe(true);
+    expect(validate({ ...valid, packetHash: "abc" })).toBe(false);
+    expect(validate({ ...valid, acknowledgedFieldKeys: ["a.b", "a.b"] })).toBe(false);
+    expect(validate({ ...valid, acknowledgeAll: true })).toBe(false);
+    const { acknowledgedFieldKeys: _omitted, ...missing } = valid;
+    expect(validate(missing)).toBe(false);
+  });
+
+  it("starts a submission only with the observed live form hash", () => {
+    const validate = compileComponentValidator("StartApplicationSubmissionRequest");
+    const valid = {
+      expectedRevision: 4,
+      adapterId: "greenhouse",
+      adapterVersion: "1.0.0",
+      observedFormHash: hash,
+    };
+    expect(validate(valid)).toBe(true);
+    const { observedFormHash: _omitted, ...missing } = valid;
+    expect(validate(missing)).toBe(false);
+  });
+
+  it("accepts only candidate-observable results and never a provider-asserted outcome", () => {
+    const validate = compileComponentValidator("ApplicationSubmissionResultRequest");
+    expect(
+      validate({
+        kind: "confirmed",
+        confirmation: {
+          kind: "provider_confirmation_page",
+          observedAt: now,
+          fingerprintSha256: hash,
+        },
+      }),
+    ).toBe(true);
+    // The user_attested kind is reserved for the candidate reconciliation route.
+    expect(
+      validate({
+        kind: "confirmed",
+        confirmation: { kind: "user_attested", observedAt: now, fingerprintSha256: hash },
+      }),
+    ).toBe(false);
+    for (const kind of [
+      "timeout",
+      "transport_error",
+      "challenge_required",
+      "validation_rejected",
+    ]) {
+      expect(validate({ kind })).toBe(true);
+    }
+    expect(validate({ kind: "interview_invited" })).toBe(false);
+    expect(validate({ kind: "confirmed" })).toBe(false);
+  });
+
+  it("requires a duplicate-risk acknowledgement to report not submitted", () => {
+    const validate = compileComponentValidator("ReconcileApplicationAttemptRequest");
+    expect(validate({ kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: true })).toBe(
+      true,
+    );
+    expect(
+      validate({ kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: false }),
+    ).toBe(false);
+    expect(
+      validate({ kind: "user_attested_submitted", observedAt: now, fingerprintSha256: hash }),
+    ).toBe(true);
+  });
+});
+
+describe("Application history page", () => {
+  const validate = compileComponentValidator("ApplicationHistoryPage");
+
+  it("accepts technical entries and refuses outcome kinds", () => {
+    const entry = { seq: 1, kind: "application_created", toStatus: "preparing", occurredAt: now };
+    expect(validate({ entries: [entry], hasMore: false })).toBe(true);
+    expect(validate({ entries: [{ ...entry, kind: "interview_scheduled" }], hasMore: false })).toBe(
+      false,
+    );
+    expect(validate({ entries: [{ ...entry, toStatus: "offer_received" }], hasMore: false })).toBe(
+      false,
+    );
+  });
+});

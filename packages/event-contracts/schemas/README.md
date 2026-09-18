@@ -20,3 +20,9 @@ posting content, source URLs, contributor identity, trust evidence, and lifecycl
 `trust.contribution-decision.changed.v1` carries only the stable Trust transition UUID and the
 Jobs-owned contribution UUID. It excludes contributor and reviewer identities, decision status,
 reason/evidence, source URL, and contribution content. Consumers reload exact authoritative truth.
+
+`application.status_changed.v1` and `application.applied.v1` are emitted by the Applications
+outbox in the same transaction as the lifecycle change. They carry only the application and owner
+UUIDs, the revision, and the resulting status. They exclude packet fields, hashes, artifacts,
+attempt evidence, confirmation URLs or bodies, and any post-submission hiring outcome; consumers
+(for example the future Notifications inbox) reload owner-scoped truth through the Applications API.

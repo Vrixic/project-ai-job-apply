@@ -694,6 +694,209 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Explicitly starts one Applications-owned lifecycle for an active canonical job. Discovery and saved-job state never create an application. */
+        post: operations["createApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Owner-scoped applications with their derived current action, newest first. */
+        post: operations["searchApplications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApplication"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Append-only technical history that ends at confirmed submission. It never models any later hiring stage. */
+        get: operations["getApplicationHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/packets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Builds a new immutable packet version from confirmed profile evidence and the candidate's explicit entries. Any prior approval is superseded. */
+        post: operations["prepareApplicationPacket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Approves exactly one packet hash. Every reviewable field, including restricted answers, must be acknowledged. */
+        post: operations["approveApplicationPacket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Withdraws a live approval so the candidate can edit; a new packet needs a new approval. */
+        post: operations["reopenApplicationForEdit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Cancels before any submission is in flight. A confirmed submission cannot be cancelled. */
+        post: operations["cancelApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Starts one submission attempt if and only if the approval still matches the live job, form, and artifacts. A changed binding invalidates approval instead of submitting. */
+        post: operations["startApplicationSubmission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/attempts/{attemptId}/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Write-ahead record made immediately before the irreversible submit action. It succeeds at most once per attempt. */
+        post: operations["dispatchApplicationAttempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/attempts/{attemptId}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Records the observed submission result. Any unclear result after dispatch is ambiguous and blocks another submission until reconciled. */
+        post: operations["recordApplicationAttemptResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/attempts/{attemptId}/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Candidate reconciliation of an ambiguous or taken-over attempt. Reporting not-submitted requires acknowledging duplicate-submission risk. */
+        post: operations["reconcileApplicationAttempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entitlements": {
         parameters: {
             query?: never;
@@ -1762,6 +1965,176 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** @enum {string} */
+        ApplicationStatus: "preparing" | "review_required" | "approved" | "submitting" | "takeover" | "reconciliation_required" | "applied" | "cancelled";
+        /** @enum {string} */
+        ApplicationCurrentAction: "prepare_packet" | "resolve_fields" | "review_and_approve" | "re_review" | "ready_to_submit" | "submission_in_progress" | "complete_manually" | "confirm_submission_status" | "none";
+        ApplicationPacketField: {
+            fieldKey: string;
+            value: string | number | boolean | (string | number | boolean)[] | null;
+            /** @enum {string} */
+            origin: "confirmed_fact" | "answer_vault" | "user_entered" | "generated" | "derived";
+            sourceFactIds: string[];
+            confidence: number;
+            /** @enum {string} */
+            disposition: "auto" | "review" | "user_action";
+            reasons: ("restricted_answer" | "explicit_each_time" | "never_infer" | "unsupported_value" | "unconfirmed_source" | "low_confidence" | "generated_content" | "unknown_field" | "direct_user_action")[];
+            requiresReview: boolean;
+        };
+        ApplicationFormBinding: {
+            adapterId: string;
+            variantId: string;
+            formHash: string;
+        };
+        ApplicationPacket: {
+            /** Format: uuid */
+            id: string;
+            version: number;
+            packetHash: string;
+            jobRevision: string;
+            form?: components["schemas"]["ApplicationFormBinding"];
+            fields: components["schemas"]["ApplicationPacketField"][];
+            artifactHashes: {
+                resume?: string;
+                coverLetter?: string;
+            };
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ApplicationApproval: {
+            /** Format: uuid */
+            id: string;
+            packetHash: string;
+            acknowledgedFieldKeys: string[];
+            /** Format: date-time */
+            approvedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        ApplicationAttempt: {
+            /** Format: uuid */
+            id: string;
+            sequence: number;
+            /** @enum {string} */
+            status: "started" | "dispatched" | "confirmed" | "ambiguous" | "failed_no_effect" | "failed_requires_review" | "taken_over" | "abandoned" | "reconciled_not_submitted";
+            adapterId: string;
+            adapterVersion: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            dispatchedAt?: string;
+            /** Format: date-time */
+            resolvedAt?: string;
+            confirmation?: {
+                /** @enum {string} */
+                kind: "provider_confirmation_page" | "provider_api_response" | "user_attested";
+                /** Format: date-time */
+                observedAt: string;
+            };
+        };
+        Application: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            canonicalJobId: string;
+            status: components["schemas"]["ApplicationStatus"];
+            revision: number;
+            currentAction: components["schemas"]["ApplicationCurrentAction"];
+            currentPacket?: components["schemas"]["ApplicationPacket"];
+            approval?: components["schemas"]["ApplicationApproval"];
+            attempts: components["schemas"]["ApplicationAttempt"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ApplicationPage: {
+            items: components["schemas"]["Application"][];
+            nextCursor?: string;
+        };
+        ApplicationHistoryEntry: {
+            seq: number;
+            /** @enum {string} */
+            kind: "application_created" | "packet_created" | "approval_recorded" | "approval_invalidated" | "attempt_started" | "attempt_dispatched" | "attempt_failed_no_effect" | "attempt_failed_requires_review" | "takeover_requested" | "takeover_abandoned" | "submission_ambiguous" | "reconciliation_recorded" | "submission_confirmed" | "application_cancelled";
+            fromStatus?: components["schemas"]["ApplicationStatus"];
+            toStatus: components["schemas"]["ApplicationStatus"];
+            /** Format: uuid */
+            packetId?: string;
+            /** Format: uuid */
+            attemptId?: string;
+            reasonCode?: string;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        ApplicationHistoryPage: {
+            entries: components["schemas"]["ApplicationHistoryEntry"][];
+            hasMore: boolean;
+        };
+        CreateApplicationRequest: {
+            /** Format: uuid */
+            jobId: string;
+        };
+        ApplicationSearchRequest: {
+            limit?: number;
+            cursor?: string;
+        };
+        PrepareApplicationPacketRequest: {
+            expectedRevision: number;
+            form?: components["schemas"]["ApplicationFormBinding"];
+            userEntries?: {
+                fieldKey: string;
+                value: string | number | boolean | (string | number | boolean)[] | null;
+            }[];
+        };
+        ApproveApplicationPacketRequest: {
+            expectedRevision: number;
+            packetHash: string;
+            acknowledgedFieldKeys: string[];
+        };
+        ApplicationRevisionRequest: {
+            expectedRevision: number;
+        };
+        StartApplicationSubmissionRequest: {
+            expectedRevision: number;
+            adapterId: string;
+            adapterVersion: string;
+            observedFormHash: string;
+        };
+        ApplicationSubmissionStart: {
+            /** @enum {string} */
+            outcome: "started" | "approval_invalidated";
+            /** Format: uuid */
+            attemptId?: string;
+            invalidationReasons?: ("packet_hash_mismatch" | "approval_expired" | "job_changed" | "form_changed" | "resume_changed" | "cover_letter_changed")[];
+            application: components["schemas"]["Application"];
+        };
+        ApplicationSubmissionResultRequest: {
+            /** @constant */
+            kind: "confirmed";
+            confirmation: {
+                /** @enum {string} */
+                kind: "provider_confirmation_page" | "provider_api_response";
+                /** Format: date-time */
+                observedAt: string;
+                fingerprintSha256: string;
+                providerReference?: string;
+            };
+        } | {
+            /** @enum {string} */
+            kind: "validation_rejected" | "challenge_required" | "precondition_failed" | "timeout" | "transport_error" | "unrecognized_response" | "adapter_crashed";
+        };
+        ReconcileApplicationAttemptRequest: {
+            /** @constant */
+            kind: "user_attested_submitted";
+            /** Format: date-time */
+            observedAt: string;
+            fingerprintSha256: string;
+        } | {
+            /** @constant */
+            kind: "user_attested_not_submitted";
+            /** @constant */
+            acknowledgesDuplicateRisk: true;
         };
     };
     responses: {
@@ -3498,6 +3871,432 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    createApplication: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateApplicationRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Application"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    searchApplications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Application"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplicationHistory: {
+        parameters: {
+            query?: {
+                afterSeq?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationHistoryPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    prepareApplicationPacket: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareApplicationPacketRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Application"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    approveApplicationPacket: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveApplicationPacketRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Application"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    reopenApplicationForEdit: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Application"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    cancelApplication: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Application"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    startApplicationSubmission: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartApplicationSubmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationSubmissionStart"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    dispatchApplicationAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: string;
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationAttempt"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    recordApplicationAttemptResult: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                applicationId: string;
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationSubmissionResultRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Application"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    reconcileApplicationAttempt: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                applicationId: string;
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReconcileApplicationAttemptRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Application"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     getEntitlements: {

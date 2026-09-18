@@ -36,6 +36,7 @@ Records important technical decisions, their context, alternatives, consequences
 ## Proposed delivery decisions
 
 - [ADR-027: Profile-owned candidate rights workflows](027-profile-owned-candidate-rights-workflows.md)
+- [ADR-030: AI gateway and grounded generation](030-ai-gateway-and-grounded-generation.md)
 
 Use `000-template.md` for future decisions.
 

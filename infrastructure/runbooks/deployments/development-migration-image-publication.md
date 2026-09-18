@@ -34,12 +34,12 @@ two deterministic OCI exports, byte-identity comparison, and hardened runtime sm
 `Publish`, then records only ignored local logs/layouts. It does not contact AWS, run a
 vulnerability scan, publish an image, or satisfy the publication/scan/recovery gate.
 
-The current package boundary is the Phase 2 manifest
-`d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1`: six ordered owners (Profile,
-Jobs, Documents, Matching, Billing, and Trust), ten schemas, 68 regular relations, and 46 exact
-checksum-bound migrations. The smoke gate also requires the Trust
-runner and every Phase 2 migration file, including Jobs `0024_contribution_appeal_restoration`
-and Trust `0005_development_test_removal`,
+The current package boundary is the Phase 3 manifest
+`d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1`: seven ordered owners
+(Profile, Jobs, Documents, Matching, Billing, Trust, and Applications), eleven schemas, 76 regular relations, and
+47 exact checksum-bound migrations. The smoke gate also requires the Trust and Applications runners and every
+Phase 2/3 migration file, including Jobs `0024_contribution_appeal_restoration`, Trust
+`0005_development_test_removal`, and Applications `0001_applications_foundation`,
 before an image can be considered locally buildable.
 This is a generated-synthetic/default-dark source and artifact boundary. It does not establish
 deployed Trust candidate-rights behavior, image publication, task-definition deployment,

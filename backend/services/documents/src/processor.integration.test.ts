@@ -4,8 +4,8 @@ import { promisify } from "node:util";
 import { PostgresResumeProposalWriter } from "@ai-job-apply/profile-service";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PostgresDocumentProcessorStore } from "./processor.js";
 import type { NormalizedResumeDocument } from "./parsing/index.js";
+import { PostgresDocumentProcessorStore } from "./processor.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;

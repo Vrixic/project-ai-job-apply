@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@ai-job-apply/api-contracts": "workspace:*",
+    "@ai-job-apply/applications-service": "workspace:*",
     "@ai-job-apply/auth": "workspace:*",
     "@ai-job-apply/billing-service": "workspace:*",
     "@ai-job-apply/config": "workspace:*",

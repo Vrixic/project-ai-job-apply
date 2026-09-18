@@ -1,7 +1,28 @@
 {
   "schemaVersion": 1,
-  "manifestId": "d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1",
+  "manifestId": "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
   "contributors": [
+    {
+      "owner": "applications",
+      "schemas": ["applications"],
+      "migrationLedger": "applications.schema_migrations",
+      "migrations": [
+        {
+          "version": "0001_applications_foundation",
+          "checksum": "f526628b3decbcb0a156aec00bda2ad048c3dfe0dcb536fd70a047dce11ef09e"
+        }
+      ],
+      "relations": [
+        "applications.applications",
+        "applications.approvals",
+        "applications.attempts",
+        "applications.command_receipts",
+        "applications.history",
+        "applications.outbox",
+        "applications.packets",
+        "applications.schema_migrations"
+      ]
+    },
     {
       "owner": "billing",
       "schemas": ["billing"],
