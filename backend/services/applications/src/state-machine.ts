@@ -85,6 +85,17 @@ export function nextStatus(from: ApplicationStatus, event: ApplicationEvent): Ap
   return to;
 }
 
+/** Every (from, to) status pair the lifecycle permits. The database guard must match it exactly. */
+export function allowedStatusPairs(): Array<[ApplicationStatus, ApplicationStatus]> {
+  const pairs = new Set<string>();
+  for (const from of applicationStatuses) {
+    for (const to of Object.values(transitions[from])) {
+      if (to !== from) pairs.add(`${from}>${to}`);
+    }
+  }
+  return [...pairs].sort().map((pair) => pair.split(">") as [ApplicationStatus, ApplicationStatus]);
+}
+
 export function canTransition(from: ApplicationStatus, event: ApplicationEvent): boolean {
   return transitions[from][event] !== undefined;
 }
