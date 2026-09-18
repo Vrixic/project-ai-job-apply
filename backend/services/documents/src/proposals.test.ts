@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { extractResumeFactProposals } from "./proposals.js";
 import type { NormalizedResumeDocument } from "./parsing/index.js";
+import { extractResumeFactProposals } from "./proposals.js";
 
 const document: NormalizedResumeDocument = {
   documentId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",
