@@ -450,6 +450,8 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
 
 ## D1 — Useful web product and canonical job catalog
 
+- Real-data rule (`2026-09-18`): synthetic data is for testing only. Every use of real candidate or real external data needs the product owner's item-by-item approval, listed in the [D1 real-data approval register](phase-1-web-and-job-catalog.md#real-data-approval-register-product-owner). No item is approved yet.
+
 - Candidate-rights recovered lifecycle and restore replay (2026-08-31): development state serial
   `245` now includes exact versioned recovery-ledger tag read/write permissions. The fixed-sequence
   fresh-MFA lifecycle reached confirmed quarantine after its earlier export/download/cancel gates;
