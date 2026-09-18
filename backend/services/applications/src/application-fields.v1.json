@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "status": "foundation_seed",
+  "fields": [
+    {
+      "key": "identity.legal_name.first",
+      "label": "Legal first name",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "identity.legal_name.middle",
+      "label": "Legal middle name",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "identity.legal_name.last",
+      "label": "Legal last name",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "identity.preferred_name",
+      "label": "Preferred name",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "contact.email",
+      "label": "Email",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "contact.phone",
+      "label": "Phone",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "contact.address.line1",
+      "label": "Address line 1",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "contact.address.city",
+      "label": "City",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "contact.address.region",
+      "label": "State or region",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "contact.address.postal_code",
+      "label": "Postal code",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "links.linkedin",
+      "label": "LinkedIn URL",
+      "valueType": "string",
+      "sensitivity": "standard",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "links.portfolio",
+      "label": "Portfolio URL",
+      "valueType": "string",
+      "sensitivity": "standard",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "links.github",
+      "label": "GitHub URL",
+      "valueType": "string",
+      "sensitivity": "standard",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "employment.current_company",
+      "label": "Current company",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "employment.current_title",
+      "label": "Current title",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "employment.start_date",
+      "label": "Employment start date",
+      "valueType": "date",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "employment.end_date",
+      "label": "Employment end date",
+      "valueType": "date",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "education.school",
+      "label": "School",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "education.degree",
+      "label": "Degree",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "education.field",
+      "label": "Field of study",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "education.graduation_date",
+      "label": "Graduation date",
+      "valueType": "date",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "job.notice_period",
+      "label": "Notice period",
+      "valueType": "string",
+      "sensitivity": "standard",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "job.available_start_date",
+      "label": "Available start date",
+      "valueType": "date",
+      "sensitivity": "standard",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "job.salary_expectation",
+      "label": "Salary expectation",
+      "valueType": "decimal",
+      "sensitivity": "confidential",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "job.relocation",
+      "label": "Willing to relocate",
+      "valueType": "boolean",
+      "sensitivity": "standard",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "job.remote_preference",
+      "label": "Remote-work preference",
+      "valueType": "enum",
+      "sensitivity": "standard",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "authorization.us_authorized",
+      "label": "Authorized to work in the United States",
+      "valueType": "boolean",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "authorization.sponsorship_required",
+      "label": "Requires current or future sponsorship",
+      "valueType": "boolean",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "authorization.export_control",
+      "label": "Export-control eligibility",
+      "valueType": "enum",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "disclosure.non_compete",
+      "label": "Non-compete or restrictive covenant",
+      "valueType": "boolean",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "disclosure.conflict_of_interest",
+      "label": "Potential conflict of interest",
+      "valueType": "boolean",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "demographic.gender",
+      "label": "Voluntary gender disclosure",
+      "valueType": "enum",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "demographic.race_ethnicity",
+      "label": "Voluntary race or ethnicity disclosure",
+      "valueType": "enum",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "demographic.veteran",
+      "label": "Voluntary veteran disclosure",
+      "valueType": "enum",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "demographic.disability",
+      "label": "Voluntary disability disclosure",
+      "valueType": "enum",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "documents.resume",
+      "label": "Resume",
+      "valueType": "file",
+      "sensitivity": "confidential",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "documents.cover_letter",
+      "label": "Cover letter",
+      "valueType": "file",
+      "sensitivity": "confidential",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "questions.why_company",
+      "label": "Why this company?",
+      "valueType": "text",
+      "sensitivity": "standard",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "questions.relevant_experience",
+      "label": "Relevant experience",
+      "valueType": "text",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "attestation.truthful",
+      "label": "Application information is truthful",
+      "valueType": "boolean",
+      "sensitivity": "restricted",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "attestation.terms",
+      "label": "Employer application terms",
+      "valueType": "boolean",
+      "sensitivity": "restricted",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "signature.electronic",
+      "label": "Electronic signature",
+      "valueType": "string",
+      "sensitivity": "restricted",
+      "answerPolicy": "explicit_each_time"
+    }
+  ]
+}

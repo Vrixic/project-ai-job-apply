@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { readFile } from "node:fs/promises";
+import { defaultFieldDefinitions } from "@ai-job-apply/applications-service";
 import { createOidcIdTokenVerifier, createOidcVerifier } from "@ai-job-apply/auth";
 import {
   BillingEntitlementService,
@@ -45,7 +45,7 @@ import {
 } from "@ai-job-apply/profile-service";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { createGatewayApplication } from "./application.js";
-import { createApplicationsRuntime, loadFieldDefinitions } from "./applications-runtime.js";
+import { createApplicationsRuntime } from "./applications-runtime.js";
 import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
 import {
@@ -156,21 +156,15 @@ const candidateDataExportDownloads =
     : undefined;
 
 // Applications stay dark unless explicitly enabled for local development. The database must already
-// have the Applications migration applied, and the taxonomy path must be given explicitly.
-const applicationsTaxonomyPath = process.env.APPLICATION_FIELD_TAXONOMY_PATH;
-if (process.env.APPLICATIONS_ENABLED === "true" && !applicationsTaxonomyPath) {
-  throw new Error("APPLICATION_FIELD_TAXONOMY_PATH is required when APPLICATIONS_ENABLED=true");
-}
+// have the Applications migration applied.
 const applications =
-  process.env.APPLICATIONS_ENABLED === "true" && applicationsTaxonomyPath
+  process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
         client: database.client,
         profile: store,
         documents,
         catalog,
-        definitions: loadFieldDefinitions(
-          JSON.parse(await readFile(applicationsTaxonomyPath, "utf8")),
-        ),
+        definitions: defaultFieldDefinitions(),
       })
     : undefined;
 

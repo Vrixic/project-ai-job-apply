@@ -1,6 +1,7 @@
 export * from "./attempt.js";
 export * from "./canonical.js";
 export * from "./current-action.js";
+export * from "./field-definitions.js";
 export * from "./field-policy.js";
 export * from "./metrics.js";
 export * from "./packet.js";

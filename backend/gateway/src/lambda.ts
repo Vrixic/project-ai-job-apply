@@ -1,3 +1,4 @@
+import { defaultFieldDefinitions } from "@ai-job-apply/applications-service";
 import "reflect-metadata";
 import { randomBytes } from "node:crypto";
 import {
@@ -59,6 +60,7 @@ import type {
   Handler,
 } from "aws-lambda";
 import { createGatewayApplication } from "./application.js";
+import { createApplicationsRuntime } from "./applications-runtime.js";
 import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
 import { createConfiguredD2TrustRuntime } from "./d2-trust-runtime.js";
@@ -222,6 +224,24 @@ const ACCOUNT_DELETION_REQUEST_PATH_PATTERN =
   /^\/v1\/me\/account-deletion-requests\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ACCOUNT_DELETION_CONFIRMATION_PATH_PATTERN =
   /^\/v1\/me\/account-deletion-requests\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/confirm$/;
+const APPLICATION_ID = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const APPLICATION_READ_PATH_PATTERN = new RegExp(`^/v1/applications/${APPLICATION_ID}$`, "u");
+const APPLICATION_HISTORY_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/history$`,
+  "u",
+);
+const APPLICATION_COMMAND_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/(?:packets|approval|reopen|cancel|submissions)$`,
+  "u",
+);
+const APPLICATION_DISPATCH_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/attempts/${APPLICATION_ID}/dispatch$`,
+  "u",
+);
+const APPLICATION_ATTEMPT_COMMAND_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/attempts/${APPLICATION_ID}/(?:result|reconciliation)$`,
+  "u",
+);
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -239,6 +259,7 @@ interface AllowedRoute {
   acceptsBody: boolean;
   protected: boolean;
   acceptsReviewQueueQuery?: true;
+  acceptsApplicationHistoryQuery?: true;
 }
 
 function exactD2RouteKey(routeKey: string, expected: string): boolean {
@@ -256,6 +277,24 @@ function allowedRoute(
   }
   if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
     return { acceptsBody: method === "PUT" || method === "POST", protected: true };
+  }
+  if (
+    method === "POST" &&
+    (path === "/v1/applications" ||
+      path === "/v1/applications/search" ||
+      APPLICATION_COMMAND_PATH_PATTERN.test(path) ||
+      APPLICATION_ATTEMPT_COMMAND_PATH_PATTERN.test(path))
+  ) {
+    return { acceptsBody: true, protected: true };
+  }
+  if (method === "POST" && APPLICATION_DISPATCH_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "GET" && APPLICATION_READ_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "GET" && APPLICATION_HISTORY_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true, acceptsApplicationHistoryQuery: true };
   }
   if (method === "PATCH" && PROFILE_FACT_PATH_PATTERN.test(path)) {
     return { acceptsBody: true, protected: true };
@@ -474,7 +513,10 @@ function requestPayload(
 ): { failure?: APIGatewayProxyStructuredResultV2; payload?: string } {
   if (
     event.rawQueryString &&
-    (!route.acceptsReviewQueueQuery || !validReviewQueueQuery(event.rawQueryString))
+    !(
+      (route.acceptsReviewQueueQuery && validReviewQueueQuery(event.rawQueryString)) ||
+      (route.acceptsApplicationHistoryQuery && validApplicationHistoryQuery(event.rawQueryString))
+    )
   ) {
     return {
       failure: boundaryFailure(event, 400, "invalid_request", "Invalid request"),
@@ -524,6 +566,20 @@ function validReviewQueueQuery(raw: string): boolean {
     if (key === "state" && ["needs_review", "appeal_pending"].includes(value)) continue;
     if (key === "pageSize" && /^(?:[1-9]|1[0-9]|2[0-5])$/u.test(value)) continue;
     if (key === "cursor" && /^[A-Za-z0-9_-]{1,400}$/u.test(value)) continue;
+    return false;
+  }
+  return seen.size > 0;
+}
+
+/** Only bounded, unique `afterSeq` and `limit` integers are forwarded to the history route. */
+function validApplicationHistoryQuery(raw: string): boolean {
+  if (raw.length > 64) return false;
+  const seen = new Set<string>();
+  for (const [key, value] of new URLSearchParams(raw)) {
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (key === "afterSeq" && /^\d{1,9}$/u.test(value)) continue;
+    if (key === "limit" && /^(?:[1-9]|[1-9][0-9]|1[0-9][0-9]|200)$/u.test(value)) continue;
     return false;
   }
   return seen.size > 0;
@@ -780,7 +836,8 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
       return app.inject({
         method,
         url:
-          route.acceptsReviewQueueQuery && event.rawQueryString
+          (route.acceptsReviewQueueQuery || route.acceptsApplicationHistoryQuery) &&
+          event.rawQueryString
             ? `${path}?${event.rawQueryString}`
             : path,
         headers,
@@ -968,6 +1025,13 @@ async function createConfiguredApplication(
   const trust = d2.trustConfiguration
     ? createConfiguredD2TrustRuntime(database.client, d2.trustConfiguration)
     : undefined;
+  const applications = createApplicationsRuntime({
+    client: database.client,
+    profile: store,
+    documents,
+    catalog,
+    definitions: defaultFieldDefinitions(),
+  });
   return createGatewayApplication({
     store,
     catalog,
@@ -980,6 +1044,7 @@ async function createConfiguredApplication(
     ...(ugcContributionPolicyVersion ? { ugcContributionPolicyVersion } : {}),
     moderation,
     savedJobs,
+    applications,
     privateSavedPageCaptures,
     matchAssessments,
     entitlements,

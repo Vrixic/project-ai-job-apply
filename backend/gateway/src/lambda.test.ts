@@ -1224,3 +1224,118 @@ describe("API Gateway Lambda boundary", () => {
     );
   });
 });
+
+describe("Applications routes at the Lambda boundary", () => {
+  const id = "019d04cf-1f80-7000-8000-000000000101";
+  const attempt = "019d04cf-1f80-7000-8000-000000000102";
+  const json = { "content-type": "application/json", authorization: "Bearer opaque" };
+  const invocation = (method: string, path: string, extra: Partial<AuthorizedHttpApiEvent> = {}) =>
+    routedEvent(method, path, { headers: json, ...extra });
+  const dispatcher = () => {
+    const inject = vi.fn(async () => ({
+      statusCode: 200,
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    }));
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge: createInvocationPrincipalBridge(),
+    });
+    return { inject, handler };
+  };
+
+  it.each([
+    ["POST", "/v1/applications", "{}"],
+    ["POST", "/v1/applications/search", "{}"],
+    ["GET", `/v1/applications/${id}`, undefined],
+    ["GET", `/v1/applications/${id}/history`, undefined],
+    ["POST", `/v1/applications/${id}/packets`, "{}"],
+    ["POST", `/v1/applications/${id}/approval`, "{}"],
+    ["POST", `/v1/applications/${id}/reopen`, "{}"],
+    ["POST", `/v1/applications/${id}/cancel`, "{}"],
+    ["POST", `/v1/applications/${id}/submissions`, "{}"],
+    ["POST", `/v1/applications/${id}/attempts/${attempt}/dispatch`, undefined],
+    ["POST", `/v1/applications/${id}/attempts/${attempt}/result`, "{}"],
+    ["POST", `/v1/applications/${id}/attempts/${attempt}/reconciliation`, "{}"],
+  ])("forwards %s %s to the gateway after authentication", async (method, path, body) => {
+    const { inject, handler } = dispatcher();
+    const response = await invoke(
+      handler,
+      invocation(method as string, path as string, body === undefined ? {} : { body }),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(inject).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["wrong method", "GET", "/v1/applications"],
+    ["non-v7 identifier", "GET", "/v1/applications/00000000-0000-1000-8000-000000000001"],
+    ["traversal", "GET", `/v1/applications/${id}/../me`],
+    ["unknown suffix", "POST", `/v1/applications/${id}/delete`],
+    ["dispatch with a bad attempt id", "POST", `/v1/applications/${id}/attempts/nope/dispatch`],
+    ["delete", "DELETE", `/v1/applications/${id}`],
+  ])("does not route %s", async (_label, method, path) => {
+    const { inject, handler } = dispatcher();
+    const response = await invoke(handler, invocation(method as string, path as string));
+    expect(response.statusCode).toBe(404);
+    expect(inject).not.toHaveBeenCalled();
+  });
+
+  it("requires a body on commands and refuses one on reads and dispatch", async () => {
+    const { inject, handler } = dispatcher();
+    expect(
+      (await invoke(handler, invocation("POST", `/v1/applications/${id}/cancel`))).statusCode,
+    ).toBe(400);
+    expect(
+      (await invoke(handler, invocation("GET", `/v1/applications/${id}`, { body: "{}" })))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await invoke(
+          handler,
+          invocation("POST", `/v1/applications/${id}/attempts/${attempt}/dispatch`, { body: "{}" }),
+        )
+      ).statusCode,
+    ).toBe(400);
+    expect(inject).not.toHaveBeenCalled();
+  });
+
+  it("accepts only bounded unique afterSeq and limit on the history route", async () => {
+    const path = `/v1/applications/${id}/history`;
+    for (const [query, status] of [
+      ["afterSeq=3&limit=50", 200],
+      ["limit=200", 200],
+      ["limit=201", 400],
+      ["limit=0", 400],
+      ["afterSeq=1&afterSeq=2", 400],
+      ["afterSeq=abc", 400],
+      ["owner=other", 400],
+      ["afterSeq=1234567890", 400],
+    ] as const) {
+      const { handler } = dispatcher();
+      const response = await invoke(handler, invocation("GET", path, { rawQueryString: query }));
+      expect(response.statusCode, query).toBe(status);
+    }
+    // No other Applications route accepts a query string.
+    const { handler } = dispatcher();
+    expect(
+      (
+        await invoke(
+          handler,
+          invocation("GET", `/v1/applications/${id}`, { rawQueryString: "limit=5" }),
+        )
+      ).statusCode,
+    ).toBe(400);
+  });
+
+  it("rejects an unauthenticated call before dispatch", async () => {
+    const { inject, handler } = dispatcher();
+    const input = invocation("GET", `/v1/applications/${id}`);
+    delete input.requestContext.authorizer;
+    expect((await invoke(handler, input)).statusCode).toBe(401);
+    expect(inject).not.toHaveBeenCalled();
+  });
+});
