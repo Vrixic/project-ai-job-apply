@@ -563,4 +563,193 @@ describe("domain schema registry", () => {
       }),
     ).toBe(false);
   });
+
+  it("exports the Applications section without internal identifiers, scope keys, or hiring outcomes", async () => {
+    const schema = JSON.parse(
+      await readFile(
+        new URL("../schemas/v1/candidate-data-export.schema.json", import.meta.url),
+        "utf8",
+      ),
+    ) as object;
+    const ajv = new Ajv2020({ strict: true });
+    const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) => Ajv2020;
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    const at = "2026-09-18T12:00:00.000Z";
+    const id = (suffix: string) => `019d04cf-1f80-7000-8000-0000000000${suffix}`;
+    const base = {
+      schemaVersion: 1,
+      format: "candidate-data-export-v1",
+      exportId: id("a0"),
+      policyVersion: "d3-development-synthetic-v1",
+      generatedAt: at,
+      candidate: { email: "candidate@example.test", createdAt: at, connectedAccounts: [] },
+      profile: { preferences: null, facts: [] },
+      documents: { resumes: [] },
+      jobs: { reports: [] },
+      matching: { savedJobs: [] },
+      billing: { entitlement: { plan: "free", version: 0, effectiveAt: at } },
+      audit: { events: [] },
+    };
+    const field = {
+      fieldKey: "contact.email",
+      value: "candidate@example.test",
+      origin: "confirmed_fact",
+      sourceFactIds: [id("a1")],
+      confidence: 0.99,
+      disposition: "auto",
+      reasons: [],
+      requiresReview: false,
+    };
+    const applications = {
+      schemaVersion: 1,
+      applications: [
+        {
+          id: id("b0"),
+          canonicalJobId: id("b1"),
+          status: "applied",
+          revision: 7,
+          currentPacketId: id("b2"),
+          createdAt: at,
+          updatedAt: at,
+        },
+      ],
+      packets: [
+        {
+          id: id("b2"),
+          applicationId: id("b0"),
+          version: 1,
+          packetHash: "a".repeat(64),
+          jobRevision: "b".repeat(64),
+          formAdapterId: "greenhouse",
+          formVariantId: "board-v1",
+          formHash: "c".repeat(64),
+          resumeHash: "d".repeat(64),
+          createdAt: at,
+          fields: [field, { ...field, fieldKey: "job.remote_preference", value: null }],
+        },
+      ],
+      approvals: [
+        {
+          id: id("b3"),
+          packetId: id("b2"),
+          applicationId: id("b0"),
+          packetHash: "a".repeat(64),
+          acknowledgedFieldKeys: ["contact.email"],
+          approvedAt: at,
+          expiresAt: "2026-09-19T12:00:00.000Z",
+        },
+      ],
+      attempts: [
+        {
+          id: id("b4"),
+          applicationId: id("b0"),
+          packetId: id("b2"),
+          sequence: 1,
+          status: "confirmed",
+          adapterId: "greenhouse",
+          adapterVersion: "1.0.0",
+          startedAt: at,
+          dispatchedAt: at,
+          resolvedAt: at,
+          evidenceKind: "provider_confirmation_page",
+          evidenceObservedAt: at,
+          evidenceProviderReference: "confirmation-123",
+        },
+      ],
+      history: [
+        {
+          applicationId: id("b0"),
+          seq: 1,
+          kind: "application_created",
+          toStatus: "preparing",
+          occurredAt: at,
+        },
+      ],
+    };
+    const exported = {
+      ...base,
+      applications,
+      audit: {
+        events: [
+          {
+            owner: "applications",
+            action: "applications.application_created",
+            resourceType: "application",
+            resourceId: id("b0"),
+            occurredAt: at,
+          },
+        ],
+      },
+    };
+
+    expect(validateCandidateDataExportV1(exported)).toBe(true);
+    expect(validate(exported)).toBe(true);
+    // Older exports never had the section, so its absence stays valid.
+    expect(validateCandidateDataExportV1(base)).toBe(true);
+
+    const rejected: Array<[string, unknown]> = [
+      [
+        "owner id",
+        {
+          ...applications,
+          applications: [{ ...applications.applications[0], ownerUserId: id("c0") }],
+        },
+      ],
+      [
+        "scope key",
+        { ...applications, attempts: [{ ...applications.attempts[0], scopeKey: "e".repeat(64) }] },
+      ],
+      [
+        "consent id",
+        { ...applications, approvals: [{ ...applications.approvals[0], consentId: id("c1") }] },
+      ],
+      [
+        "evidence fingerprint",
+        {
+          ...applications,
+          attempts: [{ ...applications.attempts[0], evidenceFingerprint: "f".repeat(64) }],
+        },
+      ],
+      [
+        "hiring outcome status",
+        {
+          ...applications,
+          applications: [{ ...applications.applications[0], status: "interview_scheduled" }],
+        },
+      ],
+      [
+        "hiring outcome history",
+        { ...applications, history: [{ ...applications.history[0], kind: "offer_received" }] },
+      ],
+      [
+        "unknown packet field key",
+        {
+          ...applications,
+          packets: [{ ...applications.packets[0], fields: [{ ...field, rawHtml: "<b>" }] }],
+        },
+      ],
+      [
+        "oversized value",
+        {
+          ...applications,
+          packets: [
+            { ...applications.packets[0], fields: [{ ...field, value: "x".repeat(20001) }] },
+          ],
+        },
+      ],
+      ["extra section key", { ...applications, recruiterMessages: [] }],
+    ];
+    for (const [label, section] of rejected) {
+      expect(validateCandidateDataExportV1({ ...exported, applications: section }), label).toBe(
+        false,
+      );
+    }
+    expect(
+      validateCandidateDataExportV1({
+        ...exported,
+        audit: { events: [{ ...exported.audit.events[0], owner: "recruiter" }] },
+      }),
+    ).toBe(false);
+  });
 });
