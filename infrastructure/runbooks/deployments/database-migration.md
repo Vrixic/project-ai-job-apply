@@ -13,12 +13,13 @@ service and must return to zero running tasks after every migration.
 - Confirm the image contains the migration orchestrator plus every declared independently
   checksum-verifying service-owned migration package. The orchestrator must run owners in declared
   order and stop before later owners if any owner fails.
-- For the Phase 2 package, require the exact
-  `d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1` manifest, the ordered Profile,
-  Jobs, Documents, Matching, Billing, and Trust runners, ten declared schemas, 68 declared regular
-  relations, and 46 checksum-bound migrations, including Jobs `0024` and Trust `0005` before enabling
-  the compatible Gateway or either D2 worker. Reject older D1 package and
-  receipt boundaries.
+- For the Phase 3 package, require the exact
+  `d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1` manifest, the
+  ordered Profile, Jobs, Documents, Matching, Billing, Trust, and Applications runners, eleven declared
+  schemas, 76 declared regular relations, and 47 checksum-bound migrations, including Jobs `0024`, Trust
+  `0005`, and Applications `0001` before enabling the compatible Gateway or either D2 worker. Apply the
+  Applications migration before releasing a Gateway that composes it. Reject older D1/D2 package and
+  receipt boundaries; a prior six-owner release remains verifiable only against its own recorded boundary.
 - Before Jobs `0023`/Trust `0004`, pause D2 contribution/reviewer writes and both workers through
   `d2_community_runtime.maintenance_mode = true`. Verify the exact disabled-version aliases,
   existing false handler flags, both function reservations at zero, disabled EventBridge schedule,

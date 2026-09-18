@@ -7,9 +7,10 @@ another service's tables.
 ## Subfolders
 
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
-- `restore-manifest.v1.json` — Canonical Phase 2 six-owner restore boundary: ten owned schemas
-  (including the empty-table `jobs_public` projection schema), 68 regular relations, and 46
-  checksum-bound migrations.
+- `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
+  after Trust): eleven owned schemas (including the empty-table `jobs_public` projection schema), 76
+  regular relations, and 47 checksum-bound migrations. The Docker-based Phase 2 recovery harness
+  described below still asserts the prior six-owner boundary and has not been updated or re-run.
 
 Adding a schema owner requires adding its independently checksum-verified runner here, including it
 in `Dockerfile.migration`, and updating restore verification. The container remains a bounded

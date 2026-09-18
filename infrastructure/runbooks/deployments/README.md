@@ -18,6 +18,9 @@ saved infrastructure plan, success evidence, and recovery boundary.
 - [Development ingestion Lambda publication](development-ingestion-lambda-publication.md) — Tests,
   reproducibly builds, immutably publishes, and exact-version verifies only the ingestion durable
   and runtime artifact sets without changing runtime.
+- [D3 Applications development rollout](d3-applications-development-rollout.md) — Prepared, unexecuted
+  sequence that adds the Applications migration owner and the Gateway that composes it through the guarded
+  operators, with the reviewer checkpoint for each step.
 - [Database migration](database-migration.md) — Publishes the scanned migration-only image and
   runs exactly one hardened Fargate task while the retained cluster otherwise stays empty.
 - [Development document-processing acceptance](development-document-processing-acceptance.md) —
