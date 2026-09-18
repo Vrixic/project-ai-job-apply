@@ -32,11 +32,11 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-026: Host Next.js presentation boundaries on Vercel](026-vercel-nextjs-presentation-hosting.md)
 - [ADR-028: Separate private saves, public contributions, Jobs truth, and UGC trust](028-extension-ugc-ownership-and-processing.md)
 - [ADR-029: Use one explicit public-job addition command in the extension](029-one-step-public-job-addition.md)
+- [ADR-030: AI gateway and grounded generation](030-ai-gateway-and-grounded-generation.md)
 
 ## Proposed delivery decisions
 
 - [ADR-027: Profile-owned candidate rights workflows](027-profile-owned-candidate-rights-workflows.md)
-- [ADR-030: AI gateway and grounded generation](030-ai-gateway-and-grounded-generation.md)
 
 Use `000-template.md` for future decisions.
 
