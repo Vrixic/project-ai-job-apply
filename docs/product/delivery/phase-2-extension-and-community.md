@@ -1311,13 +1311,35 @@ Trust metric datapoints; it proves no new post-fix processing or observed zero-e
   `pnpm check` gate (skills/infrastructure validation, all D2/D1 operator suites, format, lint,
   typecheck, dependency security, and all 34 Turbo build/test tasks) passes clean. The disposable
   Postgres/Redis/OTEL stack is removed and Docker Desktop/WSL are stopped.
-- Remaining: publish compatible immutable Gateway/D2 worker artifacts and apply `0024` against the
-  real development AWS account (`713881805761`, `us-east-2`), verify backfill and zero drift, then
-  obtain only the final exact owner Processing/Trust readback for contribution `01a0ac45`. This is
-  a live cloud deployment and database migration against real infrastructure; per
-  `skills/deploy-aws-platform` and standing safety practice, it requires the owner's explicit
-  go-ahead before executing, not just an implementation directive. Do not repeat the accepted
-  appeal, contribution submission or takedown.
+- Deployment (2026-09-17 to 2026-09-18, source `c377bc9`, which contains `0024`): the owner
+  authorizes the deployment. The operator-guarded sequence is Pause (cutoff `20:13:46Z`), compatible
+  D2 Workers artifact (state `360`), the single one-off ECS migration task (exit `0`, seven aggregate
+  success messages, image digest `sha256:6c6ad2ea...`; Jobs `0024` applied and its backfill queued
+  behind the fence), the compatible Gateway release (state `362`), then Resume after the mandatory
+  asynchronous retirement window (earliest `2026-09-18T02:15:16Z`). No Terraform was run outside the
+  guarded operators; a bare `terraform plan` without the operator's reconstructed variables was
+  refresh-only, saved nothing and applied nothing.
+- Resume required a fresh migration record: ECS retains stopped tasks only about an hour, so the
+  original task's record was gone by the time the window elapsed and the operator's task-proof check
+  failed closed. That guard was not bypassed. One additional reviewed `PlanExecution`/`Execute`
+  replayed the already-applied forward-only migrations (task `721bb893...`, exit `0`, seven aggregate
+  success messages, zero active tasks; receipt SHA-256 `cf351fd5...`), which is a no-op against the
+  verified schema. The migration `Verify` step then reported two proposed Gateway changes only:
+  it reconstructs its inputs from the earlier task plan and therefore proposed reverting the
+  already-released `c377bc9` Gateway artifact. That plan was not applied; live state was the
+  intended state. **Lesson:** run the migration task near the end of the drain window and Resume
+  immediately, as the runbook states, or budget for a replay.
+- Resume: the reviewed plan changed only the D2 schedule (`DISABLED`→`ENABLED`), the Trust signal
+  mapping (enabled), reserved concurrency (scheduled `0`→`1`, Trust signal `0`→`2`) and the
+  corresponding versions/aliases; no destroy. One Apply (state `362`→`363`, receipt SHA-256
+  `147de27a...`) and the operator `Verify` pass with a zero-drift baseline, Trust queue `0` pending /
+  `0` in flight. Aliases are now scheduled `33`, Trust signal `26`, Gateway `76`.
+- Post-resume health (2026-09-18): all 50 development alarms `OK`, Trust queue and DLQ empty, and
+  the scheduled worker recorded three invocations with zero errors and zero throttles in the
+  observed window. This is not proof that the exact contribution was restored.
+- Remaining: only the owner's Processing/Trust readback for contribution `01a0ac45` (expected
+  Processing `published`, Trust `accepted`). Do not repeat the appeal, submission or takedown. D2-079
+  moves to Complete, and D2-074 to Complete, once the owner reports that readback.
 
 ### D2-075 — Default missing preview work type to in-person
 
@@ -3780,11 +3802,20 @@ D2-036 and D2-037 are Complete; D2-038 is implemented with cloud validation pend
 | Takedown and human appeal-decision acceptance | Hosted sign-in, authenticated empty appeal-queue read and logout/root-reload checks are user-confirmed Complete on September 14 at protected `211e59d`. Assignments remain unchanged, the short public alias stays identity-dark and persistent project env keys remain zero. | Separately authorized takedown/human appeal-decision journeys remain. Do not repeat hosted-access checks or manufacture a case to test access. Preserve independent reviewers and evidence/version binding; no new secret, repeated reuse approval, borrowed human session or expanded reviewer role is needed. |
 | End-user extension release boundary | D2-073 production/store diagnostic exclusion and exact per-intent feedback pass 467 extension tests and isolated Edge/Chrome product checks. Updated support copy is deployed from `cd896b2`. Core sign-in, inspect/preview/add and provider publication exist. | Align final release screenshots/materials with the eventual approved enabled artifact. No further manual diagnostic-panel testing; preserve automated authentication, account isolation and retry regressions. |
 | Accessibility scope (manual screen reader deferred) | Keyboard/reflow/geometry and automated axe checks pass. The owner confirms the installed shared-history keyboard route in both Chrome and Edge on September 15. | Manual screen-reader testing is explicitly deferred by the owner and is not a Phase 2/product-launch blocker or passed test. Preserve existing accessibility controls and automated coverage; independent store requirements remain separate. |
-| Alarm notification receipt | Thirteen D2 alarms are healthy; guarded synthetic alarm/OK exercise and preflight are implemented. Owner approves running it during this deployment session (`2026-09-17`). | Run the exercise last and obtain recipient confirmation of both ALARM and recovery; healthy alarm state is not proof of delivery. See [work log](#work-log) for the result. |
+| Alarm notification receipt | All 50 development alarms are `OK`. The guarded synthetic exercise ran on `2026-09-18`: the canary reached `ALARM` and recovered to `OK` with one confirmed and zero pending subscriptions. | Owner confirms both the ALARM and recovery notifications arrived. Healthy alarm state and a successful publish are not proof of delivery. |
+| D2-079/D2-074 owner readback | Migration `0024`, worker and Gateway are deployed, D2 is resumed and zero-drift is verified ([record](#d2-079--restore-publication-state-after-a-reversed-takedown)). | Owner reports contribution `01a0ac45` as Processing `published` and Trust `accepted`. |
 | Support and store release | Hosted support route, icons/promotion assets, disclosures, and deterministic packaging exist. D2-073's end-user instructions are deployed and verified at candidate source `cd896b2`. Owner explicitly defers production/store activation to a separate launch-preparation phase (`2026-09-17`; [decision](#storeproduction-launch-remains-deferred)). | Not a Phase 2 closure blocker. When launch preparation resumes: support-email setup/verification/monitoring, final installed listing screenshots from the store-enabled artifact, and exact-candidate/accountable/store approval remain release work. |
 | Final security/privacy/product acceptance and inherited D1 gates | Engineering delta and explicit development exception are documented. The product owner formally accepts this evidence on `2026-09-17` as an engineering-only disposition ([decision](#final-security-privacy-product-accountable-disposition)), not production security/privacy/legal approval. | Closed for Phase 2 engineering-completion purposes. Revisit if scope, providers, or production activation change. |
 
 ## Work log
+
+D2-079 deployed (`2026-09-18`): migration `0024` and the compatible D2 worker/Gateway are live and
+D2 processing is resumed with verified zero drift and healthy alarms. The owner's Processing/Trust
+readback for the restored contribution is the only remaining D2-079/D2-074 evidence; see
+[D2-079](#d2-079--restore-publication-state-after-a-reversed-takedown) for the operator record.
+The synthetic ALARM/OK canary exercise ran once: the canary reached `ALARM` and recovered to `OK`
+with one confirmed subscription and no pending ones. Delivery is not claimed until the owner
+confirms both notifications arrived.
 
 Appeal reversal submitted (`2026-09-17`, D2-074): after a fresh independent-reviewer sign-in and
 MFA, the owner loads the Mintlify appeal case and records the version-fenced **Reverse appeal**
