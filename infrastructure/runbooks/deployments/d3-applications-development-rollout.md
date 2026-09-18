@@ -1,8 +1,9 @@
 # D3 Applications Development Rollout
 
-- Status: Prepared 2026-09-18. **Nothing in this procedure has been executed.** The product owner
-  authorized development cloud deployment on 2026-09-18; every step below still runs only through the
-  guarded operators, with the saved-plan and independent-reviewer checkpoints those operators define.
+- Status: Steps 1-7 and 9 executed in development on 2026-09-18 (evidence on D3-015 in the
+  [phase record](../../../docs/product/delivery/phase-3-application-preparation.md)). Steps 8 (deployed
+  acceptance) and the Auth0 prerequisite (5) are pending. Every step ran only through the guarded operators,
+  with the saved-plan and reviewer checkpoints those operators define.
 - Scope: adds the Applications schema (migration `0001`) and releases a Gateway that composes the
   Applications runtime, in the isolated development account. No staging, no public exposure, no
   real-candidate data, no provider, and no live ATS effect. Live ATS effects stay off (D3-012).
@@ -15,7 +16,7 @@ The Gateway Lambda now composes the Applications store and admits the twelve `/v
 routes. Until the schema exists those calls fail, and until Auth0 issues an `applications:*` scope the
 Gateway rejects them (403), so the release is safe either way. Apply the schema first anyway.
 
-## Hard prerequisites (none are satisfied yet)
+## Hard prerequisites (1-4 were satisfied for the 2026-09-18 run; 5 is still open)
 
 1. The reviewed D3 commits are merged to `origin/main`, and the operator shell is on a clean `main`
    exactly equal to it. Every operator, including read-only `Status`, refuses otherwise.
@@ -24,6 +25,8 @@ Gateway rejects them (403), so the release is safe either way. Apply the schema 
    `ai-job-apply-development-admin`), portable Terraform `1.16.2` (`. ./scripts/use-deployment-terraform.ps1`).
 4. A current schema-7 baseline handoff. After the D2-079 deployment, capture a fresh zero-drift baseline
    with `operate-development-gateway-release.ps1 -Action CaptureBaseline`; do not reuse an older sidecar.
+   Seed it from the most recent verified zero-drift plan after any shared-state change (for example a D2
+   runtime pause or resume): a stale seed is refused by the guard, which is correct.
 5. Auth0: add the API permissions `applications:read` and `applications:write` to the development API and
    grant them only to the clients that should call Applications (see the Auth0 runbook). Tokens must also
    carry an existing route-authorizer scope (for example `profile:read`), because the API Gateway `$default`
