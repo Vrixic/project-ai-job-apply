@@ -107,12 +107,12 @@ if (@($errors).Count -ne 0) { throw "The shared workload inspector did not parse
 $boundary = Get-D1RestoreManifestBoundary $repositoryRoot
 if (
   [string]$boundary.ManifestId -cne `
-    "d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1" -or
-  [int]$boundary.OwnerCount -ne 6 -or
-  (@($boundary.OwnerNames) -join ",") -cne "billing,documents,jobs,matching,profile,trust" -or
-  [int]$boundary.SchemaCount -ne 10 -or
-  [int]$boundary.RelationCount -ne 68 -or
-  [int]$boundary.MigrationCount -ne 46 -or
+    "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1" -or
+  [int]$boundary.OwnerCount -ne 7 -or
+  (@($boundary.OwnerNames) -join ",") -cne "applications,billing,documents,jobs,matching,profile,trust" -or
+  [int]$boundary.SchemaCount -ne 11 -or
+  [int]$boundary.RelationCount -ne 76 -or
+  [int]$boundary.MigrationCount -ne 47 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."
@@ -178,9 +178,9 @@ foreach ($priorMigrationCount in @(41, 42)) {
   $null = ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $priorD2Boundary "historical"
   Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $priorD2Boundary
   Assert-Throws { ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $boundary "current" } `
-    "Prior $priorMigrationCount-migration D2 aggregate used as current 46-migration evidence"
+    "Prior $priorMigrationCount-migration D2 aggregate used as current 47-migration evidence"
   Assert-Throws { Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $boundary } `
-    "Prior $priorMigrationCount-migration D2 restore context used as current 46-migration evidence"
+    "Prior $priorMigrationCount-migration D2 restore context used as current 47-migration evidence"
 }
 
 foreach ($mutation in @(

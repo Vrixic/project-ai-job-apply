@@ -76,13 +76,14 @@ function successfulExecutor(source: RestoreManifestSource, count = "0"): Restore
 }
 
 describe("current restore manifest", () => {
-  it("binds the exact Phase 2 Profile, Jobs, Documents, Matching, Billing, and Trust bytes", async () => {
+  it("binds the exact Phase 3 Profile, Jobs, Documents, Matching, Billing, Trust, and Applications bytes", async () => {
     const source = loadCurrentRestoreManifest();
 
     expect(source.manifest.manifestId).toBe(
-      "d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1",
+      "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
     );
     expect(source.manifest.contributors.map((contributor) => contributor.owner)).toEqual([
+      "applications",
       "billing",
       "documents",
       "jobs",
@@ -93,13 +94,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(68);
+    expect(expectedRelations(source)).toHaveLength(76);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(46);
+    ).toBe(47);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact six-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -143,6 +144,7 @@ describe("current restore manifest", () => {
     const extended = createRestoreManifest(source.manifest, [future], "d2-with-future-v1");
 
     expect(extended.contributors.map((contributor) => contributor.owner)).toEqual([
+      "applications",
       "billing",
       "documents",
       "jobs",
@@ -151,14 +153,14 @@ describe("current restore manifest", () => {
       "recommendations",
       "trust",
     ]);
-    expect(source.manifest.contributors).toHaveLength(6);
+    expect(source.manifest.contributors).toHaveLength(7);
     expect(JSON.stringify(source.manifest.contributors)).toBe(existingContributors);
     expect(
       extended.contributors.filter((contributor) => contributor.owner !== "recommendations"),
     ).toEqual(source.manifest.contributors);
     expect(Object.isFrozen(extended)).toBe(true);
     expect(Object.isFrozen(extended.contributors)).toBe(true);
-    expect(Object.isFrozen(extended.contributors[4]?.migrations)).toBe(true);
+    expect(Object.isFrozen(extended.contributors[5]?.migrations)).toBe(true);
   });
 
   it.each([
@@ -246,11 +248,12 @@ describe("read-only aggregate restore verification", () => {
 
     expect(transactionModes).toEqual(["read only isolation level repeatable read"]);
     expect(result).toMatchObject({
-      manifestId: "d2-community-lifecycle-profile-jobs-documents-matching-billing-trust-v1",
+      manifestId:
+        "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
-      ownerCount: 6,
-      relationCount: 68,
-      migrationCount: 46,
+      ownerCount: 7,
+      relationCount: 76,
+      migrationCount: 47,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -427,9 +430,10 @@ describe("read-only aggregate restore verification", () => {
       expect(historical.sha256).not.toBe(current.sha256);
       await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
         manifestSha256: historical.sha256,
-        ownerCount: 6,
-        relationCount: 68,
-        migrationCount,
+        ownerCount: 7,
+        relationCount: 76,
+        // The Applications migration is part of both boundaries; only Jobs and Trust differ.
+        migrationCount: migrationCount + 1,
       });
       await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
         "migration boundary mismatch for jobs",

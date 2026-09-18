@@ -55,6 +55,7 @@ $currentSuccessMarkers = @(
   "Matching migrations through 0003_private_saved_page_captures applied and verified.",
   "Billing migrations through 0002_candidate_rights applied and verified.",
   "Trust migrations through 0005_development_test_removal applied and verified.",
+  "Applications migrations through 0001_applications_foundation applied and verified.",
   "All service-owned database migrations applied and verified."
 )
 if (@([regex]::Matches($source, 'AggregateSuccessLogCount\s+= \$stoppedTask.AggregateSuccessLogCount')).Count -ne 3 -or
@@ -78,13 +79,14 @@ if (($actualMessages -join "`n") -cne ($currentSuccessMarkers -join "`n")) {
 }
 $logSourceFiles = @{}
 foreach ($path in @("backend/services/database-migrations/src/index.ts", "backend/services/database-migrations/src/main.ts") +
-    @("profile", "jobs", "documents", "matching", "billing", "trust" | ForEach-Object { "backend/services/$_/src/migrate.ts" })) {
+    @("profile", "jobs", "documents", "matching", "billing", "trust", "applications" | ForEach-Object { "backend/services/$_/src/migrate.ts" })) {
   $logSourceFiles[$path] = Read-MigrationReleaseSource -ReleaseSourceSha $logReleaseSha -Path $path
 }
 $historicalLogFiles = @{} + $logSourceFiles
 $historicalLogFiles["backend/services/database-migrations/src/index.ts"] =
   $historicalLogFiles["backend/services/database-migrations/src/index.ts"].Replace(
-    '  { owner: "trust", executable: "trust/dist/src/migrate.js" },' + "`n", "")
+    '  { owner: "trust", executable: "trust/dist/src/migrate.js" },' + "`n", "").Replace(
+    '  { owner: "applications", executable: "applications/dist/src/migrate.js" },' + "`n", "")
 foreach ($ownerAndMaximum in @(@("profile", 7), @("jobs", 13), @("matching", 2))) {
   $path = "backend/services/$($ownerAndMaximum[0])/src/migrate.ts"
   $versionBlock = [regex]::Match($historicalLogFiles[$path], '(?s)const migrationVersions = \[(.*?)\] as const;')
