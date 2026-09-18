@@ -7,8 +7,8 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 
 ## Current D3 slice (source and local verification only)
 
-Implemented and locally verified against generated-synthetic data; **not deployed**, not exposed
-through the gateway or OpenAPI yet, and not wired into candidate export/deletion yet.
+Implemented and locally verified against generated-synthetic data; **not deployed**. The OpenAPI contract and gateway
+routes exist but fail closed (503) until a store is wired, and it is not part of candidate export/deletion yet.
 
 - `src/state-machine.ts` - the eight-state lifecycle (`preparing`, `review_required`, `approved`,
   `submitting`, `takeover`, `reconciliation_required`, `applied`, `cancelled`), a closed set of
@@ -33,6 +33,20 @@ through the gateway or OpenAPI yet, and not wired into candidate export/deletion
   approval evidence, one live approval per application, and a partial unique index that permits only
   one scope-holding attempt per (user, application, packet).
 
+- `src/service.ts` - the owner-scoped `ApplicationsApi` used by the gateway: maps store views to the
+  generated OpenAPI types, takes packet, live-binding, and job-gate ports, and emits best-effort
+  metrics. Every method takes the authenticated owner; nothing accepts an owner from a caller.
+- `src/packet-source.ts` - builds packet proposals from candidate-confirmed, usable facts only (one
+  documented exact mapping today), leaves competing facts to the candidate, and lets candidate
+  entries win.
+- `src/metrics.ts` - privacy-safe measurement: allow-listed names and opaque dimension tokens, per-field
+  correction, attempt outcome and latency, generation outcome, and rates by adapter/variant/model/prompt
+  version.
+
+Tests: 56 unit and 25 PostgreSQL integration tests, including lifecycle parity between the domain and the
+database guard, cross-owner isolation, an 8-way concurrent submission race, no-value-leak checks, and crash
+recovery.
+
 ## Verify
 
 ```powershell
@@ -45,8 +59,9 @@ pnpm --filter @ai-job-apply/applications-service test:integration
 
 ## Not yet implemented
 
-OpenAPI/event contracts and gateway routes, the durable submission workflow and outbox publisher,
-Profile/Jobs/Documents port adapters that assemble a packet from confirmed facts, candidate-rights
-export/deletion participation, restore-manifest composition, and any deployment. Live ATS effects
+The durable stale-attempt recovery scheduler and outbox publisher, Documents/Jobs adapters that supply
+artifact and job-revision hashes, vault-backed proposals and further fact-to-field mappings, Auth0 scopes and
+API Gateway routes, runtime composition, candidate-rights export/deletion participation, migration-image and
+restore-manifest composition (D3-014, D3-015), and any deployment. Live ATS effects
 stay disabled until D3-012 approval; see the
 [Phase 3 register](../../../docs/product/delivery/phase-3-application-preparation.md).

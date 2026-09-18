@@ -218,3 +218,5 @@ public-detail activation expression, so Terraform defaults leave both anonymous 
 ## Applications routes (D3, default off)
 
 `ApplicationsController` serves the `/v1/applications` routes through the `ApplicationsApi` port from `@ai-job-apply/applications-service`. Each route resolves the owner from the exact `applications:read` or `applications:write` scope, validates strict OpenAPI bodies, requires an idempotency key on commands, and returns fixed value-free problem details. Without an injected store every route returns `503 applications_unavailable`. The Auth0 scopes, API Gateway route authorizers, and runtime composition are not configured or deployed.
+
+Set `APPLICATIONS_ENABLED=true` and `APPLICATION_FIELD_TAXONOMY_PATH=data/taxonomies/application-fields.v1.json` to compose the Applications runtime in the local development gateway (`src/applications-runtime.ts`); the database must already have the Applications migration applied. The Lambda entry point does not compose it, so deployed environments keep returning `503`.
