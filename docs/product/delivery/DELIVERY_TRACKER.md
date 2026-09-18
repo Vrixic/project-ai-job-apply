@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 18 D3 started: D3-005 is In progress. The Applications service foundation (lifecycle, review policy, immutable packet hash and approval binding, write-ahead attempts with ambiguous-result reconciliation, and an owner-scoped idempotent PostgreSQL store with append-only history and identifier-only outbox) is implemented and locally verified with generated-synthetic data (41 unit, 15 PostgreSQL integration tests). No contract, gateway, workflow, deployment, real-candidate data or ATS action exists; live ATS effects stay disabled until D3-012, and D3-013 provider fixtures remain a human gate. See the [Phase 3 tasks](phase-3-application-preparation.md).
+
 September 18 D2 complete: Phase 2 closes for its controlled-development scope after the D2-079 deployment (Jobs `0024`, worker and Gateway live, D2 resumed, zero drift), owner-confirmed restoration of the test contribution (Processing `published`, Trust `accepted`) and alarm delivery, and an audit of all nine exit criteria. This is not production, store or public-release approval. Store review, manual screen-reader testing, the live Chrome/Edge token matrix, installed-browser lifecycle and load/abuse acceptance, and a live domain/version disable drill are deferred by owner decision to [D6-017 to D6-019](phase-6-mobile-and-paid.md#task-register). Inherited D1 gates are unchanged.
 
 September 17 D2-074/D2-079: the owner reports case
@@ -432,7 +434,7 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
 | D0 | Product, data, and legal foundation | Complete | 2026-07-27 | 2026-08-12 | [Phase 0 tasks](phase-0-foundation.md) |
 | D1 | Useful web product and canonical job catalog | In progress | 2026-08-11 | Not completed | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | D2 | Extension and community loop | Complete | 2026-09-01 | 2026-09-18 | [Phase 2 tasks](phase-2-extension-and-community.md) |
-| D3 | High-quality application preparation | Not started | Not started | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
+| D3 | High-quality application preparation | In progress | 2026-09-18 | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
 | D4 | Workday and remote preparation | Not started | Not started | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | Not started | Not started | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
 | D6 | Mobile and paid launch | Not started | Not started | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
@@ -1640,8 +1642,8 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
 
 ## D3 — High-quality application preparation
 
-- Status: Not started
-- Start: Not started
+- Status: In progress
+- Start: 2026-09-18
 - Completion: Not completed
 - Depends on: D0 facts/contracts and D1 jobs; may use D2 active-tab extension
 - Task document: [Phase 3 tasks](phase-3-application-preparation.md)
@@ -1695,6 +1697,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-18 | D3 | Started Phase 3. D3-005 is In progress with the Applications domain, migration `0001`, and owner-scoped PostgreSQL store implemented and locally verified (41 unit, 15 PostgreSQL 16.6 integration tests, generated-synthetic data only). D3-014 (candidate-rights participation) was added as discovered work. Nothing is deployed; no real data, live ATS action, contract or gateway change exists yet. | [Phase 3 tasks](phase-3-application-preparation.md), [Applications service](../../../backend/services/applications/README.md) |
 | 2026-09-18 | D2 | Phase 2 is Complete for its controlled-development scope (completion date 2026-09-18). All nine exit criteria are evidenced; D2-009/010/012/015/016 are Removed to D6-017 to D6-019 with the reason recorded, D2-013 and the Trust/reviewer tasks are Complete, and open risks are owner-accepted and carried to D6. No production, store or public-release approval is claimed. | [Completion record](phase-2-extension-and-community.md#completion-record); [closure decision](phase-2-extension-and-community.md#phase-2-closure-and-d6-carry-forward); [D6 carry-forward](phase-6-mobile-and-paid.md#task-register). |
 | 2026-09-18 | D2 | Exit criteria 1-8 are now evidenced (criterion 7's store review and manual screen-reader testing are deferred to launch preparation by owner decision; criterion 8 rests on fresh automated gate tests plus live selection history, with no live disable drill). D2-007, D2-022, D2-026 and D2-030 close on the completed takedown and human appeal-decision journeys. Phase 2 stays In progress on five tasks: D2-009 (store checks), D2-012 (installed Chrome/Edge token rotation, replay and revocation matrix), D2-013 and D2-010 (accountable dispositions, owner-accepted for development scope), D2-015 and D2-016 (installed-browser lifecycle). | [Exit criteria](phase-2-extension-and-community.md#exit-criteria); [task register](phase-2-extension-and-community.md#task-register); Jobs 52/52 and Gateway 69/69 gate tests, extension 479/479, live `/health/live` and `/health/ready` 200. |
 | 2026-09-18 | D2 | D2-079 is deployed to development from `c377bc9`: Jobs `0024`, the compatible D2 worker and Gateway are live, D2 processing is resumed (schedule enabled, concurrency 1/2) and the operator Verify passes with a zero-drift baseline and empty Trust queue. Resume needed one extra reviewed migration replay because ECS drops stopped-task records after about an hour; the operator's guard was not bypassed. All 50 development alarms are `OK`. The owner confirms the restored contribution as Processing `published`, Trust `accepted`, completing D2-079 and D2-074. The owner then confirms the synthetic ALARM/OK notifications arrived, closing the alarm-receipt gate, and D2-076 closes. An audit of the nine exit criteria on 2026-09-18 evidences seven; Phase 2 stays In progress on two: store policy/security/accessibility testing (store review and manual screen-reader testing are owner-deferred) and a deployed or installed proof that the extension can be disabled by version/domain while web and catalog stay available. | [D2-079 deployment record](phase-2-extension-and-community.md#d2-079--restore-publication-state-after-a-reversed-takedown); migration replay receipt `cf351fd5`; Resume apply receipt `147de27a`; no production/store change. |

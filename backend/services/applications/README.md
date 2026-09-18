@@ -1,16 +1,52 @@
 # Applications Service
 
-Owns application packets, field proposals, review requirements, approvals, attempts, confirmation evidence, audit history, and technical application history through confirmed submission.
+Owns application packets, field proposals, review requirements, approvals, attempts, confirmation
+evidence, audit history, and technical application history through confirmed submission
+([ADR-024](../../../docs/adr/024-application-history-and-inbox-phase-ownership.md)). `applied` is
+terminal, and no recruiter, interview, offer, or rejection result is stored or modeled.
 
-## Planned subfolders
+## Current D3 slice (source and local verification only)
 
-- `domain/` — Application state machine and invariants.
-- `packets/` — Immutable packet assembly and hashing.
-- `fields/` — Proposed values, evidence, confidence, and sensitivity.
-- `approvals/` — User authorization and invalidation rules.
-- `attempts/` — Submission attempts and confirmation reconciliation.
-- `history/` — Saved, preparation, review, submission, failure, cancellation, and confirmation state.
-- `api/` — Prepare, approve, cancel, and takeover commands.
-- `tests/` — State, idempotency, duplicate-submit, and authorization tests.
+Implemented and locally verified against generated-synthetic data; **not deployed**, not exposed
+through the gateway or OpenAPI yet, and not wired into candidate export/deletion yet.
 
-External execution is delegated to workflows and workers; this service remains the durable source of truth. `applied` is terminal, and no recruiter/interview/offer result is stored.
+- `src/state-machine.ts` - the eight-state lifecycle (`preparing`, `review_required`, `approved`,
+  `submitting`, `takeover`, `reconciliation_required`, `applied`, `cancelled`), a closed set of
+  technical history kinds, and a guard that refuses hiring-outcome vocabulary.
+- `src/field-policy.ts` - review classification. Restricted answers are always shown; a
+  `never_infer` answer is dropped unless the candidate supplied it (or it is a confirmed vault
+  entry); attestations, signatures, and challenges are always direct candidate action; unsupported,
+  unconfirmed, low-confidence, unknown, and generated values are never silently applied.
+- `src/packet.ts` - packet assembly with a deterministic content hash (excludes ids, timestamps and
+  approval state), approval that must acknowledge every reviewable field, and approval validity
+  bound to the job revision, form hash, resume/cover-letter hashes, and a 24-hour age limit.
+- `src/attempt.ts` - write-ahead dispatch, conservative result classification (every unclear
+  post-dispatch result is `ambiguous`, never a plain failure), stale-attempt recovery, and
+  reconciliation. An attempt that was dispatched is never dispatched again.
+- `src/current-action.ts` - the single next candidate action, derived from source truth and never
+  stored.
+- `src/store.ts` - owner-scoped PostgreSQL store. Every command locks the application row, checks
+  an idempotency receipt, checks the expected revision, and commits state, revision, append-only
+  history, and a minimal identifier-only outbox row in one transaction.
+- `migrations/0001_applications_foundation.sql` - the `applications` schema. The database enforces
+  legal status transitions, terminal immutability, append-only packets/history/receipts, immutable
+  approval evidence, one live approval per application, and a partial unique index that permits only
+  one scope-holding attempt per (user, application, packet).
+
+## Verify
+
+```powershell
+pnpm --filter @ai-job-apply/applications-service typecheck
+pnpm --filter @ai-job-apply/applications-service test
+pnpm --filter @ai-job-apply/applications-service build
+$env:DATABASE_URL = "postgres://ai_job_apply:local_only@127.0.0.1:55432/ai_job_apply"
+pnpm --filter @ai-job-apply/applications-service test:integration
+```
+
+## Not yet implemented
+
+OpenAPI/event contracts and gateway routes, the durable submission workflow and outbox publisher,
+Profile/Jobs/Documents port adapters that assemble a packet from confirmed facts, candidate-rights
+export/deletion participation, restore-manifest composition, and any deployment. Live ATS effects
+stay disabled until D3-012 approval; see the
+[Phase 3 register](../../../docs/product/delivery/phase-3-application-preparation.md).
