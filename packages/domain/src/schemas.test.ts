@@ -192,6 +192,67 @@ describe("domain schema registry", () => {
     }
   });
 
+  it("keeps the application packet additive and bound to reviewable field evidence", async () => {
+    const schema = JSON.parse(
+      await readFile(
+        new URL("../schemas/v1/application-packet.schema.json", import.meta.url),
+        "utf8",
+      ),
+    ) as object;
+    const ajv = new Ajv2020({ strict: true });
+    const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) => Ajv2020;
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    const legacy = {
+      id: "019d04cf-1f80-7000-8000-000000000070",
+      userId: "019d04cf-1f80-7000-8000-000000000071",
+      canonicalJobId: "019d04cf-1f80-7000-8000-000000000072",
+      version: 1,
+      state: "review_required",
+      fields: [
+        {
+          fieldKey: "contact.email",
+          value: "candidate@example.test",
+          sourceFactIds: ["019d04cf-1f80-7000-8000-000000000073"],
+          confidence: 0.99,
+          review: "not_required",
+        },
+      ],
+      artifactHashes: { resume: "a".repeat(64) },
+      packetHash: "b".repeat(64),
+    };
+    // Version-one packets written before the additive fields remain valid.
+    expect(validate(legacy)).toBe(true);
+    const detailed = {
+      ...legacy,
+      applicationId: "019d04cf-1f80-7000-8000-000000000074",
+      jobRevision: "c".repeat(64),
+      form: { adapterId: "greenhouse", variantId: "synthetic-v1", formHash: "d".repeat(64) },
+      createdAt: "2026-09-18T12:00:00.000Z",
+      fields: [
+        {
+          ...legacy.fields[0],
+          origin: "confirmed_fact",
+          disposition: "auto",
+          reasons: [],
+          requiresReview: false,
+        },
+      ],
+    };
+    expect(validate(detailed)).toBe(true);
+    for (const bad of [
+      { ...detailed, outcome: "offer" },
+      { ...detailed, form: { adapterId: "greenhouse" } },
+      { ...detailed, fields: [{ ...detailed.fields[0], origin: "guessed" }] },
+      {
+        ...detailed,
+        fields: [{ ...detailed.fields[0], reasons: ["restricted_answer", "restricted_answer"] }],
+      },
+    ]) {
+      expect(validate(bad)).toBe(false);
+    }
+  });
+
   it("compiles every version-one JSON Schema", async () => {
     const directory = new URL("../schemas/v1/", import.meta.url);
     const files = (await readdir(directory)).filter((file) => file.endsWith(".schema.json"));

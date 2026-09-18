@@ -301,3 +301,47 @@ describe("event schemas", () => {
     ).toBe(false);
   });
 });
+
+describe("Applications events", () => {
+  const base = {
+    applicationId: "019b4e12-7ea3-7c36-9357-aea35ab542ca",
+    userId: "019b4e12-7ea3-7c36-9357-aea35ab542cb",
+    revision: 3,
+  };
+
+  it("accepts identifier-and-status-only status changes", () => {
+    expect(
+      validateEventData(eventTypes.applicationStatusChanged, {
+        ...base,
+        status: "review_required",
+      }),
+    ).toBe(true);
+    expect(validateEventData(eventTypes.applicationApplied, { ...base, status: "applied" })).toBe(
+      true,
+    );
+  });
+
+  it("refuses candidate values, artifacts, provider responses, and hiring outcomes", () => {
+    for (const extra of [
+      { packetHash: "a".repeat(64) },
+      { fields: [{ fieldKey: "contact.email", value: "candidate@example.test" }] },
+      { confirmationUrl: "https://ats.example.test/confirm?token=secret" },
+      { interviewStatus: "scheduled" },
+      { outcome: "offer" },
+    ]) {
+      expect(
+        validateEventData(eventTypes.applicationStatusChanged, {
+          ...base,
+          status: "applied",
+          ...extra,
+        }),
+      ).toBe(false);
+    }
+    expect(
+      validateEventData(eventTypes.applicationStatusChanged, { ...base, status: "interviewing" }),
+    ).toBe(false);
+    expect(validateEventData(eventTypes.applicationApplied, { ...base, status: "approved" })).toBe(
+      false,
+    );
+  });
+});

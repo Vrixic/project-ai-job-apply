@@ -1,3 +1,11 @@
+import {
+  ApplicationNotFoundError,
+  ApplicationRevisionConflictError,
+  type ApplicationsApi,
+  ApplicationsUnavailableError,
+  ApprovalRefusedError,
+  AttemptRefusedError,
+} from "@ai-job-apply/applications-service";
 import "reflect-metadata";
 import { createHash } from "node:crypto";
 import type {
@@ -95,7 +103,7 @@ import {
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { privacySafeRequestFailure } from "./app.module.js";
 import { createGatewayApplication } from "./application.js";
 import {
@@ -904,6 +912,7 @@ async function createApp(
     contributionCapabilityPolicy?: ContributionCapabilityPolicySource;
     trust?: TrustApplicationService;
     trustReviewerAssignments?: readonly TrustReviewerAssignment[];
+    applications?: ApplicationsApi;
   } = {},
 ) {
   const issuer = await createTestTokenIssuer();
@@ -959,6 +968,7 @@ async function createApp(
     matchAssessments,
     entitlements,
     documents,
+    ...(options.applications ? { applications: options.applications } : {}),
     ...(options.trust ? { trust: options.trust } : {}),
     ...(options.trustReviewerAssignments
       ? { trustReviewerAssignments: options.trustReviewerAssignments }
@@ -3561,5 +3571,272 @@ describe("Phase 2 Trust routes", () => {
     } finally {
       await setup.app.close();
     }
+  });
+});
+
+describe("Applications routes", () => {
+  const owner = "candidate-applications";
+  const applicationId = "019d04cf-1f80-7000-8000-000000000101";
+  const attemptId = "019d04cf-1f80-7000-8000-000000000102";
+  const jobId = "019d04cf-1f80-7000-8000-000000000103";
+  const hash = "a".repeat(64);
+  const now = "2026-09-18T12:00:00.000Z";
+  const application = {
+    id: applicationId,
+    canonicalJobId: jobId,
+    status: "review_required",
+    revision: 2,
+    currentAction: "review_and_approve",
+    attempts: [],
+    createdAt: now,
+    updatedAt: now,
+  } as const;
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  let failure: Error | undefined;
+
+  function record<T>(method: string, value: T) {
+    return async (...args: unknown[]): Promise<T> => {
+      calls.push({ method, args });
+      if (failure) throw failure;
+      return value;
+    };
+  }
+
+  const applications: ApplicationsApi = {
+    create: record("create", application),
+    search: record("search", { items: [application] }),
+    get: record("get", application),
+    history: record("history", { entries: [], hasMore: false }),
+    preparePacket: record("preparePacket", application),
+    approve: record("approve", application),
+    reopen: record("reopen", application),
+    cancel: record("cancel", application),
+    startSubmission: record("startSubmission", { outcome: "started", application }),
+    dispatchAttempt: record("dispatchAttempt", {
+      id: attemptId,
+      sequence: 1,
+      status: "dispatched",
+      adapterId: "greenhouse",
+      adapterVersion: "1.0.0",
+      startedAt: now,
+    }),
+    recordResult: record("recordResult", application),
+    reconcile: record("reconcile", application),
+  } as unknown as ApplicationsApi;
+
+  let app: Awaited<ReturnType<typeof createApp>>["app"];
+  let issuer: Awaited<ReturnType<typeof createApp>>["issuer"];
+
+  beforeAll(async () => {
+    ({ app, issuer } = await createApp({ applications }));
+  });
+  afterAll(async () => {
+    await app.close();
+  });
+  beforeEach(() => {
+    calls.length = 0;
+    failure = undefined;
+  });
+
+  const token = (scope: string) => issuer.issue(owner, { scope });
+  const key = "applications-route-key-0001";
+
+  it("requires the exact applications scope and rejects a profile or jobs scope", async () => {
+    for (const wrong of ["profile:read profile:write", "jobs:read jobs:write"]) {
+      const bearer = await token(wrong);
+      const read = await app.inject({
+        method: "GET",
+        url: `/v1/applications/${applicationId}`,
+        headers: { authorization: `Bearer ${bearer}` },
+      });
+      const write = await app.inject({
+        method: "POST",
+        url: "/v1/applications",
+        headers: { authorization: `Bearer ${bearer}`, "idempotency-key": key },
+        payload: { jobId },
+      });
+      expect(read.statusCode).toBe(403);
+      expect(write.statusCode).toBe(403);
+    }
+    // A read scope cannot mutate.
+    const readOnly = await token("applications:read");
+    const denied = await app.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/cancel`,
+      headers: { authorization: `Bearer ${readOnly}`, "idempotency-key": key },
+      payload: { expectedRevision: 2 },
+    });
+    expect(denied.statusCode).toBe(403);
+    expect(calls).toHaveLength(0);
+    expect(
+      (await app.inject({ method: "GET", url: `/v1/applications/${applicationId}` })).statusCode,
+    ).toBe(401);
+  });
+
+  it("serves owner-scoped reads and commands with no-store and validated bodies", async () => {
+    const write = { authorization: `Bearer ${await token("applications:write")}` };
+    const read = { authorization: `Bearer ${await token("applications:read")}` };
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/applications",
+      headers: { ...write, "idempotency-key": key },
+      payload: { jobId },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.headers["cache-control"]).toBe("no-store");
+    expect(created.json()).toMatchObject({ id: applicationId, status: "review_required" });
+
+    for (const [url, method, payload, headers] of [
+      ["/v1/applications/search", "POST", { limit: 10 }, read],
+      [`/v1/applications/${applicationId}`, "GET", undefined, read],
+      [`/v1/applications/${applicationId}/history?afterSeq=1&limit=5`, "GET", undefined, read],
+      [`/v1/applications/${applicationId}/packets`, "POST", { expectedRevision: 2 }, write],
+      [
+        `/v1/applications/${applicationId}/approval`,
+        "POST",
+        { expectedRevision: 2, packetHash: hash, acknowledgedFieldKeys: [] },
+        write,
+      ],
+      [`/v1/applications/${applicationId}/reopen`, "POST", { expectedRevision: 2 }, write],
+      [`/v1/applications/${applicationId}/cancel`, "POST", { expectedRevision: 2 }, write],
+      [
+        `/v1/applications/${applicationId}/submissions`,
+        "POST",
+        {
+          expectedRevision: 2,
+          adapterId: "greenhouse",
+          adapterVersion: "1.0.0",
+          observedFormHash: hash,
+        },
+        write,
+      ],
+      [
+        `/v1/applications/${applicationId}/attempts/${attemptId}/dispatch`,
+        "POST",
+        undefined,
+        write,
+      ],
+      [
+        `/v1/applications/${applicationId}/attempts/${attemptId}/result`,
+        "POST",
+        { kind: "timeout" },
+        write,
+      ],
+      [
+        `/v1/applications/${applicationId}/attempts/${attemptId}/reconciliation`,
+        "POST",
+        { kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: true },
+        write,
+      ],
+    ] as const) {
+      const response = await app.inject({
+        method,
+        url,
+        headers: method === "POST" && payload ? { ...headers, "idempotency-key": key } : headers,
+        ...(payload ? { payload } : {}),
+      });
+      expect(response.statusCode, `${method} ${url}`).toBeLessThan(300);
+      expect(response.headers["cache-control"]).toBe("no-store");
+    }
+    // The authenticated owner, never a caller-supplied one, reaches the service.
+    const owners = new Set(calls.map((call) => call.args[0]));
+    expect(owners.size).toBe(1);
+    expect(calls.find((call) => call.method === "history")?.args[2]).toEqual({
+      afterSeq: 1,
+      limit: 5,
+    });
+  });
+
+  it("rejects missing idempotency keys, malformed bodies, unknown fields, and bad identifiers", async () => {
+    const write = { authorization: `Bearer ${await token("applications:write")}` };
+    const read = { authorization: `Bearer ${await token("applications:read")}` };
+    const cases = [
+      { method: "POST", url: "/v1/applications", headers: write, payload: { jobId } },
+      {
+        method: "POST",
+        url: "/v1/applications",
+        headers: { ...write, "idempotency-key": key },
+        payload: { jobId, status: "applied" },
+      },
+      {
+        method: "POST",
+        url: "/v1/applications",
+        headers: { ...write, "idempotency-key": key },
+        payload: { jobId: "not-a-uuid" },
+      },
+      {
+        method: "POST",
+        url: `/v1/applications/${applicationId}/approval`,
+        headers: { ...write, "idempotency-key": key },
+        payload: {
+          expectedRevision: 2,
+          packetHash: hash,
+          acknowledgedFieldKeys: [],
+          acknowledgeAll: true,
+        },
+      },
+      {
+        method: "POST",
+        url: `/v1/applications/${applicationId}/attempts/${attemptId}/result`,
+        headers: { ...write, "idempotency-key": key },
+        payload: { kind: "interview_invited" },
+      },
+      { method: "GET", url: "/v1/applications/not-a-uuid", headers: read },
+      { method: "GET", url: `/v1/applications/${applicationId}/history?limit=999`, headers: read },
+      {
+        method: "GET",
+        url: `/v1/applications/${applicationId}/history?owner=other`,
+        headers: read,
+      },
+      { method: "GET", url: `/v1/applications/${applicationId}?debug=1`, headers: read },
+    ] as const;
+    for (const request of cases) {
+      const response = await app.inject(request as never);
+      expect(response.statusCode, `${request.method} ${request.url}`).toBe(400);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("maps Applications failures to stable value-free problem details", async () => {
+    const write = { authorization: `Bearer ${await token("applications:write")}` };
+    const cancel = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/applications/${applicationId}/cancel`,
+        headers: { ...write, "idempotency-key": key },
+        payload: { expectedRevision: 2 },
+      });
+    for (const [error, status, code] of [
+      [new ApplicationNotFoundError(), 404, "application_not_found"],
+      [new ApplicationRevisionConflictError(), 409, "application_revision_conflict"],
+      [
+        new ApprovalRefusedError("UNACKNOWLEDGED_FIELD", ["authorization.us_authorized"]),
+        409,
+        "application_approval_refused",
+      ],
+      [new AttemptRefusedError("AMBIGUOUS_UNRECONCILED"), 409, "application_attempt_refused"],
+      [new ApplicationsUnavailableError(), 503, "applications_unavailable"],
+    ] as const) {
+      failure = error;
+      const response = await cancel();
+      expect(response.statusCode).toBe(status);
+      expect(response.json()).toMatchObject({ code });
+      // Field keys and candidate values are never echoed.
+      expect(response.body).not.toContain("authorization.us_authorized");
+    }
+  });
+
+  it("fails closed with 503 when no Applications store is wired", async () => {
+    const { app: unwired, issuer: unwiredIssuer } = await createApp();
+    const bearer = await unwiredIssuer.issue(owner, { scope: "applications:read" });
+    const response = await unwired.inject({
+      method: "GET",
+      url: `/v1/applications/${applicationId}`,
+      headers: { authorization: `Bearer ${bearer}` },
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ code: "applications_unavailable" });
+    await unwired.close();
   });
 });

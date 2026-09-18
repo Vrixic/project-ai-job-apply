@@ -214,3 +214,7 @@ operation and calls the Jobs-owned fixed projection; the edge validates every it
 before returning a bounded page. Invalid dependency payloads and invocation failures return one
 generic `503` and are never represented as an empty successful feed. The sitemap route shares the
 public-detail activation expression, so Terraform defaults leave both anonymous routes absent.
+
+## Applications routes (D3, default off)
+
+`ApplicationsController` serves the `/v1/applications` routes through the `ApplicationsApi` port from `@ai-job-apply/applications-service`. Each route resolves the owner from the exact `applications:read` or `applications:write` scope, validates strict OpenAPI bodies, requires an idempotency key on commands, and returns fixed value-free problem details. Without an injected store every route returns `503 applications_unavailable`. The Auth0 scopes, API Gateway route authorizers, and runtime composition are not configured or deployed.

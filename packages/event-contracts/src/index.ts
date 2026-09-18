@@ -1,8 +1,16 @@
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 import * as addFormatsModule from "ajv-formats";
+import applicationAppliedSchema from "../schemas/application.applied.v1.json" with { type: "json" };
+import applicationStatusChangedSchema from "../schemas/application.status-changed.v1.json" with {
+  type: "json",
+};
 import documentScanResultSchema from "../schemas/document.scan-result.v1.json" with {
   type: "json",
 };
+import jobContributedSchema from "../schemas/job.contributed.v1.json" with { type: "json" };
+import jobExpiredSchema from "../schemas/job.expired.v1.json" with { type: "json" };
+import jobNormalizedSchema from "../schemas/job.normalized.v1.json" with { type: "json" };
+import jobVerifiedSchema from "../schemas/job.verified.v1.json" with { type: "json" };
 import ingestionDispatchNudgeSchema from "../schemas/jobs.ingestion.dispatch.nudge.v1.json" with {
   type: "json",
 };
@@ -22,15 +30,13 @@ import readinessCalculatedSchema from "../schemas/profile.readiness.calculated.v
 import entitlementChangedSchema from "../schemas/subscription.entitlement_changed.v1.json" with {
   type: "json",
 };
-import jobContributedSchema from "../schemas/job.contributed.v1.json" with { type: "json" };
-import jobExpiredSchema from "../schemas/job.expired.v1.json" with { type: "json" };
-import jobNormalizedSchema from "../schemas/job.normalized.v1.json" with { type: "json" };
-import jobVerifiedSchema from "../schemas/job.verified.v1.json" with { type: "json" };
 import trustContributionDecisionChangedSchema from "../schemas/trust.contribution-decision.changed.v1.json" with {
   type: "json",
 };
 
 export const eventTypes = {
+  applicationApplied: "application.applied.v1",
+  applicationStatusChanged: "application.status_changed.v1",
   jobContributed: "job.contributed.v1",
   jobExpired: "job.expired.v1",
   jobNormalized: "job.normalized.v1",
@@ -160,6 +166,28 @@ export interface SubscriptionEntitlementChangedData {
   version: number;
 }
 
+export interface ApplicationStatusChangedData {
+  applicationId: string;
+  userId: string;
+  revision: number;
+  status:
+    | "preparing"
+    | "review_required"
+    | "approved"
+    | "submitting"
+    | "takeover"
+    | "reconciliation_required"
+    | "applied"
+    | "cancelled";
+}
+
+export interface ApplicationAppliedData {
+  applicationId: string;
+  userId: string;
+  revision: number;
+  status: "applied";
+}
+
 export interface JobContributedData {
   contributionId: string;
 }
@@ -200,6 +228,8 @@ const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) =>
 addFormats(ajv);
 
 const validators = new Map<string, ValidateFunction<unknown>>([
+  [eventTypes.applicationApplied, ajv.compile(applicationAppliedSchema)],
+  [eventTypes.applicationStatusChanged, ajv.compile(applicationStatusChangedSchema)],
   [eventTypes.jobContributed, ajv.compile(jobContributedSchema)],
   [eventTypes.jobExpired, ajv.compile(jobExpiredSchema)],
   [eventTypes.jobNormalized, ajv.compile(jobNormalizedSchema)],

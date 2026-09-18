@@ -61,6 +61,9 @@ importers:
       '@ai-job-apply/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
+      '@ai-job-apply/applications-service':
+        specifier: workspace:*
+        version: link:../services/applications
       '@ai-job-apply/auth':
         specifier: workspace:*
         version: link:../../packages/auth

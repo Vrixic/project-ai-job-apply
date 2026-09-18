@@ -50,3 +50,5 @@ is enforced by the gateway and Jobs owner.
 no query, body, path owner, provider, or payment input and returns only the exact derived Free or
 Pro access projection with the four current core grants. Free, active Pro, and grace Pro are
 separate strict response shapes; every response is private and non-cacheable.
+
+The additive D3 Applications contract defines 12 routes under `/applications` with exact `applications:read` and `applications:write` scopes, `no-store` responses, and an `Idempotency-Key` on every state-changing command except the once-only write-ahead attempt dispatch. Bodies are strict; the packet is built server-side from confirmed evidence plus bounded candidate entries; approval names one packet hash and must acknowledge every reviewable field; a submission start supplies the observed live form hash and returns `approval_invalidated` instead of submitting when job, form, or artifacts changed. No route, schema, or enum models a recruiter, interview, offer, or rejection outcome, and the contract alone does not enable any deployed route.

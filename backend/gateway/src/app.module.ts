@@ -1,12 +1,22 @@
 import { createHash } from "node:crypto";
 import type {
   AccountDeletionRequest,
+  Application,
+  ApplicationAttempt,
+  ApplicationHistoryPage,
+  ApplicationPage,
+  ApplicationRevisionRequest,
+  ApplicationSearchRequest,
+  ApplicationSubmissionResultRequest,
+  ApplicationSubmissionStart,
+  ApproveApplicationPacketRequest,
   CandidateDataExport,
   CandidateDataExportAccess,
   CandidateDataExportDownloadGrant,
   CanonicalJobDetail,
   ConfirmAccountDeletionRequest,
   CreateAccountDeletionRequest,
+  CreateApplicationRequest,
   CreateCandidateDataExportRequest,
   CreateJobContributionRequest,
   CreateJobReportRequest,
@@ -34,12 +44,14 @@ import type {
   OpenTrustCaseRequest,
   Operation,
   OwnerTrustCase,
+  PrepareApplicationPacketRequest,
   PrivateSavedPageCapture as PrivateSavedPageCaptureResponse,
   ProblemDetails,
   ProfileFact,
   ProfileFactCollection,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
+  ReconcileApplicationAttemptRequest,
   ResolveModerationCaseRequest,
   ResolveTrustAppealRequest,
   ResumeDocumentCollection,
@@ -51,12 +63,14 @@ import type {
   SavedJobPage,
   SavedJobSearchRequest,
   SignedContributionCapabilityPolicy,
+  StartApplicationSubmissionRequest,
   TakeDownTrustCaseRequest,
   UgcContributionConsentGrant,
   UpdateProfileFactRequest,
   WithdrawTrustContributionRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
+import type { ApplicationsApi } from "@ai-job-apply/applications-service";
 import {
   type AccessTokenVerifier,
   AuthenticationError,
@@ -168,6 +182,11 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
+  type ApplicationsFailure,
+  parseHistoryQuery,
+  projectApplicationsFailure,
+} from "./applications-http.js";
+import {
   type OidcTrustReviewerAuthority,
   TrustReviewerAccessDeniedError,
 } from "./trust-reviewer-authority.js";
@@ -181,6 +200,7 @@ const UGC_CONTRIBUTION_CONSENTS = Symbol("UGC_CONTRIBUTION_CONSENTS");
 const UGC_CONTRIBUTION_POLICY_VERSION = Symbol("UGC_CONTRIBUTION_POLICY_VERSION");
 const JOB_MODERATION = Symbol("JOB_MODERATION");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
+const APPLICATIONS = Symbol("APPLICATIONS");
 const PRIVATE_SAVED_PAGE_CAPTURES = Symbol("PRIVATE_SAVED_PAGE_CAPTURES");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
@@ -306,6 +326,18 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/saved-job-captures",
   "/v1/saved-job-captures/:captureId",
   "/v1/entitlements",
+  "/v1/applications",
+  "/v1/applications/search",
+  "/v1/applications/:applicationId",
+  "/v1/applications/:applicationId/history",
+  "/v1/applications/:applicationId/packets",
+  "/v1/applications/:applicationId/approval",
+  "/v1/applications/:applicationId/reopen",
+  "/v1/applications/:applicationId/cancel",
+  "/v1/applications/:applicationId/submissions",
+  "/v1/applications/:applicationId/attempts/:attemptId/dispatch",
+  "/v1/applications/:applicationId/attempts/:attemptId/result",
+  "/v1/applications/:applicationId/attempts/:attemptId/reconciliation",
   "/v1/operations/:operationId",
 ]);
 
@@ -377,6 +409,8 @@ class RequestIdentity {
   async authorize(
     request: AuthenticatedRequest,
     requiredScope:
+      | "applications:read"
+      | "applications:write"
       | "documents:read"
       | "documents:write"
       | "jobs:read"
@@ -398,6 +432,8 @@ class RequestIdentity {
   async resolve(
     request: AuthenticatedRequest,
     requiredScope:
+      | "applications:read"
+      | "applications:write"
       | "documents:read"
       | "documents:write"
       | "jobs:read"
@@ -518,6 +554,10 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "resume_document_limit";
       title = "Resume document limit reached";
       detail = exception.message;
+    } else if (projectApplicationsFailure(exception) !== null) {
+      ({ status, code, title, detail } = projectApplicationsFailure(
+        exception,
+      ) as ApplicationsFailure);
     } else if (exception instanceof DocumentIntakeUnavailableError) {
       status = HttpStatus.SERVICE_UNAVAILABLE;
       code = "document_intake_unavailable";
@@ -873,6 +913,24 @@ const validateCreatePrivateSavedPageCapture = compileComponentValidator(
 );
 const validatePrivateSavedPageCapture = compileComponentValidator("PrivateSavedPageCapture");
 const validateSavedJobSearch = compileComponentValidator("SavedJobSearchRequest");
+const validateCreateApplication = compileComponentValidator("CreateApplicationRequest");
+const validateApplicationSearch = compileComponentValidator("ApplicationSearchRequest");
+const validatePrepareApplicationPacket = compileComponentValidator(
+  "PrepareApplicationPacketRequest",
+);
+const validateApproveApplicationPacket = compileComponentValidator(
+  "ApproveApplicationPacketRequest",
+);
+const validateApplicationRevision = compileComponentValidator("ApplicationRevisionRequest");
+const validateStartApplicationSubmission = compileComponentValidator(
+  "StartApplicationSubmissionRequest",
+);
+const validateApplicationSubmissionResult = compileComponentValidator(
+  "ApplicationSubmissionResultRequest",
+);
+const validateReconcileApplicationAttempt = compileComponentValidator(
+  "ReconcileApplicationAttemptRequest",
+);
 const validateMatchAssessment = compileComponentValidator("MatchAssessment");
 const validateCreateJobReport = compileComponentValidator("CreateJobReportRequest");
 const validateJobReport = compileComponentValidator("JobReport");
@@ -2344,6 +2402,235 @@ class CandidateController {
   }
 }
 
+function applicationsBody<T>(
+  request: AuthenticatedRequest,
+  validate: ReturnType<typeof compileComponentValidator>,
+): T {
+  if (!hasNoQuery(request) || !validate(request.body)) {
+    throw new HttpException(formatValidationErrors(validate.errors), HttpStatus.BAD_REQUEST);
+  }
+  return request.body as T;
+}
+
+function requireApplicationsRead(request: AuthenticatedRequest): void {
+  if (!hasNoQuery(request) || request.body !== undefined) {
+    throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
+  }
+}
+
+function requireApplicationPath(...ids: string[]): void {
+  if (!ids.every((id) => UUID_V7_PATTERN.test(id))) {
+    throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
+  }
+}
+
+/**
+ * Owner-scoped Applications API (D3). Every route resolves the authenticated owner from an exact
+ * `applications:read` or `applications:write` scope and never accepts an owner from the caller.
+ */
+@Controller("/v1/applications")
+@UseFilters(ProblemDetailsFilter)
+class ApplicationsController {
+  constructor(
+    @Inject(RequestIdentity) private readonly identity: RequestIdentity,
+    @Inject(APPLICATIONS) private readonly applications: ApplicationsApi,
+  ) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async create(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<Application> {
+    const user = await this.identity.resolve(request, "applications:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    const body = applicationsBody<CreateApplicationRequest>(request, validateCreateApplication);
+    requireApplicationPath(body.jobId);
+    return this.applications.create(user.id, body.jobId, commandKey);
+  }
+
+  @Post("/search")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async search(@Req() request: AuthenticatedRequest): Promise<ApplicationPage> {
+    const user = await this.identity.resolve(request, "applications:read");
+    const body = applicationsBody<ApplicationSearchRequest>(request, validateApplicationSearch);
+    return this.applications.search(user.id, body);
+  }
+
+  @Get("/:applicationId")
+  @Header("cache-control", "no-store")
+  async get(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<Application> {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationsRead(request);
+    requireApplicationPath(applicationId);
+    return this.applications.get(user.id, applicationId);
+  }
+
+  @Get("/:applicationId/history")
+  @Header("cache-control", "no-store")
+  async history(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationHistoryPage> {
+    const user = await this.identity.resolve(request, "applications:read");
+    const page = parseHistoryQuery(request.query);
+    if (request.body !== undefined || page === null) {
+      throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    requireApplicationPath(applicationId);
+    return this.applications.history(user.id, applicationId, page);
+  }
+
+  @Post("/:applicationId/packets")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async preparePacket(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<Application> {
+    const user = await this.identity.resolve(request, "applications:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    requireApplicationPath(applicationId);
+    const body = applicationsBody<PrepareApplicationPacketRequest>(
+      request,
+      validatePrepareApplicationPacket,
+    );
+    return this.applications.preparePacket(
+      user.id,
+      applicationId,
+      {
+        expectedRevision: body.expectedRevision,
+        ...(body.userEntries ? { userEntries: body.userEntries } : {}),
+      },
+      commandKey,
+    );
+  }
+
+  @Post("/:applicationId/approval")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async approve(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<Application> {
+    const user = await this.identity.resolve(request, "applications:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    requireApplicationPath(applicationId);
+    const body = applicationsBody<ApproveApplicationPacketRequest>(
+      request,
+      validateApproveApplicationPacket,
+    );
+    return this.applications.approve(user.id, applicationId, body, commandKey);
+  }
+
+  @Post("/:applicationId/reopen")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async reopen(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<Application> {
+    const user = await this.identity.resolve(request, "applications:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    requireApplicationPath(applicationId);
+    const body = applicationsBody<ApplicationRevisionRequest>(request, validateApplicationRevision);
+    return this.applications.reopen(user.id, applicationId, body.expectedRevision, commandKey);
+  }
+
+  @Post("/:applicationId/cancel")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async cancel(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<Application> {
+    const user = await this.identity.resolve(request, "applications:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    requireApplicationPath(applicationId);
+    const body = applicationsBody<ApplicationRevisionRequest>(request, validateApplicationRevision);
+    return this.applications.cancel(user.id, applicationId, body.expectedRevision, commandKey);
+  }
+
+  @Post("/:applicationId/submissions")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async startSubmission(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ApplicationSubmissionStart> {
+    const user = await this.identity.resolve(request, "applications:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    requireApplicationPath(applicationId);
+    const body = applicationsBody<StartApplicationSubmissionRequest>(
+      request,
+      validateStartApplicationSubmission,
+    );
+    return this.applications.startSubmission(user.id, applicationId, body, commandKey);
+  }
+
+  @Post("/:applicationId/attempts/:attemptId/dispatch")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async dispatch(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Param("attemptId") attemptId: string,
+  ): Promise<ApplicationAttempt> {
+    const user = await this.identity.resolve(request, "applications:write");
+    requireApplicationsRead(request);
+    requireApplicationPath(applicationId, attemptId);
+    return this.applications.dispatchAttempt(user.id, applicationId, attemptId);
+  }
+
+  @Post("/:applicationId/attempts/:attemptId/result")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async result(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Param("attemptId") attemptId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<Application> {
+    const user = await this.identity.resolve(request, "applications:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    requireApplicationPath(applicationId, attemptId);
+    const body = applicationsBody<ApplicationSubmissionResultRequest>(
+      request,
+      validateApplicationSubmissionResult,
+    );
+    return this.applications.recordResult(user.id, applicationId, attemptId, body, commandKey);
+  }
+
+  @Post("/:applicationId/attempts/:attemptId/reconciliation")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async reconcile(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Param("attemptId") attemptId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<Application> {
+    const user = await this.identity.resolve(request, "applications:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    requireApplicationPath(applicationId, attemptId);
+    const body = applicationsBody<ReconcileApplicationAttemptRequest>(
+      request,
+      validateReconcileApplicationAttempt,
+    );
+    return this.applications.reconcile(user.id, applicationId, attemptId, body, commandKey);
+  }
+}
+
 export interface AppModuleOptions {
   store: ProfileStore;
   catalog: JobCatalogReader;
@@ -2354,6 +2641,7 @@ export interface AppModuleOptions {
   ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
   savedJobs: SavedJobs;
+  applications: ApplicationsApi;
   privateSavedPageCaptures: PrivateSavedPageCaptures;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
@@ -2377,6 +2665,7 @@ export class AppModule {
         HealthController,
         CandidateController,
         OwnerTrustController,
+        ApplicationsController,
         AdminModerationController,
         AdminTrustController,
         ...(options.contributionCapabilityPolicy
@@ -2400,6 +2689,7 @@ export class AppModule {
         },
         { provide: JOB_MODERATION, useValue: options.moderation },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
+        { provide: APPLICATIONS, useValue: options.applications },
         { provide: PRIVATE_SAVED_PAGE_CAPTURES, useValue: options.privateSavedPageCaptures },
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },

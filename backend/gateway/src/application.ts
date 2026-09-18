@@ -1,3 +1,7 @@
+import {
+  type ApplicationsApi,
+  ApplicationsUnavailableError,
+} from "@ai-job-apply/applications-service";
 import type { AccessTokenVerifier, IdTokenVerifier } from "@ai-job-apply/auth";
 import type { EntitlementReadService } from "@ai-job-apply/billing-service";
 import type { DocumentStore } from "@ai-job-apply/documents-service";
@@ -42,6 +46,7 @@ export interface GatewayApplicationOptions {
   ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
   savedJobs: SavedJobs;
+  applications?: ApplicationsApi;
   privateSavedPageCaptures?: PrivateSavedPageCaptures;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
@@ -54,6 +59,27 @@ export interface GatewayApplicationOptions {
   releaseSha: string;
   clock?: () => Date;
   adapter?: FastifyAdapter;
+}
+
+/** Applications stay default-off: without a wired store every route fails closed with 503. */
+function unavailableApplications(): ApplicationsApi {
+  const fail = async (): Promise<never> => {
+    throw new ApplicationsUnavailableError();
+  };
+  return {
+    create: fail,
+    search: fail,
+    get: fail,
+    history: fail,
+    preparePacket: fail,
+    approve: fail,
+    reopen: fail,
+    cancel: fail,
+    startSubmission: fail,
+    dispatchAttempt: fail,
+    recordResult: fail,
+    reconcile: fail,
+  };
 }
 
 /**
@@ -93,6 +119,7 @@ export async function createGatewayApplication(
         : {}),
       moderation: options.moderation,
       savedJobs: options.savedJobs,
+      applications: options.applications ?? unavailableApplications(),
       privateSavedPageCaptures:
         options.privateSavedPageCaptures ??
         ({
