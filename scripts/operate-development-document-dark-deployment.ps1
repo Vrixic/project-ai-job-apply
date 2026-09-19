@@ -545,9 +545,21 @@ function Assert-CurrentBootstrapTemplateVerification {
     "stateLineage", "stateSerial", "verifiedAt", "versions", "zeroDriftPlanPath", "zeroDriftPlanSha256",
     "continuousEcsServiceCount"
   ) | Sort-Object
+  # Newer ingestion verifications also report how many NAT gateways the D2-owned shared provider
+  # network has. The key is optional so retained receipts stay valid, but when present it must be
+  # exactly the whole number 0 or 1 that the ingestion operator emits.
+  $optionalNatKey = "d2OwnedSharedProviderNatCount"
+  $actualKeys = @($Verification.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  if ($actualKeys -ccontains $optionalNatKey) {
+    $natCount = $Verification.$optionalNatKey
+    if (($natCount -isnot [int] -and $natCount -isnot [long]) -or $natCount -notin @(0, 1)) {
+      throw "The current-state template reports an invalid shared provider NAT count."
+    }
+    $keys = @($keys + $optionalNatKey | Sort-Object)
+  }
   Assert-CurrentBootstrapTemplateSource -TemplateSourceSha ([string]$Verification.sourceSha) `
     -OperatorSourceSha $OperatorSourceSha -RepositoryPath $RepositoryPath
-  if ((@($Verification.PSObject.Properties | ForEach-Object Name | Sort-Object) -join "|") -cne ($keys -join "|") -or
+  if (($actualKeys -join "|") -cne ($keys -join "|") -or
     [string]$Verification.schemaVersion -cne "1" -or
     [string]$Verification.kind -cne "development-ingestion-dark-release-verification" -or
     [string]$Verification.environment -cne "development" -or

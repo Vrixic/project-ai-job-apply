@@ -845,6 +845,32 @@ try {
   }
   Assert-CurrentBootstrapTemplateVerification $templateVerification $templatePlanPath ("4" * 64) `
     $templateState $templateOperator $templateGitFixture
+  # The newer ingestion receipt adds one optional key: exactly the whole number 0 or 1, never more.
+  foreach ($natCount in @(0, 1)) {
+    $withNat = $templateVerification | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $withNat | Add-Member NoteProperty d2OwnedSharedProviderNatCount $natCount
+    Assert-CurrentBootstrapTemplateVerification $withNat $templatePlanPath ("4" * 64) `
+      $templateState $templateOperator $templateGitFixture
+  }
+  foreach ($badNat in @(2, -1, 1.5, "1", $true, $null)) {
+    $badNatTemplate = $templateVerification | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $badNatTemplate | Add-Member NoteProperty d2OwnedSharedProviderNatCount $badNat
+    $rejected = $false
+    try {
+      Assert-CurrentBootstrapTemplateVerification $badNatTemplate $templatePlanPath ("4" * 64) `
+        $templateState $templateOperator $templateGitFixture
+    } catch { $rejected = $true }
+    if (-not $rejected) { throw "The current bootstrap template accepted invalid NAT count '$badNat'." }
+  }
+  $extraKeyTemplate = $templateVerification | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+  $extraKeyTemplate | Add-Member NoteProperty d2OwnedSharedProviderNatCount 1
+  $extraKeyTemplate | Add-Member NoteProperty providerActivationAllowed $true
+  $rejected = $false
+  try {
+    Assert-CurrentBootstrapTemplateVerification $extraKeyTemplate $templatePlanPath ("4" * 64) `
+      $templateState $templateOperator $templateGitFixture
+  } catch { $rejected = $true }
+  if (-not $rejected) { throw "The current bootstrap template accepted an unreviewed extra key beside the NAT count." }
   foreach ($templateMutation in @("source", "kind", "serial", "dark", "queues", "plan")) {
     $badTemplate = $templateVerification | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     switch ($templateMutation) {
