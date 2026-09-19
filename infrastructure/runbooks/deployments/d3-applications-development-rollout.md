@@ -4,8 +4,7 @@
   [phase record](../../../docs/product/delivery/phase-3-application-preparation.md)). Step 8 (deployed
   acceptance) passed on 2026-09-19 after the dedicated-client fix was released as Gateway version 78: 24 of 24
   synthetic lifecycle steps and exact cleanup, receipt SHA-256 `a6057ab662361965917103ccc4f5c53b635477dfdd2c41af400a48b21ae1d166` (see the
-  [acceptance runbook](development-applications-acceptance.md)). It does not prove real-token Auth0 scopes; the Auth0
-  permissions were reported granted by the owner. Every step ran only through the guarded operators,
+  [acceptance runbook](development-applications-acceptance.md)). A real-token sign-in on 2026-09-19 then created an application and packet (201 each) through the hosted candidate web; the synthetic acceptance itself does not prove Auth0 scopes. Every step ran only through the guarded operators,
   with the saved-plan and reviewer checkpoints those operators define.
 - Scope: adds the Applications schema (migration `0001`) and releases a Gateway that composes the
   Applications runtime, in the isolated development account. No staging, no public exposure, no

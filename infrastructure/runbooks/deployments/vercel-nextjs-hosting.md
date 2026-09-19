@@ -187,6 +187,8 @@ Set the following only on the exact protected Vercel target used for synthetic a
 | `AUTH0_AUDIENCE` | Server-only | Exact `ai-job-apply-api` |
 | `PLATFORM_API_BASE_URL` | Server-only | Exact development API Gateway HTTPS origin |
 | `PUBLIC_JOB_INDEXING_ENABLED` | Server-only | Exact `false` |
+| `AUTH0_APPLICATIONS_SCOPES` | Server-only (Production only) | `enabled` adds `applications:read applications:write` to the requested scopes; set only after the Auth0 User Delegated Access grant exists |
+| `NEXT_PUBLIC_APPLICATIONS_UI` | Build-time public flag (Production only) | `enabled` shows the Applications review workspace; changing it needs a new build from the CLI, not a dashboard redeploy of an older upload |
 
 Do not copy local session secrets into Vercel. Do not set any secret or token through a
 `NEXT_PUBLIC_*` variable. Keep all other preview targets identity-dark.
