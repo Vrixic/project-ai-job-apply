@@ -27,6 +27,12 @@ import {
   parseNormalizedResumeDocument,
 } from "./parsing/normalize.js";
 import { type DocumentProcessingJob, PostgresDocumentProcessorStore } from "./processor.js";
+import {
+  createResumeTailoringService,
+  PostgresParsedResumeSource,
+  RESUME_TAILORING_REQUEST_KIND,
+  type ResumeTailoringResult,
+} from "./resume-tailoring.js";
 
 const MAXIMUM_SCAN_EVENT_BYTES = 4_096;
 const MAXIMUM_NORMALIZED_BYTES = 1_500_000;
@@ -399,6 +405,7 @@ function parseScanRecord(record: SQSRecord): DocumentScanResultV1 {
 let runtimeHandler: ReturnType<typeof createDocumentProcessorHandler> | undefined;
 let runtimeStore: PostgresDocumentProcessorStore | undefined;
 let runtimeParser: AwsDocumentParserClient | undefined;
+let runtimeTailoring: ReturnType<typeof createResumeTailoringService> | undefined;
 
 function getRuntimeParser(): { parser: AwsDocumentParserClient; parserVersion: string } {
   const bucketName = process.env.CANDIDATE_DOCUMENT_BUCKET ?? "";
@@ -465,8 +472,8 @@ function isScheduledEvent(event: SQSEvent | ScheduledEvent): event is ScheduledE
 }
 
 export async function handler(
-  event: SQSEvent | ScheduledEvent | DocumentParserCorpusRequest,
-): Promise<SQSBatchResponse | DocumentParserCorpusAggregate | undefined> {
+  event: SQSEvent | ScheduledEvent | DocumentParserCorpusRequest | { kind: string },
+): Promise<SQSBatchResponse | DocumentParserCorpusAggregate | ResumeTailoringResult | undefined> {
   if ((event as { kind?: unknown }).kind === "development-document-parser-corpus-v1") {
     const { parser, parserVersion } = getRuntimeParser();
     return executeDocumentParserCorpus(event, parserVersion, parser);
@@ -495,12 +502,20 @@ export async function handler(
       new PostgresResumeProposalWriter(),
     );
     const { parser } = getRuntimeParser();
+    const normalizedReader = new S3NormalizedDocumentReader(bucketName, kmsKeyArn);
+    runtimeTailoring = createResumeTailoringService({
+      source: new PostgresParsedResumeSource(database.client),
+      reader: normalizedReader,
+    });
     runtimeHandler = createDocumentProcessorHandler(
       { accountId, region, protectionPlanArn, bucketName },
       runtimeStore,
       parser,
-      new S3NormalizedDocumentReader(bucketName, kmsKeyArn),
+      normalizedReader,
     );
+  }
+  if ((event as { kind?: unknown }).kind === RESUME_TAILORING_REQUEST_KIND) {
+    return (runtimeTailoring as ReturnType<typeof createResumeTailoringService>)(event);
   }
   if (isScheduledEvent(event as SQSEvent | ScheduledEvent)) {
     await createDocumentProcessingReconciler(

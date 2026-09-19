@@ -23,7 +23,9 @@ rendering state, version diffs, and artifact metadata.
 - `src/tailoring/` selects and orders verbatim bullets by job-term overlap, produces a fixed-reason visible diff, and gates structural factuality (no new text, no cross-entry moves).
 - `src/render/` renders DOCX and PDF from a tailored variant and verifies each artifact by re-parsing it with the production parser and comparing text. PDF supports the standard Latin font only.
 
-Generative rewrites, cover letters, version storage/reads and any tailored-resume API are not implemented here; they need grounded generation (D3-004) and review.
+- `src/resume-tailoring.ts` serves the fixed `resume-tailoring-v1` request from the document processor ([ADR-031](../../../docs/adr/031-deterministic-resume-tailoring-in-documents-runtime.md)): an owner-scoped parsed-resume lookup, the verified normalized read, deterministic tailoring, and verified DOCX/PDF rendering. Nothing is persisted beyond the content hash the packet stores. The dependency-free wire contract is `src/resume-tailoring-contract.ts`, which the Gateway imports.
+
+Generative rewrites and cover letters are not implemented here; they need grounded generation (D3-004) and review.
 
 ## Planned expansion
 

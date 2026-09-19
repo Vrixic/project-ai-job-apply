@@ -33,6 +33,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-028: Separate private saves, public contributions, Jobs truth, and UGC trust](028-extension-ugc-ownership-and-processing.md)
 - [ADR-029: Use one explicit public-job addition command in the extension](029-one-step-public-job-addition.md)
 - [ADR-030: AI gateway and grounded generation](030-ai-gateway-and-grounded-generation.md)
+- [ADR-031: Deterministic resume tailoring in the Documents runtime](031-deterministic-resume-tailoring-in-documents-runtime.md)
 
 ## Proposed delivery decisions
 

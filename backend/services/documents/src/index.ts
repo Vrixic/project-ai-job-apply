@@ -15,6 +15,7 @@ export type {
   S3ResumeUploadSignerOptions,
 } from "./upload-signer.js";
 export { MAXIMUM_RESUME_BYTES, S3ResumeUploadSigner } from "./upload-signer.js";
+export * from "./resume-tailoring-contract.js";
 
 export class DocumentIdempotencyConflictError extends Error {
   constructor() {

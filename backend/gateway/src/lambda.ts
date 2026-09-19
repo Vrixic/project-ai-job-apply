@@ -75,6 +75,7 @@ import {
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
+import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
 
@@ -1033,7 +1034,12 @@ async function createConfiguredApplication(
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
     profile: store,
-    documents,
+    // The Documents runtime tailors the candidate's resume; the Gateway never reads resume text.
+    ...(process.env.DOCUMENT_TAILORING_FUNCTION_ARN
+      ? {
+          tailoring: new LambdaResumeTailoringClient(process.env.DOCUMENT_TAILORING_FUNCTION_ARN),
+        }
+      : {}),
     catalog,
     definitions: defaultFieldDefinitions(),
   });

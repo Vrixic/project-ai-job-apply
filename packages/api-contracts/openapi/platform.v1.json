@@ -2386,6 +2386,134 @@
         }
       }
     },
+    "/applications/{applicationId}/resume": {
+      "get": {
+        "operationId": "getApplicationResumePreview",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "description": "The resume tailored for this application's job, computed from the candidate's own parsed resume, with a section-by-section view of what changed. It selects and orders the candidate's own bullets and never adds or rewords text. Nothing is stored; the view is recomputed and is bound to the packet by its content hash.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-scoped tailored resume preview",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResumePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/applications/{applicationId}/resume/file": {
+      "get": {
+        "operationId": "getApplicationResumeFile",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "description": "One verified DOCX or PDF rendering of the tailored resume the current packet carries. It is refused with a stale-packet conflict unless the rendering's content hash equals the packet's resume hash, so the file a candidate downloads is exactly the one they reviewed.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["docx", "pdf"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-scoped tailored resume file",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResumeFile"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/applications/{applicationId}/packets": {
       "post": {
         "operationId": "prepareApplicationPacket",
@@ -6221,6 +6349,129 @@
           "hasMore": {
             "type": "boolean"
           }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationResumeBullet": {
+        "type": "object",
+        "required": ["text", "change"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "change": { "type": "string", "enum": ["kept", "moved_up", "omitted"] },
+          "matchedTerms": {
+            "type": "array",
+            "maxItems": 20,
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationResumeEntry": {
+        "type": "object",
+        "required": ["lines", "bullets"],
+        "properties": {
+          "lines": {
+            "type": "array",
+            "maxItems": 20,
+            "items": { "type": "string", "maxLength": 500 }
+          },
+          "bullets": {
+            "type": "array",
+            "maxItems": 60,
+            "items": { "$ref": "#/components/schemas/ApplicationResumeBullet" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationResumeSection": {
+        "type": "object",
+        "required": ["kind", "entries"],
+        "properties": {
+          "kind": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "heading": { "type": "string", "maxLength": 200 },
+          "entries": {
+            "type": "array",
+            "maxItems": 60,
+            "items": { "$ref": "#/components/schemas/ApplicationResumeEntry" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationResumePreview": {
+        "type": "object",
+        "required": ["status", "matchesPacket"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ready", "no_resume", "unavailable"] },
+          "unavailableReason": {
+            "type": "string",
+            "enum": [
+              "document_unreadable",
+              "factuality_failed",
+              "render_failed",
+              "service_unavailable"
+            ]
+          },
+          "baseDocument": {
+            "type": "object",
+            "required": ["id", "fileName"],
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "fileName": { "type": "string", "minLength": 1, "maxLength": 255 }
+            },
+            "additionalProperties": false
+          },
+          "tailoringVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "contentSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "matchesPacket": {
+            "type": "boolean",
+            "description": "True only when the current packet's resume hash equals this live tailoring. False means the resume, the job text, or the tailoring version changed since the packet was prepared."
+          },
+          "matchedTerms": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+          },
+          "sections": {
+            "type": "array",
+            "maxItems": 20,
+            "items": { "$ref": "#/components/schemas/ApplicationResumeSection" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationResumeFile": {
+        "type": "object",
+        "required": [
+          "format",
+          "mediaType",
+          "fileName",
+          "sha256",
+          "sizeBytes",
+          "contentSha256",
+          "contentBase64"
+        ],
+        "properties": {
+          "format": { "type": "string", "enum": ["docx", "pdf"] },
+          "mediaType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ]
+          },
+          "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 of the file bytes."
+          },
+          "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 300000 },
+          "contentSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Format-independent content hash that the packet's resume hash binds."
+          },
+          "contentBase64": { "type": "string", "minLength": 4, "maxLength": 400000 }
         },
         "additionalProperties": false
       },

@@ -145,6 +145,15 @@ export interface HistoryQuery {
   limit?: number;
 }
 
+/** The resume file route takes exactly one `format` parameter, `docx` or `pdf`, and nothing else. */
+export function parseResumeFormatQuery(query: unknown): "docx" | "pdf" | null {
+  if (typeof query !== "object" || query === null || Array.isArray(query)) return null;
+  const entries = Object.entries(query as Record<string, unknown>);
+  const only = entries[0];
+  if (entries.length !== 1 || !only || only[0] !== "format") return null;
+  return only[1] === "docx" || only[1] === "pdf" ? only[1] : null;
+}
+
 /** Strict bounded query parsing: unknown, repeated, or non-integer parameters are invalid. */
 export function parseHistoryQuery(query: unknown): HistoryQuery | null {
   if (query === undefined || query === null) return {};

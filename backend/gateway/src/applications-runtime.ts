@@ -1,9 +1,10 @@
-import type { ProfileFact, ResumeDocumentCollection } from "@ai-job-apply/api-contracts";
+import type { ProfileFact } from "@ai-job-apply/api-contracts";
 import {
   type ApplicationJobGate,
   type ApplicationRecord,
   type ApplicationsApi,
   ApplicationsService,
+  ApplicationsUnavailableError,
   type ArtifactHashes,
   type CurrentBindings,
   FactBackedPacketSource,
@@ -12,17 +13,26 @@ import {
   type LiveBindingsSource,
   type MetricSink,
   PostgresApplicationStore,
+  type ResumeFileBody,
+  type ResumePreviewBody,
+  type ResumePreviewSource,
 } from "@ai-job-apply/applications-service";
+import {
+  RESUME_TAILORING_REQUEST_KIND,
+  type ResumeTailoringResult,
+} from "@ai-job-apply/documents-service";
 import type { GraphFact } from "@ai-job-apply/domain";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
 import type postgres from "postgres";
+import type { ResumeTailoringClient } from "./resume-tailoring-client.js";
 
 /** The owner APIs the Applications runtime reads through. It never touches another owner's tables. */
 export interface ApplicationsRuntimeOptions {
   client: postgres.Sql;
   profile: { listProfileFacts(userId: string): Promise<{ facts: ProfileFact[] }> };
-  documents: { listResumeDocuments(userId: string): Promise<ResumeDocumentCollection> };
-  catalog: Pick<JobCatalogReader, "resolveActiveJobSummaries">;
+  /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
+  tailoring?: ResumeTailoringClient;
+  catalog: Pick<JobCatalogReader, "resolveActiveJobSummaries" | "getActiveJob">;
   definitions: ReadonlyMap<string, FieldDefinition>;
   clock?: () => Date;
   metrics?: MetricSink;
@@ -77,13 +87,96 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     });
   }
 
-  async function artifacts(ownerUserId: string): Promise<ArtifactHashes> {
-    const documents = await options.documents.listResumeDocuments(ownerUserId);
-    const latest = documents.documents
-      .filter((document) => document.status === "parsed")
-      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0))[0];
-    return latest ? { resume: latest.sha256 } : {};
+  /**
+   * Asks the Documents runtime to tailor the owner's own resume to the job (ADR-031). A transport
+   * failure is a 503, never a silent "no resume", so an approval is never invalidated or created
+   * against a resume that was merely unreachable.
+   */
+  async function tailoringFor(
+    ownerUserId: string,
+    jobId: string,
+    mode: "hash" | "preview",
+  ): Promise<ResumeTailoringResult | undefined> {
+    if (!options.tailoring) return undefined;
+    const job = await options.catalog.getActiveJob(jobId, clock());
+    if (!job) return undefined;
+    try {
+      return await options.tailoring.tailor({
+        kind: RESUME_TAILORING_REQUEST_KIND,
+        mode,
+        ownerUserId,
+        job: { title: job.title.slice(0, 300), description: job.description.slice(0, 60_000) },
+      });
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
   }
+
+  async function artifacts(ownerUserId: string, jobId: string): Promise<ArtifactHashes> {
+    const result = await tailoringFor(ownerUserId, jobId, "hash");
+    return result?.status === "ready" ? { resume: result.contentSha256 } : {};
+  }
+
+  const resumes: ResumePreviewSource = {
+    async file({ ownerUserId, jobId, format }): Promise<ResumeFileBody | undefined> {
+      if (!options.tailoring) return undefined;
+      const job = await options.catalog.getActiveJob(jobId, clock());
+      if (!job) return undefined;
+      let result: ResumeTailoringResult;
+      try {
+        result = await options.tailoring.tailor({
+          kind: RESUME_TAILORING_REQUEST_KIND,
+          mode: "artifact",
+          ownerUserId,
+          format,
+          job: { title: job.title.slice(0, 300), description: job.description.slice(0, 60_000) },
+        });
+      } catch {
+        throw new ApplicationsUnavailableError();
+      }
+      if (result.status !== "ready" || !result.artifact) return undefined;
+      return {
+        format: result.artifact.format,
+        mediaType: result.artifact.mediaType,
+        sha256: result.artifact.sha256,
+        sizeBytes: result.artifact.sizeBytes,
+        contentSha256: result.contentSha256,
+        contentBase64: result.artifact.contentBase64,
+        baseFileName: result.baseDocument.fileName,
+      };
+    },
+    async preview({ ownerUserId, jobId }): Promise<ResumePreviewBody> {
+      const result = await tailoringFor(ownerUserId, jobId, "preview");
+      if (!result) return { status: "unavailable", unavailableReason: "service_unavailable" };
+      if (result.status === "no_resume") return { status: "no_resume" };
+      if (result.status === "unavailable") {
+        return {
+          status: "unavailable",
+          unavailableReason:
+            result.reason === "invalid_request" ? "service_unavailable" : result.reason,
+        };
+      }
+      return {
+        status: "ready",
+        baseDocument: { id: result.baseDocument.id, fileName: result.baseDocument.fileName },
+        tailoringVersion: result.tailoringVersion,
+        contentSha256: result.contentSha256,
+        matchedTerms: result.matchedTerms ?? [],
+        sections: (result.sections ?? []).map((section) => ({
+          kind: section.kind,
+          ...(section.heading ? { heading: section.heading } : {}),
+          entries: section.entries.map((entry) => ({
+            lines: entry.lines,
+            bullets: entry.bullets.map((bullet) => ({
+              text: bullet.text,
+              change: bullet.change,
+              ...(bullet.matchedTerms ? { matchedTerms: bullet.matchedTerms } : {}),
+            })),
+          })),
+        })),
+      };
+    },
+  };
 
   const jobs: ApplicationJobGate = {
     async isActive(jobId, at) {
@@ -94,7 +187,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
 
   const bindings: LiveBindingsSource = {
     async resolve({ ownerUserId, application, formHash }): Promise<CurrentBindings> {
-      const resume = (await artifacts(ownerUserId)).resume;
+      const resume = (await artifacts(ownerUserId, application.canonicalJobId)).resume;
       return {
         jobRevision: await jobRevision(application.canonicalJobId, clock()),
         formHash,
@@ -108,7 +201,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
       (await options.profile.listProfileFacts(ownerUserId)).facts.map(toGraphFact),
     jobRevision: (application: ApplicationRecord) =>
       jobRevision(application.canonicalJobId, clock()),
-    artifacts: (ownerUserId) => artifacts(ownerUserId),
+    artifacts: (ownerUserId, application) => artifacts(ownerUserId, application.canonicalJobId),
     clock,
   });
 
@@ -119,6 +212,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     packets,
     bindings,
     jobs,
+    resumes,
     ...(options.metrics ? { metrics: options.metrics } : {}),
     clock,
   });

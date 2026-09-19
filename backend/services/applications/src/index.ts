@@ -7,6 +7,7 @@ export * from "./field-policy.js";
 export * from "./metrics.js";
 export * from "./packet.js";
 export * from "./packet-source.js";
+export * from "./resume-preview.js";
 export * from "./service.js";
 export * from "./state-machine.js";
 export * from "./store.js";

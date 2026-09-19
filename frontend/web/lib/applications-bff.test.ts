@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { applicationsRoute, historySearch } from "./applications-bff";
+import { applicationsRoute, formatSearch, historySearch } from "./applications-bff";
 
 const APP = "019d04cf-1f80-7000-8000-000000000001";
 const ATTEMPT = "019d04cf-1f80-7000-8000-000000000002";
@@ -235,6 +235,117 @@ describe("Applications browser boundary", () => {
     );
     expect(notFound.status).toBe(404);
     expect(await notFound.json()).toMatchObject({ code: "application_not_found" });
+  });
+
+  it("serves the tailored resume preview through one fixed path and validates it strictly", async () => {
+    const preview = {
+      status: "ready",
+      matchesPacket: true,
+      baseDocument: { id: JOB, fileName: "resume.pdf" },
+      tailoringVersion: "tailoring.v1",
+      contentSha256: "a".repeat(64),
+      matchedTerms: ["typescript"],
+      sections: [
+        {
+          kind: "experience",
+          heading: "Experience",
+          entries: [
+            {
+              lines: ["Engineer - Acme"],
+              bullets: [{ text: "Built APIs in TypeScript", change: "moved_up" }],
+            },
+          ],
+        },
+      ],
+    };
+    const ok = harness(() => json(preview));
+    const response = await applicationsRoute(
+      "resumePreview",
+      new Request("http://localhost:3000/x", { method: "GET" }),
+      { applicationId: APP },
+      ok.deps,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(preview);
+    expect(String((ok.fetch.mock.calls[0] as unknown[])[0])).toBe(
+      `http://localhost:4000/v1/applications/${APP}/resume`,
+    );
+
+    // Anything outside the contract never reaches the browser.
+    for (const bad of [
+      { ...preview, recruiterNotes: "x" },
+      { ...preview, status: "interview_scheduled" },
+      { status: "ready" },
+      {
+        ...preview,
+        sections: [
+          {
+            kind: "experience",
+            entries: [{ lines: [], bullets: [{ text: "x", change: "rewritten" }] }],
+          },
+        ],
+      },
+    ]) {
+      const { deps } = harness(() => json(bad));
+      const refused = await applicationsRoute(
+        "resumePreview",
+        new Request("http://localhost:3000/x", { method: "GET" }),
+        { applicationId: APP },
+        deps,
+      );
+      expect(refused.status).toBe(503);
+      expect(JSON.stringify(await refused.json())).not.toContain("recruiterNotes");
+    }
+  });
+
+  it("forwards only a strict single format query for the resume file", async () => {
+    const file = {
+      format: "pdf",
+      mediaType: "application/pdf",
+      fileName: "resume-tailored.pdf",
+      sha256: "a".repeat(64),
+      sizeBytes: 3,
+      contentSha256: "b".repeat(64),
+      contentBase64: "YWJj",
+    };
+    const ok = harness(() => json(file));
+    const response = await applicationsRoute(
+      "resumeFile",
+      new Request("http://localhost:3000/x?format=pdf", { method: "GET" }),
+      { applicationId: APP },
+      ok.deps,
+    );
+    expect(response.status).toBe(200);
+    expect(String((ok.fetch.mock.calls[0] as unknown[])[0])).toBe(
+      `http://localhost:4000/v1/applications/${APP}/resume/file?format=pdf`,
+    );
+    for (const search of [
+      "",
+      "?format=exe",
+      "?format=pdf&format=docx",
+      "?format=pdf&x=1",
+      "?x=pdf",
+    ]) {
+      expect(formatSearch(search), search).toBeUndefined();
+      const { deps, fetch } = harness(() => json(file));
+      const refused = await applicationsRoute(
+        "resumeFile",
+        new Request(`http://localhost:3000/x${search}`, { method: "GET" }),
+        { applicationId: APP },
+        deps,
+      );
+      expect(refused.status, search).toBe(400);
+      expect(fetch).not.toHaveBeenCalled();
+    }
+    // A file that breaks the contract (for example a size above the ceiling) never reaches the browser.
+    const oversize = harness(() => json({ ...file, sizeBytes: 300_001 }));
+    const refused = await applicationsRoute(
+      "resumeFile",
+      new Request("http://localhost:3000/x?format=pdf", { method: "GET" }),
+      { applicationId: APP },
+      oversize.deps,
+    );
+    expect(refused.status).toBe(503);
   });
 
   it("never passes an invalid, oversized, mistyped, or foreign success body to the browser", async () => {

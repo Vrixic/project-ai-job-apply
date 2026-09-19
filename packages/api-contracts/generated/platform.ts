@@ -761,6 +761,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/applications/{applicationId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The resume tailored for this application's job, computed from the candidate's own parsed resume, with a section-by-section view of what changed. It selects and orders the candidate's own bullets and never adds or rewords text. Nothing is stored; the view is recomputed and is bound to the packet by its content hash. */
+        get: operations["getApplicationResumePreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/resume/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One verified DOCX or PDF rendering of the tailored resume the current packet carries. It is refused with a stale-packet conflict unless the rendering's content hash equals the packet's resume hash, so the file a candidate downloads is exactly the one they reviewed. */
+        get: operations["getApplicationResumeFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications/{applicationId}/packets": {
         parameters: {
             query?: never;
@@ -2070,6 +2104,51 @@ export interface components {
         ApplicationHistoryPage: {
             entries: components["schemas"]["ApplicationHistoryEntry"][];
             hasMore: boolean;
+        };
+        ApplicationResumeBullet: {
+            text: string;
+            /** @enum {string} */
+            change: "kept" | "moved_up" | "omitted";
+            matchedTerms?: string[];
+        };
+        ApplicationResumeEntry: {
+            lines: string[];
+            bullets: components["schemas"]["ApplicationResumeBullet"][];
+        };
+        ApplicationResumeSection: {
+            kind: string;
+            heading?: string;
+            entries: components["schemas"]["ApplicationResumeEntry"][];
+        };
+        ApplicationResumePreview: {
+            /** @enum {string} */
+            status: "ready" | "no_resume" | "unavailable";
+            /** @enum {string} */
+            unavailableReason?: "document_unreadable" | "factuality_failed" | "render_failed" | "service_unavailable";
+            baseDocument?: {
+                /** Format: uuid */
+                id: string;
+                fileName: string;
+            };
+            tailoringVersion?: string;
+            contentSha256?: string;
+            /** @description True only when the current packet's resume hash equals this live tailoring. False means the resume, the job text, or the tailoring version changed since the packet was prepared. */
+            matchesPacket: boolean;
+            matchedTerms?: string[];
+            sections?: components["schemas"]["ApplicationResumeSection"][];
+        };
+        ApplicationResumeFile: {
+            /** @enum {string} */
+            format: "docx" | "pdf";
+            /** @enum {string} */
+            mediaType: "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            fileName: string;
+            /** @description SHA-256 of the file bytes. */
+            sha256: string;
+            sizeBytes: number;
+            /** @description Format-independent content hash that the packet's resume hash binds. */
+            contentSha256: string;
+            contentBase64: string;
         };
         CreateApplicationRequest: {
             /** Format: uuid */
@@ -4003,6 +4082,65 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplicationResumePreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped tailored resume preview */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationResumePreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplicationResumeFile: {
+        parameters: {
+            query: {
+                format: "docx" | "pdf";
+            };
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped tailored resume file */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationResumeFile"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

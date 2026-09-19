@@ -89,9 +89,15 @@ async function click(label: RegExp | string) {
   });
 }
 
-async function mount(fetchImplementation: typeof globalThis.fetch) {
+async function mount(fetchImplementation: typeof globalThis.fetch, applyUrl?: string) {
   await act(async () => {
-    root.render(<ApplicationsWorkspace jobId={JOB} fetchImplementation={fetchImplementation} />);
+    root.render(
+      <ApplicationsWorkspace
+        jobId={JOB}
+        applyUrl={applyUrl}
+        fetchImplementation={fetchImplementation}
+      />,
+    );
   });
 }
 
@@ -106,17 +112,21 @@ describe("ApplicationsWorkspace", () => {
     expect(container.textContent).toContain("nothing is submitted from this page");
     await click("Prepare application");
 
-    expect(calls.map(([url]) => url)).toEqual([
+    // The resume preview is a read-only GET that follows the packet; commands are unchanged.
+    expect(calls.map(([url]) => url).filter((url) => !url.endsWith("/resume"))).toEqual([
       "/api/platform/applications",
       `/api/platform/applications/${APP}/packets`,
     ]);
     expect(JSON.parse(String(calls[0]?.[1].body))).toEqual({ jobId: JOB });
     expect(JSON.parse(String(calls[1]?.[1].body))).toEqual({ expectedRevision: 1 });
-    for (const [, init] of calls) {
+    for (const [, init] of calls.filter(([, request]) => request.method === "POST")) {
       expect((init.headers as Record<string, string>)["idempotency-key"]).toMatch(/^web-/);
     }
     expect(container.textContent).toContain("Application review");
     expect(container.textContent).toContain("Review what will be sent");
+    // The candidate sees the resume prepared for this job next to the packet.
+    expect(container.textContent).toContain("Your resume for this job");
+    expect(calls.map(([url]) => url)).toContain(`/api/platform/applications/${APP}/resume`);
   });
 
   it("approves exactly the reviewed packet hash and acknowledged keys at the current revision", async () => {
@@ -146,6 +156,35 @@ describe("ApplicationsWorkspace", () => {
     const approvalHeaders = (approval?.[1].headers ?? {}) as Record<string, string>;
     expect(approvalHeaders["idempotency-key"]).toBe(`web-approve-2-${APP}`);
     expect(container.textContent).toContain("Approved");
+  });
+
+  it("offers the Apply step only after approval, without submitting anything", async () => {
+    const calls: Array<[string, RequestInit]> = [];
+    const readyToApply = {
+      ...reviewable(3),
+      status: "approved",
+      currentAction: "ready_to_submit",
+    } as unknown as Application;
+    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push([url, init]);
+      if (url.endsWith("/approval")) return respond(readyToApply);
+      return url.endsWith("/packets") ? respond(reviewable(), 201) : respond(application(), 201);
+    }) as unknown as typeof globalThis.fetch;
+    await mount(fetchImplementation, "https://boards.example.test/jobs/1");
+    await click("Prepare application");
+    // Not yet approved: no Apply step.
+    expect(container.textContent).not.toContain("Open the application page");
+    const acknowledge = Array.from(container.querySelectorAll("input[type=checkbox]"))[0];
+    await act(async () => {
+      (acknowledge as HTMLInputElement).click();
+    });
+    await click(/approve/i);
+    expect(container.textContent).toContain("Open the application page");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe(
+      "https://boards.example.test/jobs/1",
+    );
+    // No submission, dispatch, or attempt call is ever made from the web page.
+    expect(calls.map(([url]) => url).filter((url) => /submissions|attempts/.test(url))).toEqual([]);
   });
 
   it("shows fixed copy for a refusal and never upstream text", async () => {
