@@ -226,6 +226,57 @@ function Assert-GatewayDocumentBaselineReceipt {
   return $true
 }
 
+# After the invoke grant (ADR-031) is applied, a refresh reports the Gateway role's computed
+# `inline_policy` snapshot as changed, because state still holds the older policy text. It is accepted
+# only when nothing but that snapshot differs and the change is exactly the reviewed statement, and the
+# live policy equals the exact source-evaluated policy.
+function Assert-GatewayRoleInlinePolicyRefreshDrift {
+  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][object]$Record)
+  $change = $Record.change
+  if ([string]$Record.address -cne "module.platform.aws_iam_role.gateway_lambda[0]" -or
+      [string]$Record.type -cne "aws_iam_role" -or [string]$Record.mode -cne "managed" -or
+      (@($change.actions) -join ",") -cne "update" -or $null -eq $change.before -or $null -eq $change.after) {
+    throw "The Gateway role refresh record has an unsafe shape."
+  }
+  Assert-NoTerraformReplacementPaths $change
+  $afterUnknown = Get-GatewayOptionalProperty $change "after_unknown"
+  if ($null -ne $afterUnknown -and @(Get-GatewayUnknownTrueLeafPaths -Value $afterUnknown).Count -ne 0) {
+    throw "The Gateway role refresh record contains an unknown field."
+  }
+  if ((ConvertTo-GatewayCanonicalJson (Get-GatewayOptionalProperty $change "before_sensitive")) -cne
+      (ConvertTo-GatewayCanonicalJson (Get-GatewayOptionalProperty $change "after_sensitive"))) {
+    throw "The Gateway role refresh record changed sensitivity."
+  }
+  $before = $change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $after = $change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  if ([string]$after.arn -cnotmatch '^arn:aws:iam::([0-9]{12}):role/ai-job-apply-development-gateway-lambda$') {
+    throw "The Gateway role refresh record is not the exact Gateway role."
+  }
+  $accountId = [string]$Matches[1]
+  $beforeInline = @($before.inline_policy)
+  $afterInline = @($after.inline_policy)
+  if ($beforeInline.Count -ne 1 -or $afterInline.Count -ne 1 -or
+      [string]$beforeInline[0].name -cne "gateway-lambda-runtime" -or [string]$afterInline[0].name -cne "gateway-lambda-runtime") {
+    throw "The Gateway role refresh record has an unexpected inline-policy boundary."
+  }
+  $plannedValues = Get-GatewayOptionalProperty $Plan "planned_values"
+  $rootModule = Get-GatewayOptionalProperty $plannedValues "root_module"
+  if ($null -eq $rootModule) { throw "The Gateway role refresh needs the exact source-evaluated planned root module." }
+  $planned = Get-TerraformStateResourceMap $rootModule
+  $expectedPolicy = $planned["module.platform.aws_iam_role_policy.gateway_lambda[0]"]
+  if ($null -eq $expectedPolicy -or [string]$expectedPolicy.policy -cne [string]$afterInline[0].policy) {
+    throw "The Gateway role inline policy differs from the exact source-evaluated policy."
+  }
+  Assert-GatewayPolicyGainsExactlyOneStatement -BeforeJson ([string]$beforeInline[0].policy) `
+    -AfterJson ([string]$afterInline[0].policy) -Sid "InvokeExactDocumentTailoringRuntime" `
+    -AliasArn "arn:aws:lambda:us-east-2:${accountId}:function:ai-job-apply-development-document-processor:development" `
+    -Label "Gateway role refresh"
+  $before.inline_policy = @(); $after.inline_policy = @()
+  if ((ConvertTo-GatewayCanonicalJson $before) -cne (ConvertTo-GatewayCanonicalJson $after)) {
+    throw "The Gateway role refresh changed more than its inline-policy snapshot."
+  }
+}
+
 function Assert-AcceptedGatewayProviderDrift {
   param([Parameter(Mandatory)][object]$Plan)
 
@@ -235,6 +286,17 @@ function Assert-AcceptedGatewayProviderDrift {
   $rootModule = Get-GatewayOptionalProperty $plannedValues "root_module"
   if ($null -eq $rootModule) {
     throw "Accepted gateway provider drift requires the exact source-evaluated planned root module."
+  }
+  $roleAddress = "module.platform.aws_iam_role.gateway_lambda[0]"
+  $roleRecords = @($drift | Where-Object { [string]$_.address -ceq $roleAddress })
+  if ($roleRecords.Count -gt 1) { throw "The Gateway role refresh was reported more than once." }
+  if ($roleRecords.Count -eq 1) {
+    Assert-GatewayRoleInlinePolicyRefreshDrift -Plan $Plan -Record $roleRecords[0]
+    # Everything else still goes through the shared accepted-drift check, unchanged.
+    $remaining = $Plan | Select-Object *
+    $remaining.resource_drift = @($drift | Where-Object { [string]$_.address -cne $roleAddress })
+    Assert-RestoreRoleAcceptedPlanDrift -Plan $remaining
+    return
   }
   Assert-RestoreRoleAcceptedPlanDrift -Plan $Plan
 }

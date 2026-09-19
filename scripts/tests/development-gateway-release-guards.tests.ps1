@@ -767,6 +767,79 @@ $parserToo = Copy-Fixture $processorPlan
 $parserToo.resource_changes = @($parserToo.resource_changes) + @([pscustomobject]@{ address = "module.platform.aws_lambda_function.document_parser[0]"; mode = "managed"; type = "aws_lambda_function"; change = [pscustomobject]@{ actions = @("update"); before = [pscustomobject]@{}; after = [pscustomobject]@{} } })
 Assert-Rejected { Assert-ExactGatewayReleasePlan $parserToo $artifact -ProcessorArtifact $processorArtifact } "A processor refresh that also changed the parser was accepted."
 
+
+# ---- Gateway role inline-policy refresh drift after the invoke grant is applied (ADR-031).
+$gatewayRoleArnValue = "arn:aws:iam::${account}:role/ai-job-apply-development-gateway-lambda"
+$gatewayBeforePolicy = ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @($logsStatement, $secretStatement) })
+$gatewayAfterPolicy = ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @($logsStatement, $secretStatement, $roleGrant) })
+function New-GatewayRoleDriftPlan {
+  param(
+    [string]$BeforePolicy = $gatewayBeforePolicy,
+    [string]$AfterPolicy = $gatewayAfterPolicy,
+    [string]$PlannedPolicy = $gatewayAfterPolicy,
+    [bool]$IncludePlannedPolicy = $true,
+    [object]$Base = $completeDarkReleasePlan
+  )
+  $refreshPlan = Copy-Fixture $Base
+  if ($IncludePlannedPolicy) {
+    $refreshPlan.planned_values.root_module.resources = @($refreshPlan.planned_values.root_module.resources) + @(
+      [pscustomobject]@{
+        address = "module.platform.aws_iam_role_policy.gateway_lambda[0]"
+        values = [pscustomobject]@{ name = "gateway-lambda-runtime"; role = "ai-job-apply-development-gateway-lambda"; policy = $PlannedPolicy }
+      })
+  }
+  $roleBefore = [pscustomobject]@{
+    arn = $gatewayRoleArnValue; name = "ai-job-apply-development-gateway-lambda"; path = "/"
+    inline_policy = @([pscustomobject]@{ name = "gateway-lambda-runtime"; policy = $BeforePolicy })
+    tags = [pscustomobject]@{}
+  }
+  $roleAfter = Copy-Fixture $roleBefore
+  $roleAfter.inline_policy[0].policy = $AfterPolicy
+  $refreshPlan.resource_drift = @($refreshPlan.resource_drift) + @(
+    New-GatewayProviderDriftRecord -Address "module.platform.aws_iam_role.gateway_lambda[0]" -Type "aws_iam_role" -Before $roleBefore -After $roleAfter)
+  return $refreshPlan
+}
+$roleDriftPlan = New-GatewayRoleDriftPlan
+$null = Assert-ExactGatewayReleasePlan $roleDriftPlan $artifact; $passed++
+$roleDriftBaseline = New-GatewayRoleDriftPlan -Base $completeDarkBaselinePlan
+$null = Assert-RetainedGatewayBaselinePlan $roleDriftBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name); $passed++
+
+$otherStatement = [ordered]@{ Sid = "InvokeExactDocumentTailoringRuntime"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = "*" }
+$widenedPolicy = ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @($logsStatement, $secretStatement, $otherStatement) })
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GatewayRoleDriftPlan -AfterPolicy $widenedPolicy -PlannedPolicy $widenedPolicy) $artifact } "A widened Gateway role refresh was accepted."
+$twoAdded = ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @($logsStatement, $secretStatement, $roleGrant, [ordered]@{ Sid = "Extra"; Effect = "Allow"; Action = "s3:GetObject"; Resource = "*" }) })
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GatewayRoleDriftPlan -AfterPolicy $twoAdded -PlannedPolicy $twoAdded) $artifact } "A Gateway role refresh with a second added statement was accepted."
+$alteredExisting = ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @([ordered]@{ Sid = "WriteOwnedLogs"; Effect = "Allow"; Action = "logs:*"; Resource = "*" }, $secretStatement, $roleGrant) })
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GatewayRoleDriftPlan -AfterPolicy $alteredExisting -PlannedPolicy $alteredExisting) $artifact } "A Gateway role refresh that altered an existing statement was accepted."
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GatewayRoleDriftPlan -PlannedPolicy $gatewayBeforePolicy) $artifact } "A Gateway role refresh differing from the source-evaluated policy was accepted."
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GatewayRoleDriftPlan -IncludePlannedPolicy $false) $artifact } "A Gateway role refresh without its planned policy was accepted."
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GatewayRoleDriftPlan -BeforePolicy $gatewayAfterPolicy) $artifact } "A Gateway role refresh that added no statement was accepted."
+
+$otherAttribute = New-GatewayRoleDriftPlan
+$otherAttribute.resource_drift[-1].change.after.path = "/service/"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $otherAttribute $artifact } "A Gateway role refresh that also changed another attribute was accepted."
+$otherRole = New-GatewayRoleDriftPlan
+$otherRole.resource_drift[-1].change.after.arn = "arn:aws:iam::${account}:role/some-other-role"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $otherRole $artifact } "A refresh of a different role was accepted as the Gateway role."
+$otherPolicyName = New-GatewayRoleDriftPlan
+$otherPolicyName.resource_drift[-1].change.after.inline_policy[0].name = "other-policy"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $otherPolicyName $artifact } "A Gateway role refresh with another inline policy name was accepted."
+$duplicateRecord = New-GatewayRoleDriftPlan
+$duplicateRecord.resource_drift = @($duplicateRecord.resource_drift) + @($duplicateRecord.resource_drift[-1])
+Assert-Rejected { Assert-ExactGatewayReleasePlan $duplicateRecord $artifact } "A duplicated Gateway role refresh was accepted."
+$unknownRole = New-GatewayRoleDriftPlan
+$unknownRole.resource_drift[-1].change.after_unknown | Add-Member NoteProperty inline_policy $true
+Assert-Rejected { Assert-ExactGatewayReleasePlan $unknownRole $artifact } "A Gateway role refresh with an unknown field was accepted."
+$replacedRole = New-GatewayRoleDriftPlan
+$replacedRole.resource_drift[-1].change | Add-Member NoteProperty replace_paths @(@("inline_policy")) -Force
+Assert-Rejected { Assert-ExactGatewayReleasePlan $replacedRole $artifact } "A Gateway role refresh with replacement paths was accepted."
+$sensitiveRole = New-GatewayRoleDriftPlan
+$sensitiveRole.resource_drift[-1].change.after_sensitive = [pscustomobject]@{ inline_policy = $true }
+Assert-Rejected { Assert-ExactGatewayReleasePlan $sensitiveRole $artifact } "A Gateway role refresh that changed sensitivity was accepted."
+$createdRole = New-GatewayRoleDriftPlan
+$createdRole.resource_drift[-1].change.actions = @("delete", "create")
+Assert-Rejected { Assert-ExactGatewayReleasePlan $createdRole $artifact } "A Gateway role replacement was accepted as refresh drift."
+
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
 $diagnosticPlanPath = Join-Path $terraformDirectory `

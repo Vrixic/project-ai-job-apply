@@ -189,6 +189,12 @@ unknown field is allowed, and the switch may move only from `false` to `true`. T
 already be deployed and live-verified before this release, because the grant only names it. After apply,
 `Verify` must return zero drift; seed later baselines from that verification plan so the switch stays on.
 
+After the invoke grant is applied, a refresh-backed plan lists `aws_iam_role.gateway_lambda[0]` as drift
+because the role's computed `inline_policy` snapshot in state still holds the older policy text. The guard
+accepts that one provider-observed record only when nothing else about the role differs, the live policy equals
+the exact source-evaluated policy, and the difference is exactly the one reviewed `InvokeExactDocumentTailoringRuntime`
+statement; any other change to that role, a second or altered statement, unknown fields, replacement paths, or a
+duplicate record is refused. It disappears once state is refreshed.
 ## Optional document processor refresh (ADR-031)
 
 The same release may also move the document processor to a newly published, independently verified
