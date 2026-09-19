@@ -34,7 +34,7 @@ jobs:
         run: test -n "$AWS_DEPLOY_ROLE_ARN" && test -n "$TERRAFORM_STATE_BUCKET"
 
       - name: Obtain short-lived AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
