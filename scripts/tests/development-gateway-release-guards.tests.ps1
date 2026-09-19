@@ -677,6 +677,96 @@ $extraResource = New-GrantPlan
 $extraResource.resource_changes = @($extraResource.resource_changes) + @([pscustomobject]@{ address = "module.platform.aws_s3_bucket.artifacts"; mode = "managed"; type = "aws_s3_bucket"; change = [pscustomobject]@{ actions = @("update"); before = [pscustomobject]@{}; after = [pscustomobject]@{} } })
 Assert-Rejected { Assert-ExactGatewayReleasePlan $extraResource $artifact -ExpectedAccountId $account } "A grant plan with an unreviewed extra resource was accepted."
 
+
+# ---- Document processor refresh (ADR-031): the processor function and alias, bound to the verified receipt.
+$processorArtifact = Get-GatewayProcessorArtifact $documentReceipt $sourceSha
+if ([string]$processorArtifact.artifactSha256 -cne ("4" * 64) -or [string]$processorArtifact.key -cnotmatch "/document-processor-lambda\.zip$" -or
+    [string]$processorArtifact.versionId -cne "version-document-processor-lambda-zip") {
+  throw "The processor artifact was not taken from the exact processor archive entry."
+}
+$passed++
+Assert-Rejected { Get-GatewayProcessorArtifact $documentReceipt ("d" * 40) } "A processor artifact was taken from a receipt for a different source."
+$noProcessorZip = Copy-Fixture $documentReceipt
+$noProcessorZip.artifacts = @($noProcessorZip.artifacts | Where-Object { -not ($_.artifactName -ceq "document-processor-lambda" -and $_.suffix -ceq "zip") })
+Assert-Rejected { Get-GatewayProcessorArtifact $noProcessorZip $sourceSha } "A processor artifact was taken from a receipt without the processor archive."
+
+$processorRelease = New-Variables -Released
+$processorRelease.document_processor_artifact_s3_key.value = [string]$processorArtifact.key
+$processorRelease.document_processor_artifact_s3_object_version.value = [string]$processorArtifact.versionId
+$processorRelease.document_processor_artifact_sha256.value = [string]$processorArtifact.artifactSha256
+$processorRelease.document_processor_artifact_base64sha256.value = [string]$processorArtifact.objectBase64Sha256
+$null = Assert-GatewayReleaseVariables $baselineVariables $processorRelease $artifact $account $repositoryUrl "" -ProcessorArtifact $processorArtifact; $passed++
+Assert-Rejected { Assert-GatewayReleaseVariables $baselineVariables $processorRelease $artifact $account $repositoryUrl "" } "Processor variables changed without a verified processor artifact."
+foreach ($name in @("document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version", "document_processor_artifact_sha256", "document_processor_artifact_base64sha256")) {
+  $wrongVariable = Copy-Fixture $processorRelease; $wrongVariable.$name.value = "not-the-verified-value"
+  Assert-Rejected { Assert-GatewayReleaseVariables $baselineVariables $wrongVariable $artifact $account $repositoryUrl "" -ProcessorArtifact $processorArtifact } "The release accepted an unverified '$name'."
+}
+$unchangedProcessor = New-Variables -Released
+Assert-Rejected { Assert-GatewayReleaseVariables $baselineVariables $unchangedProcessor $artifact $account $repositoryUrl "" -ProcessorArtifact $processorArtifact } "A processor refresh accepted variables that do not use the verified artifact."
+$parserMoved = Copy-Fixture $processorRelease; $parserMoved.document_parser_artifact_sha256.value = "9" * 64
+Assert-Rejected { Assert-GatewayReleaseVariables $baselineVariables $parserMoved $artifact $account $repositoryUrl "" -ProcessorArtifact $processorArtifact } "A processor refresh also moved the parser artifact."
+
+function New-ProcessorPlan {
+  param([object]$Base = $plan, [object]$Artifact = $processorArtifact)
+  $refreshed = Copy-Fixture $Base
+  # Clone from the clean two-resource fixture so a grant variable on the Gateway change never leaks in.
+  $function = Copy-Fixture @($plan.resource_changes | Where-Object { $_.address -ceq "module.platform.aws_lambda_function.gateway[0]" })[0]
+  $alias = Copy-Fixture @($plan.resource_changes | Where-Object { $_.address -ceq "module.platform.aws_lambda_alias.gateway[0]" })[0]
+  $function.address = "module.platform.aws_lambda_function.document_processor[0]"
+  $function.change.before.function_name = "processor"; $function.change.after.function_name = "processor"
+  $function.change.after.s3_key = [string]$Artifact.key
+  $function.change.after.s3_object_version = [string]$Artifact.versionId
+  $function.change.after.source_code_hash = [string]$Artifact.objectBase64Sha256
+  $function.change.after.environment[0].variables.RELEASE_SHA = [string]$Artifact.artifactSha256
+  $alias.address = "module.platform.aws_lambda_alias.document_processor[0]"
+  $alias.change.before.function_name = "processor"; $alias.change.after.function_name = "processor"
+  $refreshed.resource_changes = @($refreshed.resource_changes) + @($function, $alias)
+  return $refreshed
+}
+$processorPlan = New-ProcessorPlan
+$processorChanges = @(Assert-ExactGatewayReleasePlan $processorPlan $artifact -ProcessorArtifact $processorArtifact)
+if ($processorChanges.Count -ne 4) { throw "The processor refresh plan did not return exactly four changes." }
+$passed++
+# The invoke grant and the processor refresh may be released together, and only together as exact pairs.
+$combinedPlan = New-ProcessorPlan -Base (New-GrantPlan)
+$combinedChanges = @(Assert-ExactGatewayReleasePlan $combinedPlan $artifact -ExpectedAccountId $account -ProcessorArtifact $processorArtifact)
+if ($combinedChanges.Count -ne 6) { throw "The combined grant and processor refresh plan did not return exactly six changes." }
+$passed++
+
+Assert-Rejected { Assert-ExactGatewayReleasePlan $processorPlan $artifact } "A processor refresh plan was accepted without a verified processor artifact."
+$otherArtifact = [pscustomobject]@{ key = "$($processorArtifact.key)-other"; versionId = "other"; artifactSha256 = "8" * 64; objectBase64Sha256 = [Convert]::ToBase64String(([byte[]](1..32))); contentLength = 100 }
+Assert-Rejected { Assert-ExactGatewayReleasePlan $processorPlan $artifact -ProcessorArtifact $otherArtifact } "A processor refresh accepted a different artifact than the verified one."
+foreach ($field in @("s3_key", "s3_object_version", "source_code_hash")) {
+  $wrongField = Copy-Fixture $processorPlan; $wrongField.resource_changes[2].change.after.$field = "wrong"
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $wrongField $artifact -ProcessorArtifact $processorArtifact } "The processor update accepted a wrong '$field'."
+}
+$wrongRelease = Copy-Fixture $processorPlan; $wrongRelease.resource_changes[2].change.after.environment[0].variables.RELEASE_SHA = "0" * 64
+Assert-Rejected { Assert-ExactGatewayReleasePlan $wrongRelease $artifact -ProcessorArtifact $processorArtifact } "The processor update accepted a wrong RELEASE_SHA."
+foreach ($mutation in @("memory_size", "timeout", "handler", "role", "reserved_concurrent_executions")) {
+  $mutated = Copy-Fixture $processorPlan
+  $mutated.resource_changes[2].change.after.$mutation = if ($mutation -in @("handler", "role")) { "changed" } else { 999 }
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $mutated $artifact -ProcessorArtifact $processorArtifact } "The processor update changed nonapproved field '$mutation'."
+}
+$movedParserPin = Copy-Fixture $processorPlan
+$movedParserPin.resource_changes[2].change.after.environment[0].variables | Add-Member NoteProperty DOCUMENT_PARSER_FUNCTION_ARN "arn:aws:lambda:us-east-2:${account}:function:parser:7"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $movedParserPin $artifact -ProcessorArtifact $processorArtifact } "The processor update moved its parser pin or added an environment variable."
+$unknownProcessor = Copy-Fixture $processorPlan; $unknownProcessor.resource_changes[2].change.after_unknown | Add-Member NoteProperty memory_size $true
+Assert-Rejected { Assert-ExactGatewayReleasePlan $unknownProcessor $artifact -ProcessorArtifact $processorArtifact } "The processor update accepted an unknown nonapproved field."
+$movedAlias = Copy-Fixture $processorPlan; $movedAlias.resource_changes[3].change.after.description = "changed"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $movedAlias $artifact -ProcessorArtifact $processorArtifact } "The processor alias update changed a non-version field."
+$aliasWithVersion = Copy-Fixture $processorPlan; $aliasWithVersion.resource_changes[3].change.after | Add-Member NoteProperty function_version "9"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $aliasWithVersion $artifact -ProcessorArtifact $processorArtifact } "The processor alias update pinned a version at plan time."
+$functionOnly = Copy-Fixture $processorPlan; $functionOnly.resource_changes = @($functionOnly.resource_changes | Select-Object -First 3)
+Assert-Rejected { Assert-ExactGatewayReleasePlan $functionOnly $artifact -ProcessorArtifact $processorArtifact } "A processor function change without its alias was accepted."
+$processorReplaced = Copy-Fixture $processorPlan; $processorReplaced.resource_changes[2].change.actions = @("delete", "create")
+Assert-Rejected { Assert-ExactGatewayReleasePlan $processorReplaced $artifact -ProcessorArtifact $processorArtifact } "A processor replacement was accepted."
+$processorPolicyToo = Copy-Fixture $processorPlan
+$processorPolicyToo.resource_changes = @($processorPolicyToo.resource_changes) + @([pscustomobject]@{ address = "module.platform.aws_iam_role_policy.document_processor[0]"; mode = "managed"; type = "aws_iam_role_policy"; change = [pscustomobject]@{ actions = @("update"); before = [pscustomobject]@{}; after = [pscustomobject]@{} } })
+Assert-Rejected { Assert-ExactGatewayReleasePlan $processorPolicyToo $artifact -ProcessorArtifact $processorArtifact } "A processor refresh that also changed the processor IAM policy was accepted."
+$parserToo = Copy-Fixture $processorPlan
+$parserToo.resource_changes = @($parserToo.resource_changes) + @([pscustomobject]@{ address = "module.platform.aws_lambda_function.document_parser[0]"; mode = "managed"; type = "aws_lambda_function"; change = [pscustomobject]@{ actions = @("update"); before = [pscustomobject]@{}; after = [pscustomobject]@{} } })
+Assert-Rejected { Assert-ExactGatewayReleasePlan $parserToo $artifact -ProcessorArtifact $processorArtifact } "A processor refresh that also changed the parser was accepted."
+
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
 $diagnosticPlanPath = Join-Path $terraformDirectory `

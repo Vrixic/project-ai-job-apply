@@ -20,6 +20,9 @@ param(
   # Switches the Gateway-to-Documents invoke grant (ADR-031) on, once. Required for Plan, Apply, and
   # Verify of the release that first carries it; the guards accept only the reviewed grant content.
   [switch]$EnableDocumentTailoringInvoke,
+  # Also refreshes the document processor to the verified artifact named by -DocumentReceiptPath
+  # (ADR-031). The processor function and alias are the only additional changes the guards accept.
+  [switch]$RefreshDocumentProcessor,
   [switch]$Help
 )
 
@@ -399,7 +402,7 @@ function Restore-TerraformVariables {
   foreach ($entry in $Saved.GetEnumerator()) { Set-Item "Env:$($entry.Key)" ([string]$entry.Value) }
 }
 function Set-VariablesFromPlan {
-  param([Parameter(Mandatory)][object]$Plan, [AllowNull()][object]$Artifact, [switch]$EnableTailoringInvoke)
+  param([Parameter(Mandatory)][object]$Plan, [AllowNull()][object]$Artifact, [switch]$EnableTailoringInvoke, [AllowNull()][object]$ProcessorArtifact = $null)
   foreach ($property in $Plan.variables.PSObject.Properties) {
     $value = $property.Value.value
     $serialized = if ($value -is [bool]) { ([string]$value).ToLowerInvariant() }
@@ -414,6 +417,12 @@ function Set-VariablesFromPlan {
     $env:TF_VAR_gateway_lambda_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
   }
   if ($EnableTailoringInvoke) { $env:TF_VAR_document_tailoring_invoke_enabled = "true" }
+  if ($null -ne $ProcessorArtifact) {
+    $env:TF_VAR_document_processor_artifact_s3_key = [string]$ProcessorArtifact.key
+    $env:TF_VAR_document_processor_artifact_s3_object_version = [string]$ProcessorArtifact.versionId
+    $env:TF_VAR_document_processor_artifact_sha256 = [string]$ProcessorArtifact.artifactSha256
+    $env:TF_VAR_document_processor_artifact_base64sha256 = [string]$ProcessorArtifact.objectBase64Sha256
+  }
 }
 function ConvertTo-GatewayCaptureRestoreFlag {
   param([AllowNull()][object]$Value)
@@ -511,6 +520,43 @@ function Read-BaselineDocumentReceipt {
     throw "Exactly one local document publication receipt must match the retained baseline checksum."
   }
   return Get-Content -LiteralPath $matches[0].FullName -Raw | ConvertFrom-Json
+}
+# The document publication receipt for the exact release source, re-verified against the live private,
+# versioned, customer-KMS artifact bucket. Only its processor archive is used, and only when the caller
+# asks for a processor refresh; otherwise nothing about the document runtime may change.
+function Read-ProcessorRefreshArtifact {
+  if (-not $RefreshDocumentProcessor) { return $null }
+  if ($Action -notin @("Plan", "Apply", "Verify") -or [string]::IsNullOrWhiteSpace($DocumentReceiptPath) -or
+      $ReviewedDocumentReceiptSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "A document processor refresh requires Plan, Apply, or Verify with the reviewed publication receipt."
+  }
+  $receiptRoot = [IO.Path]::GetFullPath((Join-Path $terraformRoot "development-document-artifacts"))
+  $candidate = if ([IO.Path]::IsPathRooted($DocumentReceiptPath)) { $DocumentReceiptPath } else { Join-Path $terraformDirectory $DocumentReceiptPath }
+  $resolved = [IO.Path]::GetFullPath($candidate)
+  if (-not $resolved.StartsWith($receiptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
+      -not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
+    throw "The document publication receipt must be an existing file in the ignored document artifact directory."
+  }
+  if ((Get-FileSha256 $resolved) -cne $ReviewedDocumentReceiptSha256) {
+    throw "The document publication receipt checksum does not match review."
+  }
+  $receipt = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json
+  $artifact = Get-GatewayProcessorArtifact -Receipt $receipt -SourceSha $SourceSha
+  if ([string]$receipt.boundarySha256 -cne [string]$boundary.BoundarySha256) {
+    throw "The document publication receipt is outside the live development artifact and KMS boundary."
+  }
+  $stored = Invoke-AwsJson @("s3api", "head-object", "--bucket", $boundary.Bucket, "--key", $artifact.key,
+    "--version-id", $artifact.versionId, "--checksum-mode", "ENABLED", "--output", "json") "Processor artifact readback"
+  $storedKey = Invoke-AwsJson @("kms", "describe-key", "--key-id", [string]$stored.SSEKMSKeyId, "--output", "json") "Processor artifact KMS readback"
+  $platformKey = Invoke-AwsJson @("kms", "describe-key", "--key-id", $boundary.KmsArn, "--output", "json") "Platform KMS readback"
+  if ([string]$stored.VersionId -cne $artifact.versionId -or [long]$stored.ContentLength -ne $artifact.contentLength -or
+      [string]$stored.ChecksumSHA256 -cne $artifact.objectBase64Sha256 -or [string]$stored.ServerSideEncryption -cne "aws:kms" -or
+      [string]$storedKey.KeyMetadata.KeyId -cne [string]$platformKey.KeyMetadata.KeyId -or
+      [string]$stored.Metadata."source-sha" -cne $SourceSha -or
+      [string]$stored.Metadata."artifact-sha256" -cne $artifact.artifactSha256) {
+    throw "The document processor artifact failed independent exact-version readback."
+  }
+  return $artifact
 }
 function Read-Baseline {
   foreach ($required in @($BaselinePlanPath, $ReviewedBaselineSha256, $BaselineMetadataPath, $ReviewedBaselineMetadataSha256)) {
@@ -659,12 +705,12 @@ function Assert-LiveGateway {
       [string]$function.Configuration.Environment.Variables.RELEASE_SHA -cne [string]$Artifact.artifactSha256) { throw "The live gateway alias does not match the checksum-reviewed immutable artifact." }
 }
 function Invoke-ZeroDrift {
-  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact, [switch]$EnableTailoringInvoke)
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact, [switch]$EnableTailoringInvoke, [AllowNull()][object]$ProcessorArtifact = $null)
   $path = Join-Path $operatorRoot "verify-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
   if (Test-Path $path) { throw "Refusing to overwrite a verification plan." }
   $saved = Save-AndClearTerraformVariables
   try {
-    Set-VariablesFromPlan $Baseline.Plan $Artifact -EnableTailoringInvoke:$EnableTailoringInvoke
+    Set-VariablesFromPlan $Baseline.Plan $Artifact -EnableTailoringInvoke:$EnableTailoringInvoke -ProcessorArtifact $ProcessorArtifact
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
     $exitCode = $LASTEXITCODE
   } finally { Restore-TerraformVariables $saved }
@@ -682,7 +728,8 @@ function Invoke-ZeroDrift {
   }
   $null = Assert-RetainedGatewayBaselinePlan $plan $declaredVariables
   $null = Assert-GatewayReleaseVariables $Baseline.Plan.variables $plan.variables $Artifact `
-    $ExpectedAccountId $boundary.MigrationRepositoryUrl $Baseline.Metadata.ParserQualifiedArn
+    $ExpectedAccountId $boundary.MigrationRepositoryUrl $Baseline.Metadata.ParserQualifiedArn `
+    -ProcessorArtifact $ProcessorArtifact
   return Get-FileSha256 $path
 }
 
@@ -837,6 +884,7 @@ if ($Action -ceq "VerifyPublication") {
   exit 0
 }
 $baseline = Read-Baseline
+$processorArtifact = Read-ProcessorRefreshArtifact
 
 if ($Action -ceq "Verify") {
   $currentState = Get-StateIdentity
@@ -872,13 +920,14 @@ if ($Action -ceq "Verify") {
     }
     $reviewedPlan = Read-Plan $reviewedPath
     $null = Assert-GatewayReleaseVariables $baseline.Plan.variables $reviewedPlan.variables $publication.Artifact `
-      $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
-    $null = Assert-ExactGatewayReleasePlan $reviewedPlan $publication.Artifact -ExpectedAccountId $ExpectedAccountId
+      $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn `
+    -ProcessorArtifact $processorArtifact
+    $null = Assert-ExactGatewayReleasePlan $reviewedPlan $publication.Artifact -ExpectedAccountId $ExpectedAccountId -ProcessorArtifact $processorArtifact
   }
   Assert-LiveGateway $publication.Artifact
   & (Join-Path $PSScriptRoot "verify-development-gateway-lambda-boundary.ps1") -AwsProfile $AwsProfile -AwsRegion $Region | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The direct development gateway/search boundary failed." }
-  $driftSha = Invoke-ZeroDrift $baseline $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke
+  $driftSha = Invoke-ZeroDrift $baseline $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke -ProcessorArtifact $processorArtifact
   [pscustomobject]@{ Outcome = "verified"; SourceSha = $SourceSha; AliasImmutable = $true; SearchBoundary = "passed"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
   exit 0
 }
@@ -889,15 +938,16 @@ if ($Action -ceq "Plan") {
   if (Test-Path $path) { throw "Refusing to overwrite a release plan." }
   $state = Get-StateIdentity; $saved = Save-AndClearTerraformVariables
   try {
-    Set-VariablesFromPlan $baseline.Plan $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke
+    Set-VariablesFromPlan $baseline.Plan $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke -ProcessorArtifact $processorArtifact
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
     $exitCode = $LASTEXITCODE
   } finally { Restore-TerraformVariables $saved }
   if ($exitCode -ne 2) { if (Test-Path $path) { Remove-Item $path -Force }; throw "The gateway release did not produce an exact reviewable change." }
   $plan = Read-Plan $path
   $null = Assert-GatewayReleaseVariables $baseline.Plan.variables $plan.variables $publication.Artifact `
-    $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
-  $changes = @(Assert-ExactGatewayReleasePlan $plan $publication.Artifact -ExpectedAccountId $ExpectedAccountId)
+    $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn `
+    -ProcessorArtifact $processorArtifact
+  $changes = @(Assert-ExactGatewayReleasePlan $plan $publication.Artifact -ExpectedAccountId $ExpectedAccountId -ProcessorArtifact $processorArtifact)
   $sha = Get-FileSha256 $path
   $metadata = [ordered]@{ SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"; StateLineage = $state.Lineage; StateSerial = $state.Serial; SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256; BaselinePath = $baseline.Path; BaselineSha256 = $ReviewedBaselineSha256; BaselineMetadataPath = $baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256; BaselineMetadataSchemaVersion = $baseline.MetadataSchemaVersion; BaselineStage = [string]$baseline.Metadata.Stage; BaselineParserQualifiedArn = [string]$baseline.Metadata.ParserQualifiedArn; BaselineDocumentReceiptSha256 = $baseline.DocumentReceiptSha256; BaselineStateLineage = [string]$baseline.Metadata.StateLineage; BaselineStateSerial = [long]$baseline.Metadata.StateSerial; BaselineMigrationImage = $baseline.MigrationImage; MigrationImage = [string](Get-GatewayPlanVariableValue $baseline.Plan.variables "migration_image"); PlanPath = $path; PlanSha256 = $sha; ChangedResources = @($changes | ForEach-Object address | Sort-Object); CreatedAt = (Get-Date).ToUniversalTime().ToString("o") }
   Write-ExclusiveJson "$path$metadataSuffix" $metadata
@@ -916,12 +966,13 @@ $state = Get-StateIdentity
 if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne [long]$metadata.StateSerial) { throw "Remote state changed after review; generate a new gateway release plan." }
 $plan = Read-Plan $path
 $null = Assert-GatewayReleaseVariables $baseline.Plan.variables $plan.variables $publication.Artifact `
-  $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
-$null = Assert-ExactGatewayReleasePlan $plan $publication.Artifact -ExpectedAccountId $ExpectedAccountId
+  $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn `
+    -ProcessorArtifact $processorArtifact
+$null = Assert-ExactGatewayReleasePlan $plan $publication.Artifact -ExpectedAccountId $ExpectedAccountId -ProcessorArtifact $processorArtifact
 & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
 if ($LASTEXITCODE -ne 0) { throw "The exact reviewed gateway release plan failed to apply." }
 Assert-LiveGateway $publication.Artifact
 & (Join-Path $PSScriptRoot "verify-development-gateway-lambda-boundary.ps1") -AwsProfile $AwsProfile -AwsRegion $Region | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "The direct development gateway/search boundary failed after apply." }
-$driftSha = Invoke-ZeroDrift $baseline $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke
+$driftSha = Invoke-ZeroDrift $baseline $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke -ProcessorArtifact $processorArtifact
 [pscustomobject]@{ Outcome = "applied-and-verified"; SourceSha = $SourceSha; AliasImmutable = $true; SearchBoundary = "passed"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json

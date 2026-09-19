@@ -682,4 +682,43 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
   } finally { Restore-TerraformVariables $saved }
 }
 
+
+# ---- Document processor refresh (ADR-031): opt-in, receipt-bound, and threaded through every plan.
+$refreshFunction = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq "Read-ProcessorRefreshArtifact"
+    }, $true))
+if ($refreshFunction.Count -ne 1) { throw "The processor refresh receipt reader must be defined exactly once." }
+$refreshText = $refreshFunction[0].Extent.Text
+foreach ($required in @(
+    'if (-not $RefreshDocumentProcessor) { return $null }',
+    '$Action -notin @("Plan", "Apply", "Verify")',
+    'development-document-artifacts',
+    'Get-GatewayProcessorArtifact -Receipt $receipt -SourceSha $SourceSha',
+    '$boundary.BoundarySha256',
+    '"--checksum-mode", "ENABLED"',
+    '[string]$stored.Metadata."source-sha" -cne $SourceSha',
+    '[string]$stored.ServerSideEncryption -cne "aws:kms"')) {
+  if (-not $refreshText.Contains($required)) { throw "The processor refresh receipt reader is missing '$required'." }
+}
+if ($operator.IndexOf('$baseline = Read-Baseline') -lt 0 -or
+    $operator.IndexOf('$processorArtifact = Read-ProcessorRefreshArtifact') -lt $operator.IndexOf('$baseline = Read-Baseline')) {
+  throw "The processor refresh artifact must be read after the retained baseline."
+}
+# Every release path that builds or checks a plan must carry the same verified artifact.
+foreach ($needle in @(
+    'Assert-ExactGatewayReleasePlan $reviewedPlan $publication.Artifact -ExpectedAccountId $ExpectedAccountId -ProcessorArtifact $processorArtifact',
+    'Assert-ExactGatewayReleasePlan $plan $publication.Artifact -ExpectedAccountId $ExpectedAccountId -ProcessorArtifact $processorArtifact',
+    'Invoke-ZeroDrift $baseline $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke -ProcessorArtifact $processorArtifact',
+    'Set-VariablesFromPlan $baseline.Plan $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke -ProcessorArtifact $processorArtifact')) {
+  if (-not $operator.Contains($needle)) { throw "A release path does not carry the verified processor artifact: $needle" }
+}
+if (([regex]::Matches($operator, '-ProcessorArtifact \$processorArtifact')).Count -lt 9) {
+  throw "The variable and plan guards must each receive the verified processor artifact."
+}
+# CaptureBaseline never takes the processor artifact: it only reconstructs retained inputs.
+$captureSetCall = [regex]::Match($operator, 'Set-VariablesFromPlan \$seed \$null[^\r\n]*')
+if (-not $captureSetCall.Success -or $captureSetCall.Value.Contains("Processor") -or $captureSetCall.Value.Contains("Tailoring")) {
+  throw "CaptureBaseline must not apply the processor refresh or the invoke switch."
+}
 Write-Output "Development gateway release operator, capture-input reconstruction, and search-boundary tests passed."
