@@ -1,4 +1,7 @@
-import { defaultFieldDefinitions } from "@ai-job-apply/applications-service";
+import {
+  createApplicationsDatabase,
+  defaultFieldDefinitions,
+} from "@ai-job-apply/applications-service";
 import "reflect-metadata";
 import { randomBytes } from "node:crypto";
 import {
@@ -1025,8 +1028,10 @@ async function createConfiguredApplication(
   const trust = d2.trustConfiguration
     ? createConfiguredD2TrustRuntime(database.client, d2.trustConfiguration)
     : undefined;
+  // Applications needs its own plain client: the shared one camel-cases columns and installs
+  // Drizzle's JSON and timestamp handling, which makes the store fail (see applications-database).
   const applications = createApplicationsRuntime({
-    client: database.client,
+    client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
     profile: store,
     documents,
     catalog,

@@ -1,6 +1,6 @@
+import { buildOutboxNudge } from "@ai-job-apply/profile-service";
 import type { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { describe, expect, it, vi } from "vitest";
-import { buildOutboxNudge } from "@ai-job-apply/profile-service";
 import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
 
 describe("SqsOutboxNudgePublisher", () => {

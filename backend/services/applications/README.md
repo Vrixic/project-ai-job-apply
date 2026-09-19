@@ -25,6 +25,7 @@ routes exist but fail closed (503) until a store is wired, and it is not part of
   reconciliation. An attempt that was dispatched is never dispatched again.
 - `src/current-action.ts` - the single next candidate action, derived from source truth and never
   stored.
+- `src/database.ts` - `createApplicationsDatabase`, the dedicated plain client the store requires. Never give the store the gateway's shared Profile/Drizzle client (camel-cased columns, string timestamps, identity JSON serializer): a create fails on it with `ERR_INVALID_ARG_TYPE`.
 - `src/store.ts` - owner-scoped PostgreSQL store. Every command locks the application row, checks
   an idempotency receipt, checks the expected revision, and commits state, revision, append-only
   history, and a minimal identifier-only outbox row in one transaction.
