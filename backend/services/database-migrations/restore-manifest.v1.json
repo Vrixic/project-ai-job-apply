@@ -10,6 +10,10 @@
         {
           "version": "0001_applications_foundation",
           "checksum": "f526628b3decbcb0a156aec00bda2ad048c3dfe0dcb536fd70a047dce11ef09e"
+        },
+        {
+          "version": "0002_candidate_rights",
+          "checksum": "52c1f5ef68c7bf341d1394dd43395c362226d0708f2892ad462332d585cc959d"
         }
       ],
       "relations": [

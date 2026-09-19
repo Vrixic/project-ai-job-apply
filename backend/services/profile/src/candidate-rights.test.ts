@@ -316,6 +316,49 @@ describe("candidate rights policy", () => {
     ).toThrow(CandidateRightsPolicyError);
   });
 
+  it("activates exactly the seven-owner or the eight-owner Applications inventory", () => {
+    expect(policy().ownerInventory).toEqual([
+      "identity",
+      "profile",
+      "documents",
+      "jobs",
+      "matching",
+      "billing",
+      "trust",
+    ]);
+    expect(
+      loadCandidateRightsPolicy({
+        ...policyEnvironment,
+        CANDIDATE_RIGHTS_OWNER_INVENTORY:
+          "identity,profile,documents,jobs,matching,billing,trust,applications",
+      }).ownerInventory,
+    ).toEqual([
+      "identity",
+      "profile",
+      "documents",
+      "jobs",
+      "matching",
+      "billing",
+      "trust",
+      "applications",
+    ]);
+    for (const inventory of [
+      // Reordered, without Trust, duplicated, unknown, or with a trailing owner.
+      "identity,profile,documents,jobs,matching,billing,applications,trust",
+      "identity,profile,documents,jobs,matching,billing,applications",
+      "identity,profile,documents,jobs,matching,billing,trust,applications,applications",
+      "identity,profile,documents,jobs,matching,billing,trust,applications,outcomes",
+      "applications",
+    ]) {
+      expect(() =>
+        loadCandidateRightsPolicy({
+          ...policyEnvironment,
+          CANDIDATE_RIGHTS_OWNER_INVENTORY: inventory,
+        }),
+      ).toThrow(CandidateRightsPolicyError);
+    }
+  });
+
   it("requires an explicit none marker when no subprocessors are in scope", () => {
     expect(
       loadCandidateRightsPolicy({

@@ -86,7 +86,9 @@ function database(fixtures: ReturnType<typeof fixture>[]) {
     else if (query.startsWith("SELECT issuer")) output = structuredClone(value.identities);
     else if (query.startsWith("SELECT id AS")) output = structuredClone(value.documents);
     else if (
-      /^SELECT (jobs|matching|billing|trust|documents|profile)\.delete_candidate_data/u.test(query)
+      /^SELECT (applications|jobs|matching|billing|trust|documents|profile)\.delete_candidate_data/u.test(
+        query,
+      )
     ) {
       const owner = query.split(" ")[1]?.split(".")[0] ?? "";
       value.counts[owner] = 0;
@@ -389,7 +391,7 @@ describe("restore-only whole-set database preflight", () => {
     expect(db.writes()).toHaveLength(0);
   });
 
-  it("revalidates the whole set before invoking all seven owners and never receives cloud mutation ports", async () => {
+  it("revalidates the whole set before invoking all eight owners and never receives cloud mutation ports", async () => {
     const values = [fixture(), fixture(10)];
     const db = database(values);
     const store = new PostgresCandidateDeletionRestoreStore(db.handle);
@@ -415,20 +417,16 @@ describe("restore-only whole-set database preflight", () => {
       .writes()
       .filter(({ query }) => query.startsWith("SELECT "))
       .map(({ query }) => query.split(".")[0]);
-    expect(ports).toEqual([
+    const owners = [
+      "SELECT applications",
       "SELECT jobs",
       "SELECT matching",
       "SELECT billing",
       "SELECT trust",
       "SELECT documents",
       "SELECT profile",
-      "SELECT jobs",
-      "SELECT matching",
-      "SELECT billing",
-      "SELECT trust",
-      "SELECT documents",
-      "SELECT profile",
-    ]);
+    ];
+    expect(ports).toEqual([...owners, ...owners]);
     expect(
       db
         .writes()

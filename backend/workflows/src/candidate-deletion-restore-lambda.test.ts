@@ -29,19 +29,22 @@ const fixture = JSON.parse(
 );
 
 function harness() {
-  const entries: CandidateDeletionRecoveryEntry[] = ACCEPTED_CANDIDATE_DELETION_POLICIES.map(
-    (policy, index) => ({
-      requestId: `019c2b89-79b2-7000-8000-00000000000${index + 1}`,
-      operationId: `019c2b89-79b2-7000-8000-00000000001${index + 1}`,
-      userId: `019c2b89-79b2-7000-8000-00000000002${index + 1}`,
-      policyVersion: policy.version,
-      policySha256: policy.sha256,
-      subjectDigest: String(index + 1).repeat(64),
-      confirmedAt: new Date("2026-09-01T00:00:00.000Z"),
-      completedAt: new Date("2026-09-01T00:01:00.000Z"),
-      backupExpiresAt: new Date("2026-10-06T00:00:00.000Z"),
-    }),
-  );
+  // These cases exercise the two historical policies (D1 and D2); the D3 policy has its own
+  // catalog, inventory, and restore-store tests.
+  const entries: CandidateDeletionRecoveryEntry[] = ACCEPTED_CANDIDATE_DELETION_POLICIES.slice(
+    0,
+    2,
+  ).map((policy, index) => ({
+    requestId: `019c2b89-79b2-7000-8000-00000000000${index + 1}`,
+    operationId: `019c2b89-79b2-7000-8000-00000000001${index + 1}`,
+    userId: `019c2b89-79b2-7000-8000-00000000002${index + 1}`,
+    policyVersion: policy.version,
+    policySha256: policy.sha256,
+    subjectDigest: String(index + 1).repeat(64),
+    confirmedAt: new Date("2026-09-01T00:00:00.000Z"),
+    completedAt: new Date("2026-09-01T00:01:00.000Z"),
+    backupExpiresAt: new Date("2026-10-06T00:00:00.000Z"),
+  }));
   const calls: string[] = [];
   const snapshot = {
     entries,

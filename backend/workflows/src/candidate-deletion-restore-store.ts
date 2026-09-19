@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { DatabaseHandle } from "@ai-job-apply/profile-service";
 import {
+  ACCEPTED_CANDIDATE_DELETION_POLICIES,
   RESTORED_CANDIDATE_RIGHTS_OWNERS,
   validateHistoricalRecoveryEntries,
 } from "./candidate-deletion-restore-policy.js";
@@ -268,7 +269,14 @@ const ownerCountsQuery = `SELECT jsonb_build_object(
     (SELECT count(*) FROM billing.entitlement_changes WHERE user_id = $1::uuid) +
     (SELECT count(*) FROM billing.entitlement_command_receipts WHERE user_id = $1::uuid) +
     (SELECT count(*) FROM billing.entitlement_outbox WHERE user_id = $1::uuid),
-  'trust', (SELECT count(*) FROM trust.contribution_cases WHERE contributor_user_id = $1::uuid)
+  'trust', (SELECT count(*) FROM trust.contribution_cases WHERE contributor_user_id = $1::uuid),
+  'applications', (SELECT count(*) FROM applications.applications WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.packets WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.approvals WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.attempts WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.history WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.command_receipts WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.outbox WHERE owner_user_id = $1::uuid)
 ) AS "ownerCounts"`;
 
 /** Construct only after the executor authenticates a quiesced, isolated restore target. */
@@ -404,10 +412,13 @@ export class PostgresCandidateDeletionRestoreStore {
       )
         rejected("LedgerCollision");
       const inventory = ledger.ownerInventory;
+      // The recorded policy fixes the owner set its ledger tracked; a restore replay may also
+      // complete every current owner (RESTORED), never an unrecorded subset.
       const expectedOwners =
-        entry.policyVersion === "d1-development-synthetic-v1"
-          ? RESTORED_CANDIDATE_RIGHTS_OWNERS.slice(0, 6)
-          : RESTORED_CANDIDATE_RIGHTS_OWNERS;
+        ACCEPTED_CANDIDATE_DELETION_POLICIES.find(
+          (policy) =>
+            policy.version === entry.policyVersion && policy.sha256 === entry.policySha256,
+        )?.ownerInventory ?? RESTORED_CANDIDATE_RIGHTS_OWNERS;
       if (
         !inventory ||
         typeof inventory !== "object" ||
@@ -666,7 +677,15 @@ export class PostgresCandidateDeletionRestoreStore {
         signal,
       );
     }
-    for (const owner of ["jobs", "matching", "billing", "trust", "documents", "profile"] as const) {
+    for (const owner of [
+      "applications",
+      "jobs",
+      "matching",
+      "billing",
+      "trust",
+      "documents",
+      "profile",
+    ] as const) {
       const result = await rows(
         sql,
         `SELECT ${owner}.delete_candidate_data($1::uuid, $2::uuid${owner === "documents" ? ", true" : ""}) AS result`,

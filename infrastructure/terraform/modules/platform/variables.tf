@@ -1092,7 +1092,10 @@ variable "candidate_rights_enabled" {
       var.candidate_rights_policy_version != "" &&
       can(regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", var.candidate_rights_policy_version)) &&
       can(regex("^[a-f0-9]{64}$", var.candidate_rights_policy_sha256)) &&
-      var.candidate_rights_owner_inventory == "identity,profile,documents,jobs,matching,billing,trust" &&
+      contains([
+        "identity,profile,documents,jobs,matching,billing,trust",
+        "identity,profile,documents,jobs,matching,billing,trust,applications",
+      ], var.candidate_rights_owner_inventory) &&
       var.candidate_rights_subprocessor_inventory != "" &&
       var.candidate_rights_export_lifetime_seconds != null &&
       var.candidate_rights_download_grant_seconds != null &&

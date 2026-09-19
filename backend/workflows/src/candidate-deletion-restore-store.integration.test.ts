@@ -60,7 +60,7 @@ const migrationEnvironment = Object.fromEntries(
 );
 const issuer = "https://generated-restore-replay.invalid/";
 
-describe.skipIf(!requested)("isolated restored PostgreSQL seven-owner deletion replay", () => {
+describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion replay", () => {
   let database: DatabaseHandle;
   let raw: ReturnType<typeof createJobCatalogDatabase>;
   let store: PostgresCandidateDeletionRestoreStore;
@@ -69,7 +69,15 @@ describe.skipIf(!requested)("isolated restored PostgreSQL seven-owner deletion r
   beforeAll(async () => {
     // Root/operator creates the exact isolated local database. This test neither starts
     // Docker nor creates/drops databases, and never inherits cloud/provider credentials.
-    for (const owner of ["profile", "documents", "jobs", "matching", "billing", "trust"]) {
+    for (const owner of [
+      "profile",
+      "documents",
+      "jobs",
+      "matching",
+      "billing",
+      "trust",
+      "applications",
+    ]) {
       await execute(
         process.execPath,
         [fileURLToPath(new URL(`../../services/${owner}/dist/src/migrate.js`, import.meta.url))],
@@ -106,6 +114,18 @@ describe.skipIf(!requested)("isolated restored PostgreSQL seven-owner deletion r
       INSERT INTO billing.entitlement_accounts (id, user_id, version, plan, effective_at, updated_at)
       VALUES (${uuidv7()}, ${userId}, 1, 'free', now(), now())
     `;
+    // Applications data written before a candidate-rights policy tracked it must still be purged.
+    const applicationId = uuidv7();
+    await database.client`
+      INSERT INTO applications.applications
+        (id, owner_user_id, canonical_job_id, status, revision, created_at, updated_at)
+      VALUES (${applicationId}, ${userId}, ${uuidv7()}, 'preparing', 1, now(), now())
+    `;
+    await database.client`
+      INSERT INTO applications.history
+        (id, application_id, owner_user_id, seq, kind, to_status, occurred_at)
+      VALUES (${uuidv7()}, ${applicationId}, ${userId}, 1, 'application_created', 'preparing', now())
+    `;
     const policy = ACCEPTED_CANDIDATE_DELETION_POLICIES[policyIndex];
     if (!policy) throw new Error("Synthetic historical policy missing");
     const confirmedAt = new Date();
@@ -135,6 +155,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL seven-owner deletion r
         matching: number;
         billing: number;
         trust: number;
+        applications: number;
       }[]
     >`
       SELECT
@@ -144,14 +165,15 @@ describe.skipIf(!requested)("isolated restored PostgreSQL seven-owner deletion r
         (SELECT count(*)::int FROM jobs.job_contributions WHERE owner_user_id = ${userId}) AS jobs,
         (SELECT count(*)::int FROM matching.private_saved_page_captures WHERE owner_user_id = ${userId}) AS matching,
         (SELECT count(*)::int FROM billing.entitlement_accounts WHERE user_id = ${userId}) AS billing,
-        (SELECT count(*)::int FROM trust.contribution_cases WHERE contributor_user_id = ${userId}) AS trust
+        (SELECT count(*)::int FROM trust.contribution_cases WHERE contributor_user_id = ${userId}) AS trust,
+        (SELECT count(*)::int FROM applications.applications WHERE owner_user_id = ${userId}) AS applications
     `;
     if (!row) throw new Error("Synthetic owner inventory missing");
     return row;
   }
 
   async function finishAndRemove(entry: CandidateDeletionRecoveryEntry) {
-    // Exact generated fixture cleanup uses the same authorized seven-owner ports,
+    // Exact generated fixture cleanup uses the same authorized eight-owner ports,
     // never broad table deletion or a production identity call.
     const preflight = await store.preflight([entry]);
     await store.reconcile([entry], preflight);
@@ -566,7 +588,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL seven-owner deletion r
           restoredUsersAbsent: 0,
           restoredUsersAlreadyReconciled: 0,
         });
-        expect(Object.values(await counts(first.entry.userId))).toEqual(Array(7).fill(0));
+        expect(Object.values(await counts(first.entry.userId))).toEqual(Array(8).fill(0));
         expect(await counts(second.entry.userId)).toEqual(otherBefore);
         const [completed] = await database.client<Record<string, unknown>[]>`
         SELECT request.policy_version, request.requested_at, request.state, ledger.policy_sha256, ledger.owner_inventory

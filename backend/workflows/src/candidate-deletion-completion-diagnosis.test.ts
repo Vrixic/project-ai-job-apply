@@ -381,14 +381,18 @@ describe("historical completion diagnosis: persisted source evidence", () => {
     expect(run(value).outcome).toBe("persisted_candidate");
   });
 
-  it.each(["d1", "d2"] as const)(
+  it.each(["d1", "d2", "d3"] as const)(
     "accepts the source catalog's completed %s owner inventory",
     (version) => {
       const value = fixture();
-      ledger(value).ownerInventory.trust = "completed";
-      if (version === "d2") {
-        const policyVersion = "d2-development-synthetic-v1";
-        const policySha256 = "7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf";
+      if (version !== "d1") ledger(value).ownerInventory.trust = "completed";
+      if (version === "d3") ledger(value).ownerInventory.applications = "completed";
+      if (version !== "d1") {
+        const policyVersion = `${version}-development-synthetic-v1`;
+        const policySha256 =
+          version === "d2"
+            ? "7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf"
+            : "c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c";
         Object.assign(value.marker.entry, { policyVersion, policySha256 });
         Object.assign(ledger(value), { policyVersion, policySha256 });
         request(value).policyVersion = policyVersion;

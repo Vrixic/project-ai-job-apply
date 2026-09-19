@@ -181,10 +181,10 @@ try {
   const sourceUrl = `postgres://ai_job_apply:${password}@127.0.0.1:${port}/d2_source`;
   const targetUrl = `postgres://ai_job_apply:${password}@127.0.0.1:${port}/d2_target`;
   const source = loadCurrentRestoreManifest();
-  assert.equal(source.manifest.contributors.length, 6);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 10);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 68);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 46);
+  assert.equal(source.manifest.contributors.length, 7);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 11);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 76);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 48);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
