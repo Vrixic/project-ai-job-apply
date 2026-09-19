@@ -327,6 +327,8 @@ function Assert-OperatorOnlyReleaseDelta {
     "scripts/tests/development-gateway-release-guards.tests.ps1",
     "scripts/tests/development-gateway-release-operator.tests.ps1",
     "scripts/validate-serverless-workflow-infrastructure.mjs",
+    # Bundles only the Gateway Lambda artifact; it is not part of the migration image or its inputs.
+    "scripts/build-gateway-lambda.mjs",
     "infrastructure/runbooks/deployments/database-migration.md"
   )
   if ($ChangeRecords.Count -eq 0) { throw "An ancestor release must have an attributable operator-only correction." }

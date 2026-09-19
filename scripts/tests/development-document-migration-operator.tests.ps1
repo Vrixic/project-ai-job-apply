@@ -734,6 +734,7 @@ Assert-OperatorOnlyReleaseDelta -ChangeRecords @(
   "M`tscripts/operate-development-document-migration.ps1",
   "M`tscripts/tests/development-document-migration-operator.tests.ps1",
   "M`tscripts/validate-serverless-workflow-infrastructure.mjs",
+  "M`tscripts/build-gateway-lambda.mjs",
   "M`tinfrastructure/runbooks/deployments/database-migration.md"
 )
 Assert-RecoveryOperatorBinding -ExecutionOperatorSourceSha $releaseSource `
@@ -757,6 +758,14 @@ foreach ($unsafeRecovery in @(
 foreach ($unsafeDelta in @(
     , @("M`tinfrastructure/terraform/environments/development/main.tf"),
     , @("A`tscripts/operate-development-document-migration.ps1"),
+    # Only the Gateway bundle script is allowed: other Lambda builds, the gateway source, the
+    # migration image inputs, and a newly added or deleted copy of the allowed file are not.
+    , @("M`tscripts/build-document-lambdas.mjs"),
+    , @("M`tscripts/build-workflow-ingress-lambda.mjs"),
+    , @("A`tscripts/build-gateway-lambda.mjs"),
+    , @("D`tscripts/build-gateway-lambda.mjs"),
+    , @("M`tscripts/build-gateway-lambda.mjs", "M`tbackend/gateway/src/lambda.ts"),
+    , @("M`tDockerfile.migration"),
     , @()
   )) {
   $deltaRejected = $false
