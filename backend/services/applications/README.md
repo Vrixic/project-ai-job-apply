@@ -40,6 +40,8 @@ routes exist but fail closed (503) until a store is wired, and it is not part of
   deletion workflows call them only for a candidate-rights policy whose owner inventory includes
   `applications` (`d3-development-synthetic-v1`); see the phase record for the activation status.
 
+- `src/lifecycle-acceptance.ts`, `src/run-lifecycle-acceptance.ts` - the generated-synthetic fixture for the deployed lifecycle acceptance. `prepare` creates two generated identities; `cleanup` deletes the owner's Applications data through the privacy-authorized function, then the identities, and proves every owned count is zero. It refuses a contaminated boundary and accepts no SQL or candidate values. Driven only by `scripts/operate-development-applications-acceptance.ps1`.
+
 - `src/service.ts` - the owner-scoped `ApplicationsApi` used by the gateway: maps store views to the
   generated OpenAPI types, takes packet, live-binding, and job-gate ports, and emits best-effort
   metrics. Every method takes the authenticated owner; nothing accepts an owner from a caller.

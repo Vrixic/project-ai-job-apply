@@ -46,7 +46,7 @@ Gateway rejects them (403), so the release is safe either way. Apply the schema 
 | 5 | Plan and run the migration | same, `PlanExecution` / `Execute`, then `Verify` | Approve the execution descriptor; require the eight aggregate success messages, the last being `Applications migrations through 0001_applications_foundation applied and verified.` |
 | 6 | Publish and verify the Gateway artifact | `operate-development-gateway-release.ps1 -Action Publish` then `VerifyPublication` | Independent review of the publication receipt |
 | 7 | Plan and apply the Gateway release | same, `Plan` / `Apply`, then `Verify` | Approve the saved plan: only `aws_lambda_function.gateway[0]` and its alias may change |
-| 8 | Deployed acceptance (below) | scripted synthetic calls | Review the evidence |
+| 8 | Deployed acceptance (below) | [`operate-development-applications-acceptance.ps1`](development-applications-acceptance.md), from a migration image built from the commit that adds it | Review the plan descriptor and the receipt SHA-256 |
 | 9 | Stop Docker Desktop and WSL | manual | none |
 
 Never use raw `terraform plan/apply`, the default AWS profile, `-lock=false`, or another CLI version.

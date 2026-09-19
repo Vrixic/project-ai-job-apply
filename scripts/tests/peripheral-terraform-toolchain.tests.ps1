@@ -36,6 +36,7 @@ $names = @(
   "operate-development-candidate-rights-acceptance", "operate-development-candidate-rights-stage-b",
   "operate-development-d1-provider-failure-acceptance", "operate-development-document-processing-acceptance",
   "operate-development-ingestion-dark-release", "operate-development-job-search-acceptance",
+  "operate-development-applications-acceptance",
   "operate-staging-runtime-lifecycle", "operate-staging-postgresql-restore",
   "publish-development-document-lambdas", "publish-development-migration-image", "start-deployed-web-conformance"
 )
@@ -51,7 +52,7 @@ foreach ($name in $names) {
   $source = $ast.Extent.Text
   Assert-Test ($source.Contains('lib/terraform-toolchain.ps1')) "$name must import the shared toolchain."
   Assert-Test (-not $source.Contains('Terraform 1.9.8 is required')) "$name must not require the legacy executable."
-  if ($name -cne "operate-development-job-search-acceptance") {
+  if ($name -cnotin @("operate-development-job-search-acceptance", "operate-development-applications-acceptance")) {
     Assert-Test ($source.Contains('Assert-DeploymentTerraformCli')) "$name must validate the current CLI."
   }
 }

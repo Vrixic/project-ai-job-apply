@@ -4093,5 +4093,235 @@ const applicationsDatabaseUrl = process.env.DATABASE_URL;
       });
       expect(foreign.statusCode).toBe(404);
     });
+
+    // Mirrors the deployed acceptance operator (scripts/operate-development-applications-acceptance.ps1)
+    // step for step, so its expected statuses are proven here rather than assumed.
+    it("follows the exact statuses the deployed acceptance operator expects", async () => {
+      const run = Date.now().toString(16);
+      const owner = {
+        full: await issuer.issue(`acceptance-owner-${run}`, {
+          scope: "applications:read applications:write profile:read",
+        }),
+        noScope: await issuer.issue(`acceptance-owner-${run}`, { scope: "profile:read" }),
+        readOnly: await issuer.issue(`acceptance-owner-${run}`, {
+          scope: "applications:read profile:read",
+        }),
+      };
+      const other = await issuer.issue(`acceptance-other-${run}`, {
+        scope: "applications:read applications:write profile:read",
+      });
+      const key = (label: string) => `d3apps-${run}-${label}`.padEnd(16, "x");
+      const call = async (
+        token: string,
+        method: "GET" | "POST",
+        url: string,
+        idempotencyKey?: string,
+        payload?: unknown,
+      ) => {
+        const response = await app.inject({
+          method,
+          url,
+          headers: {
+            authorization: `Bearer ${token}`,
+            ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+          },
+          ...(payload === undefined ? {} : { payload: payload as never }),
+        });
+        return {
+          status: response.statusCode,
+          body: response.json() as ReturnType<typeof JSON.parse>,
+        };
+      };
+      const form = { adapterId: "synthetic-acceptance", variantId: "v1", formHash: hash };
+      const changedForm = "c".repeat(64);
+      const cases: string[] = [];
+      const expectStep = (name: string, actual: { status: number }, expected: number) => {
+        expect(actual.status, name).toBe(expected);
+        cases.push(`${name}:${actual.status}`);
+      };
+      const start = (
+        token: string,
+        id: string,
+        label: string,
+        revision: number,
+        observed: string,
+      ) =>
+        call(token, "POST", `/v1/applications/${id}/submissions`, key(label), {
+          expectedRevision: revision,
+          adapterId: "synthetic-acceptance",
+          adapterVersion: "1.0.0",
+          observedFormHash: observed,
+        });
+
+      expectStep(
+        "create-no-scope",
+        await call(owner.noScope, "POST", "/v1/applications", key("c0"), { jobId }),
+        403,
+      );
+      expectStep(
+        "create-read-only",
+        await call(owner.readOnly, "POST", "/v1/applications", key("c1"), { jobId }),
+        403,
+      );
+      const created = await call(owner.full, "POST", "/v1/applications", key("create"), { jobId });
+      expectStep("create", created, 201);
+      const id = created.body.id as string;
+      const replay = await call(owner.full, "POST", "/v1/applications", key("create"), { jobId });
+      expectStep("create-replay", replay, 201);
+      expect(replay.body.id).toBe(id);
+      const foreignGet = await call(other, "GET", `/v1/applications/${id}`);
+      expectStep("foreign-get", foreignGet, 404);
+      expect(foreignGet.body.code).toBe("application_not_found");
+      expectStep(
+        "foreign-packet",
+        await call(other, "POST", `/v1/applications/${id}/packets`, key("fp"), {
+          expectedRevision: created.body.revision,
+        }),
+        404,
+      );
+      const packet = await call(
+        owner.full,
+        "POST",
+        `/v1/applications/${id}/packets`,
+        key("packet"),
+        {
+          expectedRevision: created.body.revision,
+          form,
+        },
+      );
+      expectStep("packet", packet, 201);
+      expect(packet.body.status).toBe("review_required");
+      const badHash = await call(
+        owner.full,
+        "POST",
+        `/v1/applications/${id}/approval`,
+        key("bad"),
+        {
+          expectedRevision: packet.body.revision,
+          packetHash: "0".repeat(64),
+          acknowledgedFieldKeys: [],
+        },
+      );
+      expectStep("approve-wrong-hash", badHash, 409);
+      const approved = await call(
+        owner.full,
+        "POST",
+        `/v1/applications/${id}/approval`,
+        key("appr"),
+        {
+          expectedRevision: packet.body.revision,
+          packetHash: packet.body.currentPacket.packetHash,
+          acknowledgedFieldKeys: [],
+        },
+      );
+      expectStep("approve", approved, 200);
+      expect(approved.body.status).toBe("approved");
+      const changed = await start(owner.full, id, "chg", approved.body.revision, changedForm);
+      expectStep("start-changed-form", changed, 200);
+      expect(changed.body).toMatchObject({
+        outcome: "approval_invalidated",
+        invalidationReasons: ["form_changed"],
+      });
+      expect(changed.body.application.status).toBe("review_required");
+      const packetAgain = await call(
+        owner.full,
+        "POST",
+        `/v1/applications/${id}/packets`,
+        key("packet2"),
+        { expectedRevision: changed.body.application.revision, form },
+      );
+      expectStep("packet-again", packetAgain, 201);
+      const approvedAgain = await call(
+        owner.full,
+        "POST",
+        `/v1/applications/${id}/approval`,
+        key("appr2"),
+        {
+          expectedRevision: packetAgain.body.revision,
+          packetHash: packetAgain.body.currentPacket.packetHash,
+          acknowledgedFieldKeys: [],
+        },
+      );
+      expectStep("approve-again", approvedAgain, 200);
+      const started = await start(owner.full, id, "start", approvedAgain.body.revision, hash);
+      expectStep("start", started, 200);
+      expect(started.body.outcome).toBe("started");
+      const attemptId = started.body.attemptId as string;
+      expectStep(
+        "start-duplicate",
+        await start(owner.full, id, "dup", started.body.application.revision, hash),
+        409,
+      );
+      const dispatched = await call(
+        owner.full,
+        "POST",
+        `/v1/applications/${id}/attempts/${attemptId}/dispatch`,
+      );
+      expectStep("dispatch", dispatched, 200);
+      expect(dispatched.body.status).toBe("dispatched");
+      expectStep(
+        "dispatch-repeat",
+        await call(owner.full, "POST", `/v1/applications/${id}/attempts/${attemptId}/dispatch`),
+        409,
+      );
+      const ambiguous = await call(
+        owner.full,
+        "POST",
+        `/v1/applications/${id}/attempts/${attemptId}/result`,
+        key("timeout"),
+        { kind: "timeout" },
+      );
+      expectStep("result-timeout", ambiguous, 200);
+      expect(ambiguous.body.status).toBe("reconciliation_required");
+      expectStep(
+        "start-after-ambiguous",
+        await start(owner.full, id, "blind", ambiguous.body.revision, hash),
+        409,
+      );
+      const applied = await call(
+        owner.full,
+        "POST",
+        `/v1/applications/${id}/attempts/${attemptId}/reconciliation`,
+        key("recon"),
+        {
+          kind: "user_attested_submitted",
+          observedAt: new Date().toISOString(),
+          fingerprintSha256: hash,
+        },
+      );
+      expectStep("reconcile-attested", applied, 200);
+      expect(applied.body.status).toBe("applied");
+      const history = await call(owner.full, "GET", `/v1/applications/${id}/history`);
+      expectStep("history", history, 200);
+      const kinds = (history.body.entries as Array<{ kind: string }>).map((entry) => entry.kind);
+      expect(kinds.at(-1)).toBe("submission_confirmed");
+      expect(kinds).toContain("approval_invalidated");
+      expect(history.body.hasMore).toBe(false);
+      expect(JSON.stringify(history.body)).not.toMatch(/interview|offer|recruiter|hired/iu);
+      expectStep(
+        "start-after-applied",
+        await start(owner.full, id, "late", applied.body.revision, hash),
+        409,
+      );
+      expectStep(
+        "foreign-history",
+        await call(other, "GET", `/v1/applications/${id}/history`),
+        404,
+      );
+      const final = await call(owner.full, "GET", `/v1/applications/${id}`);
+      expectStep("get-final", final, 200);
+      expect(final.body.attempts[0]).toMatchObject({ status: "confirmed" });
+      expect(final.body.attempts[0].confirmation.kind).toBe("user_attested");
+      const conflict = await call(
+        owner.full,
+        "POST",
+        `/v1/applications/${id}/packets`,
+        key("packet"),
+        { expectedRevision: 1, form: { ...form, formHash: changedForm } },
+      );
+      expectStep("idempotency-conflict", conflict, 409);
+      expect(conflict.body.code).toBe("idempotency_conflict");
+      expect(cases).toHaveLength(24);
+    });
   },
 );
