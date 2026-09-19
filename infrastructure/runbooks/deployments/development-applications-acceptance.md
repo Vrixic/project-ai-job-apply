@@ -1,6 +1,6 @@
 # Development Applications Lifecycle Acceptance
 
-- Status: Implemented and locally verified 2026-09-18. First deployed run 2026-09-19 (`failed-cleaned`, receipt SHA-256 `d818bee6eac29c01bd4859b049160ab4f4518ba7ead777c5d09ba4ff6ead3de4`): the fixture and exact cleanup worked and the run found a real Gateway defect (create returned 500 over the shared database client). The defect is fixed in source and needs a new Gateway release and a rebuilt migration image before the acceptance is re-run. **No acceptance claim has been made.**
+- Status: Implemented and locally verified 2026-09-18. First deployed run 2026-09-19 (`failed-cleaned`, receipt SHA-256 `d818bee6eac29c01bd4859b049160ab4f4518ba7ead777c5d09ba4ff6ead3de4`) found a real Gateway defect (create returned 500 over the shared database client) and cleaned up exactly. After the fix was released, the second deployed run 2026-09-19 returned `verified-and-cleaned` (24 of 24 steps, receipt SHA-256 `a6057ab662361965917103ccc4f5c53b635477dfdd2c41af400a48b21ae1d166`, read-only Verify `verified`). This is synthetic development evidence only, not an Auth0 real-token, alarm, restore, or D3-012 approval result.
 - Operator: `scripts/operate-development-applications-acceptance.ps1` (guard tests in
   `scripts/tests/development-applications-acceptance-operator.tests.ps1`).
 - In-image fixture: `applications/dist/src/run-lifecycle-acceptance.js` in the migration image.
@@ -80,6 +80,10 @@ run `Execute` within 15 minutes with the same release inputs plus `-ExecutionPla
 `-ReviewedExecutionPlanSha256`. Review the returned receipt SHA-256, then run `Verify` (read-only) with
 `-ReceiptPath` and `-ReviewedReceiptSha256`. If Execute reports that cleanup was not proven, run only
 `RecoverCleanup` with the retained receipt.
+
+## Recorded results
+
+- 2026-09-19, `verified-and-cleaned`: Development, synthetic-only, source commit `8939eab2`: migration image `a6b18cfe...` built and scanned, migration task plan applied, Applications `0002` migration Execute and Verify with zero drift (receipt SHA-256 `53a7e07edb6c5e4488407449d99efab67b8d9efb1fd320cad26014ada0023811`), Gateway artifact `9a9912dd...` released as alias version 78 (release receipt `67870d49...`, apply `applied-and-verified`, standalone Verify `verified`, alias immutable, search boundary passed, no drift). The acceptance operator then ran its reviewed plan (`c8675eaf856d8a76ec6d6c814ecb0d04046043164738488a3215bc9165d99133`, two ECS tasks, zero plan-time writes) and returned `verified-and-cleaned`: 24 of 24 lifecycle steps passed, 1 application deleted through the privacy-authorized function, 0 persistent fixture rows, catalog job not modified; receipt SHA-256 `a6057ab662361965917103ccc4f5c53b635477dfdd2c41af400a48b21ae1d166`, and a read-only Verify returned `verified` with 0 post-cleanup rows, no state change, and no cloud mutation. This is a superseding result to the earlier `failed-cleaned` run (`d818bee6eac29c01bd4859b049160ab4f4518ba7ead777c5d09ba4ff6ead3de4`), whose create-500 defect the dedicated database client fixed.
 
 ## Recorded exceptions
 
