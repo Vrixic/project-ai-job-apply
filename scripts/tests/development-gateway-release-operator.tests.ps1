@@ -683,42 +683,50 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
 }
 
 
-# ---- Document processor refresh (ADR-031): opt-in, receipt-bound, and threaded through every plan.
-$refreshFunction = @($ast.FindAll({
+# ---- Document processor and parser refresh (ADR-031): opt-in, receipt-bound, and threaded through every plan.
+$readerFunction = @($ast.FindAll({
       param($node)
-      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq "Read-ProcessorRefreshArtifact"
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq "Get-VerifiedDocumentArtifact"
     }, $true))
-if ($refreshFunction.Count -ne 1) { throw "The processor refresh receipt reader must be defined exactly once." }
-$refreshText = $refreshFunction[0].Extent.Text
+if ($readerFunction.Count -ne 1) { throw "The document artifact receipt reader must be defined exactly once." }
+$refreshText = $readerFunction[0].Extent.Text
 foreach ($required in @(
-    'if (-not $RefreshDocumentProcessor) { return $null }',
     '$Action -notin @("Plan", "Apply", "Verify")',
     'development-document-artifacts',
-    'Get-GatewayProcessorArtifact -Receipt $receipt -SourceSha $SourceSha',
+    'Get-GatewayProcessorArtifact -Receipt $receipt -SourceSha $SourceSha -Kind $Kind',
     '$boundary.BoundarySha256',
     '"--checksum-mode", "ENABLED"',
     '[string]$stored.Metadata."source-sha" -cne $SourceSha',
     '[string]$stored.ServerSideEncryption -cne "aws:kms"')) {
-  if (-not $refreshText.Contains($required)) { throw "The processor refresh receipt reader is missing '$required'." }
+  if (-not $refreshText.Contains($required)) { throw "The document artifact receipt reader is missing '$required'." }
+}
+$selectorFunction = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq "Read-DocumentRefreshArtifacts"
+    }, $true))
+if ($selectorFunction.Count -ne 1 -or
+    -not $selectorFunction[0].Extent.Text.Contains('if ($RefreshDocumentProcessor) { Get-VerifiedDocumentArtifact -Kind processor } else { $null }') -or
+    -not $selectorFunction[0].Extent.Text.Contains('if ($RefreshDocumentParser) { Get-VerifiedDocumentArtifact -Kind parser } else { $null }')) {
+  throw "Each document artifact must be read only when its own refresh switch is set."
 }
 if ($operator.IndexOf('$baseline = Read-Baseline') -lt 0 -or
-    $operator.IndexOf('$processorArtifact = Read-ProcessorRefreshArtifact') -lt $operator.IndexOf('$baseline = Read-Baseline')) {
-  throw "The processor refresh artifact must be read after the retained baseline."
+    $operator.IndexOf('$documentArtifacts = Read-DocumentRefreshArtifacts') -lt $operator.IndexOf('$baseline = Read-Baseline')) {
+  throw "The document refresh artifacts must be read after the retained baseline."
 }
-# Every release path that builds or checks a plan must carry the same verified artifact.
+# Every release path that builds or checks a plan must carry the same verified artifacts.
+$carried = '-ProcessorArtifact $documentArtifacts.Processor -ParserArtifact $documentArtifacts.Parser'
 foreach ($needle in @(
-    'Assert-ExactGatewayReleasePlan $reviewedPlan $publication.Artifact -ExpectedAccountId $ExpectedAccountId -ProcessorArtifact $processorArtifact',
-    'Assert-ExactGatewayReleasePlan $plan $publication.Artifact -ExpectedAccountId $ExpectedAccountId -ProcessorArtifact $processorArtifact',
-    'Invoke-ZeroDrift $baseline $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke -ProcessorArtifact $processorArtifact',
-    'Set-VariablesFromPlan $baseline.Plan $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke -ProcessorArtifact $processorArtifact')) {
-  if (-not $operator.Contains($needle)) { throw "A release path does not carry the verified processor artifact: $needle" }
+    "Assert-ExactGatewayReleasePlan `$reviewedPlan `$publication.Artifact -ExpectedAccountId `$ExpectedAccountId $carried",
+    "Assert-ExactGatewayReleasePlan `$plan `$publication.Artifact -ExpectedAccountId `$ExpectedAccountId $carried",
+    "Invoke-ZeroDrift `$baseline `$publication.Artifact -EnableTailoringInvoke:`$EnableDocumentTailoringInvoke $carried",
+    "Set-VariablesFromPlan `$baseline.Plan `$publication.Artifact -EnableTailoringInvoke:`$EnableDocumentTailoringInvoke $carried")) {
+  if (-not $operator.Contains($needle)) { throw "A release path does not carry the verified document artifacts: $needle" }
 }
-if (([regex]::Matches($operator, '-ProcessorArtifact \$processorArtifact')).Count -lt 9) {
-  throw "The variable and plan guards must each receive the verified processor artifact."
+if (([regex]::Matches($operator, [regex]::Escape($carried))).Count -lt 9) {
+  throw "The variable and plan guards must each receive the verified document artifacts."
 }
-# CaptureBaseline never takes the processor artifact: it only reconstructs retained inputs.
+# CaptureBaseline never takes the document artifacts: it only reconstructs retained inputs.
 $captureSetCall = [regex]::Match($operator, 'Set-VariablesFromPlan \$seed \$null[^\r\n]*')
-if (-not $captureSetCall.Success -or $captureSetCall.Value.Contains("Processor") -or $captureSetCall.Value.Contains("Tailoring")) {
-  throw "CaptureBaseline must not apply the processor refresh or the invoke switch."
-}
-Write-Output "Development gateway release operator, capture-input reconstruction, and search-boundary tests passed."
+if (-not $captureSetCall.Success -or $captureSetCall.Value.Contains("Artifact") -or $captureSetCall.Value.Contains("Tailoring")) {
+  throw "CaptureBaseline must not apply a document refresh or the invoke switch."
+}Write-Output "Development gateway release operator, capture-input reconstruction, and search-boundary tests passed."

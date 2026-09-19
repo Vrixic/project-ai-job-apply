@@ -213,6 +213,14 @@ layers, network, every trigger, and every other variable must be unchanged, and 
 `document_processor_artifact_*` variables must equal the receipt exactly. It may be combined with the invoke
 grant above, in which case the plan has exactly six updates. Later baselines must be seeded from the
 resulting verification plan so the new processor coordinates are retained.
+`-RefreshDocumentParser` does the same for the document parser: the guards accept exactly
+`aws_lambda_function.document_parser[0]` (only its code coordinates and `RELEASE_SHA`) and
+`aws_lambda_alias.document_parser[0]` (only its numeric version), the four `document_parser_artifact_*`
+variables must equal the receipt, and the processor's numeric parser pin, the parser and object-access
+policies, environment (including `DOCUMENT_PARSER_VERSION`), network, and triggers must be unchanged. The
+processor and parser refreshes are independent and may be combined with each other and with the invoke grant
+(up to eight updates). Refresh both from one receipt so a retained baseline, which requires one publication
+receipt to describe both deployed archives, stays valid; a mixed release is refused at baseline capture.
 ## Failure and recovery
 
 - A publication failure may leave new immutable objects plus a `publishing` receipt. Never reuse,
