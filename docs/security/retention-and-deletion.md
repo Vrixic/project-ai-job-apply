@@ -117,5 +117,28 @@ window. Its exact ordered owner inventory adds Trust to the prior D1 owners. It 
 generated-synthetic development evidence only. It is not a public promise,
 legal approval, accountable security/privacy approval, or authority to process real candidate data.
 
+## D3 generated-synthetic development policy
+
+Repository-owner direction for Phase 3 selects the immutable
+[`d3-development-synthetic-v1`](policies/candidate-rights.d3-development-synthetic-v1.json)
+engineering policy for disposable development acceptance only. It keeps every D2 value (3,600-second
+export artifact, 300-second download grant, 900-second recent-MFA window, 35-day backup window) and adds
+Applications as the eighth owner after Trust. Its SHA-256,
+`c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c`, is computed over the canonical
+two-space JSON serialization plus a newline, which is stable under formatters and line endings.
+
+The Applications owner exports candidate-readable technical state and packet answers (no owner
+identifiers, scope keys, consent references, evidence fingerprints, or hiring outcomes) and deletes
+children before parents inside the same privacy-authorized transaction. Restore replay always purges
+Applications data for every deletion marker, whichever policy version recorded it.
+
+Profile and the workflows accept exactly the D2 seven-owner inventory or this eight-owner inventory, so
+the deployed D2 configuration keeps working until the D3 policy is activated. Activation is a separate,
+guarded rollout (Terraform variables, the candidate-rights operators, and their acceptance evidence) that
+has not been performed. The policy authorizes generated-synthetic development evidence only. It is not a
+public promise, legal approval, accountable security/privacy approval, or authority to process real
+candidate data. Synthetic candidates deleted before activation leave their Applications rows behind, and a
+later restore replay fails closed on such orphaned rows until they are purged.
+
 Approval and tested evidence are recorded in the
 [Phase 0 security/privacy approval plan](security-privacy-approval-plan.md).

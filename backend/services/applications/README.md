@@ -32,6 +32,13 @@ routes exist but fail closed (503) until a store is wired, and it is not part of
   legal status transitions, terminal immutability, append-only packets/history/receipts, immutable
   approval evidence, one live approval per application, and a partial unique index that permits only
   one scope-holding attempt per (user, application, packet).
+- `migrations/0002_candidate_rights.sql` - candidate-rights participation (D3-014). Every table stays
+  append-only except for the privacy-authorized deletion of the exact candidate; adds
+  `applications.export_candidate_data(uuid)` (candidate-readable technical state and packet answers,
+  without owner identifiers, scope keys, consent references, or evidence fingerprints) and
+  `applications.delete_candidate_data(uuid, uuid)` (children before parents). The aggregate export and
+  deletion workflows call them only for a candidate-rights policy whose owner inventory includes
+  `applications` (`d3-development-synthetic-v1`); see the phase record for the activation status.
 
 - `src/service.ts` - the owner-scoped `ApplicationsApi` used by the gateway: maps store views to the
   generated OpenAPI types, takes packet, live-binding, and job-gate ports, and emits best-effort

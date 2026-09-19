@@ -42,7 +42,8 @@
 - No provider adapter exists (D3-013 fixtures are missing); no live form, submission, or
   confirmation detection has been exercised.
 - The answer vault has no persistence, separate key, or API (blocked by D3-015 and D3-R4).
-- Applications is not in candidate export, deletion, or restore (D3-014), the migration image, the
+- Applications candidate export, deletion, and restore replay are implemented and locally verified (D3-014)
+  but not activated: the `d3-development-synthetic-v1` policy has not been rolled out. Applications is not yet in the deployed candidate-rights configuration, the migration image, the
   restore manifest, Terraform/IAM, or any deployment (D3-015).
 - No Auth0 `applications:*` scope, API Gateway route, BFF route, or extension integration exists.
 - No durable workflow, outbox publisher, or alarm exists for Applications.

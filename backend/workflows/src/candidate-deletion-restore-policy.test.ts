@@ -5,6 +5,7 @@ import {
   ACCEPTED_CANDIDATE_DELETION_POLICIES,
   ACCEPTED_CANDIDATE_DELETION_POLICY_CATALOG_SHA256,
   MAX_RESTORED_DELETION_MARKERS,
+  RESTORED_CANDIDATE_RIGHTS_OWNERS,
   validateHistoricalRecoveryEntries,
 } from "./candidate-deletion-restore-policy.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
@@ -27,11 +28,15 @@ function entry(policyIndex = 1): CandidateDeletionRecoveryEntry {
 
 const now = new Date("2026-12-01T00:00:00.000Z");
 describe("immutable restore-only candidate rights policy catalog", () => {
-  it("binds only the exact recorded D1/D2 policy identities and immutable inventory", () => {
+  it("binds only the exact recorded D1/D2/D3 policy identities and immutable inventory", () => {
     expect(
       ACCEPTED_CANDIDATE_DELETION_POLICIES.map((policy) => policy.ownerInventory.length),
-    ).toEqual([6, 7]);
-    for (const index of [0, 1]) {
+    ).toEqual([6, 7, 8]);
+    expect(ACCEPTED_CANDIDATE_DELETION_POLICIES[2]?.ownerInventory.at(-1)).toBe("applications");
+    expect(RESTORED_CANDIDATE_RIGHTS_OWNERS).toEqual(
+      ACCEPTED_CANDIDATE_DELETION_POLICIES[2]?.ownerInventory,
+    );
+    for (const index of [0, 1, 2]) {
       expect(validateHistoricalRecoveryEntries([entry(index)], now)).toEqual([entry(index)]);
       const policy = ACCEPTED_CANDIDATE_DELETION_POLICIES[index];
       expect(Object.isFrozen(policy)).toBe(true);
@@ -44,6 +49,32 @@ describe("immutable restore-only candidate rights policy catalog", () => {
         .update("\n")
         .digest("hex"),
     );
+  });
+
+  it("proves the D3 digest and inventory from the canonical policy document", () => {
+    const source = JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../docs/security/policies/candidate-rights.d3-development-synthetic-v1.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    // Canonical two-space serialization plus a newline: stable under formatters and line endings.
+    const canonical = `${JSON.stringify(source, null, 2)}
+`;
+    const accepted = ACCEPTED_CANDIDATE_DELETION_POLICIES[2];
+    expect(accepted?.version).toBe(source.policyVersion);
+    expect(createHash("sha256").update(canonical).digest("hex")).toBe(accepted?.sha256);
+    expect(accepted?.ownerInventory).toEqual(source.inventory.owners);
+    expect(accepted?.backupRetentionDays).toBe(source.deletion.backupRetentionDays);
+    expect(accepted?.subprocessorInventory).toEqual(source.inventory.subprocessorAdapters);
+    // The engineering selection grants nothing beyond generated-synthetic development evidence.
+    expect(source.realCandidateUseAuthorized).toBe(false);
+    expect(source.publicPolicyApproval).toBe("not-granted");
+    expect(source.accountableSecurityPrivacyApproval).toBe("pending");
+    expect(source.legalApproval).toBe("deferred-to-launch-review");
   });
 
   it("proves the historical D2 digest from the original pretty-printed source, not its reformat", () => {

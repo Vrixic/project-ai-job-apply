@@ -15,7 +15,7 @@ Assert ((Get-DeletionReplayConfigJson $fixture.configuration $now) -ceq $fixture
 Assert ((Get-DeletionReplayEnvironmentSha $fixture.environment) -ceq $fixture.configurationSha256) 'TS/PowerShell exact environment digest'
 $null = Assert-DeletionReplayEnvironment $fixture.environment $now
 Assert $true 'generated-only complete fixture accepted'
-Assert ($fixture.configuration.acceptedPolicyCatalogSha256 -ceq '4549e90155b66007655f118dd597fa41c9711a5d76ef5d1562185277df842627') 'known immutable catalog digest matches shared fixture'
+Assert ($fixture.configuration.acceptedPolicyCatalogSha256 -ceq '571ee233eac79d81e988840c0bd2271f27fedebe2c9c0a46d5c623625d131b1a') 'known immutable catalog digest matches shared fixture'
 $boundaryConfig = Clone $fixture.configuration
 $boundaryConfig.expiresAt = $now.AddSeconds(300).ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")
 $null = Get-DeletionReplayConfigJson $boundaryConfig $now

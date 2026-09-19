@@ -9,6 +9,7 @@ const owners = [
   "matching",
   "billing",
   "trust",
+  "applications",
 ] as const;
 
 /** Historical marker provenance, not an activation policy or a new authorization window. */
@@ -26,6 +27,16 @@ export const ACCEPTED_CANDIDATE_DELETION_POLICIES = Object.freeze([
     // meaning; its different file hash must not replace the retained marker identity.
     sha256: "7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf",
     backupRetentionDays: 35,
+    ownerInventory: Object.freeze(owners.slice(0, 7)),
+    subprocessorInventory: Object.freeze([] as string[]),
+  }),
+  Object.freeze({
+    version: "d3-development-synthetic-v1",
+    // SHA-256 of the canonical two-space JSON serialization plus a trailing newline of
+    // docs/security/policies/candidate-rights.d3-development-synthetic-v1.json, which is stable
+    // under formatting and line endings. Adds Applications as the eighth owner.
+    sha256: "c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c",
+    backupRetentionDays: 35,
     ownerInventory: Object.freeze([...owners]),
     subprocessorInventory: Object.freeze([] as string[]),
   }),
@@ -37,6 +48,7 @@ export const ACCEPTED_CANDIDATE_DELETION_POLICY_CATALOG_SHA256 = createHash("sha
   .update("\n")
   .digest("hex");
 
+/** Every owner a restore replay must purge, whichever policy version recorded the deletion. */
 export const RESTORED_CANDIDATE_RIGHTS_OWNERS = Object.freeze([...owners]);
 export const CURRENT_CANDIDATE_DELETION_RESTORE_POLICY_VERSION = "d2-development-synthetic-v1";
 export const MAX_RESTORED_DELETION_MARKERS = 1_000;

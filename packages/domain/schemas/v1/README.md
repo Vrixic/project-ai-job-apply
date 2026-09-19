@@ -14,6 +14,8 @@ snapshot; descriptions, source payloads, profile data, and post-submission outco
 
 `candidate-data-export.schema.json` is the portable Profile-owned candidate-rights envelope. It
 contains candidate-readable values and bounded metadata from every active candidate-rights owner,
-including reviewer-redacted Trust cases, decisions, and contributor reputation evidence, but deliberately
+including reviewer-redacted Trust cases, decisions, and contributor reputation evidence and the
+optional Applications section (packets and answers, approvals, attempts, and technical history, with no
+hiring outcomes or internal identifiers), but deliberately
 excludes OIDC subjects, access/refresh tokens, database-only ownership identifiers, object-store
 keys/versions, raw resume bytes, provider credentials, and unrestricted audit metadata.

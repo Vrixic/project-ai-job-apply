@@ -127,6 +127,39 @@
       },
       "additionalProperties": false
     },
+    "applications": {
+      "type": "object",
+      "required": ["schemaVersion", "applications", "packets", "approvals", "attempts", "history"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "applications": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/applicationsApplication" }
+        },
+        "packets": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/applicationsPacket" }
+        },
+        "approvals": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/applicationsApproval" }
+        },
+        "attempts": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/applicationsAttempt" }
+        },
+        "history": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/applicationsHistoryEntry" }
+        }
+      },
+      "additionalProperties": false
+    },
     "audit": {
       "type": "object",
       "required": ["events"],
@@ -1069,6 +1102,239 @@
         "decision_reversed"
       ]
     },
+    "applicationsStatus": {
+      "enum": [
+        "preparing",
+        "review_required",
+        "approved",
+        "submitting",
+        "takeover",
+        "reconciliation_required",
+        "applied",
+        "cancelled"
+      ]
+    },
+    "applicationsApplication": {
+      "type": "object",
+      "required": ["id", "canonicalJobId", "status", "revision", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "canonicalJobId": { "$ref": "#/$defs/uuid" },
+        "status": { "$ref": "#/$defs/applicationsStatus" },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "currentPacketId": { "$ref": "#/$defs/uuid" },
+        "createdAt": { "$ref": "#/$defs/dateTime" },
+        "updatedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "applicationsPacketField": {
+      "type": "object",
+      "required": [
+        "fieldKey",
+        "value",
+        "origin",
+        "sourceFactIds",
+        "confidence",
+        "disposition",
+        "reasons",
+        "requiresReview"
+      ],
+      "properties": {
+        "fieldKey": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "value": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "maxLength": 20000 },
+            { "type": "number" },
+            { "type": "boolean" },
+            {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "oneOf": [
+                  { "type": "string", "maxLength": 2000 },
+                  { "type": "number" },
+                  { "type": "boolean" }
+                ]
+              }
+            }
+          ]
+        },
+        "origin": {
+          "enum": ["confirmed_fact", "answer_vault", "user_entered", "generated", "derived"]
+        },
+        "sourceFactIds": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/uuid" } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "disposition": { "enum": ["auto", "review", "user_action"] },
+        "reasons": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "enum": [
+              "restricted_answer",
+              "explicit_each_time",
+              "never_infer",
+              "unsupported_value",
+              "unconfirmed_source",
+              "low_confidence",
+              "generated_content",
+              "unknown_field",
+              "direct_user_action"
+            ]
+          }
+        },
+        "requiresReview": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "applicationsPacket": {
+      "type": "object",
+      "required": [
+        "id",
+        "applicationId",
+        "version",
+        "packetHash",
+        "jobRevision",
+        "createdAt",
+        "fields"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "applicationId": { "$ref": "#/$defs/uuid" },
+        "version": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "packetHash": { "$ref": "#/$defs/sha256" },
+        "jobRevision": { "$ref": "#/$defs/sha256" },
+        "formAdapterId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "formVariantId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "formHash": { "$ref": "#/$defs/sha256" },
+        "resumeHash": { "$ref": "#/$defs/sha256" },
+        "coverLetterHash": { "$ref": "#/$defs/sha256" },
+        "createdAt": { "$ref": "#/$defs/dateTime" },
+        "fields": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/applicationsPacketField" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "applicationsApproval": {
+      "type": "object",
+      "required": [
+        "id",
+        "packetId",
+        "applicationId",
+        "packetHash",
+        "acknowledgedFieldKeys",
+        "approvedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "packetId": { "$ref": "#/$defs/uuid" },
+        "applicationId": { "$ref": "#/$defs/uuid" },
+        "packetHash": { "$ref": "#/$defs/sha256" },
+        "acknowledgedFieldKeys": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "approvedAt": { "$ref": "#/$defs/dateTime" },
+        "expiresAt": { "$ref": "#/$defs/dateTime" },
+        "invalidatedAt": { "$ref": "#/$defs/dateTime" },
+        "invalidationReason": {
+          "enum": [
+            "packet_hash_mismatch",
+            "approval_expired",
+            "job_changed",
+            "form_changed",
+            "resume_changed",
+            "cover_letter_changed",
+            "superseded",
+            "attempt_requires_review",
+            "cancelled"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "applicationsAttempt": {
+      "type": "object",
+      "required": [
+        "id",
+        "applicationId",
+        "packetId",
+        "sequence",
+        "status",
+        "adapterId",
+        "adapterVersion",
+        "startedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "applicationId": { "$ref": "#/$defs/uuid" },
+        "packetId": { "$ref": "#/$defs/uuid" },
+        "sequence": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "status": {
+          "enum": [
+            "started",
+            "dispatched",
+            "confirmed",
+            "ambiguous",
+            "failed_no_effect",
+            "failed_requires_review",
+            "taken_over",
+            "abandoned",
+            "reconciled_not_submitted"
+          ]
+        },
+        "adapterId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "adapterVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "startedAt": { "$ref": "#/$defs/dateTime" },
+        "dispatchedAt": { "$ref": "#/$defs/dateTime" },
+        "resolvedAt": { "$ref": "#/$defs/dateTime" },
+        "evidenceKind": {
+          "enum": ["provider_confirmation_page", "provider_api_response", "user_attested"]
+        },
+        "evidenceObservedAt": { "$ref": "#/$defs/dateTime" },
+        "evidenceProviderReference": { "type": "string", "minLength": 1, "maxLength": 200 }
+      },
+      "additionalProperties": false
+    },
+    "applicationsHistoryEntry": {
+      "type": "object",
+      "required": ["applicationId", "seq", "kind", "toStatus", "occurredAt"],
+      "properties": {
+        "applicationId": { "$ref": "#/$defs/uuid" },
+        "seq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "kind": {
+          "enum": [
+            "application_created",
+            "packet_created",
+            "approval_recorded",
+            "approval_invalidated",
+            "attempt_started",
+            "attempt_dispatched",
+            "attempt_failed_no_effect",
+            "attempt_failed_requires_review",
+            "takeover_requested",
+            "takeover_abandoned",
+            "submission_ambiguous",
+            "reconciliation_recorded",
+            "submission_confirmed",
+            "application_cancelled"
+          ]
+        },
+        "fromStatus": { "$ref": "#/$defs/applicationsStatus" },
+        "toStatus": { "$ref": "#/$defs/applicationsStatus" },
+        "packetId": { "$ref": "#/$defs/uuid" },
+        "attemptId": { "$ref": "#/$defs/uuid" },
+        "reasonCode": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "occurredAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "nullableSha256": {
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
@@ -1078,7 +1344,16 @@
       "required": ["owner", "action", "resourceType", "occurredAt"],
       "properties": {
         "owner": {
-          "enum": ["identity", "profile", "documents", "jobs", "matching", "billing", "trust"]
+          "enum": [
+            "identity",
+            "profile",
+            "documents",
+            "jobs",
+            "matching",
+            "billing",
+            "trust",
+            "applications"
+          ]
         },
         "action": { "type": "string", "minLength": 1, "maxLength": 120 },
         "resourceType": { "type": "string", "minLength": 1, "maxLength": 120 },

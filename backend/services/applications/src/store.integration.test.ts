@@ -43,8 +43,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const env = { ...process.env, DATABASE_URL: databaseUrl };
     const first = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const replay = await execFileAsync(process.execPath, [migrationExecutable], { env });
-    const expected =
-      "Applications migrations through 0001_applications_foundation applied and verified.";
+    const expected = "Applications migrations through 0002_candidate_rights applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
     await store.ping();

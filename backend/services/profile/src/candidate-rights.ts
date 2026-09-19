@@ -1,5 +1,6 @@
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 
+/** The exact seven-owner inventory of the deployed `d2-development-synthetic-v1` policy. */
 export const candidateRightsOwnerInventory = [
   "identity",
   "profile",
@@ -10,7 +11,22 @@ export const candidateRightsOwnerInventory = [
   "trust",
 ] as const;
 
-export type CandidateRightsOwner = (typeof candidateRightsOwnerInventory)[number];
+/**
+ * The exact eight-owner inventory of `d3-development-synthetic-v1`, which adds Applications. A
+ * deployment activates exactly one of the two lists through its accountable policy; any other
+ * ordering, subset, or extra owner disables candidate rights.
+ */
+export const candidateRightsOwnerInventoryWithApplications = [
+  ...candidateRightsOwnerInventory,
+  "applications",
+] as const;
+
+const activeOwnerInventories: readonly (readonly CandidateRightsOwner[])[] = [
+  candidateRightsOwnerInventory,
+  candidateRightsOwnerInventoryWithApplications,
+];
+
+export type CandidateRightsOwner = (typeof candidateRightsOwnerInventoryWithApplications)[number];
 export type CandidateDataExportState = "queued" | "building" | "ready" | "expired" | "failed";
 export type CandidateDataExportFailureCode =
   | "owner_unavailable"
@@ -151,9 +167,10 @@ export function loadCandidateRightsPolicy(environment: NodeJS.ProcessEnv): Candi
   if (!SHA256.test(accountablePolicySha256)) throw new CandidateRightsPolicyError();
 
   const owners = exactCsv(environment.CANDIDATE_RIGHTS_OWNER_INVENTORY);
-  if (owners.join(",") !== candidateRightsOwnerInventory.join(",")) {
-    throw new CandidateRightsPolicyError();
-  }
+  const ownerInventory = activeOwnerInventories.find(
+    (inventory) => inventory.join(",") === owners.join(","),
+  );
+  if (!ownerInventory) throw new CandidateRightsPolicyError();
   const subprocessors = exactSubprocessorInventory(
     environment.CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY,
   );
@@ -181,7 +198,7 @@ export function loadCandidateRightsPolicy(environment: NodeJS.ProcessEnv): Candi
       60,
       900,
     ),
-    ownerInventory: candidateRightsOwnerInventory,
+    ownerInventory,
     subprocessorInventory: Object.freeze(subprocessors),
   });
 }

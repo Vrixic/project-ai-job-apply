@@ -16,8 +16,8 @@ service and must return to zero running tasks after every migration.
 - For the Phase 3 package, require the exact
   `d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1` manifest, the
   ordered Profile, Jobs, Documents, Matching, Billing, Trust, and Applications runners, eleven declared
-  schemas, 76 declared regular relations, and 47 checksum-bound migrations, including Jobs `0024`, Trust
-  `0005`, and Applications `0001` before enabling the compatible Gateway or either D2 worker. Apply the
+  schemas, 76 declared regular relations, and 48 checksum-bound migrations, including Jobs `0024`, Trust
+  `0005`, and Applications `0001` and `0002` before enabling the compatible Gateway or either D2 worker. Apply the
   Applications migration before releasing a Gateway that composes it. Reject older D1/D2 package and
   receipt boundaries; a prior six-owner release remains verifiable only against its own recorded boundary.
 - Before Jobs `0023`/Trust `0004`, pause D2 contribution/reviewer writes and both workers through

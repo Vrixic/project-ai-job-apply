@@ -233,6 +233,100 @@ run "candidate_rights_activation_rejects_inventory_without_trust" {
   expect_failures = [var.candidate_rights_enabled]
 }
 
+run "candidate_rights_activation_accepts_applications_inventory" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust,applications"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.profile_readiness_activity[0].environment[0].variables.CANDIDATE_RIGHTS_OWNER_INVENTORY == "identity,profile,documents,jobs,matching,billing,trust,applications" &&
+      aws_lambda_function.gateway[0].environment[0].variables.CANDIDATE_RIGHTS_OWNER_INVENTORY == "identity,profile,documents,jobs,matching,billing,trust,applications"
+    )
+    error_message = "The eight-owner Applications inventory must reach both the activity and the gateway exactly."
+  }
+}
+
+run "candidate_rights_activation_rejects_applications_without_trust" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,applications"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+  }
+
+  expect_failures = [var.candidate_rights_enabled]
+}
+
+run "candidate_rights_activation_rejects_reordered_applications_inventory" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,applications,trust"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+  }
+
+  expect_failures = [var.candidate_rights_enabled]
+}
+
+run "candidate_rights_activation_rejects_unknown_extra_owner" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust,applications,outcomes"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+  }
+
+  expect_failures = [var.candidate_rights_enabled]
+}
+
 run "candidate_rights_activation_rejects_missing_id_token_audience" {
   command = plan
 

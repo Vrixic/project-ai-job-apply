@@ -1,5 +1,5 @@
-import type { AttemptRecord } from "./store.js";
 import type { PacketFieldEntry } from "./packet.js";
+import type { AttemptRecord } from "./store.js";
 
 /**
  * D3-010 measurement. Events carry only allow-listed dimensions whose values are short opaque
