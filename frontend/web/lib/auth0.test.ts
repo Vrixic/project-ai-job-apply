@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   AuthConfigurationError,
+  applicationsAuthScopes,
   auth0CallbackResponse,
   getAuth0Client,
   getLazyAuth0Session,
   isAuth0Configured,
   requestedAuthScopes,
+  requestedScopesFor,
   validateAppBaseUrl,
   validateAuth0Domain,
 } from "./auth0";
@@ -82,6 +84,15 @@ describe("Auth0 web configuration", () => {
     expect(requestedAuthScopes.split(" ")).toEqual(
       expect.arrayContaining(["jobs:read", "jobs:write"]),
     );
+  });
+
+  it("requests Applications permissions only when the deployment enables them", () => {
+    expect(requestedScopesFor({})).toBe(requestedAuthScopes);
+    expect(requestedScopesFor({ AUTH0_APPLICATIONS_SCOPES: "true" })).toBe(requestedAuthScopes);
+    expect(requestedScopesFor({ AUTH0_APPLICATIONS_SCOPES: "enabled" })).toBe(
+      `${requestedAuthScopes} ${applicationsAuthScopes}`,
+    );
+    expect(requestedAuthScopes).not.toContain("applications:");
   });
 
   it("rejects unsafe domains, weak session secrets, and non-local HTTP origins", () => {

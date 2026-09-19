@@ -31,10 +31,7 @@ disabled: the gateway enforces exact OAuth scopes, the candidate and moderation 
 disjoint per-application grants, and the gateway derives a non-reversible opaque moderation audit
 identifier instead of persisting raw identity-provider claims.
 
-D3 Applications (not yet configured): add the permissions `applications:read` and `applications:write`
-only when the [D3 rollout](../../infrastructure/runbooks/deployments/d3-applications-development-rollout.md)
-reaches its Auth0 step, and grant them per application to the clients that may call Applications. Do not add
-them to the web client's requested scope string until the tenant defines them. The API Gateway `$default`
+D3 Applications: the permissions `applications:read` and `applications:write` are defined on the development API and granted per application (owner statement 2026-09-18; not yet verified with a minted token). The [D3 rollout](../../infrastructure/runbooks/deployments/d3-applications-development-rollout.md) lists the acceptance that proves them. The web app requests them only when `AUTH0_APPLICATIONS_SCOPES=enabled`, so enable that only after a token for `ApplyDash Web Development` is confirmed to carry them. The API Gateway `$default`
 JWT authorizer passes a token that carries any one listed route scope, so an Applications token must also
 carry an existing scope such as `profile:read`; the Gateway then enforces the exact `applications:*` scope.
 

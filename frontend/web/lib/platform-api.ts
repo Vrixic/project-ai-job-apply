@@ -94,6 +94,52 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
     { code: "saved_job_command_limit_reached", title: "Saved-job command limit reached" },
   ],
   ["409:saved_jobs_changed", { code: "saved_jobs_changed", title: "Saved jobs changed" }],
+  [
+    "400:invalid_application_cursor",
+    { code: "invalid_application_cursor", title: "Invalid application cursor" },
+  ],
+  [
+    "400:invalid_application_packet",
+    { code: "invalid_application_packet", title: "Invalid application packet" },
+  ],
+  ["404:application_not_found", { code: "application_not_found", title: "Application not found" }],
+  [
+    "404:application_job_unavailable",
+    { code: "application_job_unavailable", title: "Job is unavailable" },
+  ],
+  [
+    "409:application_revision_conflict",
+    { code: "application_revision_conflict", title: "Application changed" },
+  ],
+  [
+    "409:application_already_exists",
+    { code: "application_already_exists", title: "Application already exists" },
+  ],
+  [
+    "409:application_limit_reached",
+    { code: "application_limit_reached", title: "Application limit reached" },
+  ],
+  ["409:application_packet_stale", { code: "application_packet_stale", title: "Packet is stale" }],
+  [
+    "409:application_approval_refused",
+    { code: "application_approval_refused", title: "Approval refused" },
+  ],
+  [
+    "409:application_state_conflict",
+    { code: "application_state_conflict", title: "Application state conflict" },
+  ],
+  [
+    "409:application_attempt_refused",
+    { code: "application_attempt_refused", title: "Attempt refused" },
+  ],
+  [
+    "503:application_integrity_failure",
+    { code: "application_integrity_failure", title: "Application unavailable" },
+  ],
+  [
+    "503:applications_unavailable",
+    { code: "applications_unavailable", title: "Applications are unavailable" },
+  ],
   ["413:payload_too_large", { code: "payload_too_large", title: "Payload too large" }],
   [
     "415:unsupported_media_type",
