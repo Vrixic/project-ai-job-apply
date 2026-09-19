@@ -448,7 +448,7 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
         ForEach-Object { $_.Groups[1].Value }
     })
   if ($declaredVariables -cnotcontains $restoreFlag) { throw "The current source is missing the exact new restore flag." }
-  $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) + @($restoreFlag, "outbox_starts_paused")
+  $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) + @($restoreFlag, "outbox_starts_paused", "document_tailoring_invoke_enabled")
   $declaredBooleanNames = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "infrastructure/terraform/environments/development") -File -Filter "*.tf" | ForEach-Object {
       $declarations = [regex]::Matches((Get-Content -LiteralPath $_.FullName -Raw), '(?ms)^variable\s+"([^"]+)"\s*\{(.*?)^\}')
       foreach ($declaration in $declarations) {
@@ -510,6 +510,26 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
   $rawCurrent = Copy-CaptureFixture $current
   $rawCurrent.variables.$restoreFlag.value = "false"
   Assert-GatewayCapturedSeedInputs $historical $rawCurrent $declaredVariables
+  # A retained seed that predates the default-off invoke switch (ADR-031) is reconstructed with the
+  # switch off, without relabeling the seed, and a captured baseline may not silently turn it on.
+  $tailoringFlag = "document_tailoring_invoke_enabled"
+  if ($declaredVariables -cnotcontains $tailoringFlag) { throw "The current source is missing the document tailoring invoke switch." }
+  $preSwitch = Copy-CaptureFixture $current
+  $preSwitch.variables.PSObject.Properties.Remove($tailoringFlag)
+  $preSwitchOriginal = ConvertTo-GatewayCanonicalJson $preSwitch
+  $preSwitchInputs = Get-GatewayCaptureSeedInputs $preSwitch $declaredVariables
+  if ($preSwitchInputs.DefaultVariables.Count -ne 1 -or $preSwitchInputs.DefaultVariables[$tailoringFlag] -isnot [bool] -or
+      $preSwitchInputs.DefaultVariables[$tailoringFlag] -ne $false -or
+      $preSwitchInputs.SeedDeclaredVariableNames -ccontains $tailoringFlag -or
+      (ConvertTo-GatewayCanonicalJson $preSwitch) -cne $preSwitchOriginal) {
+    throw "A seed that predates the invoke switch was not reconstructed with the switch off and untouched evidence."
+  }
+  $preSwitchCaptured = Copy-CaptureFixture $current
+  $preSwitchCaptured.variables.$tailoringFlag.value = "false"
+  Assert-GatewayCapturedSeedInputs $preSwitch $preSwitchCaptured $declaredVariables
+  $preSwitchCaptured.variables.$tailoringFlag.value = $true
+  Assert-Rejected { Assert-GatewayCapturedSeedInputs $preSwitch $preSwitchCaptured $declaredVariables } `
+    "A captured baseline silently switched the document tailoring invoke grant on."
   # Exercise every declared root Boolean in both directions, using actual JSON roundtrips.
   $booleanRoundTrips = 0; $booleanFlips = 0; $invalidBooleanCases = 0
   foreach ($name in $booleanVariableNames) {

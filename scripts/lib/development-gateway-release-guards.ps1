@@ -338,6 +338,15 @@ function Assert-GatewayReleaseVariables {
   foreach ($name in $baselineNames) {
     $before = Get-GatewayPlanVariableValue -Variables $BaselineVariables -Name $name
     $after = Get-GatewayPlanVariableValue -Variables $ReleaseVariables -Name $name
+    if ($name -ceq "document_tailoring_invoke_enabled") {
+      # The Gateway-to-Documents invoke grant (ADR-031) may be switched on once, never off here.
+      $beforeEnabled = ConvertTo-ExactBoolean $before "document_tailoring_invoke_enabled"
+      $afterEnabled = ConvertTo-ExactBoolean $after "document_tailoring_invoke_enabled"
+      if ($beforeEnabled -and -not $afterEnabled) {
+        throw "The gateway release may not switch off the document tailoring invoke grant."
+      }
+      continue
+    }
     if ($name -notin $allowed -and
         (ConvertTo-GatewayCanonicalJson $before) -cne (ConvertTo-GatewayCanonicalJson $after)) {
       throw "The gateway release changed non-gateway input '$name'."
@@ -382,8 +391,66 @@ function Assert-GatewayReleaseVariables {
   return $true
 }
 
+function ConvertTo-GatewayStringList {
+  param([AllowNull()][object]$Value)
+  if ($null -eq $Value) { return @() }
+  return @($Value | ForEach-Object { [string]$_ })
+}
+
+# Compares two IAM policy documents. `After` must equal `Before` plus exactly one statement, and that
+# statement must be the reviewed one. Statement order is irrelevant; content is compared exactly.
+function Assert-GatewayPolicyGainsExactlyOneStatement {
+  param(
+    [Parameter(Mandatory)][string]$BeforeJson,
+    [Parameter(Mandatory)][string]$AfterJson,
+    [Parameter(Mandatory)][string]$Sid,
+    [Parameter(Mandatory)][string]$AliasArn,
+    [AllowEmptyString()][string]$PrincipalRoleArn = "",
+    [Parameter(Mandatory)][string]$Label
+  )
+  $before = $BeforeJson | ConvertFrom-Json
+  $after = $AfterJson | ConvertFrom-Json
+  $beforeStatements = @($before.Statement)
+  $afterStatements = @($after.Statement)
+  $added = @($afterStatements | Where-Object { [string]$_.Sid -ceq $Sid })
+  if ([string]$before.Version -cne [string]$after.Version -or
+      $afterStatements.Count -ne $beforeStatements.Count + 1 -or $added.Count -ne 1 -or
+      @($beforeStatements | Where-Object { [string]$_.Sid -ceq $Sid }).Count -ne 0) {
+    throw "The $Label change is not exactly one added statement."
+  }
+  $statement = $added[0]
+  $properties = @($statement.PSObject.Properties | ForEach-Object Name | Sort-Object)
+  $expectedProperties = @("Action", "Effect", "Resource", "Sid") | Sort-Object
+  if ($PrincipalRoleArn) { $expectedProperties = @("Action", "Effect", "Principal", "Resource", "Sid") | Sort-Object }
+  if (($properties -join "|") -cne ($expectedProperties -join "|") -or
+      [string]$statement.Effect -cne "Allow" -or
+      ((ConvertTo-GatewayStringList $statement.Action) -join "|") -cne "lambda:InvokeFunction" -or
+      ((ConvertTo-GatewayStringList $statement.Resource) -join "|") -cne $AliasArn) {
+    throw "The $Label statement is not the exact reviewed invoke grant."
+  }
+  if ($PrincipalRoleArn) {
+    $principal = $statement.Principal
+    $principalProperties = @($principal.PSObject.Properties | ForEach-Object Name)
+    if (($principalProperties -join "|") -cne "AWS" -or
+        ((ConvertTo-GatewayStringList $principal.AWS) -join "|") -cne $PrincipalRoleArn) {
+      throw "The $Label principal is not the exact Gateway role."
+    }
+  }
+  $remaining = @($afterStatements | Where-Object { [string]$_.Sid -cne $Sid } |
+      ForEach-Object { ConvertTo-GatewayCanonicalJson $_ } | Sort-Object)
+  $original = @($beforeStatements | ForEach-Object { ConvertTo-GatewayCanonicalJson $_ } | Sort-Object)
+  if (($remaining -join "|") -cne ($original -join "|")) {
+    throw "The $Label change altered an existing statement."
+  }
+}
+
 function Assert-ExactGatewayReleasePlan {
-  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][object]$Artifact, [switch]$AllowHistorical)
+  param(
+    [Parameter(Mandatory)][object]$Plan,
+    [Parameter(Mandatory)][object]$Artifact,
+    [AllowEmptyString()][string]$ExpectedAccountId = "",
+    [switch]$AllowHistorical
+  )
   $acceptedVersions = @((Get-DeploymentTerraformVersion))
   if ($AllowHistorical) { $acceptedVersions += "1.9.8" }
   if ([string]$Plan.terraform_version -cnotin $acceptedVersions -or $Plan.errored -or -not $Plan.complete -or -not $Plan.applyable) {
@@ -404,8 +471,22 @@ function Assert-ExactGatewayReleasePlan {
     "module.platform.aws_lambda_alias.gateway[0]",
     "module.platform.aws_lambda_function.gateway[0]"
   ) | Sort-Object
+  $grantAddresses = @(
+    "module.platform.aws_iam_role_policy.gateway_lambda[0]",
+    "module.platform.aws_vpc_endpoint.lambda[0]"
+  )
   $actual = @($changes | ForEach-Object { [string]$_.address } | Sort-Object)
-  if (($actual -join "|") -cne ($expected -join "|")) {
+  $grantRelease = $false
+  if (($actual -join "|") -ceq ((@($expected + $grantAddresses) | Sort-Object) -join "|")) {
+    # The only plan larger than function plus alias is the one-time reviewed invoke grant (ADR-031).
+    $tailoringVariable = Get-GatewayOptionalProperty $Plan.variables "document_tailoring_invoke_enabled"
+    if ($null -eq $tailoringVariable -or
+        -not (ConvertTo-ExactBoolean $tailoringVariable.value "document_tailoring_invoke_enabled") -or
+        $ExpectedAccountId -cnotmatch '^[0-9]{12}$') {
+      throw "The release plan is not limited to the gateway Lambda function and immutable alias."
+    }
+    $grantRelease = $true
+  } elseif (($actual -join "|") -cne ($expected -join "|")) {
     throw "The release plan is not limited to the gateway Lambda function and immutable alias."
   }
   foreach ($change in $changes) {
@@ -428,6 +509,16 @@ function Assert-ExactGatewayReleasePlan {
   $functionAfter = $function.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
   $functionBefore.environment[0].variables.PSObject.Properties.Remove("RELEASE_SHA")
   $functionAfter.environment[0].variables.PSObject.Properties.Remove("RELEASE_SHA")
+  if ($grantRelease) {
+    $aliasArn = "arn:aws:lambda:us-east-2:$ExpectedAccountId`:function:ai-job-apply-development-document-processor:development"
+    $tailoringName = "DOCUMENT_TAILORING_FUNCTION_ARN"
+    if ($null -ne $functionBefore.environment[0].variables.PSObject.Properties[$tailoringName] -or
+        $null -eq $functionAfter.environment[0].variables.PSObject.Properties[$tailoringName] -or
+        [string]$functionAfter.environment[0].variables.$tailoringName -cne $aliasArn) {
+      throw "The gateway function must gain exactly the reviewed document tailoring function ARN."
+    }
+    $functionAfter.environment[0].variables.PSObject.Properties.Remove($tailoringName)
+  }
   foreach ($field in @("code_sha256", "last_modified", "qualified_arn", "qualified_invoke_arn", "s3_key", "s3_object_version", "source_code_hash", "version")) {
     $functionBefore.PSObject.Properties.Remove($field); $functionAfter.PSObject.Properties.Remove($field)
   }
@@ -466,6 +557,31 @@ function Assert-ExactGatewayReleasePlan {
   )
   if (($unknownAliasPaths -join "|") -cne "function_version") {
     throw "The gateway release contains an unknown nonapproved alias field."
+  }
+  if ($grantRelease) {
+    $aliasArn = "arn:aws:lambda:us-east-2:$ExpectedAccountId`:function:ai-job-apply-development-document-processor:development"
+    $gatewayRoleArn = "arn:aws:iam::$ExpectedAccountId`:role/ai-job-apply-development-gateway-lambda"
+    $grants = @(
+      @{ Address = "module.platform.aws_iam_role_policy.gateway_lambda[0]"; Type = "aws_iam_role_policy"; Sid = "InvokeExactDocumentTailoringRuntime"; Principal = ""; Label = "gateway role policy" },
+      @{ Address = "module.platform.aws_vpc_endpoint.lambda[0]"; Type = "aws_vpc_endpoint"; Sid = "GatewayInvokesExactDocumentProcessorAlias"; Principal = $gatewayRoleArn; Label = "Lambda endpoint policy" }
+    )
+    foreach ($grant in $grants) {
+      $change = @($changes | Where-Object { [string]$_.address -ceq $grant.Address })[0]
+      if ([string]$change.type -cne $grant.Type) { throw "The $($grant.Label) change has an unexpected Terraform type." }
+      $grantBefore = $change.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+      $grantAfter = $change.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+      $beforePolicy = [string]$grantBefore.policy
+      $afterPolicy = [string]$grantAfter.policy
+      $grantBefore.PSObject.Properties.Remove("policy"); $grantAfter.PSObject.Properties.Remove("policy")
+      if ((ConvertTo-GatewayCanonicalJson $grantBefore) -cne (ConvertTo-GatewayCanonicalJson $grantAfter)) {
+        throw "The $($grant.Label) change altered a field other than the policy."
+      }
+      $grantUnknown = Get-GatewayOptionalProperty $change.change "after_unknown"
+      $unknownGrantPaths = @(if ($null -ne $grantUnknown) { Get-GatewayUnknownTrueLeafPaths -Value $grantUnknown })
+      if ($unknownGrantPaths.Count -ne 0) { throw "The $($grant.Label) change contains an unknown field." }
+      Assert-GatewayPolicyGainsExactlyOneStatement -BeforeJson $beforePolicy -AfterJson $afterPolicy `
+        -Sid $grant.Sid -AliasArn $aliasArn -PrincipalRoleArn $grant.Principal -Label $grant.Label
+    }
   }
   return $changes
 }

@@ -43,6 +43,13 @@ locals {
   public_job_projection_function_arn  = "arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${local.public_job_projection_function_name}"
 }
 
+locals {
+  # The Gateway may reach resume text only through the Documents runtime (ADR-031).
+  document_tailoring_invoke_enabled = (
+    var.document_tailoring_invoke_enabled && var.deploy_gateway_lambda && local.document_complete_dark_enabled
+  )
+}
+
 data "aws_iam_policy_document" "platform_kms" {
   statement {
     sid       = "EnableAccountIAMPermissions"
@@ -1640,6 +1647,16 @@ data "aws_iam_policy_document" "gateway_lambda" {
       resources = [local.platform_kms_key_arn]
     }
   }
+
+  dynamic "statement" {
+    for_each = local.document_tailoring_invoke_enabled ? [1] : []
+    content {
+      sid       = "InvokeExactDocumentTailoringRuntime"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [local.document_processor_alias_arn]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "gateway_lambda" {
@@ -1810,6 +1827,9 @@ resource "aws_lambda_function" "gateway" {
         JOB_CONTRIBUTION_CAPABILITY_PUBLIC_KEYS_JSON = var.d2_community_runtime.signed_public_keys_json
       } : {},
       local.d2_development_contribution_environment,
+      local.document_tailoring_invoke_enabled ? {
+        DOCUMENT_TAILORING_FUNCTION_ARN = local.document_processor_alias_arn
+      } : {},
       local.d2_community_enabled ? {
         D2_PRIVATE_CAPTURE_ROUTES_ENABLED   = "true"
         D2_CONTRIBUTION_ROUTES_ENABLED      = tostring(local.d2_community_operational)
@@ -2560,6 +2580,20 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
       principals {
         type        = "AWS"
         identifiers = [aws_iam_role.ingestion_runtime["starter"].arn]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.document_tailoring_invoke_enabled ? [1] : []
+    content {
+      sid       = "GatewayInvokesExactDocumentProcessorAlias"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [local.document_processor_alias_arn]
+      principals {
+        type        = "AWS"
+        identifiers = [aws_iam_role.gateway_lambda[0].arn]
       }
     }
   }

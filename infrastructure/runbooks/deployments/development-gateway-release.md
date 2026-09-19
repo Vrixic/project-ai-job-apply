@@ -166,6 +166,29 @@ explicitly reviewed synthetic catalog revision, and invokes the route within the
 Do not forge a cursor from server secrets or perform an ad hoc database mutation. Keep D1 search
 catalog-change acceptance open until that guarded deployed evidence exists.
 
+## One-time document tailoring invoke grant (ADR-031)
+
+The first release that lets the Gateway reach the Documents runtime for resume tailoring is the only
+release allowed to change more than the Lambda function and alias. It is switched on with
+`-EnableDocumentTailoringInvoke` on `Plan`, `Apply`, and standalone `Verify` (the switch sets the
+default-off Terraform input `document_tailoring_invoke_enabled` to `true`). Without the switch every
+release remains the exact two-resource plan.
+
+The guard accepts exactly four updates and nothing else:
+
+1. `aws_lambda_function.gateway[0]` and `aws_lambda_alias.gateway[0]`, as usual, plus exactly one added
+   function variable, `DOCUMENT_TAILORING_FUNCTION_ARN`, equal to the qualified
+   `ai-job-apply-development-document-processor:development` alias ARN in the reviewed account.
+2. `aws_iam_role_policy.gateway_lambda[0]`, gaining exactly one statement `InvokeExactDocumentTailoringRuntime`
+   (`Allow`, `lambda:InvokeFunction`, that one alias ARN, no condition, no principal).
+3. `aws_vpc_endpoint.lambda[0]`, gaining exactly one statement `GatewayInvokesExactDocumentProcessorAlias`
+   (same action and resource, principal exactly the Gateway role).
+
+Every existing statement must be byte-for-byte unchanged, no field other than the policy may change, no
+unknown field is allowed, and the switch may move only from `false` to `true`. The processor alias must
+already be deployed and live-verified before this release, because the grant only names it. After apply,
+`Verify` must return zero drift; seed later baselines from that verification plan so the switch stays on.
+
 ## Failure and recovery
 
 - A publication failure may leave new immutable objects plus a `publishing` receipt. Never reuse,

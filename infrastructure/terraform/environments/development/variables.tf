@@ -418,6 +418,11 @@ variable "profile_readiness_retention_days" {
   default = 30
 }
 
+variable "document_tailoring_invoke_enabled" {
+  type    = bool
+  default = false
+}
+
 variable "candidate_rights_enabled" {
   type    = bool
   default = false

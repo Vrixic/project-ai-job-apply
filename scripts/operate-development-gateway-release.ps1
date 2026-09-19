@@ -17,6 +17,9 @@ param(
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedBaselineMetadataSha256 = "",
   [string]$PlanPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedPlanSha256 = "",
+  # Switches the Gateway-to-Documents invoke grant (ADR-031) on, once. Required for Plan, Apply, and
+  # Verify of the release that first carries it; the guards accept only the reviewed grant content.
+  [switch]$EnableDocumentTailoringInvoke,
   [switch]$Help
 )
 
@@ -396,7 +399,7 @@ function Restore-TerraformVariables {
   foreach ($entry in $Saved.GetEnumerator()) { Set-Item "Env:$($entry.Key)" ([string]$entry.Value) }
 }
 function Set-VariablesFromPlan {
-  param([Parameter(Mandatory)][object]$Plan, [AllowNull()][object]$Artifact)
+  param([Parameter(Mandatory)][object]$Plan, [AllowNull()][object]$Artifact, [switch]$EnableTailoringInvoke)
   foreach ($property in $Plan.variables.PSObject.Properties) {
     $value = $property.Value.value
     $serialized = if ($value -is [bool]) { ([string]$value).ToLowerInvariant() }
@@ -410,6 +413,7 @@ function Set-VariablesFromPlan {
     $env:TF_VAR_gateway_lambda_artifact_sha256 = [string]$Artifact.artifactSha256
     $env:TF_VAR_gateway_lambda_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
   }
+  if ($EnableTailoringInvoke) { $env:TF_VAR_document_tailoring_invoke_enabled = "true" }
 }
 function ConvertTo-GatewayCaptureRestoreFlag {
   param([AllowNull()][object]$Value)
@@ -430,6 +434,13 @@ function Get-GatewayCaptureSeedInputs {
   }
   $seedDeclared = @($DeclaredVariableNames)
   $defaults = @{}
+  # The Gateway-to-Documents invoke switch (ADR-031) is default-off and newer than every retained
+  # seed. Its absence is reconstructed as false for the fresh plan, never relabeled on the seed.
+  $tailoringFlag = "document_tailoring_invoke_enabled"
+  if ($DeclaredVariableNames -ccontains $tailoringFlag -and $null -eq $Seed.variables.PSObject.Properties[$tailoringFlag]) {
+    $seedDeclared = @($seedDeclared | Where-Object { $_ -cne $tailoringFlag })
+    $defaults[$tailoringFlag] = $false
+  }
   $restoreProperty = $Seed.variables.PSObject.Properties[$restoreFlag]
   if ($null -eq $restoreProperty) {
     # This is input reconstruction for a fresh plan, never a mutation or relabeling of
@@ -437,7 +448,7 @@ function Get-GatewayCaptureSeedInputs {
     if ([string]$Seed.terraform_version -cne "1.9.8") {
       throw "Only the historical baseline seed may omit the new default-off restore role flag."
     }
-    $seedDeclared = @($DeclaredVariableNames | Where-Object { $_ -cne $restoreFlag })
+    $seedDeclared = @($seedDeclared | Where-Object { $_ -cne $restoreFlag })
     $defaults[$restoreFlag] = $false
   } else {
     $restoreValue = $restoreProperty.Value.PSObject.Properties["value"]
@@ -462,7 +473,7 @@ function Assert-GatewayCapturedSeedInputs {
   # Native TF_VAR serialization may retain lowercase strings for declared root booleans.
   # Keep the shared typed inventory unchanged; these two newer root flags are local additions.
   $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) +
-    @("candidate_deletion_restore_role_enabled", "outbox_starts_paused")
+    @("candidate_deletion_restore_role_enabled", "outbox_starts_paused", "document_tailoring_invoke_enabled")
   foreach ($name in $DeclaredVariableNames) {
     if ($inputs.DefaultVariables.ContainsKey($name)) { $expected = $inputs.DefaultVariables[$name] }
     else {
@@ -648,12 +659,12 @@ function Assert-LiveGateway {
       [string]$function.Configuration.Environment.Variables.RELEASE_SHA -cne [string]$Artifact.artifactSha256) { throw "The live gateway alias does not match the checksum-reviewed immutable artifact." }
 }
 function Invoke-ZeroDrift {
-  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact)
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact, [switch]$EnableTailoringInvoke)
   $path = Join-Path $operatorRoot "verify-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
   if (Test-Path $path) { throw "Refusing to overwrite a verification plan." }
   $saved = Save-AndClearTerraformVariables
   try {
-    Set-VariablesFromPlan $Baseline.Plan $Artifact
+    Set-VariablesFromPlan $Baseline.Plan $Artifact -EnableTailoringInvoke:$EnableTailoringInvoke
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
     $exitCode = $LASTEXITCODE
   } finally { Restore-TerraformVariables $saved }
@@ -862,12 +873,12 @@ if ($Action -ceq "Verify") {
     $reviewedPlan = Read-Plan $reviewedPath
     $null = Assert-GatewayReleaseVariables $baseline.Plan.variables $reviewedPlan.variables $publication.Artifact `
       $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
-    $null = Assert-ExactGatewayReleasePlan $reviewedPlan $publication.Artifact
+    $null = Assert-ExactGatewayReleasePlan $reviewedPlan $publication.Artifact -ExpectedAccountId $ExpectedAccountId
   }
   Assert-LiveGateway $publication.Artifact
   & (Join-Path $PSScriptRoot "verify-development-gateway-lambda-boundary.ps1") -AwsProfile $AwsProfile -AwsRegion $Region | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "The direct development gateway/search boundary failed." }
-  $driftSha = Invoke-ZeroDrift $baseline $publication.Artifact
+  $driftSha = Invoke-ZeroDrift $baseline $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke
   [pscustomobject]@{ Outcome = "verified"; SourceSha = $SourceSha; AliasImmutable = $true; SearchBoundary = "passed"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
   exit 0
 }
@@ -878,7 +889,7 @@ if ($Action -ceq "Plan") {
   if (Test-Path $path) { throw "Refusing to overwrite a release plan." }
   $state = Get-StateIdentity; $saved = Save-AndClearTerraformVariables
   try {
-    Set-VariablesFromPlan $baseline.Plan $publication.Artifact
+    Set-VariablesFromPlan $baseline.Plan $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke
     & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
     $exitCode = $LASTEXITCODE
   } finally { Restore-TerraformVariables $saved }
@@ -886,7 +897,7 @@ if ($Action -ceq "Plan") {
   $plan = Read-Plan $path
   $null = Assert-GatewayReleaseVariables $baseline.Plan.variables $plan.variables $publication.Artifact `
     $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
-  $changes = @(Assert-ExactGatewayReleasePlan $plan $publication.Artifact)
+  $changes = @(Assert-ExactGatewayReleasePlan $plan $publication.Artifact -ExpectedAccountId $ExpectedAccountId)
   $sha = Get-FileSha256 $path
   $metadata = [ordered]@{ SchemaVersion = "1"; Kind = "development-gateway-release-plan"; Environment = "development"; AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"; StateLineage = $state.Lineage; StateSerial = $state.Serial; SourceSha = $SourceSha; ReceiptSha256 = $ReviewedReceiptSha256; BaselinePath = $baseline.Path; BaselineSha256 = $ReviewedBaselineSha256; BaselineMetadataPath = $baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256; BaselineMetadataSchemaVersion = $baseline.MetadataSchemaVersion; BaselineStage = [string]$baseline.Metadata.Stage; BaselineParserQualifiedArn = [string]$baseline.Metadata.ParserQualifiedArn; BaselineDocumentReceiptSha256 = $baseline.DocumentReceiptSha256; BaselineStateLineage = [string]$baseline.Metadata.StateLineage; BaselineStateSerial = [long]$baseline.Metadata.StateSerial; BaselineMigrationImage = $baseline.MigrationImage; MigrationImage = [string](Get-GatewayPlanVariableValue $baseline.Plan.variables "migration_image"); PlanPath = $path; PlanSha256 = $sha; ChangedResources = @($changes | ForEach-Object address | Sort-Object); CreatedAt = (Get-Date).ToUniversalTime().ToString("o") }
   Write-ExclusiveJson "$path$metadataSuffix" $metadata
@@ -906,11 +917,11 @@ if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.
 $plan = Read-Plan $path
 $null = Assert-GatewayReleaseVariables $baseline.Plan.variables $plan.variables $publication.Artifact `
   $ExpectedAccountId $boundary.MigrationRepositoryUrl $baseline.Metadata.ParserQualifiedArn
-$null = Assert-ExactGatewayReleasePlan $plan $publication.Artifact
+$null = Assert-ExactGatewayReleasePlan $plan $publication.Artifact -ExpectedAccountId $ExpectedAccountId
 & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
 if ($LASTEXITCODE -ne 0) { throw "The exact reviewed gateway release plan failed to apply." }
 Assert-LiveGateway $publication.Artifact
 & (Join-Path $PSScriptRoot "verify-development-gateway-lambda-boundary.ps1") -AwsProfile $AwsProfile -AwsRegion $Region | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "The direct development gateway/search boundary failed after apply." }
-$driftSha = Invoke-ZeroDrift $baseline $publication.Artifact
+$driftSha = Invoke-ZeroDrift $baseline $publication.Artifact -EnableTailoringInvoke:$EnableDocumentTailoringInvoke
 [pscustomobject]@{ Outcome = "applied-and-verified"; SourceSha = $SourceSha; AliasImmutable = $true; SearchBoundary = "passed"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
