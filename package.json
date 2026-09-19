@@ -76,7 +76,7 @@
     "esbuild": "0.28.2",
     "playwright-core": "1.63.0",
     "turbo": "2.10.13",
-    "typescript": "7.0.2",
+    "typescript": "5.9.3",
     "vitest": "5.0.1",
     "yazl": "3.3.1"
   }
