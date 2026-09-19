@@ -973,7 +973,7 @@ export function failIngestionAttempt(
   const settled: PausedIngestionCheckpointV1 | DeadLetteredIngestionCheckpointV1 =
     command.sourceEnabled
       ? frozen({ ...base, state: "dead_lettered", failureCode })
-      : frozen({ ...base, state: "paused", pauseReason: "source_disabled" });
+      : frozen({ ...base, state: "paused", pauseReason: "source_disabled" as const });
   return frozen({
     changed: true,
     checkpoint: settled,
