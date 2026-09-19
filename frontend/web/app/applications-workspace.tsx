@@ -9,6 +9,8 @@ import {
   sha256Hex,
 } from "../lib/applications-client";
 import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
+import { ApplyPanel } from "./apply-panel";
+import { ResumePreviewSection } from "./resume-preview-section";
 
 type Entries = Readonly<Record<string, string | boolean>>;
 
@@ -19,9 +21,12 @@ type Entries = Readonly<Record<string, string | boolean>>;
  */
 export function ApplicationsWorkspace({
   jobId,
+  applyUrl,
   fetchImplementation,
 }: {
   jobId: string;
+  /** The employer's application page, from the job's own source link. */
+  applyUrl?: string | undefined;
   fetchImplementation?: typeof globalThis.fetch;
 }) {
   const headingId = useId();
@@ -157,7 +162,30 @@ export function ApplicationsWorkspace({
     <section aria-labelledby={headingId}>
       <h2 id={headingId}>Apply with review</h2>
       {application && actions ? (
-        <ApplicationReviewPanel application={application} actions={actions} />
+        <>
+          {application.currentPacket ? (
+            <ResumePreviewSection
+              applicationId={application.id}
+              revision={application.revision}
+              {...(fetchImplementation ? { fetchImplementation } : {})}
+              onRefreshPacket={async () => {
+                try {
+                  await prepare(application, entries);
+                } catch {
+                  // The notice already carries the fixed copy for this failure.
+                }
+              }}
+            />
+          ) : null}
+          <ApplicationReviewPanel application={application} actions={actions} />
+          {application.currentAction === "ready_to_submit" ? (
+            <ApplyPanel
+              application={application}
+              applyUrl={applyUrl}
+              {...(fetchImplementation ? { fetchImplementation } : {})}
+            />
+          ) : null}
+        </>
       ) : (
         <>
           <p>

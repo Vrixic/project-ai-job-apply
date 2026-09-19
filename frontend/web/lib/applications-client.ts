@@ -1,4 +1,8 @@
-import type { Application } from "@ai-job-apply/api-contracts";
+import type {
+  Application,
+  ApplicationResumeFile,
+  ApplicationResumePreview,
+} from "@ai-job-apply/api-contracts";
 
 /**
  * Browser-side calls to the Applications BFF. Every command carries an idempotency key that is
@@ -83,4 +87,85 @@ export function commandKey(action: string, applicationId: string, revision: numb
 export async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Reads the tailored-resume preview for one application. Returns nothing on any failure so the
+ * caller shows fixed copy; the preview is display-only and never feeds a command.
+ */
+export async function fetchResumePreview(
+  applicationId: string,
+  options: ApplicationsCallOptions = {},
+): Promise<ApplicationResumePreview | undefined> {
+  const send = options.fetch ?? fetch;
+  try {
+    const response = await send(`/api/platform/applications/${applicationId}/resume`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    if (!response.ok) return undefined;
+    const value: unknown = await response.json().catch(() => undefined);
+    if (
+      value &&
+      typeof value === "object" &&
+      ["ready", "no_resume", "unavailable"].includes((value as { status?: string }).status ?? "") &&
+      typeof (value as { matchesPacket?: unknown }).matchesPacket === "boolean"
+    ) {
+      return value as ApplicationResumePreview;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function sha256OfBytes(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes.buffer as ArrayBuffer);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export type ResumeFileResult =
+  | { ok: true; file: ApplicationResumeFile }
+  | { ok: false; message: string };
+
+/** Fetches the tailored resume file the current packet carries; failures collapse to fixed copy. */
+export async function fetchResumeFile(
+  applicationId: string,
+  format: "docx" | "pdf",
+  options: ApplicationsCallOptions = {},
+): Promise<ResumeFileResult> {
+  const send = options.fetch ?? fetch;
+  try {
+    const response = await send(
+      `/api/platform/applications/${applicationId}/resume/file?format=${format}`,
+      {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        ...(options.signal ? { signal: options.signal } : {}),
+      },
+    );
+    const value: unknown = await response.json().catch(() => undefined);
+    if (response.ok && value && typeof value === "object") {
+      const file = value as Partial<ApplicationResumeFile>;
+      if (
+        (file.format === "pdf" || file.format === "docx") &&
+        typeof file.contentBase64 === "string" &&
+        typeof file.sha256 === "string" &&
+        typeof file.fileName === "string" &&
+        typeof file.mediaType === "string" &&
+        typeof file.sizeBytes === "number"
+      ) {
+        return { ok: true, file: file as ApplicationResumeFile };
+      }
+      return { ok: false, message: "That did not go through. Try again." };
+    }
+    const code =
+      value && typeof value === "object" ? String((value as { code?: unknown }).code ?? "") : "";
+    return { ok: false, message: applicationsProblemCopy(code) };
+  } catch {
+    return { ok: false, message: "That did not go through. Try again." };
+  }
 }

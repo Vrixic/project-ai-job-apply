@@ -4,6 +4,8 @@ import type {
   Application,
   ApplicationHistoryPage,
   ApplicationPage,
+  ApplicationResumeFile,
+  ApplicationResumePreview,
   ApplicationSubmissionResultRequest,
   ApplicationSubmissionStart,
   ReconcileApplicationAttemptRequest,
@@ -22,6 +24,7 @@ import {
   versionToken,
 } from "./metrics.js";
 import type { ArtifactHashes, CurrentBindings, FormBinding } from "./packet.js";
+import { type ResumePreviewSource, tailoredFileName, withPacketMatch } from "./resume-preview.js";
 import type {
   ApplicationRecord,
   ApplicationView,
@@ -30,6 +33,7 @@ import type {
   PostgresApplicationStore,
   StartAttemptResult,
 } from "./store.js";
+import { StalePacketError } from "./store.js";
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -119,6 +123,14 @@ export interface ApplicationsApi {
     request: { limit?: number; cursor?: string },
   ): Promise<ApplicationPage>;
   get(ownerUserId: string, applicationId: string): Promise<Application>;
+  /** The resume tailored for this application's job and whether the packet already carries it. */
+  resumePreview(ownerUserId: string, applicationId: string): Promise<ApplicationResumePreview>;
+  /** The tailored resume file the current packet carries; refused if it no longer matches. */
+  resumeFile(
+    ownerUserId: string,
+    applicationId: string,
+    format: ApplicationResumeFile["format"],
+  ): Promise<ApplicationResumeFile>;
   history(
     ownerUserId: string,
     applicationId: string,
@@ -189,6 +201,8 @@ export interface ApplicationsServiceDependencies {
   packets: PacketPreparationSource;
   bindings: LiveBindingsSource;
   jobs: ApplicationJobGate;
+  /** Tailored-resume preview; when absent the preview reports the service as unavailable. */
+  resumes?: ResumePreviewSource;
   /** Optional privacy-safe measurement sink. Failures never affect a request. */
   metrics?: MetricSink;
   clock?: () => Date;
@@ -234,6 +248,54 @@ export class ApplicationsService implements ApplicationsApi {
     return toApiApplication(
       await this.dependencies.store.getApplication(ownerUserId, applicationId),
     );
+  }
+
+  async resumePreview(
+    ownerUserId: string,
+    applicationId: string,
+  ): Promise<ApplicationResumePreview> {
+    const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const resumes = this.dependencies.resumes;
+    if (!resumes) {
+      return {
+        status: "unavailable",
+        unavailableReason: "service_unavailable",
+        matchesPacket: false,
+      };
+    }
+    let body: Awaited<ReturnType<ResumePreviewSource["preview"]>>;
+    try {
+      body = await resumes.preview({ ownerUserId, jobId: view.application.canonicalJobId });
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    return withPacketMatch(body, view.currentPacket?.artifactHashes.resume);
+  }
+
+  async resumeFile(
+    ownerUserId: string,
+    applicationId: string,
+    format: ApplicationResumeFile["format"],
+  ): Promise<ApplicationResumeFile> {
+    const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const resumes = this.dependencies.resumes;
+    if (!resumes) throw new ApplicationsUnavailableError();
+    const packetHash = view.currentPacket?.artifactHashes.resume;
+    // A file is served only for the exact resume the current packet carries, never a newer one.
+    if (!packetHash) throw new StalePacketError(["resume_changed"]);
+    let file: Awaited<ReturnType<ResumePreviewSource["file"]>>;
+    try {
+      file = await resumes.file({
+        ownerUserId,
+        jobId: view.application.canonicalJobId,
+        format,
+      });
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    if (!file || file.contentSha256 !== packetHash) throw new StalePacketError(["resume_changed"]);
+    const { baseFileName, ...rest } = file;
+    return { ...rest, fileName: tailoredFileName(baseFileName, format) };
   }
 
   async history(

@@ -70,6 +70,8 @@ function unavailableApplications(): ApplicationsApi {
     create: fail,
     search: fail,
     get: fail,
+    resumePreview: fail,
+    resumeFile: fail,
     history: fail,
     preparePacket: fail,
     approve: fail,

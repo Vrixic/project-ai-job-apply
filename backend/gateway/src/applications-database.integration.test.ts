@@ -21,8 +21,10 @@ function runtimeFor(client: ReturnType<typeof createApplicationsDatabase>) {
     client,
     definitions: defaultFieldDefinitions(),
     profile: { listProfileFacts: async () => ({ facts: [] }) },
-    documents: { listResumeDocuments: async () => ({ documents: [] }) },
     catalog: {
+      async getActiveJob() {
+        return null;
+      },
       async resolveActiveJobSummaries() {
         return {
           catalogRevision: "r1",

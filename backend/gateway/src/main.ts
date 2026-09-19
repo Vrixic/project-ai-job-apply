@@ -58,6 +58,7 @@ import {
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
+import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 
 const config = loadBackendConfig();
@@ -165,7 +166,13 @@ const applications =
     ? createApplicationsRuntime({
         client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
         profile: store,
-        documents,
+        ...(process.env.DOCUMENT_TAILORING_FUNCTION_ARN
+          ? {
+              tailoring: new LambdaResumeTailoringClient(
+                process.env.DOCUMENT_TAILORING_FUNCTION_ARN,
+              ),
+            }
+          : {}),
         catalog,
         definitions: defaultFieldDefinitions(),
       })

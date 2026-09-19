@@ -5,6 +5,8 @@ import type {
   ApplicationAttempt,
   ApplicationHistoryPage,
   ApplicationPage,
+  ApplicationResumeFile,
+  ApplicationResumePreview,
   ApplicationRevisionRequest,
   ApplicationSearchRequest,
   ApplicationSubmissionResultRequest,
@@ -184,6 +186,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   type ApplicationsFailure,
   parseHistoryQuery,
+  parseResumeFormatQuery,
   projectApplicationsFailure,
 } from "./applications-http.js";
 import {
@@ -330,6 +333,8 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/applications/search",
   "/v1/applications/:applicationId",
   "/v1/applications/:applicationId/history",
+  "/v1/applications/:applicationId/resume",
+  "/v1/applications/:applicationId/resume/file",
   "/v1/applications/:applicationId/packets",
   "/v1/applications/:applicationId/approval",
   "/v1/applications/:applicationId/reopen",
@@ -2484,6 +2489,33 @@ class ApplicationsController {
     }
     requireApplicationPath(applicationId);
     return this.applications.history(user.id, applicationId, page);
+  }
+
+  @Get("/:applicationId/resume")
+  @Header("cache-control", "no-store")
+  async resumePreview(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationResumePreview> {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationsRead(request);
+    requireApplicationPath(applicationId);
+    return this.applications.resumePreview(user.id, applicationId);
+  }
+
+  @Get("/:applicationId/resume/file")
+  @Header("cache-control", "no-store")
+  async resumeFile(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationResumeFile> {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationPath(applicationId);
+    const format = parseResumeFormatQuery(request.query);
+    if (request.body !== undefined || format === null) {
+      throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    return this.applications.resumeFile(user.id, applicationId, format);
   }
 
   @Post("/:applicationId/packets")

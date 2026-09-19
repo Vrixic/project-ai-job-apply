@@ -26,7 +26,7 @@ export interface ApplicationReviewActions {
 const STATUS_COPY: Record<Application["status"], string> = {
   preparing: "Preparing your application packet.",
   review_required: "Review what will be sent. Nothing is submitted until you approve.",
-  approved: "Approved. The packet is ready to submit from the browser extension.",
+  approved: "Approved. Your application is ready to complete.",
   submitting: "A submission is in progress.",
   takeover: "Finish this step yourself in the browser. We never bypass verification steps.",
   reconciliation_required:

@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
+    },
+    "./resume-tailoring": {
+      "types": "./dist/src/resume-tailoring.d.ts",
+      "default": "./dist/src/resume-tailoring.js"
     }
   },
   "scripts": {

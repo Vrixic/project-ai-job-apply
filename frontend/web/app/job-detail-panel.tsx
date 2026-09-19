@@ -306,7 +306,10 @@ export function JobDetailPanel({
                   ))}
                 </ul>
                 {authenticated && applicationsUiEnabled && result.detail.status === "active" ? (
-                  <ApplicationsWorkspace jobId={result.detail.id} />
+                  <ApplicationsWorkspace
+                    jobId={result.detail.id}
+                    applyUrl={result.detail.sources[0]?.canonicalUrl}
+                  />
                 ) : null}
               </>
             )}

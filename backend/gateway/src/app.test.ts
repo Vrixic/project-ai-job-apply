@@ -3858,6 +3858,13 @@ const applicationsDatabaseUrl = process.env.DATABASE_URL;
       onnotice: () => undefined,
     });
     let jobTitle = "Backend Engineer";
+    // The Documents runtime is faked at its wire boundary: the Gateway only ever sees this contract.
+    type TailoringBehavior =
+      | { kind: "ready"; contentSha256: string }
+      | { kind: "no_resume" }
+      | { kind: "down" };
+    let tailoringBehavior: TailoringBehavior = { kind: "ready", contentSha256: "c".repeat(64) };
+    const tailoringCalls: Array<Record<string, unknown>> = [];
     let app: Awaited<ReturnType<typeof createApp>>["app"];
     let issuer: Awaited<ReturnType<typeof createApp>>["issuer"];
 
@@ -3903,12 +3910,76 @@ const applicationsDatabaseUrl = process.env.DATABASE_URL;
             } as never;
           },
         },
-        documents: {
-          async listResumeDocuments() {
-            return { documents: [] };
+        tailoring: {
+          async tailor(request) {
+            tailoringCalls.push(request as unknown as Record<string, unknown>);
+            if (tailoringBehavior.kind === "down") throw new Error("runtime unavailable");
+            if (tailoringBehavior.kind === "no_resume") {
+              return { schema: "resume-tailoring-result.v1", status: "no_resume" };
+            }
+            return {
+              schema: "resume-tailoring-result.v1",
+              status: "ready",
+              baseDocument: {
+                id: "019d04cf-1f80-7000-8000-0000000000d1",
+                fileName: "synthetic-resume.pdf",
+                version: 1,
+                sha256: "d".repeat(64),
+              },
+              tailoringVersion: "tailoring.v1",
+              contentSha256: tailoringBehavior.contentSha256,
+              ...((request as { mode?: string }).mode === "artifact"
+                ? {
+                    artifact: {
+                      format: (request as { format: "docx" | "pdf" }).format,
+                      mediaType:
+                        (request as { format: string }).format === "pdf"
+                          ? "application/pdf"
+                          : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                      sha256: "f".repeat(64),
+                      sizeBytes: 11,
+                      contentBase64: Buffer.from("synthetic!!").toString("base64"),
+                    },
+                  }
+                : {}),
+              matchedTerms: ["typescript"],
+              sections: [
+                {
+                  kind: "experience",
+                  heading: "Experience",
+                  entries: [
+                    {
+                      lines: ["Senior Engineer - Acme Corp"],
+                      bullets: [
+                        {
+                          text: "Built a payments API in TypeScript serving 40 partners",
+                          change: "moved_up",
+                          matchedTerms: ["typescript"],
+                        },
+                        { text: "Maintained PostgreSQL clusters", change: "omitted" },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            };
           },
         },
         catalog: {
+          async getActiveJob() {
+            return {
+              id: jobId,
+              company: { id: "019d04cf-1f80-7000-8000-0000000000e2", name: "Synthetic Co" },
+              title: jobTitle,
+              locations: ["Remote - US"],
+              description: "Build payments APIs in TypeScript with PostgreSQL.",
+              status: "active",
+              firstObservedAt: new Date(),
+              lastVerifiedAt: new Date(),
+              expiresAt: new Date(Date.now() + 86_400_000),
+              sources: [],
+            } as never;
+          },
           async resolveActiveJobSummaries() {
             return {
               catalogRevision: "r1",
@@ -3936,6 +4007,146 @@ const applicationsDatabaseUrl = process.env.DATABASE_URL;
     afterAll(async () => {
       await app.close();
       await client.end({ timeout: 5 });
+    });
+
+    it("attaches the tailored resume, shows what changed, and expires approval when it changes", async () => {
+      tailoringBehavior = { kind: "ready", contentSha256: "c".repeat(64) };
+      tailoringCalls.length = 0;
+      const bearer = await issuer.issue("candidate-e2e-resume", {
+        scope: "applications:read applications:write",
+      });
+      const other = await issuer.issue("candidate-e2e-resume-other", {
+        scope: "applications:read applications:write",
+      });
+      const send = async (
+        token: string,
+        method: "GET" | "POST",
+        url: string,
+        key: string,
+        payload?: unknown,
+      ) => {
+        const response = await app.inject({
+          method,
+          url,
+          headers:
+            method === "POST"
+              ? { authorization: `Bearer ${token}`, "idempotency-key": key }
+              : { authorization: `Bearer ${token}` },
+          ...(payload === undefined ? {} : { payload: payload as never }),
+        });
+        return {
+          status: response.statusCode,
+          body: response.json() as ReturnType<typeof JSON.parse>,
+        };
+      };
+      const unique = (label: string) =>
+        `${label}-${Date.now()}-${Math.random().toString(16).slice(2)}`.padEnd(20, "x");
+      const form = { adapterId: "greenhouse", variantId: "board-v1", formHash: hash };
+
+      const created = await send(bearer, "POST", "/v1/applications", unique("rc"), { jobId });
+      const id = created.body.id as string;
+      const prepared = await send(bearer, "POST", `/v1/applications/${id}/packets`, unique("rp"), {
+        expectedRevision: created.body.revision,
+        form,
+      });
+      expect(prepared.status).toBe(201);
+      // The packet carries the tailored content hash, not the base document hash.
+      expect(prepared.body.currentPacket.artifactHashes).toEqual({ resume: "c".repeat(64) });
+      // Only the owner identity and the public job text cross to the Documents runtime.
+      expect(tailoringCalls.at(-1)).toMatchObject({
+        kind: "resume-tailoring-v1",
+        mode: "hash",
+        job: { title: jobTitle, description: "Build payments APIs in TypeScript with PostgreSQL." },
+      });
+      expect(Object.keys(tailoringCalls.at(-1) ?? {}).sort()).toEqual([
+        "job",
+        "kind",
+        "mode",
+        "ownerUserId",
+      ]);
+
+      const preview = await send(bearer, "GET", `/v1/applications/${id}/resume`, "unused");
+      expect(preview.status).toBe(200);
+      expect(preview.body).toMatchObject({
+        status: "ready",
+        matchesPacket: true,
+        contentSha256: "c".repeat(64),
+        baseDocument: { fileName: "synthetic-resume.pdf" },
+        sections: [{ kind: "experience", heading: "Experience" }],
+      });
+      expect(
+        preview.body.sections[0].entries[0].bullets.map((b: { change: string }) => b.change),
+      ).toEqual(["moved_up", "omitted"]);
+
+      // The candidate can download exactly the resume the packet carries, in either format.
+      const pdf = await send(bearer, "GET", `/v1/applications/${id}/resume/file?format=pdf`, "u");
+      expect(pdf.status).toBe(200);
+      expect(pdf.body).toMatchObject({
+        format: "pdf",
+        mediaType: "application/pdf",
+        fileName: "synthetic-resume-tailored.pdf",
+        contentSha256: "c".repeat(64),
+        sizeBytes: 11,
+      });
+      expect(Buffer.from(pdf.body.contentBase64, "base64").toString()).toBe("synthetic!!");
+      expect(
+        (await send(bearer, "GET", `/v1/applications/${id}/resume/file?format=docx`, "u")).status,
+      ).toBe(200);
+      // Only the strict `format` query is accepted.
+      for (const bad of ["", "?format=exe", "?format=pdf&extra=1", "?other=pdf"]) {
+        const refused = await send(bearer, "GET", `/v1/applications/${id}/resume/file${bad}`, "u");
+        expect(refused.status, bad).toBe(400);
+      }
+      expect(
+        (await send(other, "GET", `/v1/applications/${id}/resume/file?format=pdf`, "u")).status,
+      ).toBe(404);
+
+      // A different candidate can neither see this application nor its tailored resume.
+      const foreign = await send(other, "GET", `/v1/applications/${id}/resume`, "unused");
+      expect(foreign.status).toBe(404);
+      expect(JSON.stringify(foreign.body)).not.toContain("synthetic-resume");
+
+      const approved = await send(bearer, "POST", `/v1/applications/${id}/approval`, unique("ra"), {
+        expectedRevision: prepared.body.revision,
+        packetHash: prepared.body.currentPacket.packetHash,
+        acknowledgedFieldKeys: [],
+      });
+      expect(approved.status).toBe(200);
+
+      // The resume the runtime would now produce differs: the preview says so, and submission refuses.
+      tailoringBehavior = { kind: "ready", contentSha256: "e".repeat(64) };
+      const changed = await send(bearer, "GET", `/v1/applications/${id}/resume`, "unused");
+      expect(changed.body).toMatchObject({ status: "ready", matchesPacket: false });
+      // A file is never served for a resume the packet does not carry: it must be prepared again.
+      const stale = await send(bearer, "GET", `/v1/applications/${id}/resume/file?format=pdf`, "u");
+      expect(stale.status).toBe(409);
+      expect(stale.body.code).toBe("application_packet_stale");
+      const blocked = await send(
+        bearer,
+        "POST",
+        `/v1/applications/${id}/submissions`,
+        unique("rs"),
+        {
+          expectedRevision: approved.body.revision,
+          adapterId: "greenhouse",
+          adapterVersion: "1.0.0",
+          observedFormHash: hash,
+        },
+      );
+      expect(blocked.body).toMatchObject({
+        outcome: "approval_invalidated",
+        invalidationReasons: ["resume_changed"],
+      });
+
+      // An unreachable Documents runtime is a 503, never a silent "no resume".
+      tailoringBehavior = { kind: "down" };
+      const down = await send(bearer, "GET", `/v1/applications/${id}/resume`, "unused");
+      expect(down.status).toBe(503);
+
+      // A candidate with no parsed resume gets an honest, empty packet slot.
+      tailoringBehavior = { kind: "no_resume" };
+      const none = await send(bearer, "GET", `/v1/applications/${id}/resume`, "unused");
+      expect(none.body).toEqual({ status: "no_resume", matchesPacket: false });
     });
 
     it("prepares, approves, refuses a changed job, then submits exactly once", async () => {

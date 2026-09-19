@@ -3,7 +3,7 @@ import { getLazyAuth0Session } from "./auth0";
 import { forwardPlatformRequest } from "./platform-api";
 
 /**
- * Browser boundary for the twelve Applications routes. Every request is validated against the
+ * Browser boundary for the fourteen Applications routes. Every request is validated against the
  * generated OpenAPI schemas, bounded, and forwarded to exactly one fixed platform path; every
  * success body is validated again before it reaches the browser. Failures are projected by the
  * shared platform boundary to fixed, value-free problem details.
@@ -21,6 +21,8 @@ export type ApplicationsOperation =
   | "search"
   | "get"
   | "history"
+  | "resumePreview"
+  | "resumeFile"
   | "preparePacket"
   | "approve"
   | "reopen"
@@ -40,6 +42,8 @@ interface OperationSpec {
   needsApplication: boolean;
   needsAttempt: boolean;
   historyQuery?: boolean;
+  /** The single allowed `format` query parameter (`docx` or `pdf`). */
+  formatQuery?: boolean;
   /** Application-typed responses must be the application that was addressed. */
   echoesApplicationId?: boolean;
 }
@@ -84,6 +88,25 @@ const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
     needsApplication: true,
     needsAttempt: false,
     historyQuery: true,
+  },
+  resumePreview: {
+    method: "GET",
+    path: (id) => `/v1/applications/${id}/resume`,
+    response: "ApplicationResumePreview",
+    success: 200,
+    idempotent: false,
+    needsApplication: true,
+    needsAttempt: false,
+  },
+  resumeFile: {
+    method: "GET",
+    path: (id) => `/v1/applications/${id}/resume/file`,
+    response: "ApplicationResumeFile",
+    success: 200,
+    idempotent: false,
+    needsApplication: true,
+    needsAttempt: false,
+    formatQuery: true,
   },
   preparePacket: {
     method: "POST",
@@ -261,6 +284,14 @@ export function historySearch(search: string): string | undefined {
   return `?${kept.join("&")}`;
 }
 
+/** The resume file route takes exactly one `format` parameter, `docx` or `pdf`, and nothing else. */
+export function formatSearch(search: string): string | undefined {
+  const parameters = [...new URLSearchParams(search)];
+  const only = parameters[0];
+  if (parameters.length !== 1 || !only || only[0] !== "format") return undefined;
+  return only[1] === "docx" || only[1] === "pdf" ? `?format=${only[1]}` : undefined;
+}
+
 export interface ApplicationsRouteDependencies {
   auth0?: ReturnType<typeof getLazyAuth0Session>;
   baseUrl?: string;
@@ -287,6 +318,10 @@ export async function applicationsRoute(
   let query = "";
   if (spec.historyQuery) {
     const projected = historySearch(search);
+    if (projected === undefined) return invalid();
+    query = projected;
+  } else if (spec.formatQuery) {
+    const projected = formatSearch(search);
     if (projected === undefined) return invalid();
     query = projected;
   } else if (search.length > 0) {
