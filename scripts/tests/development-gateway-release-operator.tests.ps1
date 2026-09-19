@@ -448,7 +448,7 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
         ForEach-Object { $_.Groups[1].Value }
     })
   if ($declaredVariables -cnotcontains $restoreFlag) { throw "The current source is missing the exact new restore flag." }
-  $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) + @($restoreFlag, "outbox_starts_paused", "document_tailoring_invoke_enabled")
+  $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) + @($restoreFlag, "outbox_starts_paused")
   $declaredBooleanNames = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "infrastructure/terraform/environments/development") -File -Filter "*.tf" | ForEach-Object {
       $declarations = [regex]::Matches((Get-Content -LiteralPath $_.FullName -Raw), '(?ms)^variable\s+"([^"]+)"\s*\{(.*?)^\}')
       foreach ($declaration in $declarations) {

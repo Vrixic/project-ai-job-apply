@@ -30,7 +30,7 @@ function Get-DevelopmentDocumentBooleanVariableNames {
     "deploy_gateway_lambda", "deploy_ingestion_runtime", "deploy_profile_readiness_durable",
     "deploy_public_job_reader", "deploy_serverless_outbox",
     "document_scan_event_rule_enabled", "document_scan_mapping_enabled", "document_security_health_rules_enabled",
-    "enable_container_insights", "enable_redis", "high_availability",
+    "document_tailoring_invoke_enabled", "enable_container_insights", "enable_redis", "high_availability",
     "ingestion_provider_activation_allowed", "ingestion_provider_private_egress",
     "ingestion_runtime_enabled", "ingestion_synthetic_source_enabled",
     "private_application_networking", "public_job_cluster_residual_accepted",

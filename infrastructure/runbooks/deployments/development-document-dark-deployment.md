@@ -148,7 +148,7 @@ its recorded serial. It also requires a separately reviewed zero-drift plan at t
 state and its verification receipt as the variable template. The template source must be the
 current operator or its Git ancestor; the exact checksum, state lineage/serial, default-dark
 verification, and a new current-source refresh plan—not source equality alone—prove that its
-variables are current. The current-state plan—not the historical plan—supplies all 100 variables,
+variables are current. The current-state plan—not the historical plan—supplies all 101 variables,
 including the exact staged parser and processor artifact coordinates and numeric parser pin.
 The historical baseline and receipt remain authenticated provenance only.
 

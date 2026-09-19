@@ -473,7 +473,7 @@ function Assert-GatewayCapturedSeedInputs {
   # Native TF_VAR serialization may retain lowercase strings for declared root booleans.
   # Keep the shared typed inventory unchanged; these two newer root flags are local additions.
   $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) +
-    @("candidate_deletion_restore_role_enabled", "outbox_starts_paused", "document_tailoring_invoke_enabled")
+    @("candidate_deletion_restore_role_enabled", "outbox_starts_paused")
   foreach ($name in $DeclaredVariableNames) {
     if ($inputs.DefaultVariables.ContainsKey($name)) { $expected = $inputs.DefaultVariables[$name] }
     else {

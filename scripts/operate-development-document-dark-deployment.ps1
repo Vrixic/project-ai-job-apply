@@ -240,7 +240,7 @@ $postHistoricalVariableNames = @(
   "candidate_rights_owner_inventory", "candidate_rights_policy_sha256",
   "candidate_rights_policy_version", "candidate_rights_recent_auth_max_age_seconds",
   "candidate_rights_subprocessor_inventory", "database_backup_retention_days",
-  "deploy_ingestion_runtime", "deploy_public_job_reader",
+  "deploy_ingestion_runtime", "deploy_public_job_reader", "document_tailoring_invoke_enabled",
   "ingestion_durable_artifact_base64sha256", "ingestion_durable_artifact_s3_key",
   "ingestion_durable_artifact_s3_object_version", "ingestion_durable_artifact_sha256",
   "ingestion_execution_timeout_seconds", "ingestion_lambda_extension_layer_arn",
