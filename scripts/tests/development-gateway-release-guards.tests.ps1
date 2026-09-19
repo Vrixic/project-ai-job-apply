@@ -768,6 +768,105 @@ $parserToo.resource_changes = @($parserToo.resource_changes) + @([pscustomobject
 Assert-Rejected { Assert-ExactGatewayReleasePlan $parserToo $artifact -ProcessorArtifact $processorArtifact } "A processor refresh that also changed the parser was accepted."
 
 
+# ---- Document parser refresh (ADR-031): the parser function and alias, bound to the same verified receipt.
+$parserArtifact = Get-GatewayProcessorArtifact $documentReceipt $sourceSha -Kind parser
+if ([string]$parserArtifact.artifactSha256 -cne ("3" * 64) -or [string]$parserArtifact.key -cnotmatch "/document-parser-lambda\.zip$" -or
+    [string]$parserArtifact.versionId -cne "parser-version") {
+  throw "The parser artifact was not taken from the exact parser archive entry."
+}
+$passed++
+Assert-Rejected { Get-GatewayProcessorArtifact $documentReceipt ("d" * 40) -Kind parser } "A parser artifact was taken from a receipt for a different source."
+$noParserZip = Copy-Fixture $documentReceipt
+$noParserZip.artifacts = @($noParserZip.artifacts | Where-Object { -not ($_.artifactName -ceq "document-parser-lambda" -and $_.suffix -ceq "zip") })
+Assert-Rejected { Get-GatewayProcessorArtifact $noParserZip $sourceSha -Kind parser } "A parser artifact was taken from a receipt without the parser archive."
+
+$parserVariables = New-Variables -Released
+$parserVariables.document_parser_artifact_s3_key.value = [string]$parserArtifact.key
+$parserVariables.document_parser_artifact_s3_object_version.value = [string]$parserArtifact.versionId
+$parserVariables.document_parser_artifact_sha256.value = [string]$parserArtifact.artifactSha256
+$parserVariables.document_parser_artifact_base64sha256.value = [string]$parserArtifact.objectBase64Sha256
+# The fixture baseline already names the receipt's parser archive, so build one that differs first.
+$parserBaseline = Copy-Fixture $baselineVariables
+$parserBaseline.document_parser_artifact_s3_key.value = "lambda/documents/older/$('2' * 64)/document-parser-lambda.zip"
+$parserBaseline.document_parser_artifact_s3_object_version.value = "older-parser-version"
+$parserBaseline.document_parser_artifact_sha256.value = "2" * 64
+$parserBaseline.document_parser_artifact_base64sha256.value = [Convert]::ToBase64String(([byte[]](2..33)))
+$null = Assert-GatewayReleaseVariables $parserBaseline $parserVariables $artifact $account $repositoryUrl "" -ParserArtifact $parserArtifact; $passed++
+Assert-Rejected { Assert-GatewayReleaseVariables $parserBaseline $parserVariables $artifact $account $repositoryUrl "" } "Parser variables changed without a verified parser artifact."
+foreach ($name in @("document_parser_artifact_s3_key", "document_parser_artifact_s3_object_version", "document_parser_artifact_sha256", "document_parser_artifact_base64sha256")) {
+  $wrongParserVariable = Copy-Fixture $parserVariables; $wrongParserVariable.$name.value = "not-the-verified-value"
+  Assert-Rejected { Assert-GatewayReleaseVariables $parserBaseline $wrongParserVariable $artifact $account $repositoryUrl "" -ParserArtifact $parserArtifact } "The release accepted an unverified '$name'."
+}
+$processorMovedWithParser = Copy-Fixture $parserVariables; $processorMovedWithParser.document_processor_artifact_sha256.value = "9" * 64
+Assert-Rejected { Assert-GatewayReleaseVariables $parserBaseline $processorMovedWithParser $artifact $account $repositoryUrl "" -ParserArtifact $parserArtifact } "A parser refresh also moved the processor artifact without a verified processor artifact."
+$pinMoved = Copy-Fixture $parserVariables; $pinMoved.document_parser_invocation_qualified_arn.value = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-parser:99"
+Assert-Rejected { Assert-GatewayReleaseVariables $parserBaseline $pinMoved $artifact $account $repositoryUrl "" -ParserArtifact $parserArtifact } "A parser refresh moved the processor's numeric parser pin."
+
+function New-ParserPlan {
+  param([object]$Base = $plan, [object]$Artifact = $parserArtifact)
+  $refreshed = Copy-Fixture $Base
+  $function = Copy-Fixture @($plan.resource_changes | Where-Object { $_.address -ceq "module.platform.aws_lambda_function.gateway[0]" })[0]
+  $alias = Copy-Fixture @($plan.resource_changes | Where-Object { $_.address -ceq "module.platform.aws_lambda_alias.gateway[0]" })[0]
+  $function.address = "module.platform.aws_lambda_function.document_parser[0]"
+  $function.change.before.function_name = "parser"; $function.change.after.function_name = "parser"
+  $function.change.after.s3_key = [string]$Artifact.key
+  $function.change.after.s3_object_version = [string]$Artifact.versionId
+  $function.change.after.source_code_hash = [string]$Artifact.objectBase64Sha256
+  $function.change.after.environment[0].variables.RELEASE_SHA = [string]$Artifact.artifactSha256
+  $alias.address = "module.platform.aws_lambda_alias.document_parser[0]"
+  $alias.change.before.function_name = "parser"; $alias.change.after.function_name = "parser"
+  $refreshed.resource_changes = @($refreshed.resource_changes) + @($function, $alias)
+  return $refreshed
+}
+$parserPlan = New-ParserPlan
+$parserChanges = @(Assert-ExactGatewayReleasePlan $parserPlan $artifact -ParserArtifact $parserArtifact)
+if ($parserChanges.Count -ne 4) { throw "The parser refresh plan did not return exactly four changes." }
+$passed++
+$bothPlan = New-ParserPlan -Base (New-ProcessorPlan)
+$bothChanges = @(Assert-ExactGatewayReleasePlan $bothPlan $artifact -ProcessorArtifact $processorArtifact -ParserArtifact $parserArtifact)
+if ($bothChanges.Count -ne 6) { throw "The processor and parser refresh plan did not return exactly six changes." }
+$passed++
+$allPlan = New-ParserPlan -Base (New-ProcessorPlan -Base (New-GrantPlan))
+$allChanges = @(Assert-ExactGatewayReleasePlan $allPlan $artifact -ExpectedAccountId $account -ProcessorArtifact $processorArtifact -ParserArtifact $parserArtifact)
+if ($allChanges.Count -ne 8) { throw "The grant, processor, and parser plan did not return exactly eight changes." }
+$passed++
+
+Assert-Rejected { Assert-ExactGatewayReleasePlan $parserPlan $artifact } "A parser refresh plan was accepted without a verified parser artifact."
+Assert-Rejected { Assert-ExactGatewayReleasePlan $parserPlan $artifact -ProcessorArtifact $processorArtifact } "A parser refresh plan was accepted with only a processor artifact."
+Assert-Rejected { Assert-ExactGatewayReleasePlan $bothPlan $artifact -ParserArtifact $parserArtifact } "A processor change was accepted without its verified artifact."
+Assert-Rejected { Assert-ExactGatewayReleasePlan $parserPlan $artifact -ParserArtifact $otherArtifact } "A parser refresh accepted a different artifact than the verified one."
+foreach ($field in @("s3_key", "s3_object_version", "source_code_hash")) {
+  $wrongParserField = Copy-Fixture $parserPlan; $wrongParserField.resource_changes[2].change.after.$field = "wrong"
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $wrongParserField $artifact -ParserArtifact $parserArtifact } "The parser update accepted a wrong '$field'."
+}
+$wrongParserRelease = Copy-Fixture $parserPlan; $wrongParserRelease.resource_changes[2].change.after.environment[0].variables.RELEASE_SHA = "0" * 64
+Assert-Rejected { Assert-ExactGatewayReleasePlan $wrongParserRelease $artifact -ParserArtifact $parserArtifact } "The parser update accepted a wrong RELEASE_SHA."
+foreach ($mutation in @("memory_size", "timeout", "handler", "role", "reserved_concurrent_executions")) {
+  $mutatedParser = Copy-Fixture $parserPlan
+  $mutatedParser.resource_changes[2].change.after.$mutation = if ($mutation -in @("handler", "role")) { "changed" } else { 999 }
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $mutatedParser $artifact -ParserArtifact $parserArtifact } "The parser update changed nonapproved field '$mutation'."
+}
+$parserEnvironment = Copy-Fixture $parserPlan
+$parserEnvironment.resource_changes[2].change.after.environment[0].variables | Add-Member NoteProperty DOCUMENT_PARSER_VERSION "9.9.9"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $parserEnvironment $artifact -ParserArtifact $parserArtifact } "The parser update added or changed an environment variable."
+$unknownParser = Copy-Fixture $parserPlan; $unknownParser.resource_changes[2].change.after_unknown | Add-Member NoteProperty memory_size $true
+Assert-Rejected { Assert-ExactGatewayReleasePlan $unknownParser $artifact -ParserArtifact $parserArtifact } "The parser update accepted an unknown nonapproved field."
+$movedParserAlias = Copy-Fixture $parserPlan; $movedParserAlias.resource_changes[3].change.after.description = "changed"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $movedParserAlias $artifact -ParserArtifact $parserArtifact } "The parser alias update changed a non-version field."
+$parserAliasVersion = Copy-Fixture $parserPlan; $parserAliasVersion.resource_changes[3].change.after | Add-Member NoteProperty function_version "9"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $parserAliasVersion $artifact -ParserArtifact $parserArtifact } "The parser alias update pinned a version at plan time."
+$parserFunctionOnly = Copy-Fixture $parserPlan; $parserFunctionOnly.resource_changes = @($parserFunctionOnly.resource_changes | Select-Object -First 3)
+Assert-Rejected { Assert-ExactGatewayReleasePlan $parserFunctionOnly $artifact -ParserArtifact $parserArtifact } "A parser function change without its alias was accepted."
+$parserReplaced = Copy-Fixture $parserPlan; $parserReplaced.resource_changes[2].change.actions = @("delete", "create")
+Assert-Rejected { Assert-ExactGatewayReleasePlan $parserReplaced $artifact -ParserArtifact $parserArtifact } "A parser replacement was accepted."
+$parserPolicyToo = Copy-Fixture $parserPlan
+$parserPolicyToo.resource_changes = @($parserPolicyToo.resource_changes) + @([pscustomobject]@{ address = "module.platform.aws_iam_role_policy.document_parser[0]"; mode = "managed"; type = "aws_iam_role_policy"; change = [pscustomobject]@{ actions = @("update"); before = [pscustomobject]@{}; after = [pscustomobject]@{} } })
+Assert-Rejected { Assert-ExactGatewayReleasePlan $parserPolicyToo $artifact -ParserArtifact $parserArtifact } "A parser refresh that also changed the parser IAM policy was accepted."
+$objectAccessToo = Copy-Fixture $parserPlan
+$objectAccessToo.resource_changes = @($objectAccessToo.resource_changes) + @([pscustomobject]@{ address = "module.platform.aws_iam_role.document_parser_object_access[0]"; mode = "managed"; type = "aws_iam_role"; change = [pscustomobject]@{ actions = @("update"); before = [pscustomobject]@{}; after = [pscustomobject]@{} } })
+Assert-Rejected { Assert-ExactGatewayReleasePlan $objectAccessToo $artifact -ParserArtifact $parserArtifact } "A parser refresh that also changed the object-access role was accepted."
+
+
 # ---- Gateway role inline-policy refresh drift after the invoke grant is applied (ADR-031).
 $gatewayRoleArnValue = "arn:aws:iam::${account}:role/ai-job-apply-development-gateway-lambda"
 $gatewayBeforePolicy = ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @($logsStatement, $secretStatement) })

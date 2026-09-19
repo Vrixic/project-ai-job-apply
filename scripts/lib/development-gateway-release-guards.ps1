@@ -388,7 +388,9 @@ function Assert-GatewayReleaseVariables {
     [Parameter(Mandatory)][string]$ExpectedMigrationRepositoryUrl,
     [AllowEmptyString()][string]$ExpectedParserQualifiedArn = "",
     # The verified document processor artifact, when this release also refreshes the processor.
-    [AllowNull()][object]$ProcessorArtifact = $null
+    [AllowNull()][object]$ProcessorArtifact = $null,
+    # The verified document parser artifact, when this release also refreshes the parser.
+    [AllowNull()][object]$ParserArtifact = $null
   )
   $baselineNames = @($BaselineVariables.PSObject.Properties | ForEach-Object Name | Sort-Object)
   $releaseNames = @($ReleaseVariables.PSObject.Properties | ForEach-Object Name | Sort-Object)
@@ -403,7 +405,12 @@ function Assert-GatewayReleaseVariables {
     "document_processor_artifact_s3_key", "document_processor_artifact_s3_object_version",
     "document_processor_artifact_sha256", "document_processor_artifact_base64sha256"
   )
+  $parserVariableNames = @(
+    "document_parser_artifact_s3_key", "document_parser_artifact_s3_object_version",
+    "document_parser_artifact_sha256", "document_parser_artifact_base64sha256"
+  )
   if ($null -ne $ProcessorArtifact) { $allowed = @($allowed + $processorVariableNames) }
+  if ($null -ne $ParserArtifact) { $allowed = @($allowed + $parserVariableNames) }
   foreach ($name in $baselineNames) {
     $before = Get-GatewayPlanVariableValue -Variables $BaselineVariables -Name $name
     $after = Get-GatewayPlanVariableValue -Variables $ReleaseVariables -Name $name
@@ -432,6 +439,12 @@ function Assert-GatewayReleaseVariables {
     $expected["document_processor_artifact_s3_object_version"] = [string]$ProcessorArtifact.versionId
     $expected["document_processor_artifact_sha256"] = [string]$ProcessorArtifact.artifactSha256
     $expected["document_processor_artifact_base64sha256"] = [string]$ProcessorArtifact.objectBase64Sha256
+  }
+  if ($null -ne $ParserArtifact) {
+    $expected["document_parser_artifact_s3_key"] = [string]$ParserArtifact.key
+    $expected["document_parser_artifact_s3_object_version"] = [string]$ParserArtifact.versionId
+    $expected["document_parser_artifact_sha256"] = [string]$ParserArtifact.artifactSha256
+    $expected["document_parser_artifact_base64sha256"] = [string]$ParserArtifact.objectBase64Sha256
   }
   foreach ($entry in $expected.GetEnumerator()) {
     if ([string](Get-GatewayPlanVariableValue -Variables $ReleaseVariables -Name $entry.Key) -cne [string]$entry.Value) {
@@ -522,15 +535,19 @@ function Assert-GatewayPolicyGainsExactlyOneStatement {
 # The one document processor artifact a release may refresh, taken only from a verified publication
 # receipt for the exact release source (ADR-031). Live object readback is done by the operator.
 function Get-GatewayProcessorArtifact {
-  param([Parameter(Mandatory)][object]$Receipt, [Parameter(Mandatory)][string]$SourceSha)
+  param(
+    [Parameter(Mandatory)][object]$Receipt,
+    [Parameter(Mandatory)][string]$SourceSha,
+    [ValidateSet("processor", "parser")][string]$Kind = "processor"
+  )
   Assert-DevelopmentDocumentPublicationReceipt -Receipt $Receipt
   if ([string]$Receipt.sourceSha -cne $SourceSha) {
     throw "The document publication receipt does not belong to the exact release source."
   }
   $zip = @($Receipt.artifacts | Where-Object {
-      [string]$_.artifactName -ceq "document-processor-lambda" -and [string]$_.suffix -ceq "zip"
+      [string]$_.artifactName -ceq "document-$Kind-lambda" -and [string]$_.suffix -ceq "zip"
     })
-  if ($zip.Count -ne 1) { throw "The document publication receipt does not contain exactly one processor archive." }
+  if ($zip.Count -ne 1) { throw "The document publication receipt does not contain exactly one $Kind archive." }
   return [pscustomobject]@{
     key = [string]$zip[0].key; versionId = [string]$zip[0].versionId
     artifactSha256 = [string]$zip[0].artifactSha256; objectBase64Sha256 = [string]$zip[0].objectBase64Sha256
@@ -538,17 +555,22 @@ function Get-GatewayProcessorArtifact {
   }
 }
 
-# The processor function may change only its code coordinates and RELEASE_SHA, and its alias only its
-# numeric version. The parser pin, policy, layers, network, and every other field must be unchanged.
-function Assert-GatewayProcessorRefreshChanges {
-  param([Parameter(Mandatory)][object[]]$Changes, [Parameter(Mandatory)][object]$ProcessorArtifact)
-  $function = @($Changes | Where-Object { [string]$_.address -ceq "module.platform.aws_lambda_function.document_processor[0]" })[0]
+# A document Lambda (processor or parser) may change only its code coordinates and RELEASE_SHA, and its
+# alias only its numeric version. Policy, layers, network, environment, and every other field must be
+# unchanged.
+function Assert-GatewayDocumentLambdaRefreshChanges {
+  param(
+    [Parameter(Mandatory)][object[]]$Changes,
+    [Parameter(Mandatory)][object]$ProcessorArtifact,
+    [ValidateSet("processor", "parser")][string]$Kind = "processor"
+  )
+  $function = @($Changes | Where-Object { [string]$_.address -ceq "module.platform.aws_lambda_function.document_$Kind[0]" })[0]
   if ([string]$function.type -cne "aws_lambda_function" -or
       [string]$function.change.after.s3_key -cne [string]$ProcessorArtifact.key -or
       [string]$function.change.after.s3_object_version -cne [string]$ProcessorArtifact.versionId -or
       [string]$function.change.after.source_code_hash -cne [string]$ProcessorArtifact.objectBase64Sha256 -or
       [string]$function.change.after.environment[0].variables.RELEASE_SHA -cne [string]$ProcessorArtifact.artifactSha256) {
-    throw "The document processor update is not bound to the exact verified artifact."
+    throw "The document $Kind update is not bound to the exact verified artifact."
   }
   $before = $function.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
   $after = $function.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
@@ -561,15 +583,15 @@ function Assert-GatewayProcessorRefreshChanges {
     $differing = @($before.PSObject.Properties.Name | Where-Object {
         (ConvertTo-GatewayCanonicalJson $before.$_) -cne (ConvertTo-GatewayCanonicalJson $after.$_)
       })
-    throw "The release changed a nonapproved document processor field: $($differing -join ', ')."
+    throw "The release changed a nonapproved document $Kind field: $($differing -join ', ')."
   }
   $unknown = Get-GatewayOptionalProperty $function.change "after_unknown"
   $unknownPaths = @(if ($null -ne $unknown) { Get-GatewayUnknownTrueLeafPaths -Value $unknown | Sort-Object })
   if (($unknownPaths -join "|") -cne ((@("last_modified", "qualified_arn", "qualified_invoke_arn", "version") | Sort-Object) -join "|")) {
-    throw "The release contains an unknown nonapproved document processor field."
+    throw "The release contains an unknown nonapproved document $Kind field."
   }
-  $alias = @($Changes | Where-Object { [string]$_.address -ceq "module.platform.aws_lambda_alias.document_processor[0]" })[0]
-  if ([string]$alias.type -cne "aws_lambda_alias") { throw "The document processor alias change has an unexpected Terraform type." }
+  $alias = @($Changes | Where-Object { [string]$_.address -ceq "module.platform.aws_lambda_alias.document_$Kind[0]" })[0]
+  if ([string]$alias.type -cne "aws_lambda_alias") { throw "The document $Kind alias change has an unexpected Terraform type." }
   $aliasBefore = $alias.change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
   $aliasAfter = $alias.change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
   $beforeVersion = $aliasBefore.PSObject.Properties["function_version"]
@@ -580,12 +602,12 @@ function Assert-GatewayProcessorRefreshChanges {
   if ((ConvertTo-GatewayCanonicalJson $aliasBefore) -cne (ConvertTo-GatewayCanonicalJson $aliasAfter) -or
       $null -eq $beforeVersion -or $beforeVersion.Value -isnot [string] -or
       [string]$beforeVersion.Value -cnotmatch '^[1-9][0-9]*$' -or $null -ne $afterVersion) {
-    throw "The release changed the document processor alias routing or a non-version field."
+    throw "The release changed the document $Kind alias routing or a non-version field."
   }
   $aliasUnknown = Get-GatewayOptionalProperty $alias.change "after_unknown"
   $aliasUnknownPaths = @(if ($null -ne $aliasUnknown) { Get-GatewayUnknownTrueLeafPaths -Value $aliasUnknown | Sort-Object })
   if (($aliasUnknownPaths -join "|") -cne "function_version") {
-    throw "The release contains an unknown nonapproved document processor alias field."
+    throw "The release contains an unknown nonapproved document $Kind alias field."
   }
 }
 
@@ -595,6 +617,7 @@ function Assert-ExactGatewayReleasePlan {
     [Parameter(Mandatory)][object]$Artifact,
     [AllowEmptyString()][string]$ExpectedAccountId = "",
     [AllowNull()][object]$ProcessorArtifact = $null,
+    [AllowNull()][object]$ParserArtifact = $null,
     [switch]$AllowHistorical
   )
   $acceptedVersions = @((Get-DeploymentTerraformVersion))
@@ -625,17 +648,24 @@ function Assert-ExactGatewayReleasePlan {
     "module.platform.aws_lambda_alias.document_processor[0]",
     "module.platform.aws_lambda_function.document_processor[0]"
   )
+  $parserAddresses = @(
+    "module.platform.aws_lambda_alias.document_parser[0]",
+    "module.platform.aws_lambda_function.document_parser[0]"
+  )
   $actual = @($changes | ForEach-Object { [string]$_.address } | Sort-Object)
   $grantCount = @($grantAddresses | Where-Object { $actual -ccontains $_ }).Count
   $processorCount = @($processorAddresses | Where-Object { $actual -ccontains $_ }).Count
+  $parserCount = @($parserAddresses | Where-Object { $actual -ccontains $_ }).Count
   $grantRelease = $grantCount -eq 2
   $processorRelease = $processorCount -eq 2
+  $parserRelease = $parserCount -eq 2
   $expectedAddresses = @(
     $expected
     if ($grantRelease) { $grantAddresses }
     if ($processorRelease) { $processorAddresses }
+    if ($parserRelease) { $parserAddresses }
   ) | Sort-Object
-  if ($grantCount -notin @(0, 2) -or $processorCount -notin @(0, 2) -or
+  if ($grantCount -notin @(0, 2) -or $processorCount -notin @(0, 2) -or $parserCount -notin @(0, 2) -or
       ($actual -join "|") -cne ($expectedAddresses -join "|")) {
     throw "The release plan is not limited to the gateway Lambda function and immutable alias."
   }
@@ -650,6 +680,9 @@ function Assert-ExactGatewayReleasePlan {
   }
   if ($processorRelease -and $null -eq $ProcessorArtifact) {
     throw "A document processor refresh requires the exact verified processor artifact."
+  }
+  if ($parserRelease -and $null -eq $ParserArtifact) {
+    throw "A document parser refresh requires the exact verified parser artifact."
   }
   foreach ($change in $changes) {
     Assert-NoTerraformReplacementPaths $change.change
@@ -720,7 +753,8 @@ function Assert-ExactGatewayReleasePlan {
   if (($unknownAliasPaths -join "|") -cne "function_version") {
     throw "The gateway release contains an unknown nonapproved alias field."
   }
-  if ($processorRelease) { Assert-GatewayProcessorRefreshChanges -Changes $changes -ProcessorArtifact $ProcessorArtifact }
+  if ($processorRelease) { Assert-GatewayDocumentLambdaRefreshChanges -Changes $changes -ProcessorArtifact $ProcessorArtifact -Kind processor }
+  if ($parserRelease) { Assert-GatewayDocumentLambdaRefreshChanges -Changes $changes -ProcessorArtifact $ParserArtifact -Kind parser }
   if ($grantRelease) {
     $aliasArn = "arn:aws:lambda:us-east-2:$ExpectedAccountId`:function:ai-job-apply-development-document-processor:development"
     $gatewayRoleArn = "arn:aws:iam::$ExpectedAccountId`:role/ai-job-apply-development-gateway-lambda"
