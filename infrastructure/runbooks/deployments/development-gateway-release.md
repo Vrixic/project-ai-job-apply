@@ -189,6 +189,24 @@ unknown field is allowed, and the switch may move only from `false` to `true`. T
 already be deployed and live-verified before this release, because the grant only names it. After apply,
 `Verify` must return zero drift; seed later baselines from that verification plan so the switch stays on.
 
+## Optional document processor refresh (ADR-031)
+
+The same release may also move the document processor to a newly published, independently verified
+document artifact, so the Gateway's tailoring request is served by the matching code. Add
+`-RefreshDocumentProcessor` with `-DocumentReceiptPath` and `-ReviewedDocumentReceiptSha256` to `Plan`,
+`Apply`, and standalone `Verify` (the switch has no effect on `CaptureBaseline`). Without the switch the
+processor, its alias, and every document variable stay exactly as they are.
+
+The operator reads the receipt from the ignored document artifact directory, requires its
+checksum, its exact release source, the live artifact and KMS boundary, and independent exact-version
+readback of the processor archive (version, length, checksum, customer KMS key, source and artifact
+metadata). The guards then accept exactly two more updates: `aws_lambda_function.document_processor[0]`,
+changing only its code coordinates and `RELEASE_SHA` to that archive, and `aws_lambda_alias.document_processor[0]`,
+changing only its numeric version. The parser and its numeric pin, the processor IAM policy, environment,
+layers, network, every trigger, and every other variable must be unchanged, and the four
+`document_processor_artifact_*` variables must equal the receipt exactly. It may be combined with the invoke
+grant above, in which case the plan has exactly six updates. Later baselines must be seeded from the
+resulting verification plan so the new processor coordinates are retained.
 ## Failure and recovery
 
 - A publication failure may leave new immutable objects plus a `publishing` receipt. Never reuse,
