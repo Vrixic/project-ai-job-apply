@@ -21,6 +21,21 @@ const canonicalIpv6Address = /^\[[0-9a-f:.]+\]$/u;
 export const requestedAuthScopes =
   "openid profile email offline_access documents:read documents:write jobs:read jobs:write profile:read profile:write";
 
+/**
+ * Applications permissions are requested only when the deployment states that the tenant defines
+ * them and grants them to this client. Requesting an ungranted scope must never break sign-in, so
+ * the default stays the reviewed base scope set.
+ */
+export const applicationsAuthScopes = "applications:read applications:write";
+
+export function requestedScopesFor(
+  environment: Readonly<Record<string, string | undefined>>,
+): string {
+  return environment.AUTH0_APPLICATIONS_SCOPES === "enabled"
+    ? `${requestedAuthScopes} ${applicationsAuthScopes}`
+    : requestedAuthScopes;
+}
+
 export class AuthConfigurationError extends Error {
   constructor(message = "Auth0 is not configured") {
     super(message);
@@ -127,7 +142,7 @@ export function getAuth0Client(environment: Environment = process.env): Auth0Cli
     appBaseUrl,
     authorizationParameters: {
       audience,
-      scope: requestedAuthScopes,
+      scope: requestedScopesFor(environment),
     },
     enableAccessTokenEndpoint: false,
     logoutStrategy: "oidc",

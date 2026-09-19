@@ -3,6 +3,11 @@
 import type { CanonicalJobDetail } from "@ai-job-apply/api-contracts";
 import { useEffect, useId, useRef, useState } from "react";
 import { parseJobDetail } from "../lib/job-detail";
+import { ApplicationsWorkspace } from "./applications-workspace";
+
+// Applications is shown only when the deployment turns the surface on at build time; the platform
+// still refuses callers whose token lacks the Applications permissions.
+const applicationsUiEnabled = process.env.NEXT_PUBLIC_APPLICATIONS_UI === "enabled";
 
 const requestTimeoutMilliseconds = 20_000;
 const unavailableMessage = "Job details are temporarily unavailable. Try again.";
@@ -300,6 +305,9 @@ export function JobDetailPanel({
                     </li>
                   ))}
                 </ul>
+                {authenticated && applicationsUiEnabled && result.detail.status === "active" ? (
+                  <ApplicationsWorkspace jobId={result.detail.id} />
+                ) : null}
               </>
             )}
           </div>

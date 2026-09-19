@@ -227,3 +227,22 @@ request/response body, provider record, or cloud identifier enters the result. T
 no product mutation. Empty search/saved-job results remain valid, so this is not by itself the final
 representative-data, provider-failure, write/recovery, SLO, or Phase 1 acceptance gate. See the
 [development D1 read-workload runbook](../../infrastructure/runbooks/observability/development-d1-read-workload.md).
+
+## D3 Applications review
+
+The twelve `/api/platform/applications/**` route handlers are thin wrappers over
+`lib/applications-bff.ts`. Each request is validated against the generated OpenAPI schemas (UUIDv7
+identifiers, a bounded JSON body, an idempotency key for commands, and only the `afterSeq`/`limit`
+history query), forwarded to exactly one fixed platform path, and every success body is validated
+again before it reaches the browser. Failures are projected to fixed, value-free problem details.
+
+`ApplicationsWorkspace` (`app/applications-workspace.tsx`) prepares an application from a job, shows the
+review-by-exception panel, and approves, reopens, cancels, or resolves an ambiguous result. It never
+submits: submission belongs to the browser extension, which is blocked on provider fixtures (D3-013)
+and live-effect approval (D3-012). Two deployment flags keep it off by default:
+
+- `AUTH0_APPLICATIONS_SCOPES=enabled` (server) adds `applications:read applications:write` to the
+  requested Auth0 scopes. Enable it only after a token minted for this client is confirmed to carry them;
+  requesting an ungranted scope must not break sign-in.
+- `NEXT_PUBLIC_APPLICATIONS_UI=enabled` (build time) shows the workspace on an active job for a
+  signed-in candidate. The platform still refuses callers whose token lacks the permissions.
