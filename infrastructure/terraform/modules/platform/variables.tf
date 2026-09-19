@@ -353,6 +353,12 @@ variable "candidate_document_cors_allowed_origins" {
   }
 }
 
+variable "document_tailoring_invoke_enabled" {
+  description = "Lets the Gateway invoke the exact document processor alias for deterministic resume tailoring (ADR-031). It grants nothing unless the Gateway and the complete-dark document runtime are deployed."
+  type        = bool
+  default     = false
+}
+
 variable "document_processing_deployment_stage" {
   description = "Monotonic document-processing rollout stage; every processing trigger remains independently dark."
   type        = string

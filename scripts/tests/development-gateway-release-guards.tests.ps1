@@ -263,8 +263,9 @@ foreach ($mutation in @("migration", "serial", "stage", "extra", "missing", "kms
 }
 
 function New-Variables {
-  param([switch]$Released)
+  param([switch]$Released, [switch]$Tailoring)
   return [pscustomobject]@{
+    document_tailoring_invoke_enabled = [pscustomobject]@{ value = [bool]$Tailoring }
     deploy_applications = [pscustomobject]@{ value = $true }
     deploy_gateway_lambda = [pscustomobject]@{ value = $true }
     serverless_runtime_enabled = [pscustomobject]@{ value = $true }
@@ -556,6 +557,125 @@ $badPlan = Copy-Fixture $plan; $badPlan.resource_changes[0].change.after_unknown
 Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "An unknown nonapproved field was accepted."
 $badPlan = Copy-Fixture $plan; $badPlan.resource_drift = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("update") } })
 Assert-Rejected { Assert-ExactGatewayReleasePlan $badPlan $artifact } "Unreviewed release-time resource drift was accepted."
+
+
+# ---- Document tailoring invoke grant (ADR-031): the one reviewed exception to a two-resource release.
+$grantBaseline = New-Variables
+$grantRelease = New-Variables -Released -Tailoring
+$null = Assert-GatewayReleaseVariables $grantBaseline $grantRelease $artifact $account $repositoryUrl ""; $passed++
+$steadyBaseline = New-Variables -Tailoring; $steadyRelease = New-Variables -Released -Tailoring
+$null = Assert-GatewayReleaseVariables $steadyBaseline $steadyRelease $artifact $account $repositoryUrl ""; $passed++
+$switchedOff = New-Variables -Released
+Assert-Rejected { Assert-GatewayReleaseVariables $steadyBaseline $switchedOff $artifact $account $repositoryUrl "" } "The gateway release switched the invoke grant off."
+$missingSwitch = Copy-Fixture $grantRelease; $missingSwitch.PSObject.Properties.Remove("document_tailoring_invoke_enabled")
+Assert-Rejected { Assert-GatewayReleaseVariables $grantBaseline $missingSwitch $artifact $account $repositoryUrl "" } "The gateway release dropped the invoke switch from the variable inventory."
+$malformedSwitch = Copy-Fixture $grantRelease; $malformedSwitch.document_tailoring_invoke_enabled.value = "True"
+Assert-Rejected { Assert-GatewayReleaseVariables $grantBaseline $malformedSwitch $artifact $account $repositoryUrl "" } "A noncanonical invoke switch was accepted."
+
+$aliasArn = "arn:aws:lambda:us-east-2:$account`:function:ai-job-apply-development-document-processor:development"
+$gatewayRoleArn = "arn:aws:iam::$account`:role/ai-job-apply-development-gateway-lambda"
+function ConvertTo-PolicyJson { param([Parameter(Mandatory)][object]$Value); return ConvertTo-Json -InputObject $Value -Depth 20 -Compress }
+$logsStatement = [ordered]@{ Sid = "WriteOwnedLogs"; Effect = "Allow"; Action = @("logs:CreateLogStream", "logs:PutLogEvents"); Resource = "arn:aws:logs:us-east-2:${account}:log-group:app:*" }
+$secretStatement = [ordered]@{ Sid = "ReadDatabaseSecret"; Effect = "Allow"; Action = "secretsmanager:GetSecretValue"; Resource = "arn:aws:secretsmanager:us-east-2:${account}:secret:db" }
+$roleGrant = [ordered]@{ Sid = "InvokeExactDocumentTailoringRuntime"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = $aliasArn }
+$starterStatement = [ordered]@{ Sid = "StarterInvokesExactDurableVersionOnly"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = "arn:aws:lambda:us-east-2:${account}:function:durable:3"; Principal = [ordered]@{ AWS = "*" } }
+$endpointGrant = [ordered]@{ Sid = "GatewayInvokesExactDocumentProcessorAlias"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = $aliasArn; Principal = [ordered]@{ AWS = $gatewayRoleArn } }
+
+function New-GrantPlan {
+  param(
+    [object]$RoleAfter = @($logsStatement, $secretStatement, $roleGrant),
+    [object]$EndpointAfter = @($starterStatement, $endpointGrant),
+    [string]$EnvironmentValue = $aliasArn,
+    [bool]$SwitchOn = $true
+  )
+  $grantPlan = Copy-Fixture $plan
+  $grantPlan | Add-Member NoteProperty variables ([pscustomobject]@{
+      document_tailoring_invoke_enabled = [pscustomobject]@{ value = $SwitchOn }
+    })
+  $grantPlan.resource_changes[0].change.after.environment[0].variables |
+    Add-Member NoteProperty DOCUMENT_TAILORING_FUNCTION_ARN $EnvironmentValue
+  $roleChange = [pscustomobject]@{
+    address = "module.platform.aws_iam_role_policy.gateway_lambda[0]"; mode = "managed"; type = "aws_iam_role_policy"
+    change = [pscustomobject]@{
+      actions = @("update")
+      before = [pscustomobject]@{ name = "gateway-lambda-runtime"; role = "role-id"; policy = (ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @($logsStatement, $secretStatement) })) }
+      after = [pscustomobject]@{ name = "gateway-lambda-runtime"; role = "role-id"; policy = (ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @($RoleAfter) })) }
+      before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}; after_unknown = [pscustomobject]@{}
+    }
+  }
+  $endpointChange = [pscustomobject]@{
+    address = "module.platform.aws_vpc_endpoint.lambda[0]"; mode = "managed"; type = "aws_vpc_endpoint"
+    change = [pscustomobject]@{
+      actions = @("update")
+      before = [pscustomobject]@{ service_name = "com.amazonaws.us-east-2.lambda"; private_dns_enabled = $true; policy = (ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @($starterStatement) })) }
+      after = [pscustomobject]@{ service_name = "com.amazonaws.us-east-2.lambda"; private_dns_enabled = $true; policy = (ConvertTo-PolicyJson ([ordered]@{ Version = "2012-10-17"; Statement = @($EndpointAfter) })) }
+      before_sensitive = [pscustomobject]@{}; after_sensitive = [pscustomobject]@{}; after_unknown = [pscustomobject]@{}
+    }
+  }
+  $grantPlan.resource_changes = @($grantPlan.resource_changes) + @($roleChange, $endpointChange)
+  return $grantPlan
+}
+
+$grantPlan = New-GrantPlan
+$grantChanges = @(Assert-ExactGatewayReleasePlan $grantPlan $artifact -ExpectedAccountId $account)
+if ($grantChanges.Count -ne 4) { throw "The reviewed invoke grant plan did not return exactly four changes." }
+$passed++
+# Order of the added statement does not matter; content does.
+$null = Assert-ExactGatewayReleasePlan (New-GrantPlan -RoleAfter @($roleGrant, $logsStatement, $secretStatement) -EndpointAfter @($endpointGrant, $starterStatement)) $artifact -ExpectedAccountId $account; $passed++
+
+Assert-Rejected { Assert-ExactGatewayReleasePlan $grantPlan $artifact } "A four-resource plan was accepted without the reviewed account."
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -SwitchOn $false) $artifact -ExpectedAccountId $account } "A four-resource plan was accepted with the invoke switch off."
+Assert-Rejected { Assert-ExactGatewayReleasePlan $grantPlan $artifact -ExpectedAccountId "999999999999" } "A grant for a different account was accepted."
+$noEnvironment = New-GrantPlan; $noEnvironment.resource_changes[0].change.after.environment[0].variables.PSObject.Properties.Remove("DOCUMENT_TAILORING_FUNCTION_ARN")
+Assert-Rejected { Assert-ExactGatewayReleasePlan $noEnvironment $artifact -ExpectedAccountId $account } "The grant plan omitted the function ARN variable."
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -EnvironmentValue "$aliasArn-other") $artifact -ExpectedAccountId $account } "The grant plan pointed the Gateway at a different function."
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -EnvironmentValue "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-processor:`$LATEST") $artifact -ExpectedAccountId $account } "The grant plan pointed the Gateway at an unqualified function."
+$extraEnvironment = New-GrantPlan; $extraEnvironment.resource_changes[0].change.after.environment[0].variables | Add-Member NoteProperty EXTRA "x"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $extraEnvironment $artifact -ExpectedAccountId $account } "The grant plan added an unreviewed function variable."
+
+foreach ($case in @(
+    @{ Name = "a wildcard resource"; Statement = ([ordered]@{ Sid = "InvokeExactDocumentTailoringRuntime"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = "*" }) },
+    @{ Name = "a broader action"; Statement = ([ordered]@{ Sid = "InvokeExactDocumentTailoringRuntime"; Effect = "Allow"; Action = "lambda:*"; Resource = $aliasArn }) },
+    @{ Name = "an extra action"; Statement = ([ordered]@{ Sid = "InvokeExactDocumentTailoringRuntime"; Effect = "Allow"; Action = @("lambda:InvokeFunction", "lambda:GetFunction"); Resource = $aliasArn }) },
+    @{ Name = "an unqualified function"; Statement = ([ordered]@{ Sid = "InvokeExactDocumentTailoringRuntime"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-document-processor" }) },
+    @{ Name = "a Deny effect"; Statement = ([ordered]@{ Sid = "InvokeExactDocumentTailoringRuntime"; Effect = "Deny"; Action = "lambda:InvokeFunction"; Resource = $aliasArn }) },
+    @{ Name = "a condition"; Statement = ([ordered]@{ Sid = "InvokeExactDocumentTailoringRuntime"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = $aliasArn; Condition = [ordered]@{ Bool = [ordered]@{ "x" = "y" } } }) },
+    @{ Name = "a different Sid"; Statement = ([ordered]@{ Sid = "SomethingElse"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = $aliasArn }) }
+  )) {
+  Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -RoleAfter @($logsStatement, $secretStatement, $case.Statement)) $artifact -ExpectedAccountId $account } "The gateway role policy accepted $($case.Name)."
+}
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -RoleAfter @($logsStatement, $secretStatement)) $artifact -ExpectedAccountId $account } "The gateway role policy grant was missing."
+$secondStatement = [ordered]@{ Sid = "AnotherGrant"; Effect = "Allow"; Action = "s3:GetObject"; Resource = "*" }
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -RoleAfter @($logsStatement, $secretStatement, $roleGrant, $secondStatement)) $artifact -ExpectedAccountId $account } "The gateway role policy gained an unreviewed second statement."
+$widenedLogs = [ordered]@{ Sid = "WriteOwnedLogs"; Effect = "Allow"; Action = @("logs:*"); Resource = "*" }
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -RoleAfter @($widenedLogs, $secretStatement, $roleGrant)) $artifact -ExpectedAccountId $account } "The gateway role policy widened an existing statement."
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -RoleAfter @($secretStatement, $roleGrant)) $artifact -ExpectedAccountId $account } "The gateway role policy dropped an existing statement."
+
+foreach ($case in @(
+    @{ Name = "a different principal"; Statement = ([ordered]@{ Sid = "GatewayInvokesExactDocumentProcessorAlias"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = $aliasArn; Principal = [ordered]@{ AWS = "arn:aws:iam::${account}:role/other" } }) },
+    @{ Name = "a wildcard principal"; Statement = ([ordered]@{ Sid = "GatewayInvokesExactDocumentProcessorAlias"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = $aliasArn; Principal = [ordered]@{ AWS = "*" } }) },
+    @{ Name = "no principal"; Statement = ([ordered]@{ Sid = "GatewayInvokesExactDocumentProcessorAlias"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = $aliasArn }) },
+    @{ Name = "a wildcard resource"; Statement = ([ordered]@{ Sid = "GatewayInvokesExactDocumentProcessorAlias"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = "*"; Principal = [ordered]@{ AWS = $gatewayRoleArn } }) },
+    @{ Name = "a condition"; Statement = ([ordered]@{ Sid = "GatewayInvokesExactDocumentProcessorAlias"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = $aliasArn; Principal = [ordered]@{ AWS = $gatewayRoleArn }; Condition = [ordered]@{ Bool = [ordered]@{ "x" = "y" } } }) }
+  )) {
+  Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -EndpointAfter @($starterStatement, $case.Statement)) $artifact -ExpectedAccountId $account } "The Lambda endpoint policy accepted $($case.Name)."
+}
+$alteredStarter = [ordered]@{ Sid = "StarterInvokesExactDurableVersionOnly"; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = "*"; Principal = [ordered]@{ AWS = "*" } }
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GrantPlan -EndpointAfter @($alteredStarter, $endpointGrant)) $artifact -ExpectedAccountId $account } "The Lambda endpoint policy altered an existing statement."
+
+$renamedRole = New-GrantPlan; $renamedRole.resource_changes[2].change.after.name = "other-policy"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $renamedRole $artifact -ExpectedAccountId $account } "The gateway role policy change altered a non-policy field."
+$movedEndpoint = New-GrantPlan; $movedEndpoint.resource_changes[3].change.after.service_name = "com.amazonaws.us-east-2.sqs"
+Assert-Rejected { Assert-ExactGatewayReleasePlan $movedEndpoint $artifact -ExpectedAccountId $account } "The Lambda endpoint change altered a non-policy field."
+$unknownGrant = New-GrantPlan; $unknownGrant.resource_changes[2].change.after_unknown | Add-Member NoteProperty policy $true
+Assert-Rejected { Assert-ExactGatewayReleasePlan $unknownGrant $artifact -ExpectedAccountId $account } "The gateway role policy change accepted an unknown field."
+$replacedGrant = New-GrantPlan; $replacedGrant.resource_changes[3].change.actions = @("delete", "create")
+Assert-Rejected { Assert-ExactGatewayReleasePlan $replacedGrant $artifact -ExpectedAccountId $account } "The grant plan accepted a replaced endpoint."
+$partialGrant = New-GrantPlan; $partialGrant.resource_changes = @($partialGrant.resource_changes | Select-Object -First 3)
+Assert-Rejected { Assert-ExactGatewayReleasePlan $partialGrant $artifact -ExpectedAccountId $account } "A three-resource plan was accepted."
+$extraResource = New-GrantPlan
+$extraResource.resource_changes = @($extraResource.resource_changes) + @([pscustomobject]@{ address = "module.platform.aws_s3_bucket.artifacts"; mode = "managed"; type = "aws_s3_bucket"; change = [pscustomobject]@{ actions = @("update"); before = [pscustomobject]@{}; after = [pscustomobject]@{} } })
+Assert-Rejected { Assert-ExactGatewayReleasePlan $extraResource $artifact -ExpectedAccountId $account } "A grant plan with an unreviewed extra resource was accepted."
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
