@@ -864,6 +864,7 @@ function Set-VariablesFromPlan {
     public_job_route_throttling_rate_limit         = 1
     public_job_route_throttling_burst_limit        = 1
     ingestion_provider_private_egress              = $false
+    document_tailoring_invoke_enabled              = $false
   }
   $invalidMissing = @($missing | Where-Object { -not $compatibilityDefaults.Contains($_) })
   if ($unexpected.Count -ne 0 -or $invalidMissing.Count -ne 0) {
@@ -1045,7 +1046,8 @@ function Assert-ExactCurrentBaselineVariableSet {
     "public_job_projection_artifact_sha256",
     "public_job_projection_artifact_base64sha256",
     "public_job_route_throttling_rate_limit",
-    "public_job_route_throttling_burst_limit"
+    "public_job_route_throttling_burst_limit",
+    "document_tailoring_invoke_enabled"
   )
   $invalidMissing = @($missing | Where-Object { $_ -notin $historicalCompatibilityVariables })
   if (-not $AllowCompatibilityDefaults -or $missing.Count -eq 0 -or

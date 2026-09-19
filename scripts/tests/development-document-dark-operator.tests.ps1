@@ -677,9 +677,14 @@ if ($variableAssignments.Count -ne 3) { throw "The post-historical, current, and
 foreach ($assignment in $variableAssignments) { Invoke-Expression $assignment.Extent.Text }
 
 $currentKindNames = @((Get-DevelopmentDocumentVariableKinds).Keys | Sort-Object)
-if ($allowedVariableNames.Count -ne 100 -or
+if ($allowedVariableNames.Count -ne 101 -or
   (@($allowedVariableNames | Sort-Object) -join "|") -cne ($currentKindNames -join "|")) {
-  throw "The current document baseline does not classify the exact 100-variable development plan."
+  throw "The current document baseline does not classify the exact 101-variable development plan."
+}
+# The default-off Gateway-to-Documents invoke switch (ADR-031) is a registered boolean, never a free-form input.
+if ($allowedVariableNames -cnotcontains "document_tailoring_invoke_enabled" -or
+  (Get-DevelopmentDocumentVariableKinds)["document_tailoring_invoke_enabled"] -cne "boolean") {
+  throw "The document tailoring invoke switch is not registered as an exact boolean input."
 }
 
 $baselineBooleanFunctions = @($ast.FindAll({
