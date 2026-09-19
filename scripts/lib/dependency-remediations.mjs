@@ -15,6 +15,13 @@ const remediatedAdvisories = new Map([
   ["CVE-2025-71329", "GHSA-5p2g-fcmc-qvqq"],
   ["CVE-2025-71330", "GHSA-w3rx-r6r6-pgpr"],
 ]);
+// The registry reports the affected transitive path from the mobile importer through either of its
+// two direct dependencies that reach metro; both lead to the same reviewed, patched installation
+// that verifyImageSizeRemediation proves. Any other importer or first hop is still rejected.
+const mobileAuditPathPrefixes = Object.freeze([
+  "frontend__mobile>expo>",
+  "frontend__mobile>react-native>",
+]);
 const dependencySections = ["dependencies", "devDependencies", "optionalDependencies"];
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -192,7 +199,7 @@ export function evaluateAuditReport(report) {
           finding.paths.some(
             (entry) =>
               typeof entry !== "string" ||
-              !entry.startsWith("frontend__mobile>expo>") ||
+              !mobileAuditPathPrefixes.some((prefix) => entry.startsWith(prefix)) ||
               !entry.endsWith(">metro>image-size"),
           ),
       )

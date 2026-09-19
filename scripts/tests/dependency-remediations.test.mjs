@@ -229,6 +229,43 @@ test("checks every dependency section and rejects new roots, aliases, versions a
   }
 });
 
+test("accepts the reviewed audit path through either direct mobile dependency and nothing else", () => {
+  const withPaths = (paths) => {
+    const value = report();
+    for (const advisory of Object.values(value.advisories)) advisory.findings[0].paths = paths;
+    return value;
+  };
+  for (const paths of [
+    ["frontend__mobile>expo>metro>image-size"],
+    ["frontend__mobile>react-native>@react-native/community-cli-plugin>metro>image-size"],
+    [
+      "frontend__mobile>expo>metro>image-size",
+      "frontend__mobile>react-native>@react-native/community-cli-plugin>metro>image-size",
+    ],
+  ]) {
+    assert.deepEqual(evaluateAuditReport(withPaths(paths)), {
+      remediatedAdvisories: 2,
+      registryOmittedAdvisories: 0,
+    });
+  }
+  for (const paths of [
+    // Another importer, a lookalike first hop, a different sink, or an unanchored prefix.
+    ["frontend__web>react-native>metro>image-size"],
+    ["frontend__mobile>react-native-auth0>metro>image-size"],
+    ["frontend__mobile>react-nativex>metro>image-size"],
+    ["frontend__mobile>other>metro>image-size"],
+    ["frontend__mobile>react-native>metro>another-package"],
+    ["frontend__mobile>react-native>metro>image-size>extra"],
+    ["x>frontend__mobile>react-native>metro>image-size"],
+    [
+      "frontend__mobile>react-native>metro>image-size",
+      "backend__gateway>react-native>metro>image-size",
+    ],
+  ]) {
+    assert.throws(() => evaluateAuditReport(withPaths(paths)), undefined, paths.join(" | "));
+  }
+});
+
 test("rejects any changed advisory, new advisory or hidden metadata vulnerability", () => {
   for (const mutate of [
     (value) => {
