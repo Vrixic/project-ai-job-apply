@@ -1,5 +1,5 @@
-import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import type { OutboxNudgePublisher } from "@ai-job-apply/profile-service";
+import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 
 interface SqsSender {
   send(command: SendMessageCommand): Promise<{ MessageId?: string }>;

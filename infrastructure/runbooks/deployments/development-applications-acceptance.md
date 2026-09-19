@@ -1,6 +1,6 @@
 # Development Applications Lifecycle Acceptance
 
-- Status: Implemented and locally verified 2026-09-18; **not yet executed against the deployed development account.**
+- Status: Implemented and locally verified 2026-09-18. First deployed run 2026-09-19 (`failed-cleaned`, receipt SHA-256 `d818bee6eac29c01bd4859b049160ab4f4518ba7ead777c5d09ba4ff6ead3de4`): the fixture and exact cleanup worked and the run found a real Gateway defect (create returned 500 over the shared database client). The defect is fixed in source and needs a new Gateway release and a rebuilt migration image before the acceptance is re-run. **No acceptance claim has been made.**
 - Operator: `scripts/operate-development-applications-acceptance.ps1` (guard tests in
   `scripts/tests/development-applications-acceptance-operator.tests.ps1`).
 - In-image fixture: `applications/dist/src/run-lifecycle-acceptance.js` in the migration image.
@@ -83,6 +83,7 @@ run `Execute` within 15 minutes with the same release inputs plus `-ExecutionPla
 
 ## Recorded exceptions
 
+- The 2026-09-19 run's failure was a product defect, not an operator fault: `POST /v1/applications` returned 500 in the deployed Gateway because Applications was composed with the shared Profile/Drizzle database client. The operator refused to claim acceptance and proved cleanup, as designed. The operator binds its source commit to the migration image receipt, so a fix merged after an image build requires a rebuilt image before the acceptance can run again.
 - On 2026-09-18 read-only probes of `GET /v1/applications/{id}` with a synthetic subject
   (`synthetic-applications-acceptance`) resolved that subject on first use and left one generated identity
   (a user, an external identity, and an `identity.linked` audit event) in the development database. It holds

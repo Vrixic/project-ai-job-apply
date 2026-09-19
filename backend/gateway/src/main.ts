@@ -1,5 +1,8 @@
 import "reflect-metadata";
-import { defaultFieldDefinitions } from "@ai-job-apply/applications-service";
+import {
+  createApplicationsDatabase,
+  defaultFieldDefinitions,
+} from "@ai-job-apply/applications-service";
 import { createOidcIdTokenVerifier, createOidcVerifier } from "@ai-job-apply/auth";
 import {
   BillingEntitlementService,
@@ -160,7 +163,7 @@ const candidateDataExportDownloads =
 const applications =
   process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
-        client: database.client,
+        client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
         profile: store,
         documents,
         catalog,
