@@ -367,9 +367,12 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
     )
       ? (directCause.cause as { code?: unknown; name?: unknown } | undefined)
       : directCause;
+  // A PostgreSQL SQLSTATE is a fixed five-character class code, never data, so it is safe to log for the
+  // persistence failures whose stage alone has not been enough to diagnose them.
   const postgresCauseCode =
-    errorType === "JobContributionUnavailableError" &&
-    routeTemplate === "/v1/jobs/contributions" &&
+    ((errorType === "JobContributionUnavailableError" &&
+      routeTemplate === "/v1/jobs/contributions") ||
+      (errorType === "ResumeUploadRegistrationError" && routeTemplate === "/v1/resumes/uploads")) &&
     typeof cause?.code === "string" &&
     /^(?:08|0A|22|23|25|2D|3D|3F|40|42|53|54|55|57|58|F0|HV|P0|XX)[0-9A-Z]{3}$/u.test(cause.code)
       ? cause.code

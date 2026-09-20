@@ -1347,6 +1347,35 @@ describe("candidate API", () => {
       JSON.stringify(privacySafeRequestFailure(registrationFailure, "/v1/resumes/uploads")),
     ).not.toContain("candidate content");
 
+    // A PostgreSQL SQLSTATE cause is logged for upload registration, and nothing else from the cause is.
+    const registrationDatabaseFailure = new ResumeUploadRegistrationError(
+      "IDEMPOTENCY_INSERT",
+      Object.assign(new Error("candidate resume text must remain private"), { code: "42804" }),
+    );
+    expect(privacySafeRequestFailure(registrationDatabaseFailure, "/v1/resumes/uploads")).toEqual({
+      event: "unhandled_request_failure",
+      route: "/v1/resumes/uploads",
+      error_type: "ResumeUploadRegistrationError",
+      error_code: "DOCUMENT_IDEMPOTENCY_INSERT",
+      postgres_cause_code: "42804",
+    });
+    expect(
+      JSON.stringify(privacySafeRequestFailure(registrationDatabaseFailure, "/v1/resumes/uploads")),
+    ).not.toContain("candidate resume text");
+    for (const unsafeCode of ["secret-value", "42", "42804 ", "xx000", "not a code"]) {
+      const unsafe = new ResumeUploadRegistrationError(
+        "IDEMPOTENCY_INSERT",
+        Object.assign(new Error("private"), { code: unsafeCode }),
+      );
+      expect(privacySafeRequestFailure(unsafe, "/v1/resumes/uploads")).not.toHaveProperty(
+        "postgres_cause_code",
+      );
+    }
+    // Only the upload route reports it, so another route with the same error name does not.
+    expect(
+      privacySafeRequestFailure(registrationDatabaseFailure, "/v1/jobs/:jobId"),
+    ).not.toHaveProperty("postgres_cause_code");
+
     const contributionFailure = new JobContributionUnavailableError(
       "JOB_STORE_CHRONOLOGY",
       Object.assign(new Error("private posting data"), { code: "42883" }),
