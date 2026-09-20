@@ -34,6 +34,10 @@ param(
   # Verify. It runs on its own from a current schema-7 baseline and is never combined with a release.
   [ValidateSet("None", "EnableMapping", "EnableRule", "DisableRule", "DisableMapping")]
   [string]$DocumentScanActivation = "None",
+  # D3-024: append ONE exact HTTPS browser origin to the candidate-document upload CORS list, with Plan, Apply, and
+  # Verify. Runs on its own from a current schema-7 baseline and is never combined with a release or an activation.
+  [ValidatePattern("^(?:|https://[a-z0-9.-]+(?::[0-9]{1,5})?)$")]
+  [string]$DocumentUploadCorsOrigin = "",
   [switch]$Help
 )
 
@@ -45,6 +49,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\development-gateway-release-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-current-document-baseline.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-scan-activation-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-document-upload-cors-guards.ps1")
 
 if ($Help) {
   @"
@@ -60,6 +65,8 @@ Usage:
     -Action Plan|Apply|Verify -DocumentScanActivation EnableMapping|EnableRule|DisableRule|DisableMapping
     plus the baseline inputs (-BaselinePlanPath, -ReviewedBaselineSha256, -BaselineMetadataPath,
     -ReviewedBaselineMetadataSha256) and, for Apply and Verify, -PlanPath and -ReviewedPlanSha256.
+  Document upload CORS (D3-024): -Action Plan|Apply|Verify -DocumentUploadCorsOrigin https://EXACT-ORIGIN, from a current
+    schema-7 baseline, never with a release or an activation; Apply and Verify also take -PlanPath and -ReviewedPlanSha256.
   Mixed document release (parser and processor from two receipts), add to CaptureBaseline:
     -ProcessorDocumentReceiptPath PROCESSOR_RECEIPT -ReviewedProcessorDocumentReceiptSha256 PROCESSOR_RECEIPT_SHA256
     (-DocumentReceiptPath is then the parser receipt). The resulting schema-8 baseline can only start a
@@ -99,6 +106,7 @@ $artifactDirectory = Join-Path $repositoryRoot "backend\gateway\dist\lambda"
 $artifactName = "gateway-lambda"
 $metadataSuffix = ".gateway-release.json"
 $activationMetadataSuffix = ".document-scan-activation.json"
+$uploadCorsMetadataSuffix = ".document-upload-cors.json"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -858,6 +866,63 @@ function Get-ActivationExpectedMetadata {
   }
 }
 
+# ---- D3-024: document upload CORS origin (independent of the release and activation flows) ---------------------
+function Set-UploadCorsVariables {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][string]$Origin)
+  Set-VariablesFromPlan $Baseline.Plan $null
+  $origins = @(@(Get-DocumentUploadCorsOrigins $Baseline.Plan.variables) + @($Origin))
+  $env:TF_VAR_candidate_document_cors_allowed_origins = ConvertTo-Json -InputObject @($origins) -Compress
+}
+function Get-UploadCorsBucket {
+  param([Parameter(Mandatory)][object]$Change)
+  $bucket = [string]$Change.change.after.bucket
+  if ($bucket -cne "ai-job-apply-development-candidate-docs-$ExpectedAccountId") {
+    throw "The upload CORS bucket is not the exact development candidate document bucket."
+  }
+  return $bucket
+}
+function Assert-DocumentUploadCorsLive {
+  param([Parameter(Mandatory)][string[]]$ExpectedOrigins, [Parameter(Mandatory)][string]$Bucket)
+  $live = Invoke-AwsJson @("s3api", "get-bucket-cors", "--bucket", $Bucket, "--output", "json") "Upload CORS readback"
+  $rules = @($live.CORSRules)
+  if ($rules.Count -ne 1 -or
+      (@($rules[0].AllowedOrigins) -join "|") -cne ($ExpectedOrigins -join "|") -or
+      (@($rules[0].AllowedMethods) -join "|") -cne "POST" -or
+      (@($rules[0].AllowedHeaders) -join "|") -cne "*" -or
+      (@($rules[0].ExposeHeaders) -join "|") -cne "ETag|x-amz-version-id" -or
+      [int]$rules[0].MaxAgeSeconds -ne 300) {
+    throw "The live upload CORS configuration does not match the reviewed change."
+  }
+}
+function Invoke-UploadCorsZeroDrift {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][string]$Origin)
+  $path = Join-Path $operatorRoot "upload-cors-verify-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
+  if (Test-Path $path) { throw "Refusing to overwrite a verification plan." }
+  $saved = Save-AndClearTerraformVariables
+  try {
+    Set-UploadCorsVariables $Baseline $Origin
+    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
+    $exitCode = $LASTEXITCODE
+  } finally { Restore-TerraformVariables $saved }
+  if ($exitCode -ne 0) { throw "The post-change Terraform plan is not zero drift. Inspect the ignored verification log." }
+  $plan = Read-Plan $path
+  $null = Assert-RetainedGatewayBaselinePlan $plan (Get-DeclaredTerraformVariableNames)
+  $null = Assert-DocumentUploadCorsVariables $Baseline.Plan.variables $plan.variables $Origin
+  return Get-FileSha256 $path
+}
+function Get-UploadCorsExpectedMetadata {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][string]$Origin, [Parameter(Mandatory)][string]$PlanFile, [Parameter(Mandatory)][string]$PlanSha)
+  return @{
+    SchemaVersion = "1"; Kind = "development-document-upload-cors-plan"; Environment = "development"
+    AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"
+    StateLineage = [string]$Baseline.Metadata.StateLineage; StateSerial = [long]$Baseline.Metadata.StateSerial
+    SourceSha = $SourceSha; Origin = $Origin
+    BaselinePath = $Baseline.Path; BaselineSha256 = $ReviewedBaselineSha256
+    BaselineMetadataPath = $Baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256
+    PlanPath = $PlanFile; PlanSha256 = $PlanSha
+  }
+}
+
 $commit = Assert-CallerAndSource
 Initialize-Backend
 $boundary = Resolve-ArtifactBoundary
@@ -1034,7 +1099,7 @@ if ($Action -ceq "Publish") {
 if ($DocumentScanActivation -cne "None") {
   if ($Action -cnotin @("Plan", "Apply", "Verify") -or $RefreshDocumentProcessor -or $RefreshDocumentParser -or
       $EnableDocumentTailoringInvoke -or -not [string]::IsNullOrWhiteSpace($ReceiptPath) -or
-      -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath)) {
+      -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath) -or $DocumentUploadCorsOrigin -cne "") {
     throw "A document scan activation is planned, applied, and verified on its own, from a retained baseline, and never with a release."
   }
   $step = $DocumentScanActivation
@@ -1094,6 +1159,76 @@ if ($DocumentScanActivation -cne "None") {
   Assert-DocumentScanActivationLive $step
   $driftSha = Invoke-ActivationZeroDrift $baseline $step
   [pscustomobject]@{ Outcome = $(if ($Action -ceq "Apply") { "applied-and-verified" } else { "verified" }); Step = $step; SourceSha = $SourceSha; LiveState = "matches"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
+  exit 0
+}
+
+if ($DocumentUploadCorsOrigin -cne "") {
+  if ($Action -cnotin @("Plan", "Apply", "Verify") -or $DocumentScanActivation -cne "None" -or $RefreshDocumentProcessor -or
+      $RefreshDocumentParser -or $EnableDocumentTailoringInvoke -or -not [string]::IsNullOrWhiteSpace($ReceiptPath) -or
+      -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath)) {
+    throw "A document upload CORS change is planned, applied, and verified on its own, from a retained baseline, and never with a release."
+  }
+  $origin = $DocumentUploadCorsOrigin
+  $null = Assert-DocumentUploadCorsOrigin $origin
+  $baseline = Read-Baseline
+  if ([string]$baseline.MetadataSchemaVersion -cne "7") { throw "A document upload CORS change requires a current schema-7 baseline." }
+  $baselineOrigins = @(Get-DocumentUploadCorsOrigins $baseline.Plan.variables)
+
+  if ($Action -ceq "Plan") {
+    if ([string]::IsNullOrWhiteSpace($PlanPath)) { $PlanPath = Join-Path $operatorRoot "upload-cors-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan" }
+    $path = Resolve-GatewayOperatorPath $PlanPath -ReleaseOnly
+    if (Test-Path $path) { throw "Refusing to overwrite an upload CORS plan." }
+    $state = Get-StateIdentity; $saved = Save-AndClearTerraformVariables
+    try {
+      Set-UploadCorsVariables $baseline $origin
+      & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
+      $exitCode = $LASTEXITCODE
+    } finally { Restore-TerraformVariables $saved }
+    if ($exitCode -ne 2) { if (Test-Path $path) { Remove-Item $path -Force }; throw "The document upload CORS change did not produce an exact reviewable change." }
+    $plan = Read-Plan $path
+    $null = Assert-DocumentUploadCorsVariables $baseline.Plan.variables $plan.variables $origin
+    $changes = @(Assert-ExactDocumentUploadCorsPlan $plan $baselineOrigins $origin)
+    $null = Get-UploadCorsBucket $changes[0]
+    $sha = Get-FileSha256 $path
+    $metadata = [ordered]@{}
+    foreach ($entry in (Get-UploadCorsExpectedMetadata $baseline $origin $path $sha).GetEnumerator() | Sort-Object Name) { $metadata[$entry.Name] = $entry.Value }
+    $metadata["StateLineage"] = $state.Lineage; $metadata["StateSerial"] = $state.Serial
+    $metadata["CreatedAt"] = (Get-Date).ToUniversalTime().ToString("o")
+    Write-ExclusiveJson "$path$uploadCorsMetadataSuffix" $metadata
+    [pscustomobject]@{ Outcome = "review-required"; Origin = $origin; PlanPath = $path; PlanSha256 = $sha; Updates = $changes.Count; Resources = @($changes | ForEach-Object { [string]$_.address }); ApprovalCommand = "Apply reviewed document upload CORS plan $sha" } | ConvertTo-Json
+    exit 0
+  }
+
+  if ([string]::IsNullOrWhiteSpace($PlanPath) -or $ReviewedPlanSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "Apply and Verify require the exact reviewed upload CORS plan and SHA-256."
+  }
+  $path = Resolve-GatewayOperatorPath $PlanPath -MustExist -ReleaseOnly
+  if ((Get-FileSha256 $path) -cne $ReviewedPlanSha256) { throw "The upload CORS plan checksum does not match review." }
+  $metadataPath = "$path$uploadCorsMetadataSuffix"
+  if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "The upload CORS plan metadata is missing." }
+  $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+  Assert-ReviewedPlanMetadata $metadata (Get-UploadCorsExpectedMetadata $baseline $origin $path $ReviewedPlanSha256)
+  $state = Get-StateIdentity
+  $plan = Read-Plan $path
+  $null = Assert-DocumentUploadCorsVariables $baseline.Plan.variables $plan.variables $origin
+  $changes = @(Assert-ExactDocumentUploadCorsPlan $plan $baselineOrigins $origin)
+  $bucket = Get-UploadCorsBucket $changes[0]
+
+  if ($Action -ceq "Apply") {
+    if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne [long]$metadata.StateSerial) {
+      throw "Remote state changed after review; generate a new upload CORS plan."
+    }
+    & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
+    if ($LASTEXITCODE -ne 0) { throw "The exact reviewed document upload CORS plan failed to apply." }
+  } else {
+    # Verify is the post-apply recovery path: exactly one state advance from the reviewed plan's state.
+    if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne ([long]$metadata.StateSerial + 1)) {
+      throw "Post-change verification requires exactly one state advance from the reviewed plan."
+    }
+  }
+  Assert-DocumentUploadCorsLive (@($baselineOrigins) + @($origin)) $bucket
+  $driftSha = Invoke-UploadCorsZeroDrift $baseline $origin
+  [pscustomobject]@{ Outcome = $(if ($Action -ceq "Apply") { "applied-and-verified" } else { "verified" }); Origin = $origin; SourceSha = $SourceSha; LiveState = "matches"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
   exit 0
 }
 
