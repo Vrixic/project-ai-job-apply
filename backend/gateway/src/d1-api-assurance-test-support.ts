@@ -247,6 +247,7 @@ class SyntheticAssuranceEntitlements implements EntitlementReadService {
       plan: "free",
       accessState: "active",
       grants: coreCapabilities,
+      limits: { maxStoredResumes: 1 },
       version: 0,
       evaluatedAt: now.toISOString(),
     };

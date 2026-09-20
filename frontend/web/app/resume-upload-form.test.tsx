@@ -4,7 +4,7 @@ import type { ResumeDocument } from "@ai-job-apply/api-contracts";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ResumeUploadForm } from "./resume-upload-form";
+import { ResumeUploadForm, resumeUploadGate } from "./resume-upload-form";
 
 const emptyResumes = { documents: [] };
 
@@ -826,5 +826,196 @@ describe("ResumeUploadForm upload ownership", () => {
     expect(container.textContent).toContain("session-b.pdf");
     expect(container.textContent).not.toContain("session-a.pdf");
     expect(container.textContent).toContain("Resume uploaded to quarantine");
+  });
+});
+
+function resumeDocument(overrides: Partial<ResumeDocument>): ResumeDocument {
+  return {
+    id: "00000000-0000-7000-8000-000000000001",
+    fileName: "synthetic-resume.pdf",
+    mediaType: "application/pdf",
+    sizeBytes: 3,
+    sha256: "a".repeat(64),
+    status: "parsed",
+    createdAt: "2026-09-20T12:00:00.000Z",
+    updatedAt: "2026-09-20T12:00:00.000Z",
+    ...overrides,
+  } as ResumeDocument;
+}
+
+describe("resumeUploadGate (ADR-032)", () => {
+  const now = Date.parse("2026-09-20T12:10:00.000Z");
+  const gate = (documents: ResumeDocument[], limit?: number) =>
+    resumeUploadGate(documents, limit, now);
+
+  it("blocks while a resume is uploading, scanning, or parsing, whatever the plan allows", () => {
+    for (const status of ["awaiting_upload", "scanning", "parsing"] as const) {
+      expect(gate([resumeDocument({ status })], 50), status).toEqual({
+        blocked: true,
+        message: "Your resume is still being processed. You can upload another when it finishes.",
+      });
+      expect(gate([resumeDocument({ status })]), status).toMatchObject({ blocked: true });
+    }
+  });
+
+  it("stops blocking an abandoned upload once its grant and scan margin have passed", () => {
+    const abandoned = resumeDocument({
+      status: "awaiting_upload",
+      createdAt: "2026-09-20T11:54:59.000Z",
+    });
+    expect(gate([abandoned])).toEqual({ blocked: false });
+    const recent = resumeDocument({
+      status: "awaiting_upload",
+      createdAt: "2026-09-20T11:55:01.000Z",
+    });
+    expect(gate([recent])).toMatchObject({ blocked: true });
+  });
+
+  it("blocks a parsed resume only once the plan's limit is reached", () => {
+    const parsed = resumeDocument({ status: "parsed" });
+    expect(gate([parsed], 1)).toEqual({
+      blocked: true,
+      message: "Your plan includes 1 stored resume.",
+    });
+    expect(gate([parsed], 0)).toEqual({
+      blocked: true,
+      message: "Your plan includes 0 stored resumes.",
+    });
+    expect(gate([parsed], 2)).toEqual({ blocked: false });
+    const second = resumeDocument({ id: "00000000-0000-7000-8000-000000000002" });
+    expect(gate([parsed, second], 2)).toEqual({
+      blocked: true,
+      message: "Your plan includes 2 stored resumes.",
+    });
+  });
+
+  it("does not count failed or rejected resumes, and leaves an unknown limit to the server", () => {
+    const failed = resumeDocument({ status: "failed", failureCode: "scan_failed" });
+    const rejected = resumeDocument({ status: "rejected", failureCode: "malware_detected" });
+    expect(gate([failed, rejected], 1)).toEqual({ blocked: false });
+    expect(gate([], 1)).toEqual({ blocked: false });
+    expect(gate([resumeDocument({ status: "parsed" })], undefined)).toEqual({ blocked: false });
+  });
+});
+
+describe("ResumeUploadForm upload gate", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal("React", React);
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  async function mount(documents: ResumeDocument[], maxStoredResumes?: number) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => jsonResponse({ documents })),
+    );
+    await act(async () =>
+      root.render(<ResumeUploadForm authenticated maxStoredResumes={maxStoredResumes} />),
+    );
+    await flushAsyncWork();
+  }
+  const controls = () => ({
+    input: container.querySelector<HTMLInputElement>('input[type="file"]'),
+    button: container.querySelector<HTMLButtonElement>('button[type="submit"]'),
+  });
+
+  it("disables the picker and button with the reason while a resume is unfinished", async () => {
+    const recent = new Date(Date.now() - 60_000).toISOString();
+    for (const status of ["awaiting_upload", "scanning", "parsing"] as const) {
+      await mount([resumeDocument({ status, createdAt: recent })], 10);
+      const { input, button } = controls();
+      expect(input?.disabled, status).toBe(true);
+      expect(button?.disabled, status).toBe(true);
+      expect(container.textContent, status).toContain(
+        "Your resume is still being processed. You can upload another when it finishes.",
+      );
+      await act(async () => root.render(<div />));
+    }
+  });
+
+  it("disables upload when the plan's stored-resume limit is reached and says so", async () => {
+    await mount([resumeDocument({ status: "parsed" })], 1);
+    const { input, button } = controls();
+    expect(input?.disabled).toBe(true);
+    expect(button?.disabled).toBe(true);
+    expect(container.querySelector("form p[role='status']")?.textContent).toBe(
+      "Your plan includes 1 stored resume.",
+    );
+  });
+
+  it("stays available when the limit is larger, unknown, or nothing occupies a slot", async () => {
+    await mount([resumeDocument({ status: "parsed" })], 2);
+    expect(controls().input?.disabled).toBe(false);
+    expect(container.textContent).not.toContain("Your plan includes");
+    await act(async () => root.render(<div />));
+    await mount([resumeDocument({ status: "parsed" })], undefined);
+    expect(controls().input?.disabled).toBe(false);
+    await act(async () => root.render(<div />));
+    await mount([resumeDocument({ status: "failed", failureCode: "scan_failed" })], 1);
+    expect(controls().input?.disabled).toBe(false);
+    await act(async () => root.render(<div />));
+    await mount([], 1);
+    expect(controls().input?.disabled).toBe(false);
+  });
+
+  it("shows the server's fixed refusal, without contacting storage, when it decides otherwise", async () => {
+    const refusals: Array<[number, string, string]> = [
+      [
+        409,
+        "resume_upload_in_progress",
+        "Your resume is still being processed. You can upload another when it finishes.",
+      ],
+      [409, "resume_document_limit", "Your plan's stored resume limit has been reached."],
+      [
+        503,
+        "entitlement_unavailable",
+        "Your plan details are temporarily unavailable. Try uploading again shortly.",
+      ],
+    ];
+    for (const [status, code, copy] of refusals) {
+      const calls: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (input, init) => {
+          calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+          return init?.method === "POST"
+            ? Response.json(
+                { code, title: "upstream text never shown", detail: "secret" },
+                { status },
+              )
+            : jsonResponse(emptyResumes);
+        }),
+      );
+      await act(async () => root.render(<ResumeUploadForm authenticated />));
+      await flushAsyncWork();
+      const form = await selectFile(
+        container,
+        syntheticPdf("resume.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
+      );
+      await act(async () => submit(form));
+      await flushAsyncWork(40);
+      expect(container.textContent, code).toContain(copy);
+      expect(container.textContent, code).not.toMatch(/secret|upstream text/);
+      expect(
+        calls.filter((call) => call.startsWith("POST")),
+        code,
+      ).toEqual(["POST /api/platform/resumes"]);
+      await act(async () => root.render(<div />));
+    }
   });
 });

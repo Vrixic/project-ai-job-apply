@@ -63,3 +63,48 @@ describe("candidateSafeProblemMessage", () => {
     },
   );
 });
+
+describe("resume refusals (ADR-032)", () => {
+  const problem = (status: number, code: string) =>
+    new Response(
+      JSON.stringify({ code, title: "upstream text must never show", detail: "secret" }),
+      {
+        status,
+        headers: { "content-type": "application/problem+json" },
+      },
+    );
+
+  it("gives an unfinished upload, the plan limit, and unavailable plan details their own fixed copy", async () => {
+    await expect(
+      candidateSafeProblemMessage(problem(409, "resume_upload_in_progress"), "resume"),
+    ).resolves.toBe(
+      "Your resume is still being processed. You can upload another when it finishes.",
+    );
+    await expect(
+      candidateSafeProblemMessage(problem(409, "resume_document_limit"), "resume"),
+    ).resolves.toBe("Your plan's stored resume limit has been reached.");
+    await expect(
+      candidateSafeProblemMessage(problem(503, "entitlement_unavailable"), "resume"),
+    ).resolves.toBe("Your plan details are temporarily unavailable. Try uploading again shortly.");
+  });
+
+  it("uses that copy only for the resume surface, never echoes upstream text, and keeps other conflicts generic", async () => {
+    await expect(
+      candidateSafeProblemMessage(problem(409, "resume_document_limit"), "profile_facts"),
+    ).resolves.toBe("This profile fact changed. Refresh and review it again.");
+    await expect(
+      candidateSafeProblemMessage(problem(409, "idempotency_conflict"), "resume"),
+    ).resolves.toBe("The resume request changed. Refresh and try again.");
+    await expect(
+      candidateSafeProblemMessage(problem(409, "something_else"), "resume"),
+    ).resolves.toBe("The resume request changed. Refresh and try again.");
+    for (const code of [
+      "resume_upload_in_progress",
+      "resume_document_limit",
+      "entitlement_unavailable",
+    ]) {
+      const message = await candidateSafeProblemMessage(problem(409, code), "resume");
+      expect(message).not.toMatch(/upstream|secret/);
+    }
+  });
+});

@@ -19,9 +19,22 @@ function isDateTime(value: unknown): value is string {
   );
 }
 
+function isPlanLimits(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const limits = value as Record<string, unknown>;
+  return (
+    Object.keys(limits).join(",") === "maxStoredResumes" &&
+    Number.isSafeInteger(limits.maxStoredResumes) &&
+    (limits.maxStoredResumes as number) >= 0 &&
+    (limits.maxStoredResumes as number) <= 1000
+  );
+}
+
 function isEntitlementSummary(value: unknown): value is EntitlementSummary {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
+  // `limits` is an additive optional field (ADR-032); when present it must be exact.
+  if (candidate.limits !== undefined && !isPlanLimits(candidate.limits)) return false;
   if (
     !Number.isSafeInteger(candidate.version) ||
     (candidate.version as number) < 0 ||
@@ -32,7 +45,14 @@ function isEntitlementSummary(value: unknown): value is EntitlementSummary {
   ) {
     return false;
   }
-  const baseKeys = ["accessState", "evaluatedAt", "grants", "plan", "version"];
+  const baseKeys = [
+    "accessState",
+    "evaluatedAt",
+    "grants",
+    "plan",
+    "version",
+    ...(candidate.limits === undefined ? [] : ["limits"]),
+  ];
   if (candidate.plan === "free" && candidate.accessState === "active") {
     return Object.keys(candidate).sort().join(",") === baseKeys.sort().join(",");
   }
@@ -53,7 +73,14 @@ function isEntitlementSummary(value: unknown): value is EntitlementSummary {
   );
 }
 
-export function EntitlementStatus({ authenticated }: { authenticated: boolean }) {
+export function EntitlementStatus({
+  authenticated,
+  onSummary,
+}: {
+  authenticated: boolean;
+  /** Reports the evaluated summary when it is ready and nothing when it is not, for callers that gate on limits. */
+  onSummary?: (summary: EntitlementSummary | undefined) => void;
+}) {
   const [view, setView] = useState<
     | { generation: number; status: "idle" | "loading" | "unavailable" }
     | { generation: number; status: "ready"; summary: EntitlementSummary }
@@ -133,6 +160,13 @@ export function EntitlementStatus({ authenticated }: { authenticated: boolean })
       }
     };
   }, [authenticated, requestAttempt]);
+
+  const onSummaryRef = useRef(onSummary);
+  onSummaryRef.current = onSummary;
+  const reportedSummary = view.status === "ready" && authenticated ? view.summary : undefined;
+  useEffect(() => {
+    onSummaryRef.current?.(reportedSummary);
+  }, [reportedSummary]);
 
   if (!authenticated) {
     return (

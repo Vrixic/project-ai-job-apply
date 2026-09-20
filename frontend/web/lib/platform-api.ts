@@ -64,9 +64,10 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
     "409:profile_fact_transition_conflict",
     { code: "profile_fact_transition_conflict", title: "Profile fact transition conflict" },
   ],
+  ["409:resume_document_limit", { code: "resume_document_limit", title: "Resume limit reached" }],
   [
-    "409:resume_document_limit",
-    { code: "resume_document_limit", title: "Resume document limit reached" },
+    "409:resume_upload_in_progress",
+    { code: "resume_upload_in_progress", title: "A resume is still being processed" },
   ],
   [
     "409:job_search_catalog_changed",

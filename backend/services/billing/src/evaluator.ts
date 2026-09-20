@@ -4,6 +4,7 @@ import {
   type EntitlementEvaluation,
   type EntitlementSchedule,
   maximumEntitlementVersion,
+  planLimits,
 } from "./types.js";
 
 const immutableCoreGrants = Object.freeze([...coreCapabilities]);
@@ -88,6 +89,7 @@ export function evaluateEntitlement(
       plan: "free",
       accessState: "active",
       grants: immutableCoreGrants,
+      limits: planLimits.free,
       version: 0,
       evaluatedAt,
     };
@@ -102,6 +104,7 @@ export function evaluateEntitlement(
       plan: "free",
       accessState: "active",
       grants: immutableCoreGrants,
+      limits: planLimits.free,
       version: schedule.version,
       evaluatedAt,
     };
@@ -113,6 +116,7 @@ export function evaluateEntitlement(
       plan: "free",
       accessState: "active",
       grants: immutableCoreGrants,
+      limits: planLimits.free,
       version: schedule.version,
       evaluatedAt,
     };
@@ -123,6 +127,7 @@ export function evaluateEntitlement(
       plan: "pro",
       accessState: "active",
       grants: immutableCoreGrants,
+      limits: planLimits.pro,
       version: schedule.version,
       evaluatedAt,
       accessThrough: schedule.accessThrough.toISOString(),
@@ -135,6 +140,7 @@ export function evaluateEntitlement(
       plan: "pro",
       accessState: "grace",
       grants: immutableCoreGrants,
+      limits: planLimits.pro,
       version: schedule.version,
       evaluatedAt,
       accessThrough: schedule.accessThrough.toISOString(),
@@ -146,6 +152,7 @@ export function evaluateEntitlement(
     plan: "free",
     accessState: "active",
     grants: immutableCoreGrants,
+    limits: planLimits.free,
     version: schedule.version,
     evaluatedAt,
   };

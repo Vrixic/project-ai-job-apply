@@ -1950,6 +1950,10 @@ export interface components {
             version: number;
             /** Format: date-time */
             evaluatedAt: string;
+            /** @description Quantities the evaluated plan allows (ADR-032). Billing owns them; the context that owns the limited thing enforces them. */
+            limits?: {
+                maxStoredResumes: number;
+            };
             /** Format: date-time */
             accessThrough?: string;
             /** Format: date-time */

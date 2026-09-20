@@ -58,6 +58,7 @@ import {
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
+import { resumeLimitsFromEntitlements } from "./resume-limits.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 
@@ -138,6 +139,7 @@ const documents =
           bucket: config.DOCUMENT_UPLOAD_BUCKET,
           kmsKeyArn: config.DOCUMENT_UPLOAD_KMS_KEY_ARN,
         }),
+        resumeLimitsFromEntitlements(entitlements),
       )
     : new UnavailableDocumentStore();
 const verifier = createOidcVerifier({
