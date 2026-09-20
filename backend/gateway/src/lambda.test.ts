@@ -654,6 +654,39 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledTimes(3);
   });
 
+  it("allows only the exact resume delete route shape", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 204,
+      body: "",
+      headers: { "cache-control": "no-store" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const resumePath = "/v1/resumes/018f92b0-4ad7-7b1d-8f44-b7ae694c85c1";
+    expect((await invoke(handler, routedEvent("DELETE", resumePath))).statusCode).toBe(204);
+    for (const [method, path] of [
+      ["GET", resumePath],
+      ["PUT", resumePath],
+      ["PATCH", resumePath],
+      ["DELETE", "/v1/resumes"],
+      ["DELETE", `${resumePath}/`],
+      ["DELETE", `${resumePath}/source`],
+      ["DELETE", "/v1/resumes/6f9619ff-8b86-4011-b42d-00c04fc964ff"],
+      ["DELETE", "/v1/resumes/not-a-uuid"],
+    ] as const) {
+      expect(
+        (await invoke(handler, routedEvent(method, path))).statusCode,
+        `${method} ${path}`,
+      ).toBe(404);
+    }
+    expect(inject).toHaveBeenCalledTimes(1);
+  });
+
   it("allows only exact candidate-rights routes and preserves the private proof header", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn().mockResolvedValue({

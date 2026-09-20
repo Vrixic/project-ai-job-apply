@@ -23,6 +23,17 @@ const resumeStorageTimeoutMessage =
   "Resume file upload timed out. Try again to request a new upload grant.";
 const resumeUploadFailureMessage =
   "Could not upload the resume. Try again with a new upload grant.";
+const resumeDeleteTimeoutMilliseconds = 20_000;
+const resumeDeleteTimeoutMessage =
+  "Deleting the resume timed out. Check your resumes and try again.";
+const resumeDeleteFailureMessage = "Could not delete the resume. Try again.";
+const resumeDeletedMessage = "Resume deleted. You can upload a new one.";
+const resumeFileInputId = "resume-file-input";
+
+/** A resume can be deleted only once processing has ended (ADR-033). */
+function isDeletableResume(document: ResumeDocument): boolean {
+  return ["parsed", "failed", "rejected"].includes(document.status);
+}
 
 class ResumeUploadCandidateError extends Error {
   constructor(message: string) {
@@ -188,6 +199,9 @@ export function ResumeUploadForm({
   const [file, setFile] = useState<File>();
   const [loading, setLoading] = useState(authenticated);
   const [uploading, setUploading] = useState(false);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string>();
+  const [deletingId, setDeletingId] = useState<string>();
+  const [focusTarget, setFocusTarget] = useState<string>();
   const [message, setMessage] = useState<string>();
   const [readFailure, setReadFailure] = useState<string>();
   const authenticatedRef = useRef(authenticated);
@@ -430,6 +444,8 @@ export function ResumeUploadForm({
       setFile(undefined);
       setLoading(false);
       setUploading(false);
+      setConfirmingDeleteId(undefined);
+      setDeletingId(undefined);
       setMessage(undefined);
       setReadFailure(undefined);
       if (fileInput.current) fileInput.current.value = "";
@@ -460,6 +476,59 @@ export function ResumeUploadForm({
     },
     [abortSessionRequests, cancelActiveRead, cancelActiveUpload],
   );
+
+  // Moving focus is explicit because the control that had it is replaced or removed by the change.
+  useEffect(() => {
+    if (!focusTarget) return;
+    window.document.getElementById(focusTarget)?.focus();
+    setFocusTarget(undefined);
+  }, [focusTarget]);
+
+  async function deleteDocument(documentId: string) {
+    const generation = sessionGeneration.current;
+    if (!sessionIsCurrent(generation) || deletingId) return;
+    const controller = createSessionController(generation);
+    if (!controller) return;
+    setDeletingId(documentId);
+    setMessage(undefined);
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, resumeDeleteTimeoutMilliseconds);
+    try {
+      const response = await fetch(`/api/platform/resumes/${documentId}`, {
+        method: "DELETE",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!sessionIsCurrent(generation, controller.signal)) return;
+      if (response.status !== 204) {
+        throw new ResumeUploadCandidateError(await candidateSafeProblemMessage(response, "resume"));
+      }
+      documentRevision.current += 1;
+      setDocuments((current) => current.filter((document) => document.id !== documentId));
+      setMessage(resumeDeletedMessage);
+      setFocusTarget(resumeFileInputId);
+    } catch (error) {
+      if (mounted.current && authenticatedRef.current && generation === sessionGeneration.current) {
+        setMessage(
+          timedOut
+            ? resumeDeleteTimeoutMessage
+            : error instanceof ResumeUploadCandidateError
+              ? error.message
+              : resumeDeleteFailureMessage,
+        );
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      releaseSessionController(controller);
+      if (sessionIsCurrent(generation)) {
+        setDeletingId(undefined);
+        setConfirmingDeleteId(undefined);
+      }
+    }
+  }
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -621,6 +690,48 @@ export function ResumeUploadForm({
                   {document.failureCode ? ` · ${statusLabel(document.failureCode)}` : ""}
                 </small>
               </div>
+              {isDeletableResume(document) &&
+                (confirmingDeleteId === document.id ? (
+                  <div role="group" aria-label={`Confirm deleting ${document.fileName}`}>
+                    <p>
+                      Delete {document.fileName}? Facts already extracted from it stay in your
+                      profile.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void deleteDocument(document.id)}
+                      disabled={deletingId !== undefined}
+                    >
+                      {deletingId === document.id ? "Deleting…" : "Confirm delete"}
+                    </button>
+                    <button
+                      type="button"
+                      id={`resume-delete-cancel-${document.id}`}
+                      className="secondary-button"
+                      onClick={() => {
+                        setConfirmingDeleteId(undefined);
+                        setFocusTarget(`resume-delete-${document.id}`);
+                      }}
+                      disabled={deletingId !== undefined}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    id={`resume-delete-${document.id}`}
+                    className="secondary-button"
+                    aria-label={`Delete ${document.fileName}`}
+                    onClick={() => {
+                      setConfirmingDeleteId(document.id);
+                      setFocusTarget(`resume-delete-cancel-${document.id}`);
+                    }}
+                    disabled={deletingId !== undefined}
+                  >
+                    Delete
+                  </button>
+                ))}
             </li>
           ))}
         </ul>
@@ -645,6 +756,7 @@ export function ResumeUploadForm({
           <span>PDF or DOCX, up to 5 MiB</span>
           <input
             ref={fileInput}
+            id={resumeFileInputId}
             type="file"
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(event) => {

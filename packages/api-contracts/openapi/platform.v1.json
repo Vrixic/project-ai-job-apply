@@ -483,6 +483,36 @@
         }
       }
     },
+    "/resumes/{documentId}": {
+      "delete": {
+        "operationId": "deleteResume",
+        "security": [{ "oidc": ["documents:write"] }],
+        "description": "Deletes one of the caller's resumes once processing has ended. The resume disappears from the list, frees its plan slot, and can no longer be used to tailor an application; stored file bytes are removed by a separate purge (ADR-033). Repeating the call, or naming a resume that is absent or not the caller's, has the same result. A resume that is still uploading, scanning, or parsing is refused.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "documentId",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The owner-scoped resume is deleted or was already absent",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
     "/profile/facts": {
       "get": {
         "operationId": "listProfileFacts",

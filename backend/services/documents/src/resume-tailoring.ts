@@ -66,6 +66,7 @@ export class PostgresParsedResumeSource implements ParsedResumeSource {
         FROM documents.resume_documents
        WHERE user_id = ${ownerUserId}
          AND status = 'parsed'
+         AND deleted_at IS NULL
          AND security_hold = false
          AND normalized_object_key IS NOT NULL
          AND normalized_object_version IS NOT NULL

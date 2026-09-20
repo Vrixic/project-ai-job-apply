@@ -10,7 +10,10 @@ rendering state, version diffs, and artifact metadata.
 - `src/upload-signer.ts` creates five-minute exact-key S3 POST grants with media type, byte range,
   SHA-256 metadata, and customer-managed KMS conditions.
 - `src/index.ts` owns candidate-scoped resume registration/listing and never returns bucket keys,
-  object versions, normalized content, or extracted text.
+  object versions, normalized content, or extracted text. It also enforces the plan's stored-resume limit
+  and one-upload-at-a-time rule ([ADR-032](../../../docs/adr/032-billing-owned-plan-limits-enforced-by-owning-contexts.md))
+  and candidate deletion, a tombstone that hides and frees the resume but keeps its objects until a separate
+  purge ([ADR-033](../../../docs/adr/033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md)).
 - `src/processor.ts` owns fail-closed malware-result transitions and normalized-object metadata;
   resume bytes and block text remain behind the object-store boundary.
 - `src/parsing/` performs bounded PDF/DOCX magic, archive, page, and text normalization after a

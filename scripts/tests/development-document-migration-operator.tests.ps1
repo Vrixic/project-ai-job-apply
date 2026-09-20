@@ -51,7 +51,7 @@ if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -o
 $currentSuccessMarkers = @(
   "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
   "Jobs migrations through 0024_contribution_appeal_restoration applied and verified.",
-  "Documents migrations through 0003_candidate_rights applied and verified.",
+  "Documents migrations through 0004_resume_deletion applied and verified.",
   "Matching migrations through 0003_private_saved_page_captures applied and verified.",
   "Billing migrations through 0002_candidate_rights applied and verified.",
   "Trust migrations through 0005_development_test_removal applied and verified.",
@@ -98,7 +98,7 @@ foreach ($ownerAndMaximum in @(@("profile", 7), @("jobs", 13), @("matching", 2))
 $historicalSuccessMarkers = @(
   "Database migrations through 0007_candidate_rights_export_null_omission applied and verified.",
   "Jobs migrations through 0013_public_job_sitemap applied and verified.",
-  "Documents migrations through 0003_candidate_rights applied and verified.",
+  "Documents migrations through 0004_resume_deletion applied and verified.",
   "Matching migrations through 0002_candidate_rights applied and verified.",
   "Billing migrations through 0002_candidate_rights applied and verified.",
   "All service-owned database migrations applied and verified."

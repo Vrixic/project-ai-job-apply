@@ -188,6 +188,7 @@ const SAVED_JOB_PATH_PATTERN =
 const D2_UUID_V7 = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const D2_UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const PRIVATE_CAPTURE_PATH_PATTERN = new RegExp(`^/v1/saved-job-captures/${D2_UUID_V7}$`, "u");
+const RESUME_PATH_PATTERN = new RegExp(`^/v1/resumes/${D2_UUID_V7}$`, "u");
 const CONTRIBUTION_PATH_PATTERN = new RegExp(`^/v1/jobs/contributions/${D2_UUID_V7}$`, "u");
 const CONTRIBUTION_CANCEL_PATH_PATTERN = new RegExp(
   `^/v1/jobs/contributions/${D2_UUID_V7}/cancel$`,
@@ -348,6 +349,9 @@ function allowedRoute(
     return { acceptsBody: true, protected: true };
   }
   if (method === "DELETE" && SAVED_JOB_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "DELETE" && RESUME_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
   }
   if (

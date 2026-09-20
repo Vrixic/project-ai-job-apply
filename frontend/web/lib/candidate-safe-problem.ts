@@ -42,6 +42,10 @@ const resumeCodeCopy: ReadonlyMap<string, string> = new Map([
   ],
   ["resume_document_limit", "Your plan's stored resume limit has been reached."],
   [
+    "resume_not_deletable",
+    "This resume is still being processed. You can delete it when processing finishes.",
+  ],
+  [
     "entitlement_unavailable",
     "Your plan details are temporarily unavailable. Try uploading again shortly.",
   ],

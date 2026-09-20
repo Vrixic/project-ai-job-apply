@@ -6,6 +6,7 @@ import {
   RESUME_UPLOAD_HOLD_SECONDS,
   ResumeDocumentLimitError,
   type ResumeLimits,
+  ResumeNotDeletableError,
   ResumeUploadInProgressError,
   type ResumeUploadSigner,
 } from "./index.js";
@@ -342,5 +343,90 @@ describe("PostgresDocumentStore resume slots (ADR-032)", () => {
 
   it("holds an unfinished registration for the grant lifetime plus a scan margin", () => {
     expect(RESUME_UPLOAD_HOLD_SECONDS).toBe(15 * 60);
+  });
+});
+
+describe("PostgresDocumentStore resume deletion (ADR-033)", () => {
+  const owner = "019bf123-4567-789a-8bcd-ef0123456788";
+  const documentId = "019bf123-4567-789a-8bcd-ef0123456790";
+
+  function build(row?: { status: string; deletedAt: string | null }) {
+    const statements: Array<{ sql: string; values: unknown[] }> = [];
+    const transaction = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = strings.join("?");
+      statements.push({ sql, values });
+      if (sql.includes("SELECT status, deleted_at")) return row ? [row] : [];
+      return [];
+    };
+    const client = {
+      begin: async <T>(callback: (sql: typeof transaction) => Promise<T>) => callback(transaction),
+    } as unknown as postgres.Sql;
+    const store = new PostgresDocumentStore(
+      client,
+      {
+        createGrant: async () => {
+          throw new Error("a deletion must not mint a grant");
+        },
+      },
+      oneResume,
+    );
+    const wrote = () =>
+      statements.some(
+        ({ sql }) => sql.includes("SET deleted_at") || sql.includes("INSERT INTO documents.audit"),
+      );
+    return {
+      statements,
+      wrote,
+      remove: () => store.deleteResume(owner, documentId, "synthetic-trace-0001"),
+    };
+  }
+
+  it.each(["parsed", "failed", "rejected"])(
+    "tombstones a %s resume after taking the slot lock, and records who and what in the audit log",
+    async (status) => {
+      const harness = build({ status, deletedAt: null });
+      await harness.remove();
+      const sql = harness.statements.map(({ sql: text }) => text);
+      const lock = harness.statements.findIndex(
+        ({ values }) => values[0] === `${owner}:documents.resume-slot`,
+      );
+      const update = sql.findIndex((text) => text.includes("SET deleted_at = now()"));
+      const audit = sql.findIndex((text) => text.includes("'resume.deleted'"));
+      expect(lock).toBe(0);
+      expect(sql[1]).toContain("FOR UPDATE");
+      expect(update).toBeGreaterThan(1);
+      expect(audit).toBeGreaterThan(update);
+      expect(harness.statements[update]?.values).toEqual([documentId, owner]);
+      expect(harness.statements[audit]?.values).toContain(owner);
+      expect(harness.statements[audit]?.values).toContain(documentId);
+      // No file bytes or name are copied into the audit metadata.
+      expect(JSON.stringify(harness.statements[audit]?.values)).not.toMatch(/synthetic-resume/);
+    },
+  );
+
+  it.each(["awaiting_upload", "scanning", "parsing"])(
+    "refuses to delete a resume that is still %s and changes nothing",
+    async (status) => {
+      const harness = build({ status, deletedAt: null });
+      await expect(harness.remove()).rejects.toBeInstanceOf(ResumeNotDeletableError);
+      expect(harness.wrote()).toBe(false);
+    },
+  );
+
+  it("resolves the same way for a missing, someone else's, or already deleted resume", async () => {
+    const missing = build();
+    await expect(missing.remove()).resolves.toBeUndefined();
+    expect(missing.wrote()).toBe(false);
+    const already = build({ status: "parsed", deletedAt: "2026-09-20T12:00:00.000Z" });
+    await expect(already.remove()).resolves.toBeUndefined();
+    expect(already.wrote()).toBe(false);
+  });
+
+  it("scopes the lookup to the caller so another candidate's resume is never touched", async () => {
+    const harness = build({ status: "parsed", deletedAt: null });
+    await harness.remove();
+    const lookup = harness.statements.find(({ sql }) => sql.includes("SELECT status, deleted_at"));
+    expect(lookup?.sql).toContain("user_id");
+    expect(lookup?.values).toEqual([documentId, owner]);
   });
 });

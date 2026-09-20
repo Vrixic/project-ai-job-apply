@@ -43,6 +43,14 @@ export class ResumeUploadInProgressError extends Error {
   }
 }
 
+/** The resume is still uploading, scanning, or parsing, so it cannot be deleted yet (ADR-033). */
+export class ResumeNotDeletableError extends Error {
+  constructor() {
+    super("The resume is still being processed and cannot be deleted yet");
+    this.name = "ResumeNotDeletableError";
+  }
+}
+
 /**
  * How long an unfinished registration keeps its slot: the upload grant lifetime plus a scan margin. After that the
  * registration is abandoned and the next one marks it failed, instead of the candidate waiting for the 30 minutes
@@ -94,6 +102,12 @@ export interface DocumentStore {
     idempotencyKey: string,
     traceId: string,
   ): Promise<CreateResumeUploadResponse>;
+  /**
+   * Candidate-initiated deletion (ADR-033). Idempotent and owner-scoped: a resume that is already deleted, does not
+   * exist, or belongs to someone else all resolve the same way. Rejects with {@link ResumeNotDeletableError} while the
+   * resume is still being processed.
+   */
+  deleteResume(userId: string, documentId: string, traceId: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -103,6 +117,10 @@ export class UnavailableDocumentStore implements DocumentStore {
   }
 
   async createResumeUpload(): Promise<CreateResumeUploadResponse> {
+    throw new DocumentIntakeUnavailableError();
+  }
+
+  async deleteResume(): Promise<void> {
     throw new DocumentIntakeUnavailableError();
   }
 
@@ -179,7 +197,7 @@ export class PostgresDocumentStore implements DocumentStore {
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM documents.resume_documents
-      WHERE user_id = ${userId}
+      WHERE user_id = ${userId} AND deleted_at IS NULL
       ORDER BY created_at DESC, id DESC
       LIMIT 20
     `;
@@ -254,6 +272,7 @@ export class PostgresDocumentStore implements DocumentStore {
         SELECT status, count(*)::int AS count
         FROM documents.resume_documents
         WHERE user_id = ${userId}
+          AND deleted_at IS NULL
           AND status IN ('awaiting_upload', 'scanning', 'parsing', 'parsed')
         GROUP BY status
       `;
@@ -336,6 +355,41 @@ export class PostgresDocumentStore implements DocumentStore {
       }
       throw new ResumeUploadRegistrationError(stage, error);
     }
+  }
+
+  async deleteResume(userId: string, documentId: string, traceId: string): Promise<void> {
+    await this.client.begin(async (transaction) => {
+      // Same per-candidate lock as registration, so a deletion and an upload for one candidate are ordered and the slot
+      // freed here is seen by the next registration.
+      await transaction`
+        SELECT pg_advisory_xact_lock(hashtext(${`${userId}:documents.resume-slot`}))
+      `;
+      const rows = await transaction<Array<{ status: string; deletedAt: Date | string | null }>>`
+        SELECT status, deleted_at AS "deletedAt"
+        FROM documents.resume_documents
+        WHERE id = ${documentId} AND user_id = ${userId}
+        FOR UPDATE
+      `;
+      const row = rows[0];
+      if (!row || row.deletedAt) return;
+      if (!["parsed", "rejected", "failed"].includes(row.status)) {
+        throw new ResumeNotDeletableError();
+      }
+      await transaction`
+        UPDATE documents.resume_documents
+        SET deleted_at = now(), updated_at = now()
+        WHERE id = ${documentId} AND user_id = ${userId}
+      `;
+      const metadata = JSON.stringify({ version: 1, status: row.status });
+      await transaction`
+        INSERT INTO documents.audit_events (
+          id, user_id, action, document_id, trace_id, metadata
+        ) VALUES (
+          ${uuidv7()}, ${userId}, 'resume.deleted', ${documentId}, ${traceId},
+          ${metadata}::text::jsonb
+        )
+      `;
+    });
   }
 
   async close(): Promise<void> {}
