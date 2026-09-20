@@ -1,6 +1,6 @@
 # D3-013 Provider Fixture Request (Greenhouse, Lever, Ashby application forms)
 
-- Status: Prepared for human action. Nothing here is authorized, acquired, or accepted.
+- Status: Prepared for human action. Nothing here is authorized, acquired, or accepted. On 2026-09-19 the product owner adopted the proposed variant matrix and acceptance thresholds below as written (owner statement); every human step below is still open.
 - Task: D3-013 (blocks D3-007 and the last D3 exit criterion)
 - Governing records: [ADR-021](../../adr/021-own-provider-fixtures-with-adapter-deliveries.md),
   [ATS fixture policy](ats-fixture-policy.md), fixture metadata schema
@@ -24,7 +24,7 @@ request.
 4. **Accept representativeness** in a separate QA review (not the author of the capture).
 5. **Record raw-capture destruction or compliant quarantine.**
 
-## Proposed variant matrix (per provider; to be decided)
+## Variant matrix (per provider; adopted by the owner 2026-09-19)
 
 | # | Variant | Why it matters |
 |---|---|---|
@@ -38,10 +38,9 @@ request.
 | 8 | Confirmation/success state | Confirmation evidence without storing page bodies |
 | 9 | Embedded/iframe-hosted form | Extraction boundaries |
 
-## Acceptance thresholds to agree (proposed defaults for QA and product)
+## Acceptance thresholds (adopted by the owner 2026-09-19)
 
-Exit criterion 5 requires "agreed field accuracy and confirmation thresholds". Proposed, for the
-owner to adopt or change:
+Exit criterion 5 requires "agreed field accuracy and confirmation thresholds". Adopted by the owner:
 
 - Field mapping: at least 98% of exact-match required fields planned correctly across accepted
   variants, and 0 sensitive, attestation, or signature fields ever planned as a fill.
