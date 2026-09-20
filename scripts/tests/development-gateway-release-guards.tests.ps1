@@ -933,8 +933,14 @@ function New-ParserPlan {
   $alias.address = "module.platform.aws_lambda_alias.document_parser[0]"
   $alias.change.before.function_name = "parser"; $alias.change.after.function_name = "parser"
   $refreshed.resource_changes = @($refreshed.resource_changes) + @($function, $alias)
+  # Terraform also reports the parser's recomputed latest-version ARN as a changed output.
+  $refreshed.output_changes | Add-Member NoteProperty document_parser_version_arn ([pscustomobject]@{
+      actions = @("update"); before = $parserVersionArn; after_unknown = $true
+      before_sensitive = $false; after_sensitive = $false
+    }) -Force
   return $refreshed
 }
+$parserVersionArn = "arn:aws:lambda:us-east-2:$account`:function:ai-job-apply-development-document-parser:6"
 $parserPlan = New-ParserPlan
 $parserChanges = @(Assert-ExactGatewayReleasePlan $parserPlan $artifact -ParserArtifact $parserArtifact)
 if ($parserChanges.Count -ne 4) { throw "The parser refresh plan did not return exactly four changes." }
@@ -949,6 +955,44 @@ if ($allChanges.Count -ne 8) { throw "The grant, processor, and parser plan did 
 $passed++
 
 Assert-Rejected { Assert-ExactGatewayReleasePlan $parserPlan $artifact } "A parser refresh plan was accepted without a verified parser artifact."
+# The parser's recomputed version ARN is the only output change a release may carry, and only with a parser refresh.
+$null = Assert-ExactGatewayReleasePlan $parserPlan $artifact -ExpectedAccountId $account -ParserArtifact $parserArtifact; $passed++
+$parserNoOutput = Copy-Fixture $parserPlan; $parserNoOutput.output_changes.PSObject.Properties.Remove("document_parser_version_arn")
+$null = Assert-ExactGatewayReleasePlan $parserNoOutput $artifact -ParserArtifact $parserArtifact; $passed++
+$outputWithoutRefresh = Copy-Fixture $plan
+$outputWithoutRefresh.output_changes | Add-Member NoteProperty document_parser_version_arn $parserPlan.output_changes.document_parser_version_arn
+Assert-Rejected { Assert-ExactGatewayReleasePlan $outputWithoutRefresh $artifact } "The parser version output changed without a parser refresh."
+$processorOnlyOutput = New-ProcessorPlan
+$processorOnlyOutput.output_changes | Add-Member NoteProperty document_parser_version_arn $parserPlan.output_changes.document_parser_version_arn
+Assert-Rejected { Assert-ExactGatewayReleasePlan $processorOnlyOutput $artifact -ProcessorArtifact $processorArtifact } "The parser version output changed with only a processor refresh."
+foreach ($mutation in @(
+    "create", "delete", "replace", "known value", "sensitive before", "sensitive after", "not unknown", "not an arn",
+    "other function", "other region", "other account", "version zero", "missing before", "extra output", "other output"
+  )) {
+  $badOutput = Copy-Fixture $parserPlan
+  $output = $badOutput.output_changes.document_parser_version_arn
+  switch ($mutation) {
+    "create" { $output.actions = @("create") }
+    "delete" { $output.actions = @("delete") }
+    "replace" { $output.actions = @("delete", "create") }
+    "known value" { $output | Add-Member NoteProperty after $parserVersionArn }
+    "sensitive before" { $output.before_sensitive = $true }
+    "sensitive after" { $output.after_sensitive = $true }
+    "not unknown" { $output.after_unknown = $false }
+    "not an arn" { $output.before = "not-an-arn" }
+    "other function" { $output.before = "arn:aws:lambda:us-east-2:$account`:function:ai-job-apply-development-gateway:6" }
+    "other region" { $output.before = "arn:aws:lambda:eu-west-1:$account`:function:ai-job-apply-development-document-parser:6" }
+    "other account" { $output.before = "arn:aws:lambda:us-east-2:999999999999:function:ai-job-apply-development-document-parser:6" }
+    "version zero" { $output.before = "arn:aws:lambda:us-east-2:$account`:function:ai-job-apply-development-document-parser:0" }
+    "missing before" { $output.PSObject.Properties.Remove("before") }
+    "extra output" {
+      $badOutput.output_changes | Add-Member NoteProperty document_processor_alias_arn ([pscustomobject]@{
+          actions = @("update"); before = "arn"; after_unknown = $true; before_sensitive = $false; after_sensitive = $false })
+    }
+    "other output" { $badOutput.output_changes.gateway_lambda_alias_arn.actions = @("update") }
+  }
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $badOutput $artifact -ExpectedAccountId $account -ParserArtifact $parserArtifact } "The parser version output accepted: $mutation."
+}
 Assert-Rejected { Assert-ExactGatewayReleasePlan $parserPlan $artifact -ProcessorArtifact $processorArtifact } "A parser refresh plan was accepted with only a processor artifact."
 Assert-Rejected { Assert-ExactGatewayReleasePlan $bothPlan $artifact -ParserArtifact $parserArtifact } "A processor change was accepted without its verified artifact."
 Assert-Rejected { Assert-ExactGatewayReleasePlan $parserPlan $artifact -ParserArtifact $otherArtifact } "A parser refresh accepted a different artifact than the verified one."
