@@ -1,11 +1,12 @@
 "use client";
 
 import type { Application } from "@ai-job-apply/api-contracts";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   type ApplicationsCallResult,
   applicationsCall,
   commandKey,
+  findLiveApplication,
   sha256Hex,
 } from "../lib/applications-client";
 import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
@@ -15,7 +16,8 @@ import { ResumePreviewSection } from "./resume-preview-section";
 type Entries = Readonly<Record<string, string | boolean>>;
 
 /**
- * Starts and reviews one application for a job. Submission itself is performed later from the
+ * Starts and reviews one application for a job. If the candidate already has a live application
+ * for this job it is opened instead of started again. Submission itself is performed later from the
  * browser extension; this surface only prepares, reviews, approves, reopens, cancels, and lets the
  * candidate resolve an ambiguous result. It never shows upstream text, only fixed copy.
  */
@@ -35,7 +37,21 @@ export function ApplicationsWorkspace({
   const [entries, setEntries] = useState<Entries>({});
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
   const options = fetchImplementation ? { fetch: fetchImplementation } : {};
+
+  // Open the candidate's existing live application for this job, if there is one.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once per job; `options` is derived from a stable prop.
+  useEffect(() => {
+    const controller = new AbortController();
+    setChecking(true);
+    void findLiveApplication(jobId, { ...options, signal: controller.signal }).then((found) => {
+      if (controller.signal.aborted) return;
+      if (found.ok && found.application) setApplication(found.application);
+      setChecking(false);
+    });
+    return () => controller.abort();
+  }, [jobId]);
 
   async function refresh(id: string) {
     const latest = await applicationsCall("GET", `/api/platform/applications/${id}`, options);
@@ -58,14 +74,35 @@ export function ApplicationsWorkspace({
     setBusy(true);
     setNotice(undefined);
     try {
-      const created = await settle(
-        await applicationsCall("POST", "/api/platform/applications", {
-          ...options,
-          body: { jobId },
-          idempotencyKey: createKey,
-        }),
-      );
+      const result = await applicationsCall("POST", "/api/platform/applications", {
+        ...options,
+        body: { jobId },
+        idempotencyKey: createKey,
+      });
+      if (!result.ok && result.code === "application_already_exists") {
+        // A live application appeared since this page loaded: open it instead of failing.
+        const found = await findLiveApplication(jobId, options);
+        if (found.ok && found.application) {
+          setApplication(found.application);
+          setNotice("You already have an application for this job. It is open below.");
+          return;
+        }
+      }
+      const created = await settle(result);
       await prepare(created, entries);
+    } catch {
+      // The notice already carries the fixed copy for this failure.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** An application that exists but never got a packet (for example after a failed prepare). */
+  async function continuePreparing(current: Application) {
+    setBusy(true);
+    setNotice(undefined);
+    try {
+      await prepare(current, entries);
     } catch {
       // The notice already carries the fixed copy for this failure.
     } finally {
@@ -177,6 +214,15 @@ export function ApplicationsWorkspace({
               }}
             />
           ) : null}
+          {application.status === "preparing" && !application.currentPacket ? (
+            <button
+              type="button"
+              onClick={() => void continuePreparing(application)}
+              disabled={busy}
+            >
+              {busy ? "Preparing..." : "Prepare application"}
+            </button>
+          ) : null}
           <ApplicationReviewPanel application={application} actions={actions} />
           {application.currentAction === "ready_to_submit" ? (
             <ApplyPanel
@@ -186,6 +232,8 @@ export function ApplicationsWorkspace({
             />
           ) : null}
         </>
+      ) : checking ? (
+        <p role="status">Checking for an existing application...</p>
       ) : (
         <>
           <p>

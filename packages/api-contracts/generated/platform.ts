@@ -2157,6 +2157,11 @@ export interface components {
         ApplicationSearchRequest: {
             limit?: number;
             cursor?: string;
+            /**
+             * Format: uuid
+             * @description Only this candidate's applications for this job, newest first.
+             */
+            jobId?: string;
         };
         PrepareApplicationPacketRequest: {
             expectedRevision: number;

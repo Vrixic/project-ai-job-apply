@@ -90,6 +90,47 @@ export async function sha256Hex(text: string): Promise<string> {
 }
 
 /**
+ * The candidate's live application for a job: the newest one for that job, unless it was
+ * cancelled (a cancelled application may be restarted, so it is not "live"). `ok: false` means the
+ * lookup itself failed and the caller must not assume there is none.
+ */
+export async function findLiveApplication(
+  jobId: string,
+  options: ApplicationsCallOptions = {},
+): Promise<{ ok: true; application: Application | undefined } | { ok: false }> {
+  const send = options.fetch ?? fetch;
+  try {
+    const response = await send("/api/platform/applications/search", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      ...(options.signal ? { signal: options.signal } : {}),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jobId, limit: 1 }),
+    });
+    if (!response.ok) return { ok: false };
+    const value: unknown = await response.json().catch(() => undefined);
+    const items = (value as { items?: unknown } | undefined)?.items;
+    if (!Array.isArray(items)) return { ok: false };
+    const newest: unknown = items[0];
+    if (newest === undefined) return { ok: true, application: undefined };
+    if (
+      !newest ||
+      typeof newest !== "object" ||
+      typeof (newest as { id?: unknown }).id !== "string" ||
+      typeof (newest as { status?: unknown }).status !== "string" ||
+      (newest as { canonicalJobId?: unknown }).canonicalJobId !== jobId
+    ) {
+      return { ok: false };
+    }
+    const application = newest as Application;
+    return { ok: true, application: application.status === "cancelled" ? undefined : application };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
  * Reads the tailored-resume preview for one application. Returns nothing on any failure so the
  * caller shows fixed copy; the preview is display-only and never feeds a command.
  */

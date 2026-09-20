@@ -120,7 +120,7 @@ export interface ApplicationsApi {
   create(ownerUserId: string, jobId: string, idempotencyKey: string): Promise<Application>;
   search(
     ownerUserId: string,
-    request: { limit?: number; cursor?: string },
+    request: { limit?: number; cursor?: string; jobId?: string },
   ): Promise<ApplicationPage>;
   get(ownerUserId: string, applicationId: string): Promise<Application>;
   /** The resume tailored for this application's job and whether the packet already carries it. */
@@ -230,12 +230,13 @@ export class ApplicationsService implements ApplicationsApi {
 
   async search(
     ownerUserId: string,
-    request: { limit?: number; cursor?: string },
+    request: { limit?: number; cursor?: string; jobId?: string },
   ): Promise<ApplicationPage> {
     const limit = request.limit ?? 25;
     const page = await this.dependencies.store.listApplications(ownerUserId, {
       limit,
       ...(request.cursor ? { after: decodeCursor(request.cursor) } : {}),
+      ...(request.jobId ? { canonicalJobId: request.jobId } : {}),
     });
     const last = page.items.at(-1)?.application;
     return {

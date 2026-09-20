@@ -83,3 +83,9 @@ stay disabled until D3-012 approval; see the
 is filled only from exactly one confirmed, currently usable fact whose value fits the field's type; competing
 facts choose none, and the candidate's own entry wins. Restricted answers, narrative questions, and documents are
 never mapped. Add a row only after the owner approves it and a test pins it.
+
+## Finding a job's application
+
+`search` takes an optional `jobId`. The result is this candidate's applications for that job, newest first. The web
+workspace uses `limit: 1` to reopen the live application, treating a cancelled newest one as "none" because a
+cancelled application may be restarted.
