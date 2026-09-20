@@ -1,0 +1,51 @@
+# D3-012 Accountable Disposition (development scope)
+
+- Status: **Draft for the accountable individual's confirmation. Not effective until the fields marked
+  `[to confirm]` are completed and this file is merged.** Prepared 2026-09-19 from the product owner's
+  chat positions recorded in the [approval packet](d3-application-approval-packet.md).
+- Task: D3-012. Release gates: LR-D3-01 (application preparation) and LR-D3-02 (application submission)
+  in the [legal review register](../product/foundation/legal-review-register.md).
+- Basis: the [approval plan](security-privacy-approval-plan.md) allows one person to hold several roles in
+  early development but requires the actual accountable individual to be named; legal review is deferred to
+  D6-016 ([ADR-019](../adr/019-defer-foundational-counsel-review-to-public-launch.md)) and independent
+  security review to D6-015 ([ADR-020](../adr/020-defer-accountable-foundation-security-review-to-launch.md)).
+  This record is a development-scope disposition by the product owner. It is not legal advice, not an
+  independent security or privacy review, and not counsel's conclusion.
+
+## Accountable individual
+
+| Field | Value |
+|---|---|
+| Name | `[to confirm: full legal name]` |
+| Roles held | Product owner and accountable reviewer for development scope (owner statement, 2026-09-19) |
+| Independence and conflicts | None claimed: the reviewer is also the repository owner, so this is not an independent review |
+| Scope reviewed | Repository at `main` commit `[to confirm: the commit this record merges on]` and the deployed development environment |
+| Jurisdiction and source-policy versions | `[to confirm: the jurisdiction the reviewer is applying and any ATS source terms considered; none have been reviewed by counsel]` |
+
+## Scope of this disposition
+
+Applies **only** to the development environment and to candidates the accountable individual controls (the
+reviewer's own account and generated-synthetic candidates). It does **not** authorize any other real
+candidate, staging or production use, public launch, or any provider whose terms have not been reviewed.
+Real-candidate use, public policy, and counsel's conclusions remain gated by D6-015 and D6-016.
+
+## Dispositions
+
+| # | Decision | Disposition | Permitted | Prohibited | Conditions (owner, closure evidence) |
+|---|---|---|---|---|---|
+| 1 | AI processing | Accepted in principle, provider not chosen | Sending confirmed, non-restricted facts and job text to a model provider after the user is told, once a provider, model, and terms are chosen and this record is updated | Any real model call before that update; restricted, never-infer, attestation, signature, and challenge fields in a prompt; unreviewed generated text reaching an employer | Reviewer chooses provider, model, terms, and disclosure text and records them here (reviewer; this file updated) |
+| 2 | Form actions | Accepted | The extension filling fields on Greenhouse, Lever, and Ashby pages for the reviewer's own account, per exact variant that has accepted provider-derived fixtures, with the adapter kill switch on and the candidate's approval bound to the packet hash | Any variant without accepted fixtures; any page action on an unsupported form; bypassing a challenge | Fixtures accepted (D3-013); live effects flag set only by a merged change citing this record |
+| 3 | Sensitive fields | Accepted: answers are kept | Storing the candidate's own answers, always shown for review and never inferred | Reuse across contexts the candidate did not confirm; automatic filling of restricted answers | The accepted ADR-010 separate-key and least-privilege requirement is **not** amended by this record; the reviewer decides before any real-candidate use whether to keep it (reviewer; ADR-010 updated or the vault built) |
+| 4 | Signatures, attestations, CAPTCHA, MFA | Always manual | The candidate completing them by hand | Any automation of them | None |
+| 5 | Submission | Accepted with attribution | A candidate-approved, hash-bound packet submitted through an accepted adapter; every result recorded with who submitted (platform adapter, or the candidate through takeover or attestation); an ambiguous result blocks a second submission until reconciled | Blind retry after an ambiguous result; recording a candidate submission as a platform one | Confirm the history fields suffice or add an explicit submitter field before the extension executor ships (engineering; D3-008 closure) |
+| 6 | Engineering defaults | Accepted as listed in the approval packet | 24-hour approval; 0.90 auto-review threshold; one live application per job; duplicate-risk acknowledgement for "not submitted"; 15-minute AI disclosure approval | Changing them without updating this record | None |
+
+## Revalidation triggers
+
+Revisit this record when any of these change: an AI provider or model is chosen or replaced; a new ATS adapter
+or variant is added; a source's terms change; a second real candidate or any staging or production use is
+proposed; the answer vault stores real data; or a security incident involves application data.
+
+## Acknowledgement
+
+Product owner acknowledgement of the conditions above: `[to confirm: name and date]`
