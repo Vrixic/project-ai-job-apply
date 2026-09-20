@@ -1,6 +1,6 @@
 # D3-023: Document processing activation (design for the owner to review)
 
-- Status: **Proposed. Nothing has been changed or enabled.** Prepared 2026-09-20 at the owner's request.
+- Status: **Approved by the owner 2026-09-20; the activation tool is built and tested; nothing has been enabled yet.** Prepared 2026-09-20 at the owner's request.
 - Task: D3-023 in the [Phase 3 record](../product/delivery/phase-3-application-preparation.md). Depends on D3-016 and D3-020, both deployed.
 - Goal: a candidate uploads a resume, it is malware-scanned and parsed into proposed facts, and the "Your resume for this job"
   section can then show a tailored resume. Today it can only say there is no resume.
@@ -58,7 +58,22 @@ generated data during it.
 The D3-012 disposition ([record](d3-012-accountable-disposition.md)) covers the owner's own account for development but does not amend
 ADR-023, so it does not lift this gate by itself.
 
-## Decisions requested
+## Decisions (2026-09-20, owner statements)
+
+1. **Stage 1 scope: approved.**
+2. **Build the activation tool and its guard: approved.** Built as a separate `-DocumentScanActivation` mode of the Gateway operator
+   ([guards](../../../scripts/lib/development-document-scan-activation-guards.ps1), [operator](../../../scripts/operate-development-gateway-release.ps1), [runbook](../../../infrastructure/runbooks/deployments/development-gateway-release.md#activating-the-document-scan-triggers-d3-023)).
+3. **Stage 2 direction: real resumes stay blocked by ADR-023, and processing stays on.** The owner chose to keep the triggers on after the
+   synthetic run instead of switching them back off, and committed to uploading only generated-synthetic resumes until the ADR-023 gates
+   are met. ADR-023 is unchanged. Nothing technical stops a real upload while a trigger is on, so this is an operating commitment, not a
+   control. To keep the on state, a later Gateway release now carries the trigger flags forward unchanged
+   ([release guard](../../../scripts/lib/development-gateway-release-guards.ps1)), a second guard change presented to the owner with this work.
+
+Adjustment to stage 1 step 2: the tool proves the mapping step by live readback (mapping enabled with batch size 1 and concurrency 2,
+reconciler enabled, zero drift) rather than by a hand-built direct queue message, which would need a crafted scan-result record for an
+existing object. The end-to-end proof is the synthetic upload after the rule step, watched through the dead-letter queues and alarms.
+
+## Decisions requested (original)
 
 1. **Stage 1 scope:** approve the bounded generated-synthetic window described above.
 2. **Approve building the activation tool and its guard** (explicit approval is required for each guard change).
