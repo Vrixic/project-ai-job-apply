@@ -653,7 +653,6 @@ function Assert-ExactGatewayReleasePlan {
       }
     }
   )
-  if ($meaningfulOutputs.Count -ne 0) { throw "The gateway release contains a meaningful output change." }
   $changes = @($Plan.resource_changes | Where-Object { (@($_.change.actions) -join ",") -cne "no-op" })
   $expected = @(
     "module.platform.aws_lambda_alias.gateway[0]",
@@ -678,6 +677,28 @@ function Assert-ExactGatewayReleasePlan {
   $grantRelease = $grantCount -eq 2
   $processorRelease = $processorCount -eq 2
   $parserRelease = $parserCount -eq 2
+  # No output may change, with one exception. Updating the parser function publishes a new function version,
+  # so `document_parser_version_arn` (the parser's latest published version) is recomputed by Terraform and
+  # is unknown until apply. It is accepted only as that computed update, only for the parser's own version
+  # ARN, and only when this release refreshes the parser. The processor's numeric parser pin is a variable and
+  # is guarded separately, so it does not move with this output.
+  foreach ($output in $meaningfulOutputs) {
+    $value = $output.Value
+    $before = Get-GatewayOptionalProperty $value "before"
+    $afterUnknown = Get-GatewayOptionalProperty $value "after_unknown"
+    $beforeSensitive = Get-GatewayOptionalProperty $value "before_sensitive"
+    $afterSensitive = Get-GatewayOptionalProperty $value "after_sensitive"
+    $parserVersionOutput = $parserRelease -and [string]$output.Name -ceq "document_parser_version_arn" -and
+      (@($value.actions) -join ",") -ceq "update" -and
+      $before -is [string] -and
+      $before -cmatch '^arn:aws:lambda:us-east-2:[0-9]{12}:function:ai-job-apply-development-document-parser:[1-9][0-9]*$' -and
+      ($ExpectedAccountId -cnotmatch '^[0-9]{12}$' -or $before.Split(":")[4] -ceq $ExpectedAccountId) -and
+      $afterUnknown -is [bool] -and $afterUnknown -and
+      $null -eq (Get-GatewayOptionalProperty $value "after") -and
+      $beforeSensitive -is [bool] -and -not $beforeSensitive -and
+      $afterSensitive -is [bool] -and -not $afterSensitive
+    if (-not $parserVersionOutput) { throw "The gateway release contains a meaningful output change." }
+  }
   $expectedAddresses = @(
     $expected
     if ($grantRelease) { $grantAddresses }

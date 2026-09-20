@@ -1697,6 +1697,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-20 | D3 | D3-020 convergence reached the release plan, which the parser-refresh guard refused for one expected output change; the owner approved a narrow guard fix. Nothing applied yet; publications, baseline, and plan are redone after the fix merges. | [Phase 3 tasks](phase-3-application-preparation.md) |
 | 2026-09-19 | D3 | Owner approved the D3-020 convergence design; the schema-8 two-receipt baseline and convergence-only rule are implemented and tested. The mixed document release is not converged until the release runs. | [Phase 3 tasks](phase-3-application-preparation.md), [Runbook](../../../infrastructure/runbooks/deployments/development-gateway-release.md#converging-a-mixed-document-release-schema-8-baseline) |
 | 2026-09-19 | D3 | Implemented D3-021 (a candidate can reopen an existing live application from its job instead of hitting "already exists"). Locally verified including a real-browser run; not deployed, it needs the next Gateway release (D3-020). | [Phase 3 tasks](phase-3-application-preparation.md) |
 | 2026-09-19 | D3 | Found and fixed in code a miss in the resume slice: the Gateway's Lambda boundary did not route the tailored-resume operations, so the hosted app got a 404 (D3-022). Deploying the fix needs a Gateway release, blocked by the mixed document release (D3-020). | [Phase 3 tasks](phase-3-application-preparation.md) |

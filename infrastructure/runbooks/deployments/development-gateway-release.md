@@ -221,6 +221,12 @@ policies, environment (including `DOCUMENT_PARSER_VERSION`), network, and trigge
 processor and parser refreshes are independent and may be combined with each other and with the invoke grant
 (up to eight updates). Refresh both from one receipt so a retained baseline, which requires one publication
 receipt to describe both deployed archives, stays valid; a mixed release is refused at baseline capture.
+Updating the parser function publishes a new version, so Terraform also reports the output
+`document_parser_version_arn` as changed (its new value is known only after apply). That single computed update
+is accepted, but only for that output, only with `-RefreshDocumentParser`, only for the parser's own
+`ai-job-apply-development-document-parser` version ARN in the reviewed account and region, and only as a
+non-sensitive update to an unknown value; every other output change is still refused. The processor's numeric
+parser pin is a variable and does not move with it.
 ## Converging a mixed document release (schema-8 baseline)
 
 Status as of 2026-09-19 (tracked as D3-020 and D3-R7 in the Phase 3 record). The ADR-031 release refreshed only
