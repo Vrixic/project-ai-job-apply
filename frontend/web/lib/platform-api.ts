@@ -70,6 +70,10 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
     { code: "resume_upload_in_progress", title: "A resume is still being processed" },
   ],
   [
+    "409:resume_not_deletable",
+    { code: "resume_not_deletable", title: "A resume is still being processed" },
+  ],
+  [
     "409:job_search_catalog_changed",
     { code: "job_search_catalog_changed", title: "Job catalog changed" },
   ],

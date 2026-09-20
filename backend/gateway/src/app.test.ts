@@ -53,6 +53,7 @@ import {
 import {
   type DocumentStore,
   ResumeDocumentLimitError,
+  ResumeNotDeletableError,
   ResumeUploadInProgressError,
   ResumeUploadRegistrationError,
 } from "@ai-job-apply/documents-service";
@@ -913,6 +914,11 @@ class MemoryDocumentStore implements DocumentStore {
     this.documents.unshift(document);
     this.responses.set(idempotencyKey, response);
     return response;
+  }
+
+  async deleteResume(_userId: string, documentId: string): Promise<void> {
+    const index = this.documents.findIndex((document) => document.id === documentId);
+    if (index >= 0) this.documents.splice(index, 1);
   }
 
   async close(): Promise<void> {}
@@ -4668,6 +4674,9 @@ describe("resume upload refusals (ADR-032)", () => {
     async createResumeUpload() {
       throw error;
     },
+    async deleteResume() {
+      throw error;
+    },
     async close() {},
   });
 
@@ -4691,6 +4700,155 @@ describe("resume upload refusals (ADR-032)", () => {
       expect(response.json()).toMatchObject({ code, status });
       expect(response.headers["content-type"]).toMatch(/problem\+json/);
       expect(response.body).not.toMatch(/synthetic-resume|aaaaaaaa/);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("resume deletion (ADR-033)", () => {
+  const documentId = "018f92b0-4ad7-7b1d-8f44-b7ae694c85c1";
+  const payload: CreateResumeUploadRequest = {
+    fileName: "synthetic-resume.pdf",
+    mediaType: "application/pdf",
+    sizeBytes: 1024,
+    sha256: "a".repeat(64),
+  };
+
+  it("deletes the caller's resume with no body and no caching, and it leaves the list", async () => {
+    const { app, issuer } = await createApp();
+    try {
+      const token = await issuer.issue("candidate-resume", {
+        scope: "documents:read documents:write",
+      });
+      const headers = { authorization: `Bearer ${token}` };
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/resumes/uploads",
+        headers: { ...headers, "idempotency-key": "resume-delete-test-0001" },
+        payload,
+      });
+      const id = created.json().document.id as string;
+      const removed = await app.inject({ method: "DELETE", url: `/v1/resumes/${id}`, headers });
+      expect(removed.statusCode).toBe(204);
+      expect(removed.headers["cache-control"]).toBe("no-store");
+      expect(removed.body).toBe("");
+      const listed = await app.inject({ method: "GET", url: "/v1/resumes", headers });
+      expect(listed.json()).toEqual({ documents: [] });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("requires the documents:write scope and a bearer token", async () => {
+    const { app, issuer } = await createApp();
+    try {
+      const readOnly = await issuer.issue("candidate-resume", { scope: "documents:read" });
+      const forbidden = await app.inject({
+        method: "DELETE",
+        url: `/v1/resumes/${documentId}`,
+        headers: { authorization: `Bearer ${readOnly}` },
+      });
+      expect(forbidden.statusCode).toBe(403);
+      const anonymous = await app.inject({ method: "DELETE", url: `/v1/resumes/${documentId}` });
+      expect(anonymous.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    ["a malformed identifier", "/v1/resumes/not-a-uuid"],
+    ["a version 4 identifier", "/v1/resumes/6f9619ff-8b86-4011-b42d-00c04fc964ff"],
+    ["a query string", `/v1/resumes/${documentId}?force=true`],
+  ])("rejects %s before touching the store", async (_name, url) => {
+    let touched = false;
+    const documents: DocumentStore = {
+      async listResumeDocuments() {
+        return { documents: [] };
+      },
+      async createResumeUpload() {
+        throw new Error("unexpected");
+      },
+      async deleteResume() {
+        touched = true;
+      },
+      async close() {},
+    };
+    const { app, issuer } = await createApp({ documents });
+    try {
+      const token = await issuer.issue("candidate-resume", {
+        scope: "documents:read documents:write",
+      });
+      const response = await app.inject({
+        method: "DELETE",
+        url,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(touched).toBe(false);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("passes only the authenticated owner to the store, never an identifier from the caller", async () => {
+    const calls: unknown[][] = [];
+    const documents: DocumentStore = {
+      async listResumeDocuments() {
+        return { documents: [] };
+      },
+      async createResumeUpload() {
+        throw new Error("unexpected");
+      },
+      async deleteResume(...args: unknown[]) {
+        calls.push(args);
+      },
+      async close() {},
+    };
+    const { app, issuer } = await createApp({ documents });
+    try {
+      const first = await issuer.issue("candidate-one", { scope: "documents:write" });
+      const second = await issuer.issue("candidate-two", { scope: "documents:write" });
+      for (const token of [first, second]) {
+        await app.inject({
+          method: "DELETE",
+          url: `/v1/resumes/${documentId}`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+      }
+      expect(calls).toHaveLength(2);
+      expect(calls[0]?.[0]).not.toBe(calls[1]?.[0]);
+      expect(calls.map((call) => call[1])).toEqual([documentId, documentId]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("maps a resume that is still processing to a stable 409 without detail", async () => {
+    const documents: DocumentStore = {
+      async listResumeDocuments() {
+        return { documents: [] };
+      },
+      async createResumeUpload() {
+        throw new Error("unexpected");
+      },
+      async deleteResume() {
+        throw new ResumeNotDeletableError();
+      },
+      async close() {},
+    };
+    const { app, issuer } = await createApp({ documents });
+    try {
+      const token = await issuer.issue("candidate-resume", { scope: "documents:write" });
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/v1/resumes/${documentId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ code: "resume_not_deletable", status: 409 });
+      expect(response.headers["content-type"]).toMatch(/problem\+json/);
     } finally {
       await app.close();
     }

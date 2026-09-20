@@ -100,7 +100,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(48);
+    ).toBe(49);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact six-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -253,7 +253,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 7,
       relationCount: 76,
-      migrationCount: 48,
+      migrationCount: 49,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -392,6 +392,7 @@ describe("read-only aggregate restore verification", () => {
         "0005_development_test_removal",
         "0023_contribution_verification_refresh",
         "0004_accepted_independent_evidence",
+        "0004_resume_deletion",
       ],
     },
     {
@@ -401,6 +402,7 @@ describe("read-only aggregate restore verification", () => {
         "0023_contribution_verification_refresh",
         "0005_development_test_removal",
         "0004_accepted_independent_evidence",
+        "0004_resume_deletion",
       ],
     },
   ])(
@@ -432,11 +434,12 @@ describe("read-only aggregate restore verification", () => {
         manifestSha256: historical.sha256,
         ownerCount: 7,
         relationCount: 76,
-        // The two Applications migrations are part of both boundaries; only Jobs and Trust differ.
+        // The two Applications migrations are part of both boundaries; Jobs, Documents 0004, and Trust differ.
         migrationCount: migrationCount + 2,
       });
+      // Documents (0004), Jobs, and Trust all differ; the first owner checked is the one reported.
       await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
-        "migration boundary mismatch for jobs",
+        /migration boundary mismatch for (documents|jobs)/,
       );
     },
   );

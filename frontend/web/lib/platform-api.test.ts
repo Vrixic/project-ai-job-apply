@@ -312,6 +312,7 @@ describe("platform BFF", () => {
   it.each([
     [409, "resume_upload_in_progress", "A resume is still being processed"],
     [409, "resume_document_limit", "Resume limit reached"],
+    [409, "resume_not_deletable", "A resume is still being processed"],
     [503, "entitlement_unavailable", "Entitlement status unavailable"],
   ])(
     "preserves the declared resume upload refusal without upstream values: %s %s (ADR-032)",

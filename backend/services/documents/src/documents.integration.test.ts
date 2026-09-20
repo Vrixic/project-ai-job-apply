@@ -8,9 +8,11 @@ import {
   PostgresDocumentStore,
   ResumeDocumentLimitError,
   type ResumeLimits,
+  ResumeNotDeletableError,
   ResumeUploadInProgressError,
   type ResumeUploadSigner,
 } from "./index.js";
+import { PostgresParsedResumeSource } from "./resume-tailoring.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -48,7 +50,7 @@ describeWithDatabase("PostgresDocumentStore", () => {
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Documents migrations through 0003_candidate_rights applied and verified.",
+      "Documents migrations through 0004_resume_deletion applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });
@@ -319,5 +321,146 @@ describeWithDatabase("PostgresDocumentStore", () => {
     } finally {
       await client`DELETE FROM identity.users WHERE id IN (${owner}, ${other})`;
     }
+  });
+  // ---- resume deletion (ADR-033): a tombstone that frees the slot and keeps the object inventory exact
+  it("deletes a parsed resume so the candidate can upload a new one, keeping an exact object inventory", async () => {
+    await withUsers(2, async ([owner, other]) => {
+      const first = await store.createResumeUpload(
+        owner as string,
+        slotInput("a.pdf"),
+        newKey(),
+        "t1",
+      );
+      await advance(first.document.id, "scanning");
+      await advance(first.document.id, "parsing");
+      await advance(first.document.id, "parsed");
+      await client`
+        UPDATE documents.resume_documents
+        SET parser_version = 'parser-test', normalized_sha256 = ${"d".repeat(64)}
+        WHERE id = ${first.document.id}`;
+      const parsedSource = new PostgresParsedResumeSource(client);
+      expect(await parsedSource.findParsedResume(owner as string)).toMatchObject({
+        id: first.document.id,
+      });
+      await expect(
+        store.createResumeUpload(owner as string, slotInput("b.pdf"), newKey(), "t2"),
+      ).rejects.toBeInstanceOf(ResumeDocumentLimitError);
+
+      // another candidate cannot delete it, and learns nothing from trying
+      await expect(
+        store.deleteResume(other as string, first.document.id, "t-other"),
+      ).resolves.toBeUndefined();
+      expect((await store.listResumeDocuments(owner as string)).documents).toHaveLength(1);
+
+      await store.deleteResume(owner as string, first.document.id, "t3");
+      expect(await store.listResumeDocuments(owner as string)).toEqual({ documents: [] });
+      // it can no longer be used to tailor an application
+      expect(await parsedSource.findParsedResume(owner as string)).toBeNull();
+      expect(await parsedSource.findParsedResume(owner as string, first.document.id)).toBeNull();
+      // the slot is free at once, so a new upload is accepted
+      await expect(
+        store.createResumeUpload(owner as string, slotInput("b.pdf"), newKey(), "t4"),
+      ).resolves.toMatchObject({ document: { status: "awaiting_upload" } });
+
+      // the tombstone keeps its row and object keys, so candidate data deletion still names every object
+      const [inventory] = await client<Array<{ inventory: Array<{ documentId: string }> }>>`
+        SELECT documents.candidate_object_inventory(${owner as string}::uuid) AS inventory`;
+      expect(inventory?.inventory.map((entry) => entry.documentId)).toContain(first.document.id);
+
+      // repeating the deletion is a no-op: one audit event, timestamp unchanged
+      const before = await client<Array<{ deletedAt: Date }>>`
+        SELECT deleted_at AS "deletedAt" FROM documents.resume_documents WHERE id = ${first.document.id}`;
+      await store.deleteResume(owner as string, first.document.id, "t5");
+      const after = await client<Array<{ deletedAt: Date }>>`
+        SELECT deleted_at AS "deletedAt" FROM documents.resume_documents WHERE id = ${first.document.id}`;
+      expect(after[0]?.deletedAt).toEqual(before[0]?.deletedAt);
+      const audits = await client<Array<{ metadata: Record<string, unknown>; userId: string }>>`
+        SELECT metadata, user_id AS "userId" FROM documents.audit_events
+        WHERE document_id = ${first.document.id} AND action = 'resume.deleted'`;
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toEqual({ metadata: { version: 1, status: "parsed" }, userId: owner });
+    });
+  });
+
+  it("deletes a failed resume, and refuses while one is still being processed", async () => {
+    await withUsers(1, async ([owner]) => {
+      const first = await store.createResumeUpload(
+        owner as string,
+        slotInput("a.pdf"),
+        newKey(),
+        "t1",
+      );
+      for (const stage of [undefined, "scanning", "parsing"] as const) {
+        if (stage) await advance(first.document.id, stage);
+        await expect(
+          store.deleteResume(owner as string, first.document.id, "t2"),
+          String(stage),
+        ).rejects.toBeInstanceOf(ResumeNotDeletableError);
+      }
+      await advance(first.document.id, "failed");
+      await store.deleteResume(owner as string, first.document.id, "t3");
+      expect(await store.listResumeDocuments(owner as string)).toEqual({ documents: [] });
+    });
+  });
+
+  it("lets the database itself refuse to un-delete a resume or delete one that is still processing", async () => {
+    await withUsers(1, async ([owner]) => {
+      const first = await store.createResumeUpload(
+        owner as string,
+        slotInput("a.pdf"),
+        newKey(),
+        "t1",
+      );
+      const code = async (run: () => Promise<unknown>) => {
+        try {
+          await run();
+        } catch (error) {
+          return (error as { code?: string }).code;
+        }
+        return undefined;
+      };
+      expect(
+        await code(
+          () =>
+            client`UPDATE documents.resume_documents SET deleted_at = now() WHERE id = ${first.document.id}`,
+        ),
+      ).toBe("23514");
+      await advance(first.document.id, "scanning");
+      await advance(first.document.id, "failed");
+      await store.deleteResume(owner as string, first.document.id, "t2");
+      expect(
+        await code(
+          () =>
+            client`UPDATE documents.resume_documents SET deleted_at = NULL WHERE id = ${first.document.id}`,
+        ),
+      ).toBe("55000");
+    });
+  });
+
+  it("orders a deletion and an upload for the same candidate, so exactly one new resume is accepted", async () => {
+    await withUsers(4, async (users) => {
+      const outcomes = await Promise.all(
+        users.map(async (user) => {
+          const first = await store.createResumeUpload(user, slotInput("a.pdf"), newKey(), "t1");
+          await advance(first.document.id, "scanning");
+          await advance(first.document.id, "parsing");
+          await advance(first.document.id, "parsed");
+          const results = await Promise.allSettled([
+            store.deleteResume(user, first.document.id, "t2"),
+            store.createResumeUpload(user, slotInput("b.pdf"), newKey(), "t3"),
+            store.createResumeUpload(user, slotInput("c.pdf"), newKey(), "t4"),
+          ]);
+          const stored = (await store.listResumeDocuments(user)).documents;
+          return { results, stored };
+        }),
+      );
+      for (const { results, stored } of outcomes) {
+        expect(results[0]?.status).toBe("fulfilled");
+        const accepted = results.slice(1).filter((result) => result.status === "fulfilled");
+        // the deletion may land before or after a registration; the limit of 1 holds either way
+        expect(accepted.length).toBeLessThanOrEqual(1);
+        expect(stored.length).toBeLessThanOrEqual(1);
+      }
+    });
   });
 });

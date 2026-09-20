@@ -65,6 +65,10 @@
         {
           "version": "0003_candidate_rights",
           "checksum": "4d40f6cb198849cecc086e85b5cc5136779adddb5ecb39d784a956c00fc8e9b4"
+        },
+        {
+          "version": "0004_resume_deletion",
+          "checksum": "028d1e483c363de849f45463a865f71b7247007b1b7dea910997e2f2e173e41f"
         }
       ],
       "relations": [

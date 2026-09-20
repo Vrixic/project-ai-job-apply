@@ -1019,3 +1019,158 @@ describe("ResumeUploadForm upload gate", () => {
     }
   });
 });
+
+describe("ResumeUploadForm delete (ADR-033)", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  const parsed = resumeDocument({ id: "00000000-0000-7000-8000-000000000011", status: "parsed" });
+
+  beforeEach(() => {
+    vi.stubGlobal("React", React);
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  async function mount(
+    documents: ResumeDocument[],
+    onDelete: (url: string, init?: RequestInit) => Promise<Response>,
+    maxStoredResumes = 1,
+  ) {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+        if (init?.method === "DELETE") return onDelete(String(input), init);
+        return jsonResponse({ documents });
+      }),
+    );
+    await act(async () =>
+      root.render(<ResumeUploadForm authenticated maxStoredResumes={maxStoredResumes} />),
+    );
+    await flushAsyncWork();
+    return calls;
+  }
+  const button = (name: string) =>
+    Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent) === name,
+    );
+  const click = async (target: HTMLButtonElement | undefined) => {
+    if (!target) throw new Error("expected control is not rendered");
+    await act(async () => target.click());
+    await flushAsyncWork();
+  };
+
+  it("offers deletion only for a resume whose processing has ended", async () => {
+    const recent = new Date(Date.now() - 60_000).toISOString();
+    for (const status of ["awaiting_upload", "scanning", "parsing"] as const) {
+      await mount(
+        [resumeDocument({ id: "00000000-0000-7000-8000-000000000012", status, createdAt: recent })],
+        async () => new Response(null, { status: 204 }),
+      );
+      expect(button("Delete synthetic-resume.pdf"), status).toBeUndefined();
+      await act(async () => root.render(<div />));
+    }
+    for (const status of ["parsed", "failed", "rejected"] as const) {
+      await mount(
+        [
+          resumeDocument({
+            id: "00000000-0000-7000-8000-000000000013",
+            status,
+            ...(status === "parsed" ? {} : { failureCode: "scan_failed" as const }),
+          }),
+        ],
+        async () => new Response(null, { status: 204 }),
+      );
+      expect(button("Delete synthetic-resume.pdf"), status).toBeDefined();
+      await act(async () => root.render(<div />));
+    }
+  });
+
+  it("asks for confirmation first, and cancelling deletes nothing and returns focus to Delete", async () => {
+    const calls = await mount([parsed], async () => new Response(null, { status: 204 }));
+    await click(button("Delete synthetic-resume.pdf"));
+    expect(container.textContent).toContain(
+      "Delete synthetic-resume.pdf? Facts already extracted from it stay in your profile.",
+    );
+    expect(window.document.activeElement?.textContent).toBe("Cancel");
+    await click(button("Cancel"));
+    expect(calls.some((call) => call.startsWith("DELETE"))).toBe(false);
+    expect(container.textContent).not.toContain("Confirm delete");
+    expect(window.document.activeElement).toBe(button("Delete synthetic-resume.pdf"));
+  });
+
+  it("deletes after confirmation, frees the upload, announces it, and moves focus to the picker", async () => {
+    const calls = await mount([parsed], async () => new Response(null, { status: 204 }));
+    expect(container.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(true);
+    await click(button("Delete synthetic-resume.pdf"));
+    await click(button("Confirm delete"));
+    expect(calls.filter((call) => call.startsWith("DELETE"))).toEqual([
+      `DELETE /api/platform/resumes/${parsed.id}`,
+    ]);
+    expect(container.textContent).toContain("No resumes uploaded yet.");
+    expect(container.querySelector("output")?.textContent).toBe(
+      "Resume deleted. You can upload a new one.",
+    );
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input?.disabled).toBe(false);
+    expect(window.document.activeElement).toBe(input);
+    expect(container.textContent).not.toContain("Your plan includes");
+  });
+
+  it("shows fixed copy, keeps the resume listed, and never echoes upstream text when the server refuses", async () => {
+    const refusals: Array<[number, string, string]> = [
+      [
+        409,
+        "resume_not_deletable",
+        "This resume is still being processed. You can delete it when processing finishes.",
+      ],
+      [503, "platform_unavailable", "Resume processing is temporarily unavailable."],
+    ];
+    for (const [status, code, copy] of refusals) {
+      await mount([parsed], async () =>
+        Response.json({ code, title: "upstream text never shown", detail: "secret" }, { status }),
+      );
+      await click(button("Delete synthetic-resume.pdf"));
+      await click(button("Confirm delete"));
+      expect(container.textContent, code).toContain(copy);
+      expect(container.textContent, code).not.toMatch(/secret|upstream text/);
+      expect(container.textContent, code).toContain("synthetic-resume.pdf");
+      expect(button("Delete synthetic-resume.pdf"), code).toBeDefined();
+      await act(async () => root.render(<div />));
+    }
+  });
+
+  it("gives up on a stalled delete at 20 seconds with fixed copy and lets the candidate retry", async () => {
+    vi.useFakeTimers();
+    await mount(
+      [parsed],
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    );
+    await click(button("Delete synthetic-resume.pdf"));
+    await click(button("Confirm delete"));
+    expect(button("Deleting…")?.disabled).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    await flushAsyncWork();
+    expect(container.textContent).toContain(
+      "Deleting the resume timed out. Check your resumes and try again.",
+    );
+    expect(button("Delete synthetic-resume.pdf")?.disabled).toBe(false);
+  });
+});

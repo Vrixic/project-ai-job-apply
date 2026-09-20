@@ -272,6 +272,10 @@ class SyntheticAssuranceDocuments implements DocumentStore {
     return unused("DocumentStore.createResumeUpload");
   }
 
+  async deleteResume(): Promise<void> {
+    return unused("DocumentStore.deleteResume");
+  }
+
   async close(): Promise<void> {}
 }
 

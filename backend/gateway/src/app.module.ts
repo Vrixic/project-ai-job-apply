@@ -89,6 +89,7 @@ import {
   DocumentIntakeUnavailableError,
   type DocumentStore,
   ResumeDocumentLimitError,
+  ResumeNotDeletableError,
   ResumeUploadInProgressError,
 } from "@ai-job-apply/documents-service";
 import {
@@ -577,6 +578,11 @@ class ProblemDetailsFilter implements ExceptionFilter {
     } else if (exception instanceof ResumeUploadInProgressError) {
       status = HttpStatus.CONFLICT;
       code = "resume_upload_in_progress";
+      title = "A resume is still being processed";
+      detail = exception.message;
+    } else if (exception instanceof ResumeNotDeletableError) {
+      status = HttpStatus.CONFLICT;
+      code = "resume_not_deletable";
       title = "A resume is still being processed";
       detail = exception.message;
     } else if (projectApplicationsFailure(exception) !== null) {
@@ -2399,6 +2405,28 @@ class CandidateController {
   async listResumes(@Req() request: AuthenticatedRequest): Promise<ResumeDocumentCollection> {
     const user = await this.identity.resolve(request, "documents:read");
     return this.documents.listResumeDocuments(user.id);
+  }
+
+  @Delete("/resumes/:documentId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async deleteResume(
+    @Req() request: AuthenticatedRequest,
+    @Param("documentId") documentId: string,
+  ): Promise<void> {
+    if (
+      (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+      request.body !== undefined ||
+      !UUID_V7_PATTERN.test(documentId)
+    ) {
+      throw new HttpException("Resume delete input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.identity.resolve(request, "documents:write");
+    await this.documents.deleteResume(
+      user.id,
+      documentId,
+      request.traceId ?? correlationId(undefined),
+    );
   }
 
   @Post("/resumes/uploads")

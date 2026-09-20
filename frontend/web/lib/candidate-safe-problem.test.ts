@@ -88,6 +88,14 @@ describe("resume refusals (ADR-032)", () => {
     ).resolves.toBe("Your plan details are temporarily unavailable. Try uploading again shortly.");
   });
 
+  it("gives a resume that is still processing its own fixed deletion copy (ADR-033)", async () => {
+    await expect(
+      candidateSafeProblemMessage(problem(409, "resume_not_deletable"), "resume"),
+    ).resolves.toBe(
+      "This resume is still being processed. You can delete it when processing finishes.",
+    );
+  });
+
   it("uses that copy only for the resume surface, never echoes upstream text, and keeps other conflicts generic", async () => {
     await expect(
       candidateSafeProblemMessage(problem(409, "resume_document_limit"), "profile_facts"),
