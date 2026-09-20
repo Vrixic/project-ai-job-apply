@@ -1,7 +1,8 @@
 # D3-012 Accountable Disposition (development scope)
 
-- Status: **Draft for the accountable individual's confirmation. Not effective until the fields marked
-  `[to confirm]` are completed and this file is merged.** Prepared 2026-09-19 from the product owner's
+- Status: **Draft for the accountable individual's confirmation. Not effective until the fields still marked
+  `[to confirm]` (scope commit, jurisdiction and source-policy versions, acknowledgement) are completed and this
+  file is merged.** The accountable individual's name is recorded. Prepared 2026-09-19 from the product owner's
   chat positions recorded in the [approval packet](d3-application-approval-packet.md).
 - Task: D3-012. Release gates: LR-D3-01 (application preparation) and LR-D3-02 (application submission)
   in the [legal review register](../product/foundation/legal-review-register.md).
@@ -16,7 +17,7 @@
 
 | Field | Value |
 |---|---|
-| Name | `[to confirm: full legal name]` |
+| Name | Vrij Patel (legal name given by the accountable individual in chat, 2026-09-19) |
 | Roles held | Product owner and accountable reviewer for development scope (owner statement, 2026-09-19) |
 | Independence and conflicts | None claimed: the reviewer is also the repository owner, so this is not an independent review |
 | Scope reviewed | Repository at `main` commit `[to confirm: the commit this record merges on]` and the deployed development environment |
