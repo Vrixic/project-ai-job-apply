@@ -75,3 +75,11 @@ API Gateway routes, runtime composition, candidate-rights export/deletion partic
 restore-manifest composition (D3-014, D3-015), and any deployment. Live ATS effects
 stay disabled until D3-012 approval; see the
 [Phase 3 register](../../../docs/product/delivery/phase-3-application-preparation.md).
+
+## Automatic fills from Profile facts
+
+`FACT_FIELD_MAP` in `src/packet-source.ts` is the owner-approved convention (2026-09-19): 26 exact
+`kind/key` rows from `identity`, `employment`, `education`, and `preference` facts to application fields. A field
+is filled only from exactly one confirmed, currently usable fact whose value fits the field's type; competing
+facts choose none, and the candidate's own entry wins. Restricted answers, narrative questions, and documents are
+never mapped. Add a row only after the owner approves it and a test pins it.
