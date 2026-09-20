@@ -234,6 +234,14 @@ const APPLICATION_HISTORY_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/history$`,
   "u",
 );
+const APPLICATION_RESUME_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/resume$`,
+  "u",
+);
+const APPLICATION_RESUME_FILE_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/resume/file$`,
+  "u",
+);
 const APPLICATION_COMMAND_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/(?:packets|approval|reopen|cancel|submissions)$`,
   "u",
@@ -264,6 +272,7 @@ interface AllowedRoute {
   protected: boolean;
   acceptsReviewQueueQuery?: true;
   acceptsApplicationHistoryQuery?: true;
+  acceptsApplicationResumeFormatQuery?: true;
 }
 
 function exactD2RouteKey(routeKey: string, expected: string): boolean {
@@ -299,6 +308,12 @@ function allowedRoute(
   }
   if (method === "GET" && APPLICATION_HISTORY_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true, acceptsApplicationHistoryQuery: true };
+  }
+  if (method === "GET" && APPLICATION_RESUME_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "GET" && APPLICATION_RESUME_FILE_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true, acceptsApplicationResumeFormatQuery: true };
   }
   if (method === "PATCH" && PROFILE_FACT_PATH_PATTERN.test(path)) {
     return { acceptsBody: true, protected: true };
@@ -519,7 +534,10 @@ function requestPayload(
     event.rawQueryString &&
     !(
       (route.acceptsReviewQueueQuery && validReviewQueueQuery(event.rawQueryString)) ||
-      (route.acceptsApplicationHistoryQuery && validApplicationHistoryQuery(event.rawQueryString))
+      (route.acceptsApplicationHistoryQuery &&
+        validApplicationHistoryQuery(event.rawQueryString)) ||
+      (route.acceptsApplicationResumeFormatQuery &&
+        validApplicationResumeFormatQuery(event.rawQueryString))
     )
   ) {
     return {
@@ -587,6 +605,15 @@ function validApplicationHistoryQuery(raw: string): boolean {
     return false;
   }
   return seen.size > 0;
+}
+
+/** The resume file route takes exactly one `format` parameter, `docx` or `pdf`, and nothing else. */
+function validApplicationResumeFormatQuery(raw: string): boolean {
+  const parameters = [...new URLSearchParams(raw)];
+  const only = parameters[0];
+  return (
+    parameters.length === 1 && only?.[0] === "format" && (only[1] === "docx" || only[1] === "pdf")
+  );
 }
 
 function claimStrings(value: JwtClaimValue): string[] {
@@ -840,7 +867,9 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
       return app.inject({
         method,
         url:
-          (route.acceptsReviewQueueQuery || route.acceptsApplicationHistoryQuery) &&
+          (route.acceptsReviewQueueQuery ||
+            route.acceptsApplicationHistoryQuery ||
+            route.acceptsApplicationResumeFormatQuery) &&
           event.rawQueryString
             ? `${path}?${event.rawQueryString}`
             : path,

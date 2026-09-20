@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import type { APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { describe, expect, it, vi } from "vitest";
@@ -1251,6 +1253,7 @@ describe("Applications routes at the Lambda boundary", () => {
     ["POST", "/v1/applications/search", "{}"],
     ["GET", `/v1/applications/${id}`, undefined],
     ["GET", `/v1/applications/${id}/history`, undefined],
+    ["GET", `/v1/applications/${id}/resume`, undefined],
     ["POST", `/v1/applications/${id}/packets`, "{}"],
     ["POST", `/v1/applications/${id}/approval`, "{}"],
     ["POST", `/v1/applications/${id}/reopen`, "{}"],
@@ -1276,6 +1279,8 @@ describe("Applications routes at the Lambda boundary", () => {
     ["unknown suffix", "POST", `/v1/applications/${id}/delete`],
     ["dispatch with a bad attempt id", "POST", `/v1/applications/${id}/attempts/nope/dispatch`],
     ["delete", "DELETE", `/v1/applications/${id}`],
+    ["resume as a command", "POST", `/v1/applications/${id}/resume`],
+    ["resume file with an extra segment", "GET", `/v1/applications/${id}/resume/file/extra`],
   ])("does not route %s", async (_label, method, path) => {
     const { inject, handler } = dispatcher();
     const response = await invoke(handler, invocation(method as string, path as string));
@@ -1326,6 +1331,67 @@ describe("Applications routes at the Lambda boundary", () => {
         await invoke(
           handler,
           invocation("GET", `/v1/applications/${id}`, { rawQueryString: "limit=5" }),
+        )
+      ).statusCode,
+    ).toBe(400);
+  });
+
+  it("routes every Applications operation the OpenAPI contract declares", async () => {
+    const contract = JSON.parse(
+      readFileSync(
+        fileURLToPath(
+          new URL("../../../packages/api-contracts/openapi/platform.v1.json", import.meta.url),
+        ),
+        "utf8",
+      ),
+    ) as { paths: Record<string, Record<string, unknown>> };
+    const declared: Array<[string, string]> = [];
+    for (const [template, operations] of Object.entries(contract.paths)) {
+      if (!template.startsWith("/applications")) continue;
+      for (const method of Object.keys(operations)) {
+        declared.push([method.toUpperCase(), `/v1${template}`]);
+      }
+    }
+    expect(declared.length).toBeGreaterThan(10);
+    for (const [method, template] of declared) {
+      const path = template.replace("{applicationId}", id).replace("{attemptId}", attempt);
+      const { handler } = dispatcher();
+      const query = path.endsWith("/resume/file") ? "format=pdf" : "";
+      const commandBody = method === "POST" && !path.endsWith("/dispatch") ? "{}" : undefined;
+      const response = await invoke(
+        handler,
+        invocation(method, path, {
+          ...(commandBody === undefined ? {} : { body: commandBody }),
+          ...(query ? { rawQueryString: query } : {}),
+        }),
+      );
+      expect(response.statusCode, `${method} ${template}`).toBe(200);
+    }
+  });
+
+  it("accepts only one docx or pdf format on the resume file route, and no query on the preview", async () => {
+    const file = `/v1/applications/${id}/resume/file`;
+    for (const [query, status] of [
+      ["format=docx", 200],
+      ["format=pdf", 200],
+      ["format=txt", 400],
+      ["format=pdf&format=docx", 400],
+      ["format=pdf&x=1", 400],
+      ["x=pdf", 400],
+    ] as const) {
+      const { inject, handler } = dispatcher();
+      const response = await invoke(handler, invocation("GET", file, { rawQueryString: query }));
+      expect(response.statusCode, query).toBe(status);
+      if (status === 200) {
+        expect(inject).toHaveBeenCalledWith(expect.objectContaining({ url: `${file}?${query}` }));
+      }
+    }
+    const { handler } = dispatcher();
+    expect(
+      (
+        await invoke(
+          handler,
+          invocation("GET", `/v1/applications/${id}/resume`, { rawQueryString: "format=pdf" }),
         )
       ).statusCode,
     ).toBe(400);
