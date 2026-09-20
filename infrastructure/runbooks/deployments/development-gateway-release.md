@@ -350,6 +350,14 @@ Rules, enforced by [the guards](../../../scripts/lib/development-document-upload
 Presigned upload grants stay exact (object key, size, checksum, encryption, and expiry); CORS only lets the listed
 origin's browser use them. Removing an origin is a separate reviewed change and is not part of this mode.
 
+**After the change, one refresh record is expected.** Terraform's S3 bucket resource also reads back the bucket's CORS
+rules, and its state keeps the old list until an apply commits the refresh, so each later plan reports one drift record
+on `aws_s3_bucket.candidate_documents[0]` whose only difference is `cors_rule`. The shared drift check accepts exactly
+that record: the rule keeps the same methods, headers, exposed headers, and max age, the origin list is the old list with
+origins appended and equals the list the source-evaluated CORS configuration plans, and nothing else about the bucket, its
+sensitivity, or its unknown values differs. A record that changes anything else is refused. The next apply commits the
+refreshed state and the record stops appearing.
+
 ## Failure and recovery
 
 - A publication failure may leave new immutable objects plus a `publishing` receipt. Never reuse,

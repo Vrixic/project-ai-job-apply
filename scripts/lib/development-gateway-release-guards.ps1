@@ -296,6 +296,84 @@ function Assert-GatewayRoleInlinePolicyRefreshDrift {
   }
 }
 
+# The candidate-document bucket resource also reads back the bucket's CORS rules, which the separate
+# `aws_s3_bucket_cors_configuration` resource manages. After the reviewed upload-origin step (D3-024) changes the
+# CORS list, the bucket resource's state still holds the old list, so every later plan reports one refresh record whose
+# only difference is `cors_rule`. It is accepted only when the origin list is the old list with origins appended and
+# equals the list the source-evaluated CORS configuration plans; the rule's other attributes, every other bucket
+# attribute, and both sensitivity and unknown trees must be otherwise identical. The next apply commits the refreshed
+# state, after which the record no longer appears.
+function Assert-GatewayBucketCorsRefreshDrift {
+  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][object]$Record)
+  $change = $Record.change
+  if ([string]$Record.address -cne "module.platform.aws_s3_bucket.candidate_documents[0]" -or
+      [string]$Record.type -cne "aws_s3_bucket" -or [string]$Record.mode -cne "managed" -or
+      (@($change.actions) -join ",") -cne "update" -or $null -eq $change.before -or $null -eq $change.after) {
+    throw "The candidate-document bucket CORS refresh record has an unsafe shape."
+  }
+  if ($null -ne (Get-GatewayOptionalProperty $change "replace_paths")) {
+    throw "The candidate-document bucket CORS refresh may not carry replacement paths."
+  }
+  $unknown = Get-GatewayOptionalProperty $change "after_unknown"
+  if ($null -ne $unknown -and @(Get-GatewayUnknownTrueLeafPaths -Value $unknown).Count -ne 0) {
+    throw "The candidate-document bucket CORS refresh contains an unknown value."
+  }
+  $before = $change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $after = $change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $beforeRules = @($before.cors_rule); $afterRules = @($after.cors_rule)
+  if ($beforeRules.Count -ne 1 -or $afterRules.Count -ne 1) {
+    throw "The candidate-document bucket CORS refresh must keep exactly one rule."
+  }
+  $beforeOrigins = @($beforeRules[0].allowed_origins); $afterOrigins = @($afterRules[0].allowed_origins)
+  foreach ($origin in $afterOrigins) {
+    if ($origin -isnot [string] -or
+        $origin -cnotmatch '^(https://[^/\s]+|http://(localhost|127\.0\.0\.1)(:[0-9]+)?)$') {
+      throw "The candidate-document bucket CORS refresh contains an origin outside the module's origin rule."
+    }
+  }
+  if ($afterOrigins.Count -le $beforeOrigins.Count -or
+      @($afterOrigins | Sort-Object -Unique).Count -ne $afterOrigins.Count -or
+      (@($afterOrigins | Select-Object -First $beforeOrigins.Count) -join "|") -cne ($beforeOrigins -join "|")) {
+    throw "The candidate-document bucket CORS refresh is not the retained origin list with origins appended."
+  }
+  $plannedValues = Get-GatewayOptionalProperty $Plan "planned_values"
+  $rootModule = Get-GatewayOptionalProperty $plannedValues "root_module"
+  if ($null -eq $rootModule) { throw "The bucket CORS refresh needs the exact source-evaluated planned root module." }
+  $planned = Get-TerraformStateResourceMap $rootModule
+  $configuration = $planned["module.platform.aws_s3_bucket_cors_configuration.candidate_documents[0]"]
+  $plannedRules = if ($null -eq $configuration) { @() } else { @($configuration.cors_rule) }
+  if ($plannedRules.Count -ne 1 -or (@($plannedRules[0].allowed_origins) -join "|") -cne ($afterOrigins -join "|")) {
+    throw "The candidate-document bucket CORS refresh differs from the source-evaluated CORS configuration."
+  }
+  # The sensitivity trees grow with the list, so they are compared with the origin flags removed and must hold no
+  # sensitive leaf at all.
+  foreach ($side in @("before_sensitive", "after_sensitive")) {
+    $tree = Get-GatewayOptionalProperty $change $side
+    if ($null -ne $tree -and @(Get-GatewayUnknownTrueLeafPaths -Value $tree).Count -ne 0) {
+      throw "The candidate-document bucket CORS refresh involves a sensitive value."
+    }
+  }
+  $beforeRules[0].PSObject.Properties.Remove("allowed_origins"); $afterRules[0].PSObject.Properties.Remove("allowed_origins")
+  if ((ConvertTo-GatewayCanonicalJson $beforeRules[0]) -cne (ConvertTo-GatewayCanonicalJson $afterRules[0])) {
+    throw "The candidate-document bucket CORS refresh changed a nonapproved rule attribute."
+  }
+  $before.PSObject.Properties.Remove("cors_rule"); $after.PSObject.Properties.Remove("cors_rule")
+  if ((ConvertTo-GatewayCanonicalJson $before) -cne (ConvertTo-GatewayCanonicalJson $after)) {
+    throw "The candidate-document bucket CORS refresh changed a nonapproved bucket attribute."
+  }
+}
+
+function Test-GatewayBucketCorsRuleDrift {
+  param([Parameter(Mandatory)][object]$Record)
+  $change = $Record.change
+  if ($null -eq $change.before -or $null -eq $change.after) { return $false }
+  $beforeRule = $change.before.PSObject.Properties["cors_rule"]; $afterRule = $change.after.PSObject.Properties["cors_rule"]
+  if ($null -eq $beforeRule -and $null -eq $afterRule) { return $false }
+  $beforeJson = if ($null -eq $beforeRule) { "null" } else { ConvertTo-GatewayCanonicalJson $beforeRule.Value }
+  $afterJson = if ($null -eq $afterRule) { "null" } else { ConvertTo-GatewayCanonicalJson $afterRule.Value }
+  return $beforeJson -cne $afterJson
+}
+
 function Assert-AcceptedGatewayProviderDrift {
   param([Parameter(Mandatory)][object]$Plan)
 
@@ -307,13 +385,26 @@ function Assert-AcceptedGatewayProviderDrift {
     throw "Accepted gateway provider drift requires the exact source-evaluated planned root module."
   }
   $roleAddress = "module.platform.aws_iam_role.gateway_lambda[0]"
+  $bucketAddress = "module.platform.aws_s3_bucket.candidate_documents[0]"
+  $handled = @()
   $roleRecords = @($drift | Where-Object { [string]$_.address -ceq $roleAddress })
   if ($roleRecords.Count -gt 1) { throw "The Gateway role refresh was reported more than once." }
   if ($roleRecords.Count -eq 1) {
     Assert-GatewayRoleInlinePolicyRefreshDrift -Plan $Plan -Record $roleRecords[0]
+    $handled += $roleAddress
+  }
+  $bucketRecords = @($drift | Where-Object { [string]$_.address -ceq $bucketAddress })
+  if ($bucketRecords.Count -gt 1) { throw "The candidate-document bucket refresh was reported more than once." }
+  # A record that changes the CORS rules must be exactly the reviewed CORS refresh; any other bucket record still
+  # goes through the shared check below, which accepts only its own reviewed policy refresh.
+  if ($bucketRecords.Count -eq 1 -and (Test-GatewayBucketCorsRuleDrift $bucketRecords[0])) {
+    Assert-GatewayBucketCorsRefreshDrift -Plan $Plan -Record $bucketRecords[0]
+    $handled += $bucketAddress
+  }
+  if ($handled.Count -gt 0) {
     # Everything else still goes through the shared accepted-drift check, unchanged.
     $remaining = $Plan | Select-Object *
-    $remaining.resource_drift = @($drift | Where-Object { [string]$_.address -cne $roleAddress })
+    $remaining.resource_drift = @($drift | Where-Object { [string]$_.address -cnotin $handled })
     Assert-RestoreRoleAcceptedPlanDrift -Plan $remaining
     return
   }

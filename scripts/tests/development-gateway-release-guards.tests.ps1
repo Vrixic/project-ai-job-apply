@@ -1127,6 +1127,132 @@ $createdRole = New-GatewayRoleDriftPlan
 $createdRole.resource_drift[-1].change.actions = @("delete", "create")
 Assert-Rejected { Assert-ExactGatewayReleasePlan $createdRole $artifact } "A Gateway role replacement was accepted as refresh drift."
 
+# ---- D3-024: refresh drift on the candidate-document bucket's CORS rules, after the reviewed upload-origin step
+$corsLocal = "http://localhost:3000"; $corsHosted = "https://ai-job-apply-candidate.vercel.app"
+$corsBucketAddress = "module.platform.aws_s3_bucket.candidate_documents[0]"
+$corsConfigurationAddress = "module.platform.aws_s3_bucket_cors_configuration.candidate_documents[0]"
+function New-CorsRule {
+  param([string[]]$Origins)
+  return [pscustomobject]@{
+    allowed_headers = @("*"); allowed_methods = @("POST"); allowed_origins = @($Origins)
+    expose_headers = @("ETag", "x-amz-version-id"); max_age_seconds = 300
+  }
+}
+function New-CorsSensitivity {
+  param([int]$OriginCount)
+  return [pscustomobject]@{
+    cors_rule = @([pscustomobject]@{
+        allowed_headers = @($false); allowed_methods = @($false)
+        allowed_origins = @(1..$OriginCount | ForEach-Object { $false }); expose_headers = @($false, $false) })
+    tags = [pscustomobject]@{}
+  }
+}
+function New-GatewayBucketCorsDriftPlan {
+  param(
+    [string[]]$Before = @($corsLocal), [string[]]$After = @($corsLocal, $corsHosted), [string[]]$Planned = @($corsLocal, $corsHosted),
+    [bool]$IncludePlanned = $true, [object]$Base = $plan
+  )
+  $refreshPlan = Copy-Fixture $Base
+  $plannedResources = @()
+  if ($IncludePlanned) {
+    $configuredRule = New-CorsRule $Planned; $configuredRule | Add-Member NoteProperty id ""
+    $plannedResources = @([pscustomobject]@{
+        address = $corsConfigurationAddress
+        values = [pscustomobject]@{ bucket = "ai-job-apply-development-candidate-docs-$account"; cors_rule = @($configuredRule) }
+      })
+  }
+  $existing = @()
+  if ($null -ne $refreshPlan.PSObject.Properties["planned_values"] -and
+      $null -ne $refreshPlan.planned_values.root_module.PSObject.Properties["resources"]) {
+    $existing = @($refreshPlan.planned_values.root_module.resources)
+  }
+  $root = [pscustomobject]@{ resources = @($existing) + @($plannedResources) }
+  if ($null -ne $refreshPlan.PSObject.Properties["planned_values"]) { $refreshPlan.planned_values = [pscustomobject]@{ root_module = $root } }
+  else { $refreshPlan | Add-Member NoteProperty planned_values ([pscustomobject]@{ root_module = $root }) }
+  $bucketBefore = [pscustomobject]@{
+    arn = "arn:aws:s3:::ai-job-apply-development-candidate-docs-$account"; bucket = "ai-job-apply-development-candidate-docs-$account"
+    cors_rule = @(New-CorsRule $Before); force_destroy = $false; policy = "{}"; tags = [pscustomobject]@{}
+    versioning = @([pscustomobject]@{ enabled = $true; mfa_delete = $false })
+  }
+  $bucketAfter = Copy-Fixture $bucketBefore
+  $bucketAfter.cors_rule = @(New-CorsRule $After)
+  $existingDrift = if ($null -ne $refreshPlan.PSObject.Properties["resource_drift"]) { @($refreshPlan.resource_drift) } else { @() }
+  $record = New-GatewayProviderDriftRecord -Address $corsBucketAddress -Type "aws_s3_bucket" -Before $bucketBefore -After $bucketAfter `
+    -BeforeSensitive (New-CorsSensitivity $Before.Count) -AfterSensitive (New-CorsSensitivity $After.Count)
+  $refreshPlan.resource_drift = @($existingDrift) + @($record)
+  return $refreshPlan
+}
+$corsDriftRelease = New-GatewayBucketCorsDriftPlan
+$null = Assert-ExactGatewayReleasePlan $corsDriftRelease $artifact; $passed++
+$corsDriftBaseline = New-GatewayBucketCorsDriftPlan -Base $baselinePlan
+$null = Assert-RetainedGatewayBaselinePlan $corsDriftBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name); $passed++
+$null = Assert-ExactGatewayReleasePlan (New-GatewayBucketCorsDriftPlan -Before @($corsLocal, "https://other.example.com") -After @($corsLocal, "https://other.example.com", $corsHosted) -Planned @($corsLocal, "https://other.example.com", $corsHosted)) $artifact; $passed++
+$null = Assert-ExactGatewayReleasePlan (New-GatewayBucketCorsDriftPlan -Before @() -After @($corsHosted) -Planned @($corsHosted)) $artifact; $passed++
+
+Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GatewayBucketCorsDriftPlan -IncludePlanned $false) $artifact } "A bucket CORS refresh without its planned configuration was accepted."
+foreach ($case in @(
+    @{ Name = "planned lacks the origin"; Planned = @($corsLocal) },
+    @{ Name = "planned reordered"; Planned = @($corsHosted, $corsLocal) },
+    @{ Name = "planned has an extra origin"; Planned = @($corsLocal, $corsHosted, "https://extra.example.com") },
+    @{ Name = "planned differs"; Planned = @($corsLocal, "https://other.example.com") }
+  )) {
+  Assert-Rejected { Assert-ExactGatewayReleasePlan (New-GatewayBucketCorsDriftPlan -Planned $case.Planned) $artifact } "A bucket CORS refresh accepted '$($case.Name)'."
+}
+foreach ($case in @(
+    @{ Name = "baseline dropped"; Before = @($corsLocal); After = @($corsHosted) },
+    @{ Name = "reordered"; Before = @($corsLocal, $corsHosted); After = @($corsHosted, $corsLocal) },
+    @{ Name = "shrunk"; Before = @($corsLocal, $corsHosted); After = @($corsLocal) },
+    @{ Name = "duplicate origin"; Before = @($corsLocal); After = @($corsLocal, $corsLocal) },
+    @{ Name = "wildcard origin"; Before = @($corsLocal); After = @($corsLocal, "*") },
+    @{ Name = "non-https origin"; Before = @($corsLocal); After = @($corsLocal, "http://example.com/path") }
+  )) {
+  Assert-Rejected {
+    Assert-ExactGatewayReleasePlan (New-GatewayBucketCorsDriftPlan -Before $case.Before -After $case.After -Planned $case.After) $artifact
+  } "A bucket CORS refresh accepted '$($case.Name)'."
+}
+foreach ($mutation in @(
+    "methods", "headers", "expose", "max age", "second rule", "no rule", "bucket policy", "tags", "versioning", "force destroy",
+    "arn", "unknown value", "sensitive before", "sensitive after", "replace path", "create", "delete", "replace", "no-op", "wrong type",
+    "data mode", "other address"
+  )) {
+  $bad = New-GatewayBucketCorsDriftPlan
+  $record = $bad.resource_drift[-1]
+  switch ($mutation) {
+    "methods" { $record.change.after.cors_rule[0].allowed_methods = @("POST", "GET") }
+    "headers" { $record.change.after.cors_rule[0].allowed_headers = @("x-amz-*") }
+    "expose" { $record.change.after.cors_rule[0].expose_headers = @("ETag") }
+    "max age" { $record.change.after.cors_rule[0].max_age_seconds = 86400 }
+    "second rule" { $record.change.after.cors_rule = @($record.change.after.cors_rule[0], (Copy-Fixture $record.change.after.cors_rule[0])) }
+    "no rule" { $record.change.after.cors_rule = @() }
+    "bucket policy" { $record.change.after.policy = '{"Statement":[]}' }
+    "tags" { $record.change.after.tags | Add-Member NoteProperty leaked "x" }
+    "versioning" { $record.change.after.versioning[0].enabled = $false }
+    "force destroy" { $record.change.after.force_destroy = $true }
+    "arn" { $record.change.after.arn = "arn:aws:s3:::another-bucket" }
+    "unknown value" { $record.change.after_unknown | Add-Member NoteProperty cors_rule $true }
+    "sensitive before" { $record.change.before_sensitive.cors_rule[0].allowed_origins[0] = $true }
+    "sensitive after" { $record.change.after_sensitive.cors_rule[0].allowed_origins[1] = $true }
+    "replace path" { $record.change | Add-Member NoteProperty replace_paths @(, @("cors_rule")) -Force }
+    "create" { $record.change.actions = @("create") }
+    "delete" { $record.change.actions = @("delete") }
+    "replace" { $record.change.actions = @("delete", "create") }
+    "no-op" { $record.change.actions = @("no-op") }
+    "wrong type" { $record.type = "aws_s3_bucket_policy" }
+    "data mode" { $record.mode = "data" }
+    "other address" { $record.address = "module.platform.aws_s3_bucket.artifacts[0]" }
+  }
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $bad $artifact } "A bucket CORS refresh accepted the '$mutation' mutation."
+}
+$duplicateBucketRecord = New-GatewayBucketCorsDriftPlan
+$duplicateBucketRecord.resource_drift = @($duplicateBucketRecord.resource_drift) + @($duplicateBucketRecord.resource_drift[-1])
+Assert-Rejected { Assert-ExactGatewayReleasePlan $duplicateBucketRecord $artifact } "A duplicated bucket CORS refresh was accepted."
+# an unrelated drift record next to it is still judged by the shared check, not waved through
+$withOtherDrift = New-GatewayBucketCorsDriftPlan
+$withOtherDrift.resource_drift = @($withOtherDrift.resource_drift) + @(
+  New-GatewayProviderDriftRecord -Address "module.platform.aws_lambda_function.gateway[0]" -Type "aws_lambda_function" `
+    -Before ([pscustomobject]@{ memory_size = 1024 }) -After ([pscustomobject]@{ memory_size = 2048 }))
+Assert-Rejected { Assert-ExactGatewayReleasePlan $withOtherDrift $artifact } "An unrelated drift record next to the bucket CORS refresh was accepted."
+
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
 $diagnosticPlanPath = Join-Path $terraformDirectory `
