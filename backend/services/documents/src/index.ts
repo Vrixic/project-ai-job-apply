@@ -9,13 +9,13 @@ import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import type { ResumeUploadSigner } from "./upload-signer.js";
 
+export * from "./resume-tailoring-contract.js";
 export type {
   ResumeUploadGrantInput,
   ResumeUploadSigner,
   S3ResumeUploadSignerOptions,
 } from "./upload-signer.js";
 export { MAXIMUM_RESUME_BYTES, S3ResumeUploadSigner } from "./upload-signer.js";
-export * from "./resume-tailoring-contract.js";
 
 export class DocumentIdempotencyConflictError extends Error {
   constructor() {
@@ -234,20 +234,23 @@ export class PostgresDocumentStore implements DocumentStore {
         )
       `;
         stage = "IDEMPOTENCY_INSERT";
+        // JSON is bound as explicit text and cast in SQL, never through `transaction.json`. The Gateway hands this
+        // store its shared client, which installs an identity JSON serializer (see createApplicationsDatabase), so
+        // the driver wrapper fails there with ERR_INVALID_ARG_TYPE. `::text::jsonb` keeps the parameter a plain
+        // string on every client and still stores structured JSONB (a bare `::jsonb` double-encodes on a plain client).
+        const idempotencyResponse = JSON.stringify(response);
         await transaction`
         INSERT INTO documents.idempotency_keys (user_id, scope, key, request_hash, response)
-        VALUES (
-          ${userId}, ${scope}, ${idempotencyKey}, ${hash},
-          ${transaction.json(response as unknown as postgres.JSONValue)}
-        )
+        VALUES (${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${idempotencyResponse}::text::jsonb)
       `;
         stage = "AUDIT_INSERT";
+        const auditMetadata = JSON.stringify({ version: 1, sizeBytes: input.sizeBytes });
         await transaction`
         INSERT INTO documents.audit_events (
           id, user_id, action, document_id, trace_id, metadata
         ) VALUES (
           ${uuidv7()}, ${userId}, 'resume.upload.registered', ${documentId}, ${traceId},
-          ${transaction.json({ version: 1, sizeBytes: input.sizeBytes })}
+          ${auditMetadata}::text::jsonb
         )
       `;
         stage = "TRANSACTION_COMMIT";

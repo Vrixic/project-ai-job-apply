@@ -1362,6 +1362,41 @@ describe("candidate API", () => {
     expect(
       JSON.stringify(privacySafeRequestFailure(registrationDatabaseFailure, "/v1/resumes/uploads")),
     ).not.toContain("candidate resume text");
+    // A driver error code (the D3-024 failure) is reported as such, and nothing else from the cause is.
+    const registrationDriverFailure = new ResumeUploadRegistrationError(
+      "IDEMPOTENCY_INSERT",
+      Object.assign(new Error("candidate resume text must remain private"), {
+        code: "ERR_INVALID_ARG_TYPE",
+      }),
+    );
+    expect(privacySafeRequestFailure(registrationDriverFailure, "/v1/resumes/uploads")).toEqual({
+      event: "unhandled_request_failure",
+      route: "/v1/resumes/uploads",
+      error_type: "ResumeUploadRegistrationError",
+      error_code: "DOCUMENT_IDEMPOTENCY_INSERT",
+      driver_cause_code: "ERR_INVALID_ARG_TYPE",
+    });
+    expect(
+      JSON.stringify(privacySafeRequestFailure(registrationDriverFailure, "/v1/resumes/uploads")),
+    ).not.toContain("candidate resume text");
+    expect(
+      privacySafeRequestFailure(registrationDriverFailure, "/v1/jobs/:jobId"),
+    ).not.toHaveProperty("driver_cause_code");
+    for (const unsafeDriverCode of [
+      "secret value",
+      "lower_case",
+      "AB",
+      `A${"B".repeat(70)}`,
+      "ERR-DASH",
+    ]) {
+      const unsafe = new ResumeUploadRegistrationError(
+        "IDEMPOTENCY_INSERT",
+        Object.assign(new Error("private"), { code: unsafeDriverCode }),
+      );
+      expect(privacySafeRequestFailure(unsafe, "/v1/resumes/uploads")).not.toHaveProperty(
+        "driver_cause_code",
+      );
+    }
     for (const unsafeCode of ["secret-value", "42", "42804 ", "xx000", "not a code"]) {
       const unsafe = new ResumeUploadRegistrationError(
         "IDEMPOTENCY_INSERT",
