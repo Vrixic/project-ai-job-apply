@@ -1,9 +1,8 @@
 # D3-012 Accountable Disposition (development scope)
 
-- Status: **Draft for the accountable individual's confirmation. Not effective until the fields still marked
-  `[to confirm]` (scope commit, jurisdiction and source-policy versions, acknowledgement) are completed and this
-  file is merged.** The accountable individual's name is recorded. Prepared 2026-09-19 from the product owner's
-  chat positions recorded in the [approval packet](d3-application-approval-packet.md).
+- Status: **Effective when the accountable individual merges the pull request that adds this file; that merge
+  is the acknowledgement recorded at the end.** Prepared 2026-09-19 from the product owner's chat positions
+  recorded in the [approval packet](d3-application-approval-packet.md).
 - Task: D3-012. Release gates: LR-D3-01 (application preparation) and LR-D3-02 (application submission)
   in the [legal review register](../product/foundation/legal-review-register.md).
 - Basis: the [approval plan](security-privacy-approval-plan.md) allows one person to hold several roles in
@@ -20,8 +19,8 @@
 | Name | Vrij Patel (legal name given by the accountable individual in chat, 2026-09-19) |
 | Roles held | Product owner and accountable reviewer for development scope (owner statement, 2026-09-19) |
 | Independence and conflicts | None claimed: the reviewer is also the repository owner, so this is not an independent review |
-| Scope reviewed | Repository at `main` commit `[to confirm: the commit this record merges on]` and the deployed development environment |
-| Jurisdiction and source-policy versions | `[to confirm: the jurisdiction the reviewer is applying and any ATS source terms considered; none have been reviewed by counsel]` |
+| Scope reviewed | The repository at the merge commit of this record's pull request (#417) and the deployed development environment as of 2026-09-19 (Gateway alias 79, document processor alias 11) |
+| Jurisdiction and source-policy versions | None selected and none reviewed. No jurisdiction has been chosen, and no Greenhouse, Lever, or Ashby terms, robots policy, or API policy has been reviewed by counsel or by the reviewer, so this record cites no source-policy version. LR-D3-01 and LR-D3-02 stay `Not started` in the [legal review register](../product/foundation/legal-review-register.md), and each ATS variant needs its own source review at D3-013 before its fixtures are accepted |
 
 ## Scope of this disposition
 
@@ -49,4 +48,12 @@ proposed; the answer vault stores real data; or a security incident involves app
 
 ## Acknowledgement
 
-Product owner acknowledgement of the conditions above: `[to confirm: name and date]`
+Vrij Patel, the accountable individual named above, acknowledges the conditions above by merging the pull
+request that adds this file. The merge commit and its GitHub timestamp are the date and the record of that
+acknowledgement. Until then this file is a proposal and nothing in it is in force.
+
+## What this does not do
+
+It does not enable live ATS effects (they stay off until D3-013 fixtures are accepted and a merged change cites
+this record), choose an AI provider, amend ADR-010, or replace counsel's review (D6-016) or the independent
+security review (D6-015).
