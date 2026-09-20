@@ -478,9 +478,14 @@ function Assert-GatewayReleaseVariables {
   $eventRuleEnabled = ConvertTo-ExactBoolean `
     (Get-GatewayPlanVariableValue $ReleaseVariables "document_scan_event_rule_enabled") `
     "document_scan_event_rule_enabled"
+  # A Gateway release never changes the document scan triggers: the loop above already requires both flags to
+  # equal the retained baseline, and only the separate activation steps (D3-023) may move them. It may
+  # therefore carry an activated state forward, but only in the shape ADR-023 allows: triggers exist only in the
+  # complete boundary, and the GuardDuty rule never runs without the processor mapping.
   if ($stage -notin @("parser-dark", "complete-dark") -or
-      $mappingEnabled -or $eventRuleEnabled) {
-    throw "The gateway release must preserve the deployed processing-dark boundary."
+      ($eventRuleEnabled -and -not $mappingEnabled) -or
+      (($mappingEnabled -or $eventRuleEnabled) -and $stage -cne "complete-dark")) {
+    throw "The gateway release must preserve the deployed document processing boundary."
   }
   if ($stage -ceq "parser-dark" -and -not [string]::IsNullOrEmpty($parserArn)) {
     throw "Parser-dark must preserve an empty processor parser-version pin."

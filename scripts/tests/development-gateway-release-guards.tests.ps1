@@ -505,15 +505,42 @@ foreach ($variables in @($completeDarkBaseline, $completeDarkRelease)) {
 }
 $null = Assert-GatewayReleaseVariables $completeDarkBaseline $completeDarkRelease `
   $artifact $account $repositoryUrl $completeDarkParserArn; $passed++
-foreach ($name in @("document_scan_mapping_enabled", "document_scan_event_rule_enabled")) {
-  foreach ($enabled in @($true, "true")) {
-    $enabledBaseline = Copy-Fixture $baselineVariables
-    $enabledRelease = Copy-Fixture $releaseVariables
-    $enabledBaseline.$name.value = $enabled
-    $enabledRelease.$name.value = $enabled
+# D3-023: a release carries an activated state forward unchanged (never changes it), in the ADR-023 shape only.
+foreach ($enabled in @($true, "true")) {
+  foreach ($flags in @(@("document_scan_mapping_enabled"), @("document_scan_mapping_enabled", "document_scan_event_rule_enabled"))) {
+    $activeBaseline = Copy-Fixture $completeDarkBaseline
+    $activeRelease = Copy-Fixture $completeDarkRelease
+    foreach ($flag in $flags) { $activeBaseline.$flag.value = $enabled; $activeRelease.$flag.value = $enabled }
+    $null = Assert-GatewayReleaseVariables $activeBaseline $activeRelease $artifact $account $repositoryUrl $completeDarkParserArn; $passed++
+    # ...but a release may not move a trigger either way, so only the activation steps can change them.
+    foreach ($flag in $flags) {
+      $enabling = Copy-Fixture $completeDarkRelease
+      foreach ($other in $flags) { $enabling.$other.value = $enabled }
+      $disabledBaseline = Copy-Fixture $completeDarkBaseline
+      Assert-Rejected {
+        Assert-GatewayReleaseVariables $disabledBaseline $enabling $artifact $account $repositoryUrl $completeDarkParserArn
+      } "The gateway release enabled '$flag' itself."
+      $disabling = Copy-Fixture $completeDarkRelease
+      Assert-Rejected {
+        Assert-GatewayReleaseVariables $activeBaseline $disabling $artifact $account $repositoryUrl $completeDarkParserArn
+      } "The gateway release disabled '$flag' itself."
+      break
+    }
+  }
+  # the GuardDuty rule never runs without the processor mapping
+  $ruleOnly = Copy-Fixture $completeDarkBaseline; $ruleOnlyRelease = Copy-Fixture $completeDarkRelease
+  foreach ($variables in @($ruleOnly, $ruleOnlyRelease)) { $variables.document_scan_event_rule_enabled.value = $enabled }
+  Assert-Rejected {
+    Assert-GatewayReleaseVariables $ruleOnly $ruleOnlyRelease $artifact $account $repositoryUrl $completeDarkParserArn
+  } "The gateway release accepted the scan rule without the processor mapping."
+  # triggers only exist in the complete boundary
+  foreach ($name in @("document_scan_mapping_enabled", "document_scan_event_rule_enabled")) {
+    $parserDarkBaseline = Copy-Fixture $baselineVariables
+    $parserDarkRelease = Copy-Fixture $releaseVariables
+    foreach ($variables in @($parserDarkBaseline, $parserDarkRelease)) { $variables.document_scan_mapping_enabled.value = $enabled; $variables.$name.value = $enabled }
     Assert-Rejected {
-      Assert-GatewayReleaseVariables $enabledBaseline $enabledRelease $artifact $account $repositoryUrl ""
-    } "The gateway release accepted enabled processing-dark flag '$name'."
+      Assert-GatewayReleaseVariables $parserDarkBaseline $parserDarkRelease $artifact $account $repositoryUrl ""
+    } "The gateway release accepted enabled flag '$name' outside the complete processing boundary."
   }
 }
 foreach ($case in @(
