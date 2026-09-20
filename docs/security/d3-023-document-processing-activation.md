@@ -1,6 +1,6 @@
 # D3-023: Document processing activation (design for the owner to review)
 
-- Status: **Approved by the owner 2026-09-20; the activation tool is built and tested; nothing has been enabled yet.** Prepared 2026-09-20 at the owner's request.
+- Status: **Approved by the owner 2026-09-20; the activation tool is built and tested; the mapping, reconciler, and GuardDuty rule were enabled on 2026-09-20 and left on.** Prepared 2026-09-20 at the owner's request.
 - Task: D3-023 in the [Phase 3 record](../product/delivery/phase-3-application-preparation.md). Depends on D3-016 and D3-020, both deployed.
 - Goal: a candidate uploads a resume, it is malware-scanned and parsed into proposed facts, and the "Your resume for this job"
   section can then show a tailored resume. Today it can only say there is no resume.
