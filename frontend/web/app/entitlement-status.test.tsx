@@ -61,6 +61,68 @@ describe("EntitlementStatus", () => {
     expect(fetchMock.mock.calls[0]?.[1]?.headers).toBeUndefined();
   });
 
+  it("accepts the additive plan limits, reports them upward, and rejects any inexact limits", async () => {
+    const summary = (limits: unknown) => ({
+      plan: "free",
+      accessState: "active",
+      grants,
+      version: 0,
+      evaluatedAt: "2026-08-16T12:00:00.000Z",
+      ...(limits === undefined ? {} : { limits }),
+    });
+    const reported: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => Response.json(summary({ maxStoredResumes: 1 }))),
+    );
+    await act(async () =>
+      root.render(<EntitlementStatus authenticated onSummary={(value) => reported.push(value)} />),
+    );
+    await act(async () => {});
+    expect(container.textContent).toContain("Free access");
+    expect(reported.at(-1)).toMatchObject({ plan: "free", limits: { maxStoredResumes: 1 } });
+
+    // an older Gateway without limits still renders, and reports a summary with no limit to gate on
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => Response.json(summary(undefined))),
+    );
+    await act(async () => root.render(<div />));
+    reported.length = 0;
+    await act(async () =>
+      root.render(<EntitlementStatus authenticated onSummary={(value) => reported.push(value)} />),
+    );
+    await act(async () => {});
+    expect(container.textContent).toContain("Free access");
+    expect((reported.at(-1) as { limits?: unknown }).limits).toBeUndefined();
+
+    for (const bad of [
+      { maxStoredResumes: -1 },
+      { maxStoredResumes: 1.5 },
+      { maxStoredResumes: 1001 },
+      { maxStoredResumes: "1" },
+      { maxStoredResumes: 1, maxOther: 2 },
+      {},
+      [],
+      null,
+    ]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async () => Response.json(summary(bad))),
+      );
+      await act(async () => root.render(<div />));
+      reported.length = 0;
+      await act(async () =>
+        root.render(
+          <EntitlementStatus authenticated onSummary={(value) => reported.push(value)} />,
+        ),
+      );
+      await act(async () => {});
+      expect(container.textContent, JSON.stringify(bad)).not.toContain("Free access");
+      expect(reported.at(-1), JSON.stringify(bad)).toBeUndefined();
+    }
+  });
+
   it("renders a bounded grace status without adding paid-feature claims", async () => {
     vi.stubGlobal(
       "fetch",

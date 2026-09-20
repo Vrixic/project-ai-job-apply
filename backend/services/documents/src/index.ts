@@ -24,11 +24,36 @@ export class DocumentIdempotencyConflictError extends Error {
   }
 }
 
+/**
+ * The candidate's plan does not allow another stored resume (ADR-032). The limit comes from Billing through
+ * {@link ResumeLimits}; this module only enforces it.
+ */
 export class ResumeDocumentLimitError extends Error {
-  constructor() {
-    super("At most 20 resume documents may be retained per candidate");
+  constructor(readonly limit?: number) {
+    super("The candidate's plan does not allow another stored resume");
     this.name = "ResumeDocumentLimitError";
   }
+}
+
+/** A resume is still uploading, scanning, or parsing, so a new upload is refused whatever the plan. */
+export class ResumeUploadInProgressError extends Error {
+  constructor() {
+    super("A resume is still being processed; upload another when it finishes");
+    this.name = "ResumeUploadInProgressError";
+  }
+}
+
+/**
+ * How long an unfinished registration keeps its slot: the upload grant lifetime plus a scan margin. After that the
+ * registration is abandoned and the next one marks it failed, instead of the candidate waiting for the 30 minutes
+ * the processing reconciler allows. Keep in step with the web app's recoverable-upload window.
+ */
+export const RESUME_UPLOAD_HOLD_SECONDS = 15 * 60;
+
+/** Plan limits, supplied by the composition root from Billing so Documents never imports Billing (ADR-032). */
+export interface ResumeLimits {
+  /** The most resumes this candidate may keep at once. Must reject, never guess, when it cannot be determined. */
+  maxStoredResumes(userId: string): Promise<number>;
 }
 
 export class DocumentIntakeUnavailableError extends Error {
@@ -42,7 +67,9 @@ type ResumeUploadRegistrationStage =
   | "TRANSACTION_START"
   | "LOCK"
   | "IDEMPOTENCY_READ"
-  | "LIMIT_READ"
+  | "SLOT_LOCK"
+  | "SLOT_ABANDON"
+  | "SLOT_READ"
   | "GRANT_SIGN"
   | "DOCUMENT_INSERT"
   | "IDEMPOTENCY_INSERT"
@@ -134,6 +161,7 @@ export class PostgresDocumentStore implements DocumentStore {
   constructor(
     private readonly client: postgres.Sql,
     private readonly signer: ResumeUploadSigner,
+    private readonly limits: ResumeLimits,
   ) {}
 
   async listResumeDocuments(userId: string): Promise<ResumeDocumentCollection> {
@@ -166,6 +194,12 @@ export class PostgresDocumentStore implements DocumentStore {
   ): Promise<CreateResumeUploadResponse> {
     const hash = requestHash(input);
     const scope = "documents.resume-upload.create.v1";
+    // Resolved before the transaction so no lock is held while Billing is consulted; it rejects (503 upstream) rather
+    // than guess when the plan cannot be evaluated.
+    const maxStoredResumes = await this.limits.maxStoredResumes(userId);
+    if (!Number.isSafeInteger(maxStoredResumes) || maxStoredResumes < 0) {
+      throw new ResumeDocumentLimitError(0);
+    }
     let stage: ResumeUploadRegistrationStage = "TRANSACTION_START";
     try {
       return await this.client.begin(async (transaction) => {
@@ -189,14 +223,49 @@ export class PostgresDocumentStore implements DocumentStore {
           return storedUploadResponse(prior[0].response);
         }
 
-        stage = "LIMIT_READ";
-        const [count] = await transaction<Array<{ count: number }>>`
-        SELECT count(*)::int AS count
+        // One writer per candidate decides the slot, so two concurrent uploads with different idempotency keys cannot
+        // both pass the count below.
+        stage = "SLOT_LOCK";
+        await transaction`
+        SELECT pg_advisory_xact_lock(hashtext(${`${userId}:documents.resume-slot`}))
+      `;
+        stage = "SLOT_ABANDON";
+        const abandoned = await transaction<Array<{ id: string; version: number }>>`
+        UPDATE documents.resume_documents
+        SET status = 'failed', failure_code = 'scan_failed', processed_at = now(), updated_at = now()
+        WHERE user_id = ${userId}
+          AND status = 'awaiting_upload'
+          AND created_at < now() - (${RESUME_UPLOAD_HOLD_SECONDS}::int * interval '1 second')
+        RETURNING id, version
+      `;
+        for (const row of abandoned) {
+          const failure = JSON.stringify({ version: row.version, failureCode: "scan_failed" });
+          await transaction`
+          INSERT INTO documents.audit_events (
+            id, user_id, action, document_id, trace_id, metadata
+          ) VALUES (
+            ${uuidv7()}, ${userId}, 'resume.processing.failed', ${row.id}, ${traceId},
+            ${failure}::text::jsonb
+          )
+        `;
+        }
+        stage = "SLOT_READ";
+        const occupied = await transaction<Array<{ status: string; count: number }>>`
+        SELECT status, count(*)::int AS count
         FROM documents.resume_documents
         WHERE user_id = ${userId}
+          AND status IN ('awaiting_upload', 'scanning', 'parsing', 'parsed')
+        GROUP BY status
       `;
-        if ((count?.count ?? 0) >= 20) {
-          throw new ResumeDocumentLimitError();
+        const inFlight = occupied
+          .filter(({ status }) => status !== "parsed")
+          .reduce((total, { count }) => total + count, 0);
+        if (inFlight > 0) {
+          throw new ResumeUploadInProgressError();
+        }
+        const stored = occupied.reduce((total, { count }) => total + count, 0);
+        if (stored >= maxStoredResumes) {
+          throw new ResumeDocumentLimitError(maxStoredResumes);
         }
 
         const documentId = uuidv7();
@@ -260,6 +329,7 @@ export class PostgresDocumentStore implements DocumentStore {
       if (
         error instanceof DocumentIdempotencyConflictError ||
         error instanceof ResumeDocumentLimitError ||
+        error instanceof ResumeUploadInProgressError ||
         error instanceof ResumeUploadRegistrationError
       ) {
         throw error;

@@ -38,6 +38,7 @@ Records important technical decisions, their context, alternatives, consequences
 ## Proposed delivery decisions
 
 - [ADR-027: Profile-owned candidate rights workflows](027-profile-owned-candidate-rights-workflows.md)
+- [ADR-032: Billing-owned plan limits, enforced atomically by the owning context](032-billing-owned-plan-limits-enforced-by-owning-contexts.md)
 
 Use `000-template.md` for future decisions.
 

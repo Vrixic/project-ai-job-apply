@@ -9,6 +9,23 @@ export const coreCapabilities = Object.freeze([
 export const maximumEntitlementVersion = Number.MAX_SAFE_INTEGER;
 export const maximumEntitlementOutboxAttempts = 5;
 
+/**
+ * Quantities a plan allows (ADR-032). Billing owns this table and returns the evaluated plan's limits with every
+ * valid entitlement evaluation; the context that owns the thing being limited enforces it. Limits are derived from
+ * the plan, so an expired Pro subscription evaluates as Free and gets Free limits.
+ */
+export interface PlanLimits {
+  /** Resumes a candidate may keep (uploading, scanning, parsing, or parsed) at once. */
+  readonly maxStoredResumes: number;
+}
+
+export const planLimitsVersion = 1;
+export const planLimits: Readonly<Record<EntitlementPlan, PlanLimits>> = Object.freeze({
+  free: Object.freeze({ maxStoredResumes: 1 }),
+  // Pro's limits are a pending product decision; they equal Free's until Pro is defined.
+  pro: Object.freeze({ maxStoredResumes: 1 }),
+});
+
 export type EntitlementCapability = (typeof coreCapabilities)[number];
 export type EntitlementAccessState = "active" | "grace";
 
@@ -53,6 +70,7 @@ export type EntitlementEvaluation =
       plan: EntitlementPlan;
       accessState: EntitlementAccessState;
       grants: readonly EntitlementCapability[];
+      limits: PlanLimits;
       version: number;
       evaluatedAt: string;
       accessThrough?: string;

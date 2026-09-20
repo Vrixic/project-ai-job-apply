@@ -48,8 +48,14 @@ import {
   type EntitlementEvaluation,
   type EntitlementReadService,
   type EntitlementSchedule,
+  EntitlementUnavailableError,
 } from "@ai-job-apply/billing-service";
-import { type DocumentStore, ResumeUploadRegistrationError } from "@ai-job-apply/documents-service";
+import {
+  type DocumentStore,
+  ResumeDocumentLimitError,
+  ResumeUploadInProgressError,
+  ResumeUploadRegistrationError,
+} from "@ai-job-apply/documents-service";
 import {
   type ActiveJobRecord,
   type ActiveJobSearchInput,
@@ -804,6 +810,7 @@ class MemoryEntitlements implements EntitlementReadService {
         plan: "free",
         accessState: "active",
         grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+        limits: { maxStoredResumes: 1 },
         version: 0,
         evaluatedAt: now.toISOString(),
       }
@@ -918,12 +925,13 @@ async function createApp(
     trust?: TrustApplicationService;
     trustReviewerAssignments?: readonly TrustReviewerAssignment[];
     applications?: ApplicationsApi;
+    documents?: DocumentStore;
   } = {},
 ) {
   const issuer = await createTestTokenIssuer();
   const store = new MemoryProfileStore();
   const catalog = new MemoryJobCatalog();
-  const documents = new MemoryDocumentStore();
+  const documents = options.documents ?? new MemoryDocumentStore();
   const savedJobs = new MemorySavedJobs();
   const privateSavedPageCaptures = new MemoryPrivateSavedPageCaptures();
   const jobReports = new MemoryJobReports();
@@ -1600,6 +1608,7 @@ describe("candidate API", () => {
       plan: "pro",
       accessState: "grace",
       grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      limits: { maxStoredResumes: 1 },
       version: 7,
       evaluatedAt: now.toISOString(),
       accessThrough: "2026-08-15T12:00:00.000Z",
@@ -1627,6 +1636,7 @@ describe("candidate API", () => {
       plan: "free",
       accessState: "active",
       grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      limits: { maxStoredResumes: 1 },
       version: 0,
       evaluatedAt: now.toISOString(),
     });
@@ -1634,6 +1644,7 @@ describe("candidate API", () => {
       plan: "pro",
       accessState: "grace",
       grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      limits: { maxStoredResumes: 1 },
       version: 7,
       evaluatedAt: now.toISOString(),
       accessThrough: "2026-08-15T12:00:00.000Z",
@@ -1694,6 +1705,31 @@ describe("candidate API", () => {
       });
       expect(response.body).not.toMatch(/provider secret|candidate@|018f92b0|invalid_schedule/i);
     }
+    // limits are part of the contract: a missing or out-of-range limit fails closed like any malformed evaluation
+    for (const limits of [
+      undefined,
+      { maxStoredResumes: -1 },
+      { maxStoredResumes: 1.5 },
+      { maxStoredResumes: 1001 },
+      { maxStoredResumes: "1" },
+    ]) {
+      entitlements.evaluations.set(owner, {
+        valid: true,
+        plan: "free",
+        accessState: "active",
+        grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+        limits,
+        version: 1,
+        evaluatedAt: now.toISOString(),
+      } as never);
+      const badLimits = await app.inject({
+        method: "GET",
+        url: "/v1/entitlements",
+        headers: authorization,
+      });
+      expect(badLimits.statusCode, JSON.stringify(limits)).toBe(503);
+      expect(badLimits.json().code, JSON.stringify(limits)).toBe("entitlement_unavailable");
+    }
     entitlements.evaluations.set(owner, {
       valid: true,
       plan: "enterprise",
@@ -1713,6 +1749,7 @@ describe("candidate API", () => {
       plan: "pro",
       accessState: "grace",
       grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      limits: { maxStoredResumes: 1 },
       version: 1,
       evaluatedAt: now.toISOString(),
       accessThrough: "2026-08-16T12:01:00.000Z",
@@ -1728,6 +1765,7 @@ describe("candidate API", () => {
       plan: "free",
       accessState: "active",
       grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+      limits: { maxStoredResumes: 1 },
       version: 1,
       evaluatedAt: "2026-02-30T12:00:00.000Z",
     });
@@ -4615,3 +4653,46 @@ const applicationsDatabaseUrl = process.env.DATABASE_URL;
     });
   },
 );
+
+describe("resume upload refusals (ADR-032)", () => {
+  const payload: CreateResumeUploadRequest = {
+    fileName: "synthetic-resume.pdf",
+    mediaType: "application/pdf",
+    sizeBytes: 1024,
+    sha256: "a".repeat(64),
+  };
+  const refusing = (error: Error): DocumentStore => ({
+    async listResumeDocuments() {
+      return { documents: [] };
+    },
+    async createResumeUpload() {
+      throw error;
+    },
+    async close() {},
+  });
+
+  it.each([
+    [new ResumeUploadInProgressError(), 409, "resume_upload_in_progress"],
+    [new ResumeDocumentLimitError(1), 409, "resume_document_limit"],
+    [new EntitlementUnavailableError(), 503, "entitlement_unavailable"],
+  ])("maps %s to a stable problem without leaking detail", async (error, status, code) => {
+    const { app, issuer } = await createApp({ documents: refusing(error) });
+    try {
+      const token = await issuer.issue("candidate-resume", {
+        scope: "documents:read documents:write",
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/resumes/uploads",
+        headers: { authorization: `Bearer ${token}`, "idempotency-key": "resume-upload-test-0001" },
+        payload,
+      });
+      expect(response.statusCode).toBe(status);
+      expect(response.json()).toMatchObject({ code, status });
+      expect(response.headers["content-type"]).toMatch(/problem\+json/);
+      expect(response.body).not.toMatch(/synthetic-resume|aaaaaaaa/);
+    } finally {
+      await app.close();
+    }
+  });
+});

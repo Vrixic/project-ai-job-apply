@@ -2,6 +2,7 @@
 
 import {
   compileComponentValidator,
+  type EntitlementSummary,
   type JobPreferenceSet,
   type Operation,
   type PutJobPreferencesResponse,
@@ -178,6 +179,12 @@ export function FoundationForm({
   workloadConformanceEnabled: boolean;
 }) {
   const [profileRefreshVersion, setProfileRefreshVersion] = useState(0);
+  const [maxStoredResumes, setMaxStoredResumes] = useState<number>();
+  const handleEntitlementSummary = useCallback(
+    (summary: EntitlementSummary | undefined) =>
+      setMaxStoredResumes(summary?.limits?.maxStoredResumes),
+    [],
+  );
   const handleDocumentParsed = useCallback(
     () => setProfileRefreshVersion((version) => version + 1),
     [],
@@ -1006,13 +1013,17 @@ export function FoundationForm({
             )}
           </form>
 
-          <ResumeUploadForm authenticated onDocumentParsed={handleDocumentParsed} />
+          <ResumeUploadForm
+            authenticated
+            maxStoredResumes={maxStoredResumes}
+            onDocumentParsed={handleDocumentParsed}
+          />
           <ProfileFactsForm authenticated refreshVersion={profileRefreshVersion} />
         </>
       )}
       <JobSearchForm authenticated={authenticated} />
       <SavedJobsPanel authenticated={authenticated} />
-      <EntitlementStatus authenticated={authenticated} />
+      <EntitlementStatus onSummary={handleEntitlementSummary} authenticated={authenticated} />
       <CandidateRightsPanel authenticated={authenticated} />
 
       {!authConfigured && (

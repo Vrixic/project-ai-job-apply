@@ -310,6 +310,30 @@ describe("platform BFF", () => {
   });
 
   it.each([
+    [409, "resume_upload_in_progress", "A resume is still being processed"],
+    [409, "resume_document_limit", "Resume limit reached"],
+    [503, "entitlement_unavailable", "Entitlement status unavailable"],
+  ])(
+    "preserves the declared resume upload refusal without upstream values: %s %s (ADR-032)",
+    async (status, code, title) => {
+      const response = await forwardPlatformRequest(
+        "/v1/resumes/uploads",
+        { method: "POST", body: "{}" },
+        {
+          auth0: authenticated,
+          baseUrl: "http://localhost:4000",
+          fetch: async () => upstreamProblem(status, code),
+        },
+      );
+      expect(response.status).toBe(status);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ type: `urn:ai-job-apply:problem:${code}`, title, status, code });
+      expect(JSON.stringify(body)).not.toContain(privateCanary);
+      expect(body).not.toHaveProperty("detail");
+    },
+  );
+
+  it.each([
     ["report", 404, "job_report_target_unavailable", "Job is unavailable"],
     ["report", 409, "job_already_reported", "Job already reported"],
     ["report", 409, "job_report_limit_reached", "Job-report limit reached"],

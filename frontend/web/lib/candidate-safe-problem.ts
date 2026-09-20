@@ -34,6 +34,19 @@ const copyBySurface: Readonly<Record<CandidateProblemSurface, SurfaceCopy>> = {
   },
 };
 
+// Refusals the candidate can act on get their own fixed copy (ADR-032); they are never upstream text.
+const resumeCodeCopy: ReadonlyMap<string, string> = new Map([
+  [
+    "resume_upload_in_progress",
+    "Your resume is still being processed. You can upload another when it finishes.",
+  ],
+  ["resume_document_limit", "Your plan's stored resume limit has been reached."],
+  [
+    "entitlement_unavailable",
+    "Your plan details are temporarily unavailable. Try uploading again shortly.",
+  ],
+]);
+
 const authenticationCodes = new Set(["authentication_required", "session_expired"]);
 const conflictCodes = new Set([
   "idempotency_conflict",
@@ -60,6 +73,10 @@ export async function candidateSafeProblemMessage(
 
   if (response.status === 401 || (code !== undefined && authenticationCodes.has(code))) {
     return "Sign in again to continue.";
+  }
+  if (surface === "resume" && code !== undefined) {
+    const specific = resumeCodeCopy.get(code);
+    if (specific) return specific;
   }
   if (response.status === 403 || code === "forbidden") {
     return "Your session is not allowed to complete this request.";

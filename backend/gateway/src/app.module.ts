@@ -89,6 +89,7 @@ import {
   DocumentIntakeUnavailableError,
   type DocumentStore,
   ResumeDocumentLimitError,
+  ResumeUploadInProgressError,
 } from "@ai-job-apply/documents-service";
 import {
   type ContributionCapabilityPolicySource,
@@ -571,7 +572,12 @@ class ProblemDetailsFilter implements ExceptionFilter {
     } else if (exception instanceof ResumeDocumentLimitError) {
       status = HttpStatus.CONFLICT;
       code = "resume_document_limit";
-      title = "Resume document limit reached";
+      title = "Resume limit reached";
+      detail = exception.message;
+    } else if (exception instanceof ResumeUploadInProgressError) {
+      status = HttpStatus.CONFLICT;
+      code = "resume_upload_in_progress";
+      title = "A resume is still being processed";
       detail = exception.message;
     } else if (projectApplicationsFailure(exception) !== null) {
       ({ status, code, title, detail } = projectApplicationsFailure(
@@ -1063,11 +1069,21 @@ function projectEntitlement(evaluation: Awaited<ReturnType<EntitlementReadServic
   ) {
     throw new EntitlementUnavailableError();
   }
+  const maxStoredResumes = evaluation.limits?.maxStoredResumes;
+  if (
+    typeof maxStoredResumes !== "number" ||
+    !Number.isSafeInteger(maxStoredResumes) ||
+    maxStoredResumes < 0 ||
+    maxStoredResumes > 1000
+  ) {
+    throw new EntitlementUnavailableError();
+  }
   const base = {
     grants: ["profile.manage", "jobs.search", "jobs.save", "applications.history"],
+    limits: { maxStoredResumes },
     version: evaluation.version,
     evaluatedAt: evaluation.evaluatedAt,
-  } satisfies Pick<EntitlementSummary, "grants" | "version" | "evaluatedAt">;
+  } satisfies Pick<EntitlementSummary, "grants" | "limits" | "version" | "evaluatedAt">;
   if (evaluation.plan === "free") {
     if (
       evaluation.accessState !== "active" ||

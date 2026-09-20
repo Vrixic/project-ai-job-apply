@@ -95,6 +95,34 @@ export function recoverableResumeIds(
     .map((document) => document.id);
 }
 
+const uploadInProgressMessage =
+  "Your resume is still being processed. You can upload another when it finishes.";
+
+/**
+ * Whether a new upload may be started, from what the candidate can already see (ADR-032). An unfinished upload always
+ * blocks, on every plan; a parsed resume blocks once the plan's stored-resume limit is reached. The server enforces
+ * both authoritatively, so an unknown limit (entitlements unavailable) only means the server decides.
+ */
+export function resumeUploadGate(
+  documents: readonly ResumeDocument[],
+  maxStoredResumes: number | undefined,
+  now = Date.now(),
+): { blocked: false } | { blocked: true; message: string } {
+  if (recoverableResumeIds(documents, now).length > 0) {
+    return { blocked: true, message: uploadInProgressMessage };
+  }
+  if (maxStoredResumes !== undefined) {
+    const stored = documents.filter((document) => document.status === "parsed").length;
+    if (stored >= maxStoredResumes) {
+      return {
+        blocked: true,
+        message: `Your plan includes ${maxStoredResumes} stored resume${maxStoredResumes === 1 ? "" : "s"}.`,
+      };
+    }
+  }
+  return { blocked: false };
+}
+
 export class ResumePollingTargets {
   readonly #ids = new Set<string>();
 
@@ -147,9 +175,12 @@ interface ResumeReadOwner {
 
 export function ResumeUploadForm({
   authenticated,
+  maxStoredResumes,
   onDocumentParsed,
 }: {
   authenticated: boolean;
+  /** The plan's stored-resume limit from the entitlement summary, when it is known. */
+  maxStoredResumes?: number | undefined;
   onDocumentParsed?: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -550,6 +581,9 @@ export function ResumeUploadForm({
   }
 
   const visibleDocuments = authenticated ? documents : [];
+  const uploadGate = authenticated
+    ? resumeUploadGate(documents, maxStoredResumes)
+    : { blocked: false as const };
   const visibleFile = authenticated ? file : undefined;
   const visibleLoading = authenticated && loading;
   const visibleUploading = authenticated && uploading;
@@ -621,14 +655,18 @@ export function ResumeUploadForm({
                 setFile(undefined);
               }
             }}
-            disabled={!authenticated || visibleUploading}
+            disabled={!authenticated || visibleUploading || uploadGate.blocked}
             required
           />
           {visibleFile && <span aria-live="polite">Selected file: {visibleFile.name}</span>}
         </label>
-        <button type="submit" disabled={!authenticated || !visibleFile || visibleUploading}>
+        <button
+          type="submit"
+          disabled={!authenticated || !visibleFile || visibleUploading || uploadGate.blocked}
+        >
           {visibleUploading ? "Encrypting and uploading…" : "Upload resume"}
         </button>
+        {uploadGate.blocked && <p role="status">{uploadGate.message}</p>}
       </form>
       {visibleMessage && <output>{visibleMessage}</output>}
     </section>
