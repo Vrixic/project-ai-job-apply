@@ -3694,6 +3694,7 @@ describe("Applications routes", () => {
 
     for (const [url, method, payload, headers] of [
       ["/v1/applications/search", "POST", { limit: 10 }, read],
+      ["/v1/applications/search", "POST", { jobId, limit: 5 }, read],
       [`/v1/applications/${applicationId}`, "GET", undefined, read],
       [`/v1/applications/${applicationId}/history?afterSeq=1&limit=5`, "GET", undefined, read],
       [`/v1/applications/${applicationId}/packets`, "POST", { expectedRevision: 2 }, write],
@@ -3751,6 +3752,20 @@ describe("Applications routes", () => {
       afterSeq: 1,
       limit: 5,
     });
+    // The job filter reaches the service exactly as sent.
+    expect(calls.filter((call) => call.method === "search").map((call) => call.args[1])).toEqual([
+      { limit: 10 },
+      { jobId, limit: 5 },
+    ]);
+    for (const payload of [{ jobId: "not-a-uuid" }, { jobId, canonicalJobId: jobId }]) {
+      const rejected = await app.inject({
+        method: "POST",
+        url: "/v1/applications/search",
+        headers: read,
+        payload,
+      });
+      expect(rejected.statusCode, JSON.stringify(payload)).toBe(400);
+    }
   });
 
   it("rejects missing idempotency keys, malformed bodies, unknown fields, and bad identifiers", async () => {

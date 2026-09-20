@@ -106,20 +106,26 @@ describe("ApplicationsWorkspace", () => {
     const calls: Array<[string, RequestInit]> = [];
     const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
       calls.push([url, init]);
+      if (url.endsWith("/search")) return respond({ items: [] });
       return url.endsWith("/packets") ? respond(reviewable(), 201) : respond(application(), 201);
     }) as unknown as typeof globalThis.fetch;
     await mount(fetchImplementation);
     expect(container.textContent).toContain("nothing is submitted from this page");
     await click("Prepare application");
 
-    // The resume preview is a read-only GET that follows the packet; commands are unchanged.
+    // Opening looks for an existing application first, then the resume preview is a read-only
+    // GET that follows the packet; commands are unchanged.
     expect(calls.map(([url]) => url).filter((url) => !url.endsWith("/resume"))).toEqual([
+      "/api/platform/applications/search",
       "/api/platform/applications",
       `/api/platform/applications/${APP}/packets`,
     ]);
-    expect(JSON.parse(String(calls[0]?.[1].body))).toEqual({ jobId: JOB });
-    expect(JSON.parse(String(calls[1]?.[1].body))).toEqual({ expectedRevision: 1 });
-    for (const [, init] of calls.filter(([, request]) => request.method === "POST")) {
+    expect(JSON.parse(String(calls[0]?.[1].body))).toEqual({ jobId: JOB, limit: 1 });
+    expect(JSON.parse(String(calls[1]?.[1].body))).toEqual({ jobId: JOB });
+    expect(JSON.parse(String(calls[2]?.[1].body))).toEqual({ expectedRevision: 1 });
+    for (const [, init] of calls.filter(
+      ([url, request]) => request.method === "POST" && !url.endsWith("/search"),
+    )) {
       expect((init.headers as Record<string, string>)["idempotency-key"]).toMatch(/^web-/);
     }
     expect(container.textContent).toContain("Application review");
@@ -127,6 +133,107 @@ describe("ApplicationsWorkspace", () => {
     // The candidate sees the resume prepared for this job next to the packet.
     expect(container.textContent).toContain("Your resume for this job");
     expect(calls.map(([url]) => url)).toContain(`/api/platform/applications/${APP}/resume`);
+  });
+
+  const buttons = () => Array.from(container.querySelectorAll("button")).map((b) => b.textContent);
+
+  it("opens the candidate's existing live application for the job instead of starting another", async () => {
+    const calls: Array<[string, RequestInit]> = [];
+    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push([url, init]);
+      return url.endsWith("/search") ? respond({ items: [reviewable()] }) : respond({}, 404);
+    }) as unknown as typeof globalThis.fetch;
+    await mount(fetchImplementation);
+
+    expect(container.textContent).toContain("Application review");
+    expect(container.textContent).toContain("Review what will be sent");
+    expect(container.textContent).toContain("Your resume for this job");
+    expect(container.textContent).not.toContain("Checking for an existing application");
+    expect(buttons()).not.toContain("Prepare application");
+    expect(JSON.parse(String(calls[0]?.[1].body))).toEqual({ jobId: JOB, limit: 1 });
+    // Nothing was created or prepared just by opening the page.
+    expect(
+      calls.filter(([url, init]) => init.method === "POST" && !url.endsWith("/search")),
+    ).toEqual([]);
+  });
+
+  it("offers to prepare when the newest application was cancelled or none exists", async () => {
+    for (const items of [[application({ status: "cancelled", revision: 4 })], []]) {
+      const fetchImplementation = vi.fn(async (url: string) =>
+        url.endsWith("/search") ? respond({ items }) : respond({}, 404),
+      ) as unknown as typeof globalThis.fetch;
+      await mount(fetchImplementation);
+      expect(container.textContent).toContain("nothing is submitted from this page");
+      expect(buttons()).toContain("Prepare application");
+      await act(async () => root.render(<div />));
+    }
+  });
+
+  it("shows the prepare step when the lookup fails or returns anything unexpected", async () => {
+    const otherJob = "00000000-0000-7000-8000-0000000000ff";
+    for (const reply of [
+      () => respond({}, 503),
+      () => respond({ items: [application({ canonicalJobId: otherJob })] }),
+      () => respond({ items: "nope" }),
+    ]) {
+      const fetchImplementation = vi.fn(async (url: string) =>
+        url.endsWith("/search") ? reply() : respond({}, 404),
+      ) as unknown as typeof globalThis.fetch;
+      await mount(fetchImplementation);
+      expect(container.textContent).not.toContain("Application review");
+      expect(buttons()).toContain("Prepare application");
+      await act(async () => root.render(<div />));
+    }
+  });
+
+  it("opens the live application when creating one reports that it already exists", async () => {
+    let searches = 0;
+    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/search")) {
+        searches += 1;
+        // Nothing at first (page load); the application exists by the time the candidate clicks.
+        return respond({ items: searches === 1 ? [] : [reviewable()] });
+      }
+      if (url === "/api/platform/applications" && init.method === "POST") {
+        return respond({ code: "application_already_exists" }, 409);
+      }
+      return respond({}, 404);
+    }) as unknown as typeof globalThis.fetch;
+    await mount(fetchImplementation);
+    await click("Prepare application");
+    expect(container.textContent).toContain("Application review");
+    expect(container.textContent).toContain(
+      "You already have an application for this job. It is open below.",
+    );
+    expect(container.textContent).not.toContain("live application for this job");
+  });
+
+  it("keeps the fixed already-exists copy when that application cannot be found", async () => {
+    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/search")) return respond({ items: [] });
+      if (url === "/api/platform/applications" && init.method === "POST") {
+        return respond({ code: "application_already_exists" }, 409);
+      }
+      return respond({}, 404);
+    }) as unknown as typeof globalThis.fetch;
+    await mount(fetchImplementation);
+    await click("Prepare application");
+    expect(container.textContent).toContain("You already have a live application for this job.");
+  });
+
+  it("continues preparing an existing application that has no packet yet, without creating another", async () => {
+    const calls: Array<[string, RequestInit]> = [];
+    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push([url, init]);
+      if (url.endsWith("/search")) return respond({ items: [application()] });
+      return url.endsWith("/packets") ? respond(reviewable(), 201) : respond({}, 404);
+    }) as unknown as typeof globalThis.fetch;
+    await mount(fetchImplementation);
+    await click("Prepare application");
+    const posts = calls.filter(([url, init]) => init.method === "POST" && !url.endsWith("/search"));
+    expect(posts.map(([url]) => url)).toEqual([`/api/platform/applications/${APP}/packets`]);
+    expect(JSON.parse(String(posts[0]?.[1].body))).toEqual({ expectedRevision: 1 });
+    expect(container.textContent).toContain("Review what will be sent");
   });
 
   it("approves exactly the reviewed packet hash and acknowledged keys at the current revision", async () => {

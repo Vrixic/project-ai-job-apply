@@ -222,6 +222,29 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
     expect(start.application.approval).toBeUndefined();
   });
 
+  it("finds only this owner's applications for one job, newest first, so a live one can be reopened", async () => {
+    const owner = uuidv7();
+    const jobA = newJob();
+    const jobB = newJob();
+    const first = await service.create(owner, jobA, key("filter-a1"));
+    await service.create(owner, jobB, key("filter-b1"));
+    const onlyA = await service.search(owner, { jobId: jobA });
+    expect(validatePage(onlyA)).toBe(true);
+    expect(onlyA.items.map((item) => item.id)).toEqual([first.id]);
+    expect((await service.search(owner, { jobId: jobB })).items).toHaveLength(1);
+    expect((await service.search(owner, { jobId: newJob() })).items).toHaveLength(0);
+    // Another candidate never sees this owner's application for the same job.
+    expect((await service.search(uuidv7(), { jobId: jobA })).items).toHaveLength(0);
+
+    // After a cancellation the candidate may start again; the newest application comes first.
+    await service.cancel(owner, first.id, first.revision, key("filter-cancel"));
+    const restarted = await service.create(owner, jobA, key("filter-a2"));
+    const both = await service.search(owner, { jobId: jobA });
+    expect(both.items.map((item) => item.id)).toEqual([restarted.id, first.id]);
+    expect(both.items[0]?.status).not.toBe("cancelled");
+    expect(both.items[1]?.status).toBe("cancelled");
+  });
+
   it("pages owner applications with a strict cursor and never leaks another owner", async () => {
     const owner = uuidv7();
     for (let index = 0; index < 3; index += 1) {

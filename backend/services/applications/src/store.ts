@@ -745,7 +745,11 @@ export class PostgresApplicationStore {
 
   async listApplications(
     ownerUserId: string,
-    page: { limit?: number; after?: { updatedAt: Date; id: string } } = {},
+    page: {
+      limit?: number;
+      after?: { updatedAt: Date; id: string };
+      canonicalJobId?: string;
+    } = {},
   ): Promise<{ items: ApplicationView[]; hasMore: boolean }> {
     const limit = Math.min(Math.max(page.limit ?? 25, 1), MAX_LIST_PAGE);
     return this.client.begin("READ ONLY", async (tx) => {
@@ -754,6 +758,7 @@ export class PostgresApplicationStore {
         SELECT id, owner_user_id, canonical_job_id, status, revision, current_packet_id, created_at, updated_at
         FROM applications.applications
         WHERE owner_user_id = ${ownerUserId}
+          ${page.canonicalJobId ? tx`AND canonical_job_id = ${page.canonicalJobId}` : tx``}
           ${after ? tx`AND (updated_at, id) < (${after.updatedAt}, ${after.id})` : tx``}
         ORDER BY updated_at DESC, id DESC
         LIMIT ${limit + 1}
