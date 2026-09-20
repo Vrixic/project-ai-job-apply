@@ -237,6 +237,12 @@ feature. The product owner approved the transitional baseline below on 2026-09-1
 
 Do not work around a mixed release with raw Terraform, an older receipt, or a hand-edited sidecar.
 
+**Converged 2026-09-20.** The release ran from a schema-8 baseline (state serial 374): one document receipt refreshed
+both archives (parser to version 7, processor to version 12) with the Gateway (version 80) in a plan of exactly
+six updates plus the one accepted parser-version output change, applied and verified with zero drift. A schema-7
+baseline was then captured from that single receipt (state serial 375), so schema 8 is no longer needed and stays
+available only for a future mixed release.
+
 Rules, all enforced by the guards and covered by tests:
 
 - **Schema 8 is schema 7 plus three keys**: `ProcessorReceiptSha256`, `ProcessorReleaseSourceSha`, and
