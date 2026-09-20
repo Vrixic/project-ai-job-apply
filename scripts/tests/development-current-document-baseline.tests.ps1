@@ -241,6 +241,112 @@ try {
   $badCheck = @{} + $check; $badCheck.Metadata = $badMetadata
   Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @badCheck } "coherently rehashed receipt with changed artifact version"
   [IO.File]::WriteAllText($receiptPath, ($receipt | ConvertTo-Json -Depth 30), [Text.UTF8Encoding]::new($false))
+
+  # ---- D3-020: schema-8 (two-receipt) baseline for a mixed document release. The deployed parser comes
+  # from the first receipt and the deployed processor from a second, different receipt.
+  $processorSource = "c" * 40
+  $processorArtifacts = @()
+  foreach ($kind in @("parser", "processor")) {
+    $artifactName = "document-$kind-lambda"; $digest = $(if ($kind -ceq "parser") { "5" } else { "6" }) * 64
+    foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
+      $processorArtifacts += [pscustomobject]@{
+        artifactName = $artifactName; artifactSha256 = $digest; suffix = $suffix
+        key = "lambda/documents/$processorSource/$digest/$artifactName.$suffix"; versionId = "second-version-$kind-$suffix"
+        objectSha256 = $digest; objectBase64Sha256 = [Convert]::ToBase64String((New-Object byte[] 32)); contentLength = 128
+      }
+    }
+  }
+  $processorReceipt = [pscustomobject]@{
+    schemaVersion = 1; kind = "development-document-lambda-publication"; environment = "development"; region = $Region
+    sourceSha = $processorSource; phase = "verified"; createdAt = "2026-09-02T00:00:00Z"; completedAt = "2026-09-02T00:00:01Z"
+    boundarySha256 = $receipt.boundarySha256; artifacts = $processorArtifacts
+  }
+  $processorReceiptPath = Join-Path $receiptRoot "receipt-generated-processor.json"
+  [IO.File]::WriteAllText($processorReceiptPath, ($processorReceipt | ConvertTo-Json -Depth 30), [Text.UTF8Encoding]::new($false))
+  $processorReceiptSha = Get-FileSha256 $processorReceiptPath
+  # Plan: the parser stays from the first receipt; the processor moves to the second receipt.
+  $mixedPlan = Copy-Fixture $plan
+  $secondProcessorZip = @($processorArtifacts | Where-Object { $_.artifactName -ceq "document-processor-lambda" -and $_.suffix -ceq "zip" })[0]
+  $mixedPlan.variables.document_processor_artifact_s3_key.value = $secondProcessorZip.key
+  $mixedPlan.variables.document_processor_artifact_s3_object_version.value = $secondProcessorZip.versionId
+  $mixedPlan.variables.document_processor_artifact_sha256.value = $secondProcessorZip.artifactSha256
+  $mixedPlan.variables.document_processor_artifact_base64sha256.value = $secondProcessorZip.objectBase64Sha256
+  $processorFunction = $mixedPlan.planned_values.root_module.resources[4].values
+  $processorFunction.s3_key = $secondProcessorZip.key
+  $processorFunction.s3_object_version = $secondProcessorZip.versionId
+  $processorFunction.source_code_hash = $secondProcessorZip.objectBase64Sha256
+  $metadata8 = [pscustomobject](New-CurrentDocumentBaselineMetadata -Plan $mixedPlan -PlanPath $planPath -PlanSha256 $planSha -State $state `
+    -SourceSha $SourceSha -DocumentReleaseSourceSha $documentSource -ReceiptSha256 $receiptSha -AccountId $ExpectedAccountId -Region $Region `
+    -RepositoryRoot $repositoryRoot -ProcessorReleaseSourceSha $processorSource -ProcessorReceiptSha256 $processorReceiptSha)
+  if ($metadata8.SchemaVersion -cne "8" -or $metadata8.ProcessorReceiptSha256 -cne $processorReceiptSha -or
+      $metadata8.ProcessorReleaseSourceSha -cne $processorSource -or $metadata8.DocumentReleaseSourceSha -cne $documentSource) {
+    throw "A two-receipt capture lost which receipt describes which archive."
+  }
+  $check8 = @{ Metadata = $metadata8; Plan = $mixedPlan; PlanPath = $planPath; PlanSha256 = $planSha; CurrentState = $state; SourceSha = $SourceSha
+    AccountId = $ExpectedAccountId; Region = $Region; RepositoryRoot = $repositoryRoot; ReceiptDirectory = $receiptRoot }
+  $null = Assert-CurrentDocumentBaselineEvidence @check8 -AllowTwoReceipts
+  # The migration and D2 operators never opt in, so they reject a two-receipt baseline.
+  Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @check8 } "a schema-8 baseline without the Gateway-operator opt-in"
+  # The migration reader resolves a baseline through its adjacent sidecar and must refuse schema 8. The same
+  # reader accepts the equivalent schema-7 baseline above, and the plan path and checksum here match, so the
+  # refusal is about the schema.
+  $mixedPath = Join-Path $operatorRoot "mixed.tfplan"
+  Copy-Item -LiteralPath $planPath -Destination $mixedPath -Force
+  $mixedSha = Get-FileSha256 $mixedPath
+  $metadata8Migration = [pscustomobject](New-CurrentDocumentBaselineMetadata -Plan $mixedPlan -PlanPath $mixedPath -PlanSha256 $mixedSha -State $state `
+    -SourceSha $SourceSha -DocumentReleaseSourceSha $documentSource -ReceiptSha256 $receiptSha -AccountId $ExpectedAccountId -Region $Region `
+    -RepositoryRoot $repositoryRoot -ProcessorReleaseSourceSha $processorSource -ProcessorReceiptSha256 $processorReceiptSha)
+  $sidecar8 = "$mixedPath.baseline.json"
+  [IO.File]::WriteAllText($sidecar8, ($metadata8Migration | ConvertTo-Json -Depth 30), [Text.UTF8Encoding]::new($false))
+  $script:fixturePlan = $mixedPlan
+  $migrationMessage = ""
+  try { Read-RetainedMigrationBaseline -PlanPath $mixedPath -PlanSha256 $mixedSha -MetadataSha256 (Get-FileSha256 $sidecar8) -RequireCurrentState | Out-Null } catch { $migrationMessage = $_.Exception.Message }
+  if ($migrationMessage -notmatch "schema-7|exact development migration handoff") { throw "The migration reader did not refuse a two-receipt baseline for its schema: '$migrationMessage'." }
+  $script:fixturePlan = $plan
+  # A capture must name both receipts or neither.
+  Assert-Rejected {
+    New-CurrentDocumentBaselineMetadata -Plan $mixedPlan -PlanPath $planPath -PlanSha256 $planSha -State $state -SourceSha $SourceSha `
+      -DocumentReleaseSourceSha $documentSource -ReceiptSha256 $receiptSha -AccountId $ExpectedAccountId -Region $Region `
+      -RepositoryRoot $repositoryRoot -ProcessorReceiptSha256 $processorReceiptSha
+  } "a two-receipt capture without the processor source"
+  foreach ($change in @(
+      @{ Name = "processor receipt reused for both"; Mutate = { param($v) $v.ProcessorReceiptSha256 = $v.ReceiptSha256 } },
+      @{ Name = "swapped receipts"; Mutate = { param($v) $v.ReceiptSha256 = $processorReceiptSha; $v.ProcessorReceiptSha256 = $receiptSha } },
+      @{ Name = "unknown processor receipt"; Mutate = { param($v) $v.ProcessorReceiptSha256 = "e" * 64 } },
+      @{ Name = "processor source relabelled"; Mutate = { param($v) $v.ProcessorReleaseSourceSha = "e" * 40 } },
+      @{ Name = "processor delta"; Mutate = { param($v) $v.ProcessorSourceDeltaSha256 = "e" * 64 } },
+      @{ Name = "parser delta"; Mutate = { param($v) $v.DocumentSourceDeltaSha256 = "e" * 64 } },
+      @{ Name = "missing processor receipt key"; Mutate = { param($v) $v.PSObject.Properties.Remove("ProcessorReceiptSha256") } },
+      @{ Name = "relabelled as schema 7"; Mutate = { param($v) $v.SchemaVersion = "7" } },
+      @{ Name = "parser stage"; Mutate = { param($v) $v.Stage = "parser-dark"; $v.ParserQualifiedArn = "" } }
+    )) {
+    $bad8 = Copy-Fixture $metadata8; & $change.Mutate $bad8
+    $bad8Check = @{} + $check8; $bad8Check.Metadata = $bad8
+    Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @bad8Check -AllowTwoReceipts } $change.Name
+  }
+  # Each deployed function must match the receipt that claims it.
+  foreach ($property in @("s3_key", "s3_object_version", "source_code_hash")) {
+    $badPlan8 = Copy-Fixture $mixedPlan; $badPlan8.planned_values.root_module.resources[4].values.$property = "different"
+    $badPlan8Check = @{} + $check8; $badPlan8Check.Plan = $badPlan8
+    Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @badPlan8Check -AllowTwoReceipts } "two-receipt processor $property"
+  }
+  # A single receipt that does not describe the deployed processor cannot stand in for the second one.
+  $sameReceipt8 = Copy-Fixture $metadata8; $sameReceipt8.ProcessorReceiptSha256 = $receiptSha
+  $sameReceipt8Check = @{} + $check8; $sameReceipt8Check.Metadata = $sameReceipt8
+  Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @sameReceipt8Check -AllowTwoReceipts } "the first receipt standing in for the processor"
+  # The original single-receipt plan is not a mixed release, so it is not a valid two-receipt baseline.
+  $notMixed8Check = @{} + $check8; $notMixed8Check.Plan = $plan
+  Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @notMixed8Check -AllowTwoReceipts } "a non-mixed plan under a two-receipt baseline"
+  # A missing or duplicated second receipt on disk fails closed.
+  $duplicate8 = Join-Path $receiptRoot "receipt-duplicate-processor.json"
+  [IO.File]::WriteAllText($duplicate8, (Get-Content -LiteralPath $processorReceiptPath -Raw), [Text.UTF8Encoding]::new($false))
+  Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @check8 -AllowTwoReceipts } "a duplicated processor receipt"
+  Remove-Item -LiteralPath $duplicate8 -Force
+  Move-Item -LiteralPath $processorReceiptPath -Destination "$processorReceiptPath.moved"
+  Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @check8 -AllowTwoReceipts } "a missing processor receipt"
+  Move-Item -LiteralPath "$processorReceiptPath.moved" -Destination $processorReceiptPath
+  $null = Assert-CurrentDocumentBaselineEvidence @check8 -AllowTwoReceipts
+  Write-Host "Current schema-8 two-receipt (D3-020) capture and adversarial tests passed."
   $badTask = Copy-Fixture $task; $badTask.appliedBaselineReceiptSha256 = "e" * 64
   Assert-Rejected { New-PostMigrationBaselineMetadata -Plan $postPlan -PlanPath $postPath -PlanSha256 $postSha -State $postState -TaskMetadata $badTask } "task receipt reattribution"
   [IO.File]::AppendAllText($sidecar, " ")
