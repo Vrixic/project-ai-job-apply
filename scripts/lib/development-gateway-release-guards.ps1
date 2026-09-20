@@ -89,7 +89,11 @@ function Assert-RetainedGatewayBaselineMetadata {
   $actualKeys = @($Metadata.PSObject.Properties | ForEach-Object Name | Sort-Object)
   $schemaVersion = [string]$Metadata.SchemaVersion
   $v7Keys = @($v6Keys + "DocumentSourceDeltaSha256" | Sort-Object)
-  $expectedKeys = if ($schemaVersion -ceq "1") { $v1Keys } elseif ($schemaVersion -ceq "2") { $v2Keys } elseif ($schemaVersion -ceq "3") { $v3Keys } elseif ($schemaVersion -ceq "4") { $v4Keys } elseif ($schemaVersion -ceq "5") { $v5Keys } elseif ($schemaVersion -ceq "6") { $v6Keys } elseif ($schemaVersion -ceq "7") { $v7Keys } else { @() }
+  # Schema 8 (D3-020) is a one-time transitional current-state baseline for a mixed document release:
+  # the parser and the processor come from two different verified publication receipts. It is accepted
+  # only by the Gateway operator, and only for a release that refreshes both archives from one receipt.
+  $v8Keys = @($v7Keys + @("ProcessorReceiptSha256", "ProcessorReleaseSourceSha", "ProcessorSourceDeltaSha256") | Sort-Object)
+  $expectedKeys = if ($schemaVersion -ceq "1") { $v1Keys } elseif ($schemaVersion -ceq "2") { $v2Keys } elseif ($schemaVersion -ceq "3") { $v3Keys } elseif ($schemaVersion -ceq "4") { $v4Keys } elseif ($schemaVersion -ceq "5") { $v5Keys } elseif ($schemaVersion -ceq "6") { $v6Keys } elseif ($schemaVersion -ceq "7") { $v7Keys } elseif ($schemaVersion -ceq "8") { $v8Keys } else { @() }
   $createdAt = [datetime]::MinValue
   $createdAtValid = [datetime]::TryParse([string]$Metadata.CreatedAt, [ref]$createdAt) -and
     $createdAt.Year -ge 2000 -and $createdAt.Year -le 2099
@@ -116,10 +120,16 @@ function Assert-RetainedGatewayBaselineMetadata {
       [string]$Metadata.BaselineToReleaseDeltaSha256 -match '^[a-f0-9]{64}$' -and
       [string]$Metadata.OperatorSourceSha -ceq $SourceSha -and
       [string]$Metadata.OperatorDeltaSha256 -match '^[a-f0-9]{64}$'
-  } elseif ($schemaVersion -in @("6", "7")) {
+  } elseif ($schemaVersion -in @("6", "7", "8")) {
     [string]$Metadata.SourceSha -ceq $SourceSha -and
       [string]$Metadata.DocumentReleaseSourceSha -match '^[a-f0-9]{40}$' -and
-      ($schemaVersion -cne "7" -or [string]$Metadata.DocumentSourceDeltaSha256 -cmatch '^[a-f0-9]{64}$')
+      ($schemaVersion -cnotin @("7", "8") -or [string]$Metadata.DocumentSourceDeltaSha256 -cmatch '^[a-f0-9]{64}$') -and
+      ($schemaVersion -cne "8" -or (
+          [string]$Metadata.ProcessorReceiptSha256 -cmatch '^[a-f0-9]{64}$' -and
+          [string]$Metadata.ProcessorReceiptSha256 -cne [string]$Metadata.ReceiptSha256 -and
+          [string]$Metadata.ProcessorReleaseSourceSha -cmatch '^[a-f0-9]{40}$' -and
+          [string]$Metadata.ProcessorSourceDeltaSha256 -cmatch '^[a-f0-9]{64}$' -and
+          [string]$stage -ceq "complete-dark"))
   } else { [string]$Metadata.SourceSha -ceq $SourceSha }
   $stateBindingValid = [string]$Metadata.StateLineage -ceq [string]$CurrentState.Lineage -and
     ([long]$Metadata.StateSerial -eq [long]$CurrentState.Serial -or
@@ -145,7 +155,7 @@ function Assert-RetainedGatewayBaselineMetadata {
         [string]$parserQualifiedArn -cnotmatch "^arn:aws:lambda:$([regex]::Escape($Region)):$AccountId`:function:ai-job-apply-development-document-parser:[1-9][0-9]*$")) {
     throw "The retained baseline metadata does not match the exact document-to-gateway handoff."
   }
-  if ($schemaVersion -in @("2", "4", "5", "6", "7") -and [string]$Metadata.MigrationImage -cne [string]$migrationImage) {
+  if ($schemaVersion -in @("2", "4", "5", "6", "7", "8") -and [string]$Metadata.MigrationImage -cne [string]$migrationImage) {
     throw "The version-2 retained baseline metadata does not bind the exact migration image."
   }
   return $true
@@ -157,7 +167,10 @@ function Assert-GatewayDocumentBaselineReceipt {
     [Parameter(Mandatory)][string]$ReceiptSha256,
     [Parameter(Mandatory)][object]$Plan,
     [Parameter(Mandatory)][string]$SourceSha,
-    [Parameter(Mandatory)][string]$ExpectedBoundarySha256
+    [Parameter(Mandatory)][string]$ExpectedBoundarySha256,
+    # `both` is the single-receipt rule. `parser` or `processor` (schema-8 baselines only) checks that
+    # this receipt describes only that deployed archive; the other archive is proven by the other receipt.
+    [ValidateSet("both", "parser", "processor")][string]$Role = "both"
   )
   $expectedKeys = @(
     "artifacts", "boundarySha256", "completedAt", "createdAt", "environment", "kind",
@@ -199,17 +212,23 @@ function Assert-GatewayDocumentBaselineReceipt {
   $parser = @($entries | Where-Object { [string]$_.artifactName -ceq "document-parser-lambda" -and [string]$_.suffix -ceq "zip" })
   $processor = @($entries | Where-Object { [string]$_.artifactName -ceq "document-processor-lambda" -and [string]$_.suffix -ceq "zip" })
   if ($parser.Count -ne 1 -or $processor.Count -ne 1) { throw "The document receipt lacks an exact parser/processor ZIP pair." }
-  foreach ($binding in @(
-      @{ Variable = "document_parser_artifact_s3_key"; Value = [string]$parser[0].key },
-      @{ Variable = "document_parser_artifact_s3_object_version"; Value = [string]$parser[0].versionId },
-      @{ Variable = "document_parser_artifact_sha256"; Value = [string]$parser[0].artifactSha256 },
-      @{ Variable = "document_parser_artifact_base64sha256"; Value = [string]$parser[0].objectBase64Sha256 }
-    )) {
-    if ([string](Get-GatewayPlanVariableValue $Plan.variables $binding.Variable) -cne $binding.Value) {
-      throw "The retained baseline plan does not match its document receipt '$($binding.Variable)'."
+  if ($Role -in @("both", "parser")) {
+    foreach ($binding in @(
+        @{ Variable = "document_parser_artifact_s3_key"; Value = [string]$parser[0].key },
+        @{ Variable = "document_parser_artifact_s3_object_version"; Value = [string]$parser[0].versionId },
+        @{ Variable = "document_parser_artifact_sha256"; Value = [string]$parser[0].artifactSha256 },
+        @{ Variable = "document_parser_artifact_base64sha256"; Value = [string]$parser[0].objectBase64Sha256 }
+      )) {
+      if ([string](Get-GatewayPlanVariableValue $Plan.variables $binding.Variable) -cne $binding.Value) {
+        throw "The retained baseline plan does not match its document receipt '$($binding.Variable)'."
+      }
     }
   }
   $stage = [string](Get-GatewayPlanVariableValue $Plan.variables "document_processing_deployment_stage")
+  if ($Role -ceq "processor" -and $stage -cne "complete-dark") {
+    throw "A processor-only document receipt requires the complete-dark stage."
+  }
+  if ($Role -ceq "parser") { return $true }
   $processorBindings = @(
     @{ Variable = "document_processor_artifact_s3_key"; Value = [string]$processor[0].key },
     @{ Variable = "document_processor_artifact_s3_object_version"; Value = [string]$processor[0].versionId },

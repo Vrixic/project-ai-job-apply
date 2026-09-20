@@ -3,6 +3,9 @@ $ErrorActionPreference = "Stop"
 
 # Schema 7 is a current-state capture, not the historical schema-6 Bootstrap chain. The
 # document artifact release remains distinct from the current operator/migration release.
+# Schema 8 (D3-020) is the same capture for a mixed document release, where the deployed parser and
+# processor come from two different verified receipts. It exists only so a convergence release can
+# start; every reader except the Gateway operator rejects it.
 function Get-CurrentDocumentBaselineTextSha256 {
   param([Parameter(Mandatory)][string]$Value)
   $sha = [Security.Cryptography.SHA256]::Create()
@@ -84,10 +87,18 @@ function New-CurrentDocumentBaselineMetadata {
     [Parameter(Mandatory)][string]$ReceiptSha256,
     [Parameter(Mandatory)][string]$AccountId,
     [Parameter(Mandatory)][string]$Region,
-    [Parameter(Mandatory)][string]$RepositoryRoot
+    [Parameter(Mandatory)][string]$RepositoryRoot,
+    # Both or neither. When given, ReceiptSha256 and DocumentReleaseSourceSha describe the deployed
+    # parser and these describe the deployed processor (schema 8).
+    [string]$ProcessorReleaseSourceSha = "",
+    [string]$ProcessorReceiptSha256 = ""
   )
-  return [ordered]@{
-    SchemaVersion = "7"; Kind = "development-document-zero-drift-baseline"
+  $twoReceipts = -not [string]::IsNullOrEmpty($ProcessorReleaseSourceSha) -or -not [string]::IsNullOrEmpty($ProcessorReceiptSha256)
+  if ($twoReceipts -and ([string]::IsNullOrEmpty($ProcessorReleaseSourceSha) -or [string]::IsNullOrEmpty($ProcessorReceiptSha256))) {
+    throw "A two-receipt baseline needs both the processor receipt checksum and its release source."
+  }
+  $metadata = [ordered]@{
+    SchemaVersion = $(if ($twoReceipts) { "8" } else { "7" }); Kind = "development-document-zero-drift-baseline"
     Environment = "development"; AccountId = $AccountId; Region = $Region
     SourceSha = $SourceSha; DocumentReleaseSourceSha = $DocumentReleaseSourceSha
     DocumentSourceDeltaSha256 = Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $RepositoryRoot -DocumentReleaseSourceSha $DocumentReleaseSourceSha -SourceSha $SourceSha
@@ -99,6 +110,22 @@ function New-CurrentDocumentBaselineMetadata {
     PlanPath = [IO.Path]::GetFullPath($PlanPath); PlanSha256 = $PlanSha256
     Applyable = $false; MeaningfulChanges = 0; CreatedAt = [datetime]::UtcNow.ToString("o")
   }
+  if ($twoReceipts) {
+    $metadata["ProcessorReceiptSha256"] = $ProcessorReceiptSha256
+    $metadata["ProcessorReleaseSourceSha"] = $ProcessorReleaseSourceSha
+    $metadata["ProcessorSourceDeltaSha256"] = Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $RepositoryRoot -DocumentReleaseSourceSha $ProcessorReleaseSourceSha -SourceSha $SourceSha
+  }
+  return $metadata
+}
+
+function Get-CurrentDocumentBaselineReceipt {
+  param([Parameter(Mandatory)][string]$ReceiptDirectory, [Parameter(Mandatory)][string]$ReceiptSha256)
+  $receipts = @(Get-ChildItem -LiteralPath $ReceiptDirectory -File -Filter "receipt-*.json" | Where-Object {
+      -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
+      (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $ReceiptSha256
+    })
+  if ($receipts.Count -ne 1) { throw "Exactly one local document receipt must match the current baseline checksum." }
+  return Get-Content -LiteralPath $receipts[0].FullName -Raw | ConvertFrom-Json
 }
 
 function Assert-CurrentDocumentBaselineEvidence {
@@ -113,21 +140,26 @@ function Assert-CurrentDocumentBaselineEvidence {
     [Parameter(Mandatory)][string]$Region,
     [Parameter(Mandatory)][string]$RepositoryRoot,
     [Parameter(Mandatory)][string]$ReceiptDirectory,
-    [switch]$AllowOneSerialAdvance
+    [switch]$AllowOneSerialAdvance,
+    # Only the Gateway operator passes this, so that a schema-8 (two-receipt) baseline is accepted there
+    # and rejected by every other reader.
+    [switch]$AllowTwoReceipts
   )
-  if ([string]$Metadata.SchemaVersion -cne "7") { throw "A current document baseline must use its distinct schema-7 format." }
+  $schema = [string]$Metadata.SchemaVersion
+  if ($schema -cne "7" -and -not ($schema -ceq "8" -and $AllowTwoReceipts)) {
+    throw "A current document baseline must use its distinct schema-7 format."
+  }
   $null = Assert-RetainedGatewayBaselineMetadata -Metadata $Metadata -Plan $Plan -PlanPath $PlanPath -PlanSha256 $PlanSha256 `
     -SourceSha $SourceSha -AccountId $AccountId -Region $Region -CurrentState $CurrentState `
     -ExpectedMigrationRepositoryUrl "$AccountId.dkr.ecr.$Region.amazonaws.com/ai-job-apply/migration" -AllowOneSerialAdvance:$AllowOneSerialAdvance
   $delta = Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $RepositoryRoot -DocumentReleaseSourceSha ([string]$Metadata.DocumentReleaseSourceSha) -SourceSha $SourceSha
   if ([string]$Metadata.DocumentSourceDeltaSha256 -cne $delta) { throw "The current document baseline source delta does not match its exact commits." }
+  if ($schema -ceq "8") {
+    $processorDelta = Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $RepositoryRoot -DocumentReleaseSourceSha ([string]$Metadata.ProcessorReleaseSourceSha) -SourceSha $SourceSha
+    if ([string]$Metadata.ProcessorSourceDeltaSha256 -cne $processorDelta) { throw "The current document baseline processor source delta does not match its exact commits." }
+  }
   if (-not (Test-Path -LiteralPath $ReceiptDirectory -PathType Container)) { throw "The current document baseline receipt directory is unavailable." }
-  $receipts = @(Get-ChildItem -LiteralPath $ReceiptDirectory -File -Filter "receipt-*.json" | Where-Object {
-      -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
-      (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ceq [string]$Metadata.ReceiptSha256
-    })
-  if ($receipts.Count -ne 1) { throw "Exactly one local document receipt must match the current baseline checksum." }
-  $receipt = Get-Content -LiteralPath $receipts[0].FullName -Raw | ConvertFrom-Json
+  $receipt = Get-CurrentDocumentBaselineReceipt -ReceiptDirectory $ReceiptDirectory -ReceiptSha256 ([string]$Metadata.ReceiptSha256)
   $resources = Get-TerraformStateResourceMap -RootModule $Plan.planned_values.root_module
   foreach ($address in @("module.platform.aws_s3_bucket.artifacts", "module.platform.aws_kms_key.platform", "module.platform.aws_ecr_repository.migration", "module.platform.aws_lambda_function.document_parser[0]")) {
     if (-not $resources.ContainsKey($address)) { throw "The current baseline lacks an exact document artifact resource boundary." }
@@ -141,8 +173,18 @@ function Assert-CurrentDocumentBaselineEvidence {
     throw "The current document baseline artifact boundary is outside the exact development account."
   }
   $boundarySha = Get-CurrentDocumentBaselineTextSha256 "$AccountId|$Region|$bucket|$kmsArn"
-  $null = Assert-GatewayDocumentBaselineReceipt -Receipt $receipt -ReceiptSha256 ([string]$Metadata.ReceiptSha256) `
-    -Plan $Plan -SourceSha ([string]$Metadata.DocumentReleaseSourceSha) -ExpectedBoundarySha256 $boundarySha
+  if ($schema -ceq "8") {
+    # Two receipts: the first describes only the deployed parser, the second only the deployed
+    # processor. Each is held to the full single-receipt rules for its own archive and source.
+    $null = Assert-GatewayDocumentBaselineReceipt -Receipt $receipt -ReceiptSha256 ([string]$Metadata.ReceiptSha256) `
+      -Plan $Plan -SourceSha ([string]$Metadata.DocumentReleaseSourceSha) -ExpectedBoundarySha256 $boundarySha -Role parser
+    $processorReceipt = Get-CurrentDocumentBaselineReceipt -ReceiptDirectory $ReceiptDirectory -ReceiptSha256 ([string]$Metadata.ProcessorReceiptSha256)
+    $null = Assert-GatewayDocumentBaselineReceipt -Receipt $processorReceipt -ReceiptSha256 ([string]$Metadata.ProcessorReceiptSha256) `
+      -Plan $Plan -SourceSha ([string]$Metadata.ProcessorReleaseSourceSha) -ExpectedBoundarySha256 $boundarySha -Role processor
+  } else {
+    $null = Assert-GatewayDocumentBaselineReceipt -Receipt $receipt -ReceiptSha256 ([string]$Metadata.ReceiptSha256) `
+      -Plan $Plan -SourceSha ([string]$Metadata.DocumentReleaseSourceSha) -ExpectedBoundarySha256 $boundarySha
+  }
   foreach ($kind in @("parser", "processor")) {
     if ($kind -ceq "processor" -and [string]$Metadata.Stage -ceq "parser-dark") { continue }
     $address = "module.platform.aws_lambda_function.document_$kind[0]"

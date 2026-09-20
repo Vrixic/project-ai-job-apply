@@ -318,6 +318,123 @@ Assert-Rejected {
   Assert-GatewayDocumentBaselineReceipt $tamperedDocumentReceipt $documentReceiptSha `
     ([pscustomobject]@{ variables = $baselineVariables }) $sourceSha $boundarySha
 } "A document receipt relabeled away from exact plan variables was accepted."
+
+# ---- D3-020: schema-8 (two-receipt) baseline for a mixed document release
+$parserPin = "arn:aws:lambda:us-east-2:$account`:function:ai-job-apply-development-document-parser:7"
+$completePlan = [pscustomobject]@{ variables = [pscustomobject]@{
+    document_processing_deployment_stage = [pscustomobject]@{ value = "complete-dark" }
+    document_parser_invocation_qualified_arn = [pscustomobject]@{ value = $parserPin }
+    migration_image = [pscustomobject]@{ value = $baselineMigrationImage }
+  } }
+$baselineMetadataV8 = Copy-Fixture $baselineMetadataV6
+$baselineMetadataV8.SchemaVersion = "8"
+$baselineMetadataV8.Stage = "complete-dark"
+$baselineMetadataV8.ParserQualifiedArn = $parserPin
+$baselineMetadataV8 | Add-Member DocumentSourceDeltaSha256 ("1" * 64)
+$baselineMetadataV8 | Add-Member ProcessorReceiptSha256 ("2" * 64)
+$baselineMetadataV8 | Add-Member ProcessorReleaseSourceSha ("e" * 40)
+$baselineMetadataV8 | Add-Member ProcessorSourceDeltaSha256 ("3" * 64)
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV8 $completePlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $currentState; $passed++
+foreach ($mutation in @(
+    "same receipt for both", "bad processor receipt", "bad processor source", "bad processor delta",
+    "missing processor receipt", "missing parser delta", "extra key", "relabelled as schema 7",
+    "relabelled as schema 6", "stale source", "parser-dark stage", "wrong migration image"
+  )) {
+  $badV8 = Copy-Fixture $baselineMetadataV8
+  $planForCheck = $completePlan
+  switch ($mutation) {
+    "same receipt for both" { $badV8.ProcessorReceiptSha256 = $badV8.ReceiptSha256 }
+    "bad processor receipt" { $badV8.ProcessorReceiptSha256 = "not-a-digest" }
+    "bad processor source" { $badV8.ProcessorReleaseSourceSha = "invalid" }
+    "bad processor delta" { $badV8.ProcessorSourceDeltaSha256 = "invalid" }
+    "missing processor receipt" { $badV8.PSObject.Properties.Remove("ProcessorReceiptSha256") }
+    "missing parser delta" { $badV8.PSObject.Properties.Remove("DocumentSourceDeltaSha256") }
+    "extra key" { $badV8 | Add-Member Unexpected "value" }
+    "relabelled as schema 7" { $badV8.SchemaVersion = "7" }
+    "relabelled as schema 6" { $badV8.SchemaVersion = "6" }
+    "stale source" { $badV8.SourceSha = "e" * 40 }
+    "parser-dark stage" { $badV8.Stage = "parser-dark"; $badV8.ParserQualifiedArn = ""; $planForCheck = $metadataPlan }
+    "wrong migration image" { $badV8.MigrationImage = "$repositoryUrl@sha256:$('2' * 64)" }
+  }
+  Assert-Rejected {
+    Assert-RetainedGatewayBaselineMetadata $badV8 $planForCheck $baselinePath $baselineSha `
+      $sourceSha $account "us-east-2" $repositoryUrl $currentState
+  } "A schema-8 baseline accepted $mutation."
+}
+
+# Each receipt of a two-receipt baseline is held to the full rules for exactly its own archive.
+function New-DocumentReceiptFixture {
+  param([Parameter(Mandatory)][string]$Source, [Parameter(Mandatory)][string]$ParserDigest, [Parameter(Mandatory)][string]$ProcessorDigest)
+  return [pscustomobject]@{
+    schemaVersion = 1; kind = "development-document-lambda-publication"; environment = "development"
+    region = "us-east-2"; sourceSha = $Source; boundarySha256 = $boundarySha; phase = "verified"
+    createdAt = "2026-08-13T12:00:00Z"; completedAt = "2026-08-13T12:01:00Z"
+    artifacts = @(
+      foreach ($name in @("document-parser-lambda", "document-processor-lambda")) {
+        $digest = if ($name -ceq "document-parser-lambda") { $ParserDigest } else { $ProcessorDigest }
+        foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
+          [pscustomobject]@{
+            artifactName = $name; artifactSha256 = $digest; suffix = $suffix
+            key = "lambda/documents/$Source/$digest/$name.$suffix"
+            versionId = "version-$($Source.Substring(0, 4))-$name-$suffix"
+            objectSha256 = $(if ($suffix -ceq "zip") { $digest } else { "5" * 64 })
+            objectBase64Sha256 = $artifactBase64; contentLength = 100
+          }
+        }
+      }
+    )
+  }
+}
+function Get-ReceiptZip { param([object]$Receipt, [string]$Name)
+  return @($Receipt.artifacts | Where-Object { [string]$_.artifactName -ceq $Name -and [string]$_.suffix -ceq "zip" })[0]
+}
+$parserSource = "d" * 40; $processorSource = "e" * 40
+$parserReceipt = New-DocumentReceiptFixture $parserSource ("3" * 64) ("4" * 64)
+$processorReceipt = New-DocumentReceiptFixture $processorSource ("6" * 64) ("7" * 64)
+$mixedVariables = Copy-Fixture (New-Variables)
+$mixedVariables.document_processing_deployment_stage.value = "complete-dark"
+$deployedParser = Get-ReceiptZip $parserReceipt "document-parser-lambda"
+$deployedProcessor = Get-ReceiptZip $processorReceipt "document-processor-lambda"
+$mixedVariables.document_parser_artifact_s3_key.value = $deployedParser.key
+$mixedVariables.document_parser_artifact_s3_object_version.value = $deployedParser.versionId
+$mixedVariables.document_parser_artifact_sha256.value = $deployedParser.artifactSha256
+$mixedVariables.document_parser_artifact_base64sha256.value = $deployedParser.objectBase64Sha256
+$mixedVariables.document_processor_artifact_s3_key.value = $deployedProcessor.key
+$mixedVariables.document_processor_artifact_s3_object_version.value = $deployedProcessor.versionId
+$mixedVariables.document_processor_artifact_sha256.value = $deployedProcessor.artifactSha256
+$mixedVariables.document_processor_artifact_base64sha256.value = $deployedProcessor.objectBase64Sha256
+$mixedPlan = [pscustomobject]@{ variables = $mixedVariables }
+$parserSha = "a" * 64; $processorSha = "b" * 64
+$null = Assert-GatewayDocumentBaselineReceipt $parserReceipt $parserSha $mixedPlan $parserSource $boundarySha -Role parser; $passed++
+$null = Assert-GatewayDocumentBaselineReceipt $processorReceipt $processorSha $mixedPlan $processorSource $boundarySha -Role processor; $passed++
+# Neither mixed receipt satisfies the single-receipt rule, which is why schema 8 exists at all.
+Assert-Rejected { Assert-GatewayDocumentBaselineReceipt $parserReceipt $parserSha $mixedPlan $parserSource $boundarySha } "The parser receipt alone described a mixed release."
+Assert-Rejected { Assert-GatewayDocumentBaselineReceipt $processorReceipt $processorSha $mixedPlan $processorSource $boundarySha } "The processor receipt alone described a mixed release."
+# A receipt cannot vouch for the other archive.
+Assert-Rejected { Assert-GatewayDocumentBaselineReceipt $processorReceipt $processorSha $mixedPlan $processorSource $boundarySha -Role parser } "The processor receipt vouched for the parser."
+Assert-Rejected { Assert-GatewayDocumentBaselineReceipt $parserReceipt $parserSha $mixedPlan $parserSource $boundarySha -Role processor } "The parser receipt vouched for the processor."
+# Each role still needs its receipt's own exact source, boundary, verified phase, and immutable objects.
+Assert-Rejected { Assert-GatewayDocumentBaselineReceipt $parserReceipt $parserSha $mixedPlan $processorSource $boundarySha -Role parser } "A parser receipt was accepted for another source."
+Assert-Rejected { Assert-GatewayDocumentBaselineReceipt $parserReceipt $parserSha $mixedPlan $parserSource ("0" * 64) -Role parser } "A parser receipt was accepted for another boundary."
+foreach ($role in @("parser", "processor")) {
+  $pendingReceipt = Copy-Fixture $(if ($role -ceq "parser") { $parserReceipt } else { $processorReceipt }); $pendingReceipt.phase = "publishing"
+  Assert-Rejected {
+    Assert-GatewayDocumentBaselineReceipt $pendingReceipt $parserSha $mixedPlan $(if ($role -ceq "parser") { $parserSource } else { $processorSource }) $boundarySha -Role $role
+  } "An unverified $role receipt was accepted."
+}
+$tamperedParser = Copy-Fixture $parserReceipt; $tamperedParser.artifacts[0].versionId = "wrong"
+Assert-Rejected { Assert-GatewayDocumentBaselineReceipt $tamperedParser $parserSha $mixedPlan $parserSource $boundarySha -Role parser } "A relabelled parser receipt version was accepted."
+$tamperedProcessor = Copy-Fixture $processorReceipt
+(Get-ReceiptZip $tamperedProcessor "document-processor-lambda").versionId = "wrong"
+Assert-Rejected { Assert-GatewayDocumentBaselineReceipt $tamperedProcessor $processorSha $mixedPlan $processorSource $boundarySha -Role processor } "A relabelled processor receipt version was accepted."
+# A processor-only receipt needs a stage where a processor exists.
+Assert-Rejected {
+  Assert-GatewayDocumentBaselineReceipt $processorReceipt $processorSha ([pscustomobject]@{ variables = $baselineVariables }) $processorSource $boundarySha -Role processor
+} "A processor-only receipt was accepted for a parser-dark stage."
+Assert-Rejected {
+  Assert-GatewayDocumentBaselineReceipt $parserReceipt $parserSha $mixedPlan $parserSource $boundarySha -Role neither
+} "An unknown receipt role was accepted."
 $baselinePlan = [pscustomobject]@{
   complete = $true; errored = $false; applyable = $false; terraform_version = "1.9.8"
   variables = $baselineVariables; planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{} }

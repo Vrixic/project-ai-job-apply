@@ -42,6 +42,28 @@ foreach ($required in @(
     throw "The gateway operator does not preserve the exact split-source migration handoff."
   }
 }
+# D3-020: the two-receipt (schema 8) baseline is captured only from two different receipts, accepted only
+# by this operator, and can only start a release that refreshes parser and processor together.
+foreach ($twoReceiptMarker in @(
+    'ProcessorDocumentReceiptPath', 'ReviewedProcessorDocumentReceiptSha256',
+    'A two-receipt baseline requires a second, different processor publication receipt with its reviewed checksum.',
+    'The processor document receipt checksum does not match review.',
+    '-Role processor', '-Role parser', '-AllowTwoReceipts',
+    'ProcessorReleaseSourceSha = [string]$processorReceipt.sourceSha',
+    'A two-receipt baseline can only start a release that refreshes the document parser and processor together from one receipt.'
+  )) {
+  if (-not $operator.Contains($twoReceiptMarker)) {
+    throw "The gateway operator does not preserve the two-receipt convergence boundary: $twoReceiptMarker"
+  }
+}
+if (-not ($operator -match '(?s)\$baseline = Read-Baseline\s+\$documentArtifacts = Read-DocumentRefreshArtifacts\s+#[^\n]*\n(?:#[^\n]*\n)*if \(\[string\]\$baseline\.MetadataSchemaVersion -ceq "8" -and -not \(\$RefreshDocumentParser -and \$RefreshDocumentProcessor\)\) \{\s+throw')) {
+  throw "The two-receipt baseline is not tied to a release that refreshes parser and processor together."
+}
+# No other reader may opt in to a two-receipt baseline.
+foreach ($otherOperator in @("operate-development-document-migration.ps1", "operate-development-d2-runtime-release.ps1")) {
+  $otherSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\$otherOperator") -Raw
+  if ($otherSource.Contains("AllowTwoReceipts")) { throw "$otherOperator must not accept a two-receipt baseline." }
+}
 foreach ($recoveryMarker in @(
     "Assert-GatewayVerifySourceDelta", "The gateway verification-only delta is empty",
     'if ($Action -cne "Verify")', "The gateway drift variable inventory is empty or duplicated.",

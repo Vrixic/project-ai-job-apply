@@ -11,6 +11,10 @@ param(
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedReceiptSha256 = "",
   [string]$DocumentReceiptPath = "",
   [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedDocumentReceiptSha256 = "",
+  # CaptureBaseline only, for a mixed document release (D3-020): the receipt that describes the deployed
+  # processor. -DocumentReceiptPath then describes only the deployed parser. Both must be given.
+  [string]$ProcessorDocumentReceiptPath = "",
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedProcessorDocumentReceiptSha256 = "",
   [string]$BaselinePlanPath = "",
   [ValidatePattern("^[a-f0-9]{64}$")][string]$ReviewedBaselineSha256 = "",
   [string]$BaselineMetadataPath = "",
@@ -47,6 +51,10 @@ Usage:
     -BaselinePlanPath REVIEWED_ZERO_DRIFT_SEED -ReviewedBaselineSha256 SEED_SHA256 `
     -DocumentReceiptPath VERIFIED_DOCUMENT_RECEIPT `
     -ReviewedDocumentReceiptSha256 DOCUMENT_RECEIPT_SHA256
+  Mixed document release (parser and processor from two receipts), add to CaptureBaseline:
+    -ProcessorDocumentReceiptPath PROCESSOR_RECEIPT -ReviewedProcessorDocumentReceiptSha256 PROCESSOR_RECEIPT_SHA256
+    (-DocumentReceiptPath is then the parser receipt). The resulting schema-8 baseline can only start a
+    release that uses -RefreshDocumentParser and -RefreshDocumentProcessor from one new receipt.
   .\scripts\operate-development-gateway-release.ps1 -Action VerifyPublication `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
     -ReceiptPath RECEIPT -ReviewedReceiptSha256 RECEIPT_SHA256
@@ -605,12 +613,12 @@ function Read-Baseline {
     -AccountId $ExpectedAccountId -Region $Region `
     -ExpectedMigrationRepositoryUrl $boundary.MigrationRepositoryUrl -CurrentState $state `
     -AllowOneSerialAdvance:($Action -ceq "Verify")
-  if ([string]$metadata.SchemaVersion -ceq "7") {
+  if ([string]$metadata.SchemaVersion -in @("7", "8")) {
     $null = Assert-CurrentDocumentBaselineEvidence -Metadata $metadata -Plan $plan -PlanPath $planPath `
       -PlanSha256 $ReviewedBaselineSha256 -CurrentState $state -SourceSha $SourceSha `
       -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot `
       -ReceiptDirectory (Join-Path $terraformRoot "development-document-artifacts") `
-      -AllowOneSerialAdvance:($Action -ceq "Verify")
+      -AllowOneSerialAdvance:($Action -ceq "Verify") -AllowTwoReceipts
   }
   $documentReleaseSha = if ([string]$metadata.SchemaVersion -ceq "5") {
     if ([string]$metadata.DocumentReleaseSourceSha -cne 'a6d0fba09082b8bc61ee7b604ee1d5c47bd71624' -or
@@ -635,13 +643,27 @@ function Read-Baseline {
       throw "The retained document baseline operator delta does not match the current gateway release source."
     }
     [string]$metadata.ReleaseSourceSha
-  } elseif ([string]$metadata.SchemaVersion -in @("6", "7")) {
+  } elseif ([string]$metadata.SchemaVersion -in @("6", "7", "8")) {
     [string]$metadata.DocumentReleaseSourceSha
   } else { $SourceSha }
   $documentReceipt = Read-BaselineDocumentReceipt -ReceiptSha256 ([string]$metadata.ReceiptSha256)
-  $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
-    -ReceiptSha256 ([string]$metadata.ReceiptSha256) -Plan $plan -SourceSha $documentReleaseSha `
-    -ExpectedBoundarySha256 $boundary.BoundarySha256
+  $processorReceiptSha256 = ""
+  if ([string]$metadata.SchemaVersion -ceq "8") {
+    # Mixed document release: the first receipt describes only the deployed parser and the second only
+    # the deployed processor; each is verified to the full single-receipt standard for its archive.
+    $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
+      -ReceiptSha256 ([string]$metadata.ReceiptSha256) -Plan $plan -SourceSha $documentReleaseSha `
+      -ExpectedBoundarySha256 $boundary.BoundarySha256 -Role parser
+    $processorReceiptSha256 = [string]$metadata.ProcessorReceiptSha256
+    $processorReceipt = Read-BaselineDocumentReceipt -ReceiptSha256 $processorReceiptSha256
+    $null = Assert-GatewayDocumentBaselineReceipt -Receipt $processorReceipt `
+      -ReceiptSha256 $processorReceiptSha256 -Plan $plan -SourceSha ([string]$metadata.ProcessorReleaseSourceSha) `
+      -ExpectedBoundarySha256 $boundary.BoundarySha256 -Role processor
+  } else {
+    $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
+      -ReceiptSha256 ([string]$metadata.ReceiptSha256) -Plan $plan -SourceSha $documentReleaseSha `
+      -ExpectedBoundarySha256 $boundary.BoundarySha256
+  }
   $stage = [string](Get-GatewayPlanVariableValue $plan.variables "document_processing_deployment_stage")
   $parserArn = [string](Get-GatewayPlanVariableValue $plan.variables "document_parser_invocation_qualified_arn")
   if ($stage -cne [string]$metadata.Stage) {
@@ -659,6 +681,7 @@ function Read-Baseline {
   return [pscustomobject]@{
     Path = $planPath; MetadataPath = $metadataPath; Metadata = $metadata; Plan = $plan
     DocumentReceiptSha256 = [string]$metadata.ReceiptSha256
+    ProcessorDocumentReceiptSha256 = $processorReceiptSha256
     MigrationImage = $migrationImage; MetadataSchemaVersion = [string]$metadata.SchemaVersion
   }
 }
@@ -765,6 +788,14 @@ if ($Action -ceq "CaptureBaseline") {
       $ReviewedDocumentReceiptSha256 -notmatch '^[a-f0-9]{64}$') {
     throw "Baseline capture requires a reviewed zero-drift seed and verified document receipt."
   }
+  $twoReceipts = -not [string]::IsNullOrWhiteSpace($ProcessorDocumentReceiptPath) -or
+    -not [string]::IsNullOrEmpty($ReviewedProcessorDocumentReceiptSha256)
+  if ($twoReceipts -and ([string]::IsNullOrWhiteSpace($ProcessorDocumentReceiptPath) -or
+      $ReviewedProcessorDocumentReceiptSha256 -notmatch '^[a-f0-9]{64}$' -or
+      $ReviewedProcessorDocumentReceiptSha256 -ceq $ReviewedDocumentReceiptSha256)) {
+    throw "A two-receipt baseline requires a second, different processor publication receipt with its reviewed checksum."
+  }
+  $receiptRole = if ($twoReceipts) { @{ Role = "parser" } } else { @{} }
   $seedPath = Resolve-GatewayOperatorPath $BaselinePlanPath -MustExist
   if ((Get-FileSha256 $seedPath) -cne $ReviewedBaselineSha256) {
     throw "The zero-drift seed checksum does not match review."
@@ -789,7 +820,18 @@ if ($Action -ceq "CaptureBaseline") {
   $documentReceipt = Get-Content -LiteralPath $documentPath -Raw | ConvertFrom-Json
   $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
     -ReceiptSha256 $ReviewedDocumentReceiptSha256 -Plan $seed `
-    -SourceSha ([string]$documentReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256
+    -SourceSha ([string]$documentReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256 @receiptRole
+  $processorReceipt = $null
+  if ($twoReceipts) {
+    $processorPath = Resolve-GatewayOperatorPath $ProcessorDocumentReceiptPath -MustExist
+    if ((Get-FileSha256 $processorPath) -cne $ReviewedProcessorDocumentReceiptSha256) {
+      throw "The processor document receipt checksum does not match review."
+    }
+    $processorReceipt = Get-Content -LiteralPath $processorPath -Raw | ConvertFrom-Json
+    $null = Assert-GatewayDocumentBaselineReceipt -Receipt $processorReceipt `
+      -ReceiptSha256 $ReviewedProcessorDocumentReceiptSha256 -Plan $seed `
+      -SourceSha ([string]$processorReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256 -Role processor
+  }
 
   $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
   $capturedPath = Resolve-GatewayOperatorPath `
@@ -814,7 +856,12 @@ if ($Action -ceq "CaptureBaseline") {
   Assert-GatewayCapturedSeedInputs $seed $captured $declaredVariables
   $null = Assert-GatewayDocumentBaselineReceipt -Receipt $documentReceipt `
     -ReceiptSha256 $ReviewedDocumentReceiptSha256 -Plan $captured `
-    -SourceSha ([string]$documentReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256
+    -SourceSha ([string]$documentReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256 @receiptRole
+  if ($twoReceipts) {
+    $null = Assert-GatewayDocumentBaselineReceipt -Receipt $processorReceipt `
+      -ReceiptSha256 $ReviewedProcessorDocumentReceiptSha256 -Plan $captured `
+      -SourceSha ([string]$processorReceipt.sourceSha) -ExpectedBoundarySha256 $boundary.BoundarySha256 -Role processor
+  }
   $state = Get-StateIdentity
   if ([string]$state.Lineage -cne [string]$captureStateBefore.Lineage -or [long]$state.Serial -ne [long]$captureStateBefore.Serial) {
     throw "Terraform state changed while capturing the current document baseline."
@@ -830,14 +877,17 @@ if ($Action -ceq "CaptureBaseline") {
     throw "The captured baseline migration digest is outside the exact Terraform-owned repository."
   }
   $capturedSha = Get-FileSha256 $capturedPath
+  $processorMetadata = if ($twoReceipts) {
+    @{ ProcessorReleaseSourceSha = [string]$processorReceipt.sourceSha; ProcessorReceiptSha256 = $ReviewedProcessorDocumentReceiptSha256 }
+  } else { @{} }
   $metadata = New-CurrentDocumentBaselineMetadata -Plan $captured -PlanPath $capturedPath `
     -PlanSha256 $capturedSha -State $state -SourceSha $SourceSha `
     -DocumentReleaseSourceSha ([string]$documentReceipt.sourceSha) -ReceiptSha256 $ReviewedDocumentReceiptSha256 `
-    -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot
+    -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot @processorMetadata
   $null = Assert-CurrentDocumentBaselineEvidence -Metadata ([pscustomobject]$metadata) -Plan $captured `
     -PlanPath $capturedPath -PlanSha256 $capturedSha -CurrentState $state -SourceSha $SourceSha `
     -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot `
-    -ReceiptDirectory (Join-Path $terraformRoot "development-document-artifacts")
+    -ReceiptDirectory (Join-Path $terraformRoot "development-document-artifacts") -AllowTwoReceipts
   $metadataPath = "$capturedPath.baseline.json"
   Write-ExclusiveJson $metadataPath $metadata
   [pscustomobject]@{
@@ -900,6 +950,12 @@ if ($Action -ceq "VerifyPublication") {
 }
 $baseline = Read-Baseline
 $documentArtifacts = Read-DocumentRefreshArtifacts
+# A schema-8 (two-receipt) baseline exists only to converge a mixed document release. A release planned,
+# applied, or verified from it must therefore refresh the parser and the processor together, from the one
+# receipt named by -DocumentReceiptPath, and may never be a Gateway-only release.
+if ([string]$baseline.MetadataSchemaVersion -ceq "8" -and -not ($RefreshDocumentParser -and $RefreshDocumentProcessor)) {
+  throw "A two-receipt baseline can only start a release that refreshes the document parser and processor together from one receipt."
+}
 
 if ($Action -ceq "Verify") {
   $currentState = Get-StateIdentity

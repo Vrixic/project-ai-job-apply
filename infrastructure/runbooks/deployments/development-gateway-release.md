@@ -221,29 +221,51 @@ policies, environment (including `DOCUMENT_PARSER_VERSION`), network, and trigge
 processor and parser refreshes are independent and may be combined with each other and with the invoke grant
 (up to eight updates). Refresh both from one receipt so a retained baseline, which requires one publication
 receipt to describe both deployed archives, stays valid; a mixed release is refused at baseline capture.
-## Known limitation: mixed document release
+## Converging a mixed document release (schema-8 baseline)
 
-Status as of 2026-09-19 (tracked as D3-020 and D3-R7 in the Phase 3 record). The ADR-031 release refreshed
-only the document processor, leaving development with the parser from `43f69e9` and the processor from
-`9240c6b`. A retained baseline (`CaptureBaseline`, and the receipt check inside `Read-Baseline`) requires one
-document publication receipt to describe both deployed archives, and capturing a baseline requires a
-zero-drift seed of the current state, so **no baseline can be captured and no Gateway release can be planned
-until the release is converged**. The symptom is `The retained baseline plan does not match its document
-receipt 'document_parser_artifact_s3_key'`. The environment itself is healthy and serves the feature.
+Status as of 2026-09-19 (tracked as D3-020 and D3-R7 in the Phase 3 record). The ADR-031 release refreshed only
+the document processor, leaving development with the parser from `43f69e9` and the processor from `9240c6b`.
+A schema-7 baseline needs one document publication receipt to describe both deployed archives, so no baseline
+could be captured and no Gateway release could be planned. The environment itself is healthy and serves the
+feature. The product owner approved the transitional baseline below on 2026-09-19 (owner statement in chat).
 
-Do not work around it with raw Terraform, an older receipt, or a hand-edited sidecar. Choose one, each of which
-is a guard change needing the owner's approval:
+Do not work around a mixed release with raw Terraform, an older receipt, or a hand-edited sidecar.
 
-1. **Two-receipt baselines:** a new baseline schema that records a parser receipt beside the processor
-   receipt, validated by `Assert-GatewayDocumentBaselineReceipt` and `Assert-CurrentDocumentBaselineEvidence`
-   and read by the Gateway operator (and any other reader of the shared library).
-2. **Rollback path:** a release that may move the processor back to the older release's receipt (today a
-   receipt must belong to the exact release source), restoring one consistent release; then run the merged
-   `-RefreshDocumentParser` and `-RefreshDocumentProcessor` together from one receipt.
+Rules, all enforced by the guards and covered by tests:
 
-Either way, refresh parser and processor together from one receipt from now on. The stale
-document-dark operator chain cannot be used to converge the release: its variable inventory lacks
-`candidate_deletion_restore_role_enabled`, `d2_community_runtime`, and `outbox_starts_paused`.
+- **Schema 8 is schema 7 plus three keys**: `ProcessorReceiptSha256`, `ProcessorReleaseSourceSha`, and
+  `ProcessorSourceDeltaSha256`. `ReceiptSha256` and `DocumentReleaseSourceSha` then describe only the deployed
+  parser, and the processor keys describe only the deployed processor. The two receipts must be different files.
+- **Each receipt is verified to the full single-receipt standard for its own archive only**: its own release
+  source, the live artifact and KMS boundary, the verified phase, the exact eight immutable objects, and the exact
+  plan variables and function coordinates of that archive. The stage must be `complete-dark`. A receipt cannot
+  vouch for the other archive.
+- **Only the Gateway operator accepts schema 8** (it passes `-AllowTwoReceipts`). The document migration and D2
+  operators reject it.
+- **Convergence only**: `Plan`, `Apply`, and `Verify` from a schema-8 baseline require `-RefreshDocumentParser`
+  and `-RefreshDocumentProcessor` together, from one new receipt at the release commit. It is never used for a
+  Gateway-only release. After it, the deployed release is single-receipt again and later baselines are schema 7.
+
+Procedure (one release commit `X`; merge nothing between steps 2 and 6, because every merge invalidates
+source-bound evidence):
+
+1. Confirm `main` equals `origin/main` at `X`, clean, and the portable Terraform is selected.
+2. Publish the document Lambdas from `X` with `publish-development-document-lambdas.ps1` (`Publish`, then
+   `Verify`). This produces the one new receipt `R`.
+3. Produce the reviewed zero-drift seed of the deployed state, as for any baseline capture.
+4. Capture the baseline from the two receipts that describe what is deployed now:
+
+```powershell
+.\scripts\operate-development-gateway-release.ps1 -Action CaptureBaseline `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha X `
+  -BaselinePlanPath REVIEWED_ZERO_DRIFT_SEED -ReviewedBaselineSha256 SEED_SHA256 `
+  -DocumentReceiptPath PARSER_RECEIPT -ReviewedDocumentReceiptSha256 PARSER_RECEIPT_SHA256 `
+  -ProcessorDocumentReceiptPath PROCESSOR_RECEIPT -ReviewedProcessorDocumentReceiptSha256 PROCESSOR_RECEIPT_SHA256
+```
+
+5. `Plan`, review, `Apply`, and `Verify` with `-RefreshDocumentParser -RefreshDocumentProcessor` and
+   `-DocumentReceiptPath R` (plus the usual Gateway publication receipt and baseline inputs).
+6. The next `CaptureBaseline` uses `R` alone and produces a schema-7 baseline.
 
 ## Failure and recovery
 
