@@ -91,6 +91,31 @@ foreach ($otherOperator in @("operate-development-document-migration.ps1", "oper
   $otherSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\$otherOperator") -Raw
   if ($otherSource.Contains("DocumentScanActivation")) { throw "$otherOperator must not carry the document scan activation." }
 }
+# D3-024: appending one exact upload CORS origin is a separate Plan/Apply/Verify mode that never combines with a release
+# or an activation, needs a current schema-7 baseline, applies only the exact reviewed plan, and verifies the live CORS.
+foreach ($corsMarker in @(
+    'DocumentUploadCorsOrigin', 'development-document-upload-cors-guards.ps1',
+    'A document upload CORS change is planned, applied, and verified on its own, from a retained baseline, and never with a release.',
+    'A document upload CORS change requires a current schema-7 baseline.',
+    'Assert-DocumentUploadCorsVariables', 'Assert-ExactDocumentUploadCorsPlan', 'Assert-DocumentUploadCorsLive',
+    'Invoke-UploadCorsZeroDrift', 'The document upload CORS change did not produce an exact reviewable change.',
+    'Remote state changed after review; generate a new upload CORS plan.',
+    'Post-change verification requires exactly one state advance from the reviewed plan.',
+    'The upload CORS plan checksum does not match review.', 'development-document-upload-cors-plan',
+    'The live upload CORS configuration does not match the reviewed change.'
+  )) {
+  if (-not $operator.Contains($corsMarker)) {
+    throw "The gateway operator does not preserve the document upload CORS boundary: $corsMarker"
+  }
+}
+if ($operator.IndexOf('if ($DocumentUploadCorsOrigin -cne "") {') -lt 0 -or
+    $operator.IndexOf('if ($DocumentUploadCorsOrigin -cne "") {') -gt $operator.IndexOf('$publication = Read-Receipt $boundary')) {
+  throw "The document upload CORS change is not isolated from the release publication path."
+}
+foreach ($otherOperator in @("operate-development-document-migration.ps1", "operate-development-d2-runtime-release.ps1", "operate-development-document-dark-deployment.ps1")) {
+  $otherSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\$otherOperator") -Raw
+  if ($otherSource.Contains("DocumentUploadCorsOrigin")) { throw "$otherOperator must not carry the document upload CORS change." }
+}
 foreach ($recoveryMarker in @(
     "Assert-GatewayVerifySourceDelta", "The gateway verification-only delta is empty",
     'if ($Action -cne "Verify")', "The gateway drift variable inventory is empty or duplicated.",

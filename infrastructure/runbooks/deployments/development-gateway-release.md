@@ -321,6 +321,35 @@ refuses a shape ADR-023 does not allow (the rule without the mapping, or any tri
 checks content, so the operating rule is that only generated-synthetic resumes are uploaded while a trigger is on; real
 resumes stay blocked until the ADR-023 gates are met (see the [activation design](../../security/d3-023-document-processing-activation.md)).
 
+## Allowing an upload origin (D3-024)
+
+The candidate-document bucket only lets a browser post to a short-lived, exact upload grant from origins listed in
+`candidate_document_cors_allowed_origins`. It held only `http://localhost:3000`, so the hosted app's browser could
+not post a resume. The Gateway operator's `-DocumentUploadCorsOrigin` mode appends one exact origin, one reviewed step
+at a time, from a current schema-7 baseline, and never with a release or a trigger activation.
+
+Rules, enforced by [the guards](../../../scripts/lib/development-document-upload-cors-guards.ps1) and tested with generated fixtures in the real Terraform shape:
+
+- **One exact origin**: lowercase `https://`, dotted host, optional port, no wildcard, path, query, or credentials, and
+  not already in the list. The planned list must be exactly the retained list with that origin appended.
+- **One resource, in place**: the plan must be exactly one update of the bucket CORS configuration with only that origin
+  added. Any other change, output, unknown value, or sensitive value, another rule, changed methods, headers, exposed
+  headers, or max age, or a different bucket is refused, as is any other changed variable.
+- **Apply** takes the reviewed plan and SHA-256, requires unchanged state, applies only that saved plan, reads the live
+  bucket CORS back (one rule, the exact origin list, `POST`, `*`, the two exposed headers, 300 seconds), and requires a
+  zero-drift plan. **Verify** does the same after exactly one state advance.
+
+```powershell
+.\scripts\operate-development-gateway-release.ps1 -Action Plan -DocumentUploadCorsOrigin https://EXACT-ORIGIN `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
+  -BaselinePlanPath BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -BaselineMetadataPath BASELINE_METADATA -ReviewedBaselineMetadataSha256 METADATA_SHA256
+# review the plan, then Apply (same inputs plus -PlanPath and -ReviewedPlanSha256)
+```
+
+Presigned upload grants stay exact (object key, size, checksum, encryption, and expiry); CORS only lets the listed
+origin's browser use them. Removing an origin is a separate reviewed change and is not part of this mode.
+
 ## Failure and recovery
 
 - A publication failure may leave new immutable objects plus a `publishing` receipt. Never reuse,
