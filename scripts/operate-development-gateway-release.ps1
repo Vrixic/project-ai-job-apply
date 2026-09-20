@@ -30,6 +30,10 @@ param(
   # Likewise for the document parser, from the same or another verified publication receipt. A release
   # that refreshes both must use one receipt so the retained baseline describes one document release.
   [switch]$RefreshDocumentParser,
+  # D3-023: enable or disable the document scan triggers, one reviewed step at a time, with Plan, Apply, and
+  # Verify. It runs on its own from a current schema-7 baseline and is never combined with a release.
+  [ValidateSet("None", "EnableMapping", "EnableRule", "DisableRule", "DisableMapping")]
+  [string]$DocumentScanActivation = "None",
   [switch]$Help
 )
 
@@ -40,6 +44,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-gateway-release-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-current-document-baseline.ps1")
+. (Join-Path $PSScriptRoot "lib\development-document-scan-activation-guards.ps1")
 
 if ($Help) {
   @"
@@ -51,6 +56,10 @@ Usage:
     -BaselinePlanPath REVIEWED_ZERO_DRIFT_SEED -ReviewedBaselineSha256 SEED_SHA256 `
     -DocumentReceiptPath VERIFIED_DOCUMENT_RECEIPT `
     -ReviewedDocumentReceiptSha256 DOCUMENT_RECEIPT_SHA256
+  Document scan activation (D3-023), one step at a time, from a current schema-7 baseline and never with a release:
+    -Action Plan|Apply|Verify -DocumentScanActivation EnableMapping|EnableRule|DisableRule|DisableMapping
+    plus the baseline inputs (-BaselinePlanPath, -ReviewedBaselineSha256, -BaselineMetadataPath,
+    -ReviewedBaselineMetadataSha256) and, for Apply and Verify, -PlanPath and -ReviewedPlanSha256.
   Mixed document release (parser and processor from two receipts), add to CaptureBaseline:
     -ProcessorDocumentReceiptPath PROCESSOR_RECEIPT -ReviewedProcessorDocumentReceiptSha256 PROCESSOR_RECEIPT_SHA256
     (-DocumentReceiptPath is then the parser receipt). The resulting schema-8 baseline can only start a
@@ -89,6 +98,7 @@ $terraformDataDirectory = Join-Path $terraformRoot "development-gateway-release-
 $artifactDirectory = Join-Path $repositoryRoot "backend\gateway\dist\lambda"
 $artifactName = "gateway-lambda"
 $metadataSuffix = ".gateway-release.json"
+$activationMetadataSuffix = ".document-scan-activation.json"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -771,6 +781,83 @@ function Invoke-ZeroDrift {
   return Get-FileSha256 $path
 }
 
+
+# ---- D3-023: document scan activation (independent of the release flow) ----------------------------------
+function Set-ActivationVariables {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][string]$Step)
+  Set-VariablesFromPlan $Baseline.Plan $null
+  $transition = Get-DocumentScanActivationTransition $Step
+  $env:TF_VAR_document_scan_mapping_enabled = ([string]$transition.ToMapping).ToLowerInvariant()
+  $env:TF_VAR_document_scan_event_rule_enabled = ([string]$transition.ToRule).ToLowerInvariant()
+}
+function Get-DeclaredTerraformVariableNames {
+  $terraformFiles = @(Get-ChildItem -LiteralPath $terraformDirectory -File -Filter "*.tf" | Sort-Object Name)
+  $declared = @($terraformFiles | ForEach-Object {
+      $variableSource = Get-Content -LiteralPath $_.FullName -Raw
+      [regex]::Matches($variableSource, '(?m)^\s*variable\s+"([a-zA-Z0-9_]+)"\s*\{') | ForEach-Object { $_.Groups[1].Value }
+    })
+  if ($terraformFiles.Count -eq 0 -or $declared.Count -eq 0 -or @($declared | Sort-Object -Unique).Count -ne $declared.Count) {
+    throw "The activation variable inventory is empty or duplicated."
+  }
+  return $declared
+}
+function Assert-DocumentScanActivationLive {
+  param([Parameter(Mandatory)][string]$Step)
+  $transition = Get-DocumentScanActivationTransition $Step
+  $queueArn = "arn:aws:sqs:${Region}:${ExpectedAccountId}:ai-job-apply-development-document-scan-results"
+  $processorAlias = "arn:aws:lambda:${Region}:${ExpectedAccountId}:function:ai-job-apply-development-document-processor:development"
+  $wantedMappingState = if ($transition.ToMapping) { "Enabled" } else { "Disabled" }
+  $mapping = $null
+  for ($attempt = 1; $attempt -le 12; $attempt++) {
+    $listed = @((Invoke-AwsJson @("lambda", "list-event-source-mappings", "--event-source-arn", $queueArn, "--output", "json") "Document scan mapping readback").EventSourceMappings)
+    if ($listed.Count -ne 1) { throw "Exactly one document scan mapping must exist." }
+    $mapping = $listed[0]
+    if ([string]$mapping.State -in @("Enabled", "Disabled") -or $attempt -eq 12) { break }
+    Start-Sleep -Seconds 5
+  }
+  if ([string]$mapping.State -cne $wantedMappingState -or [int]$mapping.BatchSize -ne 1 -or
+      [int]$mapping.ScalingConfig.MaximumConcurrency -ne 2 -or [string]$mapping.FunctionArn -cne $processorAlias) {
+    throw "The live document scan mapping does not match the reviewed activation state."
+  }
+  foreach ($rule in @(
+      @{ Name = "ai-job-apply-development-document-processing-reconciler"; Enabled = $transition.ToMapping },
+      @{ Name = "ai-job-apply-development-document-scan-results"; Enabled = $transition.ToRule }
+    )) {
+    $live = Invoke-AwsJson @("events", "describe-rule", "--name", [string]$rule.Name, "--output", "json") "Document scan rule readback"
+    if ([string]$live.State -cne $(if ($rule.Enabled) { "ENABLED" } else { "DISABLED" })) {
+      throw "A live document scan rule does not match the reviewed activation state."
+    }
+  }
+}
+function Invoke-ActivationZeroDrift {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][string]$Step)
+  $path = Join-Path $operatorRoot "activation-verify-$Step-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
+  if (Test-Path $path) { throw "Refusing to overwrite a verification plan." }
+  $saved = Save-AndClearTerraformVariables
+  try {
+    Set-ActivationVariables $Baseline $Step
+    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
+    $exitCode = $LASTEXITCODE
+  } finally { Restore-TerraformVariables $saved }
+  if ($exitCode -ne 0) { throw "The post-activation Terraform plan is not zero drift. Inspect the ignored verification log." }
+  $plan = Read-Plan $path
+  $null = Assert-RetainedGatewayBaselinePlan $plan (Get-DeclaredTerraformVariableNames)
+  $null = Assert-DocumentScanActivationVariables $Baseline.Plan.variables $plan.variables $Step
+  return Get-FileSha256 $path
+}
+function Get-ActivationExpectedMetadata {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][string]$Step, [Parameter(Mandatory)][string]$PlanFile, [Parameter(Mandatory)][string]$PlanSha)
+  return @{
+    SchemaVersion = "1"; Kind = "development-document-scan-activation-plan"; Environment = "development"
+    AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"
+    StateLineage = [string]$Baseline.Metadata.StateLineage; StateSerial = [long]$Baseline.Metadata.StateSerial
+    SourceSha = $SourceSha; Step = $Step
+    BaselinePath = $Baseline.Path; BaselineSha256 = $ReviewedBaselineSha256
+    BaselineMetadataPath = $Baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256
+    PlanPath = $PlanFile; PlanSha256 = $PlanSha
+  }
+}
+
 $commit = Assert-CallerAndSource
 Initialize-Backend
 $boundary = Resolve-ArtifactBoundary
@@ -940,6 +1027,73 @@ if ($Action -ceq "Publish") {
   }
   $value.phase = "verified"; $value.completedAt = (Get-Date).ToUniversalTime().ToString("o"); Write-ExclusiveJson $receipt $value -Replace
   [pscustomobject]@{ Outcome = "published-and-verified"; ReceiptPath = $receipt; ReceiptSha256 = Get-FileSha256 $receipt; SourceSha = $SourceSha; PublishedObjectCount = 4; DeploymentChanged = $false } | ConvertTo-Json
+  exit 0
+}
+
+
+if ($DocumentScanActivation -cne "None") {
+  if ($Action -cnotin @("Plan", "Apply", "Verify") -or $RefreshDocumentProcessor -or $RefreshDocumentParser -or
+      $EnableDocumentTailoringInvoke -or -not [string]::IsNullOrWhiteSpace($ReceiptPath) -or
+      -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath)) {
+    throw "A document scan activation is planned, applied, and verified on its own, from a retained baseline, and never with a release."
+  }
+  $step = $DocumentScanActivation
+  $baseline = Read-Baseline
+  if ([string]$baseline.MetadataSchemaVersion -cne "7") { throw "A document scan activation requires a current schema-7 baseline." }
+
+  if ($Action -ceq "Plan") {
+    if ([string]::IsNullOrWhiteSpace($PlanPath)) { $PlanPath = Join-Path $operatorRoot "activation-$step-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan" }
+    $path = Resolve-GatewayOperatorPath $PlanPath -ReleaseOnly
+    if (Test-Path $path) { throw "Refusing to overwrite an activation plan." }
+    $state = Get-StateIdentity; $saved = Save-AndClearTerraformVariables
+    try {
+      Set-ActivationVariables $baseline $step
+      & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
+      $exitCode = $LASTEXITCODE
+    } finally { Restore-TerraformVariables $saved }
+    if ($exitCode -ne 2) { if (Test-Path $path) { Remove-Item $path -Force }; throw "The document scan activation did not produce an exact reviewable change." }
+    $plan = Read-Plan $path
+    $null = Assert-DocumentScanActivationVariables $baseline.Plan.variables $plan.variables $step
+    $changes = @(Assert-ExactDocumentScanActivationPlan $plan $step)
+    $sha = Get-FileSha256 $path
+    $metadata = [ordered]@{}
+    foreach ($entry in (Get-ActivationExpectedMetadata $baseline $step $path $sha).GetEnumerator() | Sort-Object Name) { $metadata[$entry.Name] = $entry.Value }
+    $metadata["StateLineage"] = $state.Lineage; $metadata["StateSerial"] = $state.Serial
+    $metadata["CreatedAt"] = (Get-Date).ToUniversalTime().ToString("o")
+    Write-ExclusiveJson "$path$activationMetadataSuffix" $metadata
+    [pscustomobject]@{ Outcome = "review-required"; Step = $step; PlanPath = $path; PlanSha256 = $sha; Updates = $changes.Count; Resources = @($changes | ForEach-Object { [string]$_.address }); ApprovalCommand = "Apply reviewed document scan activation $step plan $sha" } | ConvertTo-Json
+    exit 0
+  }
+
+  if ([string]::IsNullOrWhiteSpace($PlanPath) -or $ReviewedPlanSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "Apply and Verify require the exact reviewed activation plan and SHA-256."
+  }
+  $path = Resolve-GatewayOperatorPath $PlanPath -MustExist -ReleaseOnly
+  if ((Get-FileSha256 $path) -cne $ReviewedPlanSha256) { throw "The activation plan checksum does not match review." }
+  $metadataPath = "$path$activationMetadataSuffix"
+  if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "The activation plan metadata is missing." }
+  $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+  Assert-ReviewedPlanMetadata $metadata (Get-ActivationExpectedMetadata $baseline $step $path $ReviewedPlanSha256)
+  $state = Get-StateIdentity
+
+  if ($Action -ceq "Apply") {
+    if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne [long]$metadata.StateSerial) {
+      throw "Remote state changed after review; generate a new activation plan."
+    }
+    $plan = Read-Plan $path
+    $null = Assert-DocumentScanActivationVariables $baseline.Plan.variables $plan.variables $step
+    $null = Assert-ExactDocumentScanActivationPlan $plan $step
+    & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
+    if ($LASTEXITCODE -ne 0) { throw "The exact reviewed document scan activation plan failed to apply." }
+  } else {
+    # Verify is the post-apply recovery path: exactly one state advance from the reviewed plan's state.
+    if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne ([long]$metadata.StateSerial + 1)) {
+      throw "Post-activation verification requires exactly one state advance from the reviewed plan."
+    }
+  }
+  Assert-DocumentScanActivationLive $step
+  $driftSha = Invoke-ActivationZeroDrift $baseline $step
+  [pscustomobject]@{ Outcome = $(if ($Action -ceq "Apply") { "applied-and-verified" } else { "verified" }); Step = $step; SourceSha = $SourceSha; LiveState = "matches"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
   exit 0
 }
 

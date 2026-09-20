@@ -64,6 +64,33 @@ foreach ($otherOperator in @("operate-development-document-migration.ps1", "oper
   $otherSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\$otherOperator") -Raw
   if ($otherSource.Contains("AllowTwoReceipts")) { throw "$otherOperator must not accept a two-receipt baseline." }
 }
+# D3-023: the document scan activation is a separate Plan/Apply/Verify mode that never combines with a release,
+# needs a current schema-7 baseline, applies only the exact reviewed plan, and verifies live state and zero drift.
+foreach ($activationMarker in @(
+    'DocumentScanActivation', 'EnableMapping', 'EnableRule', 'DisableRule', 'DisableMapping',
+    'development-document-scan-activation-guards.ps1',
+    'A document scan activation is planned, applied, and verified on its own, from a retained baseline, and never with a release.',
+    'A document scan activation requires a current schema-7 baseline.',
+    'Assert-DocumentScanActivationVariables', 'Assert-ExactDocumentScanActivationPlan',
+    'Assert-DocumentScanActivationLive', 'Invoke-ActivationZeroDrift',
+    'The document scan activation did not produce an exact reviewable change.',
+    'Remote state changed after review; generate a new activation plan.',
+    'Post-activation verification requires exactly one state advance from the reviewed plan.',
+    'The activation plan checksum does not match review.', 'development-document-scan-activation-plan'
+  )) {
+  if (-not $operator.Contains($activationMarker)) {
+    throw "The gateway operator does not preserve the document scan activation boundary: $activationMarker"
+  }
+}
+# The activation branch must run before the release publication receipt is read, so it can never be combined with one.
+if ($operator.IndexOf('if ($DocumentScanActivation -cne "None") {') -lt 0 -or
+    $operator.IndexOf('if ($DocumentScanActivation -cne "None") {') -gt $operator.IndexOf('$publication = Read-Receipt $boundary')) {
+  throw "The document scan activation is not isolated from the release publication path."
+}
+foreach ($otherOperator in @("operate-development-document-migration.ps1", "operate-development-d2-runtime-release.ps1", "operate-development-document-dark-deployment.ps1")) {
+  $otherSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\$otherOperator") -Raw
+  if ($otherSource.Contains("DocumentScanActivation")) { throw "$otherOperator must not carry the document scan activation." }
+}
 foreach ($recoveryMarker in @(
     "Assert-GatewayVerifySourceDelta", "The gateway verification-only delta is empty",
     'if ($Action -cne "Verify")', "The gateway drift variable inventory is empty or duplicated.",

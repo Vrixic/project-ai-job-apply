@@ -279,6 +279,48 @@ source-bound evidence):
    `-DocumentReceiptPath R` (plus the usual Gateway publication receipt and baseline inputs).
 6. The next `CaptureBaseline` uses `R` alone and produces a schema-7 baseline.
 
+## Activating the document scan triggers (D3-023)
+
+Enables or disables the document scan triggers in development, one reviewed step at a time, with the Gateway
+operator's `-DocumentScanActivation` mode. It changes exactly two Terraform variables and the three resources they
+drive, and nothing else; it never carries a Gateway or document Lambda change and is never combined with a release.
+ADR-023 fixes the order: the processor mapping and timeout reconciler first, then the exact GuardDuty rule.
+
+| Step | Variables (from, to) | Resources updated in place |
+|---|---|---|
+| `EnableMapping` | mapping false to true | the processor SQS mapping (`enabled`) and the 15-minute reconciler rule (`state`) |
+| `EnableRule` | rule false to true (mapping already true) | the GuardDuty scan-result rule (`state`) |
+| `DisableRule` | rule true to false | the GuardDuty scan-result rule |
+| `DisableMapping` | mapping true to false (rule already false) | the mapping and the reconciler rule |
+
+Rules, enforced by [the guards](../../../scripts/lib/development-document-scan-activation-guards.ps1) and tested with generated fixtures in the real Terraform shape:
+
+- **A current schema-7 baseline is required** (captured at the release commit from a zero-drift seed and the one document
+  receipt), and it must be exactly where the step starts. A reviewed plan cannot be replayed as a different step.
+- **The plan must be exactly the reviewed change**: only those resources, `update` in place, one attribute each between
+  the reviewed values, no unknown or sensitive change, no output change, and every other variable unchanged.
+- **Apply** takes the reviewed plan and its SHA-256, requires unchanged state, applies only that saved plan, then reads
+  the live mapping (enabled state, batch size 1, concurrency 2, processor alias) and both rules back from AWS and
+  requires a zero-drift plan with the new flags. **Verify** does the same after exactly one state advance.
+
+```powershell
+.\scripts\operate-development-gateway-release.ps1 -Action Plan -DocumentScanActivation EnableMapping `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
+  -BaselinePlanPath BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -BaselineMetadataPath BASELINE_METADATA -ReviewedBaselineMetadataSha256 METADATA_SHA256
+# review the plan, then Apply (same inputs plus the plan)
+.\scripts\operate-development-gateway-release.ps1 -Action Apply -DocumentScanActivation EnableMapping `
+  [same inputs] -PlanPath ACTIVATION_PLAN -ReviewedPlanSha256 ACTIVATION_PLAN_SHA256
+```
+
+Rollback is the inverse step from a fresh baseline (`DisableRule`, then `DisableMapping`). A later Gateway release
+carries the activated state forward: the release guard requires both flags to equal the retained baseline and only
+refuses a shape ADR-023 does not allow (the rule without the mapping, or any trigger outside the complete boundary).
+
+**Boundary.** ADR-023 accepts this only for generated-synthetic development processing. Nothing in the upload path
+checks content, so the operating rule is that only generated-synthetic resumes are uploaded while a trigger is on; real
+resumes stay blocked until the ADR-023 gates are met (see the [activation design](../../security/d3-023-document-processing-activation.md)).
+
 ## Failure and recovery
 
 - A publication failure may leave new immutable objects plus a `publishing` receipt. Never reuse,
