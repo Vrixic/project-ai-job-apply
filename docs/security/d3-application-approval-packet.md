@@ -4,7 +4,7 @@
   or an approval. No disposition below has been requested from or granted by any reviewer.
 - Task: D3-012. Release gates: LR-D3-01 (application preparation) and LR-D3-02 (application
   submission) in the [legal review register](../product/foundation/legal-review-register.md).
-- Prepared: 2026-09-18
+- Prepared: 2026-09-18; refreshed to the implemented state and given the owner's positions on 2026-09-19
 - Live ATS effects, automated form actions, and any real AI provider stay disabled until every
   disposition here is recorded. Foundational counsel review is separately deferred to D6-016
   ([ADR-019](../adr/019-defer-foundational-counsel-review-to-public-launch.md)).
@@ -20,6 +20,20 @@
 | 5 | Submission: whether a candidate-approved, hash-bound packet may be submitted on the candidate's behalf, and the evidence required for ambiguous results | Counsel; security/privacy | Any automated submission |
 | 6 | The engineering defaults listed under "Defaults to confirm" | Product owner | Release |
 
+## Owner positions (2026-09-19; owner statements, not accountable approval)
+
+The product owner gave these positions in chat. They are product direction for the reviewers to assess.
+They are not a legal, security, or privacy disposition, and every reviewer record below is still required.
+
+| # | Owner position | What it means for the review |
+|---|---|---|
+| 1 | AI processing is acceptable in principle and users will be told: candidate facts and job text may reach a model provider, with disclosure to the user. | No provider, model, data-processing terms, or disclosure text has been chosen; reviewers still decide and approve them before any real generation. |
+| 2 | Filling fields on Greenhouse, Lever, and Ashby application pages is a given product requirement. | Reviewers still decide per exact variant and against each source's terms; no adapter exists until D3-013 fixtures do. |
+| 3 | Sensitive answers are kept, and the owner does not expect any stored answer to be highly sensitive. | Restricted answers are still shown for review and never inferred. The accepted ADR-010 requirement for a separate key and least-privilege boundary is unchanged: this position does not amend it, and the reviewer decides whether it is required before real-candidate use. |
+| 4 | Signatures, attestations, CAPTCHA, and MFA are never automated; the user completes them manually. | Matches the implemented policy (direct candidate action). Counsel confirms. |
+| 5 | The record must show who submitted: when the platform's adapter did not submit, the candidate did. | Attempts already carry the adapter and version, and history separates adapter attempts from candidate takeover and candidate attestation (`taken_over`, `user_attested_submitted`). Whether an explicit submitter field is needed is an engineering follow-up under D3-008; reviewers assess the evidence kinds. |
+| 6 | The engineering defaults below are accepted. | Product owner acknowledgement recorded; reviewers may still add conditions. |
+
 ## What is implemented (locally verified with generated-synthetic data only)
 
 | Control | Where | Evidence |
@@ -34,6 +48,9 @@
 | Assisted-manual fallback: no page action, no automated submission | ATS SDK | Tests |
 | Review-by-exception UI with restricted answers always visible | Web panel | 10 tests incl. automated axe checks |
 | Privacy-safe versioned measurement | Applications metrics | Tests proving no value or identifier is emitted |
+| Job-specific resume: deterministic selection and ordering of the candidate's own bullets (never adds or rewords text), verified DOCX/PDF, content hash bound into the packet, computed in the Documents runtime so the Gateway never reads resume text ([ADR-031](../adr/031-deterministic-resume-tailoring-in-documents-runtime.md), proposed) | Documents runtime, Applications, Gateway, web | Unit, PostgreSQL, and HTTP end-to-end tests; deployed to development and answering the fixed request (no resume can be tailored yet because document processing is dark) |
+| After approval, an Apply step that opens the employer's page and offers the approved answers and the verified tailored resume; it never submits and makes no attempt call | Web | Unit tests and a real-Chromium run against a mocked API |
+| Automatic fills only from exactly one confirmed, type-fitting fact under an owner-approved 26-row convention; restricted answers never mapped | Applications packet source | 13 tests |
 
 ## What is not implemented or not proven
 
@@ -42,13 +59,11 @@
 - No provider adapter exists (D3-013 fixtures are missing); no live form, submission, or
   confirmation detection has been exercised.
 - The answer vault has no persistence, separate key, or API (blocked by D3-015 and D3-R4).
-- Applications candidate export, deletion, and restore replay are implemented and locally verified (D3-014)
-  but not activated: the `d3-development-synthetic-v1` policy has not been rolled out. Applications is not yet in the deployed candidate-rights configuration, the migration image, the
-  restore manifest, Terraform/IAM, or any deployment (D3-015).
-- No Auth0 `applications:*` scope, API Gateway route, BFF route, or extension integration exists.
+- Applications candidate export, deletion, and restore replay are implemented and locally verified (D3-014). The owner confirmed the `d3-development-synthetic-v1` policy selection on 2026-09-19, but it is not activated: activation needs a Gateway release, which is blocked by D3-020. The Applications schema itself is deployed to development (D3-015).
+- No extension integration exists. The Auth0 `applications:*` scopes, Gateway routes, BFF routes, and review workspace exist in development and were exercised with a real sign-in (create and packet prepare returned 201); nothing was approved or submitted.
 - No durable workflow, outbox publisher, or alarm exists for Applications.
-- Accessibility was checked only by automated jsdom axe rules (no color contrast, no real browser,
-  no assistive technology).
+- Accessibility was checked by automated jsdom axe rules and a real-Chromium keyboard run of the real
+  components against a mocked API (no color contrast, no assistive technology, no live end-to-end run).
 
 ## Defaults to confirm (all currently engineering choices)
 
