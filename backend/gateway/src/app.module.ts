@@ -377,6 +377,16 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
     /^(?:08|0A|22|23|25|2D|3D|3F|40|42|53|54|55|57|58|F0|HV|P0|XX)[0-9A-Z]{3}$/u.test(cause.code)
       ? cause.code
       : undefined;
+  // Driver and runtime errors (for example ERR_INVALID_ARG_TYPE) carry a fixed upper-case code and no data. A
+  // SQLSTATE alone missed the D3-024 upload failure, which was a driver error rather than a database error.
+  const driverCauseCode =
+    !postgresCauseCode &&
+    errorType === "ResumeUploadRegistrationError" &&
+    routeTemplate === "/v1/resumes/uploads" &&
+    typeof cause?.code === "string" &&
+    /^[A-Z][A-Z0-9_]{2,63}$/u.test(cause.code)
+      ? cause.code
+      : undefined;
   const contributionCauseCode =
     errorType === "JobContributionUnavailableError" &&
     routeTemplate === "/v1/jobs/contributions" &&
@@ -401,6 +411,7 @@ export function privacySafeRequestFailure(exception: unknown, routeTemplate: str
     error_type: errorType,
     error_code: errorCode,
     ...(postgresCauseCode ? { postgres_cause_code: postgresCauseCode } : {}),
+    ...(driverCauseCode ? { driver_cause_code: driverCauseCode } : {}),
     ...(contributionCauseCode ? { contribution_cause_code: contributionCauseCode } : {}),
     ...(contributionCauseType ? { contribution_cause_type: contributionCauseType } : {}),
   } as const;
