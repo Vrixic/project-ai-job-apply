@@ -285,7 +285,9 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
     heldWaiting?: number;
     remaining?: Record<string, number>;
     failObjects?: string[];
+    failObjectsWith?: Error;
     failRetire?: string[];
+    failRetireWith?: Error;
     completeResult?: Record<string, unknown>;
     withoutPurger?: boolean;
     inventory?: unknown;
@@ -318,13 +320,14 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
       async (_transaction: unknown, input: { documentId: string }) => {
         calls.push(`retire:${input.documentId}`);
         if (options.failRetire?.includes(input.documentId))
-          throw new Error("synthetic retire failure");
+          throw options.failRetireWith ?? new Error("synthetic retire failure");
         return { proposalsErased: 1, importsErased: 1 };
       },
     );
     const purgeDocumentPrefixes = vi.fn(async (documentId: string) => {
       calls.push(`purge:${documentId}`);
-      if (options.failObjects?.includes(documentId)) throw new Error("synthetic s3 failure");
+      if (options.failObjects?.includes(documentId))
+        throw options.failObjectsWith ?? new Error("synthetic s3 failure");
       return { deleted: 2, remaining: options.remaining?.[documentId] ?? 0 };
     });
     const dependencies = {
@@ -431,6 +434,74 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
       expect(logged).toContain("resume_purge_failed");
       expect(logged).not.toContain(first);
       expect(logged).not.toContain(user);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("names the failed step and only fixed-format reasons, never a message or a key", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const aws = Object.assign(
+        new Error(`Access denied to quarantine/${first}/source for ${user}`),
+        {
+          name: "AccessDenied",
+          Code: "AccessDenied",
+          $metadata: { httpStatusCode: 403 },
+        },
+      );
+      const s3 = sweepFixture({ failObjects: [first], failObjectsWith: aws });
+      await s3.store.purgeDeletedResumes();
+      const pg = sweepFixture({
+        failRetire: [first],
+        failRetireWith: Object.assign(new Error(`permission denied for table ${user}`), {
+          name: "PostgresError",
+          code: "42501",
+        }),
+      });
+      await pg.store.purgeDeletedResumes();
+      const logged = error.mock.calls.map(([entry]) => entry as Record<string, unknown>);
+      expect(logged[0]).toEqual({
+        event: "resume_purge_failed",
+        step: "purge_objects",
+        errorCode: "ResumePurgeStepFailed",
+        errorName: "AccessDenied",
+        errorReason: "AccessDenied",
+        httpStatus: 403,
+      });
+      expect(logged[1]).toEqual({
+        event: "resume_purge_failed",
+        step: "retire_proposals",
+        errorCode: "ResumePurgeStepFailed",
+        errorName: "PostgresError",
+        sqlState: "42501",
+      });
+      const text = JSON.stringify(logged);
+      expect(text).not.toContain(first);
+      expect(text).not.toContain(user);
+      expect(text).not.toMatch(/denied to|permission denied/u);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("drops fields that do not have the expected shape", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const odd = Object.assign(new Error("x"), {
+        name: "bad name with spaces!",
+        code: "not-a-sqlstate",
+        $metadata: { httpStatusCode: 99999 },
+      });
+      await sweepFixture({
+        failObjects: [first],
+        failObjectsWith: odd,
+      }).store.purgeDeletedResumes();
+      expect(error.mock.calls[0]?.[0]).toEqual({
+        event: "resume_purge_failed",
+        step: "purge_objects",
+        errorCode: "ResumePurgeStepFailed",
+      });
     } finally {
       error.mockRestore();
     }

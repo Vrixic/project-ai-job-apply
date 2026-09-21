@@ -1281,4 +1281,110 @@ if (Test-Path -LiteralPath $diagnosticPlanPath -PathType Leaf) {
   $passed++
 }
 
+# ---- D3-027: refresh drift on the two durable-chain roles, after the reviewed activity code refresh
+$chainSpecs = @(
+  @{
+    Address = "module.platform.aws_iam_role.outbox_starter[0]"; RoleName = "ai-job-apply-development-outbox-starter"
+    PolicyName = "outbox-starter-runtime"; PolicyAddress = "module.platform.aws_iam_role_policy.outbox_starter[0]"
+    Sid = "StartExactDurableWorkflowVersion"; FunctionName = "ai-job-apply-development-profile-readiness-durable"
+  },
+  @{
+    Address = "module.platform.aws_iam_role.profile_readiness_durable[0]"; RoleName = "ai-job-apply-development-profile-readiness-durable"
+    PolicyName = "profile-readiness-durable-runtime"; PolicyAddress = "module.platform.aws_iam_role_policy.profile_readiness_durable[0]"
+    Sid = "InvokeExactProfileActivityVersion"; FunctionName = "ai-job-apply-development-profile-readiness-activity"
+  }
+)
+function New-ChainPolicyJson {
+  param([Parameter(Mandatory)][hashtable]$Spec, [Parameter(Mandatory)][int]$Version, [scriptblock]$Mutate = $null)
+  $statements = @(
+    [ordered]@{ Sid = "WriteOwnedLogs"; Effect = "Allow"; Action = @("logs:PutLogEvents", "logs:CreateLogStream"); Resource = "arn:aws:logs:us-east-2:${account}:log-group:/x:*" },
+    [ordered]@{ Sid = "ReadDatabaseSecret"; Effect = "Allow"; Action = "secretsmanager:GetSecretValue"; Resource = "arn:aws:secretsmanager:us-east-2:${account}:secret:db" },
+    [ordered]@{ Sid = $Spec.Sid; Effect = "Allow"; Action = "lambda:InvokeFunction"; Resource = "arn:aws:lambda:us-east-2:${account}:function:$($Spec.FunctionName):$Version" },
+    [ordered]@{ Sid = "SendToDeadLetter"; Effect = "Allow"; Action = "sqs:SendMessage"; Resource = "arn:aws:sqs:us-east-2:${account}:dlq" }
+  )
+  $policy = [ordered]@{ Version = "2012-10-17"; Statement = $statements }
+  if ($null -ne $Mutate) { $policy = & $Mutate $policy }
+  return ($policy | ConvertTo-Json -Depth 20 -Compress)
+}
+function New-ChainRoleDriftPlan {
+  param(
+    [Parameter(Mandatory)][hashtable]$Spec, [int]$BeforeVersion = 15, [int]$AfterVersion = 16,
+    [scriptblock]$MutateAfter = $null, [scriptblock]$MutateRecord = $null, [string]$PlannedPolicy = "", [switch]$OmitPlanned
+  )
+  $beforePolicy = New-ChainPolicyJson $Spec $BeforeVersion
+  $afterPolicy = New-ChainPolicyJson $Spec $AfterVersion $MutateAfter
+  $roleArn = "arn:aws:iam::${account}:role/$($Spec.RoleName)"
+  $before = [pscustomobject]@{ arn = $roleArn; name = $Spec.RoleName; tags = [pscustomobject]@{}; inline_policy = @([pscustomobject]@{ name = $Spec.PolicyName; policy = $beforePolicy }) }
+  $after = [pscustomobject]@{ arn = $roleArn; name = $Spec.RoleName; tags = [pscustomobject]@{}; inline_policy = @([pscustomobject]@{ name = $Spec.PolicyName; policy = $afterPolicy }) }
+  $record = New-GatewayProviderDriftRecord -Address $Spec.Address -Type "aws_iam_role" -Before $before -After $after
+  if ($null -ne $MutateRecord) { $record = & $MutateRecord $record }
+  $expected = if ($PlannedPolicy -ne "") { $PlannedPolicy } else { $afterPolicy }
+  $resources = @()
+  if (-not $OmitPlanned) { $resources = @([pscustomobject]@{ address = $Spec.PolicyAddress; values = [pscustomobject]@{ policy = $expected } }) }
+  return [pscustomobject]@{
+    resource_drift = @($record)
+    planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{ resources = $resources } }
+  }
+}
+foreach ($spec in $chainSpecs) {
+  $null = Assert-AcceptedGatewayProviderDrift -Plan (New-ChainRoleDriftPlan $spec); $passed++
+  $null = Assert-AcceptedGatewayProviderDrift -Plan (New-ChainRoleDriftPlan $spec -BeforeVersion 3 -AfterVersion 40); $passed++
+  foreach ($case in @(
+      @{ Name = "the same version"; Plan = { New-ChainRoleDriftPlan $spec -BeforeVersion 16 -AfterVersion 16 } },
+      @{ Name = "a lower version"; Plan = { New-ChainRoleDriftPlan $spec -BeforeVersion 16 -AfterVersion 15 } },
+      @{ Name = "no planned policy"; Plan = { New-ChainRoleDriftPlan $spec -OmitPlanned } },
+      @{ Name = "a policy that is not the planned one"; Plan = { New-ChainRoleDriftPlan $spec -PlannedPolicy (New-ChainPolicyJson $spec 99) } },
+      @{ Name = "another function"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Resource = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-gateway:16"; $p } } },
+      @{ Name = "an unversioned function"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Resource = "arn:aws:lambda:us-east-2:${account}:function:$($spec.FunctionName)"; $p } } },
+      @{ Name = "an alias resource"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Resource = "arn:aws:lambda:us-east-2:${account}:function:$($spec.FunctionName):development"; $p } } },
+      @{ Name = "a wildcard resource"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Resource = "*"; $p } } },
+      @{ Name = "another account"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Resource = "arn:aws:lambda:us-east-2:999999999999:function:$($spec.FunctionName):16"; $p } } },
+      @{ Name = "two resources"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Resource = @("arn:aws:lambda:us-east-2:${account}:function:$($spec.FunctionName):16", "arn:aws:lambda:us-east-2:${account}:function:$($spec.FunctionName):17"); $p } } },
+      @{ Name = "a widened action"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Action = "lambda:*"; $p } } },
+      @{ Name = "a second action"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Action = @("lambda:InvokeFunction", "lambda:DeleteFunction"); $p } } },
+      @{ Name = "a deny effect"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Effect = "Deny"; $p } } },
+      @{ Name = "a condition added"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Condition = @{ StringEquals = @{ x = "y" } }; $p } } },
+      @{ Name = "an extra statement"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement = @($p.Statement) + @([ordered]@{ Sid = "Extra"; Effect = "Allow"; Action = "s3:*"; Resource = "*" }); $p } } },
+      @{ Name = "a removed statement"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement = @($p.Statement | Select-Object -First 3); $p } } },
+      @{ Name = "another statement changed"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[1].Resource = "*"; $p } } },
+      @{ Name = "another statement widened"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[0].Action = "logs:*"; $p } } },
+      @{ Name = "a reordered policy"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement = @($p.Statement[1], $p.Statement[0], $p.Statement[2], $p.Statement[3]); $p } } },
+      @{ Name = "another policy version"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Version = "2008-10-17"; $p } } },
+      @{ Name = "the reviewed statement renamed"; Plan = { New-ChainRoleDriftPlan $spec -MutateAfter { param($p) $p.Statement[2].Sid = "Other"; $p } } },
+      @{ Name = "another role"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.after.arn = "arn:aws:iam::${account}:role/other"; $r } } },
+      @{ Name = "another inline policy name"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.after.inline_policy[0].name = "other"; $r } } },
+      @{ Name = "a second inline policy"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.after.inline_policy = @($r.change.after.inline_policy[0], $r.change.after.inline_policy[0]); $r } } },
+      @{ Name = "a changed tag"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.after.tags = [pscustomobject]@{ x = "y" }; $r } } },
+      @{ Name = "an added attribute"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.after | Add-Member NoteProperty description "changed"; $r } } },
+      @{ Name = "an unknown value"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.after_unknown = [pscustomobject]@{ inline_policy = $true }; $r } } },
+      @{ Name = "a sensitivity change"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.after_sensitive = [pscustomobject]@{ tags = $true }; $r } } },
+      @{ Name = "a replacement path"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change | Add-Member NoteProperty replace_paths @(, @("name")); $r } } },
+      @{ Name = "a create action"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.actions = @("create"); $r } } },
+      @{ Name = "a delete action"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.actions = @("delete"); $r } } },
+      @{ Name = "a data-source mode"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.mode = "data"; $r } } },
+      @{ Name = "another type"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.type = "aws_iam_policy"; $r } } }
+    )) {
+    $bad = & $case.Plan
+    Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $bad } "The $($spec.RoleName) refresh with $($case.Name) was accepted."
+  }
+  $duplicated = New-ChainRoleDriftPlan $spec
+  $duplicated.resource_drift = @($duplicated.resource_drift[0], $duplicated.resource_drift[0])
+  Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $duplicated } "A duplicated $($spec.RoleName) refresh was accepted."
+}
+# each spec's grant may not be swapped for the other's function or statement name
+$swapped = New-ChainRoleDriftPlan $chainSpecs[0] -MutateAfter { param($p) $p.Statement[2].Resource = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-profile-readiness-activity:16"; $p }
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $swapped } "The outbox starter role was accepted with the activity function."
+$otherRole = New-ChainRoleDriftPlan $chainSpecs[1]
+$otherRole.resource_drift[0].address = "module.platform.aws_iam_role.gateway_lambda[0]"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $otherRole } "A different role address was accepted as a chain role refresh."
+# both records together are accepted, and an unrelated record beside them still refuses
+$both = New-ChainRoleDriftPlan $chainSpecs[0]
+$second = New-ChainRoleDriftPlan $chainSpecs[1]
+$both.resource_drift = @($both.resource_drift[0], $second.resource_drift[0])
+$both.planned_values.root_module.resources = @($both.planned_values.root_module.resources) + @($second.planned_values.root_module.resources)
+$null = Assert-AcceptedGatewayProviderDrift -Plan $both; $passed++
+$withUnknown = Copy-Fixture $both
+$withUnknown.resource_drift = @($withUnknown.resource_drift) + @((New-GatewayProviderDriftRecord -Address "module.platform.aws_iam_role.unreviewed[0]" -Type "aws_iam_role" -Before ([pscustomobject]@{ a = 1 }) -After ([pscustomobject]@{ a = 2 })))
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $withUnknown } "An unreviewed drift record beside the chain role refreshes was accepted."
+
 Write-Output "Development gateway release guard tests passed: $passed"

@@ -103,6 +103,35 @@ class CandidateRightsActivityRejected extends Error {
   }
 }
 
+/**
+ * Fixed-format fields that say why a resume purge step failed without carrying a message, a key, or an identifier: the
+ * error name, a PostgreSQL SQLSTATE, an AWS error code, and an HTTP status, each only when it has the expected shape.
+ */
+function resumePurgeFailureFields(error: unknown): Record<string, string | number> {
+  if (error instanceof CandidateRightsActivityRejected) return { errorCode: error.code };
+  const fields: Record<string, string | number> = { errorCode: "ResumePurgeStepFailed" };
+  if (typeof error !== "object" || error === null) return fields;
+  const value = error as {
+    name?: unknown;
+    code?: unknown;
+    Code?: unknown;
+    $metadata?: { httpStatusCode?: unknown };
+  };
+  if (typeof value.name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/u.test(value.name)) {
+    fields.errorName = value.name;
+  }
+  if (typeof value.code === "string" && /^[0-9A-Z]{5}$/u.test(value.code))
+    fields.sqlState = value.code;
+  const awsCode = typeof value.Code === "string" ? value.Code : value.code;
+  if (typeof awsCode === "string" && /^[A-Za-z][A-Za-z0-9_]{1,63}$/u.test(awsCode))
+    fields.errorReason = awsCode;
+  const status = value.$metadata?.httpStatusCode;
+  if (typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599) {
+    fields.httpStatus = status;
+  }
+  return fields;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -717,6 +746,7 @@ export class PostgresCandidateRightsActivityStore {
     let purged = 0;
     let failed = 0;
     for (const { userId, documentId } of due) {
+      let step = "retire_proposals";
       try {
         await client.begin((transaction) =>
           resumeProposals.retireDocumentProposals(transaction, {
@@ -725,21 +755,19 @@ export class PostgresCandidateRightsActivityStore {
             traceId: "resume-purge",
           }),
         );
+        step = "purge_objects";
         const objects = await documentObjectStore.purgeDocumentPrefixes(documentId);
         if (objects.remaining !== 0) {
           throw new CandidateRightsActivityRejected("ResumePurgeObjectsRemain");
         }
+        step = "complete_purge";
         const completed = await client<Array<{ data: { purged?: unknown } }>>`
           SELECT documents.complete_resume_purge(${userId}::uuid, ${documentId}::uuid, true) AS data
         `;
         if (completed[0]?.data?.purged === true) purged += 1;
       } catch (error) {
         failed += 1;
-        console.error({
-          event: "resume_purge_failed",
-          errorCode:
-            error instanceof CandidateRightsActivityRejected ? error.code : "ResumePurgeStepFailed",
-        });
+        console.error({ event: "resume_purge_failed", step, ...resumePurgeFailureFields(error) });
       }
     }
     return { scanned: due.length, purged, failed, heldWaiting: data.heldWaiting as number };
