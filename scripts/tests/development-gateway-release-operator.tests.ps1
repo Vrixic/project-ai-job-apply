@@ -116,6 +116,46 @@ foreach ($otherOperator in @("operate-development-document-migration.ps1", "oper
   $otherSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\$otherOperator") -Raw
   if ($otherSource.Contains("DocumentUploadCorsOrigin")) { throw "$otherOperator must not carry the document upload CORS change." }
 }
+# D3-027: the candidate-rights activity code refresh is a separate Plan/Apply/Verify mode that never combines with a release,
+# an activation, or a CORS change, needs a current schema-7 baseline and a verified core-workflow receipt, applies only the exact
+# reviewed plan, and verifies the whole live chain and zero drift.
+foreach ($activityMarker in @(
+    'RefreshCandidateRightsActivity', 'WorkflowReceiptPath', 'ReviewedWorkflowReceiptSha256',
+    'development-candidate-rights-activity-guards.ps1',
+    'A candidate-rights activity refresh is planned, applied, and verified on its own, from a retained baseline, and never with a release.',
+    'A candidate-rights activity refresh requires a current schema-7 baseline.',
+    'The candidate-rights activity refresh is planned, applied, and verified only.',
+    'A workflow publication receipt is accepted only by the candidate-rights activity refresh.',
+    'Get-VerifiedWorkflowActivityArtifact', 'Get-CandidateRightsActivityArtifact', 'Assert-CandidateRightsActivityVariables',
+    'Assert-ExactCandidateRightsActivityPlan', 'Assert-CandidateRightsActivityLive', 'Invoke-CandidateRightsActivityZeroDrift',
+    'The workflow publication receipt checksum does not match review.',
+    'The activity artifact failed independent exact-version readback.',
+    'The candidate-rights activity refresh did not produce an exact reviewable change.',
+    'Remote state changed after review; generate a new activity refresh plan.',
+    'The activity refresh plan checksum does not match review.', 'development-candidate-rights-activity-plan',
+    'The exact reviewed candidate-rights activity plan failed to apply.',
+    'The live durable role does not invoke exactly the new activity version.'
+  )) {
+  if (-not $operator.Contains($activityMarker)) {
+    throw "The gateway operator does not preserve the candidate-rights activity refresh boundary: $activityMarker"
+  }
+}
+if ($operator.IndexOf('if ($RefreshCandidateRightsActivity) {') -lt 0 -or
+    $operator.IndexOf('if ($RefreshCandidateRightsActivity) {') -gt $operator.IndexOf('$publication = Read-Receipt $boundary')) {
+  throw "The candidate-rights activity refresh is not isolated from the release publication path."
+}
+# The other isolated modes refuse it, and no other operator carries it.
+foreach ($isolatedMode in @('if ($DocumentScanActivation -cne "None") {', 'if ($DocumentUploadCorsOrigin -cne "") {')) {
+  $start = $operator.IndexOf($isolatedMode)
+  $end = $operator.IndexOf('throw "', $start)
+  if ($start -lt 0 -or -not $operator.Substring($start, $end - $start).Contains('$RefreshCandidateRightsActivity')) {
+    throw "An isolated mode does not refuse the candidate-rights activity refresh."
+  }
+}
+foreach ($otherOperator in @("operate-development-document-migration.ps1", "operate-development-d2-runtime-release.ps1", "operate-development-document-dark-deployment.ps1")) {
+  $otherSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot "..\$otherOperator") -Raw
+  if ($otherSource.Contains("RefreshCandidateRightsActivity")) { throw "$otherOperator must not carry the candidate-rights activity refresh." }
+}
 foreach ($recoveryMarker in @(
     "Assert-GatewayVerifySourceDelta", "The gateway verification-only delta is empty",
     'if ($Action -cne "Verify")', "The gateway drift variable inventory is empty or duplicated.",

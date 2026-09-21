@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { validateCandidateDataExportV1 } from "@ai-job-apply/domain";
-import type { DatabaseHandle } from "@ai-job-apply/profile-service";
+import type { DatabaseHandle, PostgresResumeProposalWriter } from "@ai-job-apply/profile-service";
 import type { CandidateRightsPolicy } from "@ai-job-apply/profile-service/candidate-rights";
 import {
   type CandidateRightsActivityInputV1,
@@ -38,6 +38,8 @@ export interface CandidateDocumentObjectStore {
   deleteAllVersionsAndMarkers(
     objects: readonly CandidateDocumentObjectRef[],
   ): Promise<{ exactInventoryEmpty: boolean }>;
+  /** Removes every version and marker under one deleted resume's prefixes and reports what a second listing still finds. */
+  purgeDocumentPrefixes?(documentId: string): Promise<{ deleted: number; remaining: number }>;
 }
 
 export interface CandidateExternalIdentity {
@@ -59,6 +61,8 @@ export interface CandidateRightsActivityDependencies {
   policy: CandidateRightsPolicy;
   artifactStore: CandidateExportArtifactStore;
   documentObjectStore: CandidateDocumentObjectStore;
+  /** Profile's own retirement of unreviewed proposals, needed by the resume purge sweep (ADR-034). */
+  resumeProposals?: Pick<PostgresResumeProposalWriter, "retireDocumentProposals">;
   identityProvider: CandidateIdentityProvider;
   subprocessors: readonly CandidateSubprocessor[];
   recoveryLedger: CandidateDeletionRecoveryLedger;
@@ -673,6 +677,72 @@ export class PostgresCandidateRightsActivityStore {
       expired += updated.length;
     }
     return { scanned: due.length, expired };
+  }
+
+  /**
+   * Finishes candidate deletions of resumes (ADR-034). For each tombstone the Documents function names as ready: retire the
+   * unreviewed Profile proposals, remove every object version and marker under the resume's prefixes, and only when a second
+   * listing is empty ask Documents to remove the row and its entries. Every step is idempotent, so a failure leaves the
+   * database as it was and the next sweep retries. One failing tombstone does not stop the others; the caller decides what
+   * a nonzero `failed` means. Reports counts only.
+   */
+  async purgeDeletedResumes(
+    limit = 25,
+  ): Promise<{ scanned: number; purged: number; failed: number; heldWaiting: number }> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new CandidateRightsActivityRejected("ResumePurgeLimitRejected");
+    }
+    const { documentObjectStore, resumeProposals } = this.dependencies;
+    if (!documentObjectStore.purgeDocumentPrefixes || !resumeProposals) {
+      throw new CandidateRightsActivityRejected("ResumePurgeUnavailable");
+    }
+    const client = this.dependencies.database.client;
+    const rows = await client<Array<{ data: unknown }>>`
+      SELECT documents.pending_resume_purges(${limit}) AS data
+    `;
+    const data = rows[0]?.data;
+    if (
+      !isRecord(data) ||
+      !Array.isArray(data.eligible) ||
+      !Number.isSafeInteger(data.heldWaiting)
+    ) {
+      throw new CandidateRightsActivityRejected("ResumePurgeInventoryInvalid");
+    }
+    const due = data.eligible.map((item) => {
+      if (!isRecord(item) || !isUuid(String(item.userId)) || !isUuid(String(item.documentId))) {
+        throw new CandidateRightsActivityRejected("ResumePurgeInventoryInvalid");
+      }
+      return { userId: String(item.userId), documentId: String(item.documentId) };
+    });
+    let purged = 0;
+    let failed = 0;
+    for (const { userId, documentId } of due) {
+      try {
+        await client.begin((transaction) =>
+          resumeProposals.retireDocumentProposals(transaction, {
+            userId,
+            documentId,
+            traceId: "resume-purge",
+          }),
+        );
+        const objects = await documentObjectStore.purgeDocumentPrefixes(documentId);
+        if (objects.remaining !== 0) {
+          throw new CandidateRightsActivityRejected("ResumePurgeObjectsRemain");
+        }
+        const completed = await client<Array<{ data: { purged?: unknown } }>>`
+          SELECT documents.complete_resume_purge(${userId}::uuid, ${documentId}::uuid, true) AS data
+        `;
+        if (completed[0]?.data?.purged === true) purged += 1;
+      } catch (error) {
+        failed += 1;
+        console.error({
+          event: "resume_purge_failed",
+          errorCode:
+            error instanceof CandidateRightsActivityRejected ? error.code : "ResumePurgeStepFailed",
+        });
+      }
+    }
+    return { scanned: due.length, purged, failed, heldWaiting: data.heldWaiting as number };
   }
 }
 

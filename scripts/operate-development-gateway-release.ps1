@@ -38,6 +38,12 @@ param(
   # Verify. Runs on its own from a current schema-7 baseline and is never combined with a release or an activation.
   [ValidatePattern("^(?:|https://[a-z0-9.-]+(?::[0-9]{1,5})?)$")]
   [string]$DocumentUploadCorsOrigin = "",
+  # D3-027 (ADR-034): refresh the profile-readiness activity Lambda code, which also serves the terminal Lambda and is bound
+  # into the durable workflow, from a verified core-workflow publication receipt, with Plan, Apply, and Verify. Runs on its
+  # own from a current schema-7 baseline and is never combined with a release, an activation, or a CORS change.
+  [switch]$RefreshCandidateRightsActivity,
+  [string]$WorkflowReceiptPath = "",
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedWorkflowReceiptSha256 = "",
   [switch]$Help
 )
 
@@ -50,6 +56,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\development-current-document-baseline.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-scan-activation-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-upload-cors-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-candidate-rights-activity-guards.ps1")
 
 if ($Help) {
   @"
@@ -67,6 +74,9 @@ Usage:
     -ReviewedBaselineMetadataSha256) and, for Apply and Verify, -PlanPath and -ReviewedPlanSha256.
   Document upload CORS (D3-024): -Action Plan|Apply|Verify -DocumentUploadCorsOrigin https://EXACT-ORIGIN, from a current
     schema-7 baseline, never with a release or an activation; Apply and Verify also take -PlanPath and -ReviewedPlanSha256.
+  Candidate-rights activity refresh (D3-027): -Action Plan|Apply|Verify -RefreshCandidateRightsActivity `
+    -WorkflowReceiptPath VERIFIED_WORKFLOW_RECEIPT -ReviewedWorkflowReceiptSha256 RECEIPT_SHA256, from a current schema-7
+    baseline, never with a release, an activation, or a CORS change; Apply and Verify also take -PlanPath and -ReviewedPlanSha256.
   Mixed document release (parser and processor from two receipts), add to CaptureBaseline:
     -ProcessorDocumentReceiptPath PROCESSOR_RECEIPT -ReviewedProcessorDocumentReceiptSha256 PROCESSOR_RECEIPT_SHA256
     (-DocumentReceiptPath is then the parser receipt). The resulting schema-8 baseline can only start a
@@ -97,6 +107,13 @@ if ($ExpectedAccountId -notmatch '^[0-9]{12}$' -or [string]::IsNullOrWhiteSpace(
   throw "The exact development account ID and encrypted Terraform state bucket are required."
 }
 
+if ($RefreshCandidateRightsActivity -and $Action -cnotin @("Plan", "Apply", "Verify")) {
+  throw "The candidate-rights activity refresh is planned, applied, and verified only."
+}
+if (-not $RefreshCandidateRightsActivity -and (-not [string]::IsNullOrWhiteSpace($WorkflowReceiptPath) -or $ReviewedWorkflowReceiptSha256 -cne "")) {
+  throw "A workflow publication receipt is accepted only by the candidate-rights activity refresh."
+}
+
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
 $terraformRoot = Join-Path $terraformDirectory ".terraform"
@@ -107,6 +124,7 @@ $artifactName = "gateway-lambda"
 $metadataSuffix = ".gateway-release.json"
 $activationMetadataSuffix = ".document-scan-activation.json"
 $uploadCorsMetadataSuffix = ".document-upload-cors.json"
+$candidateRightsActivityMetadataSuffix = ".candidate-rights-activity.json"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -923,6 +941,123 @@ function Get-UploadCorsExpectedMetadata {
   }
 }
 
+# ---- D3-027: candidate-rights activity code refresh (independent of the release, activation, and CORS flows) ----------
+function Get-VerifiedWorkflowActivityArtifact {
+  if ([string]::IsNullOrWhiteSpace($WorkflowReceiptPath) -or $ReviewedWorkflowReceiptSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "The activity refresh requires the reviewed workflow publication receipt."
+  }
+  $receiptRoot = [IO.Path]::GetFullPath((Join-Path $terraformRoot "development-workflow-artifacts"))
+  $candidate = if ([IO.Path]::IsPathRooted($WorkflowReceiptPath)) { $WorkflowReceiptPath } else { Join-Path $terraformDirectory $WorkflowReceiptPath }
+  $resolved = [IO.Path]::GetFullPath($candidate)
+  if (-not $resolved.StartsWith($receiptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
+      -not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
+    throw "The workflow publication receipt must be an existing file in the ignored workflow artifact directory."
+  }
+  if ((Get-FileSha256 $resolved) -cne $ReviewedWorkflowReceiptSha256) { throw "The workflow publication receipt checksum does not match review." }
+  $receipt = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json
+  $artifact = Get-CandidateRightsActivityArtifact -Receipt $receipt -SourceSha $SourceSha -BoundarySha256 $boundary.BoundarySha256
+  $stored = Invoke-AwsJson @("s3api", "head-object", "--bucket", $boundary.Bucket, "--key", $artifact.key,
+    "--version-id", $artifact.versionId, "--checksum-mode", "ENABLED", "--output", "json") "Activity artifact readback"
+  $storedKey = Invoke-AwsJson @("kms", "describe-key", "--key-id", [string]$stored.SSEKMSKeyId, "--output", "json") "Activity artifact KMS readback"
+  $platformKey = Invoke-AwsJson @("kms", "describe-key", "--key-id", $boundary.KmsArn, "--output", "json") "Platform KMS readback"
+  if ([string]$stored.VersionId -cne $artifact.versionId -or [long]$stored.ContentLength -ne $artifact.contentLength -or
+      [string]$stored.ChecksumSHA256 -cne $artifact.objectBase64Sha256 -or [string]$stored.ServerSideEncryption -cne "aws:kms" -or
+      [string]$storedKey.KeyMetadata.KeyId -cne [string]$platformKey.KeyMetadata.KeyId -or
+      [string]$stored.Metadata."source-sha" -cne $SourceSha -or
+      [string]$stored.Metadata."artifact-sha256" -cne $artifact.artifactSha256) {
+    throw "The activity artifact failed independent exact-version readback."
+  }
+  return $artifact
+}
+function Set-CandidateRightsActivityVariables {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact)
+  Set-VariablesFromPlan $Baseline.Plan $null
+  $env:TF_VAR_profile_readiness_activity_artifact_s3_key = [string]$Artifact.key
+  $env:TF_VAR_profile_readiness_activity_artifact_s3_object_version = [string]$Artifact.versionId
+  $env:TF_VAR_profile_readiness_activity_artifact_sha256 = [string]$Artifact.artifactSha256
+  $env:TF_VAR_profile_readiness_activity_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
+}
+function Get-LiveWorkflowLambda {
+  param([Parameter(Mandatory)][string]$Name)
+  $functionName = "ai-job-apply-development-$Name"
+  $alias = Invoke-AwsJson @("lambda", "get-alias", "--function-name", $functionName, "--name", "development", "--output", "json") "$Name alias readback"
+  if ([string]$alias.FunctionVersion -cnotmatch '^[1-9][0-9]*$') { throw "The $Name alias is not pinned to an immutable numeric version." }
+  $function = Invoke-AwsJson @("lambda", "get-function", "--function-name", "${functionName}:development", "--output", "json") "$Name function readback"
+  $configuration = $function.Configuration
+  if ([string]$configuration.Version -cne [string]$alias.FunctionVersion -or [string]$configuration.State -cne "Active" -or
+      [string]$configuration.LastUpdateStatus -cne "Successful") {
+    throw "The live $Name alias is not an active, successfully updated immutable version."
+  }
+  return [pscustomobject]@{
+    Version = [string]$alias.FunctionVersion; Configuration = $configuration
+    Arn = "arn:aws:lambda:$Region`:$ExpectedAccountId`:function:$functionName`:$([string]$alias.FunctionVersion)"
+  }
+}
+# The chain the module binds together: both Lambdas run the verified archive, the durable version invokes the new activity
+# version, the terminal Lambda, the outbox starter, and the terminal rule name the new durable version, and the durable role
+# may invoke exactly the new activity version.
+function Assert-CandidateRightsActivityLive {
+  param([Parameter(Mandatory)][object]$Artifact)
+  $activity = Get-LiveWorkflowLambda "profile-readiness-activity"
+  $terminal = Get-LiveWorkflowLambda "profile-readiness-terminal"
+  $durable = Get-LiveWorkflowLambda "profile-readiness-durable"
+  $outbox = Get-LiveWorkflowLambda "outbox-starter"
+  foreach ($live in @($activity, $terminal)) {
+    if ([string]$live.Configuration.CodeSha256 -cne [string]$Artifact.objectBase64Sha256 -or
+        [string]$live.Configuration.Environment.Variables.RELEASE_SHA -cne [string]$Artifact.artifactSha256) {
+      throw "A live workflow Lambda does not run the checksum-reviewed activity archive."
+    }
+  }
+  if ([string]$durable.Configuration.Environment.Variables.PROFILE_ACTIVITY_FUNCTION_ARN -cne $activity.Arn) {
+    throw "The live durable version does not invoke the new activity version."
+  }
+  foreach ($live in @($terminal, $outbox)) {
+    if ([string]$live.Configuration.Environment.Variables.DURABLE_FUNCTION_ARN -cne $durable.Arn) {
+      throw "A live workflow Lambda does not name the new durable version."
+    }
+  }
+  $rule = Invoke-AwsJson @("events", "describe-rule", "--name", "ai-job-apply-development-profile-readiness-terminal", "--output", "json") "Terminal rule readback"
+  $pattern = [string]$rule.EventPattern | ConvertFrom-Json
+  if (@($pattern.detail.functionArn).Count -ne 1 -or [string]@($pattern.detail.functionArn)[0] -cne $durable.Arn) {
+    throw "The live terminal rule does not name the new durable version."
+  }
+  $policy = Invoke-AwsJson @("iam", "get-role-policy", "--role-name", "ai-job-apply-development-profile-readiness-durable",
+    "--policy-name", "profile-readiness-durable-runtime", "--output", "json") "Durable role policy readback"
+  $statement = @($policy.PolicyDocument.Statement | Where-Object { [string]$_.Sid -ceq "InvokeExactProfileActivityVersion" })
+  if ($statement.Count -ne 1 -or [string]$statement[0].Effect -cne "Allow" -or [string]$statement[0].Action -cne "lambda:InvokeFunction" -or
+      @($statement[0].Resource).Count -ne 1 -or [string]@($statement[0].Resource)[0] -cne $activity.Arn) {
+    throw "The live durable role does not invoke exactly the new activity version."
+  }
+}
+function Invoke-CandidateRightsActivityZeroDrift {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact)
+  $path = Join-Path $operatorRoot "candidate-rights-activity-verify-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
+  if (Test-Path $path) { throw "Refusing to overwrite a verification plan." }
+  $saved = Save-AndClearTerraformVariables
+  try {
+    Set-CandidateRightsActivityVariables $Baseline $Artifact
+    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
+    $exitCode = $LASTEXITCODE
+  } finally { Restore-TerraformVariables $saved }
+  if ($exitCode -ne 0) { throw "The post-change Terraform plan is not zero drift. Inspect the ignored verification log." }
+  $plan = Read-Plan $path
+  $null = Assert-RetainedGatewayBaselinePlan $plan (Get-DeclaredTerraformVariableNames)
+  $null = Assert-CandidateRightsActivityVariables $Baseline.Plan.variables $plan.variables $Artifact
+  return Get-FileSha256 $path
+}
+function Get-CandidateRightsActivityExpectedMetadata {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact, [Parameter(Mandatory)][string]$PlanFile, [Parameter(Mandatory)][string]$PlanSha)
+  return @{
+    SchemaVersion = "1"; Kind = "development-candidate-rights-activity-plan"; Environment = "development"
+    AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"
+    StateLineage = [string]$Baseline.Metadata.StateLineage; StateSerial = [long]$Baseline.Metadata.StateSerial
+    SourceSha = $SourceSha; WorkflowReceiptSha256 = $ReviewedWorkflowReceiptSha256; ActivityArtifactSha256 = [string]$Artifact.artifactSha256
+    BaselinePath = $Baseline.Path; BaselineSha256 = $ReviewedBaselineSha256
+    BaselineMetadataPath = $Baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256
+    PlanPath = $PlanFile; PlanSha256 = $PlanSha
+  }
+}
+
 $commit = Assert-CallerAndSource
 Initialize-Backend
 $boundary = Resolve-ArtifactBoundary
@@ -1099,7 +1234,7 @@ if ($Action -ceq "Publish") {
 if ($DocumentScanActivation -cne "None") {
   if ($Action -cnotin @("Plan", "Apply", "Verify") -or $RefreshDocumentProcessor -or $RefreshDocumentParser -or
       $EnableDocumentTailoringInvoke -or -not [string]::IsNullOrWhiteSpace($ReceiptPath) -or
-      -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath) -or $DocumentUploadCorsOrigin -cne "") {
+      -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath) -or $DocumentUploadCorsOrigin -cne "" -or $RefreshCandidateRightsActivity) {
     throw "A document scan activation is planned, applied, and verified on its own, from a retained baseline, and never with a release."
   }
   $step = $DocumentScanActivation
@@ -1165,7 +1300,7 @@ if ($DocumentScanActivation -cne "None") {
 if ($DocumentUploadCorsOrigin -cne "") {
   if ($Action -cnotin @("Plan", "Apply", "Verify") -or $DocumentScanActivation -cne "None" -or $RefreshDocumentProcessor -or
       $RefreshDocumentParser -or $EnableDocumentTailoringInvoke -or -not [string]::IsNullOrWhiteSpace($ReceiptPath) -or
-      -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath)) {
+      -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath) -or $RefreshCandidateRightsActivity) {
     throw "A document upload CORS change is planned, applied, and verified on its own, from a retained baseline, and never with a release."
   }
   $origin = $DocumentUploadCorsOrigin
@@ -1229,6 +1364,72 @@ if ($DocumentUploadCorsOrigin -cne "") {
   Assert-DocumentUploadCorsLive (@($baselineOrigins) + @($origin)) $bucket
   $driftSha = Invoke-UploadCorsZeroDrift $baseline $origin
   [pscustomobject]@{ Outcome = $(if ($Action -ceq "Apply") { "applied-and-verified" } else { "verified" }); Origin = $origin; SourceSha = $SourceSha; LiveState = "matches"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
+  exit 0
+}
+
+if ($RefreshCandidateRightsActivity) {
+  if ($DocumentScanActivation -cne "None" -or $DocumentUploadCorsOrigin -cne "" -or $RefreshDocumentProcessor -or $RefreshDocumentParser -or
+      $EnableDocumentTailoringInvoke -or -not [string]::IsNullOrWhiteSpace($ReceiptPath) -or
+      -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath)) {
+    throw "A candidate-rights activity refresh is planned, applied, and verified on its own, from a retained baseline, and never with a release."
+  }
+  $baseline = Read-Baseline
+  if ([string]$baseline.MetadataSchemaVersion -cne "7") { throw "A candidate-rights activity refresh requires a current schema-7 baseline." }
+  $artifact = Get-VerifiedWorkflowActivityArtifact
+
+  if ($Action -ceq "Plan") {
+    if ([string]::IsNullOrWhiteSpace($PlanPath)) { $PlanPath = Join-Path $operatorRoot "candidate-rights-activity-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan" }
+    $path = Resolve-GatewayOperatorPath $PlanPath -ReleaseOnly
+    if (Test-Path $path) { throw "Refusing to overwrite an activity refresh plan." }
+    $state = Get-StateIdentity; $saved = Save-AndClearTerraformVariables
+    try {
+      Set-CandidateRightsActivityVariables $baseline $artifact
+      & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m -detailed-exitcode "-out=$path" *> "$path.log"
+      $exitCode = $LASTEXITCODE
+    } finally { Restore-TerraformVariables $saved }
+    if ($exitCode -ne 2) { if (Test-Path $path) { Remove-Item $path -Force }; throw "The candidate-rights activity refresh did not produce an exact reviewable change." }
+    $plan = Read-Plan $path
+    $null = Assert-CandidateRightsActivityVariables $baseline.Plan.variables $plan.variables $artifact
+    $changes = @(Assert-ExactCandidateRightsActivityPlan $plan $artifact)
+    $sha = Get-FileSha256 $path
+    $metadata = [ordered]@{}
+    foreach ($entry in (Get-CandidateRightsActivityExpectedMetadata $baseline $artifact $path $sha).GetEnumerator() | Sort-Object Name) { $metadata[$entry.Name] = $entry.Value }
+    $metadata["StateLineage"] = $state.Lineage; $metadata["StateSerial"] = $state.Serial
+    $metadata["CreatedAt"] = (Get-Date).ToUniversalTime().ToString("o")
+    Write-ExclusiveJson "$path$candidateRightsActivityMetadataSuffix" $metadata
+    [pscustomobject]@{ Outcome = "review-required"; ActivityArtifactSha256 = [string]$artifact.artifactSha256; PlanPath = $path; PlanSha256 = $sha; Updates = $changes.Count; Resources = @($changes | ForEach-Object { [string]$_.address }); ApprovalCommand = "Apply reviewed candidate-rights activity plan $sha" } | ConvertTo-Json
+    exit 0
+  }
+
+  if ([string]::IsNullOrWhiteSpace($PlanPath) -or $ReviewedPlanSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "Apply and Verify require the exact reviewed activity refresh plan and SHA-256."
+  }
+  $path = Resolve-GatewayOperatorPath $PlanPath -MustExist -ReleaseOnly
+  if ((Get-FileSha256 $path) -cne $ReviewedPlanSha256) { throw "The activity refresh plan checksum does not match review." }
+  $metadataPath = "$path$candidateRightsActivityMetadataSuffix"
+  if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) { throw "The activity refresh plan metadata is missing." }
+  $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+  Assert-ReviewedPlanMetadata $metadata (Get-CandidateRightsActivityExpectedMetadata $baseline $artifact $path $ReviewedPlanSha256)
+  $state = Get-StateIdentity
+  $plan = Read-Plan $path
+  $null = Assert-CandidateRightsActivityVariables $baseline.Plan.variables $plan.variables $artifact
+  $null = Assert-ExactCandidateRightsActivityPlan $plan $artifact
+
+  if ($Action -ceq "Apply") {
+    if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne [long]$metadata.StateSerial) {
+      throw "Remote state changed after review; generate a new activity refresh plan."
+    }
+    & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
+    if ($LASTEXITCODE -ne 0) { throw "The exact reviewed candidate-rights activity plan failed to apply." }
+  } else {
+    # Verify is the post-apply recovery path: exactly one state advance from the reviewed plan's state.
+    if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne ([long]$metadata.StateSerial + 1)) {
+      throw "Post-change verification requires exactly one state advance from the reviewed plan."
+    }
+  }
+  Assert-CandidateRightsActivityLive $artifact
+  $driftSha = Invoke-CandidateRightsActivityZeroDrift $baseline $artifact
+  [pscustomobject]@{ Outcome = $(if ($Action -ceq "Apply") { "applied-and-verified" } else { "verified" }); ActivityArtifactSha256 = [string]$artifact.artifactSha256; SourceSha = $SourceSha; LiveState = "matches"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
   exit 0
 }
 

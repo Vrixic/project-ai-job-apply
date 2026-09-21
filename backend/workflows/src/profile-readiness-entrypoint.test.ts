@@ -13,6 +13,7 @@ const runtime = vi.hoisted(() => ({
   createRightsStore: vi.fn(),
   createProfileStore: vi.fn(),
   expireDueExports: vi.fn(async () => ({ scanned: 2, expired: 2 })),
+  purgeDeletedResumes: vi.fn(async () => ({ scanned: 1, purged: 1, failed: 0, heldWaiting: 0 })),
   beginExport: vi.fn(async () => undefined),
   markOperationRunning: vi.fn(async () => undefined),
   fetch: vi.fn(async () => {
@@ -42,6 +43,7 @@ vi.mock("./candidate-rights-activities.js", async (importOriginal) => ({
     }
 
     expireDueExports = runtime.expireDueExports;
+    purgeDeletedResumes = runtime.purgeDeletedResumes;
     beginExport = runtime.beginExport;
   },
 }));
@@ -140,8 +142,10 @@ describe("deployed profile-readiness activity entrypoints", { timeout: 30_000 },
       schemaVersion: 1,
       scanned: 2,
       expired: 2,
+      resumePurge: { scanned: 1, purged: 1, failed: 0, heldWaiting: 0 },
     });
     expect(runtime.expireDueExports).toHaveBeenCalledExactlyOnceWith();
+    expect(runtime.purgeDeletedResumes).toHaveBeenCalledExactlyOnceWith();
     expect(runtime.createRightsStore).toHaveBeenCalledOnce();
     expect(runtime.createProfileStore).not.toHaveBeenCalled();
     expect(runtime.beginExport).not.toHaveBeenCalled();
@@ -183,8 +187,10 @@ describe("deployed profile-readiness activity entrypoints", { timeout: 30_000 },
       schemaVersion: 1,
       scanned: 2,
       expired: 2,
+      resumePurge: { scanned: 1, purged: 1, failed: 0, heldWaiting: 0 },
     });
     expect(runtime.expireDueExports).toHaveBeenCalledExactlyOnceWith();
+    expect(runtime.purgeDeletedResumes).toHaveBeenCalledExactlyOnceWith();
     expect(runtime.fetch).not.toHaveBeenCalled();
   });
 
