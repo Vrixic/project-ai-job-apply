@@ -952,6 +952,22 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
   $drift = @($Records)
   if ($drift.Count -eq 0) { throw "The plan must contain a nonempty accepted resource-drift subset." }
 
+  # After the reviewed upload-origin step (D3-024) the bucket resource reads back its CORS rules, so plans carry one bucket
+  # record whose only difference is `cors_rule`. That record must be exactly the reviewed CORS refresh, checked by the same
+  # function the Gateway release checks use; it is then set aside and every other record, including any other change to the
+  # bucket, still goes through the unchanged checks below. Without the shared functions loaded it is not special-cased.
+  $bucketAddress = "module.platform.aws_s3_bucket.candidate_documents[0]"
+  if ($null -ne (Get-Command Test-GatewayBucketCorsRuleDrift -ErrorAction SilentlyContinue) -and
+      $null -ne (Get-Command Assert-GatewayBucketCorsRefreshDrift -ErrorAction SilentlyContinue)) {
+    $corsRecords = @($drift | Where-Object { [string]$_.address -ceq $bucketAddress -and (Test-GatewayBucketCorsRuleDrift $_) })
+    if ($corsRecords.Count -gt 1) { throw "The candidate-document bucket CORS refresh was reported more than once." }
+    if ($corsRecords.Count -eq 1) {
+      Assert-GatewayBucketCorsRefreshDrift -Record $corsRecords[0] `
+        -Plan ([pscustomobject]@{ planned_values = [pscustomobject]@{ root_module = $RootModule } })
+      $drift = @($drift | Where-Object { -not [object]::ReferenceEquals($_, $corsRecords[0]) })
+    }
+  }
+
   $eventRules = @(
     "module.platform.aws_cloudwatch_event_rule.document_processing_reconciler[0]",
     "module.platform.aws_cloudwatch_event_rule.document_scan_plan_unhealthy[0]",
