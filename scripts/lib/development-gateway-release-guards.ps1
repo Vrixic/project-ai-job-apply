@@ -340,8 +340,21 @@ function Assert-DurableChainRoleInlinePolicyRefreshDrift {
   if ($null -eq $rootModule) { throw "The $($Expected.RoleName) role refresh needs the exact source-evaluated planned root module." }
   $planned = Get-TerraformStateResourceMap $rootModule
   $expectedPolicy = $planned[$Expected.PolicyAddress]
-  if ($null -eq $expectedPolicy -or [string]$expectedPolicy.policy -cne [string]$afterInline[0].policy) {
-    throw "The $($Expected.RoleName) role inline policy differs from the exact source-evaluated policy."
+  if ($null -eq $expectedPolicy) { throw "The $($Expected.RoleName) role refresh needs the planned role policy resource." }
+  $plannedPolicyText = $expectedPolicy.PSObject.Properties["policy"]
+  if ($null -ne $plannedPolicyText) {
+    if ([string]$plannedPolicyText.Value -cne [string]$afterInline[0].policy) {
+      throw "The $($Expected.RoleName) role inline policy differs from the exact source-evaluated policy."
+    }
+  } else {
+    # The planned text is unknown only when this same plan rewrites the role policy in place (a new activity version), so
+    # applying it replaces the policy with the source-evaluated text anyway. Any other reason for its absence is refused.
+    $policyChanges = @(@(Get-GatewayOptionalProperty $Plan "resource_changes") | Where-Object { [string]$_.address -ceq $Expected.PolicyAddress })
+    $policyUnknown = if ($policyChanges.Count -eq 1) { Get-GatewayOptionalProperty $policyChanges[0].change "after_unknown" } else { $null }
+    if ($policyChanges.Count -ne 1 -or (@($policyChanges[0].change.actions) -join ",") -cne "update" -or $null -eq $policyUnknown -or
+        $null -eq $policyUnknown.PSObject.Properties["policy"] -or $policyUnknown.policy -isnot [bool] -or -not $policyUnknown.policy) {
+      throw "The $($Expected.RoleName) planned policy is unknown and is not rewritten in place by this plan."
+    }
   }
   $beforePolicy = [string]$beforeInline[0].policy | ConvertFrom-Json
   $afterPolicy = [string]$afterInline[0].policy | ConvertFrom-Json
