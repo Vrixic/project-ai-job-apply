@@ -1309,7 +1309,8 @@ function New-ChainPolicyJson {
 function New-ChainRoleDriftPlan {
   param(
     [Parameter(Mandatory)][hashtable]$Spec, [int]$BeforeVersion = 15, [int]$AfterVersion = 16,
-    [scriptblock]$MutateAfter = $null, [scriptblock]$MutateRecord = $null, [string]$PlannedPolicy = "", [switch]$OmitPlanned
+    [scriptblock]$MutateAfter = $null, [scriptblock]$MutateRecord = $null, [string]$PlannedPolicy = "", [switch]$OmitPlanned,
+    [switch]$PlannedUnknown, [string[]]$PolicyChangeActions = @("update"), [bool]$PolicyUnknownFlag = $true, [int]$PolicyChangeCount = 1
   )
   $beforePolicy = New-ChainPolicyJson $Spec $BeforeVersion
   $afterPolicy = New-ChainPolicyJson $Spec $AfterVersion $MutateAfter
@@ -1321,10 +1322,22 @@ function New-ChainRoleDriftPlan {
   $expected = if ($PlannedPolicy -ne "") { $PlannedPolicy } else { $afterPolicy }
   $resources = @()
   if (-not $OmitPlanned) { $resources = @([pscustomobject]@{ address = $Spec.PolicyAddress; values = [pscustomobject]@{ policy = $expected } }) }
-  return [pscustomobject]@{
+  if ($PlannedUnknown) {
+    # this plan rewrites the role policy in place, so its planned text is absent (unknown)
+    $resources = @([pscustomobject]@{ address = $Spec.PolicyAddress; values = [pscustomobject]@{ name = $Spec.PolicyName } })
+  }
+  $result = [pscustomobject]@{
     resource_drift = @($record)
     planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{ resources = $resources } }
   }
+  if ($PolicyChangeCount -gt 0) {
+    $policyChange = [pscustomobject]@{
+      address = $Spec.PolicyAddress; mode = "managed"; type = "aws_iam_role_policy"
+      change = [pscustomobject]@{ actions = $PolicyChangeActions; before = [pscustomobject]@{ policy = $beforePolicy }; after = [pscustomobject]@{}; after_unknown = [pscustomobject]@{ policy = $PolicyUnknownFlag } }
+    }
+    $result | Add-Member NoteProperty resource_changes @(1..$PolicyChangeCount | ForEach-Object { $policyChange })
+  }
+  return $result
 }
 foreach ($spec in $chainSpecs) {
   $null = Assert-AcceptedGatewayProviderDrift -Plan (New-ChainRoleDriftPlan $spec); $passed++
@@ -1363,6 +1376,24 @@ foreach ($spec in $chainSpecs) {
       @{ Name = "a delete action"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.change.actions = @("delete"); $r } } },
       @{ Name = "a data-source mode"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.mode = "data"; $r } } },
       @{ Name = "another type"; Plan = { New-ChainRoleDriftPlan $spec -MutateRecord { param($r) $r.type = "aws_iam_policy"; $r } } }
+    )) {
+    $bad = & $case.Plan
+    Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $bad } "The $($spec.RoleName) refresh with $($case.Name) was accepted."
+  }
+  # the planned policy text is unknown because this same plan rewrites the role policy in place
+  $null = Assert-AcceptedGatewayProviderDrift -Plan (New-ChainRoleDriftPlan $spec -PlannedUnknown); $passed++
+  foreach ($case in @(
+      @{ Name = "no policy change in the plan"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -PolicyChangeCount 0 } },
+      @{ Name = "a duplicated policy change"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -PolicyChangeCount 2 } },
+      @{ Name = "a no-op policy change"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -PolicyChangeActions @("no-op") } },
+      @{ Name = "a policy replacement"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -PolicyChangeActions @("create", "delete") } },
+      @{ Name = "a policy delete"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -PolicyChangeActions @("delete") } },
+      @{ Name = "a known policy attribute"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -PolicyUnknownFlag $false } },
+      @{ Name = "an unknown policy but a widened statement"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -MutateAfter { param($p) $p.Statement[2].Action = "lambda:*"; $p } } },
+      @{ Name = "an unknown policy but an extra statement"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -MutateAfter { param($p) $p.Statement = @($p.Statement) + @([ordered]@{ Sid = "Extra"; Effect = "Allow"; Action = "s3:*"; Resource = "*" }); $p } } },
+      @{ Name = "an unknown policy but another function"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -MutateAfter { param($p) $p.Statement[2].Resource = "arn:aws:lambda:us-east-2:${account}:function:ai-job-apply-development-gateway:16"; $p } } },
+      @{ Name = "an unknown policy but a lower version"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -BeforeVersion 16 -AfterVersion 15 } },
+      @{ Name = "an unknown policy but another attribute changed"; Plan = { New-ChainRoleDriftPlan $spec -PlannedUnknown -MutateRecord { param($r) $r.change.after.tags = [pscustomobject]@{ x = "y" }; $r } } }
     )) {
     $bad = & $case.Plan
     Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $bad } "The $($spec.RoleName) refresh with $($case.Name) was accepted."
