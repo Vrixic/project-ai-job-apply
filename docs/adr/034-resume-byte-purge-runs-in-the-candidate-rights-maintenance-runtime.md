@@ -1,6 +1,6 @@
 # ADR-034: Resume byte purge runs in the candidate-rights maintenance runtime
 
-Status: Proposed (product-owner acceptance pending)
+Status: Accepted (product owner approved the recommendations 2026-09-21)
 Date: 2026-09-21
 
 ## Context
@@ -26,8 +26,9 @@ candidate-rights activity role holds. The design and its alternatives are in the
    Documents tables.
 4. **Failure behavior.** Every step is idempotent. A failed tombstone leaves the database untouched, the sweep throws after
    the batch so the existing alarms fire, and the next sweep retries. Nothing outside the derived prefixes can be deleted.
-5. **Security-held resumes** keep their bytes as evidence for 30 days after deletion, then are purged (owner decision
-   pending). **Unreviewed proposals** are erased, confirmed and edited facts stay (owner decision pending).
+5. **Security-held resumes** keep their bytes as evidence for 30 days after deletion, then are purged. **Unreviewed
+   proposals** are erased when their only source resume is purged; confirmed and edited facts stay. Both approved by the
+   owner 2026-09-21.
 6. **Refines ADR-033.** ADR-033 said the purge would "remove the row's object references"; the row is removed entirely once
    the bytes are verified gone, because the file name would otherwise survive in the row and in the stored idempotency
    response. ADR-033 stays otherwise accepted as written.

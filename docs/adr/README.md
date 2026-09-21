@@ -40,7 +40,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-027: Profile-owned candidate rights workflows](027-profile-owned-candidate-rights-workflows.md)
 - [ADR-032: Billing-owned plan limits, enforced atomically by the owning context](032-billing-owned-plan-limits-enforced-by-owning-contexts.md)
 - [ADR-033: Resume deletion is a tombstone, with a separate byte purge](033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md)
-- [ADR-034: Resume byte purge runs in the candidate-rights maintenance runtime](034-resume-byte-purge-runs-in-the-candidate-rights-maintenance-runtime.md)
+- [ADR-034: Resume byte purge runs in the candidate-rights maintenance runtime](034-resume-byte-purge-runs-in-the-candidate-rights-maintenance-runtime.md) (accepted 2026-09-21)
 
 Use `000-template.md` for future decisions.
 

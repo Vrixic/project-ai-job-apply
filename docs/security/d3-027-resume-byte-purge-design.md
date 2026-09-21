@@ -1,6 +1,6 @@
 # D3-027: Purging the stored bytes of deleted resumes (design for the owner to review)
 
-- Status: **Proposed. Nothing is built. Three owner decisions are needed before implementation starts.** Prepared 2026-09-21 at the owner's request.
+- Status: **Approved by the owner 2026-09-21 (all three recommendations: erase unreviewed proposals, keep security-held bytes 30 days then purge, candidate-rights maintenance runtime). Nothing is built yet.** Prepared 2026-09-21 at the owner's request. Guard edits and saved plans in the slices below still need their own owner approvals.
 - Task: D3-027 in the [Phase 3 record](../product/delivery/phase-3-application-preparation.md). Depends on D3-026 (deployed 2026-09-21).
 - Decision record: [ADR-034](../adr/034-resume-byte-purge-runs-in-the-candidate-rights-maintenance-runtime.md). This finishes the second half of [ADR-033](../adr/033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md).
 - Goal: when a candidate deletes a resume, every stored copy of it and of what was extracted from it is actually removed within minutes, provably, and without giving the internet-facing Gateway permanent-delete rights. Development stays synthetic-only; this is a precondition when the ADR-023 real-resume gates are reviewed, not a change to them.
@@ -83,7 +83,7 @@
 | 4 | Immediate proposals retirement in the delete route (Gateway port), confirmation copy, web tests; Gateway release and web deploy | Saved plan |
 | 5 | Deployed synthetic acceptance; records; D3-027 to Done on the owner's confirmation | Acceptance plan |
 
-## Decisions needed from the owner
+## Decisions (approved by the owner 2026-09-21)
 
 1. **Unreviewed proposals.** Recommended: erase them when their only source resume is purged (confirmed and edited facts stay). This also avoids duplicate suggestions after deleting and re-uploading the same resume. The alternative keeps them, which contradicts "deleted". The delete confirmation then reads: "Facts you already reviewed stay in your profile. Suggestions you have not reviewed are removed."
 2. **Security-held resumes.** Recommended: keep their bytes 30 days after deletion as evidence, then purge. Alternatives: purge immediately, or never.
