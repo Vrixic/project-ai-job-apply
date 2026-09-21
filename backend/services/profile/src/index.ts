@@ -597,6 +597,61 @@ export class PostgresResumeProposalWriter {
     }
     return rows.length;
   }
+
+  /**
+   * Erases the unreviewed proposals of a resume that was deleted and purged (ADR-034). A fact goes only if every version of
+   * it is still `proposed` (the candidate never confirmed, edited, or rejected it) and its only source is this document,
+   * by source reference and by evidence. Reviewed facts are the candidate's own data and stay. Fact versions and evidence go
+   * with the fact through ON DELETE CASCADE, and the import record for the document is removed. Idempotent: a second call
+   * finds nothing to erase.
+   */
+  async retireDocumentProposals(
+    transaction: postgres.TransactionSql,
+    input: { userId: string; documentId: string; traceId: string },
+  ): Promise<{ proposalsErased: number; importsErased: number }> {
+    const reference = `resume:${input.documentId}:%`;
+    const erased = await transaction<Array<{ id: string }>>`
+      DELETE FROM profile.profile_facts AS fact
+      WHERE fact.user_id = ${input.userId}
+        AND EXISTS (
+          SELECT 1 FROM profile.profile_fact_versions AS version
+          WHERE version.fact_id = fact.id
+            AND version.source_type = 'resume'
+            AND version.source_reference LIKE ${reference}
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM profile.profile_fact_versions AS version
+          WHERE version.fact_id = fact.id AND version.verification <> 'proposed'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM profile.profile_fact_versions AS version
+          WHERE version.fact_id = fact.id
+            AND (version.source_type <> 'resume' OR version.source_reference NOT LIKE ${reference})
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM profile.profile_fact_evidence AS evidence
+          WHERE evidence.fact_id = fact.id AND evidence.document_id <> ${input.documentId}
+        )
+      RETURNING fact.id
+    `;
+    const imports = await transaction<Array<{ id: string }>>`
+      DELETE FROM profile.resume_fact_imports
+      WHERE user_id = ${input.userId} AND document_id = ${input.documentId}
+      RETURNING id
+    `;
+    if (erased.length > 0) {
+      const metadata = JSON.stringify({ erasedProposalCount: erased.length });
+      await transaction`
+        INSERT INTO platform.audit_events (
+          id, user_id, action, resource_type, resource_id, trace_id, metadata
+        ) VALUES (
+          ${uuidv7()}, ${input.userId}, 'profile.resume.proposals.retired',
+          'resume_document', ${input.documentId}, ${input.traceId}, ${metadata}::text::jsonb
+        )
+      `;
+    }
+    return { proposalsErased: erased.length, importsErased: imports.length };
+  }
 }
 
 export class PostgresProfileStore implements ProfileStore {

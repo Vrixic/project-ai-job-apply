@@ -8,7 +8,7 @@ All durations are configuration, not hard-coded policy.
 | Data | Provisional retention |
 |---|---|
 | Active account/profile/preferences | Until user deletion |
-| Private source resumes and normalized documents | User controlled; provisional default until document or account deletion. A candidate can delete one resume: it is hidden and unusable at once, and its stored bytes remain until the byte purge (D3-027) removes them; account deletion already purges them ([ADR-033](../adr/033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md)) |
+| Private source resumes and normalized documents | User controlled; provisional default until document or account deletion. A candidate can delete one resume: it is hidden and unusable at once, and its stored bytes remain until the byte purge (D3-027, built in slices, not yet deployed) removes them; account deletion already purges them ([ADR-033](../adr/033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md)) |
 | Deleted account | No recovery after confirmation; active access ends immediately |
 | Generated application artifacts | User controlled; default until account deletion |
 | Raw contributed-page quarantine | Maximum 30 days |
