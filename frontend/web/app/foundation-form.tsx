@@ -1017,6 +1017,7 @@ export function FoundationForm({
             authenticated
             maxStoredResumes={maxStoredResumes}
             onDocumentParsed={handleDocumentParsed}
+            onDocumentDeleted={handleDocumentParsed}
           />
           <ProfileFactsForm authenticated refreshVersion={profileRefreshVersion} />
         </>

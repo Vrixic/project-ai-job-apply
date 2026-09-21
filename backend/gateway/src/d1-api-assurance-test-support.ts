@@ -53,6 +53,10 @@ function unused(method: string): never {
 export class SyntheticAssuranceProfileStore implements ProfileStore {
   pingFailure: Error | undefined;
 
+  async retireResumeProposals(): Promise<{ proposalsErased: number }> {
+    return unused("ProfileStore.retireResumeProposals");
+  }
+
   async resolveUser(principal: AuthPrincipal): Promise<CurrentUser> {
     if (principal.subject === "synthetic-candidate-a") return { id: SYNTHETIC_OWNER_A };
     if (principal.subject === "synthetic-candidate-b") return { id: SYNTHETIC_OWNER_B };

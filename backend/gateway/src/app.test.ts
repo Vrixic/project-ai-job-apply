@@ -136,6 +136,8 @@ const MISMATCHED_ID_TOKEN_PROOF =
 
 class MemoryProfileStore implements ProfileStore {
   resolveUserCalls = 0;
+  retiredResumeProposals: Array<{ userId: string; documentId: string }> = [];
+  retireFailure: Error | undefined;
   candidateRightsPrincipals: AuthPrincipal[] = [];
   private readonly users = new Map<string, CurrentUser>();
   private preferences: JobPreferenceSet | undefined;
@@ -218,6 +220,15 @@ class MemoryProfileStore implements ProfileStore {
 
   seedFact(fact: ProfileFact): void {
     this.facts.set(fact.id, fact);
+  }
+
+  async retireResumeProposals(
+    userId: string,
+    documentId: string,
+  ): Promise<{ proposalsErased: number }> {
+    if (this.retireFailure) throw this.retireFailure;
+    this.retiredResumeProposals.push({ userId, documentId });
+    return { proposalsErased: 0 };
   }
 
   async resolveUser(principal: AuthPrincipal): Promise<CurrentUser> {
@@ -4821,6 +4832,90 @@ describe("resume deletion (ADR-033)", () => {
       expect(calls[0]?.[0]).not.toBe(calls[1]?.[0]);
       expect(calls.map((call) => call[1])).toEqual([documentId, documentId]);
     } finally {
+      await app.close();
+    }
+  });
+
+  it("erases the caller's unreviewed suggestions from the deleted resume, for that owner and document only", async () => {
+    const { app, issuer, store } = await createApp();
+    try {
+      const token = await issuer.issue("candidate-resume", {
+        scope: "documents:read documents:write",
+      });
+      const headers = { authorization: `Bearer ${token}` };
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/resumes/uploads",
+        headers: { ...headers, "idempotency-key": "resume-retire-test-0001" },
+        payload,
+      });
+      const id = created.json().document.id as string;
+      const removed = await app.inject({ method: "DELETE", url: `/v1/resumes/${id}`, headers });
+      expect(removed.statusCode).toBe(204);
+      expect(store.retiredResumeProposals).toHaveLength(1);
+      expect(store.retiredResumeProposals[0]).toMatchObject({ documentId: id });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("does not retire anything when the delete itself is refused", async () => {
+    const documents: DocumentStore = {
+      async listResumeDocuments() {
+        return { documents: [] };
+      },
+      async createResumeUpload() {
+        throw new Error("unexpected");
+      },
+      async deleteResume() {
+        throw new ResumeNotDeletableError();
+      },
+      async close() {},
+    };
+    const { app, issuer, store } = await createApp({ documents });
+    try {
+      const token = await issuer.issue("candidate-resume", { scope: "documents:write" });
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/v1/resumes/${documentId}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(409);
+      expect(store.retiredResumeProposals).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("still answers 204 when retiring the suggestions fails, because the purge sweep repeats it", async () => {
+    const { app, issuer, store } = await createApp();
+    store.retireFailure = new Error("synthetic profile outage private-canary");
+    const errors: unknown[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args);
+    };
+    try {
+      const token = await issuer.issue("candidate-resume", {
+        scope: "documents:read documents:write",
+      });
+      const headers = { authorization: `Bearer ${token}` };
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/resumes/uploads",
+        headers: { ...headers, "idempotency-key": "resume-retire-test-0002" },
+        payload,
+      });
+      const id = created.json().document.id as string;
+      const removed = await app.inject({ method: "DELETE", url: `/v1/resumes/${id}`, headers });
+      expect(removed.statusCode).toBe(204);
+      expect(removed.body).toBe("");
+      const listed = await app.inject({ method: "GET", url: "/v1/resumes", headers });
+      expect(listed.json()).toEqual({ documents: [] });
+      expect(JSON.stringify(errors)).toContain("resume_proposal_retirement_deferred");
+      expect(JSON.stringify(errors)).not.toContain("private-canary");
+    } finally {
+      console.error = original;
       await app.close();
     }
   });

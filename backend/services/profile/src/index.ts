@@ -110,6 +110,15 @@ export interface ProfileStore {
     traceId: string,
     options?: { allowQuarantined?: boolean },
   ): Promise<CurrentUser>;
+  /**
+   * Erases the candidate's unreviewed proposals whose only source is a deleted resume (ADR-034), so the review list is clean at
+   * once. Owner-scoped and idempotent; the byte purge sweep repeats it, so a failure here is never the only chance.
+   */
+  retireResumeProposals(
+    userId: string,
+    documentId: string,
+    traceId: string,
+  ): Promise<{ proposalsErased: number }>;
   getPreferences(userId: string): Promise<JobPreferenceSet | null>;
   putPreferences(
     userId: string,
@@ -674,6 +683,21 @@ export class PostgresProfileStore implements ProfileStore {
     this.candidateRightsPolicy = options.candidateRightsPolicy;
     this.candidateDeletionConfirmationJournal = options.candidateDeletionConfirmationJournal;
     this.clock = options.clock ?? (() => new Date());
+  }
+
+  async retireResumeProposals(
+    userId: string,
+    documentId: string,
+    traceId: string,
+  ): Promise<{ proposalsErased: number }> {
+    const result = await this.handle.client.begin((transaction) =>
+      new PostgresResumeProposalWriter().retireDocumentProposals(transaction, {
+        userId,
+        documentId,
+        traceId,
+      }),
+    );
+    return { proposalsErased: result.proposalsErased };
   }
 
   async resolveUser(

@@ -1046,6 +1046,7 @@ describe("ResumeUploadForm delete (ADR-033)", () => {
     documents: ResumeDocument[],
     onDelete: (url: string, init?: RequestInit) => Promise<Response>,
     maxStoredResumes = 1,
+    onDocumentDeleted?: () => void,
   ) {
     const calls: string[] = [];
     vi.stubGlobal(
@@ -1057,7 +1058,13 @@ describe("ResumeUploadForm delete (ADR-033)", () => {
       }),
     );
     await act(async () =>
-      root.render(<ResumeUploadForm authenticated maxStoredResumes={maxStoredResumes} />),
+      root.render(
+        <ResumeUploadForm
+          authenticated
+          maxStoredResumes={maxStoredResumes}
+          onDocumentDeleted={onDocumentDeleted}
+        />,
+      ),
     );
     await flushAsyncWork();
     return calls;
@@ -1102,7 +1109,7 @@ describe("ResumeUploadForm delete (ADR-033)", () => {
     const calls = await mount([parsed], async () => new Response(null, { status: 204 }));
     await click(button("Delete synthetic-resume.pdf"));
     expect(container.textContent).toContain(
-      "Delete synthetic-resume.pdf? Facts already extracted from it stay in your profile.",
+      "Delete synthetic-resume.pdf? Facts you already reviewed stay in your profile. Suggestions you have not reviewed are removed.",
     );
     expect(window.document.activeElement?.textContent).toBe("Cancel");
     await click(button("Cancel"));
@@ -1127,6 +1134,26 @@ describe("ResumeUploadForm delete (ADR-033)", () => {
     expect(input?.disabled).toBe(false);
     expect(window.document.activeElement).toBe(input);
     expect(container.textContent).not.toContain("Your plan includes");
+  });
+
+  it("tells the page once after a delete so the review list drops the suggestions, and never on a refusal", async () => {
+    const deleted = vi.fn();
+    await mount([parsed], async () => new Response(null, { status: 204 }), 1, deleted);
+    await click(button("Delete synthetic-resume.pdf"));
+    await click(button("Confirm delete"));
+    expect(deleted).toHaveBeenCalledTimes(1);
+    await act(async () => root.render(<div />));
+
+    const refused = vi.fn();
+    await mount(
+      [parsed],
+      async () => Response.json({ code: "resume_not_deletable" }, { status: 409 }),
+      1,
+      refused,
+    );
+    await click(button("Delete synthetic-resume.pdf"));
+    await click(button("Confirm delete"));
+    expect(refused).not.toHaveBeenCalled();
   });
 
   it("shows fixed copy, keeps the resume listed, and never echoes upstream text when the server refuses", async () => {

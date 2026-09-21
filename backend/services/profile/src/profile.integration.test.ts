@@ -964,4 +964,74 @@ describeWithDatabase("PostgresProfileStore", () => {
       await database.client`SELECT 1 FROM platform.audit_events WHERE user_id = ${user.id} AND action = 'profile.resume.proposals.retired'`,
     ).toHaveLength(1);
   });
+
+  it("retires a deleted resume's unreviewed proposals through the store, for the caller only (ADR-034)", async () => {
+    const runId = crypto.randomUUID();
+    const user = await store.resolveUser(
+      { ...principal, subject: `resume-store-retire-${runId}` },
+      "integration-trace",
+    );
+    const other = await store.resolveUser(
+      { ...principal, subject: `resume-store-retire-other-${runId}` },
+      "integration-trace",
+    );
+    const documentId = crypto.randomUUID();
+    const writer = new PostgresResumeProposalWriter();
+    const importFor = (owner: string, value: string, start: number) =>
+      database.client.begin((transaction) =>
+        writer.import(transaction, {
+          userId: owner,
+          documentId,
+          documentVersion: 1,
+          parserVersion: "resume-parser-v1",
+          traceId: "store-retire-import",
+          proposals: [
+            {
+              kind: "skill" as const,
+              key: "skill",
+              value,
+              sensitivity: "standard" as const,
+              evidence: {
+                supportingSpans: [
+                  {
+                    documentId,
+                    documentVersion: 1,
+                    parserVersion: "resume-parser-v1",
+                    blockIndex: 0,
+                    startOffset: start,
+                    endOffset: start + 5,
+                    page: 1,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+    await importFor(user.id, "Unreviewed", 0);
+    await importFor(other.id, "Someone else's", 10);
+    const countFacts = async (owner: string) =>
+      (
+        await database.client<Array<{ id: string }>>`
+          SELECT id FROM profile.profile_facts WHERE user_id = ${owner}`
+      ).length;
+    expect(await countFacts(user.id)).toBe(1);
+
+    // the caller's identity is what scopes the erase: another candidate naming this document changes nothing of the caller's
+    expect(
+      await store.retireResumeProposals(other.id, crypto.randomUUID(), "store-retire-x"),
+    ).toEqual({
+      proposalsErased: 0,
+    });
+    expect(await countFacts(user.id)).toBe(1);
+
+    expect(await store.retireResumeProposals(user.id, documentId, "store-retire-a")).toEqual({
+      proposalsErased: 1,
+    });
+    expect(await countFacts(user.id)).toBe(0);
+    expect(await countFacts(other.id)).toBe(1);
+    expect(await store.retireResumeProposals(user.id, documentId, "store-retire-b")).toEqual({
+      proposalsErased: 0,
+    });
+  });
 });
