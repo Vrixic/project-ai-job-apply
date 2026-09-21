@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 . (Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1")
 . (Join-Path $repositoryRoot "scripts\lib\development-document-dark-guards.ps1")
+. (Join-Path $repositoryRoot "scripts\lib\development-gateway-release-guards.ps1")
 $account = "123456789012"
 
 $declaredDevelopmentOutputs = @(
@@ -1058,6 +1059,102 @@ foreach ($record in $driftRecords) {
 }
 $ecsMigrationDrift = New-TagDriftRecord "module.platform.aws_ecs_task_definition.migration[0]" "aws_ecs_task_definition"
 Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($ecsMigrationDrift) -RootModule $plannedDriftRoot
+# ---- D3-024 follow-up: the bucket's CORS refresh after the reviewed upload-origin step
+$corsLocal = "http://localhost:3000"; $corsHosted = "https://ai-job-apply-candidate.vercel.app"
+$corsBucketAddress = "module.platform.aws_s3_bucket.candidate_documents[0]"
+$corsConfigurationAddress = "module.platform.aws_s3_bucket_cors_configuration.candidate_documents[0]"
+function New-TestCorsRule {
+  param([string[]]$Origins)
+  return [pscustomobject]@{
+    allowed_headers = @("*"); allowed_methods = @("POST"); allowed_origins = @($Origins)
+    expose_headers = @("ETag", "x-amz-version-id"); max_age_seconds = 300
+  }
+}
+function New-TestCorsSensitivity {
+  param([int]$OriginCount)
+  return [pscustomobject]@{
+    cors_rule = @([pscustomobject]@{
+        allowed_headers = @($false); allowed_methods = @($false)
+        allowed_origins = @(1..$OriginCount | ForEach-Object { $false }); expose_headers = @($false, $false) })
+    tags = [pscustomobject]@{}
+  }
+}
+function New-TestCorsDriftCase {
+  param([string[]]$Before = @($corsLocal), [string[]]$After = @($corsLocal, $corsHosted), [string[]]$Planned = @($corsLocal, $corsHosted),
+    [bool]$IncludePlanned = $true)
+  $bucketBefore = [pscustomobject]@{
+    arn = "arn:aws:s3:::ai-job-apply-development-candidate-docs-$account"; bucket = "ai-job-apply-development-candidate-docs-$account"
+    cors_rule = @(New-TestCorsRule $Before); force_destroy = $false; policy = "{}"; tags = [pscustomobject]@{}
+    versioning = @([pscustomobject]@{ enabled = $true; mfa_delete = $false })
+  }
+  $bucketAfter = $bucketBefore | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+  $bucketAfter.cors_rule = @(New-TestCorsRule $After)
+  $record = New-DriftRecord $corsBucketAddress "aws_s3_bucket" $bucketBefore $bucketAfter `
+    (New-TestCorsSensitivity $Before.Count) (New-TestCorsSensitivity $After.Count)
+  # Terraform's refresh records carry no replace_paths; the shared check rejects any that appear.
+  $record.change.PSObject.Properties.Remove("replace_paths")
+  $resources = @([pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; values = [pscustomobject]@{ arn = $kmsArn } })
+  if ($IncludePlanned) {
+    $resources += @([pscustomobject]@{
+        address = $corsConfigurationAddress
+        values = [pscustomobject]@{ bucket = $bucketAfter.bucket; cors_rule = @(New-TestCorsRule $Planned) }
+      })
+  }
+  return [pscustomobject]@{ Record = $record; Root = [pscustomobject]@{ resources = $resources } }
+}
+function Assert-CorsCaseRejected {
+  param([object]$Case, [string]$Name, [object[]]$Extra = @())
+  $rejected = $false
+  try { Assert-DevelopmentDocumentAcceptedResourceDrift -Records (@($Case.Record) + $Extra) -RootModule $Case.Root }
+  catch { $rejected = $true }
+  if (-not $rejected) { throw "The document drift guard accepted the bucket CORS case '$Name'." }
+}
+$corsCase = New-TestCorsDriftCase
+Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($corsCase.Record) -RootModule $corsCase.Root
+$corsWithOthers = New-TestCorsDriftCase
+$corsWithOthers.Root = [pscustomobject]@{ resources = @($corsWithOthers.Root.resources) + @($plannedDriftRoot.resources) }
+Assert-DevelopmentDocumentAcceptedResourceDrift -Records (@($corsWithOthers.Record) + @($driftRecords)) -RootModule $corsWithOthers.Root
+Assert-DevelopmentDocumentAcceptedResourceDrift -Records @((New-TestCorsDriftCase -Before @() -After @($corsHosted) -Planned @($corsHosted)).Record) `
+  -RootModule (New-TestCorsDriftCase -Before @() -After @($corsHosted) -Planned @($corsHosted)).Root
+Assert-CorsCaseRejected (New-TestCorsDriftCase -IncludePlanned $false) "without its planned configuration"
+foreach ($case in @(
+    @{ Name = "planned lacks the origin"; Planned = @($corsLocal) },
+    @{ Name = "planned reordered"; Planned = @($corsHosted, $corsLocal) },
+    @{ Name = "planned has an extra origin"; Planned = @($corsLocal, $corsHosted, "https://extra.example.com") }
+  )) {
+  Assert-CorsCaseRejected (New-TestCorsDriftCase -Planned $case.Planned) $case.Name
+}
+foreach ($case in @(
+    @{ Name = "baseline dropped"; Before = @($corsLocal); After = @($corsHosted) },
+    @{ Name = "shrunk"; Before = @($corsLocal, $corsHosted); After = @($corsLocal) },
+    @{ Name = "duplicate origin"; Before = @($corsLocal); After = @($corsLocal, $corsLocal) },
+    @{ Name = "wildcard origin"; Before = @($corsLocal); After = @($corsLocal, "*") },
+    @{ Name = "non-https origin"; Before = @($corsLocal); After = @($corsLocal, "http://example.com/path") }
+  )) {
+  Assert-CorsCaseRejected (New-TestCorsDriftCase -Before $case.Before -After $case.After -Planned $case.After) $case.Name
+}
+foreach ($mutation in @("methods", "headers", "expose", "max age", "second rule", "policy", "unknown value", "sensitive", "replace path")) {
+  $bad = New-TestCorsDriftCase
+  $change = $bad.Record.change
+  switch ($mutation) {
+    "methods" { $change.after.cors_rule[0].allowed_methods = @("POST", "GET") }
+    "headers" { $change.after.cors_rule[0].allowed_headers = @("x-amz-*") }
+    "expose" { $change.after.cors_rule[0].expose_headers = @("ETag") }
+    "max age" { $change.after.cors_rule[0].max_age_seconds = 86400 }
+    "second rule" { $change.after.cors_rule = @($change.after.cors_rule[0], $change.after.cors_rule[0]) }
+    "policy" { $change.after.policy = '{"Statement":[]}' }
+    "unknown value" { $change | Add-Member NoteProperty after_unknown ([pscustomobject]@{ cors_rule = $true }) -Force }
+    "sensitive" { $change.after_sensitive.cors_rule[0].allowed_origins[1] = $true }
+    "replace path" { $change | Add-Member NoteProperty replace_paths @(, @("cors_rule")) -Force }
+  }
+  Assert-CorsCaseRejected $bad "mutation '$mutation'"
+}
+$duplicateCors = New-TestCorsDriftCase
+Assert-CorsCaseRejected $duplicateCors "duplicated record" @($duplicateCors.Record)
+$unknownOther = New-TestCorsDriftCase
+Assert-CorsCaseRejected $unknownOther "with an unimplemented resource category" @(
+  (New-DriftRecord "module.platform.aws_unreviewed.thing[0]" "aws_unreviewed" ([pscustomobject]@{ id = "x"; a = 1 }) ([pscustomobject]@{ id = "x"; a = 2 })))
+# A bucket policy refresh with no CORS change still takes the original policy path (its exact 3-to-4 statement boundary).
 $retainedFullDriftPlan = $retainedBaselinePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $retainedFullDriftPlan.planned_values.root_module = $plannedDriftRoot
 $retainedFullDriftPlan.resource_drift = $driftRecords
