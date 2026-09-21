@@ -9,6 +9,11 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 21 D3.1 added: a new delivery after D3 replaces the "profile facts" model with a
+structured candidate Profile (Personal, Education, Work experience, Skills, Application answers,
+Resume). It is Not started and depends on D3 complete; nothing is implemented. Its first task is
+a design ADR with a consumer map. See the [Phase 3.1 tasks](phase-3-1-structured-profile.md).
+
 September 18 D3 started: D3-005 is In progress. The Applications service foundation (lifecycle, review policy, immutable packet hash and approval binding, write-ahead attempts with ambiguous-result reconciliation, and an owner-scoped idempotent PostgreSQL store with append-only history and identifier-only outbox) is implemented and locally verified with generated-synthetic data (41 unit, 19 PostgreSQL integration tests), with 12 additive OpenAPI routes, two identifier-only event schemas, and fail-closed gateway routes (gateway 209 tests). No contract, gateway, workflow, deployment, real-candidate data or ATS action exists; live ATS effects stay disabled until D3-012, and D3-013 provider fixtures remain a human gate. See the [Phase 3 tasks](phase-3-application-preparation.md).
 
 September 18 D2 complete: Phase 2 closes for its controlled-development scope after the D2-079 deployment (Jobs `0024`, worker and Gateway live, D2 resumed, zero drift), owner-confirmed restoration of the test contribution (Processing `published`, Trust `accepted`) and alarm delivery, and an audit of all nine exit criteria. This is not production, store or public-release approval. Store review, manual screen-reader testing, the live Chrome/Edge token matrix, installed-browser lifecycle and load/abuse acceptance, and a live domain/version disable drill are deferred by owner decision to [D6-017 to D6-019](phase-6-mobile-and-paid.md#task-register). Inherited D1 gates are unchanged.
@@ -435,6 +440,7 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
 | D1 | Useful web product and canonical job catalog | In progress | 2026-08-11 | Not completed | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | D2 | Extension and community loop | Complete | 2026-09-01 | 2026-09-18 | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | In progress | 2026-09-18 | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
+| D3.1 | Structured candidate profile | Not started | Not started | Not completed | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
 | D4 | Workday and remote preparation | Not started | Not started | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | Not started | Not started | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
 | D6 | Mobile and paid launch | Not started | Not started | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
@@ -1651,6 +1657,19 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
   authoritative Applications-owned technical history through confirmed submission on supported
   ATS sites with measured factuality and field accuracy.
 
+## D3.1 - Structured candidate profile
+
+- Status: Not started
+- Start: Not started
+- Completion: Not completed
+- Depends on: D3 complete
+- Task document: [Phase 3.1 tasks](phase-3-1-structured-profile.md)
+- Exit gate: Candidates maintain one structured Profile (Personal, Education, Work experience,
+  Skills, Application answers, Resume) with resume import as saved-on-confirm drafts; Prepare,
+  matching, and extension fill read only those records; the profile-facts model is fully retired;
+  restricted answers stay behind the ADR-010 boundary; and the journey passes on the deployed web
+  app and installed extension.
+
 ## D4 — Workday and remote preparation
 
 - Status: Not started
@@ -1697,6 +1716,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-21 | D3.1 | Created the D3.1 phase record (12 tasks, Not started, depends on D3 complete) to replace profile facts with a structured Profile. Records only; no code, contract, or migration changed. | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
 | 2026-09-21 | D3 | Byte purge slice 1 is built and tested locally (Documents migration 0005 and the Profile proposal retirement). Nothing is merged or deployed; the next steps are the migration image and execution, then the sweep. | [Phase 3 tasks](phase-3-application-preparation.md) |
 | 2026-09-21 | D3 | The owner approved the byte-purge design and its three recommendations; ADR-034 is Accepted. Implementation of D3-027 begins with slice 1 (migrations and SQL functions) once the design PR merges. Guard edits and saved plans still need their own approvals. | [Phase 3 tasks](phase-3-application-preparation.md), [Design](../../security/d3-027-resume-byte-purge-design.md) |
 | 2026-09-21 | D3 | Designed and planned the byte purge for deleted resumes (D3-027): the proposal reuses the existing candidate-rights maintenance runtime, needs no new cloud privilege or resource, removes the resume's bytes, database row, and unreviewed extracted suggestions, and is delivered in five slices. Nothing is built; three owner decisions and acceptance of ADR-034 are needed first. Also registered a risk that account deletion checks only exact recorded object keys. | [Phase 3 tasks](phase-3-application-preparation.md), [Design](../../security/d3-027-resume-byte-purge-design.md) |
@@ -2114,6 +2134,7 @@ Append only material cross-delivery events.
 
 | Date | Decision or change | Reason | Affected deliveries | Evidence |
 |---|---|---|---|---|
+| 2026-09-21 | The owner removes "profile facts" as a section and replaces it with a structured Profile of skills, resume details, and generic application answers, delivered as D3.1 after D3. Two follow-on choices stay open for the owner: discard versus migrate existing development facts, and keeping restricted answers out of the general profile. | Ambiguous facts are hard to track; plain saved records give one meaning and one place to correct. D3-001, D4-003, and architecture section 5.1 are reconciled inside D3.1. | D3, D3.1, D4 | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
 | 2026-09-18 | Propose ADR-030 (product-owner acceptance pending): all AI use through one default-off gateway with just-in-time disclosure approval, grounded and checked output, and mandatory candidate review; provider/model selection remains blocked on D3-012. | Generated claims must be verifiable against confirmed evidence and sensitive answers must never be silently drafted. | D3 | [ADR-030](../../adr/030-ai-gateway-and-grounded-generation.md) |
 | 2026-08-17 | Approve D1-006 Option A: remove application history/inbox from D1, allocate Applications-owned technical history to D3, allocate the generic Notifications-owned action inbox to D5, and keep D6 as a consumer. | One authoritative Applications lifecycle and one derived Notifications inbox avoid fabricated terminal history and preserve confirmed submission as the product boundary. | D1, D3, D5, D6 | [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md), [approved disposition](../foundation/d1-006-application-history-ownership-review-disposition.md) |
 | 2026-07-28 | Track actual start/completion without forecast dates. | Delivery is governed by quality gates rather than schedule predictions. | D0–D7 | Architecture delivery-roadmap principles |

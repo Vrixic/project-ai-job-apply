@@ -11,6 +11,7 @@ This folder turns the architecture roadmap into an auditable delivery system.
 - `phase-1-web-and-job-catalog.md` — Useful candidate web product and canonical job catalog.
 - `phase-2-extension-and-community.md` — Browser extension and UGC job contribution loop.
 - `phase-3-application-preparation.md` — Grounded documents, application packets, and supported ATS autofill.
+- `phase-3-1-structured-profile.md` - Structured candidate Profile replacing profile facts; follows Phase 3.
 - `phase-4-workday-and-remote.md` — Workday behavior and isolated remote preparation.
 - `phase-5-outreach-and-notifications.md` — Personalized outreach and application notifications.
 - `phase-6-mobile-and-paid.md` — Mobile companion and Free/Pro paid launch.
