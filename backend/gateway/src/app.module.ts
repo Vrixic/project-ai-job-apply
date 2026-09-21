@@ -2422,11 +2422,16 @@ class CandidateController {
       throw new HttpException("Resume delete input is invalid", HttpStatus.BAD_REQUEST);
     }
     const user = await this.identity.resolve(request, "documents:write");
-    await this.documents.deleteResume(
-      user.id,
-      documentId,
-      request.traceId ?? correlationId(undefined),
-    );
+    const traceId = request.traceId ?? correlationId(undefined);
+    await this.documents.deleteResume(user.id, documentId, traceId);
+    // The resume is already deleted, so a failure here must not fail the request: the byte purge sweep retires the same
+    // proposals (ADR-034). It is scoped to this candidate and this document, so calling it for an already-deleted or absent
+    // resume is a no-op.
+    try {
+      await this.store.retireResumeProposals(user.id, documentId, traceId);
+    } catch {
+      console.error({ event: "resume_proposal_retirement_deferred", traceId });
+    }
   }
 
   @Post("/resumes/uploads")

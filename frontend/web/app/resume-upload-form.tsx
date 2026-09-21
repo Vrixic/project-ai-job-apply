@@ -188,11 +188,14 @@ export function ResumeUploadForm({
   authenticated,
   maxStoredResumes,
   onDocumentParsed,
+  onDocumentDeleted,
 }: {
   authenticated: boolean;
   /** The plan's stored-resume limit from the entitlement summary, when it is known. */
   maxStoredResumes?: number | undefined;
   onDocumentParsed?: () => void;
+  /** Called after a resume is deleted, so the review list can drop its unreviewed suggestions (ADR-034). */
+  onDocumentDeleted?: (() => void) | undefined;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<ResumeDocument[]>([]);
@@ -216,6 +219,8 @@ export function ResumeUploadForm({
   const mounted = useRef(true);
   const onDocumentParsedRef = useRef(onDocumentParsed);
   onDocumentParsedRef.current = onDocumentParsed;
+  const onDocumentDeletedRef = useRef(onDocumentDeleted);
+  onDocumentDeletedRef.current = onDocumentDeleted;
 
   const sessionIsCurrent = useCallback((generation: number, signal?: AbortSignal): boolean => {
     return (
@@ -510,6 +515,7 @@ export function ResumeUploadForm({
       setDocuments((current) => current.filter((document) => document.id !== documentId));
       setMessage(resumeDeletedMessage);
       setFocusTarget(resumeFileInputId);
+      onDocumentDeletedRef.current?.();
     } catch (error) {
       if (mounted.current && authenticatedRef.current && generation === sessionGeneration.current) {
         setMessage(
@@ -694,8 +700,8 @@ export function ResumeUploadForm({
                 (confirmingDeleteId === document.id ? (
                   <div role="group" aria-label={`Confirm deleting ${document.fileName}`}>
                     <p>
-                      Delete {document.fileName}? Facts already extracted from it stay in your
-                      profile.
+                      Delete {document.fileName}? Facts you already reviewed stay in your profile.
+                      Suggestions you have not reviewed are removed.
                     </p>
                     <button
                       type="button"
