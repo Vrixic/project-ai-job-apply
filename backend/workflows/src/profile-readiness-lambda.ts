@@ -4,6 +4,7 @@ import {
   errorCodeFromUnknown,
   loadCandidateRightsPolicy,
   PostgresProfileStore,
+  PostgresResumeProposalWriter,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
 import type { Handler } from "aws-lambda";
@@ -59,6 +60,7 @@ export interface CandidateRightsMaintenanceResult {
   schemaVersion: 1;
   scanned: number;
   expired: number;
+  resumePurge: { scanned: number; purged: number; failed: number; heldWaiting: number };
 }
 
 function safeFailureCode(error: unknown): string {
@@ -203,7 +205,7 @@ function isCandidateRightsMaintenanceEvent(value: unknown, expectedRuleArn: stri
 }
 
 export function createCandidateRightsMaintenanceHandler(
-  store: Pick<PostgresCandidateRightsActivityStore, "expireDueExports">,
+  store: Pick<PostgresCandidateRightsActivityStore, "expireDueExports" | "purgeDeletedResumes">,
   expectedRuleArn: string,
 ): (event: unknown) => Promise<CandidateRightsMaintenanceResult> {
   if (!expectedRuleArn) throw new Error("CandidateRightsMaintenanceConfigurationInvalid");
@@ -211,8 +213,28 @@ export function createCandidateRightsMaintenanceHandler(
     if (!isCandidateRightsMaintenanceEvent(event, expectedRuleArn)) {
       throw new Error("CandidateRightsMaintenanceEventRejected");
     }
-    const result = await store.expireDueExports();
-    return { schemaVersion: 1, ...result };
+    // The two sweeps are independent: one failing must not stop the other. Both run, then any failure is raised so the
+    // Lambda error alarm and the rule's dead-letter alarm fire (ADR-034).
+    let exportResult: { scanned: number; expired: number } | undefined;
+    let exportFailure: unknown;
+    try {
+      exportResult = await store.expireDueExports();
+    } catch (error) {
+      exportFailure = error;
+    }
+    let purgeResult: CandidateRightsMaintenanceResult["resumePurge"] | undefined;
+    let purgeFailure: unknown;
+    try {
+      purgeResult = await store.purgeDeletedResumes();
+      console.info({ event: "resume_purge_swept", ...purgeResult });
+    } catch (error) {
+      purgeFailure = error;
+    }
+    if (exportFailure !== undefined) throw exportFailure;
+    if (purgeFailure !== undefined) throw purgeFailure;
+    if (!exportResult || !purgeResult) throw new Error("CandidateRightsMaintenanceResultMissing");
+    if (purgeResult.failed > 0) throw new Error("ResumePurgeIncomplete");
+    return { schemaVersion: 1, ...exportResult, resumePurge: purgeResult };
   };
 }
 
@@ -264,6 +286,7 @@ async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRights
     policy,
     artifactStore: new AwsCandidateExportArtifactStore(exportBucket, exportKmsKeyArn),
     documentObjectStore: new AwsCandidateDocumentObjectStore(documentBucket),
+    resumeProposals: new PostgresResumeProposalWriter(),
     identityProvider: new Auth0CandidateIdentityProvider({ issuer, ...auth0 }),
     subprocessors: [],
     recoveryLedger: new AwsCandidateDeletionRecoveryLedger(recoveryBucket, exportKmsKeyArn),

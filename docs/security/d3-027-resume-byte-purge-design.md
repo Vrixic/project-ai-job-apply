@@ -79,7 +79,7 @@
 | 0 | This design accepted; ADR-034 accepted; owner decisions below | Owner |
 | 1 | Documents `0005` migration (two SQL functions, the `resume.purged` audit action), the Profile `retireDocumentProposals` method; real-PostgreSQL tests; migration inventory pins 49 to 50 | Pin edits (as before) |
 | 2 | Migration image, task definition plan, one execution, verify | Saved plan and execution descriptor |
-| 3 | Sweep, prefix-scoped object deletion, handler wiring, unit and boundary tests; publish the workflow artifacts; **a narrow guarded release mode that updates only the profile-readiness activity and durable functions and aliases** (none exists for a code-only update today) | Guard edit approval, then saved plan |
+| 3 | Sweep, prefix-scoped object deletion, handler wiring, unit and boundary tests; publish the workflow artifacts; **a guarded release mode for the activity Lambda's code** (none existed; built as `-RefreshCandidateRightsActivity`, see the risk note below for its true reach) | Guard edit approval, then saved plan |
 | 4 | Immediate proposals retirement in the delete route (Gateway port), confirmation copy, web tests; Gateway release and web deploy | Saved plan |
 | 5 | Deployed synthetic acceptance; records; D3-027 to Done on the owner's confirmation | Acceptance plan |
 
@@ -92,6 +92,6 @@
 ## Risks and open items
 
 - The account-deletion path deletes only the exact recorded keys, so a normalized object left by an earlier parser version would survive it. Recommendation: make it verify by prefix too, as its own small task (register as a risk now).
-- The release path for a code-only update of the profile-readiness Lambda must be confirmed in slice 3 before it is promised; if it needs a new guarded mode, that is a guard change and needs your approval.
+- **Found in slice 3:** the activity archive also serves the terminal Lambda, and the module binds the activity version into the durable workflow, so a code-only release changes 12 resources (activity, terminal, outbox-starter Lambdas and aliases, the durable CloudFormation stack, two role policies, the terminal event rule, the Lambda VPC endpoint policy, the policy-propagation timer) and two outputs. The owner approved exactly that set on 2026-09-21; the mode refuses anything else.
 - The candidate export still lists a tombstoned row until it is purged (minutes), then no longer.
 - Real-resume use stays blocked by ADR-023 regardless of this task.

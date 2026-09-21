@@ -358,6 +358,47 @@ origins appended and equals the list the source-evaluated CORS configuration pla
 sensitivity, or its unknown values differs. A record that changes anything else is refused. The next apply commits the
 refreshed state and the record stops appearing.
 
+## Refreshing the candidate-rights activity code (D3-027)
+
+The resume byte purge (ADR-034) runs in the profile-readiness activity Lambda's `rate(5 minutes)` maintenance handler, so
+its code has to reach that Lambda without changing anything else. The Gateway operator's `-RefreshCandidateRightsActivity`
+mode does this from a current schema-7 baseline and a verified core-workflow publication receipt, one reviewed plan at a
+time, and never with a release, a trigger activation, or a CORS change.
+
+The same archive also serves the terminal Lambda, and the module binds the activity version into the durable workflow, so
+the change is wider than one function. The owner approved this exact set on 2026-09-21; the guards
+([library](../../../scripts/lib/development-candidate-rights-activity-guards.ps1)) refuse any other:
+
+- **Updates in place**: the activity Lambda and its alias, the terminal Lambda and its alias, the CloudFormation-published
+  durable stack (a new coherent durable version and alias), the durable role policy (invoke the new activity version), the
+  outbox-starter Lambda, alias, and role policy (they point at the durable version), the terminal event rule, and the
+  Lambda VPC endpoint policy. **One replacement**: the durable policy-propagation timer. **Two output changes**: the
+  durable alias and version ARNs.
+- **Only the four activity artifact variables change**, and they must equal the receipt's activity archive exactly; every
+  other variable and the variable inventory are identical, the durable and candidate-rights flags stay enabled, and an
+  archive that is already released is refused. Each resource may differ only in its reviewed attributes, unknown values
+  are limited to the reviewed ones, no new sensitive value is allowed, and any other resource or output change refuses.
+- **Publish first**: `operate-development-workflow-lambda-publication.ps1 -Action Publish` (then `Verify`) from the merged
+  commit writes the immutable archive and its receipt; the mode re-reads the exact object version, checksum, KMS key, and
+  metadata before planning.
+- **Apply** takes the reviewed plan and SHA-256, requires unchanged state, applies only that saved plan, then reads the live
+  chain back: both Lambdas run the reviewed archive, the durable version invokes the new activity version, the terminal
+  Lambda, outbox starter, and terminal rule name the new durable version, and the durable role may invoke exactly the new
+  activity version. It then requires a zero-drift plan. **Verify** does the same after exactly one state advance.
+
+```powershell
+.\scripts\operate-development-gateway-release.ps1 -Action Plan -RefreshCandidateRightsActivity `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
+  -WorkflowReceiptPath WORKFLOW_RECEIPT -ReviewedWorkflowReceiptSha256 RECEIPT_SHA256 `
+  -BaselinePlanPath BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -BaselineMetadataPath BASELINE_METADATA -ReviewedBaselineMetadataSha256 METADATA_SHA256
+# review the plan, then Apply (same inputs plus the plan)
+.\scripts\operate-development-gateway-release.ps1 -Action Apply -RefreshCandidateRightsActivity `
+  [same inputs] -PlanPath ACTIVITY_PLAN -ReviewedPlanSha256 ACTIVITY_PLAN_SHA256
+```
+
+Rollback is a fresh baseline and a plan that restores the previous receipt's archive through a separately reviewed release.
+
 ## Failure and recovery
 
 - A publication failure may leave new immutable objects plus a `publishing` receipt. Never reuse,

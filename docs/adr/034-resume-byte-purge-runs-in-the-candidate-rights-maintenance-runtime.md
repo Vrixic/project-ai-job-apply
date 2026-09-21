@@ -37,8 +37,9 @@ candidate-rights activity role holds. The design and its alternatives are in the
 
 - One forward-only migration (Documents `0005`) and a further migration-inventory pin update (49 to 50). Profile needs no
   migration: its retirement is a store method, which the maintenance Lambda and the Gateway already bundle.
-- The profile-readiness activity Lambda's code must be released; no guarded mode updates that Lambda's code alone today, so
-  a narrow one is proposed and needs owner approval as a guard change.
+- The profile-readiness activity Lambda's code must be released. No guarded mode did that alone, so `-RefreshCandidateRightsActivity`
+  was added (owner-approved guard change, 2026-09-21). Because the archive also serves the terminal Lambda and the module binds the
+  activity version into the durable workflow, a code-only release changes 12 resources and 2 outputs; the mode allows exactly that set.
 - Deletion code for documents lives in the Workflows package, following the account-deletion precedent.
 - A restore to before a deletion can bring back a row whose bytes are gone; that is the safe direction.
 

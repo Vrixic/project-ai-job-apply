@@ -17,6 +17,9 @@ interface S3Sender {
   send(command: unknown): Promise<Record<string, unknown>>;
 }
 
+const RESUME_DOCUMENT_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+
 function isConditionalWriteConflict(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const value = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } };
@@ -144,6 +147,14 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
   }
 
   private async inventory(key: string): Promise<ObjectIdentifier[]> {
+    return this.listVersions(key, (candidate) => candidate === key);
+  }
+
+  /** Every version and delete marker whose key is listed under `prefix` and accepted by `matches`. */
+  private async listVersions(
+    prefix: string,
+    matches: (key: string) => boolean,
+  ): Promise<ObjectIdentifier[]> {
     const inventory: ObjectIdentifier[] = [];
     let keyMarker: string | undefined;
     let versionIdMarker: string | undefined;
@@ -152,7 +163,7 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
       const page = await this.client.send(
         new ListObjectVersionsCommand({
           Bucket: this.bucketName,
-          Prefix: key,
+          Prefix: prefix,
           ...(keyMarker ? { KeyMarker: keyMarker } : {}),
           ...(versionIdMarker ? { VersionIdMarker: versionIdMarker } : {}),
         }),
@@ -163,10 +174,14 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
           if (
             item &&
             typeof item === "object" &&
-            (item as { Key?: unknown }).Key === key &&
+            typeof (item as { Key?: unknown }).Key === "string" &&
+            matches((item as { Key: string }).Key) &&
             typeof (item as { VersionId?: unknown }).VersionId === "string"
           ) {
-            inventory.push({ Key: key, VersionId: (item as { VersionId: string }).VersionId });
+            inventory.push({
+              Key: (item as { Key: string }).Key,
+              VersionId: (item as { VersionId: string }).VersionId,
+            });
           }
         }
       };
@@ -205,5 +220,39 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
     }
     const remaining = await Promise.all(keys.map((key) => this.inventory(key)));
     return { exactInventoryEmpty: remaining.every((items) => items.length === 0) };
+  }
+
+  /**
+   * Removes every version and delete marker under the two prefixes of one deleted resume (ADR-034). The prefixes are derived
+   * from the document identifier here, never taken from a caller, so nothing outside `quarantine/<id>/` and
+   * `normalized/<id>/` can be reached. Prefix listing also finds a normalized object left by an earlier parser version.
+   * The result comes from a second listing after the deletes: `remaining` is what is still there.
+   */
+  async purgeDocumentPrefixes(documentId: string): Promise<{ deleted: number; remaining: number }> {
+    if (typeof documentId !== "string" || !RESUME_DOCUMENT_ID_PATTERN.test(documentId)) {
+      throw new Error("ResumePurgeDocumentIdentityRejected");
+    }
+    const prefixes = [`quarantine/${documentId}/`, `normalized/${documentId}/`];
+    const list = (prefix: string) => this.listVersions(prefix, (key) => key.startsWith(prefix));
+    let deleted = 0;
+    for (const prefix of prefixes) {
+      const inventory = await list(prefix);
+      for (let offset = 0; offset < inventory.length; offset += 1_000) {
+        const batch = inventory.slice(offset, offset + 1_000);
+        const result = await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucketName,
+            Delete: { Objects: batch, Quiet: true },
+          }),
+        );
+        if (Array.isArray(result.Errors) && result.Errors.length > 0) {
+          throw new Error("ResumePurgeObjectDeletionIncomplete");
+        }
+        deleted += batch.length;
+      }
+    }
+    let remaining = 0;
+    for (const prefix of prefixes) remaining += (await list(prefix)).length;
+    return { deleted, remaining };
   }
 }

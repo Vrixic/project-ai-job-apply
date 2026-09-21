@@ -1716,6 +1716,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-21 | D3 | Byte purge: slice 1 (Documents migration 0005) is deployed to development; slice 3 (the purge sweep and a guarded release mode for the activity Lambda's code) is built and tested locally, not merged or deployed. The release mode had to allow 12 resources because the activity code is bound into the durable workflow; the owner approved exactly that set. | [Phase 3 tasks](phase-3-application-preparation.md), [Design](../../security/d3-027-resume-byte-purge-design.md) |
 | 2026-09-21 | D3.1 | Created the D3.1 phase record (12 tasks, Not started, depends on D3 complete) to replace profile facts with a structured Profile. Records only; no code, contract, or migration changed. | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
 | 2026-09-21 | D3 | Byte purge slice 1 is built and tested locally (Documents migration 0005 and the Profile proposal retirement). Nothing is merged or deployed; the next steps are the migration image and execution, then the sweep. | [Phase 3 tasks](phase-3-application-preparation.md) |
 | 2026-09-21 | D3 | The owner approved the byte-purge design and its three recommendations; ADR-034 is Accepted. Implementation of D3-027 begins with slice 1 (migrations and SQL functions) once the design PR merges. Guard edits and saved plans still need their own approvals. | [Phase 3 tasks](phase-3-application-preparation.md), [Design](../../security/d3-027-resume-byte-purge-design.md) |

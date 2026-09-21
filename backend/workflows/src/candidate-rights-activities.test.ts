@@ -274,3 +274,191 @@ describe("candidate-rights activity persistence boundary", () => {
     );
   });
 });
+
+describe("candidate-rights resume purge sweep (ADR-034)", () => {
+  const user = "019c2b89-79b2-7000-8000-000000000011";
+  const first = "019c2b89-79b2-7000-8000-000000000021";
+  const second = "019c2b89-79b2-7000-8000-000000000022";
+
+  function sweepFixture(options: {
+    eligible?: Array<{ userId: string; documentId: string }>;
+    heldWaiting?: number;
+    remaining?: Record<string, number>;
+    failObjects?: string[];
+    failRetire?: string[];
+    completeResult?: Record<string, unknown>;
+    withoutPurger?: boolean;
+    inventory?: unknown;
+  }) {
+    const calls: string[] = [];
+    const client = vi.fn(async (query: TemplateStringsArray, ...values: unknown[]) => {
+      const text = query.join("?");
+      if (text.includes("pending_resume_purges")) {
+        calls.push(`pending:${String(values[0])}`);
+        return [
+          {
+            data:
+              "inventory" in options
+                ? options.inventory
+                : {
+                    eligible: options.eligible ?? [{ userId: user, documentId: first }],
+                    heldWaiting: options.heldWaiting ?? 0,
+                  },
+          },
+        ];
+      }
+      if (text.includes("complete_resume_purge")) {
+        calls.push(`complete:${String(values[1])}:${String(values[0])}`);
+        return [{ data: options.completeResult ?? { purged: true } }];
+      }
+      throw new Error("unexpected query");
+    });
+    const begin = vi.fn(async (run: (sql: unknown) => Promise<unknown>) => run({}));
+    const retireDocumentProposals = vi.fn(
+      async (_transaction: unknown, input: { documentId: string }) => {
+        calls.push(`retire:${input.documentId}`);
+        if (options.failRetire?.includes(input.documentId))
+          throw new Error("synthetic retire failure");
+        return { proposalsErased: 1, importsErased: 1 };
+      },
+    );
+    const purgeDocumentPrefixes = vi.fn(async (documentId: string) => {
+      calls.push(`purge:${documentId}`);
+      if (options.failObjects?.includes(documentId)) throw new Error("synthetic s3 failure");
+      return { deleted: 2, remaining: options.remaining?.[documentId] ?? 0 };
+    });
+    const dependencies = {
+      database: { client: Object.assign(client, { begin }) } as unknown as DatabaseHandle,
+      policy: {
+        ownerInventory: [
+          "identity",
+          "profile",
+          "documents",
+          "jobs",
+          "matching",
+          "billing",
+          "trust",
+        ],
+        subprocessorInventory: [],
+      },
+      artifactStore: {},
+      documentObjectStore: options.withoutPurger ? {} : { purgeDocumentPrefixes },
+      ...(options.withoutPurger ? {} : { resumeProposals: { retireDocumentProposals } }),
+      identityProvider: {},
+      subprocessors: [],
+      recoveryLedger: {},
+    } as unknown as CandidateRightsActivityDependencies;
+    return {
+      store: new PostgresCandidateRightsActivityStore(dependencies),
+      calls,
+      purgeDocumentPrefixes,
+      retireDocumentProposals,
+    };
+  }
+
+  it("retires proposals, purges the objects, then completes, in that order, and reports counts only", async () => {
+    const fixture = sweepFixture({
+      eligible: [
+        { userId: user, documentId: first },
+        { userId: user, documentId: second },
+      ],
+      heldWaiting: 2,
+    });
+    await expect(fixture.store.purgeDeletedResumes()).resolves.toEqual({
+      scanned: 2,
+      purged: 2,
+      failed: 0,
+      heldWaiting: 2,
+    });
+    expect(fixture.calls).toEqual([
+      "pending:25",
+      `retire:${first}`,
+      `purge:${first}`,
+      `complete:${first}:${user}`,
+      `retire:${second}`,
+      `purge:${second}`,
+      `complete:${second}:${user}`,
+    ]);
+  });
+
+  it("never completes the database step when a second listing still finds objects", async () => {
+    const fixture = sweepFixture({ remaining: { [first]: 1 } });
+    await expect(fixture.store.purgeDeletedResumes()).resolves.toMatchObject({
+      purged: 0,
+      failed: 1,
+    });
+    expect(fixture.calls.some((call) => call.startsWith("complete:"))).toBe(false);
+  });
+
+  it("continues past a failing tombstone, and a failed Profile step leaves the objects untouched", async () => {
+    const fixture = sweepFixture({
+      eligible: [
+        { userId: user, documentId: first },
+        { userId: user, documentId: second },
+      ],
+      failRetire: [first],
+    });
+    await expect(fixture.store.purgeDeletedResumes()).resolves.toMatchObject({
+      scanned: 2,
+      purged: 1,
+      failed: 1,
+    });
+    expect(fixture.calls).not.toContain(`purge:${first}`);
+    expect(fixture.calls).toContain(`complete:${second}:${user}`);
+    const objectsFailure = sweepFixture({ failObjects: [first] });
+    await expect(objectsFailure.store.purgeDeletedResumes()).resolves.toMatchObject({
+      purged: 0,
+      failed: 1,
+    });
+    expect(objectsFailure.calls.some((call) => call.startsWith("complete:"))).toBe(false);
+  });
+
+  it("does not count an already-removed tombstone as purged", async () => {
+    const fixture = sweepFixture({ completeResult: { purged: false, reason: "absent" } });
+    await expect(fixture.store.purgeDeletedResumes()).resolves.toMatchObject({
+      scanned: 1,
+      purged: 0,
+      failed: 0,
+    });
+  });
+
+  it("logs only fixed codes, never identifiers", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const fixture = sweepFixture({ failObjects: [first] });
+      await fixture.store.purgeDeletedResumes();
+      const logged = JSON.stringify(error.mock.calls);
+      expect(logged).toContain("resume_purge_failed");
+      expect(logged).not.toContain(first);
+      expect(logged).not.toContain(user);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it.each([0, 101, 1.5])("rejects a batch limit of %s before touching anything", async (limit) => {
+    const fixture = sweepFixture({});
+    await expect(fixture.store.purgeDeletedResumes(limit)).rejects.toThrow(
+      "ResumePurgeLimitRejected",
+    );
+    expect(fixture.calls).toEqual([]);
+  });
+
+  it("fails closed when the runtime lacks the purger, or the inventory is malformed", async () => {
+    await expect(sweepFixture({ withoutPurger: true }).store.purgeDeletedResumes()).rejects.toThrow(
+      "ResumePurgeUnavailable",
+    );
+    for (const inventory of [
+      null,
+      { eligible: "no", heldWaiting: 0 },
+      { eligible: [{ userId: "not-a-uuid", documentId: first }], heldWaiting: 0 },
+      { eligible: [], heldWaiting: "x" },
+    ]) {
+      const fixture = sweepFixture({ inventory });
+      await expect(fixture.store.purgeDeletedResumes()).rejects.toThrow(
+        "ResumePurgeInventoryInvalid",
+      );
+      expect(fixture.purgeDocumentPrefixes).not.toHaveBeenCalled();
+    }
+  });
+});

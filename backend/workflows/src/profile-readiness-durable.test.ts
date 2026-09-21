@@ -372,9 +372,18 @@ describe("profile readiness Lambda durable workflow", () => {
 describe("profile readiness activity and terminal boundaries", () => {
   it("accepts only the exact scheduled candidate-rights maintenance rule", async () => {
     const expireDueExports = vi.fn(async () => ({ scanned: 2, expired: 2 }));
+    const purgeDeletedResumes = vi.fn(async () => ({
+      scanned: 3,
+      purged: 3,
+      failed: 0,
+      heldWaiting: 1,
+    }));
     const ruleArn =
       "arn:aws:events:us-east-2:123456789012:rule/ai-job-apply-development-candidate-rights-maintenance";
-    const handler = createCandidateRightsMaintenanceHandler({ expireDueExports }, ruleArn);
+    const handler = createCandidateRightsMaintenanceHandler(
+      { expireDueExports, purgeDeletedResumes },
+      ruleArn,
+    );
     await expect(
       handler({
         source: "aws.events",
@@ -384,7 +393,12 @@ describe("profile readiness activity and terminal boundaries", () => {
         resources: [ruleArn],
         detail: {},
       }),
-    ).resolves.toEqual({ schemaVersion: 1, scanned: 2, expired: 2 });
+    ).resolves.toEqual({
+      schemaVersion: 1,
+      scanned: 2,
+      expired: 2,
+      resumePurge: { scanned: 3, purged: 3, failed: 0, heldWaiting: 1 },
+    });
     await expect(
       handler({
         source: "aws.events",
@@ -396,6 +410,53 @@ describe("profile readiness activity and terminal boundaries", () => {
       }),
     ).rejects.toThrow("CandidateRightsMaintenanceEventRejected");
     expect(expireDueExports).toHaveBeenCalledOnce();
+    expect(purgeDeletedResumes).toHaveBeenCalledOnce();
+  });
+
+  it("runs both sweeps even when one fails, then raises so the alarms fire (ADR-034)", async () => {
+    const ruleArn =
+      "arn:aws:events:us-east-2:123456789012:rule/ai-job-apply-development-candidate-rights-maintenance";
+    const event = {
+      source: "aws.events",
+      "detail-type": "Scheduled Event",
+      account: "123456789012",
+      region: "us-east-2",
+      resources: [ruleArn],
+      detail: {},
+    };
+    const ok = { scanned: 0, expired: 0 };
+    const purged = { scanned: 1, purged: 1, failed: 0, heldWaiting: 0 };
+    const exportsFail = vi.fn(async () => {
+      throw new Error("ExportSweepFailed");
+    });
+    const purge = vi.fn(async () => purged);
+    await expect(
+      createCandidateRightsMaintenanceHandler(
+        { expireDueExports: exportsFail, purgeDeletedResumes: purge },
+        ruleArn,
+      )(event),
+    ).rejects.toThrow("ExportSweepFailed");
+    expect(purge).toHaveBeenCalledOnce();
+
+    const exportsOk = vi.fn(async () => ok);
+    const purgeFails = vi.fn(async () => {
+      throw new Error("PurgeSweepFailed");
+    });
+    await expect(
+      createCandidateRightsMaintenanceHandler(
+        { expireDueExports: exportsOk, purgeDeletedResumes: purgeFails },
+        ruleArn,
+      )(event),
+    ).rejects.toThrow("PurgeSweepFailed");
+    expect(exportsOk).toHaveBeenCalledOnce();
+
+    const partial = vi.fn(async () => ({ scanned: 2, purged: 1, failed: 1, heldWaiting: 0 }));
+    await expect(
+      createCandidateRightsMaintenanceHandler(
+        { expireDueExports: exportsOk, purgeDeletedResumes: partial },
+        ruleArn,
+      )(event),
+    ).rejects.toThrow("ResumePurgeIncomplete");
   });
 
   it("rejects malformed direct activity invocation before touching persistence", async () => {

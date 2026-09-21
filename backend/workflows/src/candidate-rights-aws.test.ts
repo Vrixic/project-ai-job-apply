@@ -461,3 +461,146 @@ describe("candidate-rights AWS object boundaries", () => {
     expect(deleted.some((item) => item.VersionId === "must-not-delete")).toBe(false);
   });
 });
+
+describe("AwsCandidateDocumentObjectStore resume purge (ADR-034)", () => {
+  const documentId = "019c2b89-79b2-7000-8000-000000000001";
+  const otherId = "019c2b89-79b2-7000-8000-000000000002";
+  type Entry = { Key: string; VersionId: string };
+
+  function fakeBucket(
+    initial: Entry[],
+    options: { reappear?: Entry[]; deleteErrors?: boolean; pageSize?: number } = {},
+  ) {
+    let versions = [...initial];
+    const deleted: Entry[] = [];
+    const listings: string[] = [];
+    const send = vi.fn(async (command: unknown) => {
+      const name = (command as { constructor: { name: string } }).constructor.name;
+      const input = (command as { input: Record<string, unknown> }).input;
+      if (name === "ListObjectVersionsCommand") {
+        const prefix = String(input.Prefix);
+        listings.push(prefix);
+        const matching = versions.filter((entry) => entry.Key.startsWith(prefix));
+        const pageSize = options.pageSize ?? 1000;
+        const start = input.KeyMarker ? Number(String(input.VersionIdMarker ?? "0")) : 0;
+        const page = matching.slice(start, start + pageSize);
+        const more = start + pageSize < matching.length;
+        return {
+          Versions: page.filter((entry) => !entry.VersionId.startsWith("marker")),
+          DeleteMarkers: page.filter((entry) => entry.VersionId.startsWith("marker")),
+          IsTruncated: more,
+          ...(more ? { NextKeyMarker: "next", NextVersionIdMarker: String(start + pageSize) } : {}),
+        };
+      }
+      if (name === "DeleteObjectsCommand") {
+        const objects = (input.Delete as { Objects: Entry[] }).Objects;
+        if (options.deleteErrors)
+          return { Errors: [{ Key: objects[0]?.Key, Code: "AccessDenied" }] };
+        deleted.push(...objects);
+        versions = versions.filter(
+          (entry) =>
+            !objects.some(
+              (object) => object.Key === entry.Key && object.VersionId === entry.VersionId,
+            ),
+        );
+        if (options.reappear) versions.push(...options.reappear);
+        return {};
+      }
+      throw new Error("Unexpected command");
+    });
+    return {
+      store: new AwsCandidateDocumentObjectStore("synthetic-document-bucket", { send }),
+      send,
+      deleted,
+      listings,
+      current: () => versions,
+    };
+  }
+
+  const mine = [
+    { Key: `quarantine/${documentId}/source`, VersionId: "v1" },
+    { Key: `quarantine/${documentId}/source`, VersionId: "marker-1" },
+    {
+      Key: `normalized/${documentId}/${"a".repeat(64)}/resume-parser-v6/resume.json`,
+      VersionId: "v2",
+    },
+    {
+      Key: `normalized/${documentId}/${"a".repeat(64)}/resume-parser-v7/resume.json`,
+      VersionId: "v3",
+    },
+  ];
+  const neighbors = [
+    { Key: `quarantine/${otherId}/source`, VersionId: "keep-1" },
+    {
+      Key: `normalized/${otherId}/${"b".repeat(64)}/resume-parser-v7/resume.json`,
+      VersionId: "keep-2",
+    },
+    { Key: `quarantine/${documentId}x/source`, VersionId: "keep-3" },
+    { Key: `exports/${documentId}/file`, VersionId: "keep-4" },
+  ];
+
+  it("removes every version and marker under both prefixes, including an older parser version, and nothing else", async () => {
+    const bucket = fakeBucket([...mine, ...neighbors]);
+    await expect(bucket.store.purgeDocumentPrefixes(documentId)).resolves.toEqual({
+      deleted: 4,
+      remaining: 0,
+    });
+    expect(bucket.deleted.map((entry) => entry.VersionId).sort()).toEqual([
+      "marker-1",
+      "v1",
+      "v2",
+      "v3",
+    ]);
+    expect(
+      bucket
+        .current()
+        .map((entry) => entry.VersionId)
+        .sort(),
+    ).toEqual(["keep-1", "keep-2", "keep-3", "keep-4"]);
+    // it listed each prefix before deleting and again after, and only its own two prefixes
+    expect(new Set(bucket.listings)).toEqual(
+      new Set([`quarantine/${documentId}/`, `normalized/${documentId}/`]),
+    );
+    expect(bucket.listings).toHaveLength(4);
+  });
+
+  it("follows pagination so a large history is fully removed", async () => {
+    const many = Array.from({ length: 7 }, (_unused, index) => ({
+      Key: `quarantine/${documentId}/source`,
+      VersionId: `v${index}`,
+    }));
+    const bucket = fakeBucket(many, { pageSize: 3 });
+    await expect(bucket.store.purgeDocumentPrefixes(documentId)).resolves.toEqual({
+      deleted: 7,
+      remaining: 0,
+    });
+  });
+
+  it("reports what a second listing still finds, so the caller cannot mistake it for empty", async () => {
+    const late = { Key: `normalized/${documentId}/late/resume.json`, VersionId: "late-1" };
+    const bucket = fakeBucket(mine, { reappear: [late] });
+    const result = await bucket.store.purgeDocumentPrefixes(documentId);
+    expect(result.remaining).toBeGreaterThan(0);
+  });
+
+  it("fails on a per-object deletion error instead of reporting success", async () => {
+    const bucket = fakeBucket(mine, { deleteErrors: true });
+    await expect(bucket.store.purgeDocumentPrefixes(documentId)).rejects.toThrow(
+      "ResumePurgeObjectDeletionIncomplete",
+    );
+  });
+
+  it.each([
+    ["a traversal attempt", `${documentId}/../${otherId}`],
+    ["a prefix of an id", documentId.slice(0, 20)],
+    ["an empty id", ""],
+    ["a path", "quarantine/x/y"],
+    ["an upper-case id", documentId.toUpperCase()],
+  ])("rejects %s before any S3 call", async (_name, value) => {
+    const bucket = fakeBucket(mine);
+    await expect(bucket.store.purgeDocumentPrefixes(value)).rejects.toThrow(
+      "ResumePurgeDocumentIdentityRejected",
+    );
+    expect(bucket.send).not.toHaveBeenCalled();
+  });
+});
