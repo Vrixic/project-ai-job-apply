@@ -296,6 +296,87 @@ function Assert-GatewayRoleInlinePolicyRefreshDrift {
   }
 }
 
+# After the candidate-rights activity code refresh (D3-027) two IAM roles report their computed `inline_policy` snapshot as
+# changed, because state still holds the previous policy text: the outbox starter's (which may start exactly one durable
+# workflow version) and the durable workflow's (which may invoke exactly one activity version). Each is accepted only when
+# nothing but that snapshot differs, the new policy equals the exact source-evaluated policy, and it is the previous policy
+# with one named statement whose Resource is the same Lambda function at a strictly higher version, and nothing else. The next
+# apply commits the refreshed state, after which the record no longer appears.
+function Assert-DurableChainRoleInlinePolicyRefreshDrift {
+  param(
+    [Parameter(Mandatory)][object]$Plan,
+    [Parameter(Mandatory)][object]$Record,
+    [Parameter(Mandatory)][hashtable]$Expected
+  )
+  $change = $Record.change
+  if ([string]$Record.address -cne $Expected.Address -or [string]$Record.type -cne "aws_iam_role" -or
+      [string]$Record.mode -cne "managed" -or (@($change.actions) -join ",") -cne "update" -or
+      $null -eq $change.before -or $null -eq $change.after) {
+    throw "The $($Expected.RoleName) role refresh record has an unsafe shape."
+  }
+  Assert-NoTerraformReplacementPaths $change
+  $afterUnknown = Get-GatewayOptionalProperty $change "after_unknown"
+  if ($null -ne $afterUnknown -and @(Get-GatewayUnknownTrueLeafPaths -Value $afterUnknown).Count -ne 0) {
+    throw "The $($Expected.RoleName) role refresh record contains an unknown field."
+  }
+  if ((ConvertTo-GatewayCanonicalJson (Get-GatewayOptionalProperty $change "before_sensitive")) -cne
+      (ConvertTo-GatewayCanonicalJson (Get-GatewayOptionalProperty $change "after_sensitive"))) {
+    throw "The $($Expected.RoleName) role refresh record changed sensitivity."
+  }
+  $before = $change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $after = $change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  if ([string]$after.arn -cnotmatch "^arn:aws:iam::([0-9]{12}):role/$([regex]::Escape($Expected.RoleName))$") {
+    throw "The role refresh record is not the exact $($Expected.RoleName) role."
+  }
+  $accountId = [string]$Matches[1]
+  $beforeInline = @($before.inline_policy)
+  $afterInline = @($after.inline_policy)
+  if ($beforeInline.Count -ne 1 -or $afterInline.Count -ne 1 -or
+      [string]$beforeInline[0].name -cne $Expected.PolicyName -or [string]$afterInline[0].name -cne $Expected.PolicyName) {
+    throw "The $($Expected.RoleName) role refresh record has an unexpected inline-policy boundary."
+  }
+  $plannedValues = Get-GatewayOptionalProperty $Plan "planned_values"
+  $rootModule = Get-GatewayOptionalProperty $plannedValues "root_module"
+  if ($null -eq $rootModule) { throw "The $($Expected.RoleName) role refresh needs the exact source-evaluated planned root module." }
+  $planned = Get-TerraformStateResourceMap $rootModule
+  $expectedPolicy = $planned[$Expected.PolicyAddress]
+  if ($null -eq $expectedPolicy -or [string]$expectedPolicy.policy -cne [string]$afterInline[0].policy) {
+    throw "The $($Expected.RoleName) role inline policy differs from the exact source-evaluated policy."
+  }
+  $beforePolicy = [string]$beforeInline[0].policy | ConvertFrom-Json
+  $afterPolicy = [string]$afterInline[0].policy | ConvertFrom-Json
+  $beforeStatements = @($beforePolicy.Statement); $afterStatements = @($afterPolicy.Statement)
+  if ([string]$beforePolicy.Version -cne [string]$afterPolicy.Version -or $beforeStatements.Count -ne $afterStatements.Count -or
+      @($afterStatements | Where-Object { [string]$_.Sid -ceq $Expected.Sid }).Count -ne 1) {
+    throw "The $($Expected.RoleName) role policy is not the previous policy with one reviewed statement advanced."
+  }
+  $functionPattern = "^arn:aws:lambda:us-east-2:$accountId`:function:$([regex]::Escape($Expected.FunctionName)):([1-9][0-9]*)$"
+  for ($index = 0; $index -lt $beforeStatements.Count; $index++) {
+    $left = $beforeStatements[$index]; $right = $afterStatements[$index]
+    if ([string]$right.Sid -cne $Expected.Sid) {
+      if ((ConvertTo-GatewayCanonicalJson $left) -cne (ConvertTo-GatewayCanonicalJson $right)) {
+        throw "The $($Expected.RoleName) role refresh changed a statement other than the reviewed one."
+      }
+      continue
+    }
+    if ([string]$left.Sid -cne $Expected.Sid -or [string]$left.Effect -cne "Allow" -or [string]$right.Effect -cne "Allow" -or
+        [string]$left.Action -cne "lambda:InvokeFunction" -or [string]$right.Action -cne "lambda:InvokeFunction" -or
+        @($left.Resource).Count -ne 1 -or @($right.Resource).Count -ne 1 -or
+        @($left.PSObject.Properties.Name | Sort-Object).Count -ne 4 -or @($right.PSObject.Properties.Name | Sort-Object).Count -ne 4 -or
+        [string]@($left.Resource)[0] -cnotmatch $functionPattern) {
+      throw "The $($Expected.RoleName) reviewed statement is not the exact single-function invoke grant."
+    }
+    $beforeVersion = [long]$Matches[1]
+    if ([string]@($right.Resource)[0] -cnotmatch $functionPattern -or [long]$Matches[1] -le $beforeVersion) {
+      throw "The $($Expected.RoleName) reviewed statement did not advance to a higher version of the same function."
+    }
+  }
+  $before.inline_policy = @(); $after.inline_policy = @()
+  if ((ConvertTo-GatewayCanonicalJson $before) -cne (ConvertTo-GatewayCanonicalJson $after)) {
+    throw "The $($Expected.RoleName) role refresh changed more than its inline-policy snapshot."
+  }
+}
+
 # The candidate-document bucket resource also reads back the bucket's CORS rules, which the separate
 # `aws_s3_bucket_cors_configuration` resource manages. After the reviewed upload-origin step (D3-024) changes the
 # CORS list, the bucket resource's state still holds the old list, so every later plan reports one refresh record whose
@@ -400,6 +481,26 @@ function Assert-AcceptedGatewayProviderDrift {
   if ($bucketRecords.Count -eq 1 -and (Test-GatewayBucketCorsRuleDrift $bucketRecords[0])) {
     Assert-GatewayBucketCorsRefreshDrift -Plan $Plan -Record $bucketRecords[0]
     $handled += $bucketAddress
+  }
+  $durableChainRoles = @(
+    @{
+      Address = "module.platform.aws_iam_role.outbox_starter[0]"; RoleName = "ai-job-apply-development-outbox-starter"
+      PolicyName = "outbox-starter-runtime"; PolicyAddress = "module.platform.aws_iam_role_policy.outbox_starter[0]"
+      Sid = "StartExactDurableWorkflowVersion"; FunctionName = "ai-job-apply-development-profile-readiness-durable"
+    },
+    @{
+      Address = "module.platform.aws_iam_role.profile_readiness_durable[0]"; RoleName = "ai-job-apply-development-profile-readiness-durable"
+      PolicyName = "profile-readiness-durable-runtime"; PolicyAddress = "module.platform.aws_iam_role_policy.profile_readiness_durable[0]"
+      Sid = "InvokeExactProfileActivityVersion"; FunctionName = "ai-job-apply-development-profile-readiness-activity"
+    }
+  )
+  foreach ($chainRole in $durableChainRoles) {
+    $chainRecords = @($drift | Where-Object { [string]$_.address -ceq $chainRole.Address })
+    if ($chainRecords.Count -gt 1) { throw "The $($chainRole.RoleName) role refresh was reported more than once." }
+    if ($chainRecords.Count -eq 1) {
+      Assert-DurableChainRoleInlinePolicyRefreshDrift -Plan $Plan -Record $chainRecords[0] -Expected $chainRole
+      $handled += $chainRole.Address
+    }
   }
   if ($handled.Count -gt 0) {
     # Everything else still goes through the shared accepted-drift check, unchanged.
