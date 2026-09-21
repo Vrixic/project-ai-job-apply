@@ -416,6 +416,19 @@ resource "aws_iam_policy" "workload_boundary" {
         Resource = "${local.candidate_document_bucket_arn}/*"
       },
       {
+        # ADR-034: only the candidate-rights activity role may permanently delete stored resume versions (resume byte purge
+        # and account deletion). No other workload role's ceiling gains this action.
+        Sid      = "PurgeDeletedCandidateDocumentVersions"
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObjectVersion"]
+        Resource = "${local.candidate_document_bucket_arn}/*"
+        Condition = {
+          ArnEquals = {
+            "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-profile-readiness-activity"
+          }
+        }
+      },
+      {
         Sid    = "OperateCandidateDataExportObjects"
         Effect = "Allow"
         Action = [

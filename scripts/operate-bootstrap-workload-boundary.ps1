@@ -47,8 +47,8 @@ Usage:
     -Environment development -AwsProfile ai-job-apply-development-admin `
     -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET
 
-Plan permits exactly one resource update with the candidate-rights-versioned-recovery-read-v1 semantic
-change set.
+Plan permits exactly one resource update with the candidate-documents-version-delete-v1 semantic change set:
+one added statement letting only the candidate-rights activity role delete candidate-document object versions.
 Apply accepts only the checksum-reviewed saved plan
 and matching metadata. Verify requires a drift-free bootstrap and compares the live managed IAM
 policy with Terraform state. Plans and metadata remain in the ignored bootstrap .terraform tree.
@@ -78,6 +78,7 @@ $objectAccessRoleArn = "arn:aws:iam::${ExpectedAccountId}:role/ai-job-apply-$Env
 $candidateDocumentBucketArn = "arn:aws:s3:::ai-job-apply-$Environment-candidate-docs-*"
 $candidateExportBucketArn = "arn:aws:s3:::ai-job-apply-$Environment-candidate-exports-*"
 $candidateRecoveryBucketArn = "arn:aws:s3:::ai-job-apply-$Environment-candidate-del-recovery-*"
+$activityRoleArn = "arn:aws:iam::${ExpectedAccountId}:role/ai-job-apply-$Environment-profile-readiness-activity"
 $requiredRetainedStatements = @(
   [pscustomobject]@{
     Sid = "AssumeOwnedDocumentObjectAccessRole"; Effect = "Allow"; Action = @("sts:AssumeRole")
@@ -96,24 +97,26 @@ $requiredRetainedStatements = @(
     Sid = "ConfigureCandidateDocumentBucketEvents"; Effect = "Allow"
     Action = @("s3:GetBucketNotification", "s3:ListBucket", "s3:ListBucketVersions", "s3:PutBucketNotification")
     Resource = $candidateDocumentBucketArn
-  }
-)
-$expectedAddedStatements = @()
-$expectedModifiedStatements = @(
+  },
+  # The previous change set (candidate-rights-versioned-recovery-read-v1) is applied and now retained.
   [pscustomobject]@{
-    Before = [pscustomobject]@{
-      Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
-      Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging")
-      Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
-    }
-    After = [pscustomobject]@{
-      Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
-      Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:GetObjectVersionTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging")
-      Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
-    }
+    Sid = "OperateCandidateDeletionRecoveryLedger"; Effect = "Allow"
+    Action = @("s3:GetObject", "s3:GetObjectTagging", "s3:GetObjectVersionTagging", "s3:PutObject", "s3:PutObjectRetention", "s3:PutObjectTagging", "s3:PutObjectVersionTagging")
+    Resource = "$candidateRecoveryBucketArn/candidate-deletion-recovery/*"
   }
 )
-$changeSet = "candidate-rights-versioned-recovery-read-v1"
+# ADR-034: the permissions boundary allowed S3 version deletion only on the candidate-EXPORTS bucket, so the resume byte purge
+# and account deletion of stored resumes were denied by the boundary. One statement lets the candidate-rights activity role
+# (and no other workload role) permanently delete candidate-document object versions.
+$expectedAddedStatements = @(
+  [pscustomobject]@{
+    Sid = "PurgeDeletedCandidateDocumentVersions"; Effect = "Allow"; Action = @("s3:DeleteObjectVersion")
+    Resource = "$candidateDocumentBucketArn/*"
+    Condition = [pscustomobject]@{ ArnEquals = [pscustomobject]@{ "aws:PrincipalArn" = $activityRoleArn } }
+  }
+)
+$expectedModifiedStatements = @()
+$changeSet = "candidate-documents-version-delete-v1"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -323,7 +326,7 @@ function Invoke-Verification {
     if ($stateCanonical -cne $liveCanonical) {
       throw "The live workload boundary does not semantically match Terraform state."
     }
-    $requiredStatements = $requiredRetainedStatements + @($expectedModifiedStatements[0].After)
+    $requiredStatements = @($requiredRetainedStatements) + @($expectedAddedStatements)
     foreach ($expected in $requiredStatements) {
       $expectedCanonical = ConvertTo-DeploymentCanonicalValue -Value $expected -SortArrays
       $matches = @($livePolicy.Statement | Where-Object {
