@@ -41,6 +41,10 @@ candidate-rights activity role holds. The design and its alternatives are in the
   was added (owner-approved guard change, 2026-09-21). Because the archive also serves the terminal Lambda and the module binds the
   activity version into the durable workflow, a code-only release changes 12 resources and 2 outputs; the mode allows exactly that set.
 - Deletion code for documents lives in the Workflows package, following the account-deletion precedent.
+- **Found live (2026-09-21):** the workload permissions boundary allowed `s3:DeleteObjectVersion` only on the candidate-exports
+  bucket, so the role that already "held" delete on paper was denied on the documents bucket, for the purge and for account deletion
+  of stored resumes alike. The owner approved one boundary statement scoped by `aws:PrincipalArn` to the activity role (bootstrap
+  change set `candidate-documents-version-delete-v1`).
 - A restore to before a deletion can bring back a row whose bytes are gone; that is the safe direction.
 
 ## Alternatives
