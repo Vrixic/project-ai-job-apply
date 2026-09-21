@@ -836,4 +836,132 @@ describeWithDatabase("PostgresProfileStore", () => {
       `;
     }
   });
+  it("retires only the unreviewed proposals whose sole source is a purged resume (ADR-034)", async () => {
+    const runId = crypto.randomUUID();
+    const user = await store.resolveUser(
+      { ...principal, subject: `resume-retire-${runId}` },
+      "integration-trace",
+    );
+    const other = await store.resolveUser(
+      { ...principal, subject: `resume-retire-other-${runId}` },
+      "integration-trace",
+    );
+    const documentA = crypto.randomUUID();
+    const documentB = crypto.randomUUID();
+    const writer = new PostgresResumeProposalWriter();
+    const span = (documentId: string, start: number) => ({
+      documentId,
+      documentVersion: 1,
+      parserVersion: "resume-parser-v1",
+      blockIndex: 0,
+      startOffset: start,
+      endOffset: start + 5,
+      page: 1,
+    });
+    const proposal = (value: string, spans: ReturnType<typeof span>[]) => ({
+      kind: "skill" as const,
+      key: "skill",
+      value,
+      sensitivity: "standard" as const,
+      evidence: { supportingSpans: spans },
+    });
+    const importFor = (
+      owner: string,
+      documentId: string,
+      proposals: ReturnType<typeof proposal>[],
+    ) =>
+      database.client.begin((transaction) =>
+        writer.import(transaction, {
+          userId: owner,
+          documentId,
+          documentVersion: 1,
+          parserVersion: "resume-parser-v1",
+          traceId: "retire-import",
+          proposals,
+        }),
+      );
+    await importFor(user.id, documentA, [
+      proposal("Unreviewed one", [span(documentA, 0)]),
+      proposal("Unreviewed two", [span(documentA, 10)]),
+      proposal("Confirmed later", [span(documentA, 20)]),
+      proposal("Rejected later", [span(documentA, 30)]),
+    ]);
+    await importFor(user.id, documentB, [proposal("Other resume", [span(documentB, 0)])]);
+    await importFor(other.id, documentA, [proposal("Someone else's", [span(documentA, 40)])]);
+
+    const factIdOf = async (owner: string, value: string) => {
+      const [row] = await database.client<Array<{ id: string }>>`
+        SELECT fact.id FROM profile.profile_facts AS fact
+        JOIN profile.profile_fact_versions AS version ON version.fact_id = fact.id
+        WHERE fact.user_id = ${owner} AND version.fact_value = ${JSON.stringify(value)}::jsonb`;
+      if (!row) throw new Error(`fact ${value} missing`);
+      return row.id;
+    };
+    const review = async (factId: string, verification: "confirmed" | "rejected") => {
+      await database.client`
+        INSERT INTO profile.profile_fact_versions (
+          fact_id, version, kind, fact_key, fact_value, verification, sensitivity, source_type, source_reference
+        )
+        SELECT fact_id, 2, kind, fact_key, fact_value, ${verification}, sensitivity, source_type, source_reference
+        FROM profile.profile_fact_versions WHERE fact_id = ${factId} AND version = 1`;
+    };
+    await review(await factIdOf(user.id, "Confirmed later"), "confirmed");
+    await review(await factIdOf(user.id, "Rejected later"), "rejected");
+    // a proposal that also rests on a second document keeps its other source
+    const mixedId = await factIdOf(user.id, "Other resume");
+    await database.client`
+      INSERT INTO profile.profile_fact_evidence (
+        fact_id, fact_version, ordinal, document_id, document_version, parser_version,
+        block_index, start_offset, end_offset, page
+      ) VALUES (${mixedId}, 1, 1, ${documentA}, 1, 'resume-parser-v1', 0, 50, 55, 1)`;
+
+    const result = await database.client.begin((transaction) =>
+      writer.retireDocumentProposals(transaction, {
+        userId: user.id,
+        documentId: documentA,
+        traceId: "retire-a",
+      }),
+    );
+    expect(result).toEqual({ proposalsErased: 2, importsErased: 1 });
+
+    const remaining = async (owner: string) =>
+      (
+        await database.client<Array<{ value: string }>>`
+          SELECT DISTINCT version.fact_value #>> '{}' AS value
+          FROM profile.profile_facts AS fact
+          JOIN profile.profile_fact_versions AS version ON version.fact_id = fact.id
+          WHERE fact.user_id = ${owner} ORDER BY 1`
+      ).map((row) => row.value);
+    expect(await remaining(user.id)).toEqual(["Confirmed later", "Other resume", "Rejected later"]);
+    expect(await remaining(other.id)).toEqual(["Someone else's"]);
+    expect(
+      await database.client`SELECT 1 FROM profile.resume_fact_imports WHERE user_id = ${user.id} AND document_id = ${documentA}`,
+    ).toHaveLength(0);
+    expect(
+      await database.client`SELECT 1 FROM profile.resume_fact_imports WHERE user_id = ${user.id} AND document_id = ${documentB}`,
+    ).toHaveLength(1);
+    expect(
+      await database.client`SELECT 1 FROM profile.profile_fact_evidence AS evidence
+        JOIN profile.profile_facts AS fact ON fact.id = evidence.fact_id
+        WHERE fact.user_id = ${user.id} AND evidence.start_offset IN (0, 10) AND evidence.document_id = ${documentA}`,
+    ).toHaveLength(0);
+    const audits = await database.client<Array<{ metadata: unknown }>>`
+      SELECT metadata FROM platform.audit_events
+      WHERE user_id = ${user.id} AND action = 'profile.resume.proposals.retired'`;
+    expect(audits).toEqual([{ metadata: { erasedProposalCount: 2 } }]);
+
+    // idempotent: a second call finds nothing and writes no second audit event
+    expect(
+      await database.client.begin((transaction) =>
+        writer.retireDocumentProposals(transaction, {
+          userId: user.id,
+          documentId: documentA,
+          traceId: "retire-a-again",
+        }),
+      ),
+    ).toEqual({ proposalsErased: 0, importsErased: 0 });
+    expect(
+      await database.client`SELECT 1 FROM platform.audit_events WHERE user_id = ${user.id} AND action = 'profile.resume.proposals.retired'`,
+    ).toHaveLength(1);
+  });
 });

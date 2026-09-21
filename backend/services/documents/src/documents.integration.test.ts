@@ -50,7 +50,7 @@ describeWithDatabase("PostgresDocumentStore", () => {
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Documents migrations through 0004_resume_deletion applied and verified.",
+      "Documents migrations through 0005_resume_purge applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });
@@ -461,6 +461,205 @@ describeWithDatabase("PostgresDocumentStore", () => {
         expect(accepted.length).toBeLessThanOrEqual(1);
         expect(stored.length).toBeLessThanOrEqual(1);
       }
+    });
+  });
+  // ---- resume byte purge (ADR-034): the two owner-defined functions the maintenance sweep calls
+  const purgeInput = (name: string) => ({ ...slotInput(name), sha256: "e".repeat(64) });
+  const tombstone = async (
+    owner: string,
+    name: string,
+    options: { hold?: boolean; deletedDaysAgo?: number } = {},
+  ) => {
+    const registered = await store.createResumeUpload(owner, purgeInput(name), newKey(), "t-reg");
+    const id = registered.document.id;
+    await advance(id, "scanning");
+    await client`
+      UPDATE documents.resume_documents
+      SET status = 'failed', failure_code = 'scan_failed', security_hold = ${options.hold ?? false}
+      WHERE id = ${id}`;
+    await client`
+      INSERT INTO documents.processing_receipts (event_id, document_id, source_object_version)
+      VALUES (${`receipt-${id}`}, ${id}, 'v1')`;
+    await client`
+      INSERT INTO documents.processing_dispositions (
+        document_id, source_object_version, scan_status, scan_result, first_event_id
+      ) VALUES (${id}, 'v1', 'COMPLETED', 'NO_THREATS_FOUND', ${`event-${id}`})`;
+    if (options.deletedDaysAgo === undefined) {
+      await store.deleteResume(owner, id, "t-del");
+    } else {
+      // A tombstone written before the evidence window began: the column can be set once, from null.
+      await client`
+        UPDATE documents.resume_documents
+        SET deleted_at = now() - ${options.deletedDaysAgo} * interval '1 day' WHERE id = ${id}`;
+    }
+    return id;
+  };
+  const pending = async (limit = 100) => {
+    const [row] = await client<
+      Array<{
+        data: { eligible: Array<{ userId: string; documentId: string }>; heldWaiting: number };
+      }>
+    >`
+      SELECT documents.pending_resume_purges(${limit}) AS data`;
+    return row?.data as {
+      eligible: Array<{ userId: string; documentId: string }>;
+      heldWaiting: number;
+    };
+  };
+  const completePurge = async (owner: string, id: string, absent: boolean) => {
+    const [row] = await client<Array<{ data: Record<string, unknown> }>>`
+      SELECT documents.complete_resume_purge(${owner}::uuid, ${id}::uuid, ${absent}) AS data`;
+    return row?.data;
+  };
+  const sqlCode = async (run: () => Promise<unknown>) => {
+    try {
+      await run();
+    } catch (error) {
+      return (error as { code?: string }).code;
+    }
+    return undefined;
+  };
+
+  it("names only tombstones that are ready, oldest first, and counts held ones still inside the evidence window", async () => {
+    await withUsers(1, async ([owner]) => {
+      const first = await tombstone(owner as string, "first.pdf");
+      const held = await tombstone(owner as string, "held.pdf", { hold: true });
+      const expiredHold = await tombstone(owner as string, "expired-hold.pdf", {
+        hold: true,
+        deletedDaysAgo: 31,
+      });
+      const live = await store.createResumeUpload(
+        owner as string,
+        purgeInput("live.pdf"),
+        newKey(),
+        "t-live",
+      );
+      const result = await pending();
+      const mine = result.eligible
+        .filter((entry) => entry.userId === owner)
+        .map((entry) => entry.documentId);
+      expect(mine).toContain(first);
+      expect(mine).toContain(expiredHold);
+      expect(mine).not.toContain(held);
+      expect(mine).not.toContain(live.document.id);
+      expect(result.heldWaiting).toBeGreaterThanOrEqual(1);
+      // oldest tombstone first: the backdated one leads the candidate's own entries
+      expect(mine.indexOf(expiredHold)).toBeLessThan(mine.indexOf(first));
+      expect((await pending(1)).eligible).toHaveLength(1);
+      expect(await sqlCode(() => pending(0))).toBe("22023");
+      expect(await sqlCode(() => pending(101))).toBe("22023");
+    });
+  });
+
+  it("purges a tombstone completely: row, idempotency entry with the file name, receipts, dispositions, and leaves one value-free audit event", async () => {
+    await withUsers(2, async ([owner, other]) => {
+      const fileName = `purge-me-${crypto.randomUUID()}.pdf`;
+      const id = await tombstone(owner as string, fileName);
+      const otherId = await tombstone(other as string, "someone-elses.pdf");
+      // an idempotency response written as a JSON string (older clients) is found too
+      const stringKey = newKey();
+      await client`
+        INSERT INTO documents.idempotency_keys (user_id, scope, key, request_hash, response)
+        VALUES (${owner as string}, 'documents.resume-upload.create.v1', ${stringKey}, ${"f".repeat(64)},
+                ${JSON.stringify({ document: { id, fileName } })}::jsonb)`;
+      const before = await client`
+        SELECT 1 FROM documents.idempotency_keys WHERE user_id = ${owner as string} AND response::text LIKE ${`%${fileName}%`}`;
+      expect(before.length).toBeGreaterThanOrEqual(2);
+
+      expect(await completePurge(owner as string, id, true)).toMatchObject({
+        purged: true,
+        idempotencyKeysDeleted: 2,
+      });
+
+      expect(await client`SELECT 1 FROM documents.resume_documents WHERE id = ${id}`).toHaveLength(
+        0,
+      );
+      expect(
+        await client`SELECT 1 FROM documents.processing_receipts WHERE document_id = ${id}`,
+      ).toHaveLength(0);
+      expect(
+        await client`SELECT 1 FROM documents.processing_dispositions WHERE document_id = ${id}`,
+      ).toHaveLength(0);
+      expect(
+        await client`SELECT 1 FROM documents.idempotency_keys WHERE user_id = ${owner as string} AND response::text LIKE ${`%${fileName}%`}`,
+      ).toHaveLength(0);
+      const audits = await client<Array<{ action: string; metadata: unknown; traceId: string }>>`
+        SELECT action, metadata, trace_id AS "traceId" FROM documents.audit_events
+        WHERE document_id = ${id} AND action = 'resume.purged'`;
+      expect(audits).toEqual([
+        { action: "resume.purged", metadata: { version: 1 }, traceId: "resume-purge" },
+      ]);
+      expect(
+        JSON.stringify(
+          await client`SELECT metadata FROM documents.audit_events WHERE document_id = ${id}`,
+        ),
+      ).not.toContain(fileName);
+      // the other candidate's tombstone and its entries are untouched
+      expect(
+        await client`SELECT 1 FROM documents.resume_documents WHERE id = ${otherId}`,
+      ).toHaveLength(1);
+      expect(
+        await client`SELECT 1 FROM documents.processing_receipts WHERE document_id = ${otherId}`,
+      ).toHaveLength(1);
+      // repeating is a no-op
+      expect(await completePurge(owner as string, id, true)).toEqual({
+        purged: false,
+        reason: "absent",
+      });
+      expect(
+        await client`SELECT 1 FROM documents.audit_events WHERE document_id = ${id} AND action = 'resume.purged'`,
+      ).toHaveLength(1);
+    });
+  });
+
+  it("refuses to purge without the attestation, a live resume, another candidate's resume, or a held one still inside its evidence window", async () => {
+    await withUsers(2, async ([owner, other]) => {
+      const id = await tombstone(owner as string, "a.pdf");
+      expect(await sqlCode(() => completePurge(owner as string, id, false))).toBe("55000");
+      // owner-scoped: naming someone else's id finds nothing and changes nothing
+      expect(await completePurge(other as string, id, true)).toEqual({
+        purged: false,
+        reason: "absent",
+      });
+      expect(await client`SELECT 1 FROM documents.resume_documents WHERE id = ${id}`).toHaveLength(
+        1,
+      );
+      const held = await tombstone(owner as string, "held.pdf", { hold: true });
+      expect(await sqlCode(() => completePurge(owner as string, held, true))).toBe("55000");
+      expect(
+        await client`SELECT 1 FROM documents.resume_documents WHERE id = ${held}`,
+      ).toHaveLength(1);
+      const expired = await tombstone(owner as string, "expired.pdf", {
+        hold: true,
+        deletedDaysAgo: 31,
+      });
+      expect(await completePurge(owner as string, expired, true)).toMatchObject({ purged: true });
+      const live = await store.createResumeUpload(
+        owner as string,
+        purgeInput("live.pdf"),
+        newKey(),
+        "t-live",
+      );
+      expect(await sqlCode(() => completePurge(owner as string, live.document.id, true))).toBe(
+        "55000",
+      );
+    });
+  });
+
+  it("orders a purge against an upload for the same candidate, and a new upload after it is unaffected", async () => {
+    await withUsers(1, async ([owner]) => {
+      const id = await tombstone(owner as string, "old.pdf");
+      const [purge, upload] = await Promise.allSettled([
+        completePurge(owner as string, id, true),
+        store.createResumeUpload(owner as string, purgeInput("new.pdf"), newKey(), "t-new"),
+      ]);
+      expect(purge.status).toBe("fulfilled");
+      expect(upload.status).toBe("fulfilled");
+      expect(
+        (await store.listResumeDocuments(owner as string)).documents.map(
+          (document) => document.fileName,
+        ),
+      ).toEqual(["new.pdf"]);
     });
   });
 });

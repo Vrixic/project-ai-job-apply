@@ -69,6 +69,10 @@
         {
           "version": "0004_resume_deletion",
           "checksum": "028d1e483c363de849f45463a865f71b7247007b1b7dea910997e2f2e173e41f"
+        },
+        {
+          "version": "0005_resume_purge",
+          "checksum": "49d224c5716b10f689a41ced5d324ea2c0e416948b5066bd0c500fd9a35e171b"
         }
       ],
       "relations": [

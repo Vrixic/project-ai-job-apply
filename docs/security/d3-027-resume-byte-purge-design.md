@@ -29,14 +29,14 @@
 
 **Per tombstone, in this order (each step idempotent):**
 
-1. `profile.retire_resume_proposals(user, document)` (new Profile SQL function, SECURITY DEFINER, pinned search path): hard-deletes the profile facts whose latest version is `proposed`, whose source is this resume, and whose evidence points only at this document; cascade removes versions and evidence. Confirmed, edited, and rejected facts are untouched.
+1. `PostgresResumeProposalWriter.retireDocumentProposals(transaction, user, document)` (a Profile-owned method on the class the document processor already uses to import proposals; the Profile store is already bundled in both the maintenance Lambda and the Gateway, so it needs no migration): hard-deletes the profile facts whose every version is still `proposed`, whose source is this resume by source reference, and whose evidence points only at this document; cascade removes versions and evidence; also removes the document's import record and writes a count-only audit event. Facts the candidate confirmed, edited, or rejected are untouched.
 2. Delete every version and delete marker under the two exact prefixes derived from the document id. Keys are **derived and validated** (`^quarantine/<uuid>/` and `^normalized/<uuid>/` with the row's own id), never taken from a stored or caller-supplied string, so the sweep cannot be pointed at any other object. Prefix listing also catches a normalized object left by an earlier parser version that the recorded key would miss.
 3. List both prefixes again. Only if both are empty, call `documents.complete_resume_purge(user, document, true)` (new Documents SQL function, same attestation pattern as `delete_candidate_data`): in one transaction it verifies the row is tombstoned, deletes the matching `idempotency_keys` rows (the ones whose stored response names this document), deletes the row (cascading receipts and dispositions), and writes `resume.purged`.
 4. If the row is already gone (account deletion got there first), the step is a no-op.
 
 **Selection.** `documents.pending_resume_purges(limit)` returns identifiers only (user id, document id, whether a security hold applies), oldest tombstone first. The final function takes the per-candidate advisory lock that registration and deletion already use, so it also orders against an upload.
 
-**Immediate proposals (slice 4).** The delete route also calls the same Profile function right away (through a port composed in the Gateway, as with `ResumeLimits`), so the review list is clean at once instead of after the next sweep. The sweep still runs it first, so a Gateway failure between the two writes is harmless.
+**Immediate proposals (slice 4).** The delete route also calls the same Profile method right away (through a port composed in the Gateway, as with `ResumeLimits`), so the review list is clean at once instead of after the next sweep. The sweep still runs it first, so a Gateway failure between the two writes is harmless.
 
 **Security-held documents.** A row that a malware scan flagged keeps its bytes as evidence. Recommendation: the sweep skips it for 30 days after deletion, then purges it like any other, and reports a count of held tombstones so they are visible. (Owner decision 2.)
 
@@ -59,7 +59,7 @@
 | S3 delete partially fails | Batch reports errors, sweep throws after the batch, the row stays tombstoned, next sweep retries; nothing in the database is removed |
 | Second listing not empty | Same: no database change, retry |
 | Database step fails after S3 is empty | Next sweep lists empty prefixes, attests, retries the function |
-| Profile function fails | Objects are not touched for that tombstone; retried next sweep |
+| Profile method fails | Objects are not touched for that tombstone; retried next sweep |
 | Two sweeps overlap | Not possible on the same alias (reserved concurrency 1; a throttled invocation is retried by the rule); the operations are idempotent and the database function is serialized per candidate anyway |
 | Account deletion runs at the same time | Both idempotent; whichever removes the row first wins |
 | Sweep cannot run at all | Tombstones accumulate but stay hidden; Lambda error alarm; documented manual purge is the same function with the same guards |
@@ -77,7 +77,7 @@
 | Slice | Content | Approvals needed |
 |---|---|---|
 | 0 | This design accepted; ADR-034 accepted; owner decisions below | Owner |
-| 1 | Documents `0005` and Profile `0010` migrations with the three SQL functions and the `resume.purged` audit action; real-PostgreSQL tests; migration inventory pins 49 to 51 | Pin edits (as before) |
+| 1 | Documents `0005` migration (two SQL functions, the `resume.purged` audit action), the Profile `retireDocumentProposals` method; real-PostgreSQL tests; migration inventory pins 49 to 50 | Pin edits (as before) |
 | 2 | Migration image, task definition plan, one execution, verify | Saved plan and execution descriptor |
 | 3 | Sweep, prefix-scoped object deletion, handler wiring, unit and boundary tests; publish the workflow artifacts; **a narrow guarded release mode that updates only the profile-readiness activity and durable functions and aliases** (none exists for a code-only update today) | Guard edit approval, then saved plan |
 | 4 | Immediate proposals retirement in the delete route (Gateway port), confirmation copy, web tests; Gateway release and web deploy | Saved plan |

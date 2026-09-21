@@ -16,3 +16,9 @@ caller attests that every version and delete marker under the returned object ke
 (`parsed`, `failed`, `rejected`) can carry it, it can never be cleared, and the row, object keys, and object versions
 are kept so the exact inventory above still names every stored object until a separate purge removes the bytes
 (ADR-033). It also adds the `resume.deleted` audit action.
+
+`0005_resume_purge` adds the two owner-defined functions the candidate-rights maintenance sweep uses to finish a deletion
+(ADR-034): `pending_resume_purges` names the tombstones that are ready (a security-held one only after 30 days), and
+`complete_resume_purge` removes a tombstone's row, its idempotency entries (which store the file name), receipts, and
+dispositions once the caller attests that every stored object is gone, and records one value-free `resume.purged` audit
+event. It also adds that audit action.

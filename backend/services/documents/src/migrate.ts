@@ -13,6 +13,7 @@ const migrationVersions = [
   "0002_resume_processing",
   "0003_candidate_rights",
   "0004_resume_deletion",
+  "0005_resume_purge",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
