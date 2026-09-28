@@ -8,7 +8,7 @@ All durations are configuration, not hard-coded policy.
 | Data | Provisional retention |
 |---|---|
 | Active account/profile/preferences | Until user deletion |
-| Private source resumes and normalized documents | User controlled; provisional default until document or account deletion. A candidate can delete one resume: it is hidden and unusable at once, the profile suggestions from it that the candidate had not reviewed are erased at once (reviewed facts stay), and a sweep every 5 minutes then removes its stored versions and markers and the Documents row (D3-027; the sweep is deployed in development, the immediate suggestion erase is built and not yet deployed); account deletion also purges them ([ADR-033](../adr/033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md)) |
+| Private source resumes and normalized documents | User controlled; provisional default until document or account deletion. A candidate can delete one resume: it is hidden and unusable at once, the profile suggestions from it that the candidate had not reviewed are erased at once (reviewed facts stay), and a sweep every 5 minutes then removes its stored versions and markers and the Documents row (D3-027, deployed and accepted in development 2026-09-28); account deletion also purges them (its case with a stored resume is D3-028, not yet proven deployed) ([ADR-033](../adr/033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md)) |
 | Deleted account | No recovery after confirmation; active access ends immediately |
 | Generated application artifacts | User controlled; default until account deletion |
 | Raw contributed-page quarantine | Maximum 30 days |
