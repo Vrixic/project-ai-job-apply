@@ -1256,3 +1256,66 @@ variable "candidate_rights_export_lifecycle_days" {
     error_message = "Candidate export lifecycle must be one through eight whole days and cannot precede the seconds-based export deadline."
   }
 }
+
+variable "restricted_answer_vault_enabled" {
+  description = "Provision the dedicated KMS key for the restricted-answer vault (ADR-010, D3-001) and grant the gateway Lambda role Encrypt/Decrypt on it. Never the shared platform key: that key also encrypts the database itself."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.restricted_answer_vault_enabled || var.deploy_gateway_lambda
+    error_message = "The restricted-answer vault key requires the gateway Lambda, the only caller granted Encrypt/Decrypt on it."
+  }
+}
+
+variable "applications_attempt_recovery_enabled" {
+  description = "Dark-deploy the scheduled Lambda that resolves a submission attempt whose worker vanished (D3-005/D3-008/D3-011)."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.applications_attempt_recovery_enabled || (
+      var.deploy_gateway_lambda &&
+      var.applications_attempt_recovery_artifact_s3_key != "" &&
+      var.applications_attempt_recovery_artifact_s3_object_version != "" &&
+      var.applications_attempt_recovery_artifact_sha256 != "" &&
+      var.applications_attempt_recovery_artifact_base64sha256 != "" &&
+      var.profile_readiness_lambda_extension_layer_arn != ""
+    )
+    error_message = "The applications attempt-recovery scheduler requires the existing application database, an immutable artifact with its exact S3 version/digests, and the reviewed Secrets extension."
+  }
+}
+
+variable "applications_attempt_recovery_artifact_s3_key" {
+  description = "Immutable environment artifact-bucket key for the applications attempt-recovery Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "applications_attempt_recovery_artifact_s3_object_version" {
+  description = "Exact S3 object version containing the applications attempt-recovery Lambda ZIP."
+  type        = string
+  default     = ""
+}
+
+variable "applications_attempt_recovery_artifact_sha256" {
+  description = "Lowercase hexadecimal SHA-256 of the exact applications attempt-recovery Lambda ZIP."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.applications_attempt_recovery_artifact_sha256 == "" || can(regex("^[a-f0-9]{64}$", var.applications_attempt_recovery_artifact_sha256))
+    error_message = "Applications attempt-recovery artifact SHA-256 must be empty or 64 lowercase hexadecimal characters."
+  }
+}
+
+variable "applications_attempt_recovery_artifact_base64sha256" {
+  description = "Base64-encoded SHA-256 of the exact applications attempt-recovery Lambda ZIP."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.applications_attempt_recovery_artifact_base64sha256 == "" || can(regex("^[A-Za-z0-9+/]{43}=$", var.applications_attempt_recovery_artifact_base64sha256))
+    error_message = "Applications attempt-recovery artifact base64 SHA-256 must be empty or one canonical 44-character digest."
+  }
+}

@@ -1657,6 +1657,16 @@ data "aws_iam_policy_document" "gateway_lambda" {
       resources = [local.document_processor_alias_arn]
     }
   }
+
+  dynamic "statement" {
+    for_each = var.restricted_answer_vault_enabled ? [1] : []
+    content {
+      sid       = "EncryptDecryptRestrictedAnswerVault"
+      effect    = "Allow"
+      actions   = ["kms:Encrypt", "kms:Decrypt"]
+      resources = [aws_kms_key.restricted_answer_vault[0].arn]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "gateway_lambda" {
@@ -1829,6 +1839,9 @@ resource "aws_lambda_function" "gateway" {
       local.d2_development_contribution_environment,
       local.document_tailoring_invoke_enabled ? {
         DOCUMENT_TAILORING_FUNCTION_ARN = local.document_processor_alias_arn
+      } : {},
+      var.restricted_answer_vault_enabled ? {
+        RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN = aws_kms_key.restricted_answer_vault[0].arn
       } : {},
       local.d2_community_enabled ? {
         D2_PRIVATE_CAPTURE_ROUTES_ENABLED   = "true"
