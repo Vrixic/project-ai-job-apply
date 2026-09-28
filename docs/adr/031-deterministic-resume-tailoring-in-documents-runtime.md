@@ -1,6 +1,6 @@
 # ADR-031: Deterministic resume tailoring in the Documents runtime
 
-Status: Proposed (product-owner acceptance pending)
+Status: Accepted (owner, 2026-09-28); implemented and locally verified, not yet exposed in the deployed hosted app
 Date: 2026-09-19
 
 ## Context
