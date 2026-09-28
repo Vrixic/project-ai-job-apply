@@ -11,7 +11,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "build:lambda": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs && node ../../scripts/build-profile-readiness-lambdas.mjs && node ../../scripts/build-ingestion-lambdas.mjs && node ../../scripts/build-d2-community-lambda.mjs",
+    "build:lambda": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs && node ../../scripts/build-profile-readiness-lambdas.mjs && node ../../scripts/build-ingestion-lambdas.mjs && node ../../scripts/build-d2-community-lambda.mjs && node ../../scripts/build-applications-attempt-recovery-lambda.mjs",
+    "build:lambda:applications-attempt-recovery": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-applications-attempt-recovery-lambda.mjs",
     "build:lambda:d2-community": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-d2-community-lambda.mjs",
     "build:lambda:deletion-restore": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-candidate-deletion-restore-lambda.mjs",
     "build:lambda:ingestion": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-ingestion-lambdas.mjs",
@@ -27,6 +28,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ai-job-apply/applications-service": "workspace:*",
     "@ai-job-apply/config": "workspace:*",
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
