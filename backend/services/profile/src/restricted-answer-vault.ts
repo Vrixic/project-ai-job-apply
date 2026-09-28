@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 
@@ -77,6 +78,14 @@ export class RestrictedAnswerVaultNotFoundError extends Error {
   }
 }
 
+/** The idempotency key was reused for a materially different request. */
+export class RestrictedAnswerVaultIdempotencyConflictError extends Error {
+  constructor() {
+    super("The idempotency key was already used for a different request");
+    this.name = "RestrictedAnswerVaultIdempotencyConflictError";
+  }
+}
+
 export interface RestrictedAnswerSummary {
   id: string;
   fieldKey: string;
@@ -101,6 +110,7 @@ export interface SaveRestrictedAnswerCommand {
   sourceReference: string;
   confirmedAt: Date;
   expiresAt?: Date;
+  idempotencyKey: string;
   traceId: string;
 }
 
@@ -111,10 +121,19 @@ export interface RemoveRestrictedAnswerCommand {
   traceId: string;
 }
 
+export interface RemoveRestrictedAnswerByFieldCommand {
+  userId: string;
+  fieldKey: string;
+  context?: string;
+  traceId: string;
+}
+
 export interface RestrictedAnswerVaultStore {
   save(command: SaveRestrictedAnswerCommand): Promise<{ id: string; version: number }>;
   list(userId: string): Promise<readonly RestrictedAnswerSummary[]>;
   remove(command: RemoveRestrictedAnswerCommand): Promise<{ version: number }>;
+  /** Deletes whatever is currently active, if anything; naming an absent entry is a benign no-op. */
+  removeByField(command: RemoveRestrictedAnswerByFieldCommand): Promise<{ deleted: boolean }>;
 }
 
 function assertKey(value: string | undefined, label: string, required: boolean): void {
@@ -149,6 +168,33 @@ function assertCommand(command: SaveRestrictedAnswerCommand): void {
   if (command.expiresAt && command.expiresAt <= command.confirmedAt) {
     throw new RestrictedAnswerVaultInputError("expiresAt must be after confirmedAt");
   }
+  if (command.idempotencyKey.length < 16 || command.idempotencyKey.length > 128) {
+    throw new RestrictedAnswerVaultInputError("idempotencyKey is invalid");
+  }
+}
+
+/**
+ * Deliberately excludes the plaintext `value`: several restricted answers have a tiny value space
+ * (yes/no, a short enum), so a hash including it would let anyone who can read
+ * `platform.idempotency_keys` brute-force the answer without ever calling KMS. A client that reuses
+ * one idempotency key for two different values is a client bug this hash does not catch; that
+ * trade-off is intentional.
+ */
+function requestHash(command: SaveRestrictedAnswerCommand): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        fieldKey: command.fieldKey,
+        context: command.context ?? "",
+        expectedVersion: command.expectedVersion,
+        valueType: command.valueType,
+        sensitivity: command.sensitivity,
+        sourceReference: command.sourceReference,
+        confirmedAt: command.confirmedAt.toISOString(),
+        expiresAt: command.expiresAt?.toISOString() ?? null,
+      }),
+    )
+    .digest("hex");
 }
 
 // This store is always composed with the shared, camelCase-transforming client (`createDatabase`),
@@ -181,9 +227,23 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
   }
 
   async save(command: SaveRestrictedAnswerCommand): Promise<{ id: string; version: number }> {
+    const cipher = this.requireCipher();
     assertCommand(command);
     const context = command.context ?? "";
-    const encrypted = await this.requireCipher().encrypt({
+    const scope = `restricted-answer-vault.save.v1:${command.fieldKey}:${context}`;
+    const hash = requestHash(command);
+    // Best-effort, outside any lock: skips a pointless KMS call on the common retry. The
+    // authoritative check happens inside the transaction below regardless.
+    const [precheck] = await this.client<Array<{ requestHash: string; response: unknown }>>`
+      SELECT request_hash AS "requestHash", response
+      FROM platform.idempotency_keys
+      WHERE user_id = ${command.userId}::uuid AND scope = ${scope} AND key = ${command.idempotencyKey}
+    `;
+    if (precheck) {
+      if (precheck.requestHash !== hash) throw new RestrictedAnswerVaultIdempotencyConflictError();
+      return precheck.response as { id: string; version: number };
+    }
+    const encrypted = await cipher.encrypt({
       userId: command.userId,
       fieldKey: command.fieldKey,
       context,
@@ -192,6 +252,15 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
     const nextVersion = command.expectedVersion + 1;
     return this.client.begin(async (tx) => {
       await tx`SELECT pg_advisory_xact_lock(hashtext(${`restricted-answer:${command.userId}:${command.fieldKey}:${context}`}))`;
+      const [prior] = await tx<Array<{ requestHash: string; response: unknown }>>`
+        SELECT request_hash AS "requestHash", response
+        FROM platform.idempotency_keys
+        WHERE user_id = ${command.userId}::uuid AND scope = ${scope} AND key = ${command.idempotencyKey}
+      `;
+      if (prior) {
+        if (prior.requestHash !== hash) throw new RestrictedAnswerVaultIdempotencyConflictError();
+        return prior.response as { id: string; version: number };
+      }
       const candidateId = uuidv7();
       const [row] = await tx<Array<{ id: string }>>`
         INSERT INTO profile.restricted_answers (id, user_id, field_key, context)
@@ -226,7 +295,15 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
           ${command.expiresAt ? command.expiresAt.toISOString() : null}::timestamptz
         )
       `;
-      return { id: answerId, version: nextVersion };
+      const response = { id: answerId, version: nextVersion };
+      await tx`
+        INSERT INTO platform.idempotency_keys (user_id, scope, key, request_hash, response)
+        VALUES (
+          ${command.userId}::uuid, ${scope}, ${command.idempotencyKey}, ${hash},
+          ${JSON.stringify(response)}::jsonb
+        )
+      `;
+      return response;
     });
   }
 
@@ -264,6 +341,42 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
         WHERE answer_id = ${command.id}::uuid AND version = ${current.version}
       `;
       return { version: nextVersion };
+    });
+  }
+
+  async removeByField(
+    command: RemoveRestrictedAnswerByFieldCommand,
+  ): Promise<{ deleted: boolean }> {
+    const context = command.context ?? "";
+    return this.client.begin(async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${`restricted-answer:${command.userId}:${command.fieldKey}:${context}`}))`;
+      const [current] = await tx<
+        Array<{ id: string; version: number; state: "active" | "deleted" }>
+      >`
+        SELECT answer.id, version.version, version.state
+        FROM profile.restricted_answers AS answer
+        JOIN LATERAL (
+          SELECT * FROM profile.restricted_answer_versions
+          WHERE answer_id = answer.id ORDER BY version DESC LIMIT 1
+        ) AS version ON true
+        WHERE answer.user_id = ${command.userId}::uuid
+          AND answer.field_key = ${command.fieldKey}
+          AND coalesce(answer.context, '') = ${context}
+        FOR UPDATE OF version
+      `;
+      if (!current || current.state === "deleted") return { deleted: false };
+      const nextVersion = current.version + 1;
+      await tx`
+        INSERT INTO profile.restricted_answer_versions (
+          answer_id, version, value_type, sensitivity, ciphertext, kms_key_id,
+          encryption_algorithm, state, source_reference, confirmed_at, expires_at
+        )
+        SELECT answer_id, ${nextVersion}, value_type, sensitivity, ciphertext, kms_key_id,
+               encryption_algorithm, 'deleted', source_reference, confirmed_at, expires_at
+        FROM profile.restricted_answer_versions
+        WHERE answer_id = ${current.id}::uuid AND version = ${current.version}
+      `;
+      return { deleted: true };
     });
   }
 

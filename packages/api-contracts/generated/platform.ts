@@ -229,6 +229,40 @@ export interface paths {
         patch: operations["updateProfileFact"];
         trace?: never;
     };
+    "/profile/restricted-answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRestrictedAnswers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/restricted-answers/{fieldKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Creates or corrects the current candidate's saved value for one restricted question (ADR-010). expectedVersion is 0 to create; otherwise the version last read, enforced optimistically so a concurrent edit is refused rather than silently overwritten. The value is encrypted with a key separate from the database and is never read back through this API. */
+        put: operations["saveRestrictedAnswer"];
+        post?: never;
+        /** @description Deletes the current candidate's currently saved value for one restricted question, if any. Naming a field key with nothing saved, or repeating the call, has the same result; there is no version to track. */
+        delete: operations["deleteRestrictedAnswer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs/search": {
         parameters: {
             query?: never;
@@ -1283,6 +1317,40 @@ export interface components {
             facts: components["schemas"]["ProfileFact"][];
             confirmedCount: number;
             proposedCount: number;
+        };
+        RestrictedAnswerFieldKey: string;
+        RestrictedAnswer: {
+            /** Format: uuid */
+            id: string;
+            fieldKey: components["schemas"]["RestrictedAnswerFieldKey"];
+            context?: string;
+            /** @enum {string} */
+            valueType: "string" | "text" | "boolean" | "date" | "decimal" | "enum";
+            /** @enum {string} */
+            sensitivity: "confidential" | "restricted";
+            /** @enum {string} */
+            state: "active" | "deleted";
+            version: number;
+            /** Format: date-time */
+            confirmedAt: string;
+            /** Format: date-time */
+            expiresAt?: string;
+        };
+        RestrictedAnswerCollection: {
+            answers: components["schemas"]["RestrictedAnswer"][];
+        };
+        SaveRestrictedAnswerRequest: {
+            expectedVersion: number;
+            /** @enum {string} */
+            valueType: "string" | "text" | "boolean" | "date" | "decimal" | "enum";
+            value: string;
+            /** @enum {string} */
+            sensitivity: "confidential" | "restricted";
+            sourceReference: string;
+            /** Format: date-time */
+            confirmedAt: string;
+            /** Format: date-time */
+            expiresAt?: string;
         };
         JobSearchFilters: {
             title?: string;
@@ -2851,6 +2919,93 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listRestrictedAnswers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metadata only for each of the current candidate's saved restricted answers; the encrypted value itself is never returned here */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestrictedAnswerCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    saveRestrictedAnswer: {
+        parameters: {
+            query?: {
+                context?: string;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                fieldKey: components["schemas"]["RestrictedAnswerFieldKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveRestrictedAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description Metadata for the saved entry; the value itself is not echoed back */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestrictedAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    deleteRestrictedAnswer: {
+        parameters: {
+            query?: {
+                context?: string;
+            };
+            header?: never;
+            path: {
+                fieldKey: components["schemas"]["RestrictedAnswerFieldKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted, or nothing was saved for this field key and context */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     searchCanonicalJobs: {

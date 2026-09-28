@@ -818,6 +818,97 @@ describe("API Gateway Lambda boundary", () => {
     expect(inject).toHaveBeenCalledWith(expect.objectContaining({ method, url: path, payload }));
   });
 
+  it.each([
+    ["GET", "/v1/profile/restricted-answers"],
+    ["PUT", "/v1/profile/restricted-answers/authorization.us_authorized"],
+    ["DELETE", "/v1/profile/restricted-answers/authorization.us_authorized"],
+  ])("allows the protected restricted-answer %s boundary", async (method, path) => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: method === "DELETE" ? 204 : 200,
+      body: method === "DELETE" ? "" : '{"version":1}',
+      headers: { "content-type": "application/json" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const payload = method === "PUT" ? JSON.stringify({ synthetic: true }) : undefined;
+
+    const response = await invoke(
+      handler,
+      routedEvent(method, path, {
+        ...(payload ? { body: payload } : {}),
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          ...(payload ? { "content-type": "application/json" } : {}),
+        },
+      }),
+    );
+
+    expect(response.statusCode).toBe(method === "DELETE" ? 204 : 200);
+    expect(inject).toHaveBeenCalledWith(
+      expect.objectContaining({ method, url: path, ...(payload ? { payload } : {}) }),
+    );
+  });
+
+  it("allows the restricted-answer context query on PUT and DELETE, forwarding it to the app", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 200,
+      body: '{"version":1}',
+      headers: { "content-type": "application/json" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const path = "/v1/profile/restricted-answers/authorization.sponsorship_required";
+    const payload = JSON.stringify({ synthetic: true });
+
+    const response = await invoke(
+      handler,
+      routedEvent("PUT", path, {
+        rawQueryString: "context=us",
+        body: payload,
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(inject).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "PUT", url: `${path}?context=us`, payload }),
+    );
+  });
+
+  it("rejects any restricted-answer query key other than context", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn();
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+    const response = await invoke(
+      handler,
+      routedEvent("DELETE", "/v1/profile/restricted-answers/authorization.us_authorized", {
+        rawQueryString: "other=1",
+        headers: { authorization: "Bearer opaque-api-gateway-token" },
+      }),
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(inject).not.toHaveBeenCalled();
+  });
+
   it("fails closed before application dispatch when authorizer context is absent", async () => {
     const principalBridge = createInvocationPrincipalBridge();
     const inject = vi.fn();

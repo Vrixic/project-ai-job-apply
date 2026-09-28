@@ -95,11 +95,13 @@ import {
 } from "@ai-job-apply/matching-service";
 import type {
   ProfileStore,
+  RestrictedAnswerVaultStore,
   UgcContributionConsent,
   UgcContributionConsentStore,
 } from "@ai-job-apply/profile-service";
 import {
   AccountQuarantinedError,
+  RestrictedAnswerVaultConflictError,
   UgcContributionConsentConflictError,
 } from "@ai-job-apply/profile-service";
 import {
@@ -943,6 +945,7 @@ async function createApp(
     trustReviewerAssignments?: readonly TrustReviewerAssignment[];
     applications?: ApplicationsApi;
     documents?: DocumentStore;
+    restrictedAnswerVault?: RestrictedAnswerVaultStore;
   } = {},
 ) {
   const issuer = await createTestTokenIssuer();
@@ -984,6 +987,9 @@ async function createApp(
   };
   const app = await createGatewayApplication({
     store,
+    ...(options.restrictedAnswerVault
+      ? { restrictedAnswerVault: options.restrictedAnswerVault }
+      : {}),
     catalog: options.catalog ?? catalog,
     savedJobs,
     privateSavedPageCaptures,
@@ -4944,6 +4950,371 @@ describe("resume deletion (ADR-033)", () => {
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: "resume_not_deletable", status: 409 });
       expect(response.headers["content-type"]).toMatch(/problem\+json/);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+class MemoryRestrictedAnswerVaultStore implements RestrictedAnswerVaultStore {
+  private nextId = 1;
+  private readonly entries = new Map<
+    string,
+    {
+      id: string;
+      userId: string;
+      fieldKey: string;
+      context: string;
+      version: number;
+      state: "active" | "deleted";
+      valueType: string;
+      sensitivity: string;
+      confirmedAt: string;
+      expiresAt?: string;
+    }
+  >();
+  private readonly idempotency = new Map<string, { id: string; version: number }>();
+  saveCalls: unknown[] = [];
+  removeByFieldCalls: unknown[] = [];
+
+  private key(userId: string, fieldKey: string, context: string) {
+    return `${userId}\u0000${fieldKey}\u0000${context}`;
+  }
+
+  async save(command: Parameters<RestrictedAnswerVaultStore["save"]>[0]) {
+    this.saveCalls.push(command);
+    const context = command.context ?? "";
+    const idemKey = `${command.userId}\u0000${command.idempotencyKey}`;
+    const priorIdem = this.idempotency.get(idemKey);
+    if (priorIdem) return priorIdem;
+    const key = this.key(command.userId, command.fieldKey, context);
+    const existing = this.entries.get(key);
+    const currentVersion = existing?.version ?? 0;
+    if (currentVersion !== command.expectedVersion) {
+      throw new RestrictedAnswerVaultConflictError();
+    }
+    const id = existing?.id ?? `restricted-answer-${this.nextId++}`;
+    const version = currentVersion + 1;
+    this.entries.set(key, {
+      id,
+      userId: command.userId,
+      fieldKey: command.fieldKey,
+      context,
+      version,
+      state: "active",
+      valueType: command.valueType,
+      sensitivity: command.sensitivity,
+      confirmedAt: command.confirmedAt.toISOString(),
+      ...(command.expiresAt ? { expiresAt: command.expiresAt.toISOString() } : {}),
+    });
+    const result = { id, version };
+    this.idempotency.set(idemKey, result);
+    return result;
+  }
+
+  async list(userId: string) {
+    return [...this.entries.values()]
+      .filter((entry) => entry.userId === userId)
+      .map((entry) => ({
+        id: entry.id,
+        fieldKey: entry.fieldKey,
+        ...(entry.context ? { context: entry.context } : {}),
+        valueType: entry.valueType as never,
+        sensitivity: entry.sensitivity as never,
+        state: entry.state,
+        version: entry.version,
+        confirmedAt: entry.confirmedAt,
+        ...(entry.expiresAt ? { expiresAt: entry.expiresAt } : {}),
+      }));
+  }
+
+  async remove(command: Parameters<RestrictedAnswerVaultStore["remove"]>[0]) {
+    for (const entry of this.entries.values()) {
+      if (entry.id === command.id) {
+        entry.state = "deleted";
+        entry.version += 1;
+        return { version: entry.version };
+      }
+    }
+    return { version: command.expectedVersion };
+  }
+
+  async removeByField(command: Parameters<RestrictedAnswerVaultStore["removeByField"]>[0]) {
+    this.removeByFieldCalls.push(command);
+    const context = command.context ?? "";
+    const key = this.key(command.userId, command.fieldKey, context);
+    const entry = this.entries.get(key);
+    if (!entry || entry.state === "deleted") return { deleted: false };
+    entry.state = "deleted";
+    entry.version += 1;
+    return { deleted: true };
+  }
+}
+
+describe("restricted answer vault routes (D3-001)", () => {
+  it("fails closed with a clean 503 when no vault is configured, never a generic 500", async () => {
+    const { app, issuer } = await createApp();
+    try {
+      const token = await issuer.issue("candidate-resume", { scope: "profile:read" });
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/profile/restricted-answers",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({ code: "restricted_answer_vault_unavailable" });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("creates an entry, lists its metadata only, corrects it, and deletes it", async () => {
+    const restrictedAnswerVault = new MemoryRestrictedAnswerVaultStore();
+    const { app, issuer } = await createApp({ restrictedAnswerVault });
+    try {
+      const token = await issuer.issue("candidate-resume", {
+        scope: "profile:read profile:write",
+      });
+      const headers = { authorization: `Bearer ${token}` };
+      const created = await app.inject({
+        method: "PUT",
+        url: "/v1/profile/restricted-answers/authorization.us_authorized",
+        headers: { ...headers, "idempotency-key": "restricted-answer-test-0001" },
+        payload: {
+          expectedVersion: 0,
+          valueType: "boolean",
+          value: "true",
+          sensitivity: "restricted",
+          sourceReference: "application-review-panel",
+          confirmedAt: "2026-09-28T12:00:00.000Z",
+        },
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.headers["cache-control"]).toBe("no-store");
+      const body = created.json();
+      expect(body).toMatchObject({
+        fieldKey: "authorization.us_authorized",
+        valueType: "boolean",
+        sensitivity: "restricted",
+        state: "active",
+        version: 1,
+      });
+      expect(JSON.stringify(body)).not.toContain(`"value"`);
+      expect(JSON.stringify(body)).not.toContain("true");
+
+      const listed = await app.inject({
+        method: "GET",
+        url: "/v1/profile/restricted-answers",
+        headers,
+      });
+      expect(listed.statusCode).toBe(200);
+      expect(listed.headers["cache-control"]).toBe("no-store");
+      expect(listed.json().answers).toHaveLength(1);
+      expect(JSON.stringify(listed.json())).not.toContain("true");
+
+      const corrected = await app.inject({
+        method: "PUT",
+        url: "/v1/profile/restricted-answers/authorization.us_authorized",
+        headers: { ...headers, "idempotency-key": "restricted-answer-test-0002" },
+        payload: {
+          expectedVersion: 1,
+          valueType: "boolean",
+          value: "false",
+          sensitivity: "restricted",
+          sourceReference: "application-review-panel",
+          confirmedAt: "2026-09-28T13:00:00.000Z",
+        },
+      });
+      expect(corrected.statusCode).toBe(200);
+      expect(corrected.json().version).toBe(2);
+
+      const deleted = await app.inject({
+        method: "DELETE",
+        url: "/v1/profile/restricted-answers/authorization.us_authorized",
+        headers,
+      });
+      expect(deleted.statusCode).toBe(204);
+      expect(deleted.headers["cache-control"]).toBe("no-store");
+      expect(deleted.body).toBe("");
+
+      const deletedAgain = await app.inject({
+        method: "DELETE",
+        url: "/v1/profile/restricted-answers/authorization.us_authorized",
+        headers,
+      });
+      expect(deletedAgain.statusCode).toBe(204);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("passes the context query parameter through to the store, isolating one field's contexts", async () => {
+    const restrictedAnswerVault = new MemoryRestrictedAnswerVaultStore();
+    const { app, issuer } = await createApp({ restrictedAnswerVault });
+    try {
+      const token = await issuer.issue("candidate-resume", {
+        scope: "profile:read profile:write",
+      });
+      const headers = { authorization: `Bearer ${token}` };
+      for (const context of ["us", "eu"]) {
+        const response = await app.inject({
+          method: "PUT",
+          url: `/v1/profile/restricted-answers/authorization.sponsorship_required?context=${context}`,
+          headers: { ...headers, "idempotency-key": `restricted-answer-context-${context}` },
+          payload: {
+            expectedVersion: 0,
+            valueType: "boolean",
+            value: "true",
+            sensitivity: "restricted",
+            sourceReference: "application-review-panel",
+            confirmedAt: "2026-09-28T12:00:00.000Z",
+          },
+        });
+        expect(response.statusCode, context).toBe(200);
+        expect(response.json().context).toBe(context);
+      }
+      const listed = await app.inject({
+        method: "GET",
+        url: "/v1/profile/restricted-answers",
+        headers,
+      });
+      expect(listed.json().answers).toHaveLength(2);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    ["a malformed field key", "/v1/profile/restricted-answers/Not-Valid"],
+    ["an unknown query key", "/v1/profile/restricted-answers/authorization.us_authorized?other=1"],
+  ])("rejects a save with %s as a stable 400", async (_name, path) => {
+    const restrictedAnswerVault = new MemoryRestrictedAnswerVaultStore();
+    const { app, issuer } = await createApp({ restrictedAnswerVault });
+    try {
+      const token = await issuer.issue("candidate-resume", { scope: "profile:write" });
+      const response = await app.inject({
+        method: "PUT",
+        url: path,
+        headers: {
+          authorization: `Bearer ${token}`,
+          "idempotency-key": "restricted-answer-bad-input",
+        },
+        payload: {
+          expectedVersion: 0,
+          valueType: "boolean",
+          value: "true",
+          sensitivity: "restricted",
+          sourceReference: "application-review-panel",
+          confirmedAt: "2026-09-28T12:00:00.000Z",
+        },
+      });
+      expect(response.statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("maps a stale expected version to a stable 409 without leaking detail", async () => {
+    const restrictedAnswerVault = new MemoryRestrictedAnswerVaultStore();
+    const { app, issuer } = await createApp({ restrictedAnswerVault });
+    try {
+      const token = await issuer.issue("candidate-resume", { scope: "profile:write" });
+      const headers = { authorization: `Bearer ${token}` };
+      await app.inject({
+        method: "PUT",
+        url: "/v1/profile/restricted-answers/authorization.export_control",
+        headers: { ...headers, "idempotency-key": "restricted-answer-conflict-0001" },
+        payload: {
+          expectedVersion: 0,
+          valueType: "enum",
+          value: "eligible",
+          sensitivity: "restricted",
+          sourceReference: "application-review-panel",
+          confirmedAt: "2026-09-28T12:00:00.000Z",
+        },
+      });
+      const stale = await app.inject({
+        method: "PUT",
+        url: "/v1/profile/restricted-answers/authorization.export_control",
+        headers: { ...headers, "idempotency-key": "restricted-answer-conflict-0002" },
+        payload: {
+          expectedVersion: 0,
+          valueType: "enum",
+          value: "not_eligible",
+          sensitivity: "restricted",
+          sourceReference: "application-review-panel",
+          confirmedAt: "2026-09-28T13:00:00.000Z",
+        },
+      });
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json()).toMatchObject({ code: "restricted_answer_version_conflict" });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("requires profile:write for a save and profile:read for a list, and a bearer token for either", async () => {
+    const restrictedAnswerVault = new MemoryRestrictedAnswerVaultStore();
+    const { app, issuer } = await createApp({ restrictedAnswerVault });
+    try {
+      const readOnly = await issuer.issue("candidate-resume", { scope: "profile:read" });
+      const forbidden = await app.inject({
+        method: "PUT",
+        url: "/v1/profile/restricted-answers/authorization.us_authorized",
+        headers: {
+          authorization: `Bearer ${readOnly}`,
+          "idempotency-key": "restricted-answer-scope-0001",
+        },
+        payload: {
+          expectedVersion: 0,
+          valueType: "boolean",
+          value: "true",
+          sensitivity: "restricted",
+          sourceReference: "application-review-panel",
+          confirmedAt: "2026-09-28T12:00:00.000Z",
+        },
+      });
+      expect(forbidden.statusCode).toBe(403);
+      const anonymous = await app.inject({
+        method: "GET",
+        url: "/v1/profile/restricted-answers",
+      });
+      expect(anonymous.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("never sends the answer's plaintext value in the confirmation response or the list", async () => {
+    const restrictedAnswerVault = new MemoryRestrictedAnswerVaultStore();
+    const { app, issuer } = await createApp({ restrictedAnswerVault });
+    try {
+      const token = await issuer.issue("candidate-resume", {
+        scope: "profile:read profile:write",
+      });
+      const headers = { authorization: `Bearer ${token}` };
+      const secret = "a-very-distinctive-canary-value";
+      const saved = await app.inject({
+        method: "PUT",
+        url: "/v1/profile/restricted-answers/demographic.veteran",
+        headers: { ...headers, "idempotency-key": "restricted-answer-canary-0001" },
+        payload: {
+          expectedVersion: 0,
+          valueType: "enum",
+          value: secret,
+          sensitivity: "restricted",
+          sourceReference: "application-review-panel",
+          confirmedAt: "2026-09-28T12:00:00.000Z",
+        },
+      });
+      expect(saved.body).not.toContain(secret);
+      const listed = await app.inject({
+        method: "GET",
+        url: "/v1/profile/restricted-answers",
+        headers,
+      });
+      expect(listed.body).not.toContain(secret);
+      expect(JSON.stringify(restrictedAnswerVault.saveCalls)).toContain(secret);
     } finally {
       await app.close();
     }

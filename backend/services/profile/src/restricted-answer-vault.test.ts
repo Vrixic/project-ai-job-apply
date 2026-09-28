@@ -76,6 +76,7 @@ describe("PostgresRestrictedAnswerVaultStore construction", () => {
         sensitivity: "restricted",
         sourceReference: "application-review-panel",
         confirmedAt: new Date("2026-09-28T00:00:00.000Z"),
+        idempotencyKey: "trace-1-idempotency-key",
         traceId: "trace-1",
       }),
     ).rejects.toBeInstanceOf(RestrictedAnswerVaultConfigurationError);
@@ -91,6 +92,8 @@ describe("PostgresRestrictedAnswerVaultStore construction", () => {
     ["a value over the byte bound", { value: "x".repeat(4_000) }],
     ["an empty sourceReference", { sourceReference: "" }],
     ["an expiresAt not after confirmedAt", { expiresAt: new Date("2020-01-01T00:00:00.000Z") }],
+    ["an idempotencyKey shorter than 16 characters", { idempotencyKey: "short" }],
+    ["an idempotencyKey longer than 128 characters", { idempotencyKey: "x".repeat(129) }],
   ])("rejects %s before ever calling the cipher", async (_name, override) => {
     const { PostgresRestrictedAnswerVaultStore } = await import("./restricted-answer-vault.js");
     const cipher = new FakeRestrictedAnswerCipher();
@@ -114,6 +117,7 @@ describe("PostgresRestrictedAnswerVaultStore construction", () => {
         sensitivity: "restricted",
         sourceReference: "application-review-panel",
         confirmedAt: new Date("2026-09-28T00:00:00.000Z"),
+        idempotencyKey: "trace-1-idempotency-key",
         traceId: "trace-1",
         ...override,
       }),

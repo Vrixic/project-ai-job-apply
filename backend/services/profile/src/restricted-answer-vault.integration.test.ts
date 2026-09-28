@@ -7,6 +7,7 @@ import { createDatabase } from "./index.js";
 import {
   PostgresRestrictedAnswerVaultStore,
   RestrictedAnswerVaultConflictError,
+  RestrictedAnswerVaultIdempotencyConflictError,
   RestrictedAnswerVaultNotFoundError,
 } from "./restricted-answer-vault.js";
 import { FakeRestrictedAnswerCipher } from "./restricted-answer-vault-test-cipher.js";
@@ -80,6 +81,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt,
+      idempotencyKey: "trace-create-idempotency-key",
       traceId: "trace-create",
     });
     expect(created.version).toBe(1);
@@ -111,6 +113,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "trace-create-idempotency-key",
       traceId: "trace-create",
     });
     const corrected = await store.save({
@@ -122,6 +125,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T13:00:00.000Z"),
+      idempotencyKey: "trace-correct-idempotency-key",
       traceId: "trace-correct",
     });
     expect(corrected).toEqual({ id: created.id, version: 2 });
@@ -144,6 +148,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "trace-1-idempotency-key",
       traceId: "trace-1",
     });
     expect(created.version).toBe(1);
@@ -157,6 +162,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
         sensitivity: "restricted",
         sourceReference: "application-review-panel",
         confirmedAt: new Date("2026-09-28T13:00:00.000Z"),
+        idempotencyKey: "trace-2-idempotency-key",
         traceId: "trace-2",
       }),
     ).rejects.toBeInstanceOf(RestrictedAnswerVaultConflictError);
@@ -177,6 +183,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "trace-us-idempotency-key",
       traceId: "trace-us",
     });
     await store.save({
@@ -189,6 +196,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "trace-eu-idempotency-key",
       traceId: "trace-eu",
     });
     await store.save({
@@ -201,6 +209,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "trace-other-owner-idempotency-key",
       traceId: "trace-other-owner",
     });
 
@@ -253,6 +262,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "trace-1-idempotency-key",
       traceId: "trace-1",
     });
     const removed = await store.remove({
@@ -291,6 +301,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "trace-1-idempotency-key",
       traceId: "trace-1",
     });
     await expect(
@@ -317,6 +328,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "trace-1-idempotency-key",
       traceId: "trace-1",
     });
     await expect(
@@ -338,6 +350,7 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
       sensitivity: "restricted",
       sourceReference: "application-review-panel",
       confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "trace-1-idempotency-key",
       traceId: "trace-1",
     });
 
@@ -365,5 +378,162 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
     `;
     expect(deleted?.data.restrictedAnswersDeleted).toBe(1);
     expect(await store.list(userId)).toEqual([]);
+  });
+
+  it("returns the identical response, and calls the cipher only once, when the same idempotency key repeats the same save", async () => {
+    const userId = await createUser(database.client);
+    const calls: unknown[] = [];
+    const countingCipher = {
+      encrypt: async (input: Parameters<typeof cipher.encrypt>[0]) => {
+        calls.push(input);
+        return cipher.encrypt(input);
+      },
+      decrypt: cipher.decrypt.bind(cipher),
+    };
+    const countingStore = new PostgresRestrictedAnswerVaultStore(database.client, countingCipher);
+    const command = {
+      userId,
+      fieldKey: "authorization.export_control",
+      expectedVersion: 0,
+      valueType: "enum" as const,
+      value: "eligible",
+      sensitivity: "restricted" as const,
+      sourceReference: "application-review-panel",
+      confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "repeat-save-key-0001",
+      traceId: "trace-repeat",
+    };
+    const first = await countingStore.save(command);
+    const second = await countingStore.save(command);
+    expect(second).toEqual(first);
+    expect(calls).toHaveLength(1);
+    expect(await countingStore.list(userId)).toHaveLength(1);
+  });
+
+  it("refuses to reuse an idempotency key when a non-value field differs", async () => {
+    const userId = await createUser(database.client);
+    const base = {
+      userId,
+      fieldKey: "authorization.export_control",
+      expectedVersion: 0,
+      valueType: "enum" as const,
+      value: "eligible",
+      sensitivity: "restricted" as const,
+      confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "reused-key-for-different-request",
+      traceId: "trace-a",
+    };
+    await store.save({ ...base, sourceReference: "application-review-panel" });
+    await expect(
+      store.save({ ...base, sourceReference: "a-different-source-entirely" }),
+    ).rejects.toBeInstanceOf(RestrictedAnswerVaultIdempotencyConflictError);
+  });
+
+  it("does not distinguish two different values under one reused idempotency key (by design: hashing the value would let a row reader brute-force it)", async () => {
+    const userId = await createUser(database.client);
+    const base = {
+      userId,
+      fieldKey: "authorization.export_control",
+      expectedVersion: 0,
+      valueType: "enum" as const,
+      sensitivity: "restricted" as const,
+      sourceReference: "application-review-panel",
+      confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "same-key-different-value",
+      traceId: "trace-a",
+    };
+    await store.save({ ...base, value: "eligible" });
+    // Not a conflict: the second call is treated as a retry of the first, and the stored value is
+    // unchanged. A client reusing one idempotency key for two different values is its own bug.
+    await store.save({ ...base, value: "not_eligible" });
+    expect(
+      (await store.readActiveValue({ userId, fieldKey: "authorization.export_control" }))?.value,
+    ).toBe("eligible");
+  });
+
+  it("deletes by field key without the caller ever tracking a version, and is a no-op when nothing is active", async () => {
+    const userId = await createUser(database.client);
+    expect(
+      await store.removeByField({ userId, fieldKey: "demographic.disability", traceId: "trace-1" }),
+    ).toEqual({ deleted: false });
+
+    await store.save({
+      userId,
+      fieldKey: "demographic.disability",
+      expectedVersion: 0,
+      valueType: "enum",
+      value: "not_disclosed",
+      sensitivity: "restricted",
+      sourceReference: "application-review-panel",
+      confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+      idempotencyKey: "field-delete-key-0001",
+      traceId: "trace-1",
+    });
+    expect(
+      await store.removeByField({ userId, fieldKey: "demographic.disability", traceId: "trace-2" }),
+    ).toEqual({ deleted: true });
+    expect(
+      await store.readActiveValue({ userId, fieldKey: "demographic.disability" }),
+    ).toBeUndefined();
+    expect(
+      await store.removeByField({ userId, fieldKey: "demographic.disability", traceId: "trace-3" }),
+    ).toEqual({ deleted: false });
+  });
+
+  it("deletes by field key and context independently, never touching another owner or context", async () => {
+    const userA = await createUser(database.client);
+    const userB = await createUser(database.client);
+    for (const [userId, context] of [
+      [userA, "us"],
+      [userA, "eu"],
+      [userB, "us"],
+    ] as const) {
+      await store.save({
+        userId,
+        fieldKey: "authorization.sponsorship_required",
+        context,
+        expectedVersion: 0,
+        valueType: "boolean",
+        value: "true",
+        sensitivity: "restricted",
+        sourceReference: "application-review-panel",
+        confirmedAt: new Date("2026-09-28T12:00:00.000Z"),
+        idempotencyKey: `field-delete-context-${userId}-${context}`,
+        traceId: "trace-1",
+      });
+    }
+    expect(
+      await store.removeByField({
+        userId: userA,
+        fieldKey: "authorization.sponsorship_required",
+        context: "us",
+        traceId: "trace-delete-us",
+      }),
+    ).toEqual({ deleted: true });
+    expect(
+      await store.readActiveValue({
+        userId: userA,
+        fieldKey: "authorization.sponsorship_required",
+        context: "us",
+      }),
+    ).toBeUndefined();
+    expect(
+      (
+        await store.readActiveValue({
+          userId: userA,
+          fieldKey: "authorization.sponsorship_required",
+          context: "eu",
+        })
+      )?.value,
+    ).toBe("true");
+    expect(
+      (
+        await store.readActiveValue({
+          userId: userB,
+          fieldKey: "authorization.sponsorship_required",
+          context: "us",
+        })
+      )?.value,
+    ).toBe("true");
   });
 });
