@@ -80,6 +80,7 @@ function unavailableApplications(): ApplicationsApi {
     reopen: fail,
     cancel: fail,
     startSubmission: fail,
+    startManualSubmission: fail,
     dispatchAttempt: fail,
     recordResult: fail,
     reconcile: fail,

@@ -6,7 +6,11 @@ import postgres from "postgres";
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
-const migrationVersions = ["0001_applications_foundation", "0002_candidate_rights"] as const;
+const migrationVersions = [
+  "0001_applications_foundation",
+  "0002_candidate_rights",
+  "0003_manual_submission",
+] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const migrationPath = fileURLToPath(

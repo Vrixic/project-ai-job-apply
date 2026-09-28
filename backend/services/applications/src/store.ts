@@ -299,6 +299,7 @@ type CommandOperation =
   | "approve"
   | "cancel"
   | "start_attempt"
+  | "start_manual_attempt"
   | "record_result"
   | "reconcile"
   | "takeover";
@@ -532,6 +533,16 @@ export class PostgresApplicationStore {
     });
   }
 
+  /**
+   * `manual: true` is D3-018's candidate-initiated path: the candidate never used an adapter at
+   * all, so there is nothing to dispatch. The attempt is created already `taken_over` (the schema's
+   * own dispatch/resolution constraints already allow this: "An attempt taken over by the candidate
+   * before dispatch may later be confirmed without ever being dispatched"), and the application
+   * moves through the same two already-legal events an automated challenge would produce
+   * (`attempt_started` then `takeover_requested`), so reconciliation afterward is the exact same
+   * code path, with the exact same duplicate-risk safeguards, as the extension's ambiguous-result
+   * recovery.
+   */
   async startAttempt(command: {
     ownerUserId: string;
     applicationId: string;
@@ -540,9 +551,10 @@ export class PostgresApplicationStore {
     current: CurrentBindings;
     adapterId: string;
     adapterVersion: string;
+    manual?: boolean;
   }): Promise<StartAttemptResult> {
     const requestHash = canonicalHash({
-      operation: "start_attempt",
+      operation: command.manual ? "start_manual_attempt" : "start_attempt",
       applicationId: command.applicationId,
       expectedRevision: command.expectedRevision,
       current: command.current,
@@ -551,7 +563,7 @@ export class PostgresApplicationStore {
     });
     const result = await this.mutate(
       command,
-      "start_attempt",
+      command.manual ? "start_manual_attempt" : "start_attempt",
       requestHash,
       async (tx, app, now, note) => {
         if (app.status !== "approved") throw new AttemptRefusedError("NOT_APPROVED");
@@ -579,15 +591,27 @@ export class PostgresApplicationStore {
         });
         const attemptId = uuidv7();
         try {
-          await tx`
-            INSERT INTO applications.attempts
-              (id, application_id, owner_user_id, packet_id, packet_hash, approval_id, sequence,
-               scope_key, status, adapter_id, adapter_version, started_at)
-            VALUES (${attemptId}, ${app.id}, ${app.owner_user_id}, ${packet.id}, ${packet.packetHash},
-              ${approval.id}, ${sequence},
-              ${submissionScopeKey(app.owner_user_id, app.id, packet.packetHash)}, 'started',
-              ${command.adapterId}, ${command.adapterVersion}, ${now})
-          `;
+          if (command.manual) {
+            await tx`
+              INSERT INTO applications.attempts
+                (id, application_id, owner_user_id, packet_id, packet_hash, approval_id, sequence,
+                 scope_key, status, adapter_id, adapter_version, started_at, resolved_at)
+              VALUES (${attemptId}, ${app.id}, ${app.owner_user_id}, ${packet.id}, ${packet.packetHash},
+                ${approval.id}, ${sequence},
+                ${submissionScopeKey(app.owner_user_id, app.id, packet.packetHash)}, 'taken_over',
+                ${command.adapterId}, ${command.adapterVersion}, ${now}, ${now})
+            `;
+          } else {
+            await tx`
+              INSERT INTO applications.attempts
+                (id, application_id, owner_user_id, packet_id, packet_hash, approval_id, sequence,
+                 scope_key, status, adapter_id, adapter_version, started_at)
+              VALUES (${attemptId}, ${app.id}, ${app.owner_user_id}, ${packet.id}, ${packet.packetHash},
+                ${approval.id}, ${sequence},
+                ${submissionScopeKey(app.owner_user_id, app.id, packet.packetHash)}, 'started',
+                ${command.adapterId}, ${command.adapterVersion}, ${now})
+            `;
+          }
         } catch (error) {
           if (isUniqueViolation(error, "attempts_scope_holding_uq")) {
             throw new AttemptRefusedError("ATTEMPT_IN_FLIGHT");
@@ -595,7 +619,15 @@ export class PostgresApplicationStore {
           throw error;
         }
         note({ code: "started", subjectId: attemptId });
-        return this.change(tx, app, "attempt_started", now, { packetId: packet.id, attemptId });
+        const started = await this.change(tx, app, "attempt_started", now, {
+          packetId: packet.id,
+          attemptId,
+        });
+        if (!command.manual) return started;
+        return this.change(tx, started, "takeover_requested", now, {
+          packetId: packet.id,
+          attemptId,
+        });
       },
     );
     const { note, ...commandResult } = result;

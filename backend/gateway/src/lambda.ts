@@ -250,7 +250,7 @@ const APPLICATION_RESUME_FILE_PATH_PATTERN = new RegExp(
   "u",
 );
 const APPLICATION_COMMAND_PATH_PATTERN = new RegExp(
-  `^/v1/applications/${APPLICATION_ID}/(?:packets|approval|reopen|cancel|submissions)$`,
+  `^/v1/applications/${APPLICATION_ID}/(?:packets|approval|reopen|cancel|submissions|manual-submissions)$`,
   "u",
 );
 const APPLICATION_DISPATCH_PATH_PATTERN = new RegExp(

@@ -3090,6 +3090,93 @@
         }
       }
     },
+    "/applications/{applicationId}/manual-submissions": {
+      "post": {
+        "operationId": "startManualApplicationSubmission",
+        "security": [
+          {
+            "oidc": ["applications:write"]
+          }
+        ],
+        "description": "Records that the candidate is submitting this application by hand, without any adapter observing a form. The attempt begins taken over; the candidate then reconciles it as submitted or not through the exact same reconciliation route an automated attempt's ambiguous result uses. Refused, the same as a normal submission start, if the live job, resume, or cover letter no longer matches the approved packet; a packet bound to an observed form is treated as changed, since no form is observed here.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartManualApplicationSubmissionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner-scoped application state",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationSubmissionStart"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/applications/{applicationId}/attempts/{attemptId}/dispatch": {
       "post": {
         "operationId": "dispatchApplicationAttempt",
@@ -6850,6 +6937,18 @@
           "observedFormHash": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StartManualApplicationSubmissionRequest": {
+        "type": "object",
+        "required": ["expectedRevision"],
+        "properties": {
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
           }
         },
         "additionalProperties": false

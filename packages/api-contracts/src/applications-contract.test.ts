@@ -24,7 +24,7 @@ describe("Applications OpenAPI contract", () => {
     const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
       path.startsWith("/applications"),
     );
-    expect(applicationPaths.length).toBe(14);
+    expect(applicationPaths.length).toBe(15);
     for (const [, item] of applicationPaths) {
       for (const operation of Object.values(item) as Array<{
         security: Array<{ oidc: string[] }>;
@@ -210,6 +210,14 @@ describe("Application command bodies", () => {
     expect(validate(valid)).toBe(true);
     const { observedFormHash: _omitted, ...missing } = valid;
     expect(validate(missing)).toBe(false);
+  });
+
+  it("starts a manual submission from only the expected revision, no adapter or form fields at all", () => {
+    const validate = compileComponentValidator("StartManualApplicationSubmissionRequest");
+    expect(validate({ expectedRevision: 4 })).toBe(true);
+    expect(validate({ expectedRevision: 4, adapterId: "greenhouse" })).toBe(false);
+    expect(validate({ expectedRevision: 4, observedFormHash: hash })).toBe(false);
+    expect(validate({})).toBe(false);
   });
 
   it("accepts only candidate-observable results and never a provider-asserted outcome", () => {

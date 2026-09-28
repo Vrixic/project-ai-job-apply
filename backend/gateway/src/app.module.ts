@@ -69,6 +69,7 @@ import type {
   SaveRestrictedAnswerRequest,
   SignedContributionCapabilityPolicy,
   StartApplicationSubmissionRequest,
+  StartManualApplicationSubmissionRequest,
   TakeDownTrustCaseRequest,
   UgcContributionConsentGrant,
   UpdateProfileFactRequest,
@@ -1009,6 +1010,9 @@ const validateApproveApplicationPacket = compileComponentValidator(
 const validateApplicationRevision = compileComponentValidator("ApplicationRevisionRequest");
 const validateStartApplicationSubmission = compileComponentValidator(
   "StartApplicationSubmissionRequest",
+);
+const validateStartManualApplicationSubmission = compileComponentValidator(
+  "StartManualApplicationSubmissionRequest",
 );
 const validateApplicationSubmissionResult = compileComponentValidator(
   "ApplicationSubmissionResultRequest",
@@ -2823,6 +2827,24 @@ class ApplicationsController {
       validateStartApplicationSubmission,
     );
     return this.applications.startSubmission(user.id, applicationId, body, commandKey);
+  }
+
+  @Post("/:applicationId/manual-submissions")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async startManualSubmission(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ApplicationSubmissionStart> {
+    const user = await this.identity.resolve(request, "applications:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    requireApplicationPath(applicationId);
+    const body = applicationsBody<StartManualApplicationSubmissionRequest>(
+      request,
+      validateStartManualApplicationSubmission,
+    );
+    return this.applications.startManualSubmission(user.id, applicationId, body, commandKey);
   }
 
   @Post("/:applicationId/attempts/:attemptId/dispatch")

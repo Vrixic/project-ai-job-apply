@@ -175,6 +175,17 @@ export interface ApplicationsApi {
     },
     idempotencyKey: string,
   ): Promise<ApplicationSubmissionStart>;
+  /**
+   * D3-018: the candidate never used an adapter at all (no extension, no observed form) and is
+   * recording a submission they completed by hand. The attempt starts already taken over; the
+   * candidate then reconciles it exactly like an automated attempt's ambiguous result.
+   */
+  startManualSubmission(
+    ownerUserId: string,
+    applicationId: string,
+    request: { expectedRevision: number },
+    idempotencyKey: string,
+  ): Promise<ApplicationSubmissionStart>;
   dispatchAttempt(
     ownerUserId: string,
     applicationId: string,
@@ -471,6 +482,52 @@ export class ApplicationsService implements ApplicationsApi {
     if (!result.replayed) {
       this.funnel(
         result.kind === "started" ? "submission_started" : "approval_invalidated",
+        result.kind === "approval_invalidated" ? { reason: versionToken(result.reasons[0]) } : {},
+      );
+    }
+    return result.kind === "started"
+      ? {
+          outcome: "started",
+          attemptId: result.attempt.id,
+          application: toApiApplication(result.view),
+        }
+      : {
+          outcome: "approval_invalidated",
+          invalidationReasons: [...result.reasons] as NonNullable<
+            ApplicationSubmissionStart["invalidationReasons"]
+          >,
+          application: toApiApplication(result.view),
+        };
+  }
+
+  async startManualSubmission(
+    ownerUserId: string,
+    applicationId: string,
+    request: { expectedRevision: number },
+    idempotencyKey: string,
+  ): Promise<ApplicationSubmissionStart> {
+    const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    // No adapter observed anything, so there is no form to compare; a packet bound to an observed
+    // form (the candidate did use the extension to prepare it) correctly invalidates approval here,
+    // the same as any other changed binding.
+    const live = await this.dependencies.bindings.resolve({
+      ownerUserId,
+      application: current.application,
+      formHash: null,
+    });
+    const result: StartAttemptResult = await this.dependencies.store.startAttempt({
+      ownerUserId,
+      applicationId,
+      expectedRevision: request.expectedRevision,
+      idempotencyKey,
+      current: live,
+      adapterId: "manual",
+      adapterVersion: "none",
+      manual: true,
+    });
+    if (!result.replayed) {
+      this.funnel(
+        result.kind === "started" ? "manual_submission_started" : "approval_invalidated",
         result.kind === "approval_invalidated" ? { reason: versionToken(result.reasons[0]) } : {},
       );
     }

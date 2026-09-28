@@ -182,6 +182,93 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
     expect(JSON.stringify(history)).not.toMatch(/interview|offer|recruiter|hired/i);
   });
 
+  it("records a hand-completed submission through takeover and candidate attestation", async () => {
+    const manualService = new ApplicationsService({
+      store,
+      jobs,
+      bindings,
+      packets: {
+        async prepare({ userEntries }) {
+          return {
+            jobRevision: liveJobRevision,
+            form: null,
+            fields: [
+              proposal(),
+              ...userEntries.map((entry) =>
+                proposal({
+                  fieldKey: entry.fieldKey,
+                  value: entry.value,
+                  origin: "user_entered",
+                  sourceFactIds: [],
+                }),
+              ),
+            ],
+            artifactHashes: { resume: HASH_C },
+          };
+        },
+      },
+    });
+    const owner = uuidv7();
+    const created = await manualService.create(owner, newJob(), key("manual-create"));
+    const prepared = await manualService.preparePacket(
+      owner,
+      created.id,
+      { expectedRevision: created.revision },
+      key("manual-packet"),
+    );
+    const approved = await manualService.approve(
+      owner,
+      created.id,
+      {
+        expectedRevision: prepared.revision,
+        packetHash: prepared.currentPacket?.packetHash ?? "",
+        acknowledgedFieldKeys: [],
+      },
+      key("manual-approve"),
+    );
+
+    const start = await manualService.startManualSubmission(
+      owner,
+      created.id,
+      { expectedRevision: approved.revision },
+      key("manual-start"),
+    );
+    expect(validateStart(start)).toBe(true);
+    expect(start).toMatchObject({
+      outcome: "started",
+      application: {
+        status: "takeover",
+        currentAction: "complete_manually",
+        attempts: [
+          {
+            status: "taken_over",
+            adapterId: "manual",
+            adapterVersion: "none",
+          },
+        ],
+      },
+    });
+    expect(start.application.attempts[0]?.dispatchedAt).toBeUndefined();
+
+    const applied = await manualService.reconcile(
+      owner,
+      created.id,
+      start.attemptId ?? "",
+      {
+        kind: "user_attested_submitted",
+        observedAt: new Date().toISOString(),
+        fingerprintSha256: HASH_A,
+      },
+      key("manual-reconcile"),
+    );
+    expect(validateApplication(applied)).toBe(true);
+    expect(applied.status).toBe("applied");
+    expect((await manualService.history(owner, created.id, {})).entries.at(-1)).toMatchObject({
+      kind: "submission_confirmed",
+      toStatus: "applied",
+    });
+  });
+
   it("does not submit when the live form no longer matches the approved packet", async () => {
     const owner = uuidv7();
     const created = await service.create(owner, newJob(), key("create"));

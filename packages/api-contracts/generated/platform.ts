@@ -931,6 +931,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/applications/{applicationId}/manual-submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Records that the candidate is submitting this application by hand, without any adapter observing a form. The attempt begins taken over; the candidate then reconciles it as submitted or not through the exact same reconciliation route an automated attempt's ambiguous result uses. Refused, the same as a normal submission start, if the live job, resume, or cover letter no longer matches the approved packet; a packet bound to an observed form is treated as changed, since no form is observed here. */
+        post: operations["startManualApplicationSubmission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications/{applicationId}/attempts/{attemptId}/dispatch": {
         parameters: {
             query?: never;
@@ -2273,6 +2290,9 @@ export interface components {
             adapterId: string;
             adapterVersion: string;
             observedFormHash: string;
+        };
+        StartManualApplicationSubmissionRequest: {
+            expectedRevision: number;
         };
         ApplicationSubmissionStart: {
             /** @enum {string} */
@@ -4512,6 +4532,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StartApplicationSubmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Owner-scoped application state */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationSubmissionStart"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    startManualApplicationSubmission: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartManualApplicationSubmissionRequest"];
             };
         };
         responses: {
