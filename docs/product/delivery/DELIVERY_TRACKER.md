@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-18
+Last updated: 2026-09-28
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -443,7 +443,7 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
 | D3.1 | Structured candidate profile | Not started | Not started | Not completed | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
 | D4 | Workday and remote preparation | Not started | Not started | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | Not started | Not started | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
-| D6 | Mobile and paid launch | Not started | Not started | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
+| D6 | Mobile and paid launch | In progress | 2026-09-28 | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
 | D7 | Quality optimization, expansion, and optional employer product | Not started | Not started | Not completed | [Phase 7 tasks](phase-7-quality-and-expansion.md) |
 
 ## D0 — Product, data, and legal foundation
@@ -1693,8 +1693,8 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
 
 ## D6 — Mobile and paid launch
 
-- Status: Not started
-- Start: Not started
+- Status: In progress
+- Start: 2026-09-28
 - Completion: Not completed
 - Depends on: Stable APIs from D1–D5, including D3 Applications history and D5 Notifications
   inbox contracts, plus provider-neutral entitlement contracts
@@ -1716,6 +1716,7 @@ Append only material cross-delivery events.
 
 | Date | Delivery | Update | Evidence |
 |---|---|---|---|
+| 2026-09-28 | D6 | The owner asked to put the deferred Phase 2 items into production first, with production covering the whole product. D6 started with a production launch plan: there is no production AWS account, dedicated Auth0 tenant, approved name and domain, counsel, or independent assessor yet, so those are listed as owner inputs, and engineering starts with the work that needs none of them (production Terraform design, the current exposure inventory, the extension release candidate and disable-drill operator, review packages, launch operations). Nothing is deployed or approved. | [Production launch plan](d6-production-launch-plan.md), [Phase 6 tasks](phase-6-mobile-and-paid.md) |
 | 2026-09-28 | D3 | Deleting a resume now works end to end in development: it disappears at once, its unreviewed suggestions are removed at once while facts you reviewed stay, and within about five minutes its stored files are erased. The owner checked it in the hosted app and the storage listings confirmed nothing was left. Deleting an entire account that has a resume still needs its own check (new task D3-028). | [Phase 3 tasks](phase-3-application-preparation.md) |
 | 2026-09-21 | D3 | The resume byte purge now works in development after the owner-reviewed boundary statement was applied: the two earlier deleted resumes are gone from storage with nothing left behind. Built the last code slice: deleting a resume now also removes the suggestions from it that the candidate had not reviewed, right away, and the delete confirmation says so. Reviewed facts stay. Releasing it and a deployed end-to-end check, including deleting an account that has a resume, are next. | [Phase 3 tasks](phase-3-application-preparation.md) |
 | 2026-09-21 | D3 | Found why the resume purge fails: the workload permissions boundary never allowed version deletion on the documents bucket, which would also stop account deletion from purging stored resumes. The owner approved one statement scoped to the activity role; the bootstrap operator's change set and tests are built. Applying it through the bootstrap operator, with the saved plan reviewed, is next. | [Phase 3 tasks](phase-3-application-preparation.md), [Runbook](../../security/bootstrap-workload-boundary-runbook.md) |

@@ -1,10 +1,10 @@
 # D6 — Mobile and Paid Launch
 
-- Status: Not started
-- Start: Not started
+- Status: In progress
+- Start: 2026-09-28
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-08-17
+- Last updated: 2026-09-28
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d6--mobile-and-paid-launch)
 
 ## Objective
@@ -41,6 +41,12 @@ cache, WAF, or ALB controls supported by evidence.
 | D6-017 | Complete the browser-extension store and launch release carried from D2-009/D2-010: Chrome Web Store and Edge Add-ons policy review, disclosures, listing screenshots from the exact enabled artifact, a monitored support channel, and exact-candidate accountable approval. | Ready | Unassigned | D6-011; D6-015; D6-016; D6-012 | Carried from Phase 2 by owner decision on 2026-09-18; not passed. See the [D2 release checklist](../../../frontend/extension/store/release-checklist.md). |
 | D6-018 | Prove the extension's live Chrome and Edge sign-in lifecycle carried from D2-012: PKCE, refresh rotation and replay, cancellation, logout, and provider revocation, with browser parity. | Ready | Unassigned | D6-014 | Carried from Phase 2 on 2026-09-18; deterministic source tests and initial Edge login exist; the live matrix was not run. |
 | D6-019 | Complete the extension's installed-browser assurance carried from D2-015/D2-016: manual screen-reader testing, deeper Chrome/Edge lifecycle, load/abuse acceptance, and a live domain/version disable-and-re-enable drill showing web and catalog stay available (needs a guarded selector-change operator). | Ready | Unassigned | D6-013; D6-017 | Carried from Phase 2 on 2026-09-18; automated axe, keyboard and reflow checks and gate unit tests exist; these live checks were not run. |
+| D6-020 | Write the production launch plan: scope, workstreams, owner inputs, order of work, and what is not claimed, so the deferred Phase 2 items and the rest of D6 have one ordered route to production. | Complete | Engineering; product owner | D6 gates above | [production launch plan](d6-production-launch-plan.md) (2026-09-28). A plan, not an approval; no production resource exists or is authorized by it. |
+| D6-021 | Create the production Terraform environment in its own AWS account: bootstrap and state, workload boundary, OIDC role, budgets, alarms, backups, and a dormant-by-default lean runtime, reviewed only through saved plans. | Ready | Engineering; product owner (creates the account, approves each plan) | Production AWS account; D6-014 for identity inputs | Next engineering task. Design and validation can start without an apply; no account exists yet. |
+| D6-022 | Refresh the exposure inventory to every current route, event receiver, object-access path, and service interface, each with exactly one owned exposure class, generated from the OpenAPI and infrastructure and kept current by a test. | Ready | Engineering; security engineering | D1 to D5 route set | The inventory in the API security baseline is the foundation snapshot only; resume delete, applications, contributions, and extension routes are missing. Feeds D6-015. |
+| D6-023 | Prepare the extension's exact production release candidate and its configuration (accountable pending-item retention duration, UGC policy version, signing key overlap), and build the guarded operator for the live domain and version disable-and-re-enable drill. | Ready | Engineering; product owner | D6-021; D6-014 | Prerequisite for D6-017 and D6-019. The retention duration, policy version, and keys need accountable approval. |
+| D6-024 | Assemble the review packages for counsel (D6-016) and the independent assessor (D6-015): scope, data flows, exposure inventory, threat model, rules of engagement, test roles, and evidence index, without recording secrets. | Ready | Engineering; product owner | D6-022; assessor and counsel selected | Packages only; no legal or security conclusion is inferred. |
+| D6-025 | Prepare and exercise launch operations: monitored support channel, alarm routing, incident and rollback runbooks, restore drill in production-equivalent staging, kill-switch drills, vulnerability intake, and the go/no-go checklist. | Ready | Engineering writes; product owner staffs | D6-021; D6-013 | Support-email setup and monitoring were deferred from D2 and are needed for the store listing. |
 
 ## Exit criteria
 
@@ -81,6 +87,7 @@ cache, WAF, or ALB controls supported by evidence.
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-09-28 | D6 started. Wrote the production launch plan after the owner asked to put all deferred Phase 2 items into production: the extension needs the whole platform in production, no production account, Auth0 tenant, name, counsel, or assessor exists yet, and each is listed as an owner input. Added D6-020 to D6-025 (plan, production Terraform, exposure inventory, extension release candidate and disable-drill operator, review packages, launch operations). | D6-020 to D6-025 | [production launch plan](d6-production-launch-plan.md) |
 | 2026-08-17 | Clarified that mobile renders/consumes D3 Applications truth and D5 Notifications inbox/delivery truth rather than inheriting a D1 history or inbox owner. This allocation does not start D6. | D6-003 | [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md) |
 | 2026-08-15 | Corrected the nonexistent D0 billing-contract dependency: D0 accepted product and provider-neutral direction, D1-008 authors the executable internal entitlement contract, and D6 provider adapters consume it. This is a dependency correction only; D6 did not start and no provider or paid access was activated. | D6-005 | [D1 tasks](phase-1-web-and-job-catalog.md), [architecture billing model](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#15-billing-free-plus-one-paid-plan) |
 | 2026-07-28 | Assigned mobile, billing, and storefront delta approval to D6 without starting implementation. | D6-011 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
@@ -96,6 +103,7 @@ cache, WAF, or ALB controls supported by evidence.
 
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
+| 2026-09-28 | **Owner scope decision:** put the deferred Phase 2 items into production first, with production covering everything in D6 rather than the extension alone; the owner skipped the product name and domain decision and left the Auth0 production-tenant decision open. Started D6 with the launch plan and sequenced work that needs neither decision first. | The extension depends on the production API, identity, catalog, and support surface, so it cannot launch alone. | [production launch plan](d6-production-launch-plan.md) |
 | 2026-08-17 | Keep D6-003 dependent on D3/D5 owner contracts and prohibit mobile from owning a parallel lifecycle or inbox truth. | Cross-device presentation must preserve the same authoritative owner boundaries as web and backend workflows. | [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md) |
 | 2026-08-15 | Make D1-008 the owner of the first executable provider-neutral entitlement contract and require D6 provider adapters to consume it. | D0 accepted Free/Pro direction but did not create the billing contract previously named as a D6 dependency; correcting the dependency avoids coupling feature authorization directly to Stripe or store payloads. | [D1 tasks](phase-1-web-and-job-catalog.md), [architecture billing model](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#15-billing-free-plus-one-paid-plan) |
 | 2026-07-28 | Defer final public naming from D0 to D6 while retaining ApplyDash as the swappable development identity. | Naming is not a foundation dependency but must be settled before production OAuth, email, stores, billing, or public launch. | [Naming brief](../foundation/naming-brief.md) |
@@ -117,6 +125,7 @@ cache, WAF, or ALB controls supported by evidence.
 | D6-R5 | Blocked | The current Auth0 Free subscription provides one tenant, so synthetic staging temporarily shares the development issuer and cannot prove identity-provider isolation. | Product owner; platform engineering | Before real-user staging or launch, upgrade Auth0 or migrate providers, provision dedicated staging/production tenants, cut over, and replay the applicable conformance matrix. |
 | D6-R6 | Open | The independent final assessor is unassigned, and incomplete scope or late authorization/business-logic findings can block launch. | Product owner; security owner | Select an independent qualified assessor before launch-candidate freeze, agree scope/rules of engagement, reserve remediation and retest, and keep every public surface in the owned inventory. |
 | D6-R7 | Blocked | Foundational counsel review was deferred from D0 and no attributable legal conclusion exists. | Product owner; future legal/privacy counsel | Retain qualified counsel before launch-candidate freeze, complete D6-016 against the then-current product, and close or disable every affected capability. |
+| D6-R8 | Open | No production AWS account, dedicated Auth0 tenant, approved name and domain, selected counsel, or selected independent assessor exists, and each is on the critical path of the deferred extension release and the rest of D6. Owner input needed for each. | Product owner | Answer the five owner inputs in the [production launch plan](d6-production-launch-plan.md); engineering proceeds with the work that needs none of them. |
 
 ## Completion record
 
