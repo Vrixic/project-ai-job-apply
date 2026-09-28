@@ -44,6 +44,7 @@ import {
   createDatabase,
   loadCandidateRightsPolicyIfConfigured,
   PostgresProfileStore,
+  PostgresRestrictedAnswerVaultStore,
   PostgresUgcContributionConsentStore,
 } from "@ai-job-apply/profile-service";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
@@ -58,6 +59,7 @@ import {
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
+import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
@@ -91,6 +93,13 @@ const store = new PostgresProfileStore(database, {
       }
     : {}),
 });
+const restrictedAnswerVaultKmsKeyArn = process.env.RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN;
+const restrictedAnswerVault = new PostgresRestrictedAnswerVaultStore(
+  database.client,
+  restrictedAnswerVaultKmsKeyArn
+    ? new KmsRestrictedAnswerCipher(restrictedAnswerVaultKmsKeyArn)
+    : undefined,
+);
 const catalog = new PostgresJobCatalog(database.client, {
   searchCursorKeys: deriveJobSearchCursorKeys(config.DATABASE_URL),
 });
@@ -182,6 +191,7 @@ const applications =
 
 const app = await createGatewayApplication({
   store,
+  restrictedAnswerVault,
   catalog,
   jobReports,
   jobContributions,

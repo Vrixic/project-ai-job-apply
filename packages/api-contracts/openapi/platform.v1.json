@@ -609,6 +609,117 @@
         }
       }
     },
+    "/profile/restricted-answers": {
+      "get": {
+        "operationId": "listRestrictedAnswers",
+        "security": [{ "oidc": ["profile:read"] }],
+        "responses": {
+          "200": {
+            "description": "Metadata only for each of the current candidate's saved restricted answers; the encrypted value itself is never returned here",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RestrictedAnswerCollection" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/profile/restricted-answers/{fieldKey}": {
+      "put": {
+        "operationId": "saveRestrictedAnswer",
+        "description": "Creates or corrects the current candidate's saved value for one restricted question (ADR-010). expectedVersion is 0 to create; otherwise the version last read, enforced optimistically so a concurrent edit is refused rather than silently overwritten. The value is encrypted with a key separate from the database and is never read back through this API.",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fieldKey",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/RestrictedAnswerFieldKey" }
+          },
+          {
+            "in": "query",
+            "name": "context",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 120 }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": { "type": "string", "minLength": 16, "maxLength": 128 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SaveRestrictedAnswerRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Metadata for the saved entry; the value itself is not echoed back",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/RestrictedAnswer" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRestrictedAnswer",
+        "description": "Deletes the current candidate's currently saved value for one restricted question, if any. Naming a field key with nothing saved, or repeating the call, has the same result; there is no version to track.",
+        "security": [{ "oidc": ["profile:write"] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fieldKey",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/RestrictedAnswerFieldKey" }
+          },
+          {
+            "in": "query",
+            "name": "context",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 120 }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted, or nothing was saved for this field key and context",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": { "type": "string", "enum": ["no-store"] }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
     "/jobs/search": {
       "post": {
         "operationId": "searchCanonicalJobs",
@@ -4058,6 +4169,74 @@
           "facts": { "type": "array", "items": { "$ref": "#/components/schemas/ProfileFact" } },
           "confirmedCount": { "type": "integer", "minimum": 0 },
           "proposedCount": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      },
+      "RestrictedAnswerFieldKey": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120,
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+      },
+      "RestrictedAnswer": {
+        "type": "object",
+        "required": [
+          "id",
+          "fieldKey",
+          "valueType",
+          "sensitivity",
+          "state",
+          "version",
+          "confirmedAt"
+        ],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "fieldKey": { "$ref": "#/components/schemas/RestrictedAnswerFieldKey" },
+          "context": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "valueType": {
+            "type": "string",
+            "enum": ["string", "text", "boolean", "date", "decimal", "enum"]
+          },
+          "sensitivity": { "type": "string", "enum": ["confidential", "restricted"] },
+          "state": { "type": "string", "enum": ["active", "deleted"] },
+          "version": { "type": "integer", "minimum": 1 },
+          "confirmedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "RestrictedAnswerCollection": {
+        "type": "object",
+        "required": ["answers"],
+        "properties": {
+          "answers": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RestrictedAnswer" }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveRestrictedAnswerRequest": {
+        "type": "object",
+        "required": [
+          "expectedVersion",
+          "valueType",
+          "value",
+          "sensitivity",
+          "sourceReference",
+          "confirmedAt"
+        ],
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 0 },
+          "valueType": {
+            "type": "string",
+            "enum": ["string", "text", "boolean", "date", "decimal", "enum"]
+          },
+          "value": { "type": "string", "minLength": 1, "maxLength": 3900 },
+          "sensitivity": { "type": "string", "enum": ["confidential", "restricted"] },
+          "sourceReference": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "confirmedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
         },
         "additionalProperties": false
       },

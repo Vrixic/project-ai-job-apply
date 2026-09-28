@@ -52,6 +52,7 @@ import {
   createDatabase,
   loadCandidateRightsPolicyIfConfigured,
   PostgresProfileStore,
+  PostgresRestrictedAnswerVaultStore,
   PostgresUgcContributionConsentStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
@@ -75,6 +76,7 @@ import {
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
+import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
@@ -160,6 +162,7 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "POST /v1/me/account-deletion-requests",
   "GET /v1/profile/facts",
   "POST /v1/profile/facts",
+  "GET /v1/profile/restricted-answers",
   "GET /v1/resumes",
   "POST /v1/resumes/uploads",
   "POST /v1/jobs/search",
@@ -183,6 +186,8 @@ const MODERATION_REPORT_SUMMARY_PATH_PATTERN =
   /^\/v1\/admin\/moderation\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/report-summary$/;
 const PROFILE_FACT_PATH_PATTERN =
   /^\/v1\/profile\/facts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const RESTRICTED_ANSWER_PATH_PATTERN =
+  /^\/v1\/profile\/restricted-answers\/[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/;
 const SAVED_JOB_PATH_PATTERN =
   /^\/v1\/saved-jobs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const D2_UUID_V7 = "[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
@@ -275,6 +280,7 @@ interface AllowedRoute {
   acceptsReviewQueueQuery?: true;
   acceptsApplicationHistoryQuery?: true;
   acceptsApplicationResumeFormatQuery?: true;
+  acceptsRestrictedAnswerContextQuery?: true;
 }
 
 function exactD2RouteKey(routeKey: string, expected: string): boolean {
@@ -319,6 +325,12 @@ function allowedRoute(
   }
   if (method === "PATCH" && PROFILE_FACT_PATH_PATTERN.test(path)) {
     return { acceptsBody: true, protected: true };
+  }
+  if (method === "PUT" && RESTRICTED_ANSWER_PATH_PATTERN.test(path)) {
+    return { acceptsBody: true, protected: true, acceptsRestrictedAnswerContextQuery: true };
+  }
+  if (method === "DELETE" && RESTRICTED_ANSWER_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true, acceptsRestrictedAnswerContextQuery: true };
   }
   if (method === "GET" && (OPERATION_PATH_PATTERN.test(path) || JOB_PATH_PATTERN.test(path))) {
     return { acceptsBody: false, protected: true };
@@ -542,7 +554,9 @@ function requestPayload(
       (route.acceptsApplicationHistoryQuery &&
         validApplicationHistoryQuery(event.rawQueryString)) ||
       (route.acceptsApplicationResumeFormatQuery &&
-        validApplicationResumeFormatQuery(event.rawQueryString))
+        validApplicationResumeFormatQuery(event.rawQueryString)) ||
+      (route.acceptsRestrictedAnswerContextQuery &&
+        validRestrictedAnswerContextQuery(event.rawQueryString))
     )
   ) {
     return {
@@ -618,6 +632,18 @@ function validApplicationResumeFormatQuery(raw: string): boolean {
   const only = parameters[0];
   return (
     parameters.length === 1 && only?.[0] === "format" && (only[1] === "docx" || only[1] === "pdf")
+  );
+}
+
+function validRestrictedAnswerContextQuery(raw: string): boolean {
+  const parameters = [...new URLSearchParams(raw)];
+  const only = parameters[0];
+  return (
+    parameters.length === 1 &&
+    only?.[0] === "context" &&
+    typeof only[1] === "string" &&
+    only[1].length >= 1 &&
+    only[1].length <= 120
   );
 }
 
@@ -874,7 +900,8 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
         url:
           (route.acceptsReviewQueueQuery ||
             route.acceptsApplicationHistoryQuery ||
-            route.acceptsApplicationResumeFormatQuery) &&
+            route.acceptsApplicationResumeFormatQuery ||
+            route.acceptsRestrictedAnswerContextQuery) &&
           event.rawQueryString
             ? `${path}?${event.rawQueryString}`
             : path,
@@ -1008,6 +1035,16 @@ async function createConfiguredApplication(
         }
       : {}),
   });
+  // The cipher is optional: listing and deleting a restricted answer never need it, and saving or
+  // reading its value fails closed with a clean 503 (RestrictedAnswerVaultConfigurationError)
+  // rather than a silent no-op when no key is configured yet.
+  const restrictedAnswerVaultKmsKeyArn = process.env.RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN;
+  const restrictedAnswerVault = new PostgresRestrictedAnswerVaultStore(
+    database.client,
+    restrictedAnswerVaultKmsKeyArn
+      ? new KmsRestrictedAnswerCipher(restrictedAnswerVaultKmsKeyArn)
+      : undefined,
+  );
   const catalog = new PostgresJobCatalog(database.client, {
     searchCursorKeys: deriveJobSearchCursorKeys(databaseUrl),
   });
@@ -1080,6 +1117,7 @@ async function createConfiguredApplication(
   });
   return createGatewayApplication({
     store,
+    restrictedAnswerVault,
     catalog,
     jobReports,
     jobContributions,

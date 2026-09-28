@@ -20,6 +20,7 @@ import {
 } from "@ai-job-apply/matching-service";
 import {
   type ProfileStore,
+  type RestrictedAnswerVaultStore,
   type UgcContributionConsentStore,
   UgcContributionConsentUnavailableError,
 } from "@ai-job-apply/profile-service";
@@ -38,6 +39,7 @@ import {
 
 export interface GatewayApplicationOptions {
   store: ProfileStore;
+  restrictedAnswerVault?: RestrictedAnswerVaultStore;
   catalog: JobCatalogReader;
   jobReports: JobReports;
   jobContributions: JobContributions;
@@ -94,6 +96,9 @@ export async function createGatewayApplication(
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.register({
       store: options.store,
+      ...(options.restrictedAnswerVault
+        ? { restrictedAnswerVault: options.restrictedAnswerVault }
+        : {}),
       catalog: options.catalog,
       jobReports: options.jobReports,
       jobContributions: options.jobContributions,

@@ -56,6 +56,8 @@ import type {
   ReconcileApplicationAttemptRequest,
   ResolveModerationCaseRequest,
   ResolveTrustAppealRequest,
+  RestrictedAnswer,
+  RestrictedAnswerCollection,
   ResumeDocumentCollection,
   ReviewerTrustCase,
   ReviewerTrustCasePage,
@@ -64,6 +66,7 @@ import type {
   SavedJob,
   SavedJobPage,
   SavedJobSearchRequest,
+  SaveRestrictedAnswerRequest,
   SignedContributionCapabilityPolicy,
   StartApplicationSubmissionRequest,
   TakeDownTrustCaseRequest,
@@ -151,6 +154,12 @@ import {
   ProfileFactTransitionConflictError,
   ProfileFactVersionConflictError,
   type ProfileStore,
+  RestrictedAnswerVaultConfigurationError,
+  RestrictedAnswerVaultConflictError,
+  RestrictedAnswerVaultIdempotencyConflictError,
+  RestrictedAnswerVaultInputError,
+  RestrictedAnswerVaultNotFoundError,
+  type RestrictedAnswerVaultStore,
   UgcContributionConsentConflictError,
   type UgcContributionConsentStore,
   UgcContributionConsentUnavailableError,
@@ -197,6 +206,7 @@ import {
 } from "./trust-reviewer-authority.js";
 
 const PROFILE_STORE = Symbol("PROFILE_STORE");
+const RESTRICTED_ANSWER_VAULT = Symbol("RESTRICTED_ANSWER_VAULT");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
 const JOB_REPORTS = Symbol("JOB_REPORTS");
 const JOB_CONTRIBUTIONS = Symbol("JOB_CONTRIBUTIONS");
@@ -585,6 +595,31 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "resume_not_deletable";
       title = "A resume is still being processed";
       detail = exception.message;
+    } else if (exception instanceof RestrictedAnswerVaultConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "restricted_answer_version_conflict";
+      title = "Restricted answer changed";
+      detail = exception.message;
+    } else if (exception instanceof RestrictedAnswerVaultIdempotencyConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "idempotency_conflict";
+      title = "Idempotency key conflict";
+      detail = exception.message;
+    } else if (exception instanceof RestrictedAnswerVaultNotFoundError) {
+      status = HttpStatus.NOT_FOUND;
+      code = "restricted_answer_not_found";
+      title = "Restricted answer was not found";
+      detail = exception.message;
+    } else if (exception instanceof RestrictedAnswerVaultInputError) {
+      status = HttpStatus.BAD_REQUEST;
+      code = "invalid_restricted_answer";
+      title = "Restricted answer request is invalid";
+      detail = exception.message;
+    } else if (exception instanceof RestrictedAnswerVaultConfigurationError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "restricted_answer_vault_unavailable";
+      title = "The restricted answer vault is unavailable";
+      detail = exception.message;
     } else if (projectApplicationsFailure(exception) !== null) {
       ({ status, code, title, detail } = projectApplicationsFailure(
         exception,
@@ -936,6 +971,25 @@ const validateConfirmAccountDeletionRequest = compileComponentValidator(
 );
 const validateCreateProfileFact = compileComponentValidator("CreateProfileFactRequest");
 const validateUpdateProfileFact = compileComponentValidator("UpdateProfileFactRequest");
+const validateSaveRestrictedAnswer = compileComponentValidator("SaveRestrictedAnswerRequest");
+const RESTRICTED_ANSWER_FIELD_KEY_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
+const RESTRICTED_ANSWER_QUERY_INVALID = Symbol("RESTRICTED_ANSWER_QUERY_INVALID");
+
+/** Strict bounded query parsing: an absent query is fine; anything but exactly one bounded `context` is not. */
+function parseRestrictedAnswerContextQuery(
+  query: unknown,
+): string | undefined | typeof RESTRICTED_ANSWER_QUERY_INVALID {
+  if (query === undefined || query === null) return undefined;
+  if (typeof query !== "object" || Array.isArray(query)) return RESTRICTED_ANSWER_QUERY_INVALID;
+  const entries = Object.entries(query as Record<string, unknown>);
+  if (entries.length === 0) return undefined;
+  if (entries.length !== 1) return RESTRICTED_ANSWER_QUERY_INVALID;
+  const [name, value] = entries[0] as [string, unknown];
+  if (name !== "context" || typeof value !== "string" || value.length < 1 || value.length > 120) {
+    return RESTRICTED_ANSWER_QUERY_INVALID;
+  }
+  return value;
+}
 const validateCreateResumeUpload = compileComponentValidator("CreateResumeUploadRequest");
 const validateJobSearch = compileComponentValidator("JobSearchRequest");
 const validateCreateSavedJob = compileComponentValidator("CreateSavedJobRequest");
@@ -1624,6 +1678,8 @@ class CandidateController {
   constructor(
     @Inject(RequestIdentity) private readonly identity: RequestIdentity,
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
+    @Inject(RESTRICTED_ANSWER_VAULT)
+    private readonly restrictedAnswers: RestrictedAnswerVaultStore | null,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(JOB_REPORTS) private readonly jobReports: JobReports,
     @Inject(JOB_CONTRIBUTIONS) private readonly jobContributions: JobContributions,
@@ -1963,6 +2019,101 @@ class CandidateController {
       throw new HttpException("Profile fact was not found", HttpStatus.NOT_FOUND);
     }
     return fact;
+  }
+
+  @Get("/profile/restricted-answers")
+  @Header("cache-control", "no-store")
+  async listRestrictedAnswers(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<RestrictedAnswerCollection> {
+    const user = await this.identity.resolve(request, "profile:read");
+    if (!this.restrictedAnswers) throw new RestrictedAnswerVaultConfigurationError();
+    return { answers: [...(await this.restrictedAnswers.list(user.id))] };
+  }
+
+  @Put("/profile/restricted-answers/:fieldKey")
+  @Header("cache-control", "no-store")
+  async saveRestrictedAnswer(
+    @Req() request: AuthenticatedRequest,
+    @Param("fieldKey") fieldKey: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<RestrictedAnswer> {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    if (!RESTRICTED_ANSWER_FIELD_KEY_PATTERN.test(fieldKey)) {
+      throw new HttpException("Restricted answer field key is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const context = parseRestrictedAnswerContextQuery(request.query);
+    if (context === RESTRICTED_ANSWER_QUERY_INVALID) {
+      throw new HttpException("Restricted answer query is invalid", HttpStatus.BAD_REQUEST);
+    }
+    if (!validateSaveRestrictedAnswer(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateSaveRestrictedAnswer.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!this.restrictedAnswers) throw new RestrictedAnswerVaultConfigurationError();
+    const body = request.body as SaveRestrictedAnswerRequest;
+    const confirmedAt = new Date(body.confirmedAt);
+    const expiresAt = body.expiresAt !== undefined ? new Date(body.expiresAt) : undefined;
+    if (Number.isNaN(confirmedAt.getTime()) || (expiresAt && Number.isNaN(expiresAt.getTime()))) {
+      throw new HttpException("Restricted answer request is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const saved = await this.restrictedAnswers.save({
+      userId: user.id,
+      fieldKey,
+      ...(context ? { context } : {}),
+      expectedVersion: body.expectedVersion,
+      valueType: body.valueType,
+      value: body.value,
+      sensitivity: body.sensitivity,
+      sourceReference: body.sourceReference,
+      confirmedAt,
+      ...(expiresAt ? { expiresAt } : {}),
+      idempotencyKey: commandKey,
+      traceId: request.traceId ?? correlationId(undefined),
+    });
+    // Built from the request and the store's result, not a second read: a save's echoed metadata
+    // is exactly what was just written (or, on an idempotent replay, what the first call wrote).
+    return {
+      id: saved.id,
+      fieldKey,
+      ...(context ? { context } : {}),
+      valueType: body.valueType,
+      sensitivity: body.sensitivity,
+      state: "active",
+      version: saved.version,
+      confirmedAt: confirmedAt.toISOString(),
+      ...(expiresAt ? { expiresAt: expiresAt.toISOString() } : {}),
+    };
+  }
+
+  @Delete("/profile/restricted-answers/:fieldKey")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async deleteRestrictedAnswer(
+    @Req() request: AuthenticatedRequest,
+    @Param("fieldKey") fieldKey: string,
+  ): Promise<void> {
+    const user = await this.identity.resolve(request, "profile:write");
+    if (!RESTRICTED_ANSWER_FIELD_KEY_PATTERN.test(fieldKey)) {
+      throw new HttpException("Restricted answer field key is invalid", HttpStatus.BAD_REQUEST);
+    }
+    const context = parseRestrictedAnswerContextQuery(request.query);
+    if (context === RESTRICTED_ANSWER_QUERY_INVALID) {
+      throw new HttpException("Restricted answer query is invalid", HttpStatus.BAD_REQUEST);
+    }
+    if (request.body !== undefined) {
+      throw new HttpException("Restricted answer delete input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    if (!this.restrictedAnswers) throw new RestrictedAnswerVaultConfigurationError();
+    await this.restrictedAnswers.removeByField({
+      userId: user.id,
+      fieldKey,
+      ...(context ? { context } : {}),
+      traceId: request.traceId ?? correlationId(undefined),
+    });
   }
 
   @Post("/jobs/contributions")
@@ -2729,6 +2880,7 @@ class ApplicationsController {
 
 export interface AppModuleOptions {
   store: ProfileStore;
+  restrictedAnswerVault?: RestrictedAnswerVaultStore;
   catalog: JobCatalogReader;
   jobReports: JobReports;
   jobContributions: JobContributions;
@@ -2796,6 +2948,7 @@ export class AppModule {
           provide: CANDIDATE_DATA_EXPORT_DOWNLOADS,
           useValue: options.candidateDataExportDownloads ?? null,
         },
+        { provide: RESTRICTED_ANSWER_VAULT, useValue: options.restrictedAnswerVault ?? null },
         { provide: TOKEN_VERIFIER, useValue: options.verifier },
         { provide: ID_TOKEN_VERIFIER, useValue: options.idTokenVerifier ?? null },
         { provide: RELEASE_SHA, useValue: options.releaseSha },
