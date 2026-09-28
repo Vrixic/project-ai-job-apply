@@ -38,6 +38,14 @@ and orders verbatim base bullets by job-term overlap and never adds or rewords t
    download. It must not log or persist it, and its logs continue to carry method, path, status, and
    timing only.
 7. Generative rewrites and cover letters are a separate path (ADR-030) and remain blocked on D3-012.
+8. **The normalized resume AST (D3-002) is never persisted either, for the same reason.** The AST
+   (`resume-ast/types.ts`, `astVersion: "resume-ast.v1"`) is a deterministic, total mapping from one
+   immutable normalized document to sections and entries; it depends only on that document and is
+   recomputed from it on every read, the same way the tailored resume is recomputed from the AST.
+   Every current consumer (tailoring today; the structured-profile resume import planned in D3.1)
+   already reads it this way. If a consumer ever needs the AST independent of a live document read
+   (audit, offline analysis, an extension that cannot call the Documents runtime), that is a new
+   decision, not an oversight in this one.
 
 ## Consequences
 
