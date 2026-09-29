@@ -280,10 +280,22 @@ try {
   [IO.File]::WriteAllText($atomicPath, '{"phase":"publishing"}', [Text.UTF8Encoding]::new($false))
   $locked = [IO.File]::Open($atomicPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
   try {
-    try { Write-JsonFile -Path $atomicPath -Value ([ordered]@{ phase = "verified" }) -AllowReplace; throw "locked replacement accepted" }
-    catch { if ($_.Exception.Message -eq "locked replacement accepted") { throw } }
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+      try { Write-JsonFile -Path $atomicPath -Value ([ordered]@{ phase = "verified" }) -AllowReplace; throw "locked replacement accepted" }
+      catch { if ($_.Exception.Message -eq "locked replacement accepted") { throw } }
+    } else {
+      Write-JsonFile -Path $atomicPath -Value ([ordered]@{ phase = "verified" }) -AllowReplace
+      $buffer = [byte[]]::new($locked.Length)
+      if ($locked.Read($buffer, 0, $buffer.Length) -ne $buffer.Length -or
+        [Text.Encoding]::UTF8.GetString($buffer) -cne '{"phase":"publishing"}') {
+        throw "atomic replacement changed the open original file"
+      }
+    }
   } finally { $locked.Dispose() }
-  if ((Get-Content -LiteralPath $atomicPath -Raw) -cne '{"phase":"publishing"}') { throw "failed finalization damaged receipt" }
+  if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -and
+    (Get-Content -LiteralPath $atomicPath -Raw) -cne '{"phase":"publishing"}') {
+    throw "failed finalization damaged receipt"
+  }
   Write-JsonFile -Path $atomicPath -Value ([ordered]@{ phase = "verified" }) -AllowReplace
   if ([string](Get-Content -LiteralPath $atomicPath -Raw | ConvertFrom-Json).phase -cne "verified") { throw "atomic finalization failed" }
 } finally {
