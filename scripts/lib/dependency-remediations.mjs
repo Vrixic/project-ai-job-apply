@@ -189,7 +189,7 @@ export function evaluateAuditReport(report) {
       advisory.github_advisory_id !== remediatedAdvisories.get(cve) ||
       advisory.module_name !== IMAGE_SIZE_REMEDIATION.package ||
       advisory.severity !== "high" ||
-      advisory.patched_versions !== "<0.0.0" ||
+      advisory.patched_versions !== ">=2.0.3" ||
       advisory.findings.some(
         (finding) =>
           !isRecord(finding) ||

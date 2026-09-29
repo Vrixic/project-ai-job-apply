@@ -58,7 +58,7 @@ function report(count = 2) {
             github_advisory_id: id,
             module_name: "image-size",
             severity: "high",
-            patched_versions: "<0.0.0",
+            patched_versions: ">=2.0.3",
             findings: [{ version: "1.2.1", paths: ["frontend__mobile>expo>metro>image-size"] }],
           },
         ]),
