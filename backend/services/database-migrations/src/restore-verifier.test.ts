@@ -94,13 +94,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(76);
+    expect(expectedRelations(source)).toHaveLength(78);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(50);
+    ).toBe(52);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact six-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -252,8 +252,8 @@ describe("read-only aggregate restore verification", () => {
         "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
       ownerCount: 7,
-      relationCount: 76,
-      migrationCount: 50,
+      relationCount: 78,
+      migrationCount: 52,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -435,9 +435,10 @@ describe("read-only aggregate restore verification", () => {
       await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
         manifestSha256: historical.sha256,
         ownerCount: 7,
-        relationCount: 76,
-        // The two Applications migrations are part of both boundaries; Jobs, Documents 0004, and Trust differ.
-        migrationCount: migrationCount + 2,
+        relationCount: 78,
+        // Applications' three migrations and Profile 0010 are part of both derived boundaries;
+        // Jobs, Documents 0004, and Trust differ.
+        migrationCount: migrationCount + 4,
       });
       // Documents (0004), Jobs, and Trust all differ; the first owner checked is the one reported.
       await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(

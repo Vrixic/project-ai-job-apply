@@ -183,8 +183,8 @@ try {
   const source = loadCurrentRestoreManifest();
   assert.equal(source.manifest.contributors.length, 7);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 11);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 76);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 50);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 78);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 52);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",

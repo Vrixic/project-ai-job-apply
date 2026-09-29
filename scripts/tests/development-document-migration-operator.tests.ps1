@@ -49,13 +49,13 @@ if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -o
 }
 
 $currentSuccessMarkers = @(
-  "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
+  "Database migrations through 0010_restricted_answer_vault applied and verified.",
   "Jobs migrations through 0024_contribution_appeal_restoration applied and verified.",
   "Documents migrations through 0005_resume_purge applied and verified.",
   "Matching migrations through 0003_private_saved_page_captures applied and verified.",
   "Billing migrations through 0002_candidate_rights applied and verified.",
   "Trust migrations through 0005_development_test_removal applied and verified.",
-  "Applications migrations through 0002_candidate_rights applied and verified.",
+  "Applications migrations through 0003_manual_submission applied and verified.",
   "All service-owned database migrations applied and verified."
 )
 if (@([regex]::Matches($source, 'AggregateSuccessLogCount\s+= \$stoppedTask.AggregateSuccessLogCount')).Count -ne 3 -or

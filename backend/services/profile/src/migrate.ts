@@ -84,6 +84,8 @@ try {
         (to_regclass('profile.profile_fact_versions') IS NOT NULL)::int +
         (to_regclass('profile.resume_fact_imports') IS NOT NULL)::int +
         (to_regclass('profile.profile_fact_evidence') IS NOT NULL)::int +
+        (to_regclass('profile.restricted_answers') IS NOT NULL)::int +
+        (to_regclass('profile.restricted_answer_versions') IS NOT NULL)::int +
         (to_regclass('platform.operations') IS NOT NULL)::int +
         (to_regclass('platform.outbox_events') IS NOT NULL)::int +
         (to_regclass('platform.idempotency_keys') IS NOT NULL)::int +
@@ -144,7 +146,7 @@ try {
       ) AS ugc_consent_delete_guard_count
     `;
     if (
-      verification?.table_count !== 16 ||
+      verification?.table_count !== 18 ||
       verification.migration_count !== migrationVersions.length ||
       verification.outbox_column_count !== 11 ||
       verification.profile_fact_trigger_count !== 1 ||
