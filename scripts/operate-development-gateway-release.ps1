@@ -230,7 +230,8 @@ function Assert-GatewayVerifySourceDelta {
     "scripts/tests/development-gateway-release-operator.tests.ps1",
     "scripts/tests/development-gateway-release-guards.tests.ps1",
     "scripts/validate-serverless-workflow-infrastructure.mjs",
-    "infrastructure/runbooks/deployments/development-gateway-release.md"
+    "infrastructure/runbooks/deployments/development-gateway-release.md",
+    "docs/product/delivery/phase-3-application-preparation.md"
   )
   & git -C $repositoryRoot merge-base --is-ancestor $ReleaseSha $OperatorSha 2>$null
   if ($LASTEXITCODE -ne 0) { throw "The applied gateway release is not an ancestor of the verification operator." }

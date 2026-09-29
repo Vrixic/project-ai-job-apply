@@ -468,6 +468,101 @@ function Test-GatewayBucketCorsRuleDrift {
   return $beforeJson -cne $afterJson
 }
 
+function Assert-ApplicationsAttemptRecoveryProviderDrift {
+  param(
+    [Parameter(Mandatory)][object]$Plan,
+    [Parameter(Mandatory)][object[]]$Records
+  )
+  $records = @($Records)
+  if ($records.Count -eq 0) { throw "Applications recovery drift must be nonempty." }
+  if (-not (ConvertTo-ExactBoolean `
+        (Get-GatewayPlanVariableValue $Plan.variables "applications_attempt_recovery_enabled") `
+        "applications_attempt_recovery_enabled")) {
+    throw "Applications recovery drift requires the exact enabled plan input."
+  }
+  $specifications = [ordered]@{
+    "module.platform.aws_cloudwatch_event_rule.applications_attempt_recovery[0]" = @{
+      Type = "aws_cloudwatch_event_rule"; Kind = "Tags"
+    }
+    "module.platform.aws_cloudwatch_metric_alarm.applications_attempt_recovery_dead_letter[0]" = @{
+      Type = "aws_cloudwatch_metric_alarm"; Kind = "Alarm"
+    }
+    "module.platform.aws_cloudwatch_metric_alarm.applications_attempt_recovery_errors[0]" = @{
+      Type = "aws_cloudwatch_metric_alarm"; Kind = "Alarm"
+    }
+    "module.platform.aws_iam_role.applications_attempt_recovery[0]" = @{
+      Type = "aws_iam_role"; Kind = "Role"
+    }
+    "module.platform.aws_lambda_function.applications_attempt_recovery[0]" = @{
+      Type = "aws_lambda_function"; Kind = "Tags"
+    }
+    "module.platform.aws_sqs_queue.applications_attempt_recovery_dead_letter[0]" = @{
+      Type = "aws_sqs_queue"; Kind = "Tags"
+    }
+  }
+  $plannedValues = Get-GatewayOptionalProperty $Plan "planned_values"
+  $rootModule = Get-GatewayOptionalProperty $plannedValues "root_module"
+  if ($null -eq $rootModule) {
+    throw "Applications recovery drift requires the exact source-evaluated planned root module."
+  }
+  $planned = Get-TerraformStateResourceMap $rootModule
+  $seen = @()
+  foreach ($record in $records) {
+    $address = [string]$record.address
+    if ($specifications.Keys -cnotcontains $address -or $seen -ccontains $address) {
+      throw "Applications recovery drift contains an unknown or duplicate resource."
+    }
+    $seen += $address
+    $specification = $specifications[$address]
+    Assert-NoTerraformReplacementPaths $record.change
+    if (
+      [string]$record.mode -cne "managed" -or
+      [string]$record.type -cne [string]$specification.Type -or
+      (@($record.change.actions) -join ",") -cne "update" -or
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $record.change "after_unknown") -cne "{}" -or
+      $null -eq $record.change.before -or $null -eq $record.change.after
+    ) {
+      throw "Applications recovery drift has an unsafe action, type, or metadata shape."
+    }
+    $before = ConvertFrom-DevelopmentDocumentJson -Json ($record.change.before | ConvertTo-Json -Depth 100)
+    $after = ConvertFrom-DevelopmentDocumentJson -Json ($record.change.after | ConvertTo-Json -Depth 100)
+    $expected = $planned[$address]
+    if ($null -eq $expected -or
+        (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne
+        (ConvertTo-DeploymentCanonicalValue $expected -SortArrays)) {
+      throw "Applications recovery drift differs from the exact source-evaluated resource."
+    }
+    $sensitivity = @("tags")
+    Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Applications recovery tag drift"
+    $after.tags = $before.tags
+    if ([string]$specification.Kind -ceq "Alarm") {
+      Assert-DevelopmentDocumentNullToEmptyArray $before $after insufficient_data_actions `
+        "Applications recovery alarm action drift"
+      $after.insufficient_data_actions = $before.insufficient_data_actions
+      $sensitivity += "insufficient_data_actions"
+    } elseif ([string]$specification.Kind -ceq "Role") {
+      $afterPolicies = @($after.inline_policy)
+      $expectedPolicy = $planned["module.platform.aws_iam_role_policy.applications_attempt_recovery[0]"]
+      if (-not (Test-DevelopmentDocumentEmptyArray $before.inline_policy) -or
+          $afterPolicies.Count -ne 1 -or
+          [string]$afterPolicies[0].name -cne "applications-attempt-recovery-runtime" -or
+          $null -eq $expectedPolicy -or
+          [string]$expectedPolicy.role -cne "ai-job-apply-development-applications-attempt-recovery" -or
+          [string]$afterPolicies[0].policy -cne [string]$expectedPolicy.policy) {
+        throw "Applications recovery role drift differs from its exact source-evaluated inline policy."
+      }
+      $after.inline_policy = $before.inline_policy
+      $sensitivity += "inline_policy"
+    }
+    Assert-DevelopmentDocumentAcceptedDriftSensitivity $record $sensitivity
+    if ((ConvertTo-DeploymentCanonicalValue $before -SortArrays) -cne
+        (ConvertTo-DeploymentCanonicalValue $after -SortArrays)) {
+      throw "Applications recovery drift changed another resource attribute."
+    }
+  }
+  return $true
+}
+
 function Assert-AcceptedGatewayProviderDrift {
   param([Parameter(Mandatory)][object]$Plan)
 
@@ -481,6 +576,19 @@ function Assert-AcceptedGatewayProviderDrift {
   $roleAddress = "module.platform.aws_iam_role.gateway_lambda[0]"
   $bucketAddress = "module.platform.aws_s3_bucket.candidate_documents[0]"
   $handled = @()
+  $recoveryAddresses = @(
+    "module.platform.aws_cloudwatch_event_rule.applications_attempt_recovery[0]",
+    "module.platform.aws_cloudwatch_metric_alarm.applications_attempt_recovery_dead_letter[0]",
+    "module.platform.aws_cloudwatch_metric_alarm.applications_attempt_recovery_errors[0]",
+    "module.platform.aws_iam_role.applications_attempt_recovery[0]",
+    "module.platform.aws_lambda_function.applications_attempt_recovery[0]",
+    "module.platform.aws_sqs_queue.applications_attempt_recovery_dead_letter[0]"
+  )
+  $recoveryRecords = @($drift | Where-Object { $recoveryAddresses -ccontains [string]$_.address })
+  if ($recoveryRecords.Count -gt 0) {
+    $null = Assert-ApplicationsAttemptRecoveryProviderDrift -Plan $Plan -Records $recoveryRecords
+    $handled += @($recoveryRecords | ForEach-Object { [string]$_.address })
+  }
   $roleRecords = @($drift | Where-Object { [string]$_.address -ceq $roleAddress })
   if ($roleRecords.Count -gt 1) { throw "The Gateway role refresh was reported more than once." }
   if ($roleRecords.Count -eq 1) {
