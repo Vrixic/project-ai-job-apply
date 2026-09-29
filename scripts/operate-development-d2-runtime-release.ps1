@@ -42,7 +42,7 @@ function Resolve-D2ReleasePath {
   $cursor = $resolved
   while ($cursor.Length -ge $privateRoot.Length) {
     if (Test-Path -LiteralPath $cursor) {
-      $item = Get-Item -LiteralPath $cursor
+      $item = Get-Item -LiteralPath $cursor -Force
       if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'D2RuntimeReparsePathRejected' }
     }
     $cursor = Split-Path -Parent $cursor
