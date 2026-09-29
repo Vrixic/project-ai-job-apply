@@ -487,3 +487,35 @@ variable "candidate_rights_export_lifecycle_days" {
   type    = number
   default = null
 }
+
+variable "restricted_answer_vault_enabled" {
+  description = "Enable the dedicated restricted-answer vault KMS key and its exact Gateway grant."
+  type        = bool
+  default     = false
+}
+
+variable "applications_attempt_recovery_enabled" {
+  description = "Enable the isolated Applications stale-attempt recovery Lambda and schedule."
+  type        = bool
+  default     = false
+}
+
+variable "applications_attempt_recovery_artifact_s3_key" {
+  type    = string
+  default = ""
+}
+
+variable "applications_attempt_recovery_artifact_s3_object_version" {
+  type    = string
+  default = ""
+}
+
+variable "applications_attempt_recovery_artifact_sha256" {
+  type    = string
+  default = ""
+}
+
+variable "applications_attempt_recovery_artifact_base64sha256" {
+  type    = string
+  default = ""
+}

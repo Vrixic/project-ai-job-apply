@@ -44,6 +44,12 @@ param(
   [switch]$RefreshCandidateRightsActivity,
   [string]$WorkflowReceiptPath = "",
   [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedWorkflowReceiptSha256 = "",
+  # D3-001/D3-005: activate exactly one default-off platform capability from a current baseline.
+  # Each component produces and consumes its own saved plan and cannot be combined with any release.
+  [ValidateSet("None", "RestrictedAnswerVault", "ApplicationsAttemptRecovery")]
+  [string]$D3PlatformActivation = "None",
+  [string]$ApplicationsRecoveryReceiptPath = "",
+  [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedApplicationsRecoveryReceiptSha256 = "",
   [switch]$Help
 )
 
@@ -57,6 +63,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\development-document-scan-activation-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-upload-cors-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-candidate-rights-activity-guards.ps1")
+. (Join-Path $PSScriptRoot "lib\development-d3-platform-activation-guards.ps1")
 
 if ($Help) {
   @"
@@ -77,6 +84,12 @@ Usage:
   Candidate-rights activity refresh (D3-027): -Action Plan|Apply|Verify -RefreshCandidateRightsActivity `
     -WorkflowReceiptPath VERIFIED_WORKFLOW_RECEIPT -ReviewedWorkflowReceiptSha256 RECEIPT_SHA256, from a current schema-7
     baseline, never with a release, an activation, or a CORS change; Apply and Verify also take -PlanPath and -ReviewedPlanSha256.
+  D3 platform activation, exactly one component and one reviewed plan at a time:
+    -Action Plan|Apply|Verify -D3PlatformActivation RestrictedAnswerVault
+    -Action Plan|Apply|Verify -D3PlatformActivation ApplicationsAttemptRecovery `
+      -ApplicationsRecoveryReceiptPath VERIFIED_RECEIPT `
+      -ReviewedApplicationsRecoveryReceiptSha256 RECEIPT_SHA256
+    Both use the current baseline inputs. Apply and Verify also take -PlanPath and -ReviewedPlanSha256.
   Mixed document release (parser and processor from two receipts), add to CaptureBaseline:
     -ProcessorDocumentReceiptPath PROCESSOR_RECEIPT -ReviewedProcessorDocumentReceiptSha256 PROCESSOR_RECEIPT_SHA256
     (-DocumentReceiptPath is then the parser receipt). The resulting schema-8 baseline can only start a
@@ -113,6 +126,14 @@ if ($RefreshCandidateRightsActivity -and $Action -cnotin @("Plan", "Apply", "Ver
 if (-not $RefreshCandidateRightsActivity -and (-not [string]::IsNullOrWhiteSpace($WorkflowReceiptPath) -or $ReviewedWorkflowReceiptSha256 -cne "")) {
   throw "A workflow publication receipt is accepted only by the candidate-rights activity refresh."
 }
+if ($D3PlatformActivation -cne "None" -and $Action -cnotin @("Plan", "Apply", "Verify")) {
+  throw "A D3 platform activation is planned, applied, and verified only."
+}
+if ($D3PlatformActivation -cne "ApplicationsAttemptRecovery" -and
+    (-not [string]::IsNullOrWhiteSpace($ApplicationsRecoveryReceiptPath) -or
+     $ReviewedApplicationsRecoveryReceiptSha256 -cne "")) {
+  throw "An Applications recovery receipt is accepted only by that component activation."
+}
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $terraformDirectory = Join-Path $repositoryRoot "infrastructure\terraform\environments\development"
@@ -125,6 +146,7 @@ $metadataSuffix = ".gateway-release.json"
 $activationMetadataSuffix = ".document-scan-activation.json"
 $uploadCorsMetadataSuffix = ".document-upload-cors.json"
 $candidateRightsActivityMetadataSuffix = ".candidate-rights-activity.json"
+$d3PlatformActivationMetadataSuffix = ".d3-platform-activation.json"
 
 $env:AWS_PROFILE = $AwsProfile
 $env:AWS_REGION = $Region
@@ -503,6 +525,22 @@ function Get-GatewayCaptureSeedInputs {
     $seedDeclared = @($seedDeclared | Where-Object { $_ -cne $tailoringFlag })
     $defaults[$tailoringFlag] = $false
   }
+  # These D3 activation inputs are default-off and were added after every retained baseline seed.
+  # Reconstruct only their declared defaults into the fresh plan. Never mutate or relabel the seed.
+  $d3Defaults = [ordered]@{
+    restricted_answer_vault_enabled = $false
+    applications_attempt_recovery_enabled = $false
+    applications_attempt_recovery_artifact_s3_key = ""
+    applications_attempt_recovery_artifact_s3_object_version = ""
+    applications_attempt_recovery_artifact_sha256 = ""
+    applications_attempt_recovery_artifact_base64sha256 = ""
+  }
+  foreach ($entry in $d3Defaults.GetEnumerator()) {
+    if ($DeclaredVariableNames -ccontains $entry.Key -and $null -eq $Seed.variables.PSObject.Properties[$entry.Key]) {
+      $seedDeclared = @($seedDeclared | Where-Object { $_ -cne $entry.Key })
+      $defaults[$entry.Key] = $entry.Value
+    }
+  }
   $restoreProperty = $Seed.variables.PSObject.Properties[$restoreFlag]
   if ($null -eq $restoreProperty) {
     # This is input reconstruction for a fresh plan, never a mutation or relabeling of
@@ -533,9 +571,14 @@ function Assert-GatewayCapturedSeedInputs {
   }
   $null = Assert-RetainedGatewayBaselinePlan $Captured $DeclaredVariableNames
   # Native TF_VAR serialization may retain lowercase strings for declared root booleans.
-  # Keep the shared typed inventory unchanged; these two newer root flags are local additions.
+  # Keep the shared typed inventory unchanged; these newer root flags are local additions.
   $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) +
-    @("candidate_deletion_restore_role_enabled", "outbox_starts_paused")
+    @(
+      "candidate_deletion_restore_role_enabled",
+      "outbox_starts_paused",
+      "restricted_answer_vault_enabled",
+      "applications_attempt_recovery_enabled"
+    )
   foreach ($name in $DeclaredVariableNames) {
     if ($inputs.DefaultVariables.ContainsKey($name)) { $expected = $inputs.DefaultVariables[$name] }
     else {
@@ -1058,6 +1101,253 @@ function Get-CandidateRightsActivityExpectedMetadata {
   }
 }
 
+# ---- D3-001/D3-005: independent platform capability activation ---------------------------------------------
+function Get-VerifiedApplicationsRecoveryArtifact {
+  if ($D3PlatformActivation -cne "ApplicationsAttemptRecovery") { return $null }
+  if ([string]::IsNullOrWhiteSpace($ApplicationsRecoveryReceiptPath) -or
+      $ReviewedApplicationsRecoveryReceiptSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "Applications attempt recovery requires its reviewed publication receipt."
+  }
+  $receiptRoot = [IO.Path]::GetFullPath((Join-Path $terraformRoot "development-applications-recovery-artifacts"))
+  $candidate = if ([IO.Path]::IsPathRooted($ApplicationsRecoveryReceiptPath)) {
+    $ApplicationsRecoveryReceiptPath
+  } else {
+    Join-Path $terraformDirectory $ApplicationsRecoveryReceiptPath
+  }
+  $resolved = [IO.Path]::GetFullPath($candidate)
+  if (
+    -not $resolved.StartsWith(
+      $receiptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar,
+      [StringComparison]::OrdinalIgnoreCase
+    ) -or
+    -not (Test-Path -LiteralPath $resolved -PathType Leaf)
+  ) {
+    throw "The Applications recovery receipt must be inside its ignored publication directory."
+  }
+  if ((Get-FileSha256 $resolved) -cne $ReviewedApplicationsRecoveryReceiptSha256) {
+    throw "The Applications recovery publication receipt checksum does not match review."
+  }
+  $receipt = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json
+  $artifact = Get-ApplicationsRecoveryArtifact -Receipt $receipt -SourceSha $SourceSha `
+    -BoundarySha256 $boundary.BoundarySha256
+  $stored = Invoke-AwsJson @(
+    "s3api", "head-object", "--bucket", $boundary.Bucket, "--key", $artifact.key,
+    "--version-id", $artifact.versionId, "--checksum-mode", "ENABLED", "--output", "json"
+  ) "Applications recovery artifact readback"
+  $storedKey = Invoke-AwsJson @(
+    "kms", "describe-key", "--key-id", [string]$stored.SSEKMSKeyId, "--output", "json"
+  ) "Applications recovery artifact KMS readback"
+  $platformKey = Invoke-AwsJson @(
+    "kms", "describe-key", "--key-id", $boundary.KmsArn, "--output", "json"
+  ) "Platform KMS readback"
+  if (
+    [string]$stored.VersionId -cne [string]$artifact.versionId -or
+    [long]$stored.ContentLength -ne [long]$artifact.contentLength -or
+    [string]$stored.ChecksumSHA256 -cne [string]$artifact.objectBase64Sha256 -or
+    [string]$stored.ServerSideEncryption -cne "aws:kms" -or
+    [string]$storedKey.KeyMetadata.KeyId -cne [string]$platformKey.KeyMetadata.KeyId -or
+    [string]$stored.Metadata."source-sha" -cne $SourceSha -or
+    [string]$stored.Metadata."artifact-sha256" -cne [string]$artifact.artifactSha256
+  ) {
+    throw "The Applications recovery artifact failed exact-version readback."
+  }
+  return $artifact
+}
+
+function Set-D3PlatformActivationVariables {
+  param(
+    [Parameter(Mandatory)][object]$Baseline,
+    [Parameter(Mandatory)][ValidateSet("RestrictedAnswerVault", "ApplicationsAttemptRecovery")][string]$Component,
+    [AllowNull()][object]$Artifact = $null
+  )
+  Set-VariablesFromPlan $Baseline.Plan $null
+  if ($Component -ceq "RestrictedAnswerVault") {
+    $env:TF_VAR_restricted_answer_vault_enabled = "true"
+    return
+  }
+  if ($null -eq $Artifact) { throw "The Applications recovery activation is missing its artifact." }
+  $env:TF_VAR_applications_attempt_recovery_enabled = "true"
+  $env:TF_VAR_applications_attempt_recovery_artifact_s3_key = [string]$Artifact.key
+  $env:TF_VAR_applications_attempt_recovery_artifact_s3_object_version = [string]$Artifact.versionId
+  $env:TF_VAR_applications_attempt_recovery_artifact_sha256 = [string]$Artifact.artifactSha256
+  $env:TF_VAR_applications_attempt_recovery_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
+}
+
+function Assert-D3PlatformActivationLive {
+  param(
+    [Parameter(Mandatory)][ValidateSet("RestrictedAnswerVault", "ApplicationsAttemptRecovery")][string]$Component,
+    [AllowNull()][object]$Artifact = $null
+  )
+  if ($Component -ceq "RestrictedAnswerVault") {
+    $key = Invoke-AwsJson @(
+      "kms", "describe-key", "--key-id", "alias/ai-job-apply-development-restricted-answer-vault", "--output", "json"
+    ) "Restricted-answer vault key readback"
+    $keyMetadata = $key.KeyMetadata
+    $rotation = Invoke-AwsJson @(
+      "kms", "get-key-rotation-status", "--key-id", [string]$keyMetadata.Arn, "--output", "json"
+    ) "Restricted-answer vault rotation readback"
+    if (
+      [string]$keyMetadata.KeyManager -cne "CUSTOMER" -or
+      [string]$keyMetadata.KeyState -cne "Enabled" -or
+      -not $keyMetadata.Enabled -or
+      -not $rotation.KeyRotationEnabled -or
+      [string]$keyMetadata.Arn -ceq [string]$boundary.KmsArn
+    ) {
+      throw "The live restricted-answer vault key is not a separate enabled rotating customer key."
+    }
+    $gateway = Invoke-AwsJson @(
+      "lambda", "get-function-configuration", "--function-name", "ai-job-apply-development-gateway",
+      "--qualifier", "development", "--output", "json"
+    ) "Restricted-answer Gateway binding readback"
+    if (
+      [string]$gateway.State -cne "Active" -or
+      [string]$gateway.LastUpdateStatus -cne "Successful" -or
+      [string]$gateway.Environment.Variables.RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN -cne [string]$keyMetadata.Arn
+    ) {
+      throw "The live Gateway is not bound to the dedicated restricted-answer vault key."
+    }
+    $policy = Invoke-AwsJson @(
+      "iam", "get-role-policy", "--role-name", "ai-job-apply-development-gateway-lambda",
+      "--policy-name", "gateway-lambda-runtime", "--output", "json"
+    ) "Restricted-answer Gateway grant readback"
+    $statement = @($policy.PolicyDocument.Statement | Where-Object {
+        [string]$_.Sid -ceq "EncryptDecryptRestrictedAnswerVault"
+      })
+    if ($statement.Count -ne 1) {
+      throw "The Gateway role does not have exactly one restricted-answer vault key grant."
+    }
+    $vaultStatement = $statement[0]
+    $actions = @($vaultStatement.Action | ForEach-Object { [string]$_ } | Sort-Object)
+    if (
+      [string]$vaultStatement.Effect -cne "Allow" -or
+      ($actions -join "|") -cne "kms:Decrypt|kms:Encrypt" -or
+      @($vaultStatement.Resource).Count -ne 1 -or
+      [string]@($vaultStatement.Resource)[0] -cne [string]$keyMetadata.Arn
+    ) {
+      throw "The Gateway role does not have the exact restricted-answer vault key grant."
+    }
+    return
+  }
+
+  if ($null -eq $Artifact) { throw "The live Applications recovery check requires its artifact." }
+  $alias = Invoke-AwsJson @(
+    "lambda", "get-alias", "--function-name", "ai-job-apply-development-applications-attempt-recovery",
+    "--name", "development", "--output", "json"
+  ) "Applications recovery alias readback"
+  if ([string]$alias.FunctionVersion -cnotmatch '^[1-9][0-9]*$') {
+    throw "The Applications recovery alias is not immutable."
+  }
+  $function = Invoke-AwsJson @(
+    "lambda", "get-function-configuration", "--function-name", "ai-job-apply-development-applications-attempt-recovery",
+    "--qualifier", [string]$alias.FunctionVersion, "--output", "json"
+  ) "Applications recovery function readback"
+  $concurrency = Invoke-AwsJson @(
+    "lambda", "get-function-concurrency", "--function-name", "ai-job-apply-development-applications-attempt-recovery",
+    "--output", "json"
+  ) "Applications recovery concurrency readback"
+  if (
+    [string]$function.Version -cne [string]$alias.FunctionVersion -or
+    [string]$function.State -cne "Active" -or
+    [string]$function.LastUpdateStatus -cne "Successful" -or
+    [string]$function.CodeSha256 -cne [string]$Artifact.objectBase64Sha256 -or
+    [string]$function.Environment.Variables.RELEASE_SHA -cne [string]$Artifact.artifactSha256 -or
+    [int]$concurrency.ReservedConcurrentExecutions -ne 1
+  ) {
+    throw "The live Applications recovery Lambda is not the exact reviewed immutable artifact."
+  }
+  $rule = Invoke-AwsJson @(
+    "events", "describe-rule", "--name", "ai-job-apply-development-applications-attempt-recovery", "--output", "json"
+  ) "Applications recovery rule readback"
+  $targets = @((Invoke-AwsJson @(
+      "events", "list-targets-by-rule", "--rule", "ai-job-apply-development-applications-attempt-recovery", "--output", "json"
+    ) "Applications recovery target readback").Targets)
+  $expectedAliasArn = "arn:aws:lambda:$Region`:$ExpectedAccountId`:function:ai-job-apply-development-applications-attempt-recovery:development"
+  if (
+    [string]$rule.State -cne "ENABLED" -or
+    [string]$rule.ScheduleExpression -cne "rate(5 minutes)" -or
+    $targets.Count -ne 1 -or
+    [string]$targets[0].Arn -cne $expectedAliasArn -or
+    [int]$targets[0].RetryPolicy.MaximumRetryAttempts -ne 5 -or
+    [int]$targets[0].RetryPolicy.MaximumEventAgeInSeconds -ne 3600 -or
+    [string]::IsNullOrWhiteSpace([string]$targets[0].DeadLetterConfig.Arn)
+  ) {
+    throw "The live Applications recovery schedule is not the exact reviewed target."
+  }
+  $endpoints = @((Invoke-AwsJson @(
+      "ec2", "describe-vpc-endpoints",
+      "--filters", "Name=service-name,Values=com.amazonaws.$Region.secretsmanager",
+      "Name=tag:Project,Values=ai-job-apply", "Name=tag:Environment,Values=development",
+      "--output", "json"
+    ) "Applications recovery Secrets endpoint readback").VpcEndpoints)
+  if ($endpoints.Count -ne 1 -or [string]$endpoints[0].State -cne "available") {
+    throw "The Applications recovery database secret does not have one available private endpoint."
+  }
+  $endpointPolicy = if ($endpoints[0].PolicyDocument -is [string]) {
+    [string]$endpoints[0].PolicyDocument | ConvertFrom-Json
+  } else { $endpoints[0].PolicyDocument }
+  $secretStatement = @($endpointPolicy.Statement | Where-Object {
+      [string]$_.Sid -ceq "ExactLambdaRolesDatabaseSecretOnly"
+    })
+  if ($secretStatement.Count -ne 1) {
+    throw "The private Secrets Manager endpoint does not have exactly one Lambda-role statement."
+  }
+  $endpointStatement = $secretStatement[0]
+  $allowedRoles = @($endpointStatement.Condition.ArnEquals."aws:PrincipalArn" | ForEach-Object { [string]$_ })
+  $expectedRole = "arn:aws:iam::$ExpectedAccountId`:role/ai-job-apply-development-applications-attempt-recovery"
+  if (
+    [string]$endpointStatement.Effect -cne "Allow" -or
+    $allowedRoles -cnotcontains $expectedRole
+  ) {
+    throw "The private Secrets Manager endpoint does not admit the exact Applications recovery role."
+  }
+}
+
+function Invoke-D3PlatformActivationZeroDrift {
+  param(
+    [Parameter(Mandatory)][object]$Baseline,
+    [Parameter(Mandatory)][ValidateSet("RestrictedAnswerVault", "ApplicationsAttemptRecovery")][string]$Component,
+    [AllowNull()][object]$Artifact = $null
+  )
+  $path = Join-Path $operatorRoot "d3-platform-verify-$Component-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
+  if (Test-Path -LiteralPath $path) { throw "Refusing to overwrite a D3 platform verification plan." }
+  $saved = Save-AndClearTerraformVariables
+  try {
+    Set-D3PlatformActivationVariables -Baseline $Baseline -Component $Component -Artifact $Artifact
+    & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
+      -detailed-exitcode "-out=$path" *> "$path.log"
+    $exitCode = $LASTEXITCODE
+  } finally { Restore-TerraformVariables $saved }
+  if ($exitCode -ne 0) {
+    throw "The post-activation Terraform plan is not zero drift. Inspect the ignored verification log."
+  }
+  $plan = Read-Plan $path
+  $null = Assert-RetainedGatewayBaselinePlan $plan (Get-DeclaredTerraformVariableNames)
+  $null = Assert-D3PlatformActivationVariables -Component $Component `
+    -BaselineVariables $Baseline.Plan.variables -PlanVariables $plan.variables -Artifact $Artifact
+  return Get-FileSha256 $path
+}
+
+function Get-D3PlatformActivationExpectedMetadata {
+  param(
+    [Parameter(Mandatory)][object]$Baseline,
+    [Parameter(Mandatory)][ValidateSet("RestrictedAnswerVault", "ApplicationsAttemptRecovery")][string]$Component,
+    [AllowNull()][object]$Artifact,
+    [Parameter(Mandatory)][string]$PlanFile,
+    [Parameter(Mandatory)][string]$PlanSha
+  )
+  return @{
+    SchemaVersion = "1"; Kind = "development-d3-platform-activation-plan"; Environment = "development"
+    AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"
+    StateLineage = [string]$Baseline.Metadata.StateLineage; StateSerial = [long]$Baseline.Metadata.StateSerial
+    SourceSha = $SourceSha; Component = $Component
+    ApplicationsRecoveryReceiptSha256 = $(if ($Component -ceq "ApplicationsAttemptRecovery") { $ReviewedApplicationsRecoveryReceiptSha256 } else { "" })
+    ArtifactSha256 = $(if ($null -ne $Artifact) { [string]$Artifact.artifactSha256 } else { "" })
+    BaselinePath = $Baseline.Path; BaselineSha256 = $ReviewedBaselineSha256
+    BaselineMetadataPath = $Baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256
+    PlanPath = $PlanFile; PlanSha256 = $PlanSha
+  }
+}
+
 $commit = Assert-CallerAndSource
 Initialize-Backend
 $boundary = Resolve-ArtifactBoundary
@@ -1227,6 +1517,139 @@ if ($Action -ceq "Publish") {
   }
   $value.phase = "verified"; $value.completedAt = (Get-Date).ToUniversalTime().ToString("o"); Write-ExclusiveJson $receipt $value -Replace
   [pscustomobject]@{ Outcome = "published-and-verified"; ReceiptPath = $receipt; ReceiptSha256 = Get-FileSha256 $receipt; SourceSha = $SourceSha; PublishedObjectCount = 4; DeploymentChanged = $false } | ConvertTo-Json
+  exit 0
+}
+
+if ($D3PlatformActivation -cne "None") {
+  if (
+    $DocumentScanActivation -cne "None" -or
+    $DocumentUploadCorsOrigin -cne "" -or
+    $RefreshCandidateRightsActivity -or
+    $RefreshDocumentProcessor -or
+    $RefreshDocumentParser -or
+    $EnableDocumentTailoringInvoke -or
+    -not [string]::IsNullOrWhiteSpace($ReceiptPath) -or
+    $ReviewedReceiptSha256 -ne "" -or
+    -not [string]::IsNullOrWhiteSpace($DocumentReceiptPath) -or
+    $ReviewedDocumentReceiptSha256 -ne "" -or
+    -not [string]::IsNullOrWhiteSpace($ProcessorDocumentReceiptPath) -or
+    $ReviewedProcessorDocumentReceiptSha256 -ne "" -or
+    -not [string]::IsNullOrWhiteSpace($WorkflowReceiptPath) -or
+    $ReviewedWorkflowReceiptSha256 -ne ""
+  ) {
+    throw "A D3 platform capability is activated on its own and never with another release or activation."
+  }
+  $component = $D3PlatformActivation
+  $baseline = Read-Baseline
+  if ([string]$baseline.MetadataSchemaVersion -cne "7") {
+    throw "A D3 platform activation requires a current schema-7 baseline."
+  }
+  $artifact = Get-VerifiedApplicationsRecoveryArtifact
+
+  if ($Action -ceq "Plan") {
+    if ([string]::IsNullOrWhiteSpace($PlanPath)) {
+      $PlanPath = Join-Path $operatorRoot "d3-platform-$component-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
+    }
+    $path = Resolve-GatewayOperatorPath $PlanPath -ReleaseOnly
+    if (Test-Path -LiteralPath $path) { throw "Refusing to overwrite a D3 platform activation plan." }
+    $state = Get-StateIdentity
+    $saved = Save-AndClearTerraformVariables
+    try {
+      Set-D3PlatformActivationVariables -Baseline $baseline -Component $component -Artifact $artifact
+      & terraform "-chdir=$terraformDirectory" plan -refresh=true -input=false -lock-timeout=5m `
+        -detailed-exitcode "-out=$path" *> "$path.log"
+      $exitCode = $LASTEXITCODE
+    } finally { Restore-TerraformVariables $saved }
+    if ($exitCode -ne 2) {
+      if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+      throw "The D3 platform activation did not produce an exact reviewable change."
+    }
+    $plan = Read-Plan $path
+    $null = Assert-D3PlatformActivationVariables -Component $component `
+      -BaselineVariables $baseline.Plan.variables -PlanVariables $plan.variables -Artifact $artifact
+    $changes = if ($component -ceq "RestrictedAnswerVault") {
+      @(Assert-ExactRestrictedAnswerVaultPlan $plan)
+    } else {
+      @(Assert-ExactApplicationsAttemptRecoveryPlan $plan $artifact)
+    }
+    $sha = Get-FileSha256 $path
+    $metadata = [ordered]@{}
+    foreach ($entry in (Get-D3PlatformActivationExpectedMetadata -Baseline $baseline -Component $component `
+          -Artifact $artifact -PlanFile $path -PlanSha $sha).GetEnumerator() | Sort-Object Name) {
+      $metadata[$entry.Name] = $entry.Value
+    }
+    $metadata["CreatedAt"] = (Get-Date).ToUniversalTime().ToString("o")
+    Write-ExclusiveJson "$path$d3PlatformActivationMetadataSuffix" $metadata
+    [pscustomobject]@{
+      Outcome = "review-required"
+      Component = $component
+      PlanPath = $path
+      PlanSha256 = $sha
+      Creates = @($changes | Where-Object { @($_.change.actions) -contains "create" }).Count
+      Updates = @($changes | Where-Object { @($_.change.actions) -contains "update" }).Count
+      Deletes = @($changes | Where-Object { @($_.change.actions) -contains "delete" }).Count
+      Resources = @($changes | ForEach-Object { [string]$_.address })
+      ApprovalCommand = "Apply reviewed $component plan $sha"
+    } | ConvertTo-Json
+    exit 0
+  }
+
+  if ([string]::IsNullOrWhiteSpace($PlanPath) -or $ReviewedPlanSha256 -notmatch '^[a-f0-9]{64}$') {
+    throw "Apply and Verify require the exact reviewed D3 platform plan and SHA-256."
+  }
+  $path = Resolve-GatewayOperatorPath $PlanPath -MustExist -ReleaseOnly
+  if ((Get-FileSha256 $path) -cne $ReviewedPlanSha256) {
+    throw "The D3 platform activation plan checksum does not match review."
+  }
+  $metadataPath = "$path$d3PlatformActivationMetadataSuffix"
+  if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
+    throw "The D3 platform activation plan metadata is missing."
+  }
+  $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+  Assert-ReviewedPlanMetadata $metadata (Get-D3PlatformActivationExpectedMetadata -Baseline $baseline `
+      -Component $component -Artifact $artifact -PlanFile $path -PlanSha $ReviewedPlanSha256)
+  $state = Get-StateIdentity
+  $plan = Read-Plan $path
+  $null = Assert-D3PlatformActivationVariables -Component $component `
+    -BaselineVariables $baseline.Plan.variables -PlanVariables $plan.variables -Artifact $artifact
+  if ($component -ceq "RestrictedAnswerVault") {
+    $null = Assert-ExactRestrictedAnswerVaultPlan $plan
+  } else {
+    $null = Assert-ExactApplicationsAttemptRecoveryPlan $plan $artifact
+  }
+
+  if ($Action -ceq "Apply") {
+    if (
+      [string]$state.Lineage -cne [string]$metadata.StateLineage -or
+      [long]$state.Serial -ne [long]$metadata.StateSerial
+    ) {
+      throw "Remote state changed after review; generate a new D3 platform activation plan."
+    }
+    & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
+    if ($LASTEXITCODE -ne 0) { throw "The exact reviewed D3 platform activation plan failed to apply." }
+  } else {
+    if (
+      [string]$state.Lineage -cne [string]$metadata.StateLineage -or
+      [long]$state.Serial -ne ([long]$metadata.StateSerial + 1)
+    ) {
+      throw "Post-activation verification requires exactly one state advance from the reviewed plan."
+    }
+  }
+  Assert-D3PlatformActivationLive -Component $component -Artifact $artifact
+  if ($component -ceq "RestrictedAnswerVault") {
+    & (Join-Path $PSScriptRoot "verify-development-gateway-lambda-boundary.ps1") `
+      -AwsProfile $AwsProfile -AwsRegion $Region | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "The Gateway boundary failed after vault activation." }
+  }
+  $driftSha = Invoke-D3PlatformActivationZeroDrift -Baseline $baseline -Component $component -Artifact $artifact
+  [pscustomobject]@{
+    Outcome = $(if ($Action -ceq "Apply") { "applied-and-verified" } else { "verified" })
+    Component = $component
+    SourceSha = $SourceSha
+    LiveState = "matches"
+    Drift = $false
+    VerificationPlanSha256 = $driftSha
+  } | ConvertTo-Json
   exit 0
 }
 

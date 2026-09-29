@@ -562,7 +562,12 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
         ForEach-Object { $_.Groups[1].Value }
     })
   if ($declaredVariables -cnotcontains $restoreFlag) { throw "The current source is missing the exact new restore flag." }
-  $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) + @($restoreFlag, "outbox_starts_paused")
+  $booleanVariableNames = @(Get-DevelopmentDocumentBooleanVariableNames) + @(
+    $restoreFlag,
+    "outbox_starts_paused",
+    "restricted_answer_vault_enabled",
+    "applications_attempt_recovery_enabled"
+  )
   $declaredBooleanNames = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "infrastructure/terraform/environments/development") -File -Filter "*.tf" | ForEach-Object {
       $declarations = [regex]::Matches((Get-Content -LiteralPath $_.FullName -Raw), '(?ms)^variable\s+"([^"]+)"\s*\{(.*?)^\}')
       foreach ($declaration in $declarations) {
@@ -644,6 +649,44 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
   $preSwitchCaptured.variables.$tailoringFlag.value = $true
   Assert-Rejected { Assert-GatewayCapturedSeedInputs $preSwitch $preSwitchCaptured $declaredVariables } `
     "A captured baseline silently switched the document tailoring invoke grant on."
+  # A retained baseline that predates D3 activation wiring reconstructs only the six exact
+  # default-off/empty inputs. The fresh baseline must contain the complete current inventory.
+  $d3Defaults = [ordered]@{
+    restricted_answer_vault_enabled = $false
+    applications_attempt_recovery_enabled = $false
+    applications_attempt_recovery_artifact_s3_key = ""
+    applications_attempt_recovery_artifact_s3_object_version = ""
+    applications_attempt_recovery_artifact_sha256 = ""
+    applications_attempt_recovery_artifact_base64sha256 = ""
+  }
+  $preD3 = Copy-CaptureFixture $current
+  foreach ($name in $d3Defaults.Keys) { $preD3.variables.PSObject.Properties.Remove($name) }
+  $preD3Original = ConvertTo-GatewayCanonicalJson $preD3
+  $preD3Inputs = Get-GatewayCaptureSeedInputs $preD3 $declaredVariables
+  if ($preD3Inputs.DefaultVariables.Count -ne $d3Defaults.Count -or
+      (ConvertTo-GatewayCanonicalJson $preD3) -cne $preD3Original) {
+    throw "A pre-D3 baseline was not reconstructed without modifying retained evidence."
+  }
+  foreach ($entry in $d3Defaults.GetEnumerator()) {
+    if ((ConvertTo-GatewayCanonicalJson $preD3Inputs.DefaultVariables[$entry.Key]) -cne
+        (ConvertTo-GatewayCanonicalJson $entry.Value)) {
+      throw "A pre-D3 baseline acquired an incorrect reconstructed default."
+    }
+  }
+  $preD3Captured = Copy-CaptureFixture $current
+  foreach ($entry in $d3Defaults.GetEnumerator()) {
+    $preD3Captured.variables.($entry.Key).value = if ($entry.Value -is [bool]) {
+      ([string]$entry.Value).ToLowerInvariant()
+    } else { $entry.Value }
+  }
+  Assert-GatewayCapturedSeedInputs $preD3 $preD3Captured $declaredVariables
+  $preD3Captured.variables.restricted_answer_vault_enabled.value = $true
+  Assert-Rejected { Assert-GatewayCapturedSeedInputs $preD3 $preD3Captured $declaredVariables } `
+    "Baseline capture silently enabled the restricted-answer vault."
+  $preD3Captured = Copy-CaptureFixture $current
+  $preD3Captured.variables.applications_attempt_recovery_artifact_s3_key.value = "unreviewed"
+  Assert-Rejected { Assert-GatewayCapturedSeedInputs $preD3 $preD3Captured $declaredVariables } `
+    "Baseline capture silently supplied an Applications recovery artifact."
   # Exercise every declared root Boolean in both directions, using actual JSON roundtrips.
   $booleanRoundTrips = 0; $booleanFlips = 0; $invalidBooleanCases = 0
   foreach ($name in $booleanVariableNames) {

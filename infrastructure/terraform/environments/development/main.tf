@@ -164,6 +164,15 @@ module "platform" {
   ingestion_synthetic_seed                              = var.ingestion_synthetic_seed
   ingestion_execution_timeout_seconds                   = var.ingestion_execution_timeout_seconds
   ingestion_retention_days                              = var.ingestion_retention_days
+
+  restricted_answer_vault_enabled               = var.restricted_answer_vault_enabled
+  applications_attempt_recovery_enabled         = var.applications_attempt_recovery_enabled
+  applications_attempt_recovery_artifact_s3_key = var.applications_attempt_recovery_artifact_s3_key
+  applications_attempt_recovery_artifact_s3_object_version = (
+    var.applications_attempt_recovery_artifact_s3_object_version
+  )
+  applications_attempt_recovery_artifact_sha256       = var.applications_attempt_recovery_artifact_sha256
+  applications_attempt_recovery_artifact_base64sha256 = var.applications_attempt_recovery_artifact_base64sha256
 }
 
 module "cost_controls" {

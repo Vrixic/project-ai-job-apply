@@ -3,7 +3,7 @@ param(
   [ValidateSet("Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
-  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob")]
+  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery")]
   [string]$ArtifactFamily = "Document",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -69,18 +69,21 @@ $terraformRoot = [IO.Path]::GetFullPath((Join-Path $terraformDirectory ".terrafo
 $isCoreWorkflow = $ArtifactFamily -ceq "CoreWorkflow"
 $isIngestion = $ArtifactFamily -ceq "Ingestion"
 $isPublicJob = $ArtifactFamily -ceq "PublicJob"
+$isApplicationsRecovery = $ArtifactFamily -ceq "ApplicationsRecovery"
 $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-workflow-artifacts"
 } elseif ($isIngestion) {
   "development-ingestion-artifacts"
 } elseif ($isPublicJob) {
   "development-public-job-artifacts"
+} elseif ($isApplicationsRecovery) {
+  "development-applications-recovery-artifacts"
 } else {
   "development-document-artifacts"
 }
 $operatorRoot = Join-Path $terraformRoot $operatorDirectoryName
 $terraformDataDirectory = Join-Path $terraformRoot "$operatorDirectoryName-data"
-$artifactDirectory = if ($isCoreWorkflow -or $isIngestion) {
+$artifactDirectory = if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRecovery) {
   Join-Path $repositoryRoot "backend\workflows\dist\lambda"
 } elseif ($isPublicJob) {
   Join-Path $repositoryRoot "backend\gateway\dist\public-job-lambda"
@@ -94,6 +97,8 @@ $artifactNames = if ($isCoreWorkflow) {
   @("ingestion-durable-lambda", "ingestion-runtime-lambda")
 } elseif ($isPublicJob) {
   @("public-job-edge-lambda", "public-job-projection-lambda")
+} elseif ($isApplicationsRecovery) {
+  @("applications-attempt-recovery-lambda")
 } else {
   @("document-processor-lambda", "document-parser-lambda")
 }
@@ -103,6 +108,8 @@ $artifactKeyRoot = if ($isCoreWorkflow) {
   "lambda/ingestion"
 } elseif ($isPublicJob) {
   "lambda/public-jobs"
+} elseif ($isApplicationsRecovery) {
+  "lambda/applications"
 } else {
   "lambda/documents"
 }
@@ -112,6 +119,8 @@ $receiptKind = if ($isCoreWorkflow) {
   "development-ingestion-lambda-publication"
 } elseif ($isPublicJob) {
   "development-public-job-lambda-publication"
+} elseif ($isApplicationsRecovery) {
+  "development-applications-recovery-lambda-publication"
 } else {
   "development-document-lambda-publication"
 }
@@ -121,6 +130,8 @@ $artifactLabel = if ($isCoreWorkflow) {
   "ingestion"
 } elseif ($isPublicJob) {
   "public job"
+} elseif ($isApplicationsRecovery) {
+  "applications recovery"
 } else {
   "document"
 }
@@ -517,7 +528,7 @@ if ($Action -eq "Publish") {
   $auditLog = Join-Path $operatorRoot "dependency-audit-$timestamp.log"
   $buildOneLog = Join-Path $operatorRoot "build-one-$timestamp.log"
   $buildTwoLog = Join-Path $operatorRoot "build-two-$timestamp.log"
-  if ($isCoreWorkflow -or $isIngestion) {
+  if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRecovery) {
     Invoke-LocalGate -Name "Workflow tests" -LogPath $testLog -Command {
       pnpm --filter @ai-job-apply/workflows test
     }
@@ -538,6 +549,7 @@ if ($Action -eq "Publish") {
       if ($isCoreWorkflow) { pnpm --filter @ai-job-apply/workflows build:lambda }
       elseif ($isIngestion) { pnpm --filter @ai-job-apply/workflows build:lambda:ingestion }
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
+      elseif ($isApplicationsRecovery) { pnpm --filter @ai-job-apply/workflows build:lambda:applications-attempt-recovery }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $first = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)
@@ -546,6 +558,7 @@ if ($Action -eq "Publish") {
       if ($isCoreWorkflow) { pnpm --filter @ai-job-apply/workflows build:lambda }
       elseif ($isIngestion) { pnpm --filter @ai-job-apply/workflows build:lambda:ingestion }
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
+      elseif ($isApplicationsRecovery) { pnpm --filter @ai-job-apply/workflows build:lambda:applications-attempt-recovery }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $second = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)

@@ -94,6 +94,11 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
   verifies exact-version readback, and writes a checksum-reviewed ignored receipt without changing
   a Lambda, alias, trigger, Terraform state, or database. See
   `infrastructure/runbooks/deployments/development-workflow-lambda-publication.md`.
+- `operate-development-applications-recovery-publication.ps1`: Reproducibly publishes and
+  exact-version verifies only the Applications attempt-recovery Lambda ZIP and its three evidence
+  companions below `lambda/applications`. It cannot deploy the function, enable the schedule,
+  apply Terraform, or run recovery. See
+  `infrastructure/runbooks/deployments/development-applications-recovery-publication.md`.
 - `operate-development-ingestion-lambda-publication.ps1` — Reproducibly publishes and
   exact-version verifies only the ingestion durable and runtime artifact sets below the dedicated
   `lambda/ingestion` boundary. It writes no Lambda, alias, trigger, Terraform, database, or
@@ -129,7 +134,9 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
 - `operate-development-gateway-release.ps1` — Provides the source- and checksum-bound local gateway
   publication fallback plus exact Terraform plan/apply/verify flow. It preserves every non-gateway
   input, limits a release to the gateway Lambda function and immutable alias, and runs the direct
-  authenticated search boundary. See
+  authenticated search boundary. Its separate D3 activation mode creates either the dedicated
+  restricted-answer KMS boundary or the Applications attempt-recovery runtime from its reviewed
+  artifact, never both in one plan. See
   `infrastructure/runbooks/deployments/development-gateway-release.md`.
 - `operate-development-synthetic-catalog-retirement.ps1` — Inspects and retires only exact generated
   source-neutral development catalog fixtures through a reviewed immutable migration image and

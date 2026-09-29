@@ -698,7 +698,7 @@ export function ResumeUploadForm({
               </div>
               {isDeletableResume(document) &&
                 (confirmingDeleteId === document.id ? (
-                  <div role="group" aria-label={`Confirm deleting ${document.fileName}`}>
+                  <fieldset aria-label={`Confirm deleting ${document.fileName}`}>
                     <p>
                       Delete {document.fileName}? Facts you already reviewed stay in your profile.
                       Suggestions you have not reviewed are removed.
@@ -722,7 +722,7 @@ export function ResumeUploadForm({
                     >
                       Cancel
                     </button>
-                  </div>
+                  </fieldset>
                 ) : (
                   <button
                     type="button"
