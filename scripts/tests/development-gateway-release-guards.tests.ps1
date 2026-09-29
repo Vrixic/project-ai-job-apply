@@ -1418,4 +1418,144 @@ $withUnknown = Copy-Fixture $both
 $withUnknown.resource_drift = @($withUnknown.resource_drift) + @((New-GatewayProviderDriftRecord -Address "module.platform.aws_iam_role.unreviewed[0]" -Type "aws_iam_role" -Before ([pscustomobject]@{ a = 1 }) -After ([pscustomobject]@{ a = 2 })))
 Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $withUnknown } "An unreviewed drift record beside the chain role refreshes was accepted."
 
+# ---- D3-005: provider normalization after the reviewed attempt-recovery activation
+function New-ApplicationsAttemptRecoveryDriftPlan {
+  $defaultTags = [pscustomobject]@{ Environment = "development"; ManagedBy = "terraform"; Project = "ai-job-apply" }
+  $policy = [ordered]@{
+    Version = "2012-10-17"
+    Statement = @(
+      [ordered]@{
+        Sid = "ReadDatabaseSecret"; Effect = "Allow"; Action = "secretsmanager:GetSecretValue"
+        Resource = "arn:aws:secretsmanager:us-east-2:${account}:secret:ai-job-apply/development/database-url-x"
+      }
+    )
+  } | ConvertTo-Json -Depth 20 -Compress
+  $specifications = @(
+    @{ Address = "module.platform.aws_cloudwatch_event_rule.applications_attempt_recovery[0]"; Type = "aws_cloudwatch_event_rule"; Kind = "Tags" },
+    @{ Address = "module.platform.aws_cloudwatch_metric_alarm.applications_attempt_recovery_dead_letter[0]"; Type = "aws_cloudwatch_metric_alarm"; Kind = "Alarm" },
+    @{ Address = "module.platform.aws_cloudwatch_metric_alarm.applications_attempt_recovery_errors[0]"; Type = "aws_cloudwatch_metric_alarm"; Kind = "Alarm" },
+    @{ Address = "module.platform.aws_iam_role.applications_attempt_recovery[0]"; Type = "aws_iam_role"; Kind = "Role" },
+    @{ Address = "module.platform.aws_lambda_function.applications_attempt_recovery[0]"; Type = "aws_lambda_function"; Kind = "Tags" },
+    @{ Address = "module.platform.aws_sqs_queue.applications_attempt_recovery_dead_letter[0]"; Type = "aws_sqs_queue"; Kind = "Tags" }
+  )
+  $records = @()
+  $resources = @()
+  foreach ($specification in $specifications) {
+    $before = [pscustomobject]@{ id = $specification.Address; tags = $null; tags_all = $defaultTags }
+    $after = [pscustomobject]@{ id = $specification.Address; tags = [pscustomobject]@{}; tags_all = $defaultTags }
+    $beforeSensitive = [pscustomobject]@{ tags_all = [pscustomobject]@{} }
+    $afterSensitive = [pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} }
+    if ($specification.Kind -ceq "Alarm") {
+      $before | Add-Member NoteProperty insufficient_data_actions $null
+      $after | Add-Member NoteProperty insufficient_data_actions @()
+      $afterSensitive | Add-Member NoteProperty insufficient_data_actions @()
+    } elseif ($specification.Kind -ceq "Role") {
+      $before | Add-Member NoteProperty arn "arn:aws:iam::${account}:role/ai-job-apply-development-applications-attempt-recovery"
+      $before | Add-Member NoteProperty name "ai-job-apply-development-applications-attempt-recovery"
+      $before | Add-Member NoteProperty inline_policy @()
+      $after | Add-Member NoteProperty arn "arn:aws:iam::${account}:role/ai-job-apply-development-applications-attempt-recovery"
+      $after | Add-Member NoteProperty name "ai-job-apply-development-applications-attempt-recovery"
+      $after | Add-Member NoteProperty inline_policy @([pscustomobject]@{
+          name = "applications-attempt-recovery-runtime"; policy = $policy
+        })
+      $beforeSensitive | Add-Member NoteProperty inline_policy @()
+      $beforeSensitive | Add-Member NoteProperty managed_policy_arns @()
+      $afterSensitive | Add-Member NoteProperty inline_policy @([pscustomobject]@{})
+      $afterSensitive | Add-Member NoteProperty managed_policy_arns @()
+    }
+    $record = New-GatewayProviderDriftRecord -Address $specification.Address -Type $specification.Type `
+      -Before $before -After $after -BeforeSensitive $beforeSensitive -AfterSensitive $afterSensitive
+    $records += $record
+    $resources += [pscustomobject]@{ address = $specification.Address; values = $record.change.after }
+  }
+  $resources += [pscustomobject]@{
+    address = "module.platform.aws_iam_role_policy.applications_attempt_recovery[0]"
+    values = [pscustomobject]@{
+      role = "ai-job-apply-development-applications-attempt-recovery"; policy = $policy
+    }
+  }
+  return [pscustomobject]@{
+    variables = [pscustomobject]@{
+      applications_attempt_recovery_enabled = [pscustomobject]@{ value = "true" }
+    }
+    planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{ resources = $resources } }
+    resource_drift = $records
+  }
+}
+
+$recoveryDrift = New-ApplicationsAttemptRecoveryDriftPlan
+$null = Assert-AcceptedGatewayProviderDrift -Plan $recoveryDrift; $passed++
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.variables.applications_attempt_recovery_enabled.value = "false"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "Recovery drift was accepted while the capability was disabled."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[0].address = "module.platform.aws_cloudwatch_event_rule.unreviewed[0]"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "An unknown recovery drift address was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[0].address = "module.platform.aws_cloudwatch_event_rule.Applications_attempt_recovery[0]"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A recovery drift address with changed casing was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift = @($badRecovery.resource_drift) + @($badRecovery.resource_drift[0])
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A duplicate recovery drift record was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[0].type = "aws_cloudwatch_log_group"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A recovery drift record with the wrong resource type was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[0].change.actions = @("create")
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A recovery drift create was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[0].change | Add-Member NoteProperty replace_paths @(, @("name"))
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A recovery drift replacement path was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[0].change.after_unknown = [pscustomobject]@{ tags = $true }
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "An unknown recovery value was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[0].change.after_sensitive.tags = $true
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A recovery sensitivity change was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[0].change.after.tags = [pscustomobject]@{ Owner = "unreviewed" }
+$badRecovery.planned_values.root_module.resources[0].values.tags = [pscustomobject]@{ Owner = "unreviewed" }
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A nonempty recovery tag was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[1].change.after.insufficient_data_actions = @("arn:aws:sns:us-east-2:${account}:unreviewed")
+$badRecovery.planned_values.root_module.resources[1].values.insufficient_data_actions = @("arn:aws:sns:us-east-2:${account}:unreviewed")
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A nonempty recovery alarm action was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[3].change.after.inline_policy[0].name = "unreviewed"
+$badRecovery.planned_values.root_module.resources[3].values.inline_policy[0].name = "unreviewed"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A recovery inline-policy name substitution was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift[3].change.after.inline_policy[0].policy = '{"Version":"2012-10-17","Statement":[]}'
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "A recovery inline policy differing from its source-evaluated policy was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.planned_values.root_module.resources[0].values.id = "different"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "Recovery drift differing from its planned resource was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.planned_values.root_module.resources = @($badRecovery.planned_values.root_module.resources | Where-Object {
+    [string]$_.address -cne "module.platform.aws_lambda_function.applications_attempt_recovery[0]"
+  })
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "Recovery drift without its planned resource was accepted."
+
+$badRecovery = Copy-Fixture $recoveryDrift
+$badRecovery.resource_drift = @($badRecovery.resource_drift) + @(
+  New-GatewayProviderDriftRecord -Address "module.platform.aws_iam_role.unreviewed[0]" -Type "aws_iam_role" `
+    -Before ([pscustomobject]@{ a = 1 }) -After ([pscustomobject]@{ a = 2 })
+)
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "Unrelated drift beside the recovery normalization was accepted."
+
 Write-Output "Development gateway release guard tests passed: $passed"
