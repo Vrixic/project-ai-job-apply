@@ -508,10 +508,17 @@ try {
     attemptedAt = $now.ToString('o') }
   Write-D2ReleaseEvidence "$PlanPath.apply-attempt.json" $attempt
   Assert-Rejected { Write-D2ReleaseEvidence "$PlanPath.apply-attempt.json" $attempt } 'Ambiguous prior apply attempt overwritten.'
-  $acl = Get-Acl -LiteralPath $operatorRoot
-  $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
-  Assert-True ($acl.AreAccessRulesProtected -and @($acl.Access).Count -eq 1 -and
-    $acl.Access[0].IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -ceq $sid.Value) 'Operator evidence directory is not current-user-only.'
+  if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+    $acl = Get-Acl -LiteralPath $operatorRoot
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    Assert-True ($acl.AreAccessRulesProtected -and @($acl.Access).Count -eq 1 -and
+      $acl.Access[0].IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -ceq $sid.Value) 'Operator evidence directory is not current-user-only.'
+  } else {
+    $expectedDirectoryMode = [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite -bor [IO.UnixFileMode]::UserExecute
+    $expectedFileMode = [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite
+    Assert-True ([IO.File]::GetUnixFileMode($operatorRoot) -eq $expectedDirectoryMode) 'Operator evidence directory is not mode 0700.'
+    Assert-True ([IO.File]::GetUnixFileMode("$PlanPath.apply-attempt.json") -eq $expectedFileMode) 'Operator evidence file is not mode 0600.'
+  }
   $metadata = [pscustomobject]@{ stateSerial = 291; beforeControlSha256 = ('3' * 64) }
   $appliedState = [pscustomobject]@{ Lineage = $binding.stateLineage; Serial = 299 }
   $applied = [pscustomobject]@{ schemaVersion = 1; kind = 'development-d2-runtime-applied'; transition = 'Pause'

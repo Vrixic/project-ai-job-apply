@@ -68,11 +68,22 @@ function Write-D2ReleaseEvidence {
   $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Depth 50))
   $stream = [IO.File]::Open($resolved, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
   try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
+  if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    $fileMode = [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite
+    [IO.File]::SetUnixFileMode($resolved, $fileMode)
+    if ([IO.File]::GetUnixFileMode($resolved) -ne $fileMode) { throw 'D2RuntimePrivateFileModeRejected' }
+  }
 }
 function Set-D2ReleasePrivateDirectory {
   param([string]$Path)
   $null = Resolve-D2ReleasePath (Join-Path $Path 'boundary-check')
   $null = New-Item -ItemType Directory -Path $Path -Force
+  if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    $directoryMode = [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite -bor [IO.UnixFileMode]::UserExecute
+    [IO.File]::SetUnixFileMode($Path, $directoryMode)
+    if ([IO.File]::GetUnixFileMode($Path) -ne $directoryMode) { throw 'D2RuntimePrivateDirectoryModeRejected' }
+    return
+  }
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent().User
   $acl = Get-Acl -LiteralPath $Path
   if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -cne $identity.Value) { throw 'D2RuntimePrivateOwnerChanged' }
