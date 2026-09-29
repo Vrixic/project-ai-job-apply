@@ -161,7 +161,9 @@ foreach ($recoveryMarker in @(
     'if ($Action -cne "Verify")', "The gateway drift variable inventory is empty or duplicated.",
     "AllowOneSerialAdvance", "Post-apply verification requires the exact reviewed gateway release plan",
     "The post-apply gateway release plan checksum does not match review.",
-    '"docs/product/delivery/phase-3-application-preparation.md"'
+    '"docs/product/delivery/phase-3-application-preparation.md"',
+    "Assert-ExactApplicationsRecoveryTwoSnapshotVerification", "TwoSnapshotVerification",
+    '"--page-size", "1000", "--max-items", "2000"'
   )) {
   if (-not $operator.Contains($recoveryMarker)) {
     throw "The gateway operator does not preserve the verifier-only post-apply recovery path."

@@ -71,7 +71,8 @@ function Assert-RetainedGatewayBaselineMetadata {
     [Parameter(Mandatory)][string]$Region,
     [Parameter(Mandatory)][string]$ExpectedMigrationRepositoryUrl,
     [Parameter(Mandatory)][object]$CurrentState,
-    [switch]$AllowOneSerialAdvance
+    [switch]$AllowOneSerialAdvance,
+    [switch]$AllowTwoSerialAdvances
   )
   $v1Keys = @(
     "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
@@ -134,7 +135,9 @@ function Assert-RetainedGatewayBaselineMetadata {
   $stateBindingValid = [string]$Metadata.StateLineage -ceq [string]$CurrentState.Lineage -and
     ([long]$Metadata.StateSerial -eq [long]$CurrentState.Serial -or
       ($AllowOneSerialAdvance -and
-        [long]$CurrentState.Serial -eq ([long]$Metadata.StateSerial + 1)))
+        [long]$CurrentState.Serial -eq ([long]$Metadata.StateSerial + 1)) -or
+      ($AllowTwoSerialAdvances -and
+        [long]$CurrentState.Serial -eq ([long]$Metadata.StateSerial + 2)))
   if ($expectedKeys.Count -eq 0 -or ($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
       [string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
       [string]$Metadata.Environment -cne "development" -or
@@ -157,6 +160,99 @@ function Assert-RetainedGatewayBaselineMetadata {
   }
   if ($schemaVersion -in @("2", "4", "5", "6", "7", "8") -and [string]$Metadata.MigrationImage -cne [string]$migrationImage) {
     throw "The version-2 retained baseline metadata does not bind the exact migration image."
+  }
+  return $true
+}
+
+function Assert-ExactApplicationsRecoveryTwoSnapshotVerification {
+  param(
+    [Parameter(Mandatory)][string]$SourceSha,
+    [Parameter(Mandatory)][string]$ReceiptSha256,
+    [Parameter(Mandatory)][string]$BaselineSha256,
+    [Parameter(Mandatory)][string]$BaselineMetadataSha256,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$CurrentState,
+    [Parameter(Mandatory)][object]$StateHistory
+  )
+  $pins = [ordered]@{
+    SourceSha = "6627ff2b07fef664198fcd775ba93b65321803be"
+    ReceiptSha256 = "5ee677749608c3dbbaadec7111a4a73e337551eca4beb691f3772aec7ae3e4c0"
+    BaselineSha256 = "cf662b6fc8db169e501a253a8ff8f537eb8ac4170c53da5dbd197f090a6c02ad"
+    BaselineMetadataSha256 = "61159804fc3567759cfc6b3bd77e3a7ef936be4cb569f7a4c43969957daaea7a"
+    PlanSha256 = "9f30c057f6423d18fe713672c489616f6e1469f5021d6b57aa91d7d2d4f8f415"
+  }
+  foreach ($entry in $pins.GetEnumerator()) {
+    if ([string](Get-Variable -Name $entry.Name -ValueOnly) -cne [string]$entry.Value) {
+      throw "The two-snapshot recovery verification differs from its exact reviewed evidence."
+    }
+  }
+  $toUtc = {
+    param([AllowNull()][object]$Value, [Parameter(Mandatory)][string]$Label)
+    if ($Value -is [datetimeoffset]) { return $Value.ToUniversalTime() }
+    if ($Value -is [datetime]) { return [datetimeoffset]$Value.ToUniversalTime() }
+    if ($Value -isnot [string]) { throw "$Label is not an exact timestamp." }
+    $timestamp = [datetimeoffset]::MinValue
+    if (-not [datetimeoffset]::TryParse(
+        $Value,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal,
+        [ref]$timestamp
+      )) {
+      throw "$Label is not an exact timestamp."
+    }
+    return $timestamp.ToUniversalTime()
+  }
+  $createdAt = & $toUtc $Metadata.CreatedAt "The recovery baseline creation time"
+  if ([string]$Metadata.SchemaVersion -cne "7" -or
+      [string]$Metadata.SourceSha -cne $pins.SourceSha -or
+      [long]$Metadata.StateSerial -ne 392 -or
+      [string]$Metadata.StateLineage -cne [string]$CurrentState.Lineage -or
+      [long]$CurrentState.Serial -ne 394) {
+    throw "The two-snapshot recovery verification has an unexpected baseline or current state."
+  }
+  $nextToken = Get-GatewayOptionalProperty $StateHistory "NextToken"
+  if ($null -ne $nextToken -and -not [string]::IsNullOrEmpty([string]$nextToken)) {
+    throw "The two-snapshot recovery state history is incomplete."
+  }
+  $versions = @(Get-GatewayOptionalProperty $StateHistory "Versions" | Where-Object {
+      $null -ne $_ -and [string]$_.Key -ceq "platform.tfstate"
+    })
+  $deleteMarkers = @(Get-GatewayOptionalProperty $StateHistory "DeleteMarkers" | Where-Object {
+      $null -ne $_ -and [string]$_.Key -ceq "platform.tfstate"
+    })
+  $versionTimes = @($versions | ForEach-Object {
+      [pscustomobject]@{ Value = $_; Timestamp = & $toUtc $_.LastModified "A recovery state version time" }
+    })
+  $deleteMarkerTimes = @($deleteMarkers | ForEach-Object {
+      [pscustomobject]@{ Value = $_; Timestamp = & $toUtc $_.LastModified "A recovery state deletion time" }
+    })
+  $newVersions = @($versionTimes | Where-Object { $_.Timestamp -gt $createdAt } |
+      Sort-Object Timestamp | ForEach-Object Value)
+  $newDeleteMarkers = @($deleteMarkerTimes | Where-Object { $_.Timestamp -gt $createdAt })
+  if ($newVersions.Count -ne 2 -or $newDeleteMarkers.Count -ne 0) {
+    throw "The two-snapshot recovery verification requires exactly two state versions and no deletion."
+  }
+  $expectedTimes = @(
+    [datetimeoffset]"2026-09-29T21:12:51Z",
+    [datetimeoffset]"2026-09-29T21:12:52Z"
+  )
+  for ($index = 0; $index -lt 2; $index++) {
+    $version = $newVersions[$index]
+    $versionId = [string](Get-GatewayOptionalProperty $version "VersionId")
+    $isLatest = Get-GatewayOptionalProperty $version "IsLatest"
+    $size = Get-GatewayOptionalProperty $version "Size"
+    $timestamp = & $toUtc $version.LastModified "A recovery state version time"
+    if ($versionId.Length -eq 0 -or
+        ($index -eq 0 -and $isLatest -ne $false) -or
+        ($index -eq 1 -and $isLatest -ne $true) -or
+        $size -isnot [long] -or [long]$size -le 0 -or
+        $timestamp.ToUniversalTime() -ne $expectedTimes[$index]) {
+      throw "The two-snapshot recovery state version does not match the exact historical apply."
+    }
+  }
+  if ([string]$newVersions[0].VersionId -ceq [string]$newVersions[1].VersionId) {
+    throw "The two-snapshot recovery state versions are not distinct."
   }
   return $true
 }

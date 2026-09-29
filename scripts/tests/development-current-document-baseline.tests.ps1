@@ -162,6 +162,11 @@ try {
   $check = @{ Metadata = $post; Plan = $postPlan; PlanPath = $postPath; PlanSha256 = $postSha; CurrentState = $postState; SourceSha = $SourceSha
     AccountId = $ExpectedAccountId; Region = $Region; RepositoryRoot = $repositoryRoot; ReceiptDirectory = $receiptRoot }
   $null = Assert-CurrentDocumentBaselineEvidence @check
+  $twoAdvanceCheck = @{} + $check
+  $twoAdvanceCheck.CurrentState = [pscustomobject]@{ Lineage = $postState.Lineage; Serial = $postState.Serial + 2 }
+  $null = Assert-CurrentDocumentBaselineEvidence @twoAdvanceCheck -AllowTwoSerialAdvances
+  Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @twoAdvanceCheck -AllowOneSerialAdvance } `
+    "the current document baseline accepted two serial advances through the one-advance gate"
   if ($post.SchemaVersion -cne "7" -or $post.DocumentReleaseSourceSha -cne $documentSource -or $post.ReceiptSha256 -cne $receiptSha) {
     throw "Migration-to-gateway handoff attributed old document artifacts to a new source."
   }

@@ -191,10 +191,22 @@ $null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV6 $metadataPlan
 $advancedState = [pscustomobject]@{ Lineage = $lineage; Serial = 43 }
 $null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
   $sourceSha $account "us-east-2" $repositoryUrl $advancedState -AllowOneSerialAdvance; $passed++
+$twoAdvanceState = [pscustomobject]@{ Lineage = $lineage; Serial = 44 }
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $twoAdvanceState -AllowTwoSerialAdvances; $passed++
 Assert-Rejected {
   Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
     $sourceSha $account "us-east-2" $repositoryUrl $advancedState
 } "A one-serial state advance was accepted without the post-apply gate."
+Assert-Rejected {
+  Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
+    $sourceSha $account "us-east-2" $repositoryUrl $twoAdvanceState -AllowOneSerialAdvance
+} "A two-serial state advance was accepted by the one-advance gate."
+Assert-Rejected {
+  $threeAdvanceState = [pscustomobject]@{ Lineage = $lineage; Serial = 45 }
+  Assert-RetainedGatewayBaselineMetadata $baselineMetadataV5 $metadataPlan $baselinePath $baselineSha `
+    $sourceSha $account "us-east-2" $repositoryUrl $threeAdvanceState -AllowTwoSerialAdvances
+} "A three-serial state advance was accepted by the two-advance gate."
 foreach ($invalidState in @(
     [pscustomobject]@{ Lineage = $lineage; Serial = 44 },
     [pscustomobject]@{ Lineage = "87654321-4321-4321-4321-cba987654321"; Serial = 43 }
@@ -260,6 +272,68 @@ foreach ($mutation in @("migration", "serial", "stage", "extra", "missing", "kms
     Assert-RetainedGatewayBaselineMetadata $badMetadata $metadataPlan $baselinePath $baselineSha `
       $sourceSha $account "us-east-2" $repositoryUrl $currentState
   } "A version-2 baseline accepted $mutation tampering."
+}
+
+$recoveryVerification = @{
+  SourceSha = "6627ff2b07fef664198fcd775ba93b65321803be"
+  ReceiptSha256 = "5ee677749608c3dbbaadec7111a4a73e337551eca4beb691f3772aec7ae3e4c0"
+  BaselineSha256 = "cf662b6fc8db169e501a253a8ff8f537eb8ac4170c53da5dbd197f090a6c02ad"
+  BaselineMetadataSha256 = "61159804fc3567759cfc6b3bd77e3a7ef936be4cb569f7a4c43969957daaea7a"
+  PlanSha256 = "9f30c057f6423d18fe713672c489616f6e1469f5021d6b57aa91d7d2d4f8f415"
+  Metadata = [pscustomobject]@{
+    SchemaVersion = "7"; SourceSha = "6627ff2b07fef664198fcd775ba93b65321803be"
+    StateSerial = 392; StateLineage = $lineage; CreatedAt = "2026-09-29T17:03:40Z"
+  }
+  CurrentState = [pscustomobject]@{ Serial = 394; Lineage = $lineage }
+  StateHistory = [pscustomobject]@{
+    NextToken = $null
+    Versions = @(
+      [pscustomobject]@{
+        Key = "platform.tfstate"; VersionId = "intermediate-version"; IsLatest = $false
+        LastModified = "2026-09-29T21:12:51Z"; Size = [long]120000
+      },
+      [pscustomobject]@{
+        Key = "platform.tfstate"; VersionId = "final-version"; IsLatest = $true
+        LastModified = "2026-09-29T21:12:52Z"; Size = [long]121000
+      },
+      [pscustomobject]@{
+        Key = "platform.tfstate"; VersionId = "baseline-version"; IsLatest = $false
+        LastModified = "2026-09-29T15:08:57Z"; Size = [long]110000
+      }
+    )
+    DeleteMarkers = @()
+  }
+}
+$null = Assert-ExactApplicationsRecoveryTwoSnapshotVerification @recoveryVerification; $passed++
+foreach ($pin in @("SourceSha", "ReceiptSha256", "BaselineSha256", "BaselineMetadataSha256", "PlanSha256")) {
+  $bad = @{} + $recoveryVerification
+  $bad[$pin] = if ($pin -ceq "SourceSha") { "0" * 40 } else { "0" * 64 }
+  Assert-Rejected { Assert-ExactApplicationsRecoveryTwoSnapshotVerification @bad } "The recovery exception accepted a different $pin."
+}
+foreach ($case in @(
+    @{ Name = "schema"; Mutate = { param($v) $v.Metadata.SchemaVersion = "6" } },
+    @{ Name = "metadata source"; Mutate = { param($v) $v.Metadata.SourceSha = "0" * 40 } },
+    @{ Name = "baseline serial"; Mutate = { param($v) $v.Metadata.StateSerial = 391 } },
+    @{ Name = "current serial"; Mutate = { param($v) $v.CurrentState.Serial = 393 } },
+    @{ Name = "lineage"; Mutate = { param($v) $v.CurrentState.Lineage = "87654321-4321-4321-4321-cba987654321" } },
+    @{ Name = "creation timestamp"; Mutate = { param($v) $v.Metadata.CreatedAt = "invalid" } },
+    @{ Name = "pagination"; Mutate = { param($v) $v.StateHistory.NextToken = "more" } },
+    @{ Name = "missing version"; Mutate = { param($v) $v.StateHistory.Versions = @($v.StateHistory.Versions | Select-Object -Skip 1) } },
+    @{ Name = "extra version"; Mutate = { param($v) $copy = Copy-Fixture $v.StateHistory.Versions[1]; $copy.VersionId = "extra"; $copy.IsLatest = $false; $v.StateHistory.Versions += $copy } },
+    @{ Name = "state deletion"; Mutate = { param($v) $v.StateHistory.DeleteMarkers = @([pscustomobject]@{ Key = "platform.tfstate"; LastModified = "2026-09-29T21:12:52Z" }) } },
+    @{ Name = "wrong key"; Mutate = { param($v) $v.StateHistory.Versions[0].Key = "other.tfstate" } },
+    @{ Name = "first timestamp"; Mutate = { param($v) $v.StateHistory.Versions[0].LastModified = "2026-09-29T21:12:50Z" } },
+    @{ Name = "second timestamp"; Mutate = { param($v) $v.StateHistory.Versions[1].LastModified = "2026-09-29T21:12:53Z" } },
+    @{ Name = "first latest flag"; Mutate = { param($v) $v.StateHistory.Versions[0].IsLatest = $true } },
+    @{ Name = "final latest flag"; Mutate = { param($v) $v.StateHistory.Versions[1].IsLatest = $false } },
+    @{ Name = "empty version id"; Mutate = { param($v) $v.StateHistory.Versions[0].VersionId = "" } },
+    @{ Name = "duplicate version id"; Mutate = { param($v) $v.StateHistory.Versions[0].VersionId = $v.StateHistory.Versions[1].VersionId } },
+    @{ Name = "empty state"; Mutate = { param($v) $v.StateHistory.Versions[1].Size = 0 } }
+  )) {
+  $bad = Copy-Fixture $recoveryVerification
+  & $case.Mutate $bad
+  Assert-Rejected { Assert-ExactApplicationsRecoveryTwoSnapshotVerification @bad } `
+    "The recovery exception accepted $($case.Name) tampering."
 }
 
 function New-Variables {
