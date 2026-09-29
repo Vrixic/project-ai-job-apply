@@ -1383,6 +1383,7 @@ describe("Applications routes at the Lambda boundary", () => {
     ["POST", `/v1/applications/${id}/reopen`, "{}"],
     ["POST", `/v1/applications/${id}/cancel`, "{}"],
     ["POST", `/v1/applications/${id}/submissions`, "{}"],
+    ["POST", `/v1/applications/${id}/manual-submissions`, "{}"],
     ["POST", `/v1/applications/${id}/attempts/${attempt}/dispatch`, undefined],
     ["POST", `/v1/applications/${id}/attempts/${attempt}/result`, "{}"],
     ["POST", `/v1/applications/${id}/attempts/${attempt}/reconciliation`, "{}"],

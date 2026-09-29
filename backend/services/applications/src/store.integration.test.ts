@@ -43,7 +43,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const env = { ...process.env, DATABASE_URL: databaseUrl };
     const first = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const replay = await execFileAsync(process.execPath, [migrationExecutable], { env });
-    const expected = "Applications migrations through 0002_candidate_rights applied and verified.";
+    const expected = "Applications migrations through 0003_manual_submission applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
     await store.ping();
@@ -615,5 +615,209 @@ describeWithDatabase("PostgresApplicationStore", () => {
           '{}'::jsonb, now(), now())
       `,
     ).rejects.toThrow(/outbox_event_type_check/);
+  });
+
+  describe("manual submission (D3-018)", () => {
+    async function approvedManual() {
+      const ownerUserId = uuidv7();
+      const created = await store.createApplication({
+        ownerUserId,
+        canonicalJobId: uuidv7(),
+        idempotencyKey: key("create"),
+      });
+      const packeted = await store.createPacket({
+        ownerUserId,
+        applicationId: created.view.application.id,
+        expectedRevision: created.view.application.revision,
+        idempotencyKey: key("packet"),
+        packet: {
+          jobRevision: HASH_A,
+          form: null,
+          fields: [proposal()],
+          artifactHashes: { resume: HASH_C },
+        },
+      });
+      const packet = packeted.view.currentPacket;
+      if (!packet) throw new Error("packet expected");
+      const manualCurrent = { jobRevision: HASH_A, formHash: null, resumeHash: HASH_C };
+      const approvedResult = await store.approve({
+        ownerUserId,
+        applicationId: created.view.application.id,
+        expectedRevision: packeted.view.application.revision,
+        idempotencyKey: key("approve"),
+        request: { packetHash: packet.packetHash, consentId: uuidv7(), acknowledgedFieldKeys: [] },
+        current: manualCurrent,
+      });
+      return {
+        ownerUserId,
+        applicationId: created.view.application.id,
+        manualCurrent,
+        approvedView: approvedResult.view,
+      };
+    }
+
+    it("starts an attempt already taken over, with no dispatch, and ends at applied through the existing reconciliation route", async () => {
+      const context = await approvedManual();
+      const start = await store.startAttempt({
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        expectedRevision: context.approvedView.application.revision,
+        idempotencyKey: key("manual-start"),
+        current: context.manualCurrent,
+        adapterId: "manual",
+        adapterVersion: "none",
+        manual: true,
+      });
+      expect(start.kind).toBe("started");
+      if (start.kind !== "started") throw new Error("started expected");
+      expect(start.attempt.status).toBe("taken_over");
+      expect(start.attempt.dispatchedAt).toBeUndefined();
+      expect(start.view.application.status).toBe("takeover");
+      expect(start.view.currentAction).toBe("complete_manually");
+
+      // Dispatch is illegal: a manual attempt never goes through the automated dispatch step.
+      await expect(
+        store.dispatchAttempt({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          attemptId: start.attempt.id,
+        }),
+      ).rejects.toMatchObject({ code: "ILLEGAL_ATTEMPT_TRANSITION" });
+
+      const reconciled = await store.reconcile({
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        attemptId: start.attempt.id,
+        idempotencyKey: key("manual-reconcile"),
+        reconciliation: {
+          kind: "user_attested_submitted",
+          evidence: {
+            kind: "user_attested",
+            observedAt: now,
+            fingerprintSha256: HASH_A,
+          },
+        },
+      });
+      expect(reconciled.view.application.status).toBe("applied");
+      const manualAttempt = reconciled.view.attempts.find((a) => a.id === start.attempt.id);
+      expect(manualAttempt).toMatchObject({ adapterId: "manual", status: "confirmed" });
+    });
+
+    it("lets the candidate attest a manual attempt was not submitted, returning to approved for a retry", async () => {
+      const context = await approvedManual();
+      const start = await store.startAttempt({
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        expectedRevision: context.approvedView.application.revision,
+        idempotencyKey: key("manual-start"),
+        current: context.manualCurrent,
+        adapterId: "manual",
+        adapterVersion: "none",
+        manual: true,
+      });
+      if (start.kind !== "started") throw new Error("started expected");
+
+      await expect(
+        store.reconcile({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          attemptId: start.attempt.id,
+          idempotencyKey: key("manual-reconcile-refused"),
+          reconciliation: { kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: false },
+        }),
+      ).rejects.toMatchObject({ code: "RECONCILIATION_REFUSED" });
+
+      const notSubmitted = await store.reconcile({
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        attemptId: start.attempt.id,
+        idempotencyKey: key("manual-reconcile-not-submitted"),
+        reconciliation: { kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: true },
+      });
+      expect(notSubmitted.view.application.status).toBe("approved");
+
+      const retry = await store.startAttempt({
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        expectedRevision: notSubmitted.view.application.revision,
+        idempotencyKey: key("manual-retry"),
+        current: context.manualCurrent,
+        adapterId: "manual",
+        adapterVersion: "none",
+        manual: true,
+      });
+      expect(retry.kind).toBe("started");
+      if (retry.kind === "started") expect(retry.attempt.sequence).toBe(2);
+    });
+
+    it("allows exactly one manual attempt when concurrent starts race", async () => {
+      const context = await approvedManual();
+      const raced = await Promise.allSettled(
+        Array.from({ length: 8 }, (_, index) =>
+          store.startAttempt({
+            ownerUserId: context.ownerUserId,
+            applicationId: context.applicationId,
+            expectedRevision: context.approvedView.application.revision,
+            idempotencyKey: key(`manual-race-${index}`),
+            current: context.manualCurrent,
+            adapterId: "manual",
+            adapterVersion: "none",
+            manual: true,
+          }),
+        ),
+      );
+      const accepted = raced.filter(
+        (
+          result,
+        ): result is PromiseFulfilledResult<Awaited<ReturnType<typeof store.startAttempt>>> =>
+          result.status === "fulfilled",
+      );
+      expect(accepted).toHaveLength(1);
+      expect(accepted[0]?.value.kind).toBe("started");
+      expect(accepted[0]?.value.view.attempts).toHaveLength(1);
+      expect(raced.filter((result) => result.status === "rejected")).toHaveLength(7);
+    });
+
+    it("invalidates approval instead of starting manually when the packet was bound to an observed form", async () => {
+      const context = await approved(); // the shared fixture always binds a form
+      // The candidate now tries to submit manually even though the extension prepared this packet;
+      // no form is observed here, so it is correctly treated as a changed binding.
+      const manualCurrent = { ...bindings, formHash: null };
+      const result = await store.startAttempt({
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        expectedRevision: context.approvedView.application.revision,
+        idempotencyKey: key("manual-mismatched-form"),
+        current: manualCurrent,
+        adapterId: "manual",
+        adapterVersion: "none",
+        manual: true,
+      });
+      expect(result.kind).toBe("approval_invalidated");
+      if (result.kind === "approval_invalidated") {
+        expect(result.reasons).toContain("form_changed");
+      }
+    });
+
+    it("is idempotent: replaying the same manual start key returns the identical attempt, not a new one", async () => {
+      const context = await approvedManual();
+      const command = {
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        expectedRevision: context.approvedView.application.revision,
+        idempotencyKey: key("manual-replay"),
+        current: context.manualCurrent,
+        adapterId: "manual",
+        adapterVersion: "none",
+        manual: true,
+      };
+      const first = await store.startAttempt(command);
+      const replay = await store.startAttempt(command);
+      if (first.kind !== "started" || replay.kind !== "started") {
+        throw new Error("started expected");
+      }
+      expect(replay.attempt.id).toBe(first.attempt.id);
+      expect(replay.view.attempts).toHaveLength(1);
+    });
   });
 });

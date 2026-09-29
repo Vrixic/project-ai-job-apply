@@ -3742,6 +3742,11 @@ describe("Applications routes", () => {
     reopen: record("reopen", application),
     cancel: record("cancel", application),
     startSubmission: record("startSubmission", { outcome: "started", application }),
+    startManualSubmission: record("startManualSubmission", {
+      outcome: "started",
+      attemptId,
+      application,
+    }),
     dispatchAttempt: record("dispatchAttempt", {
       id: attemptId,
       sequence: 1,
@@ -3843,6 +3848,12 @@ describe("Applications routes", () => {
         write,
       ],
       [
+        `/v1/applications/${applicationId}/manual-submissions`,
+        "POST",
+        { expectedRevision: 2 },
+        write,
+      ],
+      [
         `/v1/applications/${applicationId}/attempts/${attemptId}/dispatch`,
         "POST",
         undefined,
@@ -3891,6 +3902,48 @@ describe("Applications routes", () => {
       });
       expect(rejected.statusCode, JSON.stringify(payload)).toBe(400);
     }
+  });
+
+  it("starts a candidate-attested manual submission with the exact owner-scoped command", async () => {
+    const bearer = await token("applications:write");
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/manual-submissions`,
+      headers: { authorization: `Bearer ${bearer}`, "idempotency-key": key },
+      payload: { expectedRevision: 2 },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({ outcome: "started", attemptId });
+    expect(calls).toEqual([
+      {
+        method: "startManualSubmission",
+        args: [expect.any(String), applicationId, { expectedRevision: 2 }, key],
+      },
+    ]);
+  });
+
+  it("requires applications:write and a strict body for manual submission starts", async () => {
+    const readOnly = await token("applications:read");
+    const forbidden = await app.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/manual-submissions`,
+      headers: { authorization: `Bearer ${readOnly}`, "idempotency-key": key },
+      payload: { expectedRevision: 2 },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const write = await token("applications:write");
+    for (const payload of [{}, { expectedRevision: 2, adapterId: "manual" }]) {
+      const invalid = await app.inject({
+        method: "POST",
+        url: `/v1/applications/${applicationId}/manual-submissions`,
+        headers: { authorization: `Bearer ${write}`, "idempotency-key": key },
+        payload,
+      });
+      expect(invalid.statusCode, JSON.stringify(payload)).toBe(400);
+    }
+    expect(calls).toHaveLength(0);
   });
 
   it("rejects missing idempotency keys, malformed bodies, unknown fields, and bad identifiers", async () => {
@@ -3979,6 +4032,20 @@ describe("Applications routes", () => {
       method: "GET",
       url: `/v1/applications/${applicationId}`,
       headers: { authorization: `Bearer ${bearer}` },
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ code: "applications_unavailable" });
+    await unwired.close();
+  });
+
+  it("fails a manual submission start closed when no Applications store is wired", async () => {
+    const { app: unwired, issuer: unwiredIssuer } = await createApp();
+    const bearer = await unwiredIssuer.issue(owner, { scope: "applications:write" });
+    const response = await unwired.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/manual-submissions`,
+      headers: { authorization: `Bearer ${bearer}`, "idempotency-key": key },
+      payload: { expectedRevision: 2 },
     });
     expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({ code: "applications_unavailable" });

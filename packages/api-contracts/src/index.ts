@@ -113,6 +113,8 @@ export type ApproveApplicationPacketRequest =
 export type ApplicationRevisionRequest = components["schemas"]["ApplicationRevisionRequest"];
 export type StartApplicationSubmissionRequest =
   components["schemas"]["StartApplicationSubmissionRequest"];
+export type StartManualApplicationSubmissionRequest =
+  components["schemas"]["StartManualApplicationSubmissionRequest"];
 export type ApplicationSubmissionStart = components["schemas"]["ApplicationSubmissionStart"];
 export type ApplicationSubmissionResultRequest =
   components["schemas"]["ApplicationSubmissionResultRequest"];
