@@ -16,7 +16,7 @@ function Assert-DeploymentTerraformEnvironment {
 function Resolve-DeploymentTerraformFile {
   param([Parameter(Mandatory)][string]$Path, [switch]$Directory)
   try {
-    $item = Get-Item -LiteralPath $Path -ErrorAction Stop
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
     if ($item.PSProvider.Name -cne "FileSystem" -or $item.PSIsContainer -ne [bool]$Directory -or
         ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Rejected" }
     return [IO.Path]::GetFullPath($item.FullName)

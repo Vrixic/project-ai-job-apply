@@ -356,6 +356,9 @@ describe("ApplicationsWorkspace", () => {
     expect(container.textContent).toContain("I submitted it");
 
     await click("I submitted it");
+    await vi.waitFor(() => {
+      expect(calls.some(([url]) => url.endsWith("/reconciliation"))).toBe(true);
+    });
     const reconciliation = calls.find(([url]) => url.endsWith("/reconciliation"));
     expect(reconciliation?.[0]).toBe(
       `/api/platform/applications/${APP}/attempts/${attemptId}/reconciliation`,

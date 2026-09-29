@@ -399,6 +399,70 @@ the change is wider than one function. The owner approved this exact set on 2026
 
 Rollback is a fresh baseline and a plan that restores the previous receipt's archive through a separately reviewed release.
 
+## Activating D3 platform capabilities (D3-001 and D3-005)
+
+The `-D3PlatformActivation` mode enables exactly one default-off capability from a current
+schema-7 baseline. It cannot be combined with a Gateway release, document refresh, scan
+activation, upload-origin change, candidate-rights activity refresh, or the other D3 capability.
+After one capability advances state, capture and review a fresh zero-drift baseline before
+planning the other.
+
+### Restricted answer vault
+
+```powershell
+.\scripts\operate-development-gateway-release.ps1 -Action Plan `
+  -D3PlatformActivation RestrictedAnswerVault `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
+  -BaselinePlanPath BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -BaselineMetadataPath BASELINE_METADATA `
+  -ReviewedBaselineMetadataSha256 METADATA_SHA256
+
+# Only after independent review of the exact saved plan and SHA-256:
+.\scripts\operate-development-gateway-release.ps1 -Action Apply `
+  -D3PlatformActivation RestrictedAnswerVault [same inputs] `
+  -PlanPath VAULT_PLAN -ReviewedPlanSha256 VAULT_PLAN_SHA256
+```
+
+The guard accepts only creation of the dedicated rotating KMS key and alias plus the exact
+in-place Gateway role-policy, function-environment, and immutable-alias updates. It refuses any
+delete, replacement, output change, scheduler resource, unrelated input, or combined activation.
+After apply it reads the separate customer key, rotation state, Gateway key binding, and exact
+Encrypt/Decrypt role statement, runs the direct Gateway boundary suite, and requires zero drift.
+
+### Applications attempt recovery
+
+First publish and verify the exact artifact through the
+[Applications recovery publication runbook](development-applications-recovery-publication.md).
+
+```powershell
+.\scripts\operate-development-gateway-release.ps1 -Action Plan `
+  -D3PlatformActivation ApplicationsAttemptRecovery `
+  -ApplicationsRecoveryReceiptPath VERIFIED_RECEIPT `
+  -ReviewedApplicationsRecoveryReceiptSha256 RECEIPT_SHA256 `
+  -ExpectedAccountId ACCOUNT_ID -StateBucket STATE_BUCKET -SourceSha MERGED_COMMIT `
+  -BaselinePlanPath BASELINE -ReviewedBaselineSha256 BASELINE_SHA256 `
+  -BaselineMetadataPath BASELINE_METADATA `
+  -ReviewedBaselineMetadataSha256 METADATA_SHA256
+
+# Only after independent review of the exact saved plan and SHA-256:
+.\scripts\operate-development-gateway-release.ps1 -Action Apply `
+  -D3PlatformActivation ApplicationsAttemptRecovery [same inputs] `
+  -PlanPath RECOVERY_PLAN -ReviewedPlanSha256 RECOVERY_PLAN_SHA256
+```
+
+The plan must create only the isolated role and policy, encrypted DLQ, immutable Lambda and alias,
+five-minute EventBridge rule and target, exact invoke permission, and two alarms, plus the in-place
+private Secrets Manager endpoint-policy update that admits the new role. The Lambda is bound to
+the receipt's exact object key, version, and digests. Live verification checks the numeric alias,
+code digest, release identity, concurrency of one, enabled five-minute rule, retry/DLQ target, and
+the endpoint's exact role admission, then requires zero drift. It does not invoke recovery by
+hand; the enabled reviewed schedule owns execution.
+
+For either component, `Verify` accepts the same reviewed plan only after exactly one state advance.
+A failed plan performs no cloud mutation. A failed apply or live check is not permission to rerun,
+edit state, or change resources in the console. Diagnose it and use a separately generated,
+checksum-reviewed rollback plan from the new current baseline.
+
 ## Failure and recovery
 
 - A publication failure may leave new immutable objects plus a `publishing` receipt. Never reuse,

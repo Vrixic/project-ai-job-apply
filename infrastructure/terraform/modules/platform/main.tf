@@ -1755,7 +1755,8 @@ data "aws_iam_policy_document" "secrets_endpoint" {
         var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["activity"].arn : "",
         var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["terminal"].arn : "",
         local.d2_community_deployed ? aws_iam_role.d2_community_scheduled[0].arn : "",
-        local.d2_community_deployed ? aws_iam_role.d2_trust_signal[0].arn : ""
+        local.d2_community_deployed ? aws_iam_role.d2_trust_signal[0].arn : "",
+        var.applications_attempt_recovery_enabled ? aws_iam_role.applications_attempt_recovery[0].arn : ""
       ])
     }
   }

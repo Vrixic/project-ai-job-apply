@@ -57,11 +57,7 @@ function FieldRow({
       <p id={`${id}-label`}>
         <strong>{field.fieldKey}</strong>
       </p>
-      {empty ? (
-        <p>No value yet.</p>
-      ) : (
-        <p aria-labelledby={`${id}-label`}>{formatFieldValue(field.value)}</p>
-      )}
+      {empty ? <p>No value yet.</p> : <p>{formatFieldValue(field.value)}</p>}
       <ul aria-label={`Why ${field.fieldKey} is shown`}>
         {field.reasons.map((reason) => (
           <li key={reason}>{REASON_COPY[reason]}</li>

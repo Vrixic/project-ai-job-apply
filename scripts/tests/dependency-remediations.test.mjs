@@ -93,6 +93,22 @@ function fixture(t) {
   return { root, patch, dependencyRoots: graph(root) };
 }
 
+test("pins only the reviewed Windows and Linux installation trees", () => {
+  assert.deepEqual(IMAGE_SIZE_REMEDIATION.installedTreeSha256s, [
+    "69353bb092411adf01d204d8d1d423770834e57af1a15e42b9c7ca4e4a937c07",
+    "cf10fa4cf9d5f85a86f0db1b29911a4760a810161675f6f745d3631fbabb809d",
+  ]);
+  assert.ok(Object.isFrozen(IMAGE_SIZE_REMEDIATION.installedTreeSha256s));
+  for (const digest of [
+    "69353bb092411adf01d204d8d1d423770834e57af1a15e42b9c7ca4e4a937c00",
+    "CF10FA4CF9D5F85A86F0DB1B29911A4760A810161675F6F745D3631FBABB809D",
+    " cf10fa4cf9d5f85a86f0db1b29911a4760a810161675f6f745d3631fbabb809d",
+    "0".repeat(64),
+  ]) {
+    assert.equal(IMAGE_SIZE_REMEDIATION.installedTreeSha256s.includes(digest), false);
+  }
+});
+
 test("accepts exactly the reviewed patched installation even when the registry omits advisories", (t) => {
   const { root, dependencyRoots } = fixture(t);
   assert.deepEqual(verifyImageSizeRemediation({ repositoryRoot: root, dependencyRoots }), {
