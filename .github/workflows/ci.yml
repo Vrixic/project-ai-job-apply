@@ -43,8 +43,8 @@ jobs:
           node-version: 24.12.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Build Jobs service for PostgreSQL migration replay
-        run: pnpm --filter @ai-job-apply/jobs-service build
+      - name: Build Jobs service and workspace dependencies for PostgreSQL migration replay
+        run: pnpm --filter @ai-job-apply/jobs-service... build
       - name: Verify D1-004 catalog invariants
         run: pnpm verify:d1-004-catalog-invariants
       - name: Verify catalog-invariant orchestration
@@ -64,6 +64,10 @@ jobs:
         with:
           node-version: 24.12.0
           cache: pnpm
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.2
+          terraform_wrapper: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm contracts:generate
       - name: Verify generated contracts are current
@@ -136,4 +140,5 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.12.0
+      - run: pnpm install --frozen-lockfile
       - run: pnpm audit:dependencies
