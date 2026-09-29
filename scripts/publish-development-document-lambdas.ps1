@@ -91,17 +91,19 @@ $artifactDirectory = if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRec
   Join-Path $repositoryRoot "backend\services\documents\dist\lambda"
 }
 $stateKey = "platform.tfstate"
-$artifactNames = if ($isCoreWorkflow) {
-  @("workflow-ingress-lambda", "profile-readiness-durable-lambda", "profile-readiness-activity-lambda")
-} elseif ($isIngestion) {
-  @("ingestion-durable-lambda", "ingestion-runtime-lambda")
-} elseif ($isPublicJob) {
-  @("public-job-edge-lambda", "public-job-projection-lambda")
-} elseif ($isApplicationsRecovery) {
-  @("applications-attempt-recovery-lambda")
-} else {
-  @("document-processor-lambda", "document-parser-lambda")
-}
+$artifactNames = @(
+  if ($isCoreWorkflow) {
+    @("workflow-ingress-lambda", "profile-readiness-durable-lambda", "profile-readiness-activity-lambda")
+  } elseif ($isIngestion) {
+    @("ingestion-durable-lambda", "ingestion-runtime-lambda")
+  } elseif ($isPublicJob) {
+    @("public-job-edge-lambda", "public-job-projection-lambda")
+  } elseif ($isApplicationsRecovery) {
+    @("applications-attempt-recovery-lambda")
+  } else {
+    @("document-processor-lambda", "document-parser-lambda")
+  }
+)
 $artifactKeyRoot = if ($isCoreWorkflow) {
   "lambda/workflows"
 } elseif ($isIngestion) {
