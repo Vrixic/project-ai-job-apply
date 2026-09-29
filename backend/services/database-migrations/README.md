@@ -8,8 +8,9 @@ another service's tables.
 
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
-  after Trust): eleven owned schemas (including the empty-table `jobs_public` projection schema), 76
-  regular relations, and 50 checksum-bound migrations (Applications `0001` and `0002`; Documents `0004` and `0005`). The
+  after Trust): eleven owned schemas (including the empty-table `jobs_public` projection schema), 78
+  regular relations, and 52 checksum-bound migrations (Profile through `0010`; Applications through
+  `0003`; Documents `0004` and `0005`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
   purges Applications data (run 2026-09-18 against an isolated local cluster).
 
@@ -36,7 +37,8 @@ orchestrator, checks the disposable-container ownership guards, and uses a uniqu
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.
 
-The maintained harness at `scripts/tests/d2-recovery/` applies and replays all 44 migrations,
+The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 52-migration
+seven-owner boundary while retaining its D2-focused generated-data and behavior assertions,
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through
 the existing stores. A real custom-format `pg_dump` and `pg_restore` run inside tmpfs only.

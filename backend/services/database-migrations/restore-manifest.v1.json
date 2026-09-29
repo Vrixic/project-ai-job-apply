@@ -14,6 +14,10 @@
         {
           "version": "0002_candidate_rights",
           "checksum": "52c1f5ef68c7bf341d1394dd43395c362226d0708f2892ad462332d585cc959d"
+        },
+        {
+          "version": "0003_manual_submission",
+          "checksum": "9d37818dfbca9affb276912c41359b7ec67c5e2a191be64997e6478748bb7180"
         }
       ],
       "relations": [
@@ -285,6 +289,10 @@
         {
           "version": "0009_ugc_contribution_consent_candidate_rights",
           "checksum": "94ec1bdf4956eda831cbe9dbcd6a5f70b11941d679e84a9cd0d11355be05905a"
+        },
+        {
+          "version": "0010_restricted_answer_vault",
+          "checksum": "eb0805694c4830e2bb4f081c75318eb2f0d0280d3a77f62d322beb7ed27478c0"
         }
       ],
       "relations": [
@@ -302,6 +310,8 @@
         "profile.profile_fact_evidence",
         "profile.profile_fact_versions",
         "profile.profile_facts",
+        "profile.restricted_answer_versions",
+        "profile.restricted_answers",
         "profile.resume_fact_imports",
         "profile.ugc_contribution_consents"
       ]

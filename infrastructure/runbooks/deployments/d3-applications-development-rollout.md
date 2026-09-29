@@ -6,16 +6,19 @@
   synthetic lifecycle steps and exact cleanup, receipt SHA-256 `a6057ab662361965917103ccc4f5c53b635477dfdd2c41af400a48b21ae1d166` (see the
   [acceptance runbook](development-applications-acceptance.md)). A real-token sign-in on 2026-09-19 then created an application and packet (201 each) through the hosted candidate web; the synthetic acceptance itself does not prove Auth0 scopes. Every step ran only through the guarded operators,
   with the saved-plan and reviewer checkpoints those operators define.
-- Scope: adds the Applications schema (migration `0001`) and releases a Gateway that composes the
-  Applications runtime, in the isolated development account. No staging, no public exposure, no
-  real-candidate data, no provider, and no live ATS effect. Live ATS effects stay off (D3-012).
+- Scope: the initial run added the Applications schema and released a Gateway that composes the
+  Applications runtime. Subsequent Phase 3 releases use the same guarded sequence for additive
+  Profile and Applications migrations, including Profile `0010` and Applications `0003`, in the
+  isolated development account. No staging, no public exposure, no real-candidate data, no
+  provider, and no live ATS effect. Live ATS effects stay off (D3-012).
 - Companion runbooks: [migration image publication](development-migration-image-publication.md),
   [database migration](database-migration.md), [development gateway release](development-gateway-release.md).
 
 ## Why this order
 
-The Gateway Lambda now composes the Applications store and admits the twelve `/v1/applications`
-routes. Until the schema exists those calls fail, and until Auth0 issues an `applications:*` scope the
+The Gateway Lambda now composes the Applications store and admits the current contract's fifteen
+`/v1/applications` paths. Until the schema exists those calls fail, and until Auth0 issues an
+`applications:*` scope the
 Gateway rejects them (403), so the release is safe either way. Apply the schema first anyway.
 
 ## Hard prerequisites (1-4 were satisfied for the 2026-09-18 run; 5 is still open)
@@ -43,7 +46,7 @@ Gateway rejects them (403), so the release is safe either way. Apply the schema 
 | 2 | Publish the migration image, then `Verify` the receipt | same, `Publish` then `Verify` | Independent review of the receipt and its SHA-256; zero High/Critical scan |
 | 3 | Capture the current baseline | `operate-development-gateway-release.ps1 -Action CaptureBaseline` | Review the seed and returned plan/sidecar SHA-256 values |
 | 4 | Plan and apply the migration task definition | `operate-development-document-migration.ps1 -Action PlanTask` / `ApplyTask` | Review the saved plan: only the one-off migration task definition (and its narrow policy) may change; approve its exact SHA-256 |
-| 5 | Plan and run the migration | same, `PlanExecution` / `Execute`, then `Verify` | Approve the execution descriptor; require the eight aggregate success messages, the last being `Applications migrations through 0001_applications_foundation applied and verified.` |
+| 5 | Plan and run the migration | same, `PlanExecution` / `Execute`, then `Verify` | Approve the execution descriptor; require the eight aggregate success messages, the last being `Applications migrations through 0003_manual_submission applied and verified.` |
 | 6 | Publish and verify the Gateway artifact | `operate-development-gateway-release.ps1 -Action Publish` then `VerifyPublication` | Independent review of the publication receipt |
 | 7 | Plan and apply the Gateway release | same, `Plan` / `Apply`, then `Verify` | Approve the saved plan: only `aws_lambda_function.gateway[0]` and its alias may change |
 | 8 | Deployed acceptance (below) | [`operate-development-applications-acceptance.ps1`](development-applications-acceptance.md), from a migration image built from the commit that adds it | Review the plan descriptor and the receipt SHA-256 |
@@ -68,12 +71,14 @@ Do not record account identifiers, the state bucket, or tokens in shared evidenc
 
 ## Known limits of this rollout
 
-- Applications is not in the candidate export/deletion inventory. Synthetic candidates deleted through the
-  candidate-rights path leave their Applications rows behind (D3-014). Real-candidate use stays blocked.
-- The Docker-based Phase 2 recovery harness (`pnpm test:d2-recovery`) still asserts the six-owner boundary and
-  was not updated or run.
-- There is no outbox publisher, stale-attempt recovery schedule, or alarm for Applications yet.
-- The web BFF routes and extension integration do not exist, so no browser flow reaches these routes.
+- Applications participates in the candidate export/deletion inventory, but deployed acceptance and
+  real-candidate use remain governed by D3-014 and the phase record.
+- The Docker-based recovery harness now asserts the exact seven-owner, 52-migration, 78-relation
+  boundary; its generated-data behavioral assertions remain D2-focused.
+- The stale-attempt recovery runtime and Terraform composition exist but are not deployed. The outbox
+  publisher remains deferred until D5 has a consumer.
+- The web BFF reaches the manual-submission route, but extension autofill remains separately gated by
+  D3-007, D3-012, and D3-013.
 
 ## Rollback
 

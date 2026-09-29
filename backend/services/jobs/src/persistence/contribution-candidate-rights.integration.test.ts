@@ -144,7 +144,7 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(profile.stdout.trim()).toBe(
-      "Database migrations through 0009_ugc_contribution_consent_candidate_rights applied and verified.",
+      "Database migrations through 0010_restricted_answer_vault applied and verified.",
     );
     const first = await execFileAsync(process.execPath, [migrationExecutable], {
       env: { ...process.env, DATABASE_URL: databaseUrl },

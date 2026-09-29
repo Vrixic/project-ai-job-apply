@@ -16,8 +16,8 @@ service and must return to zero running tasks after every migration.
 - For the Phase 3 package, require the exact
   `d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1` manifest, the
   ordered Profile, Jobs, Documents, Matching, Billing, Trust, and Applications runners, eleven declared
-  schemas, 76 declared regular relations, and 50 checksum-bound migrations, including Jobs `0024`, Documents `0005`, Trust
-  `0005`, and Applications `0001` and `0002` before enabling the compatible Gateway or either D2 worker. Apply the
+  schemas, 78 declared regular relations, and 52 checksum-bound migrations, including Jobs `0024`, Documents `0005`, Trust
+  `0005`, Profile `0010`, and Applications through `0003` before enabling the compatible Gateway or either D2 worker. Apply the
   Applications migration before releasing a Gateway that composes it. Reject older D1/D2 package and
   receipt boundaries; a prior six-owner release remains verifiable only against its own recorded boundary.
 - Before Jobs `0023`/Trust `0004`, pause D2 contribution/reviewer writes and both workers through
@@ -278,7 +278,7 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
 4. `Execute` accepts only that checksum-reviewed descriptor, submits it through
    `--cli-input-json`, first conditionally creates an immutable customer-KMS execution claim in
    the versioned state bucket, writes a local receipt immediately, waits for `STOPPED`, and
-   requires the exact image digest, exit code `0`, no effective override, seven aggregate-only
+   requires the exact image digest, exit code `0`, no effective override, eight aggregate-only
    success messages, zero active migration tasks, and zero ECS services.
 5. `Verify` repeats the task/log/zero-compute checks and retains a refresh-backed zero-drift plan
    plus its adjacent `.baseline.json` sidecar. The operator rejects overwrites, removes only newly
@@ -301,7 +301,7 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
 
 If the local waiter exits after a durable claim and ECS submission, never call `Execute` again.
 Use `Recover` with the exact submitted receipt and reviewed descriptor. It has no submission path;
-it accepts only the exact claimed task already stopped with exit `0`, the seven aggregate success
+it accepts only the exact claimed task already stopped with exit `0`, the eight aggregate success
 records, and zero remaining migration compute, then finalizes the existing receipt for `Verify`.
 
 Run `Get-Help` through the script's `-Help` switch for exact commands. Never reuse an execution
