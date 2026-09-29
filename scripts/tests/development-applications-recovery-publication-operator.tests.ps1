@@ -20,6 +20,33 @@ foreach ($candidate in @(
   if (@($errors).Count -ne 0) { throw "The Applications recovery publication $($candidate.Name) did not parse." }
 }
 
+$engineTokens = $null
+$engineErrors = $null
+$engineAst = [Management.Automation.Language.Parser]::ParseInput(
+  $engineSource,
+  [ref]$engineTokens,
+  [ref]$engineErrors
+)
+$artifactNameAssignments = @($engineAst.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
+      $node.Left.VariablePath.UserPath -ceq "artifactNames"
+    }, $true))
+if ($artifactNameAssignments.Count -ne 1) {
+  throw "The shared publisher must assign its artifact-name collection exactly once."
+}
+$isCoreWorkflow = $false
+$isIngestion = $false
+$isPublicJob = $false
+$isApplicationsRecovery = $true
+$artifactNames = $null
+Invoke-Expression $artifactNameAssignments[0].Extent.Text
+if ($artifactNames -isnot [array] -or $artifactNames.Count -ne 1 -or
+    [string]$artifactNames[0] -cne "applications-attempt-recovery-lambda") {
+  throw "The one-artifact Applications recovery family was not preserved as an exact collection."
+}
+
 foreach ($required in @(
     'ArtifactFamily    = "ApplicationsRecovery"',
     'applications-attempt-recovery-lambda',
