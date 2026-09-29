@@ -38,6 +38,16 @@
       ],
       "outputs": []
     },
+    "@ai-job-apply/jobs-service#test:integration": {
+      "dependsOn": ["build", "^build", "@ai-job-apply/ingestion-worker#build"],
+      "cache": false,
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "D2_CANCELLATION_DATABASE_URL",
+        "D2_COMPOSED_DATABASE_URL"
+      ],
+      "outputs": []
+    },
     "clean": {
       "cache": false
     }
