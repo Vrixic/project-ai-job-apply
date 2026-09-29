@@ -290,8 +290,81 @@ describe("ApplicationsWorkspace", () => {
     expect(container.querySelector("a")?.getAttribute("href")).toBe(
       "https://boards.example.test/jobs/1",
     );
-    // No submission, dispatch, or attempt call is ever made from the web page.
+    // Opening the manual handoff does not itself create an attempt.
     expect(calls.map(([url]) => url).filter((url) => /submissions|attempts/.test(url))).toEqual([]);
+  });
+
+  it("records a manual attempt, then uses the existing candidate attestation path", async () => {
+    const attemptId = "00000000-0000-7000-8000-000000000020";
+    const ready = {
+      ...reviewable(3),
+      status: "approved",
+      currentAction: "ready_to_submit",
+      approval: {
+        packetHash: HASH,
+        approvedAt: AT,
+        expiresAt: "2026-09-19T12:00:00.000Z",
+        acknowledgedFieldKeys: ["contact.email"],
+      },
+    } as unknown as Application;
+    const takenOver = {
+      ...ready,
+      status: "takeover",
+      revision: 4,
+      currentAction: "complete_manually",
+      attempts: [
+        {
+          id: attemptId,
+          sequence: 1,
+          status: "taken_over",
+          adapterId: "manual",
+          adapterVersion: "none",
+          startedAt: AT,
+          resolvedAt: AT,
+        },
+      ],
+    } as unknown as Application;
+    const applied = {
+      ...takenOver,
+      status: "applied",
+      revision: 5,
+      currentAction: "none",
+      attempts: [{ ...takenOver.attempts[0], status: "confirmed" }],
+    } as unknown as Application;
+    const calls: Array<[string, RequestInit]> = [];
+    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push([url, init]);
+      if (url.endsWith("/search")) return respond({ items: [ready] });
+      if (url.endsWith("/manual-submissions")) {
+        return respond({ outcome: "started", attemptId, application: takenOver });
+      }
+      if (url.endsWith("/reconciliation")) return respond(applied);
+      return respond({}, 404);
+    }) as unknown as typeof globalThis.fetch;
+
+    await mount(fetchImplementation, "https://boards.example.test/jobs/1");
+    await click("Record submission status");
+
+    const start = calls.find(([url]) => url.endsWith("/manual-submissions"));
+    expect(start).toBeDefined();
+    if (!start) throw new Error("Manual submission start was not called");
+    expect(JSON.parse(String(start[1].body))).toEqual({ expectedRevision: 3 });
+    expect((start[1].headers as Record<string, string>)["idempotency-key"]).toBe(
+      `web-manual-submission-3-${APP}`,
+    );
+    expect(container.querySelector('[aria-label="Confirm the submission status"]')).not.toBeNull();
+    expect(container.textContent).toContain("I submitted it");
+
+    await click("I submitted it");
+    const reconciliation = calls.find(([url]) => url.endsWith("/reconciliation"));
+    expect(reconciliation?.[0]).toBe(
+      `/api/platform/applications/${APP}/attempts/${attemptId}/reconciliation`,
+    );
+    expect(JSON.parse(String(reconciliation?.[1].body))).toMatchObject({
+      kind: "user_attested_submitted",
+    });
+    expect(container.textContent).toContain("Submitted and confirmed.");
+    expect(container.textContent).not.toContain("Record submission status");
   });
 
   it("shows fixed copy for a refusal and never upstream text", async () => {
