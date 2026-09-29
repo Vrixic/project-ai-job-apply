@@ -458,7 +458,11 @@ code digest, release identity, concurrency of one, enabled five-minute rule, ret
 the endpoint's exact role admission, then requires zero drift. It does not invoke recovery by
 hand; the enabled reviewed schedule owns execution.
 
-For either component, `Verify` accepts the same reviewed plan only after exactly one state advance.
+For either component, `Verify` normally accepts the same reviewed plan only after exactly one state
+advance. The 2026-09-29 recovery activation has one non-reusable exception pinned to its exact
+source, receipt, baseline, metadata, plan, and two consecutive versioned-backend timestamps because
+Terraform 1.16.2 wrote an intermediate and final snapshot during that apply. No other two-serial
+advance is accepted.
 A failed plan performs no cloud mutation. A failed apply or live check is not permission to rerun,
 edit state, or change resources in the console. Diagnose it and use a separately generated,
 checksum-reviewed rollback plan from the new current baseline.

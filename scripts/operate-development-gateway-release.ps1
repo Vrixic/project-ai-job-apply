@@ -688,17 +688,32 @@ function Read-Baseline {
   }
   $null = Assert-RetainedGatewayBaselinePlan $plan $declaredVariables
   $state = Get-StateIdentity
+  $allowTwoSerialAdvances = $false
+  if ($Action -ceq "Verify" -and $D3PlatformActivation -ceq "ApplicationsAttemptRecovery" -and
+      [long]$state.Serial -eq ([long]$metadata.StateSerial + 2)) {
+    $stateHistory = Invoke-AwsJson @(
+      "s3api", "list-object-versions", "--bucket", $StateBucket, "--prefix", "platform.tfstate",
+      "--page-size", "1000", "--max-items", "2000", "--query",
+      "{NextToken:NextToken,Versions:Versions[?Key=='platform.tfstate'].{Key:Key,VersionId:VersionId,IsLatest:IsLatest,LastModified:LastModified,Size:Size},DeleteMarkers:DeleteMarkers[?Key=='platform.tfstate'].{Key:Key,VersionId:VersionId,IsLatest:IsLatest,LastModified:LastModified}}",
+      "--output", "json"
+    ) "Versioned Terraform state history validation"
+    $allowTwoSerialAdvances = Assert-ExactApplicationsRecoveryTwoSnapshotVerification `
+      -SourceSha $SourceSha -ReceiptSha256 $ReviewedApplicationsRecoveryReceiptSha256 `
+      -BaselineSha256 $ReviewedBaselineSha256 -BaselineMetadataSha256 $ReviewedBaselineMetadataSha256 `
+      -PlanSha256 $ReviewedPlanSha256 -Metadata $metadata -CurrentState $state -StateHistory $stateHistory
+  }
   $null = Assert-RetainedGatewayBaselineMetadata -Metadata $metadata -Plan $plan `
     -PlanPath $planPath -PlanSha256 $ReviewedBaselineSha256 -SourceSha $SourceSha `
     -AccountId $ExpectedAccountId -Region $Region `
     -ExpectedMigrationRepositoryUrl $boundary.MigrationRepositoryUrl -CurrentState $state `
-    -AllowOneSerialAdvance:($Action -ceq "Verify")
+    -AllowOneSerialAdvance:($Action -ceq "Verify") -AllowTwoSerialAdvances:$allowTwoSerialAdvances
   if ([string]$metadata.SchemaVersion -in @("7", "8")) {
     $null = Assert-CurrentDocumentBaselineEvidence -Metadata $metadata -Plan $plan -PlanPath $planPath `
       -PlanSha256 $ReviewedBaselineSha256 -CurrentState $state -SourceSha $SourceSha `
       -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot `
       -ReceiptDirectory (Join-Path $terraformRoot "development-document-artifacts") `
-      -AllowOneSerialAdvance:($Action -ceq "Verify") -AllowTwoReceipts
+      -AllowOneSerialAdvance:($Action -ceq "Verify") `
+      -AllowTwoSerialAdvances:$allowTwoSerialAdvances -AllowTwoReceipts
   }
   $documentReleaseSha = if ([string]$metadata.SchemaVersion -ceq "5") {
     if ([string]$metadata.DocumentReleaseSourceSha -cne 'a6d0fba09082b8bc61ee7b604ee1d5c47bd71624' -or
@@ -763,6 +778,7 @@ function Read-Baseline {
     DocumentReceiptSha256 = [string]$metadata.ReceiptSha256
     ProcessorDocumentReceiptSha256 = $processorReceiptSha256
     MigrationImage = $migrationImage; MetadataSchemaVersion = [string]$metadata.SchemaVersion
+    TwoSnapshotVerification = $allowTwoSerialAdvances
   }
 }
 function Get-BuiltArtifact {
@@ -1629,11 +1645,12 @@ if ($D3PlatformActivation -cne "None") {
     & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
     if ($LASTEXITCODE -ne 0) { throw "The exact reviewed D3 platform activation plan failed to apply." }
   } else {
+    $expectedAdvance = if ($baseline.TwoSnapshotVerification) { 2 } else { 1 }
     if (
       [string]$state.Lineage -cne [string]$metadata.StateLineage -or
-      [long]$state.Serial -ne ([long]$metadata.StateSerial + 1)
+      [long]$state.Serial -ne ([long]$metadata.StateSerial + $expectedAdvance)
     ) {
-      throw "Post-activation verification requires exactly one state advance from the reviewed plan."
+      throw "Post-activation verification requires the exact reviewed state advance."
     }
   }
   Assert-D3PlatformActivationLive -Component $component -Artifact $artifact
