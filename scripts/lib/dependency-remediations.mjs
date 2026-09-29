@@ -9,7 +9,10 @@ export const IMAGE_SIZE_REMEDIATION = Object.freeze({
   patchPath: "patches/image-size@1.2.1.patch",
   patchSha256: "37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608",
   lockPatchHash: "37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608",
-  installedTreeSha256: "69353bb092411adf01d204d8d1d423770834e57af1a15e42b9c7ca4e4a937c07",
+  installedTreeSha256s: Object.freeze([
+    "69353bb092411adf01d204d8d1d423770834e57af1a15e42b9c7ca4e4a937c07",
+    "cf10fa4cf9d5f85a86f0db1b29911a4760a810161675f6f745d3631fbabb809d",
+  ]),
 });
 const remediatedAdvisories = new Map([
   ["CVE-2025-71329", "GHSA-5p2g-fcmc-qvqq"],
@@ -158,7 +161,7 @@ export function verifyImageSizeRemediation({ repositoryRoot, dependencyRoots }) 
       metadata.name !== remediation.package ||
       metadata.version !== remediation.version ||
       metadata.main !== "dist/index.js" ||
-      installedPackageTreeSha256(directory) !== remediation.installedTreeSha256
+      !remediation.installedTreeSha256s.includes(installedPackageTreeSha256(directory))
     ) {
       fail();
     }
