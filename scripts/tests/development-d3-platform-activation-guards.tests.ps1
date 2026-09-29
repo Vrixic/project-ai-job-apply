@@ -79,11 +79,14 @@ function New-Variables {
     [string]$Version = "",
     [string]$Sha = "",
     [string]$Base64 = "",
-    [string]$Other = "retained"
+    [string]$Other = "retained",
+    [switch]$StringBooleans
   )
+  $vaultValue = if ($StringBooleans) { $Vault.ToString().ToLowerInvariant() } else { $Vault }
+  $recoveryValue = if ($StringBooleans) { $Recovery.ToString().ToLowerInvariant() } else { $Recovery }
   return [pscustomobject]@{
-    restricted_answer_vault_enabled = [pscustomobject]@{ value = $Vault }
-    applications_attempt_recovery_enabled = [pscustomobject]@{ value = $Recovery }
+    restricted_answer_vault_enabled = [pscustomobject]@{ value = $vaultValue }
+    applications_attempt_recovery_enabled = [pscustomobject]@{ value = $recoveryValue }
     applications_attempt_recovery_artifact_s3_key = [pscustomobject]@{ value = $Key }
     applications_attempt_recovery_artifact_s3_object_version = [pscustomobject]@{ value = $Version }
     applications_attempt_recovery_artifact_sha256 = [pscustomobject]@{ value = $Sha }
@@ -100,6 +103,17 @@ $null = Assert-D3PlatformActivationVariables -Component RestrictedAnswerVault `
 $passed++
 $null = Assert-D3PlatformActivationVariables -Component ApplicationsAttemptRecovery `
   -BaselineVariables $baselineVariables -PlanVariables $recoveryVariables -Artifact $artifact
+$passed++
+
+$stringBaselineVariables = New-Variables -StringBooleans
+$stringVaultVariables = New-Variables -Vault $true -StringBooleans
+$stringRecoveryVariables = New-Variables -Recovery $true -Key $artifact.key -Version $artifact.versionId `
+  -Sha $artifact.artifactSha256 -Base64 $artifact.objectBase64Sha256 -StringBooleans
+$null = Assert-D3PlatformActivationVariables -Component RestrictedAnswerVault `
+  -BaselineVariables $stringBaselineVariables -PlanVariables $stringVaultVariables
+$passed++
+$null = Assert-D3PlatformActivationVariables -Component ApplicationsAttemptRecovery `
+  -BaselineVariables $stringBaselineVariables -PlanVariables $stringRecoveryVariables -Artifact $artifact
 $passed++
 
 Assert-Rejected {

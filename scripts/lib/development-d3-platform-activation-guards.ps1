@@ -120,16 +120,18 @@ function Assert-D3PlatformActivationVariables {
   }
   if ($Component -ceq "RestrictedAnswerVault") {
     if ($null -ne $Artifact) { throw "The vault activation cannot consume a Lambda artifact." }
-    if (ConvertTo-ExactBoolean $expected.restricted_answer_vault_enabled "restricted_answer_vault_enabled") {
+    $baselineEnabled = $expected.restricted_answer_vault_enabled
+    if (ConvertTo-ExactBoolean $baselineEnabled "restricted_answer_vault_enabled") {
       throw "The restricted-answer vault is already enabled in the retained baseline."
     }
-    $expected.restricted_answer_vault_enabled = $true
+    $expected.restricted_answer_vault_enabled = if ($baselineEnabled -is [string]) { "true" } else { $true }
   } else {
     if ($null -eq $Artifact) { throw "The Applications recovery activation requires its verified artifact." }
-    if (ConvertTo-ExactBoolean $expected.applications_attempt_recovery_enabled "applications_attempt_recovery_enabled") {
+    $baselineEnabled = $expected.applications_attempt_recovery_enabled
+    if (ConvertTo-ExactBoolean $baselineEnabled "applications_attempt_recovery_enabled") {
       throw "Applications attempt recovery is already enabled in the retained baseline."
     }
-    $expected.applications_attempt_recovery_enabled = $true
+    $expected.applications_attempt_recovery_enabled = if ($baselineEnabled -is [string]) { "true" } else { $true }
     $expected.applications_attempt_recovery_artifact_s3_key = [string]$Artifact.key
     $expected.applications_attempt_recovery_artifact_s3_object_version = [string]$Artifact.versionId
     $expected.applications_attempt_recovery_artifact_sha256 = [string]$Artifact.artifactSha256
