@@ -162,6 +162,8 @@ foreach ($recoveryMarker in @(
     "AllowOneSerialAdvance", "Post-apply verification requires the exact reviewed gateway release plan",
     "The post-apply gateway release plan checksum does not match review.",
     '"docs/product/delivery/phase-3-application-preparation.md"',
+    '"scripts/lib/development-current-document-baseline.ps1"',
+    '"scripts/tests/development-current-document-baseline.tests.ps1"',
     "Assert-ExactApplicationsRecoveryTwoSnapshotVerification", "TwoSnapshotVerification",
     '"--page-size", "1000", "--max-items", "2000"'
   )) {
