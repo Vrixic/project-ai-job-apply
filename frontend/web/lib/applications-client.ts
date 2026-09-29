@@ -2,6 +2,7 @@ import type {
   Application,
   ApplicationResumeFile,
   ApplicationResumePreview,
+  ApplicationSubmissionStart,
 } from "@ai-job-apply/api-contracts";
 
 /**
@@ -63,6 +64,54 @@ export async function applicationsCall(
     const value: unknown = await response.json().catch(() => undefined);
     if (response.ok && value && typeof value === "object" && "id" in value) {
       return { ok: true, application: value as Application };
+    }
+    const code =
+      value && typeof value === "object" && typeof (value as { code?: unknown }).code === "string"
+        ? (value as { code: string }).code
+        : "applications_unavailable";
+    return { ok: false, status: response.status, code, message: applicationsProblemCopy(code) };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      code: "applications_unavailable",
+      message: applicationsProblemCopy("applications_unavailable"),
+    };
+  }
+}
+
+/**
+ * Starts the candidate-attested manual path. The server returns a submission-start envelope, but
+ * the workspace needs only its owner-scoped application state to expose the existing reconciliation
+ * controls. The BFF validates the full envelope before this browser-side identity check.
+ */
+export async function startManualApplicationSubmission(
+  applicationId: string,
+  expectedRevision: number,
+  options: ApplicationsCallOptions = {},
+): Promise<ApplicationsCallResult> {
+  const send = options.fetch ?? fetch;
+  try {
+    const response = await send(`/api/platform/applications/${applicationId}/manual-submissions`, {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      ...(options.signal ? { signal: options.signal } : {}),
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": commandKey("manual-submission", applicationId, expectedRevision),
+      },
+      body: JSON.stringify({ expectedRevision }),
+    });
+    const value: unknown = await response.json().catch(() => undefined);
+    if (response.ok && value && typeof value === "object") {
+      const result = value as Partial<ApplicationSubmissionStart>;
+      if (
+        (result.outcome === "started" || result.outcome === "approval_invalidated") &&
+        result.application?.id === applicationId
+      ) {
+        return { ok: true, application: result.application };
+      }
     }
     const code =
       value && typeof value === "object" && typeof (value as { code?: unknown }).code === "string"

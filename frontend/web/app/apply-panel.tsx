@@ -40,14 +40,17 @@ export function ApplyPanel({
   application,
   applyUrl,
   fetchImplementation,
+  onRecordManualSubmission,
 }: {
   application: Application;
   applyUrl?: string | undefined;
   fetchImplementation?: typeof globalThis.fetch;
+  onRecordManualSubmission(): Promise<void> | void;
 }) {
   const headingId = useId();
   const [message, setMessage] = useState<string>();
   const [busyFormat, setBusyFormat] = useState<"pdf" | "docx">();
+  const [recording, setRecording] = useState(false);
   const href = safeApplyUrl(applyUrl);
   const fields = (application.currentPacket?.fields ?? []).filter(
     (field) => field.value !== undefined && String(field.value) !== "",
@@ -94,6 +97,18 @@ export function ApplyPanel({
       setMessage(`${file.fileName} downloaded.`);
     } finally {
       setBusyFormat(undefined);
+    }
+  }
+
+  async function recordManualSubmission() {
+    setRecording(true);
+    setMessage(undefined);
+    try {
+      await onRecordManualSubmission();
+    } catch {
+      setMessage("That did not go through. Check the application state and try again.");
+    } finally {
+      setRecording(false);
     }
   }
 
@@ -153,6 +168,20 @@ export function ApplyPanel({
           </ul>
         </div>
       ) : null}
+      <div>
+        <h4>Record what happened</h4>
+        <p>
+          After you finish or stop on the employer's site, continue here. We will ask you to confirm
+          whether the application was submitted.
+        </p>
+        <button
+          type="button"
+          disabled={recording || busyFormat !== undefined}
+          onClick={() => void recordManualSubmission()}
+        >
+          {recording ? "Opening confirmation..." : "Record submission status"}
+        </button>
+      </div>
       <p role="status" aria-live="polite">
         {message}
       </p>

@@ -49,7 +49,7 @@ They are not a legal, security, or privacy disposition, and every reviewer recor
 | Review-by-exception UI with restricted answers always visible | Web panel | 10 tests incl. automated axe checks |
 | Privacy-safe versioned measurement | Applications metrics | Tests proving no value or identifier is emitted |
 | Job-specific resume: deterministic selection and ordering of the candidate's own bullets (never adds or rewords text), verified DOCX/PDF, content hash bound into the packet, computed in the Documents runtime so the Gateway never reads resume text ([ADR-031](../adr/031-deterministic-resume-tailoring-in-documents-runtime.md), proposed) | Documents runtime, Applications, Gateway, web | Unit, PostgreSQL, and HTTP end-to-end tests; deployed to development and answering the fixed request (no resume can be tailored yet because document processing is dark) |
-| After approval, an Apply step that opens the employer's page and offers the approved answers and the verified tailored resume; it never submits and makes no attempt call | Web | Unit tests and a real-Chromium run against a mocked API |
+| After approval, an Apply step opens the employer's page and offers the approved answers and verified tailored resume. For unsupported sites, an explicit candidate action starts a manual `taken_over` attempt with no dispatch; the existing reconciliation path records the candidate's submitted or not-submitted attestation. The web app never submits. | Web | Unit tests and a generated-synthetic real-Chromium keyboard/WCAG run against a mocked BFF |
 | Automatic fills only from exactly one confirmed, type-fitting fact under an owner-approved 26-row convention; restricted answers never mapped | Applications packet source | 13 tests |
 
 ## What is not implemented or not proven
@@ -60,10 +60,11 @@ They are not a legal, security, or privacy disposition, and every reviewer recor
   confirmation detection has been exercised.
 - The answer vault has no persistence, separate key, or API (blocked by D3-015 and D3-R4).
 - Applications candidate export, deletion, and restore replay are implemented and locally verified (D3-014). The owner confirmed the `d3-development-synthetic-v1` policy selection on 2026-09-19, but it is not activated: activation needs a Gateway release, which is blocked by D3-020. The Applications schema itself is deployed to development (D3-015).
-- No extension integration exists. The Auth0 `applications:*` scopes, Gateway routes, BFF routes, and review workspace exist in development and were exercised with a real sign-in (create and packet prepare returned 201); nothing was approved or submitted.
+- No extension integration exists. The Auth0 `applications:*` scopes, Gateway routes, BFF routes, and review workspace exist in development and were exercised with a real sign-in (create and packet prepare returned 201). The manual candidate-attestation path is locally wired and tested, but no external submission was made and the additive route/migration are not deployed.
 - No durable workflow, outbox publisher, or alarm exists for Applications.
 - Accessibility was checked by automated jsdom axe rules and a real-Chromium keyboard run of the real
-  components against a mocked API (no color contrast, no assistive technology, no live end-to-end run).
+  components against a mocked API, including the manual attempt and candidate attestation transition
+  (no assistive technology or live end-to-end run).
 
 ## Defaults to confirm (all currently engineering choices)
 

@@ -230,16 +230,18 @@ representative-data, provider-failure, write/recovery, SLO, or Phase 1 acceptanc
 
 ## D3 Applications review
 
-The twelve `/api/platform/applications/**` route handlers are thin wrappers over
+The fifteen `/api/platform/applications/**` route handlers are thin wrappers over
 `lib/applications-bff.ts`. Each request is validated against the generated OpenAPI schemas (UUIDv7
 identifiers, a bounded JSON body, an idempotency key for commands, and only the `afterSeq`/`limit`
 history query), forwarded to exactly one fixed platform path, and every success body is validated
 again before it reaches the browser. Failures are projected to fixed, value-free problem details.
 
 `ApplicationsWorkspace` (`app/applications-workspace.tsx`) prepares an application from a job, shows the
-review-by-exception panel, and approves, reopens, cancels, or resolves an ambiguous result. It never
-submits: submission belongs to the browser extension, which is blocked on provider fixtures (D3-013)
-and live-effect approval (D3-012). Two deployment flags keep it off by default:
+review-by-exception panel, and approves, reopens, cancels, or resolves an ambiguous result. For an
+unsupported site, the candidate can start a manual attempt after working on the employer's page and
+then attest submitted or not submitted through the existing reconciliation path. The web app never
+submits: automated submission belongs to the browser extension, which is blocked on provider fixtures
+(D3-013) and live-effect approval (D3-012). Two deployment flags keep it off by default:
 
 - `AUTH0_APPLICATIONS_SCOPES=enabled` (server) adds `applications:read applications:write` to the
   requested Auth0 scopes. Enable it only after a token minted for this client is confirmed to carry them;

@@ -77,6 +77,7 @@ async function mount(props: Partial<Parameters<typeof ApplyPanel>[0]> = {}) {
       <ApplyPanel
         application={approved()}
         applyUrl="https://boards.example.test/jobs/1"
+        onRecordManualSubmission={() => undefined}
         {...props}
       />,
     );
@@ -147,7 +148,7 @@ describe("ApplyPanel", () => {
     expect(link?.getAttribute("target")).toBe("_blank");
     expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
     expect(container.textContent).toContain("Nothing is sent for you yet");
-    expect(container.textContent).not.toMatch(/submitted|applied successfully/i);
+    expect(container.textContent).not.toMatch(/applied successfully/i);
   });
 
   it("says so plainly when there is no safe link", async () => {
@@ -253,6 +254,32 @@ describe("ApplyPanel", () => {
     await mount({ application: approved(false) });
     expect(container.textContent).not.toContain("Your tailored resume");
     expect(container.textContent).toContain("Your approved answers");
+  });
+
+  it("begins the candidate confirmation flow only on explicit request", async () => {
+    const onRecordManualSubmission = vi.fn(async () => undefined);
+    await mount({ onRecordManualSubmission });
+    expect(container.textContent).toContain("whether the application was submitted");
+    expect(onRecordManualSubmission).not.toHaveBeenCalled();
+    await act(async () => {
+      button("Record submission status").click();
+    });
+    expect(onRecordManualSubmission).toHaveBeenCalledOnce();
+  });
+
+  it("shows fixed copy when recording cannot start", async () => {
+    await mount({
+      onRecordManualSubmission: async () => {
+        throw new Error("SECRET upstream detail");
+      },
+    });
+    await act(async () => {
+      button("Record submission status").click();
+    });
+    expect(container.querySelector("[role=status]")?.textContent).toContain(
+      "That did not go through",
+    );
+    expect(container.textContent).not.toContain("SECRET");
   });
 
   it("has no automated accessibility violations", async () => {

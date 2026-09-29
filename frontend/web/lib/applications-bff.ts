@@ -3,7 +3,7 @@ import { getLazyAuth0Session } from "./auth0";
 import { forwardPlatformRequest } from "./platform-api";
 
 /**
- * Browser boundary for the fourteen Applications routes. Every request is validated against the
+ * Browser boundary for the fifteen Applications routes. Every request is validated against the
  * generated OpenAPI schemas, bounded, and forwarded to exactly one fixed platform path; every
  * success body is validated again before it reaches the browser. Failures are projected by the
  * shared platform boundary to fixed, value-free problem details.
@@ -28,6 +28,7 @@ export type ApplicationsOperation =
   | "reopen"
   | "cancel"
   | "startSubmission"
+  | "startManualSubmission"
   | "dispatch"
   | "recordResult"
   | "reconcile";
@@ -46,6 +47,8 @@ interface OperationSpec {
   formatQuery?: boolean;
   /** Application-typed responses must be the application that was addressed. */
   echoesApplicationId?: boolean;
+  /** Submission-start responses must contain the application that was addressed. */
+  echoesNestedApplicationId?: boolean;
 }
 
 const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
@@ -161,6 +164,18 @@ const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
     idempotent: true,
     needsApplication: true,
     needsAttempt: false,
+    echoesNestedApplicationId: true,
+  },
+  startManualSubmission: {
+    method: "POST",
+    path: (id) => `/v1/applications/${id}/manual-submissions`,
+    request: "StartManualApplicationSubmissionRequest",
+    response: "ApplicationSubmissionStart",
+    success: 200,
+    idempotent: true,
+    needsApplication: true,
+    needsAttempt: false,
+    echoesNestedApplicationId: true,
   },
   dispatch: {
     method: "POST",
@@ -421,6 +436,12 @@ async function validateSuccess(
     const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (!validator(spec.response)(value)) throw new Error("The response is invalid");
     if (spec.echoesApplicationId && (value as { id?: unknown }).id !== applicationId) {
+      throw new Error("The response is for another application");
+    }
+    if (
+      spec.echoesNestedApplicationId &&
+      (value as { application?: { id?: unknown } }).application?.id !== applicationId
+    ) {
       throw new Error("The response is for another application");
     }
     const headers = new Headers({

@@ -8,6 +8,7 @@ import {
   commandKey,
   findLiveApplication,
   sha256Hex,
+  startManualApplicationSubmission,
 } from "../lib/applications-client";
 import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
 import { ApplyPanel } from "./apply-panel";
@@ -18,8 +19,9 @@ type Entries = Readonly<Record<string, string | boolean>>;
 /**
  * Starts and reviews one application for a job. If the candidate already has a live application
  * for this job it is opened instead of started again. Submission itself is performed later from the
- * browser extension; this surface only prepares, reviews, approves, reopens, cancels, and lets the
- * candidate resolve an ambiguous result. It never shows upstream text, only fixed copy.
+ * browser extension; this surface prepares, reviews, approves, reopens, cancels, starts a manual
+ * candidate-attested attempt, and lets the candidate reconcile its result. It never shows upstream
+ * text, only fixed copy.
  */
 export function ApplicationsWorkspace({
   jobId,
@@ -229,6 +231,16 @@ export function ApplicationsWorkspace({
               application={application}
               applyUrl={applyUrl}
               {...(fetchImplementation ? { fetchImplementation } : {})}
+              onRecordManualSubmission={async () => {
+                await settle(
+                  await startManualApplicationSubmission(
+                    application.id,
+                    application.revision,
+                    options,
+                  ),
+                  application.id,
+                );
+              }}
             />
           ) : null}
         </>

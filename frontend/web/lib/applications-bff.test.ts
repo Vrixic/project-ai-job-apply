@@ -213,6 +213,60 @@ describe("Applications browser boundary", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("starts a manual attempt through the fixed validated path and checks nested ownership", async () => {
+    const attempt = {
+      id: ATTEMPT,
+      sequence: 1,
+      status: "taken_over",
+      adapterId: "manual",
+      adapterVersion: "none",
+      startedAt: AT,
+      resolvedAt: AT,
+    };
+    const started = {
+      outcome: "started",
+      attemptId: ATTEMPT,
+      application: application({
+        status: "takeover",
+        revision: 2,
+        currentAction: "complete_manually",
+        attempts: [attempt],
+      }),
+    };
+    const { fetch, deps } = harness(() => json(started));
+    const response = await applicationsRoute(
+      "startManualSubmission",
+      post("/x", { expectedRevision: 1 }),
+      { applicationId: APP },
+      deps,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(started);
+    const [url, init] = fetch.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe(`http://localhost:4000/v1/applications/${APP}/manual-submissions`);
+    expect(init.body).toBe(JSON.stringify({ expectedRevision: 1 }));
+    expect((init.headers as Record<string, string>)["idempotency-key"]).toBe(KEY);
+
+    const invalid = harness(() => json(started));
+    const refusedBody = await applicationsRoute(
+      "startManualSubmission",
+      post("/x", { expectedRevision: 1, adapterId: "manual" }),
+      { applicationId: APP },
+      invalid.deps,
+    );
+    expect(refusedBody.status).toBe(400);
+    expect(invalid.fetch).not.toHaveBeenCalled();
+
+    const foreign = harness(() => json({ ...started, application: application({ id: JOB }) }));
+    const refusedOwner = await applicationsRoute(
+      "startManualSubmission",
+      post("/x", { expectedRevision: 1 }),
+      { applicationId: APP },
+      foreign.deps,
+    );
+    expect(refusedOwner.status).toBe(503);
+  });
+
   it("projects declared upstream problems to fixed value-free bodies", async () => {
     const { deps } = harness(() => problem(409, "application_packet_stale"));
     const response = await applicationsRoute(
