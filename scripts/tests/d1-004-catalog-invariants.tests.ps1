@@ -315,3 +315,4 @@ try {
 }
 
 Write-Host "D1-004 catalog invariant verifier tests passed."
+$global:LASTEXITCODE = 0

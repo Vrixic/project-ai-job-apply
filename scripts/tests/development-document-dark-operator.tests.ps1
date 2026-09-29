@@ -1,6 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$testIgnoredRoot = Join-Path ([IO.Path]::GetTempPath()) "ignored"
 $operatorPath = Join-Path $repositoryRoot "scripts\operate-development-document-dark-deployment.ps1"
 . (Join-Path $repositoryRoot "scripts\lib\deployment-operator-guards.ps1")
 . (Join-Path $repositoryRoot "scripts\lib\development-document-dark-guards.ps1")
@@ -1032,7 +1033,7 @@ finally {
 
 $ExpectedAccountId = "111122223333"
 $Region = "us-east-2"
-$metadataPlanPath = "C:\ignored\baseline.tfplan"
+$metadataPlanPath = Join-Path $testIgnoredRoot "baseline.tfplan"
 $metadataPlanSha = "d" * 64
 $metadataReceiptSha = "e" * 64
 $metadataSourceSha = "f" * 40
@@ -1348,7 +1349,7 @@ $ReviewedBaselineToOperatorDeltaSha256 = $expectedRecoveryBaselineDelta
 $ReviewedOperatorDeltaSha256 = $expectedRecoveryReleaseDelta
 $operatorDeltaSha256 = $ReviewedOperatorDeltaSha256
 $ReviewedReceiptSha256 = $completeDarkRecoveryReceiptSha256
-$recoveryPlanPath = "C:\ignored\parser-dark-recovery.tfplan"
+$recoveryPlanPath = Join-Path $testIgnoredRoot "parser-dark-recovery.tfplan"
 $recoveryPlanSha = "d" * 64
 $recoveryMigrationImage = "${ExpectedAccountId}.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:$('e' * 64)"
 $recoveryParserArtifactSha = "6" * 64
@@ -1654,11 +1655,11 @@ $operatorDeltaSha256 = $expectedAppliedReleaseDelta
 $ReviewedReceiptSha256 = $appliedGatewayRecoveryDocumentReceiptSha256
 $ReviewedBaselineSha256 = $appliedGatewayRecoveryBaselineSha256
 $ReviewedBaselineMetadataSha256 = $appliedGatewayRecoveryBaselineMetadataSha256
-$terraformDataRoot = "C:\ignored"
+$terraformDataRoot = $testIgnoredRoot
 $RetainedParserReceiptPath =
-  "C:\ignored\development-document-artifacts\receipt-d0e55de86edf-20260813-192653.json"
+  Join-Path $testIgnoredRoot "development-document-artifacts/receipt-d0e55de86edf-20260813-192653.json"
 $ReviewedRetainedParserReceiptSha256 = $appliedGatewayRecoveryRetainedParserReceiptSha256
-$appliedRecoveryBaselinePath = "C:\ignored\baseline-complete-dark.tfplan"
+$appliedRecoveryBaselinePath = Join-Path $testIgnoredRoot "baseline-complete-dark.tfplan"
 
 function New-RetainedParserReceiptFixture {
   $artifacts = @()
@@ -1717,7 +1718,7 @@ foreach ($receiptCase in @(
       $_.artifactName -ceq "document-parser-lambda" -and $_.suffix -ceq "zip"
     })[0]
   switch ($receiptCase) {
-    "path" { $path = "C:\ignored\development-document-artifacts\receipt-other.json" }
+    "path" { $path = Join-Path $testIgnoredRoot "development-document-artifacts/receipt-other.json" }
     "hash" { $sha = "5" * 64 }
     "source" { $receipt.sourceSha = "6" * 40 }
     "shape" { $receipt.artifacts = @($receipt.artifacts | Select-Object -First 7) }
@@ -1908,8 +1909,8 @@ $rejected = $false
 try { Assert-AppliedRecoveryBaselineAccepted -Baseline $badBaseline } catch { $rejected = $true }
 if (-not $rejected) { throw "Already-applied gateway recovery accepted a changed migration image." }
 
-$AppliedGatewayReceiptPath = "C:\ignored\receipt-b4bfb38ddb87-20260814-212048.json"
-$appliedPlanPath = "C:\ignored\release-b4bfb38ddb87.tfplan"
+$AppliedGatewayReceiptPath = Join-Path $testIgnoredRoot "receipt-b4bfb38ddb87-20260814-212048.json"
+$appliedPlanPath = Join-Path $testIgnoredRoot "release-b4bfb38ddb87.tfplan"
 $appliedPlanBaselineMetadataPath = "$appliedRecoveryBaselinePath.baseline.json"
 function New-AppliedGatewayMetadata {
   return [pscustomobject][ordered]@{
@@ -1939,7 +1940,7 @@ foreach ($metadataCase in @("extra", "plan", "plan-sha", "receipt", "baseline", 
   $metadata = New-AppliedGatewayMetadata
   switch ($metadataCase) {
     "extra" { $metadata | Add-Member NoteProperty Unexpected $true }
-    "plan" { $metadata.PlanPath = "C:\ignored\other.tfplan" }
+    "plan" { $metadata.PlanPath = Join-Path $testIgnoredRoot "other.tfplan" }
     "plan-sha" { $metadata.PlanSha256 = "1" * 64 }
     "receipt" { $metadata.ReceiptSha256 = "2" * 64 }
     "baseline" { $metadata.BaselineSha256 = "3" * 64 }
@@ -2206,7 +2207,7 @@ foreach ($localCase in @(
       $_.artifactName -ceq "document-parser-lambda" -and $_.suffix -ceq "zip"
     })[0]
   switch ($localCase) {
-    "path" { $script:retainedReadResolvedPath = "C:\ignored\other-receipt.json" }
+    "path" { $script:retainedReadResolvedPath = Join-Path $testIgnoredRoot "other-receipt.json" }
     "file-hash" { $script:retainedReadFileSha = "1" * 64 }
     "reviewed-hash" { $script:ReviewedRetainedParserReceiptSha256 = "2" * 64 }
     "source" { $script:retainedReadReceipt.sourceSha = "3" * 40 }
