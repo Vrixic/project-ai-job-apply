@@ -574,9 +574,7 @@ export function ProfilePageClient({
   }
 
   return (
-    <section aria-labelledby="dashboard-profile-heading">
-      <h1 id="dashboard-profile-heading">Profile</h1>
-
+    <section aria-label="Profile">
       {message && <output aria-live="polite">{message}</output>}
       {operation && (
         <section className="result" aria-live="polite">

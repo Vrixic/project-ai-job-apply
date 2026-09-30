@@ -380,55 +380,43 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
 
   if (!authenticated) {
     return (
-      <section className="job-search" aria-labelledby="job-search-heading">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Active job catalog</span>
-            <h2 id="job-search-heading">Search current jobs</h2>
-          </div>
-        </div>
+      <section className="job-search" aria-label="Search current jobs">
         <p>Sign in to search the candidate job catalog.</p>
       </section>
     );
   }
 
   return (
-    <section className="job-search" aria-labelledby="job-search-heading">
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Active job catalog</span>
-          <h2 id="job-search-heading">Search current jobs</h2>
-        </div>
-      </div>
+    <section className="job-search" aria-label="Search current jobs">
       <p>
         Search verified, unexpired postings. These results are not personalized or ranked from
         private profile facts.
       </p>
-      <form className="compact-form job-search-fields" onSubmit={submit}>
-        <label>
-          Keywords
-          <span>Title, description, department, or company</span>
+      <form className="job-filter-bar" onSubmit={submit} aria-label="Job filters">
+        <label className="job-filter">
+          <span>Keywords</span>
           <input
             ref={keywordsRef}
             type="search"
             maxLength={200}
+            placeholder="Title, description, department, or company"
             value={fields.query}
             onChange={(event) => update("query", event.target.value)}
             disabled={!authenticated || searching}
           />
         </label>
-        <label>
-          Job title
-          <span>Matches one stored title exactly</span>
+        <label className="job-filter">
+          <span>Title</span>
           <input
             maxLength={200}
+            placeholder="Exact stored title"
             value={fields.title}
             onChange={(event) => update("title", event.target.value)}
             disabled={!authenticated || searching}
           />
         </label>
-        <label>
-          Company
+        <label className="job-filter">
+          <span>Company</span>
           <input
             maxLength={200}
             value={fields.company}
@@ -436,8 +424,8 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
             disabled={!authenticated || searching}
           />
         </label>
-        <label>
-          Location
+        <label className="job-filter">
+          <span>Location</span>
           <input
             maxLength={200}
             value={fields.location}
@@ -445,20 +433,21 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
             disabled={!authenticated || searching}
           />
         </label>
-        <label>
-          Verified within days
+        <label className="job-filter job-filter-narrow">
+          <span>Verified within</span>
           <input
             type="number"
             min={1}
             max={365}
             inputMode="numeric"
+            placeholder="Days"
             value={fields.verifiedWithinDays}
             onChange={(event) => update("verifiedWithinDays", event.target.value)}
             disabled={!authenticated || searching}
           />
         </label>
-        <label>
-          Sort
+        <label className="job-filter job-filter-narrow">
+          <span>Sort</span>
           <select
             value={fields.sort}
             onChange={(event) => update("sort", event.target.value as JobSearchFields["sort"])}
@@ -468,8 +457,8 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
             <option value="freshness">Freshness</option>
           </select>
         </label>
-        <button type="submit" disabled={!authenticated || searching}>
-          {searching && !cursor ? "Searching…" : "Search jobs"}
+        <button className="job-filter-submit" type="submit" disabled={!authenticated || searching}>
+          {searching && !cursor ? "Searching…" : "Search"}
         </button>
       </form>
 

@@ -10,8 +10,7 @@ export function JobsPageClient({ authenticated }: { authenticated: boolean }) {
   const [jobsView, setJobsView] = useState<JobsView>("search");
 
   return (
-    <section aria-labelledby="dashboard-jobs-heading">
-      <h1 id="dashboard-jobs-heading">Jobs</h1>
+    <section aria-label="Jobs">
       <div className="dashboard-subtabs" role="tablist" aria-label="Jobs view">
         <button
           type="button"
