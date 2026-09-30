@@ -13,6 +13,13 @@ function Assert-Rejected {
   $script:passed++
 }
 function Copy-Fixture { param([Parameter(Mandatory)][object]$Value); return $Value | ConvertTo-Json -Depth 50 | ConvertFrom-Json }
+function Copy-VerificationParameters {
+  param([Parameter(Mandatory)][hashtable]$Value)
+  $copy = Copy-Fixture $Value
+  $parameters = @{}
+  foreach ($property in $copy.PSObject.Properties) { $parameters[$property.Name] = $property.Value }
+  return $parameters
+}
 
 $account = "111122223333"
 $sourceSha = "a" * 40
@@ -330,11 +337,95 @@ foreach ($case in @(
     @{ Name = "duplicate version id"; Mutate = { param($v) $v.StateHistory.Versions[0].VersionId = $v.StateHistory.Versions[1].VersionId } },
     @{ Name = "empty state"; Mutate = { param($v) $v.StateHistory.Versions[1].Size = 0 } }
   )) {
-  $bad = Copy-Fixture $recoveryVerification
+  $bad = Copy-VerificationParameters $recoveryVerification
+  # Windows JSON parsing narrows small integers. Preserve this older guard's valid base
+  # fixture so each mutation is rejected for its own evidence, not an unrelated size type.
+  foreach ($version in $bad.StateHistory.Versions) { $version.Size = [long]$version.Size }
   & $case.Mutate $bad
   Assert-Rejected { Assert-ExactApplicationsRecoveryTwoSnapshotVerification @bad } `
     "The recovery exception accepted $($case.Name) tampering."
 }
+
+$exportVerification = @{
+  SourceSha = "4c557c35e18647ffd106fe754dc84394b59e9370"
+  ReceiptSha256 = "d2e18359f0e74858b72e9ac6424e2fce70d672d5efd2f4417abaaf82bc71df58"
+  BaselineSha256 = "46640629f435ccf0b20953f8f272f132d698de471e534b7dd9f992720fc4956a"
+  BaselineMetadataSha256 = "f88b7b755f9256d7e56e96ce084d885d21db4419858f3e3a55a128e2a2d831cc"
+  PlanSha256 = "c8b77d18b4e63e20081bb9bb26ffd692b64315930033e718035401903550420e"
+  PlanMetadataSha256 = "d50a7362e06a2fe0c1ba5eae5906ad9e16896cb90558979a24a59cfb155758b9"
+  Metadata = [pscustomobject]@{
+    SchemaVersion = "7"; SourceSha = "4c557c35e18647ffd106fe754dc84394b59e9370"
+    StateSerial = 395; StateLineage = $lineage; CreatedAt = "2026-09-30T17:05:31Z"
+  }
+  CurrentState = [pscustomobject]@{ Serial = 398; Lineage = $lineage }
+  StateHistory = [pscustomobject]@{
+    NextToken = $null; DeleteMarkers = @()
+    Versions = @(for ($index = 0; $index -lt 3; $index++) {
+        [pscustomobject]@{
+          Key = "platform.tfstate"; VersionId = "export-version-$index"; IsLatest = ($index -eq 2)
+          LastModified = @("2026-09-30T17:22:03Z", "2026-09-30T17:22:28Z", "2026-09-30T17:22:41Z")[$index]
+          Size = [long]120000
+        }
+      })
+  }
+}
+$null = Assert-ExactRestrictedExportThreeSnapshotVerification @exportVerification; $passed++
+foreach ($pin in @("SourceSha", "ReceiptSha256", "BaselineSha256", "BaselineMetadataSha256", "PlanSha256", "PlanMetadataSha256")) {
+  $bad = @{} + $exportVerification
+  $bad[$pin] = if ($pin -ceq "SourceSha") { "0" * 40 } else { "0" * 64 }
+  Assert-Rejected { Assert-ExactRestrictedExportThreeSnapshotVerification @bad } "Export recovery accepted a different $pin."
+}
+foreach ($case in @(
+    { param($v) $v.Metadata.SchemaVersion = "6" },
+    { param($v) $v.Metadata.SourceSha = "0" * 40 },
+    { param($v) $v.Metadata.StateSerial = 394 },
+    { param($v) $v.CurrentState.Serial = 399 },
+    { param($v) $v.CurrentState.Lineage = "87654321-4321-4321-4321-cba987654321" },
+    { param($v) $v.Metadata.CreatedAt = "invalid" },
+    { param($v) $v.Metadata.CreatedAt = "2026-09-30T17:22:03Z" },
+    { param($v) $v.StateHistory.NextToken = "more" },
+    { param($v) $v.StateHistory.Versions = @($v.StateHistory.Versions | Select-Object -Skip 1) },
+    { param($v) $copy = Copy-Fixture $v.StateHistory.Versions[1]; $copy.VersionId = "extra"; $v.StateHistory.Versions += $copy },
+    { param($v) $v.StateHistory.DeleteMarkers = @([pscustomobject]@{ Key = "platform.tfstate"; LastModified = "2026-09-30T17:22:41Z" }) },
+    { param($v) $v.StateHistory.Versions[0].Key = "other.tfstate" },
+    { param($v) $v.StateHistory.Versions[0].LastModified = "2026-09-30T17:22:04Z" },
+    { param($v) $v.StateHistory.Versions[1].LastModified = "2026-09-30T17:22:29Z" },
+    { param($v) $v.StateHistory.Versions[2].LastModified = "2026-09-30T17:22:42Z" },
+    { param($v) $v.StateHistory.Versions[0].LastModified = "2026-09-30T17:22:03" },
+    { param($v) $v.StateHistory.Versions[0].IsLatest = $true },
+    { param($v) $v.StateHistory.Versions[2].IsLatest = $false },
+    { param($v) $v.StateHistory.Versions[2].IsLatest = "true" },
+    { param($v) $v.StateHistory.Versions[0].VersionId = "" },
+    { param($v) $v.StateHistory.Versions[1].VersionId = $v.StateHistory.Versions[2].VersionId },
+    { param($v) $v.StateHistory.Versions[2].Size = [long]0 },
+    { param($v) $v.StateHistory.Versions[2].Size = "120000" },
+    { param($v) $v.StateHistory.Versions[2].Size = [double]120000.5 }
+  )) {
+  $bad = Copy-VerificationParameters $exportVerification
+  & $case $bad
+  Assert-Rejected { Assert-ExactRestrictedExportThreeSnapshotVerification @bad } "Export recovery accepted tampered snapshot evidence."
+}
+foreach ($timestampType in @("datetime", "datetimeoffset", "offset-string")) {
+  $typed = Copy-VerificationParameters $exportVerification
+  if ($timestampType -ceq "datetime") {
+    $typed.Metadata.CreatedAt = [datetime]"2026-09-30T17:05:31Z"
+    foreach ($version in $typed.StateHistory.Versions) { $version.LastModified = [datetime]$version.LastModified }
+  } elseif ($timestampType -ceq "datetimeoffset") {
+    $typed.Metadata.CreatedAt = [datetimeoffset]"2026-09-30T17:05:31Z"
+    foreach ($version in $typed.StateHistory.Versions) { $version.LastModified = [datetimeoffset]$version.LastModified }
+  } else {
+    $typed.Metadata.CreatedAt = "2026-09-30T13:05:31-04:00"
+    foreach ($version in $typed.StateHistory.Versions) { $version.LastModified = ([datetimeoffset]$version.LastModified).ToOffset([timespan]::FromHours(-4)).ToString('o') }
+  }
+  $null = Assert-ExactRestrictedExportThreeSnapshotVerification @typed; $passed++
+}
+$threeAdvanceState = [pscustomobject]@{ Lineage = $currentState.Lineage; Serial = $currentState.Serial + 3 }
+$null = Assert-RetainedGatewayBaselineMetadata $baselineMetadata $metadataPlan $baselinePath $baselineSha `
+  $sourceSha $account "us-east-2" $repositoryUrl $threeAdvanceState -AllowThreeSerialAdvances; $passed++
+Assert-Rejected {
+  Assert-RetainedGatewayBaselineMetadata $baselineMetadata $metadataPlan $baselinePath $baselineSha `
+    $sourceSha $account "us-east-2" $repositoryUrl $twoAdvanceState -AllowThreeSerialAdvances
+} "The three-advance gate accepted a different advance."
 
 function New-Variables {
   param([switch]$Released, [switch]$Tailoring)

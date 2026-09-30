@@ -433,8 +433,15 @@ After the verifier-only repair merges, run `-Action Verify -RefreshCandidateRigh
 -EnableRestrictedAnswerExport` with those original inputs. The existing ancestor-source allowlist
 admits only its named verifier/runbook/delivery-record changes; it does not relabel or republish
 artifacts. Verification still requires the exact permitted state advance and a fresh zero-change
-plan. Local inspection of the retained plan is diagnostic evidence, not a substitute for the full
-standalone live verification.
+plan. The 2026-09-30 export activation has a non-reusable exception: Terraform committed three
+snapshots during that single apply (baseline serial 395, current serial 398). Only activation
+`Verify` may use it, with the exact original source, workflow receipt, baseline/sidecar, saved
+plan/metadata hashes and three distinct versioned-backend records at `17:22:03Z`, `17:22:28Z`,
+and `17:22:41Z` on that date. History must be complete with no later snapshot or deletion; only
+the last record is latest. Different releases, state lineages, serials, timestamps, or evidence
+refuse. Plan, Apply, ordinary refresh, and every other reader retain their existing boundaries.
+No old baseline or receipt is edited. Local inspection of the retained plan is diagnostic evidence,
+not a substitute for the full standalone live verification.
 
 Before real-data activation, complete accountable security/privacy review. Generated-synthetic
 acceptance must prove exported latest active and expired values, metadata-only tombstones, owner

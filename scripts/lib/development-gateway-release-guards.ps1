@@ -72,7 +72,8 @@ function Assert-RetainedGatewayBaselineMetadata {
     [Parameter(Mandatory)][string]$ExpectedMigrationRepositoryUrl,
     [Parameter(Mandatory)][object]$CurrentState,
     [switch]$AllowOneSerialAdvance,
-    [switch]$AllowTwoSerialAdvances
+    [switch]$AllowTwoSerialAdvances,
+    [switch]$AllowThreeSerialAdvances
   )
   $v1Keys = @(
     "AccountId", "Applyable", "CreatedAt", "Environment", "Kind", "MeaningfulChanges",
@@ -137,7 +138,9 @@ function Assert-RetainedGatewayBaselineMetadata {
       ($AllowOneSerialAdvance -and
         [long]$CurrentState.Serial -eq ([long]$Metadata.StateSerial + 1)) -or
       ($AllowTwoSerialAdvances -and
-        [long]$CurrentState.Serial -eq ([long]$Metadata.StateSerial + 2)))
+        [long]$CurrentState.Serial -eq ([long]$Metadata.StateSerial + 2)) -or
+      ($AllowThreeSerialAdvances -and
+        [long]$CurrentState.Serial -eq ([long]$Metadata.StateSerial + 3)))
   if ($expectedKeys.Count -eq 0 -or ($actualKeys -join "|") -cne ($expectedKeys -join "|") -or
       [string]$Metadata.Kind -cne "development-document-zero-drift-baseline" -or
       [string]$Metadata.Environment -cne "development" -or
@@ -253,6 +256,79 @@ function Assert-ExactApplicationsRecoveryTwoSnapshotVerification {
   }
   if ([string]$newVersions[0].VersionId -ceq [string]$newVersions[1].VersionId) {
     throw "The two-snapshot recovery state versions are not distinct."
+  }
+  return $true
+}
+
+# Non-reusable recovery for the single D3-030 apply, not a generic stale-baseline allowance.
+function Assert-ExactRestrictedExportThreeSnapshotVerification {
+  param(
+    [Parameter(Mandatory)][string]$SourceSha,
+    [Parameter(Mandatory)][string]$ReceiptSha256,
+    [Parameter(Mandatory)][string]$BaselineSha256,
+    [Parameter(Mandatory)][string]$BaselineMetadataSha256,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][string]$PlanMetadataSha256,
+    [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$CurrentState,
+    [Parameter(Mandatory)][object]$StateHistory
+  )
+  $pins = [ordered]@{
+    SourceSha = "4c557c35e18647ffd106fe754dc84394b59e9370"
+    ReceiptSha256 = "d2e18359f0e74858b72e9ac6424e2fce70d672d5efd2f4417abaaf82bc71df58"
+    BaselineSha256 = "46640629f435ccf0b20953f8f272f132d698de471e534b7dd9f992720fc4956a"
+    BaselineMetadataSha256 = "f88b7b755f9256d7e56e96ce084d885d21db4419858f3e3a55a128e2a2d831cc"
+    PlanSha256 = "c8b77d18b4e63e20081bb9bb26ffd692b64315930033e718035401903550420e"
+    PlanMetadataSha256 = "d50a7362e06a2fe0c1ba5eae5906ad9e16896cb90558979a24a59cfb155758b9"
+  }
+  foreach ($entry in $pins.GetEnumerator()) {
+    if ([string](Get-Variable -Name $entry.Name -ValueOnly) -cne [string]$entry.Value) {
+      throw "The three-snapshot export verification differs from its exact reviewed evidence."
+    }
+  }
+  $toUtc = {
+    param([AllowNull()][object]$Value)
+    if ($Value -is [datetimeoffset]) { return $Value.ToUniversalTime() }
+    if ($Value -is [datetime]) { return [datetimeoffset]$Value.ToUniversalTime() }
+    if ($Value -isnot [string] -or $Value -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$') {
+      throw "The export state history requires exact timezone-bound timestamps."
+    }
+    return ([datetimeoffset]::Parse($Value, [Globalization.CultureInfo]::InvariantCulture)).ToUniversalTime()
+  }
+  $createdAt = & $toUtc $Metadata.CreatedAt
+  if ([string]$Metadata.SchemaVersion -cne "7" -or [string]$Metadata.SourceSha -cne $pins.SourceSha -or
+      [long]$Metadata.StateSerial -ne 395 -or [long]$CurrentState.Serial -ne 398 -or
+      [string]$Metadata.StateLineage -cnotmatch '^[a-f0-9-]{36}$' -or
+      [string]$Metadata.StateLineage -cne [string]$CurrentState.Lineage) {
+    throw "The three-snapshot export verification has an unexpected baseline or current state."
+  }
+  $nextToken = Get-GatewayOptionalProperty $StateHistory "NextToken"
+  if ($null -ne $nextToken -and -not [string]::IsNullOrEmpty([string]$nextToken)) {
+    throw "The export state history is incomplete."
+  }
+  $versions = @(Get-GatewayOptionalProperty $StateHistory "Versions" | Where-Object {
+      $null -ne $_ -and [string]$_.Key -ceq "platform.tfstate"
+    })
+  $newVersions = @($versions | Where-Object { (& $toUtc $_.LastModified) -gt $createdAt } |
+    Sort-Object { & $toUtc $_.LastModified })
+  $newMarkers = @(Get-GatewayOptionalProperty $StateHistory "DeleteMarkers" | Where-Object {
+      $null -ne $_ -and [string]$_.Key -ceq "platform.tfstate" -and (& $toUtc $_.LastModified) -gt $createdAt
+    })
+  if ($newVersions.Count -ne 3 -or $newMarkers.Count -ne 0) {
+    throw "Export verification requires exactly three state snapshots and no deletion after the baseline."
+  }
+  $expectedTimes = @("2026-09-30T17:22:03Z", "2026-09-30T17:22:28Z", "2026-09-30T17:22:41Z")
+  $seen = @()
+  for ($index = 0; $index -lt 3; $index++) {
+    $version = $newVersions[$index]
+    if ($version.VersionId -isnot [string] -or [string]::IsNullOrWhiteSpace($version.VersionId) -or
+        $seen -ccontains $version.VersionId -or $version.IsLatest -isnot [bool] -or
+        $version.IsLatest -ne ($index -eq 2) -or
+        ($version.Size -isnot [long] -and $version.Size -isnot [int]) -or $version.Size -le 0 -or
+        (& $toUtc $version.LastModified) -ne (& $toUtc $expectedTimes[$index])) {
+      throw "The export state snapshot does not match the exact historical apply."
+    }
+    $seen += $version.VersionId
   }
   return $true
 }

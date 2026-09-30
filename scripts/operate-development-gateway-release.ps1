@@ -699,6 +699,23 @@ function Read-Baseline {
   $null = Assert-RetainedGatewayBaselinePlan $plan $declaredVariables
   $state = Get-StateIdentity
   $allowTwoSerialAdvances = $false
+  $allowThreeSerialAdvances = $false
+  if ($Action -ceq "Verify" -and $RefreshCandidateRightsActivity -and $EnableRestrictedAnswerExport -and
+      [long]$state.Serial -eq ([long]$metadata.StateSerial + 3)) {
+    $stateHistory = Invoke-AwsJson @(
+      "s3api", "list-object-versions", "--bucket", $StateBucket, "--prefix", "platform.tfstate",
+      "--page-size", "1000", "--max-items", "2000", "--query",
+      "{NextToken:NextToken,Versions:Versions[?Key=='platform.tfstate'].{Key:Key,VersionId:VersionId,IsLatest:IsLatest,LastModified:LastModified,Size:Size},DeleteMarkers:DeleteMarkers[?Key=='platform.tfstate'].{Key:Key,VersionId:VersionId,IsLatest:IsLatest,LastModified:LastModified}}",
+      "--output", "json"
+    ) "Exact export activation state history validation"
+    $activityPlanPath = Resolve-GatewayOperatorPath $PlanPath -MustExist
+    $activityMetadataPath = Resolve-GatewayOperatorPath "$activityPlanPath$candidateRightsActivityMetadataSuffix" -MustExist
+    $allowThreeSerialAdvances = Assert-ExactRestrictedExportThreeSnapshotVerification `
+      -SourceSha $SourceSha -ReceiptSha256 $ReviewedWorkflowReceiptSha256 `
+      -BaselineSha256 $ReviewedBaselineSha256 -BaselineMetadataSha256 $ReviewedBaselineMetadataSha256 `
+      -PlanSha256 $ReviewedPlanSha256 -PlanMetadataSha256 (Get-FileSha256 $activityMetadataPath) `
+      -Metadata $metadata -CurrentState $state -StateHistory $stateHistory
+  }
   if ($Action -ceq "Verify" -and $D3PlatformActivation -ceq "ApplicationsAttemptRecovery" -and
       [long]$state.Serial -eq ([long]$metadata.StateSerial + 2)) {
     $stateHistory = Invoke-AwsJson @(
@@ -716,14 +733,15 @@ function Read-Baseline {
     -PlanPath $planPath -PlanSha256 $ReviewedBaselineSha256 -SourceSha $SourceSha `
     -AccountId $ExpectedAccountId -Region $Region `
     -ExpectedMigrationRepositoryUrl $boundary.MigrationRepositoryUrl -CurrentState $state `
-    -AllowOneSerialAdvance:($Action -ceq "Verify") -AllowTwoSerialAdvances:$allowTwoSerialAdvances
+    -AllowOneSerialAdvance:($Action -ceq "Verify") -AllowTwoSerialAdvances:$allowTwoSerialAdvances `
+    -AllowThreeSerialAdvances:$allowThreeSerialAdvances
   if ([string]$metadata.SchemaVersion -in @("7", "8")) {
     $null = Assert-CurrentDocumentBaselineEvidence -Metadata $metadata -Plan $plan -PlanPath $planPath `
       -PlanSha256 $ReviewedBaselineSha256 -CurrentState $state -SourceSha $SourceSha `
       -AccountId $ExpectedAccountId -Region $Region -RepositoryRoot $repositoryRoot `
       -ReceiptDirectory (Join-Path $terraformRoot "development-document-artifacts") `
       -AllowOneSerialAdvance:($Action -ceq "Verify") `
-      -AllowTwoSerialAdvances:$allowTwoSerialAdvances -AllowTwoReceipts
+      -AllowTwoSerialAdvances:$allowTwoSerialAdvances -AllowThreeSerialAdvances:$allowThreeSerialAdvances -AllowTwoReceipts
   }
   $documentReleaseSha = if ([string]$metadata.SchemaVersion -ceq "5") {
     if ([string]$metadata.DocumentReleaseSourceSha -cne 'a6d0fba09082b8bc61ee7b604ee1d5c47bd71624' -or

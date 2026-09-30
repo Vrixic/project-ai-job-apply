@@ -896,4 +896,20 @@ if (([regex]::Matches($operator, [regex]::Escape($carried))).Count -lt 9) {
 $captureSetCall = [regex]::Match($operator, 'Set-VariablesFromPlan \$seed \$null[^\r\n]*')
 if (-not $captureSetCall.Success -or $captureSetCall.Value.Contains("Artifact") -or $captureSetCall.Value.Contains("Tailoring")) {
   throw "CaptureBaseline must not apply a document refresh or the invoke switch."
-}Write-Output "Development gateway release operator, capture-input reconstruction, and search-boundary tests passed."
+}
+$threeSnapshotGate = [regex]::Match($operator, 'if \(\$Action -ceq "Verify" -and \$RefreshCandidateRightsActivity -and \$EnableRestrictedAnswerExport -and\s+\[long\]\$state.Serial -eq \(\[long\]\$metadata.StateSerial \+ 3\)\) \{(?<body>[\s\S]*?)\n  \}')
+if (-not $threeSnapshotGate.Success) { throw "The exact export history exception is not isolated to activation Verify at three advances." }
+foreach ($required in @(
+    'Assert-ExactRestrictedExportThreeSnapshotVerification', '-SourceSha $SourceSha',
+    '-ReceiptSha256 $ReviewedWorkflowReceiptSha256', '-BaselineSha256 $ReviewedBaselineSha256',
+    '-BaselineMetadataSha256 $ReviewedBaselineMetadataSha256', '-PlanSha256 $ReviewedPlanSha256',
+    '-PlanMetadataSha256 (Get-FileSha256 $activityMetadataPath)', '-Metadata $metadata -CurrentState $state -StateHistory $stateHistory',
+    '"--max-items", "2000"', '"--prefix", "platform.tfstate"'
+  )) {
+  if (-not $threeSnapshotGate.Groups['body'].Value.Contains($required)) { throw "The exact export recovery gate omits $required." }
+}
+if (-not $operator.Contains('$allowThreeSerialAdvances = $false') -or
+    ([regex]::Matches($operator, [regex]::Escape('-AllowThreeSerialAdvances:$allowThreeSerialAdvances'))).Count -ne 2) {
+  throw "Both baseline readers must receive only the verified three-snapshot recovery result."
+}
+Write-Output "Development gateway release operator, capture-input reconstruction, and search-boundary tests passed."

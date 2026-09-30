@@ -167,6 +167,13 @@ try {
   $null = Assert-CurrentDocumentBaselineEvidence @twoAdvanceCheck -AllowTwoSerialAdvances
   Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @twoAdvanceCheck -AllowOneSerialAdvance } `
     "the current document baseline accepted two serial advances through the one-advance gate"
+  $threeAdvanceCheck = @{} + $check
+  $threeAdvanceCheck.CurrentState = [pscustomobject]@{ Lineage = $postState.Lineage; Serial = $postState.Serial + 3 }
+  $null = Assert-CurrentDocumentBaselineEvidence @threeAdvanceCheck -AllowThreeSerialAdvances
+  Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @threeAdvanceCheck -AllowTwoSerialAdvances } `
+    "the current document baseline accepted three advances through the two-advance gate"
+  Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @threeAdvanceCheck } `
+    "the current document baseline accepted three advances without the exact recovery gate"
   if ($post.SchemaVersion -cne "7" -or $post.DocumentReleaseSourceSha -cne $documentSource -or $post.ReceiptSha256 -cne $receiptSha) {
     throw "Migration-to-gateway handoff attributed old document artifacts to a new source."
   }
