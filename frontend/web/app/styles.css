@@ -328,8 +328,15 @@ button:focus-visible {
 }
 
 input[type="file"] {
-  display: flex;
-  align-items: center;
+  /* min-height is 48px with a 1px border on each side (border-box), so the
+     content-box interior is 46px; centering via line-height works across
+     browsers' native file-input widgets, unlike flex/align-items, which
+     several engines ignore for the button + filename text they render. */
+  line-height: 46px;
+}
+
+input[type="file"]::file-selector-button {
+  vertical-align: middle;
 }
 
 button,
