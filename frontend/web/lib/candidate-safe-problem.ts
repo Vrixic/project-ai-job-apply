@@ -1,4 +1,9 @@
-export type CandidateProblemSurface = "operation" | "preferences" | "profile_facts" | "resume";
+export type CandidateProblemSurface =
+  | "operation"
+  | "preferences"
+  | "profile_facts"
+  | "restricted_answers"
+  | "resume";
 
 type SurfaceCopy = Readonly<{
   conflict: string;
@@ -25,6 +30,12 @@ const copyBySurface: Readonly<Record<CandidateProblemSurface, SurfaceCopy>> = {
     invalid: "Check the profile fact and try again.",
     missing: "This profile fact is no longer available. Refresh and try again.",
     unavailable: "Profile facts are temporarily unavailable.",
+  },
+  restricted_answers: {
+    conflict: "This saved answer changed. Refresh and review it again.",
+    invalid: "Check the restricted answer and try again.",
+    missing: "This saved answer is no longer available. Refresh and try again.",
+    unavailable: "Restricted answers are temporarily unavailable.",
   },
   resume: {
     conflict: "The resume request changed. Refresh and try again.",

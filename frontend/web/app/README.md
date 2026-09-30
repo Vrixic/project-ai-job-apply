@@ -54,10 +54,15 @@ groups; minimum compensation is an optional paired
 amount/currency input. Resume upload appears before fact review and parsed completion triggers a
 race-guarded proposal reload. Direct-entered facts require an explicit category and are always
 submitted as Confidential. Restricted sponsorship, work-authorization, demographic, disability,
-veteran, and legal answers are not collected by this page. A legacy saved preference containing
-either sponsorship boolean is not displayed or resubmitted and blocks the full-replacement save
-until migration to the future dedicated restricted-data boundary. These are source and local-test
-claims only, not deployment or real-browser acceptance.
+veteran, and legal answers remain outside general profile facts. Behind the default-off
+`NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI=enabled` gate, a dedicated authenticated panel offers only
+the nine established restricted `never_infer` fields. It lists metadata but never plaintext,
+requires an explicit choice to save, derives fixed type/sensitivity/provenance, preserves one
+idempotency intent across an ambiguous retry, uses optimistic versions, and supports exact-context
+delete. Attestations, signatures, challenges, CAPTCHA, and MFA are never offered. This source and
+local-test behavior is not deployment, browser acceptance, D3-012 approval, or Applications reuse.
+A legacy saved preference containing either sponsorship boolean is not displayed or resubmitted
+and blocks the full-replacement save until migration to the dedicated restricted-data boundary.
 
 `jobs/[jobId]` is a dynamic anonymous read-only page over the strict public Jobs projection. It
 uses generic not-found and outage states, a temporary canonical-alias redirect, trusted-origin

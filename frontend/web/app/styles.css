@@ -208,6 +208,7 @@ form,
 .result,
 aside,
 .profile-facts,
+.restricted-answers,
 .job-search,
 .saved-jobs,
 .entitlement-status {
@@ -376,6 +377,29 @@ aside {
 
 .profile-facts {
   background: #f8fbf9;
+}
+
+.restricted-answers {
+  background: #f8fbf9;
+}
+
+.restricted-answer-form {
+  margin-top: 20px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.restricted-answer-confirmation {
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.restricted-answer-confirmation input {
+  margin-top: 4px;
+}
+
+.restricted-answer-list span {
+  overflow-wrap: anywhere;
 }
 
 .job-search,

@@ -54,6 +54,14 @@ const validBodies: Record<FoundationWriteSchemaName, Record<string, unknown>> = 
     expectedVersion: 1,
     value: "TypeScript and JavaScript",
   },
+  SaveRestrictedAnswerRequest: {
+    expectedVersion: 0,
+    valueType: "boolean",
+    value: "true",
+    sensitivity: "restricted",
+    sourceReference: "candidate.settings",
+    confirmedAt: "2026-09-29T12:00:00.000Z",
+  },
   CreateCandidateDataExportRequest: { format: "candidate-data-export-v1" },
   CreateAccountDeletionRequest: { acknowledgement: "ACCOUNT_DELETION_IS_IRREVERSIBLE" },
   ConfirmAccountDeletionRequest: { expectedVersion: 1, confirmation: "DELETE_MY_ACCOUNT" },
@@ -154,6 +162,38 @@ describe("foundation write request boundary", () => {
 
     const problemBody = await expectProblem(result, 400, "invalid_request");
     expect(JSON.stringify(problemBody)).not.toContain(privateCanary);
+  });
+
+  it("accepts only one canonical restricted-answer context when explicitly enabled", async () => {
+    const value = validBodies.SaveRestrictedAnswerRequest;
+    const accepted = await readFoundationWriteRequest(
+      request(JSON.stringify(value), {
+        method: "PUT",
+        url: "http://localhost/api/platform/restricted-answers/authorization.us_authorized?context=jurisdiction.us",
+      }),
+      "SaveRestrictedAnswerRequest",
+      2_000,
+      "restricted-answer-context",
+    );
+    expect(accepted).toEqual({ body: JSON.stringify(value), idempotencyKey });
+
+    for (const query of [
+      "?context=",
+      "?context=Jurisdiction%20US",
+      "?context=a&context=b",
+      "?context=a&private=1",
+    ]) {
+      const rejected = await readFoundationWriteRequest(
+        request(JSON.stringify(value), {
+          method: "PUT",
+          url: `http://localhost/api/platform/restricted-answers/authorization.us_authorized${query}`,
+        }),
+        "SaveRestrictedAnswerRequest",
+        2_000,
+        "restricted-answer-context",
+      );
+      await expectProblem(rejected, 400, "invalid_request");
+    }
   });
 
   it.each([
