@@ -87,9 +87,15 @@ function generatedResultPath(path, kind) {
 
 export function validatePlanOptions(value) {
   const restricted = Object.hasOwn(value ?? {}, "RestrictedAnswerFixture");
+  const resume = Object.hasOwn(value ?? {}, "ResumeFixture");
   if (
-    !exactKeys(value, restricted ? [...planKeys, "RestrictedAnswerFixture"] : planKeys) ||
+    !exactKeys(value, [
+      ...planKeys,
+      ...(restricted ? ["RestrictedAnswerFixture"] : []),
+      ...(resume ? ["ResumeFixture"] : []),
+    ]) ||
     (restricted && value.RestrictedAnswerFixture !== true) ||
+    (resume && value.ResumeFixture !== true) ||
     planKeys.some((key) => typeof value[key] !== "string") ||
     !/^[0-9]{12}$/u.test(value.ExpectedAccountId) ||
     !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(value.StateBucket) ||
@@ -119,14 +125,19 @@ export function validateSessionCommand(value) {
   throw new Error("invalid_session_command");
 }
 
-export function sanitizeOperatorResult(action, value, restrictedAnswerFixture = false) {
+export function sanitizeOperatorResult(
+  action,
+  value,
+  restrictedAnswerFixture = false,
+  resumeFixture = false,
+) {
   if (
     action === "plan" &&
     exactKeys(value, ["Outcome", "PlanPath", "PlanSha256", "FixedSteps", "CloudMutation"]) &&
     value.Outcome === "review-required" &&
     generatedResultPath(value.PlanPath, "plan") &&
     sha256.test(value.PlanSha256) &&
-    value.FixedSteps === (restrictedAnswerFixture ? 16 : 15) &&
+    value.FixedSteps === 15 + (restrictedAnswerFixture ? 1 : 0) + (resumeFixture ? 2 : 0) &&
     value.CloudMutation === false
   ) {
     return {
@@ -156,6 +167,7 @@ export function sanitizeOperatorResult(action, value, restrictedAnswerFixture = 
       "PersistentSyntheticIdentities",
       "ExportCoverage",
       ...(restrictedAnswerFixture ? ["RestrictedAnswerCoverage"] : []),
+      ...(resumeFixture ? ["ResumeCoverage"] : []),
     ]) &&
     value.Outcome === "verified-and-cleaned" &&
     generatedResultPath(value.ReceiptPath, "receipt") &&
@@ -186,7 +198,28 @@ export function sanitizeOperatorResult(action, value, restrictedAnswerFixture = 
           "expiredValueCount",
           "deletedTombstoneCount",
           "revisedValueCount",
-        ].every((key) => value.RestrictedAnswerCoverage[key] === 1)))
+        ].every((key) => value.RestrictedAnswerCoverage[key] === 1))) &&
+    (!resumeFixture ||
+      (exactKeys(value.ResumeCoverage, [
+        "valid",
+        "parsedResumes",
+        "sourceVersionsBefore",
+        "normalizedVersionsBefore",
+        "sourceVersionsAfter",
+        "normalizedVersionsAfter",
+        "deleteMarkersAfter",
+      ]) &&
+        value.ResumeCoverage.valid === true &&
+        value.ResumeCoverage.parsedResumes === 1 &&
+        ["sourceVersionsBefore", "normalizedVersionsBefore"].every(
+          (key) =>
+            Number.isSafeInteger(value.ResumeCoverage[key]) &&
+            value.ResumeCoverage[key] >= 1 &&
+            value.ResumeCoverage[key] <= 1000,
+        ) &&
+        ["sourceVersionsAfter", "normalizedVersionsAfter", "deleteMarkersAfter"].every(
+          (key) => value.ResumeCoverage[key] === 0,
+        )))
   ) {
     return {
       ...value,
@@ -194,6 +227,7 @@ export function sanitizeOperatorResult(action, value, restrictedAnswerFixture = 
       ...(restrictedAnswerFixture
         ? { RestrictedAnswerCoverage: { ...value.RestrictedAnswerCoverage } }
         : {}),
+      ...(resumeFixture ? { ResumeCoverage: { ...value.ResumeCoverage } } : {}),
     };
   }
   throw new Error("operator_result_invalid");
@@ -270,6 +304,7 @@ export async function runSessionOperator({
       "plan",
       reviewedPlan,
       checked.RestrictedAnswerFixture === true,
+      checked.ResumeFixture === true,
     );
     request.reviewedPlan = { path: plan.PlanPath, sha256: plan.PlanSha256 };
   }
@@ -339,5 +374,10 @@ export async function runSessionOperator({
       } else done(parsed);
     });
   });
-  return sanitizeOperatorResult(action, result, checked.RestrictedAnswerFixture === true);
+  return sanitizeOperatorResult(
+    action,
+    result,
+    checked.RestrictedAnswerFixture === true,
+    checked.ResumeFixture === true,
+  );
 }

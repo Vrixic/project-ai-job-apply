@@ -31,8 +31,13 @@ try {
       $request.action -cnotin @('plan', 'execute')) { throw 'Invalid session request.' }
   $optionKeys = @($request.options.PSObject.Properties.Name | Sort-Object) -join ','
   $restricted = $null -ne $request.options.PSObject.Properties['RestrictedAnswerFixture']
-  $expectedOptionKeys = if ($restricted) { 'ExpectedAccountId,RestrictedAnswerFixture,ReviewedZeroDriftPlanSha256,SourceSha,StateBucket,ZeroDriftPlanPath' } else { 'ExpectedAccountId,ReviewedZeroDriftPlanSha256,SourceSha,StateBucket,ZeroDriftPlanPath' }
-  if ($optionKeys -cne $expectedOptionKeys -or ($restricted -and ($request.options.RestrictedAnswerFixture -isnot [bool] -or $request.options.RestrictedAnswerFixture -ne $true))) { throw 'Invalid session options.' }
+  $resume = $null -ne $request.options.PSObject.Properties['ResumeFixture']
+  $expectedNames = @('ExpectedAccountId','ReviewedZeroDriftPlanSha256','SourceSha','StateBucket','ZeroDriftPlanPath')
+  if ($restricted) { $expectedNames += 'RestrictedAnswerFixture' }
+  if ($resume) { $expectedNames += 'ResumeFixture' }
+  $expectedOptionKeys = @($expectedNames | Sort-Object) -join ','
+  if ($optionKeys -cne $expectedOptionKeys -or ($restricted -and ($request.options.RestrictedAnswerFixture -isnot [bool] -or $request.options.RestrictedAnswerFixture -ne $true)) -or
+      ($resume -and ($request.options.ResumeFixture -isnot [bool] -or $request.options.ResumeFixture -ne $true))) { throw 'Invalid session options.' }
   $parameters = @{
     Action = $(if ($request.action -ceq 'plan') { 'Plan' } else { 'Execute' })
     ExpectedPolicyVersion = 'd2-development-synthetic-v1'
@@ -48,6 +53,7 @@ try {
     $parameters[$name] = $request.options.$name
   }
   if ($restricted) { $parameters.RestrictedAnswerFixture = $true }
+  if ($resume) { $parameters.ResumeFixture = $true }
   if ($request.action -ceq 'execute') {
     if ((@($request.reviewedPlan.PSObject.Properties.Name | Sort-Object) -join ',') -cne 'path,sha256') { throw 'Invalid reviewed plan.' }
     $parameters.ExecutionPlanPath = [string]$request.reviewedPlan.path
