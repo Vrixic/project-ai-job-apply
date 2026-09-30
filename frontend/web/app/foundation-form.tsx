@@ -7,6 +7,7 @@ import {
   type Operation,
   type PutJobPreferencesResponse,
 } from "@ai-job-apply/api-contracts";
+import { resolveProductBrand } from "@ai-job-apply/config/brand";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   type CandidateProblemSurface,
@@ -68,6 +69,14 @@ function parseJobPreferenceSet(value: unknown): LegacyJobPreferenceSet {
   }
   return value as JobPreferenceSet;
 }
+
+const productBrand = resolveProductBrand({
+  name: process.env.NEXT_PUBLIC_PRODUCT_BRAND_NAME,
+  candidateDomain: process.env.NEXT_PUBLIC_PRODUCT_BRAND_DOMAIN,
+});
+
+type DashboardSection = "jobs" | "resume" | "profile" | "settings";
+type JobsView = "search" | "saved";
 
 const preferenceLoadTimeoutMilliseconds = 20_000;
 const preferenceLoadTimeoutMessage =
@@ -181,6 +190,8 @@ export function FoundationForm({
   restrictedAnswerVaultUiEnabled?: boolean;
   workloadConformanceEnabled: boolean;
 }) {
+  const [activeSection, setActiveSection] = useState<DashboardSection>("jobs");
+  const [jobsView, setJobsView] = useState<JobsView>("search");
   const [profileRefreshVersion, setProfileRefreshVersion] = useState(0);
   const [maxStoredResumes, setMaxStoredResumes] = useState<number>();
   const handleEntitlementSummary = useCallback(
@@ -756,295 +767,234 @@ export function FoundationForm({
     }
   }
 
-  return (
-    <main>
-      <section className="eyebrow">Foundation vertical slice</section>
-      <h1>Tell us what work fits you.</h1>
-      <p className="lede">
-        These preferences will eventually drive fresh job discovery and rapid, tailored
-        applications. Application history stops at confirmed submission.
-      </p>
-
-      {authConfigured && authenticated && (
-        <nav className="session" aria-label="Account">
-          <span>Signed in{displayName ? ` as ${displayName}` : ""}</span>
-          <a href="/auth/logout">Log out</a>
-        </nav>
-      )}
-
-      {authConformanceEnabled && authenticated && (
-        <aside>
-          <strong>Development Auth0 conformance</strong>
-          <p>
-            Force a server-side renewal before and after revoking this test account&apos;s
-            application authorization. No token material is returned to the browser.
-          </p>
-          <button type="button" onClick={verifySessionRenewal} disabled={renewingSession}>
-            {renewingSession ? "Renewing…" : "Verify session renewal"}
-          </button>
-          <button type="button" onClick={verifyJobRead} disabled={checkingJobRead}>
-            {checkingJobRead ? "Checking…" : "Verify job-read authorization"}
-          </button>
-          <hr />
-          <strong>Deployed cross-user isolation</strong>
-          <p>
-            Arm an owner-visible operation, log out, and sign in with a different synthetic account.
-            The server keeps only an encrypted, expiring probe and returns no identity, token, or
-            operation identifier.
-          </p>
-          {!isolationArmed ? (
+  const preferenceForm = (
+    <form className="preference-form" aria-label="Job preferences" onSubmit={save}>
+      <fieldset className="repeatable-field" disabled={preferenceControlsDisabled}>
+        <legend>Target roles</legend>
+        <span className="field-help">Add up to ten roles; punctuation stays within each role</span>
+        {preferenceRowIds.targetRoles.map((rowId, index) => (
+          <div className="repeatable-row" key={rowId}>
+            <label>
+              Target role {index + 1}
+              <textarea
+                maxLength={100}
+                rows={2}
+                value={preferenceFields.targetRoles[index] ?? ""}
+                onChange={(event) =>
+                  updateRepeatablePreference("targetRoles", index, event.target.value)
+                }
+                required
+              />
+            </label>
             <button
               type="button"
-              onClick={armIsolationProbe}
-              disabled={armingIsolation || !isIsolationOperationEligible(operation?.state, false)}
+              aria-label={`Remove target role ${index + 1}`}
+              onClick={() => removeRepeatablePreference("targetRoles", index)}
+              disabled={preferenceFields.targetRoles.length === 1}
             >
-              {armingIsolation ? "Arming…" : "Arm cross-user isolation check"}
+              Remove
             </button>
-          ) : (
-            <button type="button" onClick={runIsolationProbe} disabled={checkingIsolation}>
-              {checkingIsolation ? "Checking…" : "Run check as this account"}
-            </button>
-          )}
-          {workloadConformanceEnabled && (
-            <>
-              <hr />
-              <strong>Phase 0 workload</strong>
-              <p>
-                Run the fixed synthetic profile only after reviewing its runbook. The server-held
-                token, saved preferences, and operation identifiers never enter the result.
-              </p>
-              <button type="button" onClick={runPhase0Workload} disabled={runningWorkload}>
-                {runningWorkload ? "Running workload…" : "Run Phase 0 workload"}
-              </button>
-            </>
-          )}
-        </aside>
-      )}
-
-      {authConfigured && !authenticated && (
-        <aside>
-          <strong>Sign in to save your preferences.</strong>
-          <div className="auth-actions">
-            <a className="button-link" href="/auth/login">
-              Log in
-            </a>
-            <a className="secondary-link" href="/auth/login?screen_hint=signup">
-              Create account
-            </a>
           </div>
-        </aside>
-      )}
-
-      {authenticationFailed && !authenticated && (
-        <aside>
-          <strong>Sign-in was not completed.</strong>
-          <p>
-            The account may be unavailable or blocked. Try again after confirming the account is
-            active.
-          </p>
-        </aside>
-      )}
-
-      {authenticated && (
-        <>
-          <form className="preference-form" aria-label="Job preferences" onSubmit={save}>
-            <fieldset className="repeatable-field" disabled={preferenceControlsDisabled}>
-              <legend>Target roles</legend>
-              <span className="field-help">
-                Add up to ten roles; punctuation stays within each role
-              </span>
-              {preferenceRowIds.targetRoles.map((rowId, index) => (
-                <div className="repeatable-row" key={rowId}>
-                  <label>
-                    Target role {index + 1}
-                    <textarea
-                      maxLength={100}
-                      rows={2}
-                      value={preferenceFields.targetRoles[index] ?? ""}
-                      onChange={(event) =>
-                        updateRepeatablePreference("targetRoles", index, event.target.value)
-                      }
-                      required
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    aria-label={`Remove target role ${index + 1}`}
-                    onClick={() => removeRepeatablePreference("targetRoles", index)}
-                    disabled={preferenceFields.targetRoles.length === 1}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => addRepeatablePreference("targetRoles")}
-                disabled={preferenceFields.targetRoles.length >= 10}
-              >
-                Add target role
-              </button>
-            </fieldset>
-            <fieldset className="repeatable-field" disabled={preferenceControlsDisabled}>
-              <legend>Locations</legend>
-              <span className="field-help">Optional; add up to ten locations</span>
-              {preferenceRowIds.locations.map((rowId, index) => (
-                <div className="repeatable-row" key={rowId}>
-                  <label>
-                    Location {index + 1}
-                    <textarea
-                      maxLength={120}
-                      rows={2}
-                      value={preferenceFields.locations[index] ?? ""}
-                      onChange={(event) =>
-                        updateRepeatablePreference("locations", index, event.target.value)
-                      }
-                      required
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    aria-label={`Remove location ${index + 1}`}
-                    onClick={() => removeRepeatablePreference("locations", index)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => addRepeatablePreference("locations")}
-                disabled={preferenceFields.locations.length >= 10}
-              >
-                Add location
-              </button>
-            </fieldset>
-            <fieldset disabled={preferenceControlsDisabled}>
-              <legend>Work modes</legend>
-              <span className="field-help">Select every mode you would accept</span>
-              <div className="choice-group">
-                {workModeOptions.map((option) => (
-                  <label className="choice-option" key={option.value}>
-                    <input
-                      type="checkbox"
-                      checked={preferenceFields.workModes.includes(option.value)}
-                      onChange={(event) =>
-                        setPreferenceFields((current) => ({
-                          ...current,
-                          workModes: toggleOrderedChoice(
-                            workModeValues,
-                            current.workModes,
-                            option.value,
-                            event.target.checked,
-                          ),
-                        }))
-                      }
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset disabled={preferenceControlsDisabled}>
-              <legend>Employment types</legend>
-              <span className="field-help">Select every type you would accept</span>
-              <div className="choice-group">
-                {employmentTypeOptions.map((option) => (
-                  <label className="choice-option" key={option.value}>
-                    <input
-                      type="checkbox"
-                      checked={preferenceFields.employmentTypes.includes(option.value)}
-                      onChange={(event) =>
-                        setPreferenceFields((current) => ({
-                          ...current,
-                          employmentTypes: toggleOrderedChoice(
-                            employmentTypeValues,
-                            current.employmentTypes,
-                            option.value,
-                            event.target.checked,
-                          ),
-                        }))
-                      }
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <div className="paired-fields">
-              <label>
-                Minimum compensation amount
-                <span>Optional; enter a whole number</span>
-                <input
-                  inputMode="numeric"
-                  value={preferenceFields.salaryMinimum}
-                  onChange={(event) =>
-                    setPreferenceFields((current) => ({
-                      ...current,
-                      salaryMinimum: event.target.value,
-                    }))
-                  }
-                  disabled={preferenceControlsDisabled}
-                />
-              </label>
-              <label>
-                Compensation currency
-                <span>Three-letter code, such as USD</span>
-                <input
-                  maxLength={3}
-                  value={preferenceFields.salaryCurrency}
-                  onChange={(event) =>
-                    setPreferenceFields((current) => ({
-                      ...current,
-                      salaryCurrency: event.target.value.toUpperCase(),
-                    }))
-                  }
-                  disabled={preferenceControlsDisabled}
-                />
-              </label>
-            </div>
-            <button type="submit" disabled={preferenceControlsDisabled}>
-              {loadingPreferences ? "Loading…" : saving ? "Saving…" : "Save preferences"}
+        ))}
+        <button
+          type="button"
+          onClick={() => addRepeatablePreference("targetRoles")}
+          disabled={preferenceFields.targetRoles.length >= 10}
+        >
+          Add target role
+        </button>
+      </fieldset>
+      <fieldset className="repeatable-field" disabled={preferenceControlsDisabled}>
+        <legend>Locations</legend>
+        <span className="field-help">Optional; add up to ten locations</span>
+        {preferenceRowIds.locations.map((rowId, index) => (
+          <div className="repeatable-row" key={rowId}>
+            <label>
+              Location {index + 1}
+              <textarea
+                maxLength={120}
+                rows={2}
+                value={preferenceFields.locations[index] ?? ""}
+                onChange={(event) =>
+                  updateRepeatablePreference("locations", index, event.target.value)
+                }
+                required
+              />
+            </label>
+            <button
+              type="button"
+              aria-label={`Remove location ${index + 1}`}
+              onClick={() => removeRepeatablePreference("locations", index)}
+            >
+              Remove
             </button>
-            {preferenceLoadFailed && !loadingPreferences && (
-              <button
-                type="button"
-                onClick={() => void loadPreferences(preferenceSessionGeneration.current)}
-              >
-                Retry loading preferences
-              </button>
-            )}
-          </form>
-
-          <ResumeUploadForm
-            authenticated
-            maxStoredResumes={maxStoredResumes}
-            onDocumentParsed={handleDocumentParsed}
-            onDocumentDeleted={handleDocumentParsed}
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => addRepeatablePreference("locations")}
+          disabled={preferenceFields.locations.length >= 10}
+        >
+          Add location
+        </button>
+      </fieldset>
+      <fieldset disabled={preferenceControlsDisabled}>
+        <legend>Work modes</legend>
+        <span className="field-help">Select every mode you would accept</span>
+        <div className="choice-group">
+          {workModeOptions.map((option) => (
+            <label className="choice-option" key={option.value}>
+              <input
+                type="checkbox"
+                checked={preferenceFields.workModes.includes(option.value)}
+                onChange={(event) =>
+                  setPreferenceFields((current) => ({
+                    ...current,
+                    workModes: toggleOrderedChoice(
+                      workModeValues,
+                      current.workModes,
+                      option.value,
+                      event.target.checked,
+                    ),
+                  }))
+                }
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset disabled={preferenceControlsDisabled}>
+        <legend>Employment types</legend>
+        <span className="field-help">Select every type you would accept</span>
+        <div className="choice-group">
+          {employmentTypeOptions.map((option) => (
+            <label className="choice-option" key={option.value}>
+              <input
+                type="checkbox"
+                checked={preferenceFields.employmentTypes.includes(option.value)}
+                onChange={(event) =>
+                  setPreferenceFields((current) => ({
+                    ...current,
+                    employmentTypes: toggleOrderedChoice(
+                      employmentTypeValues,
+                      current.employmentTypes,
+                      option.value,
+                      event.target.checked,
+                    ),
+                  }))
+                }
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="paired-fields">
+        <label>
+          Minimum compensation amount
+          <span>Optional; enter a whole number</span>
+          <input
+            inputMode="numeric"
+            value={preferenceFields.salaryMinimum}
+            onChange={(event) =>
+              setPreferenceFields((current) => ({
+                ...current,
+                salaryMinimum: event.target.value,
+              }))
+            }
+            disabled={preferenceControlsDisabled}
           />
-          <ProfileFactsForm authenticated refreshVersion={profileRefreshVersion} />
-          {restrictedAnswerVaultUiEnabled && <RestrictedAnswersForm authenticated />}
+        </label>
+        <label>
+          Compensation currency
+          <span>Three-letter code, such as USD</span>
+          <input
+            maxLength={3}
+            value={preferenceFields.salaryCurrency}
+            onChange={(event) =>
+              setPreferenceFields((current) => ({
+                ...current,
+                salaryCurrency: event.target.value.toUpperCase(),
+              }))
+            }
+            disabled={preferenceControlsDisabled}
+          />
+        </label>
+      </div>
+      <button type="submit" disabled={preferenceControlsDisabled}>
+        {loadingPreferences ? "Loading…" : saving ? "Saving…" : "Save preferences"}
+      </button>
+      {preferenceLoadFailed && !loadingPreferences && (
+        <button
+          type="button"
+          onClick={() => void loadPreferences(preferenceSessionGeneration.current)}
+        >
+          Retry loading preferences
+        </button>
+      )}
+    </form>
+  );
+
+  const conformancePanel = authConformanceEnabled && (
+    <aside>
+      <strong>Development Auth0 conformance</strong>
+      <p>
+        Force a server-side renewal before and after revoking this test account&apos;s application
+        authorization. No token material is returned to the browser.
+      </p>
+      <button type="button" onClick={verifySessionRenewal} disabled={renewingSession}>
+        {renewingSession ? "Renewing…" : "Verify session renewal"}
+      </button>
+      <button type="button" onClick={verifyJobRead} disabled={checkingJobRead}>
+        {checkingJobRead ? "Checking…" : "Verify job-read authorization"}
+      </button>
+      <hr />
+      <strong>Deployed cross-user isolation</strong>
+      <p>
+        Arm an owner-visible operation, log out, and sign in with a different synthetic account. The
+        server keeps only an encrypted, expiring probe and returns no identity, token, or operation
+        identifier.
+      </p>
+      {!isolationArmed ? (
+        <button
+          type="button"
+          onClick={armIsolationProbe}
+          disabled={armingIsolation || !isIsolationOperationEligible(operation?.state, false)}
+        >
+          {armingIsolation ? "Arming…" : "Arm cross-user isolation check"}
+        </button>
+      ) : (
+        <button type="button" onClick={runIsolationProbe} disabled={checkingIsolation}>
+          {checkingIsolation ? "Checking…" : "Run check as this account"}
+        </button>
+      )}
+      {workloadConformanceEnabled && (
+        <>
+          <hr />
+          <strong>Phase 0 workload</strong>
+          <p>
+            Run the fixed synthetic profile only after reviewing its runbook. The server-held token,
+            saved preferences, and operation identifiers never enter the result.
+          </p>
+          <button type="button" onClick={runPhase0Workload} disabled={runningWorkload}>
+            {runningWorkload ? "Running workload…" : "Run Phase 0 workload"}
+          </button>
         </>
       )}
-      <JobSearchForm authenticated={authenticated} />
-      <SavedJobsPanel authenticated={authenticated} />
-      <EntitlementStatus onSummary={handleEntitlementSummary} authenticated={authenticated} />
-      <CandidateRightsPanel authenticated={authenticated} />
+    </aside>
+  );
 
-      {!authConfigured && (
-        <aside>
-          Auth0 client credentials are not configured. The application fails closed; browser
-          development tokens are not supported.
-        </aside>
-      )}
-      {authenticated && message && <output aria-live="polite">{message}</output>}
+  const statusOutput = (
+    <>
+      {message && <output aria-live="polite">{message}</output>}
       {workloadMetrics && (
         <section className="result" aria-live="polite">
           <strong>Aggregate Phase 0 workload metrics</strong>
           <pre>{JSON.stringify(workloadMetrics, null, 2)}</pre>
         </section>
       )}
-      {authenticated && operation && (
+      {operation && (
         <section className="result" aria-live="polite">
           <strong>Saved-preference check: {operation.state.replaceAll("_", " ")}</strong>
           {operationPollMessage && <p>{operationPollMessage}</p>}
@@ -1064,6 +1014,131 @@ export function FoundationForm({
           )}
         </section>
       )}
-    </main>
+    </>
+  );
+
+  if (!authenticated) {
+    return (
+      <main>
+        <section className="eyebrow">{productBrand.name}</section>
+        <h1>Tell us what work fits you.</h1>
+        <p className="lede">
+          These preferences will eventually drive fresh job discovery and rapid, tailored
+          applications. Application history stops at confirmed submission.
+        </p>
+
+        {authenticationFailed && (
+          <aside>
+            <strong>Sign-in was not completed.</strong>
+            <p>
+              The account may be unavailable or blocked. Try again after confirming the account is
+              active.
+            </p>
+          </aside>
+        )}
+
+        <JobSearchForm authenticated={false} />
+        <SavedJobsPanel authenticated={false} />
+        <EntitlementStatus onSummary={handleEntitlementSummary} authenticated={false} />
+        <CandidateRightsPanel authenticated={false} />
+
+        {!authConfigured && (
+          <aside>
+            Auth0 client credentials are not configured. The application fails closed; browser
+            development tokens are not supported.
+          </aside>
+        )}
+      </main>
+    );
+  }
+
+  const navItems: ReadonlyArray<{ id: DashboardSection; label: string }> = [
+    { id: "jobs", label: "Jobs" },
+    { id: "resume", label: "Resume" },
+    { id: "profile", label: "Profile" },
+    { id: "settings", label: "Settings" },
+  ];
+
+  return (
+    <div className="dashboard">
+      <aside className="dashboard-sidebar">
+        <p className="dashboard-brand">{productBrand.name}</p>
+        <nav aria-label="Sections" className="dashboard-nav">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="dashboard-nav-item"
+              aria-current={activeSection === item.id ? "page" : undefined}
+              onClick={() => setActiveSection(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+      <div className="dashboard-content">
+        <header className="dashboard-topbar">
+          <span>Signed in{displayName ? ` as ${displayName}` : ""}</span>
+          <a href="/auth/logout">Log out</a>
+        </header>
+
+        {statusOutput}
+
+        <section hidden={activeSection !== "jobs"} aria-labelledby="dashboard-jobs-heading">
+          <h1 id="dashboard-jobs-heading">Jobs</h1>
+          <div className="dashboard-subtabs" role="tablist" aria-label="Jobs view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={jobsView === "search"}
+              className="dashboard-subtab"
+              onClick={() => setJobsView("search")}
+            >
+              Search
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={jobsView === "saved"}
+              className="dashboard-subtab"
+              onClick={() => setJobsView("saved")}
+            >
+              Saved
+            </button>
+          </div>
+          <div hidden={jobsView !== "search"}>
+            <JobSearchForm authenticated />
+          </div>
+          <div hidden={jobsView !== "saved"}>
+            <SavedJobsPanel authenticated />
+          </div>
+        </section>
+
+        <section hidden={activeSection !== "resume"} aria-labelledby="dashboard-resume-heading">
+          <h1 id="dashboard-resume-heading">Resume</h1>
+          <ResumeUploadForm
+            authenticated
+            maxStoredResumes={maxStoredResumes}
+            onDocumentParsed={handleDocumentParsed}
+            onDocumentDeleted={handleDocumentParsed}
+          />
+        </section>
+
+        <section hidden={activeSection !== "profile"} aria-labelledby="dashboard-profile-heading">
+          <h1 id="dashboard-profile-heading">Profile</h1>
+          {preferenceForm}
+          <ProfileFactsForm authenticated refreshVersion={profileRefreshVersion} />
+          {restrictedAnswerVaultUiEnabled && <RestrictedAnswersForm authenticated />}
+        </section>
+
+        <section hidden={activeSection !== "settings"} aria-labelledby="dashboard-settings-heading">
+          <h1 id="dashboard-settings-heading">Settings</h1>
+          <EntitlementStatus onSummary={handleEntitlementSummary} authenticated />
+          <CandidateRightsPanel authenticated />
+          {conformancePanel}
+        </section>
+      </div>
+    </div>
   );
 }
