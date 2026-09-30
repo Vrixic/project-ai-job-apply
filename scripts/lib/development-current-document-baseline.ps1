@@ -142,6 +142,7 @@ function Assert-CurrentDocumentBaselineEvidence {
     [Parameter(Mandatory)][string]$ReceiptDirectory,
     [switch]$AllowOneSerialAdvance,
     [switch]$AllowTwoSerialAdvances,
+    [switch]$AllowThreeSerialAdvances,
     # Only the Gateway operator passes this, so that a schema-8 (two-receipt) baseline is accepted there
     # and rejected by every other reader.
     [switch]$AllowTwoReceipts
@@ -153,7 +154,8 @@ function Assert-CurrentDocumentBaselineEvidence {
   $null = Assert-RetainedGatewayBaselineMetadata -Metadata $Metadata -Plan $Plan -PlanPath $PlanPath -PlanSha256 $PlanSha256 `
     -SourceSha $SourceSha -AccountId $AccountId -Region $Region -CurrentState $CurrentState `
     -ExpectedMigrationRepositoryUrl "$AccountId.dkr.ecr.$Region.amazonaws.com/ai-job-apply/migration" `
-    -AllowOneSerialAdvance:$AllowOneSerialAdvance -AllowTwoSerialAdvances:$AllowTwoSerialAdvances
+    -AllowOneSerialAdvance:$AllowOneSerialAdvance -AllowTwoSerialAdvances:$AllowTwoSerialAdvances `
+    -AllowThreeSerialAdvances:$AllowThreeSerialAdvances
   $delta = Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $RepositoryRoot -DocumentReleaseSourceSha ([string]$Metadata.DocumentReleaseSourceSha) -SourceSha $SourceSha
   if ([string]$Metadata.DocumentSourceDeltaSha256 -cne $delta) { throw "The current document baseline source delta does not match its exact commits." }
   if ($schema -ceq "8") {
