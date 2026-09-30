@@ -2,7 +2,10 @@ import { readdir, readFile } from "node:fs/promises";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import * as addFormatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
-import { validateCandidateDataExportV1 } from "./candidate-data-export.js";
+import {
+  restrictedAnswerExportFieldKeys,
+  validateCandidateDataExportV1,
+} from "./candidate-data-export.js";
 
 async function exportDefinition(name: string) {
   const schema = JSON.parse(
@@ -61,6 +64,33 @@ describe("domain schema registry", () => {
     expect(validate({ ...metadata, value: "true", state: "deleted" })).toBe(false);
     expect(validate({ ...metadata, value: "" })).toBe(false);
     expect(validate({ ...metadata, value: "x".repeat(3901) })).toBe(false);
+    for (const fieldKey of restrictedAnswerExportFieldKeys)
+      expect(validate({ ...metadata, fieldKey, value: "synthetic" })).toBe(true);
+    for (const fieldKey of [
+      "credential.password",
+      "oauth.token",
+      "attestation.truthful",
+      "signature.name",
+      "challenge.captcha",
+      "custom.unknown",
+    ]) {
+      expect(validate({ ...metadata, fieldKey, value: "synthetic" })).toBe(false);
+      expect(validate({ ...metadata, fieldKey })).toBe(true);
+    }
+    const taxonomy = JSON.parse(
+      await readFile(
+        new URL("../../../data/taxonomies/application-fields.v1.json", import.meta.url),
+        "utf8",
+      ),
+    ) as { fields: Array<{ key: string; sensitivity: string; answerPolicy: string }> };
+    expect([...restrictedAnswerExportFieldKeys].sort()).toEqual(
+      taxonomy.fields
+        .filter(
+          (field) => field.sensitivity === "restricted" && field.answerPolicy === "never_infer",
+        )
+        .map((field) => field.key)
+        .sort(),
+    );
     for (const field of Object.keys(metadata)) {
       const incomplete: Record<string, unknown> = { ...metadata };
       delete incomplete[field];

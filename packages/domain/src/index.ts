@@ -5,7 +5,10 @@ import type {
 } from "@ai-job-apply/api-contracts";
 
 export * from "./answer-vault.js";
-export { validateCandidateDataExportV1 } from "./candidate-data-export.js";
+export {
+  restrictedAnswerExportFieldKeys,
+  validateCandidateDataExportV1,
+} from "./candidate-data-export.js";
 export * from "./fact-graph.js";
 
 export type UserId = string & { readonly __brand: "UserId" };

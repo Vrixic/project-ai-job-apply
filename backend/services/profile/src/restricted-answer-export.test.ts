@@ -10,6 +10,28 @@ const reference = {
 };
 
 describe("Profile-owned restricted answer export reader", () => {
+  it("refuses credentials, consent artifacts and unknown fields before database or KMS I/O", async () => {
+    const client = vi.fn();
+    const cipher = { decrypt: vi.fn() };
+    const reader = new PostgresRestrictedAnswerExportReader(
+      client as unknown as postgres.Sql,
+      cipher,
+    );
+    for (const fieldKey of [
+      "credential.password",
+      "oauth.token",
+      "attestation.truthful",
+      "signature.name",
+      "challenge.captcha",
+      "custom.unknown",
+    ]) {
+      await expect(reader.readValue("owner", { ...reference, fieldKey })).rejects.toThrow(
+        "RestrictedAnswerExportFieldRejected",
+      );
+    }
+    expect(client).not.toHaveBeenCalled();
+    expect(cipher.decrypt).not.toHaveBeenCalled();
+  });
   it("binds owner and exact metadata in both SQL reads and the decrypt call", async () => {
     const client = vi
       .fn()

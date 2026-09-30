@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { restrictedAnswerExportFieldKeys } from "@ai-job-apply/domain";
 import type { RestrictedAnswerCipher } from "./restricted-answer-vault.js";
 
 export interface RestrictedAnswerExportReference {
@@ -28,6 +29,9 @@ export class PostgresRestrictedAnswerExportReader implements RestrictedAnswerExp
   ) {}
 
   async readValue(userId: string, reference: RestrictedAnswerExportReference): Promise<string> {
+    if (!restrictedAnswerExportFieldKeys.includes(reference.fieldKey)) {
+      throw new Error("RestrictedAnswerExportFieldRejected");
+    }
     const context = reference.context ?? "";
     const [row] = await this.client<
       Array<{ ciphertext: Buffer; kmsKeyId: string; encryptionAlgorithm: "SYMMETRIC_DEFAULT" }>

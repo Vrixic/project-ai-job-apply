@@ -853,6 +853,26 @@
         {
           "if": { "properties": { "state": { "const": "deleted" } }, "required": ["state"] },
           "then": { "properties": { "value": false } }
+        },
+        {
+          "if": { "properties": { "value": {} }, "required": ["value"] },
+          "then": {
+            "properties": {
+              "fieldKey": {
+                "enum": [
+                  "authorization.us_authorized",
+                  "authorization.sponsorship_required",
+                  "authorization.export_control",
+                  "disclosure.non_compete",
+                  "disclosure.conflict_of_interest",
+                  "demographic.gender",
+                  "demographic.race_ethnicity",
+                  "demographic.veteran",
+                  "demographic.disability"
+                ]
+              }
+            }
+          }
         }
       ],
       "additionalProperties": false

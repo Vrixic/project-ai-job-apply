@@ -18,6 +18,9 @@ answer. Expiry prevents reuse in an application; it does not erase retained cand
 Superseded values are not exported. Deleted entries remain metadata-only tombstones, even though
 their immutable historical rows still carry ciphertext. Credentials, tokens, session material,
 signatures, attestations, and technical challenges remain excluded.
+Decryption is limited to the nine established restricted/never-infer taxonomy fields offered by
+candidate settings. Unexpected legacy keys refuse before SQL or KMS I/O; they are not silently
+omitted or treated as newly approved exportable secrets.
 
 The existing fresh-authentication, owner-scoped candidate-rights request and durable activity
 build the same encrypted, short-lived, exact-object portable artifact. Profile owns the queries.
