@@ -69,6 +69,11 @@ ledger before serving traffic.
   portable format.
 - Restricted secrets and credential material are never exported; connected-account metadata may be
   included without tokens.
+- Under [ADR-035](../adr/035-restricted-answer-values-in-candidate-export.md), a separately
+  activated export activity may include the latest non-deleted candidate-supplied restricted
+  answer, even if expired. Superseded values are omitted and deletion tombstones are metadata-only.
+  This narrow portability path does not export credentials/session material or permit ordinary
+  vault-value reads. It remains default-off and synthetic-only pending accountable review.
 - Export artifacts are encrypted, short-lived, single-user authorized, access-audited, and deleted
   after the configured download window.
 - Identity verification, response periods, appeal/escalation, and any lawful exclusions require

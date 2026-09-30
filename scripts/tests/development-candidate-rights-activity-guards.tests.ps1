@@ -326,4 +326,75 @@ $drift = Copy-Fixture $plan
 $drift.resource_drift = @([pscustomobject]@{ address = "module.platform.aws_iam_role.gateway_lambda[0]"; mode = "managed"; type = "aws_iam_role"; change = [pscustomobject]@{ actions = @("update"); before = [pscustomobject]@{ a = 1 }; after = [pscustomobject]@{ a = 2 }; after_unknown = [pscustomobject]@{} } })
 Assert-Rejected { Assert-ExactCandidateRightsActivityPlan $drift $artifact } "Unreviewed provider drift was accepted."
 
+# ---- separately reviewed default-off restricted-answer export activation
+$vaultArn = "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-0000-0000-000000000001"
+$rightsAddress = "module.platform.aws_iam_role_policy.candidate_rights_activity[0]"
+$basePolicy = [pscustomobject]@{ Version = "2012-10-17"; Statement = @([pscustomobject]@{ Sid = "Existing"; Effect = "Allow"; Action = "s3:GetObject"; Resource = "arn:aws:s3:::synthetic/*" }) }
+$exportGrant = [pscustomobject]@{
+  Sid = "DecryptRestrictedAnswersForCandidateExport"; Effect = "Allow"; Action = "kms:Decrypt"; Resource = $vaultArn
+  Condition = [pscustomobject]@{ StringEquals = [pscustomobject]@{ "kms:EncryptionContext:purpose" = "restricted-answer-vault-v1" } }
+}
+function New-ExportActivationPlan {
+  $p = New-ActivityPlan
+  $p | Add-Member NoteProperty variables ([pscustomobject]@{ restricted_answer_export_enabled = [pscustomobject]@{ value = $true } })
+  $afterPolicy = Copy-Fixture $basePolicy
+  $afterPolicy.Statement = @($afterPolicy.Statement) + @($exportGrant)
+  $beforeJson = $basePolicy | ConvertTo-Json -Depth 30 -Compress
+  $afterJson = $afterPolicy | ConvertTo-Json -Depth 30 -Compress
+  $p.resource_changes += New-Change $rightsAddress "aws_iam_role_policy" -Before @{ name = "candidate-rights-activity-runtime"; role = "synthetic-role"; policy = $beforeJson } -After @{ name = "candidate-rights-activity-runtime"; role = "synthetic-role"; policy = $afterJson }
+  $activity = Get-ChangeOf $p "aws_lambda_function.profile_readiness_activity"
+  $activity.change.after.environment[0].variables | Add-Member NoteProperty RESTRICTED_ANSWER_EXPORT_ENABLED "enabled"
+  $activity.change.after.environment[0].variables | Add-Member NoteProperty RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN $vaultArn
+  $p.planned_values.root_module.resources = @(
+    [pscustomobject]@{ address = "module.platform.aws_kms_key.restricted_answer_vault[0]"; values = [pscustomobject]@{ arn = $vaultArn } },
+    [pscustomobject]@{ address = "module.platform.aws_iam_role.profile_readiness_activity[0]"; values = [pscustomobject]@{ id = "synthetic-role" } },
+    [pscustomobject]@{ address = $rightsAddress; values = [pscustomobject]@{ policy = $afterJson } }
+  )
+  return $p
+}
+$exportPlan = New-ExportActivationPlan
+$accepted = @(Assert-ExactCandidateRightsActivityPlan $exportPlan $artifact -EnableRestrictedAnswerExport)
+if ($accepted.Count -ne ($script:CandidateRightsActivityChangeSet.Count + 1)) { throw "Export activation did not retain its complete change set." }; $passed++
+Assert-Rejected { Assert-ExactCandidateRightsActivityPlan $exportPlan $artifact } "Ordinary refresh accepted export activation."
+foreach ($case in @(
+  @{ Name = "disabled flag"; Mutate = { param($p) $p.variables.restricted_answer_export_enabled.value = $false } },
+  @{ Name = "wrong runtime key"; Mutate = { param($p) (Get-ChangeOf $p "aws_lambda_function.profile_readiness_activity").change.after.environment[0].variables.RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN = "other" } },
+  @{ Name = "wrong runtime flag"; Mutate = { param($p) (Get-ChangeOf $p "aws_lambda_function.profile_readiness_activity").change.after.environment[0].variables.RESTRICTED_ANSWER_EXPORT_ENABLED = "true" } },
+  @{ Name = "unrelated environment change"; Mutate = { param($p) (Get-ChangeOf $p "aws_lambda_function.profile_readiness_activity").change.after.environment[0].variables.NODE_ENV = "test" } },
+  @{ Name = "unknown grant"; Mutate = { param($p) (Get-ChangeOf $p "aws_iam_role_policy.candidate_rights_activity").change.after_unknown | Add-Member NoteProperty policy $true } },
+  @{ Name = "sensitive grant"; Mutate = { param($p) (Get-ChangeOf $p "aws_iam_role_policy.candidate_rights_activity").change.after_sensitive | Add-Member NoteProperty policy $true } },
+  @{ Name = "role change"; Mutate = { param($p) (Get-ChangeOf $p "aws_iam_role_policy.candidate_rights_activity").change.after.role = "other" } },
+  @{ Name = "policy replacement"; Mutate = { param($p) (Get-ChangeOf $p "aws_iam_role_policy.candidate_rights_activity").change.actions = @("delete", "create") } },
+  @{ Name = "missing dedicated key"; Mutate = { param($p) $p.planned_values.root_module.resources = @($p.planned_values.root_module.resources | Where-Object { $_.address -notlike "*aws_kms_key*" }) } },
+  @{ Name = "missing policy update"; Mutate = { param($p) $p.resource_changes = @($p.resource_changes | Where-Object { $_.address -cne $rightsAddress }) } }
+  @{ Name = "duplicate policy update"; Mutate = { param($p) $p.resource_changes += Copy-Fixture (Get-ChangeOf $p "aws_iam_role_policy.candidate_rights_activity") } },
+  @{ Name = "replacement path"; Mutate = { param($p) (Get-ChangeOf $p "aws_iam_role_policy.candidate_rights_activity").change | Add-Member NoteProperty replace_paths @(,@("policy")) } },
+  @{ Name = "changed existing statement"; Mutate = { param($p) $g = Get-ChangeOf $p "aws_iam_role_policy.candidate_rights_activity"; $j = $g.change.after.policy | ConvertFrom-Json; $j.Statement[0].Action = "s3:*"; $g.change.after.policy = $j | ConvertTo-Json -Depth 30 -Compress; $p.planned_values.root_module.resources[2].values.policy = $g.change.after.policy } },
+  @{ Name = "source policy mismatch"; Mutate = { param($p) $p.planned_values.root_module.resources[2].values.policy = "{}" } },
+  @{ Name = "additional policy attribute"; Mutate = { param($p) (Get-ChangeOf $p "aws_iam_role_policy.candidate_rights_activity").change.after | Add-Member NoteProperty unexpected "x" } }
+)) {
+  $bad = New-ExportActivationPlan; & $case.Mutate $bad
+  Assert-Rejected { Assert-ExactCandidateRightsActivityPlan $bad $artifact -EnableRestrictedAnswerExport } "Export activation accepted $($case.Name)."
+}
+foreach ($field in @("Action", "Resource", "Condition", "Effect", "Sid")) {
+  $bad = New-ExportActivationPlan
+  $change = Get-ChangeOf $bad "aws_iam_role_policy.candidate_rights_activity"
+  $policy = $change.change.after.policy | ConvertFrom-Json
+  $policy.Statement[1].$field = "widened"
+  $change.change.after.policy = $policy | ConvertTo-Json -Depth 30 -Compress
+  # Keep the source projection agreeing: policy semantics, not merely source equality, must refuse.
+  $bad.planned_values.root_module.resources[2].values.policy = $change.change.after.policy
+  Assert-Rejected { Assert-ExactCandidateRightsActivityPlan $bad $artifact -EnableRestrictedAnswerExport } "Export activation accepted widened $field."
+}
+$exportBaseline = Copy-Fixture $baselineVariables; $exportVariables = Copy-Fixture $plannedVariables
+foreach ($v in @($exportBaseline, $exportVariables)) {
+  $v | Add-Member NoteProperty restricted_answer_vault_enabled ([pscustomobject]@{ value = $true })
+  $v | Add-Member NoteProperty restricted_answer_export_enabled ([pscustomobject]@{ value = $false })
+}
+$exportVariables.restricted_answer_export_enabled.value = $true
+$null = Assert-CandidateRightsActivityVariables $exportBaseline $exportVariables $artifact -EnableRestrictedAnswerExport; $passed++
+Assert-Rejected { Assert-CandidateRightsActivityVariables $exportBaseline $exportVariables $artifact } "Ordinary refresh accepted the activation flag."
+$exportBaseline.restricted_answer_vault_enabled.value = $false
+Assert-Rejected { Assert-CandidateRightsActivityVariables $exportBaseline $exportVariables $artifact -EnableRestrictedAnswerExport } "Export activation accepted a disabled vault."
+
 Write-Host "Candidate-rights activity refresh guard tests passed: $passed assertions; generated fixtures only."

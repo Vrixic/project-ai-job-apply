@@ -169,6 +169,7 @@ module "platform" {
   ingestion_retention_days                              = var.ingestion_retention_days
 
   restricted_answer_vault_enabled               = var.restricted_answer_vault_enabled
+  restricted_answer_export_enabled              = var.restricted_answer_export_enabled
   applications_attempt_recovery_enabled         = var.applications_attempt_recovery_enabled
   applications_attempt_recovery_artifact_s3_key = var.applications_attempt_recovery_artifact_s3_key
   applications_attempt_recovery_artifact_s3_object_version = (

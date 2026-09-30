@@ -11,6 +11,7 @@ import {
   RestrictedAnswerVaultNotFoundError,
 } from "./restricted-answer-vault.js";
 import { FakeRestrictedAnswerCipher } from "./restricted-answer-vault-test-cipher.js";
+import { PostgresRestrictedAnswerExportReader } from "./restricted-answer-export.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -26,6 +27,90 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
   const database = createDatabase(databaseUrl ?? "postgres://invalid");
   const cipher = new FakeRestrictedAnswerCipher();
   const store = new PostgresRestrictedAnswerVaultStore(database.client, cipher);
+
+  it("exports only the exact latest owner value, including expired answers, and refuses tombstones", async () => {
+    const userId = await createUser(database.client);
+    const otherUserId = await createUser(database.client);
+    const command = {
+      userId,
+      fieldKey: "authorization.us_authorized",
+      context: "us",
+      expectedVersion: 0,
+      valueType: "boolean" as const,
+      value: "false",
+      sensitivity: "restricted" as const,
+      sourceReference: "candidate.settings",
+      confirmedAt: new Date("2026-01-01T12:00:00.000Z"),
+      expiresAt: new Date("2026-01-02T12:00:00.000Z"),
+      idempotencyKey: `synthetic-export-${userId}`,
+      traceId: "synthetic-export",
+    };
+    const created = await store.save(command);
+    const reader = new PostgresRestrictedAnswerExportReader(database.client, cipher);
+    const reference = { ...created, fieldKey: command.fieldKey, context: command.context };
+    await expect(reader.readValue(userId, reference)).resolves.toBe("false");
+    await expect(reader.readValue(otherUserId, reference)).rejects.toThrow(
+      "RestrictedAnswerExportSnapshotChanged",
+    );
+    await expect(reader.readValue(userId, { ...reference, context: "eu" })).rejects.toThrow(
+      "RestrictedAnswerExportSnapshotChanged",
+    );
+    const corrected = await store.save({
+      ...command,
+      expectedVersion: 1,
+      value: "true",
+      idempotencyKey: `synthetic-correct-${userId}`,
+    });
+    await expect(reader.readValue(userId, reference)).rejects.toThrow(
+      "RestrictedAnswerExportSnapshotChanged",
+    );
+    await expect(
+      reader.readValue(userId, { ...reference, version: corrected.version }),
+    ).resolves.toBe("true");
+    await store.remove({
+      userId,
+      id: created.id,
+      expectedVersion: corrected.version,
+      traceId: "synthetic-delete",
+    });
+    await expect(reader.readValue(userId, { ...reference, version: 3 })).rejects.toThrow(
+      "RestrictedAnswerExportSnapshotChanged",
+    );
+    await expect(reader.readValue(userId, { ...reference, version: 2 })).rejects.toThrow(
+      "RestrictedAnswerExportSnapshotChanged",
+    );
+  });
+
+  it("refuses an answer deleted while KMS decryption was pending", async () => {
+    const userId = await createUser(database.client);
+    const created = await store.save({
+      userId,
+      fieldKey: "demographic.veteran",
+      expectedVersion: 0,
+      valueType: "enum",
+      value: "synthetic-decline",
+      sensitivity: "restricted",
+      sourceReference: "candidate.settings",
+      confirmedAt: new Date(),
+      idempotencyKey: `synthetic-race-${userId}`,
+      traceId: "synthetic-race",
+    });
+    const reader = new PostgresRestrictedAnswerExportReader(database.client, {
+      decrypt: async (input) => {
+        const value = await cipher.decrypt(input);
+        await store.remove({
+          userId,
+          id: created.id,
+          expectedVersion: 1,
+          traceId: "synthetic-race-delete",
+        });
+        return value;
+      },
+    });
+    await expect(
+      reader.readValue(userId, { ...created, fieldKey: "demographic.veteran" }),
+    ).rejects.toThrow("RestrictedAnswerExportSnapshotChanged");
+  });
 
   async function authorizeCandidateDeletion(userId: string): Promise<string> {
     const operationId = uuidv7();

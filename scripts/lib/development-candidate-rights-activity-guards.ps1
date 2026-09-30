@@ -107,13 +107,25 @@ function Assert-CandidateRightsActivityVariables {
   param(
     [Parameter(Mandatory)][object]$BaselineVariables,
     [Parameter(Mandatory)][object]$PlanVariables,
-    [Parameter(Mandatory)][object]$Artifact
+    [Parameter(Mandatory)][object]$Artifact,
+    [switch]$EnableRestrictedAnswerExport
   )
   $expected = @{
     profile_readiness_activity_artifact_s3_key = [string]$Artifact.key
     profile_readiness_activity_artifact_s3_object_version = [string]$Artifact.versionId
     profile_readiness_activity_artifact_sha256 = [string]$Artifact.artifactSha256
     profile_readiness_activity_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
+  }
+  if ($EnableRestrictedAnswerExport) {
+    foreach ($flag in @("restricted_answer_vault_enabled", "candidate_rights_enabled")) {
+      if (-not (ConvertTo-ExactBoolean (Get-GatewayPlanVariableValue $BaselineVariables $flag) $flag)) {
+        throw "Restricted-answer export requires the already activated vault and candidate rights."
+      }
+    }
+    if ((ConvertTo-ExactBoolean (Get-GatewayPlanVariableValue $BaselineVariables "restricted_answer_export_enabled") "restricted_answer_export_enabled") -or
+        -not (ConvertTo-ExactBoolean (Get-GatewayPlanVariableValue $PlanVariables "restricted_answer_export_enabled") "restricted_answer_export_enabled")) {
+      throw "Restricted-answer export activation must change exactly false to true."
+    }
   }
   foreach ($name in $script:CandidateRightsActivityVariables) {
     if ([string](Get-GatewayPlanVariableValue $PlanVariables $name) -cne $expected[$name]) {
@@ -133,6 +145,7 @@ function Assert-CandidateRightsActivityVariables {
   if (($baselineNames -join "|") -cne ($planNames -join "|")) { throw "The activity refresh changed the Terraform variable inventory." }
   foreach ($name in $baselineNames) {
     if ($name -in $script:CandidateRightsActivityVariables) { continue }
+    if ($EnableRestrictedAnswerExport -and $name -ceq "restricted_answer_export_enabled") { continue }
     if ((ConvertTo-GatewayCanonicalJson (Get-GatewayPlanVariableValue $BaselineVariables $name)) -cne
         (ConvertTo-GatewayCanonicalJson (Get-GatewayPlanVariableValue $PlanVariables $name))) {
       throw "The activity refresh changed unrelated input '$name'."
@@ -174,12 +187,16 @@ function Test-CandidateRightsActivityPathAllowed {
 # Exactly the reviewed set of resource and output changes, each limited to its reviewed attributes, with the two Lambda
 # code updates bound to the verified archive.
 function Assert-ExactCandidateRightsActivityPlan {
-  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][object]$Artifact)
+  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][object]$Artifact, [switch]$EnableRestrictedAnswerExport)
   if ([string]$Plan.terraform_version -cne (Get-DeploymentTerraformVersion) -or $Plan.errored -or -not $Plan.complete -or
       -not $Plan.applyable) {
     throw "The activity refresh must be a successful current-version Terraform plan."
   }
   Assert-AcceptedGatewayProviderDrift -Plan $Plan
+  $originalPlan = $Plan
+  if ($EnableRestrictedAnswerExport) {
+    $Plan = ConvertTo-RestrictedAnswerExportActivityPlan $Plan
+  }
   $outputChanges = Get-GatewayOptionalProperty $Plan "output_changes"
   $changedOutputs = @(
     if ($null -ne $outputChanges) {
@@ -248,5 +265,64 @@ function Assert-ExactCandidateRightsActivityPlan {
   if ([string]$activity.change.after.environment[0].variables.RELEASE_SHA -cne [string]$Artifact.artifactSha256) {
     throw "The activity Lambda release identity is not the verified archive."
   }
+  if ($EnableRestrictedAnswerExport) { return @(Get-GatewayMeaningfulChanges @($originalPlan.resource_changes)) }
   return $changes
+}
+
+# Validate the exact extra permission and two environment bindings, then reuse the unchanged
+# code-refresh guard. This mode never broadens the ordinary activity refresh allowlist.
+function ConvertTo-RestrictedAnswerExportActivityPlan {
+  param([Parameter(Mandatory)][object]$Plan)
+  if (-not (ConvertTo-ExactBoolean (Get-GatewayPlanVariableValue $Plan.variables "restricted_answer_export_enabled") "restricted_answer_export_enabled")) {
+    throw "The saved plan does not enable restricted-answer export."
+  }
+  $planned = Get-TerraformStateResourceMap $Plan.planned_values.root_module
+  $key = $planned["module.platform.aws_kms_key.restricted_answer_vault[0]"]
+  $keyArn = if ($null -eq $key) { "" } else { [string]$key.arn }
+  if ($keyArn -cnotmatch '^arn:aws:kms:us-east-2:[0-9]{12}:key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') {
+    throw "Restricted-answer export requires the exact source-evaluated dedicated key."
+  }
+  $address = "module.platform.aws_iam_role_policy.candidate_rights_activity[0]"
+  $grants = @($Plan.resource_changes | Where-Object { [string]$_.address -ceq $address })
+  if ($grants.Count -ne 1) { throw "Restricted-answer export requires one exact rights policy update." }
+  $grant = $grants[0]
+  if ([string]$grant.mode -cne "managed" -or [string]$grant.type -cne "aws_iam_role_policy" -or
+      (@($grant.change.actions) -join ",") -cne "update") { throw "Unexpected rights policy action or type." }
+  Assert-NoTerraformReplacementPaths $grant.change
+  foreach ($tree in @("after_unknown", "before_sensitive", "after_sensitive")) {
+    if (@(Get-GatewayUnknownTrueLeafPaths -Value $grant.change.$tree).Count -ne 0) { throw "The rights grant must be completely known and nonsensitive." }
+  }
+  $before = $grant.change.before; $after = $grant.change.after
+  if ([string]$after.name -cne "candidate-rights-activity-runtime" -or
+      [string]$after.role -cne [string]$planned["module.platform.aws_iam_role.profile_readiness_activity[0]"].id -or
+      [string]$after.policy -cne [string]$planned[$address].policy) { throw "The rights grant is not bound to the source-evaluated activity policy and role." }
+  $beforeCopy = $before | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $afterCopy = $after | ConvertTo-Json -Depth 60 | ConvertFrom-Json
+  $beforeCopy.PSObject.Properties.Remove("policy"); $afterCopy.PSObject.Properties.Remove("policy")
+  if ((ConvertTo-GatewayCanonicalJson $beforeCopy) -cne (ConvertTo-GatewayCanonicalJson $afterCopy)) { throw "The rights grant changed unrelated policy attributes." }
+  $beforePolicy = [string]$before.policy | ConvertFrom-Json
+  $afterPolicy = [string]$after.policy | ConvertFrom-Json
+  $sid = "DecryptRestrictedAnswersForCandidateExport"
+  $added = @($afterPolicy.Statement | Where-Object { [string]$_.Sid -ceq $sid })
+  if (@($beforePolicy.Statement | Where-Object { [string]$_.Sid -ceq $sid }).Count -ne 0 -or $added.Count -ne 1) { throw "The rights grant is not one new export statement." }
+  $expected = [pscustomobject]@{
+    Sid = $sid; Effect = "Allow"; Action = "kms:Decrypt"; Resource = $keyArn
+    Condition = [pscustomobject]@{ StringEquals = [pscustomobject]@{ "kms:EncryptionContext:purpose" = "restricted-answer-vault-v1" } }
+  }
+  if ((ConvertTo-GatewayCanonicalJson $added[0]) -cne (ConvertTo-GatewayCanonicalJson $expected)) { throw "Restricted-answer export widened or changed its decrypt-only statement." }
+  $afterPolicy.Statement = @($afterPolicy.Statement | Where-Object { [string]$_.Sid -cne $sid })
+  if ((ConvertTo-GatewayCanonicalJson $beforePolicy) -cne (ConvertTo-GatewayCanonicalJson $afterPolicy)) { throw "Restricted-answer export changed existing IAM statements." }
+  $copy = $Plan | ConvertTo-Json -Depth 80 | ConvertFrom-Json
+  $copy.resource_changes = @($copy.resource_changes | Where-Object { [string]$_.address -cne $address })
+  $activity = @($copy.resource_changes | Where-Object { [string]$_.address -ceq "module.platform.aws_lambda_function.profile_readiness_activity[0]" })
+  if ($activity.Count -ne 1) { throw "Missing exact activity update." }
+  $beforeEnv = $activity[0].change.before.environment[0].variables
+  $afterEnv = $activity[0].change.after.environment[0].variables
+  if ($null -ne $beforeEnv.PSObject.Properties["RESTRICTED_ANSWER_EXPORT_ENABLED"] -or
+      $null -ne $beforeEnv.PSObject.Properties["RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN"] -or
+      [string]$afterEnv.RESTRICTED_ANSWER_EXPORT_ENABLED -cne "enabled" -or
+      [string]$afterEnv.RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN -cne $keyArn) { throw "The activity export environment must gain exactly its enabled flag and dedicated key." }
+  $afterEnv.PSObject.Properties.Remove("RESTRICTED_ANSWER_EXPORT_ENABLED")
+  $afterEnv.PSObject.Properties.Remove("RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN")
+  return $copy
 }

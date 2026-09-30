@@ -38,8 +38,8 @@ vi.mock("@ai-job-apply/profile-service", async (importOriginal) => ({
 vi.mock("./candidate-rights-activities.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./candidate-rights-activities.js")>()),
   PostgresCandidateRightsActivityStore: class {
-    constructor() {
-      runtime.createRightsStore();
+    constructor(dependencies: unknown) {
+      runtime.createRightsStore(dependencies);
     }
 
     expireDueExports = runtime.expireDueExports;
@@ -231,6 +231,32 @@ describe("deployed profile-readiness activity entrypoints", { timeout: 30_000 },
     expect(runtime.expireDueExports).not.toHaveBeenCalled();
     expect(runtime.createProfileStore).not.toHaveBeenCalled();
     expect(runtime.fetch).not.toHaveBeenCalled();
+  });
+
+  it("wires vault decryption only under complete exact export activation", async () => {
+    vi.stubEnv("RESTRICTED_ANSWER_EXPORT_ENABLED", "enabled");
+    vi.stubEnv(
+      "RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN",
+      "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-0000-0000-000000000001",
+    );
+    const { activity } = await import("./profile-readiness-lambda.js");
+    await invoke(activity, scheduledEvent());
+    expect(runtime.createRightsStore).toHaveBeenCalledWith(
+      expect.objectContaining({
+        restrictedAnswerExport: expect.objectContaining({ readValue: expect.any(Function) }),
+      }),
+    );
+    expect(runtime.fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses malformed export activation before constructing the rights store", async () => {
+    vi.stubEnv("RESTRICTED_ANSWER_EXPORT_ENABLED", "true");
+    const { activity } = await import("./profile-readiness-lambda.js");
+    await expect(invoke(activity, scheduledEvent())).rejects.toThrow(
+      "RestrictedAnswerExportConfigurationRejected",
+    );
+    expect(runtime.createRightsStore).not.toHaveBeenCalled();
+    expect(runtime.resolveIdentitySecret).not.toHaveBeenCalled();
   });
 
   it("continues to dispatch ordinary readiness when candidate-rights maintenance is disabled", async () => {

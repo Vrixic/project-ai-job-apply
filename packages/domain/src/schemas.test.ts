@@ -18,7 +18,7 @@ async function exportDefinition(name: string) {
 }
 
 describe("domain schema registry", () => {
-  it("allowlists the deployed vault export metadata without saved values or encryption material", async () => {
+  it("allowlists vault export metadata and optional active values without encryption material", async () => {
     const validate = await exportDefinition("restrictedAnswerMetadata");
     const metadata = {
       id: "019d04cf-1f80-7000-8000-000000000070",
@@ -46,7 +46,6 @@ describe("domain schema registry", () => {
       }),
     ).toBe(true);
     for (const field of [
-      "value",
       "plaintext",
       "ciphertext",
       "kmsKeyId",
@@ -58,6 +57,10 @@ describe("domain schema registry", () => {
     ]) {
       expect(validate({ ...metadata, [field]: "synthetic" }), field).toBe(false);
     }
+    expect(validate({ ...metadata, value: "true" })).toBe(true);
+    expect(validate({ ...metadata, value: "true", state: "deleted" })).toBe(false);
+    expect(validate({ ...metadata, value: "" })).toBe(false);
+    expect(validate({ ...metadata, value: "x".repeat(3901) })).toBe(false);
     for (const field of Object.keys(metadata)) {
       const incomplete: Record<string, unknown> = { ...metadata };
       delete incomplete[field];

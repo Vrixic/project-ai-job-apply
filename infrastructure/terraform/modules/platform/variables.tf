@@ -1268,6 +1268,17 @@ variable "restricted_answer_vault_enabled" {
   }
 }
 
+variable "restricted_answer_export_enabled" {
+  description = "Allow the private candidate-rights activity to decrypt latest non-deleted restricted answers into the candidate's encrypted export only."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.restricted_answer_export_enabled || (var.restricted_answer_vault_enabled && var.candidate_rights_enabled && var.deploy_profile_readiness_durable)
+    error_message = "Restricted-answer export requires the dedicated vault key and active candidate-rights durable runtime."
+  }
+}
+
 variable "applications_attempt_recovery_enabled" {
   description = "Dark-deploy the scheduled Lambda that resolves a submission attempt whose worker vanished (D3-005/D3-008/D3-011)."
   type        = bool

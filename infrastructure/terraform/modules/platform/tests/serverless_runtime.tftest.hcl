@@ -120,6 +120,66 @@ run "candidate_rights_auth0_secret_preprovisions_with_managed_tags" {
   }
 }
 
+run "restricted_answer_export_refuses_missing_prerequisites" {
+  command = plan
+  variables {
+    restricted_answer_export_enabled = true
+  }
+  expect_failures = [var.restricted_answer_export_enabled]
+}
+
+run "restricted_answer_export_is_decrypt_only_and_exact_key_bound" {
+  command = plan
+  override_resource {
+    target          = aws_kms_key.restricted_answer_vault[0]
+    override_during = plan
+    values = {
+      arn = "arn:aws:kms:us-east-2:111122223333:key/00000000-0000-0000-0000-000000000001"
+    }
+  }
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    restricted_answer_vault_enabled              = true
+    restricted_answer_export_enabled             = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust,applications"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+    document_processing_deployment_stage         = "parser-dark"
+    document_parser_artifact_s3_key              = "lambda/parser.zip"
+    document_parser_artifact_s3_object_version   = "synthetic-parser-version"
+    document_parser_artifact_sha256              = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    document_parser_artifact_base64sha256        = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+  }
+  assert {
+    condition = (
+      aws_lambda_function.profile_readiness_activity[0].environment[0].variables.RESTRICTED_ANSWER_EXPORT_ENABLED == "enabled" &&
+      aws_lambda_function.profile_readiness_activity[0].environment[0].variables.RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN == aws_kms_key.restricted_answer_vault[0].arn
+    )
+    error_message = "Export activation must bind only the private activity to the dedicated vault key."
+  }
+  assert {
+    condition = alltrue([for statement in data.aws_iam_policy_document.candidate_rights_activity[0].statement :
+      statement.actions == toset(["kms:Decrypt"]) &&
+      statement.resources == toset([aws_kms_key.restricted_answer_vault[0].arn]) &&
+      one(statement.condition).test == "StringEquals" &&
+      one(statement.condition).variable == "kms:EncryptionContext:purpose" &&
+      length(one(statement.condition).values) == 1 &&
+      one(one(statement.condition).values) == "restricted-answer-vault-v1"
+      if statement.sid == "DecryptRestrictedAnswersForCandidateExport"
+    ]) && length([for statement in data.aws_iam_policy_document.candidate_rights_activity[0].statement : statement.sid if statement.sid == "DecryptRestrictedAnswersForCandidateExport"]) == 1
+    error_message = "The rights activity must gain exactly one purpose-bound Decrypt-only grant on the dedicated key."
+  }
+}
+
 run "candidate_deletion_restore_is_dedicated_and_read_only" {
   command = plan
 

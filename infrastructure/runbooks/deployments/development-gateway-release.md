@@ -401,6 +401,31 @@ Rollback is a fresh baseline and a plan that restores the previous receipt's arc
 
 ## Activating D3 platform capabilities (D3-001 and D3-005)
 
+### Restricted-answer export activation
+
+After the vault and candidate-rights runtime are already activated, use the activity-refresh
+commands above with the additional `-EnableRestrictedAnswerExport` switch on Plan, Apply, and
+Verify. This is a separate reviewed release, never combined with Gateway/document changes. The
+new source defaults `restricted_answer_export_enabled` to false in both environments. Publish and
+independently verify its immutable core-workflow artifact, then capture a fresh schema-7 zero-drift
+baseline at the merged source. Plan changes only the four activity artifact inputs plus that flag
+from false to true. No migration is required.
+
+The activation guard admits the existing exact activity release chain plus one rights-role policy
+update. Its only new statement is purpose-bound `kms:Decrypt` on the existing dedicated vault key;
+all prior statements and policy attributes remain unchanged. Only the activity gains
+`RESTRICTED_ANSWER_EXPORT_ENABLED=enabled` and the exact `RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN`.
+The saved metadata binds activation mode. The owner reviews the exact saved plan and metadata
+hashes before Apply. Apply/Verify read back the immutable chain, exact activity environment, and
+full rights policy, then require zero drift. Unexpected provider drift still refuses.
+
+Before real-data activation, complete accountable security/privacy review. Generated-synthetic
+acceptance must prove exported latest active and expired values, metadata-only tombstones, owner
+isolation, failure redaction, artifact expiry/deletion, and no sensitive logs or durable payloads.
+This implementation does not itself provide any deployed acceptance. Ordinary refresh does not
+enable the flag or grant decryption; disabling it requires a fresh separately reviewed plan rather
+than reusing the activation plan or downgrading to a worker that silently omits saved values.
+
 The `-D3PlatformActivation` mode enables exactly one default-off capability from a current
 schema-7 baseline. It cannot be combined with a Gateway release, document refresh, scan
 activation, upload-origin change, candidate-rights activity refresh, or the other D3 capability.

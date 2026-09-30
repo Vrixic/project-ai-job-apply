@@ -3,6 +3,7 @@ import type { DatabaseHandle } from "@ai-job-apply/profile-service";
 import { describe, expect, it, vi } from "vitest";
 import {
   type CandidateRightsActivityDependencies,
+  createCandidateRightsActivityHandler,
   PostgresCandidateRightsActivityStore,
 } from "./candidate-rights-activities.js";
 
@@ -71,6 +72,7 @@ function harness(
   ownerInventory: readonly string[],
   applicationsData?: unknown,
   restrictedAnswers?: unknown,
+  restrictedAnswerExport?: CandidateRightsActivityDependencies["restrictedAnswerExport"],
 ) {
   const queries: string[] = [];
   const stored: { body?: Buffer } = {};
@@ -130,6 +132,7 @@ function harness(
         return { objectVersion: "version-1" };
       }),
     },
+    restrictedAnswerExport,
     documentObjectStore: {
       deleteAllVersionsAndMarkers: vi.fn(async () => ({ exactInventoryEmpty: true })),
     },
@@ -164,6 +167,55 @@ const restrictedAnswer = {
 };
 
 describe("Restricted Answer Vault portable metadata compatibility", () => {
+  it("exports the exact active and expired values, but never decrypts tombstones", async () => {
+    const reader = { readValue: vi.fn(async () => "false") };
+    const metadata = [
+      restrictedAnswer,
+      { ...restrictedAnswer, id: REQUEST, context: "us", expiresAt: "2026-09-01T12:00:00.000Z" },
+      { ...restrictedAnswer, id: OPERATION, state: "deleted", version: 2 },
+    ];
+    const run = harness(WITH_APPLICATIONS, undefined, metadata, reader);
+    await run.store.assembleExport(input("export_assemble"));
+    const exported = JSON.parse(run.stored.body?.toString("utf8") ?? "{}");
+    expect(exported.profile.restrictedAnswers).toEqual([
+      { ...metadata[0], value: "false" },
+      { ...metadata[1], value: "false" },
+      metadata[2],
+    ]);
+    expect(reader.readValue.mock.calls).toEqual([
+      [USER, { id: restrictedAnswer.id, version: 1, fieldKey: restrictedAnswer.fieldKey }],
+      [USER, { id: REQUEST, version: 1, fieldKey: restrictedAnswer.fieldKey, context: "us" }],
+    ]);
+  });
+
+  it("writes no partial artifact if decryption or snapshot verification fails", async () => {
+    const reader = {
+      readValue: vi.fn(async () => {
+        throw new Error("RestrictedAnswerExportSnapshotChanged");
+      }),
+    };
+    const run = harness(BASE, undefined, [restrictedAnswer], reader);
+    await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+      "RestrictedAnswerExportSnapshotChanged",
+    );
+    expect(run.stored.body).toBeUndefined();
+    await expect(
+      createCandidateRightsActivityHandler(run.store)(input("export_assemble")),
+    ).resolves.toMatchObject({
+      outcome: "retryable_failure",
+      errorCode: "RestrictedAnswerExportSnapshotChanged",
+    });
+  });
+
+  it("refuses missing inventory when value export is enabled", async () => {
+    const reader = { readValue: vi.fn(async () => "false") };
+    const run = harness(BASE, undefined, undefined, reader);
+    await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+      "RestrictedAnswerExportInventoryMissing",
+    );
+    expect(reader.readValue).not.toHaveBeenCalled();
+    expect(run.stored.body).toBeUndefined();
+  });
   it.each([BASE, WITH_APPLICATIONS])(
     "assembles empty, active and deleted vault metadata under owner inventory %j",
     async (...ownerInventory) => {

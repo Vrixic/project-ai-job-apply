@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { validateCandidateDataExportV1 } from "@ai-job-apply/domain";
-import type { DatabaseHandle, PostgresResumeProposalWriter } from "@ai-job-apply/profile-service";
+import type {
+  DatabaseHandle,
+  PostgresResumeProposalWriter,
+  RestrictedAnswerExportReader,
+} from "@ai-job-apply/profile-service";
 import type { CandidateRightsPolicy } from "@ai-job-apply/profile-service/candidate-rights";
 import {
   type CandidateRightsActivityInputV1,
@@ -63,6 +67,7 @@ export interface CandidateRightsActivityDependencies {
   documentObjectStore: CandidateDocumentObjectStore;
   /** Profile's own retirement of unreviewed proposals, needed by the resume purge sweep (ADR-034). */
   resumeProposals?: Pick<PostgresResumeProposalWriter, "retireDocumentProposals">;
+  restrictedAnswerExport?: RestrictedAnswerExportReader;
   identityProvider: CandidateIdentityProvider;
   subprocessors: readonly CandidateSubprocessor[];
   recoveryLedger: CandidateDeletionRecoveryLedger;
@@ -182,6 +187,7 @@ function isRetryable(error: unknown): boolean {
       "ServiceUnavailable",
       "SlowDown",
       "ThrottlingException",
+      "RestrictedAnswerExportSnapshotChanged",
     ].includes(code)
   );
 }
@@ -442,6 +448,39 @@ export class PostgresCandidateRightsActivityStore {
     );
     if (!validateCandidateDataExportV1(envelope)) {
       throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+    }
+    const exportProfile = envelope.profile as Record<string, unknown>;
+    if (
+      Array.isArray(exportProfile.restrictedAnswers) &&
+      exportProfile.restrictedAnswers.some((entry: Record<string, unknown>) =>
+        Object.hasOwn(entry, "value"),
+      )
+    ) {
+      throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+    }
+    if (this.dependencies.restrictedAnswerExport) {
+      const profile = exportProfile;
+      if (!Array.isArray(profile.restrictedAnswers)) {
+        throw new CandidateRightsActivityRejected("RestrictedAnswerExportInventoryMissing");
+      }
+      const entries: Array<Record<string, unknown>> = [];
+      for (const entry of profile.restrictedAnswers as Array<Record<string, unknown>>) {
+        if (entry.state !== "active") {
+          entries.push({ ...entry });
+          continue;
+        }
+        const value = await this.dependencies.restrictedAnswerExport.readValue(context.userId, {
+          id: entry.id as string,
+          version: entry.version as number,
+          fieldKey: entry.fieldKey as string,
+          ...(typeof entry.context === "string" ? { context: entry.context } : {}),
+        });
+        entries.push({ ...entry, value });
+      }
+      profile.restrictedAnswers = entries;
+      if (!validateCandidateDataExportV1(envelope)) {
+        throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+      }
     }
     const body = Buffer.from(`${JSON.stringify(envelope)}\n`, "utf8");
     const sha256 = createHash("sha256").update(body).digest("hex");
