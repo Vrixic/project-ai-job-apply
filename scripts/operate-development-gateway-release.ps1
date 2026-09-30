@@ -708,7 +708,9 @@ function Read-Baseline {
       "{NextToken:NextToken,Versions:Versions[?Key=='platform.tfstate'].{Key:Key,VersionId:VersionId,IsLatest:IsLatest,LastModified:LastModified,Size:Size},DeleteMarkers:DeleteMarkers[?Key=='platform.tfstate'].{Key:Key,VersionId:VersionId,IsLatest:IsLatest,LastModified:LastModified}}",
       "--output", "json"
     ) "Exact export activation state history validation"
-    $activityPlanPath = Resolve-GatewayOperatorPath $PlanPath -MustExist
+    # PowerShell variable names are case-insensitive: the local $planPath is the baseline,
+    # not the script's release-plan parameter.
+    $activityPlanPath = Resolve-GatewayOperatorPath $script:PlanPath -MustExist
     $activityMetadataPath = Resolve-GatewayOperatorPath "$activityPlanPath$candidateRightsActivityMetadataSuffix" -MustExist
     $allowThreeSerialAdvances = Assert-ExactRestrictedExportThreeSnapshotVerification `
       -SourceSha $SourceSha -ReceiptSha256 $ReviewedWorkflowReceiptSha256 `
@@ -803,6 +805,9 @@ function Read-Baseline {
   }
   return [pscustomobject]@{
     Path = $planPath; MetadataPath = $metadataPath; Metadata = $metadata; Plan = $plan
+    RestrictedExportRecoveryState = $(if ($allowThreeSerialAdvances) {
+        [pscustomobject]@{ Lineage = [string]$state.Lineage; Serial = [long]$state.Serial }
+      } else { $null })
     DocumentReceiptSha256 = [string]$metadata.ReceiptSha256
     ProcessorDocumentReceiptSha256 = $processorReceiptSha256
     MigrationImage = $migrationImage; MetadataSchemaVersion = [string]$metadata.SchemaVersion
@@ -1132,6 +1137,22 @@ function Assert-CandidateRightsActivityLive {
     throw "The live durable role does not invoke exactly the new activity version."
   }
 }
+function Assert-CandidateRightsActivityPostApplyState {
+  param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Metadata, [Parameter(Mandatory)][object]$State)
+  if ($Action -cne "Verify") { throw "Post-apply state validation is verification-only." }
+  if ([string]$State.Lineage -cne [string]$Metadata.StateLineage) {
+    throw "Post-change verification requires the reviewed state lineage."
+  }
+  if ([long]$State.Serial -eq ([long]$Metadata.StateSerial + 1)) { return }
+  $recoveryState = Get-OptionalProperty $Baseline "RestrictedExportRecoveryState"
+  if ($RefreshCandidateRightsActivity -and $EnableRestrictedAnswerExport -and
+      $SourceSha -ceq "4c557c35e18647ffd106fe754dc84394b59e9370" -and
+      [long]$Metadata.StateSerial -eq 395 -and [long]$State.Serial -eq 398 -and
+      $null -ne $recoveryState -and [string]$recoveryState.Lineage -ceq [string]$State.Lineage -and
+      [long]$recoveryState.Serial -eq [long]$State.Serial) { return }
+  throw "Post-change verification requires one state advance or the exact validated export recovery state."
+}
+
 function Invoke-CandidateRightsActivityZeroDrift {
   param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact)
   $path = Join-Path $operatorRoot "candidate-rights-activity-verify-$($SourceSha.Substring(0,12))-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfplan"
@@ -1842,10 +1863,9 @@ if ($DocumentUploadCorsOrigin -cne "") {
     & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
     if ($LASTEXITCODE -ne 0) { throw "The exact reviewed document upload CORS plan failed to apply." }
   } else {
-    # Verify is the post-apply recovery path: exactly one state advance from the reviewed plan's state.
-    if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne ([long]$metadata.StateSerial + 1)) {
-      throw "Post-change verification requires exactly one state advance from the reviewed plan."
-    }
+    # Re-read state after all artifact checks. The exact recovery result must still match;
+    # ordinary releases retain the one-advance rule and Apply's exact-state rule is unchanged.
+    Assert-CandidateRightsActivityPostApplyState -Baseline $baseline -Metadata $metadata -State $state
   }
   Assert-DocumentUploadCorsLive (@($baselineOrigins) + @($origin)) $bucket
   $driftSha = Invoke-UploadCorsZeroDrift $baseline $origin

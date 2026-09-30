@@ -443,6 +443,14 @@ refuse. Plan, Apply, ordinary refresh, and every other reader retain their exist
 No old baseline or receipt is edited. Local inspection of the retained plan is diagnostic evidence,
 not a substitute for the full standalone live verification.
 
+The recovery sidecar is resolved from the script-scoped release-plan argument, not the
+case-insensitively named local baseline path. After the exact history check and both baseline
+readers succeed, their result carries the observed recovery lineage/serial. The activity's final
+fresh state read must still match that result, the pinned release source, and serials 395/398.
+Missing, malformed, or stale recovery evidence refuses; ordinary verification still accepts only
+one advance, and Apply still requires unchanged reviewed state. Operator tests execute the real
+recovery branch in the shadowing scope and exercise the final state check on both PowerShell hosts.
+
 Before real-data activation, complete accountable security/privacy review. Generated-synthetic
 acceptance must prove exported latest active and expired values, metadata-only tombstones, owner
 isolation, failure redaction, artifact expiry/deletion, and no sensitive logs or durable payloads.
