@@ -271,6 +271,36 @@ function Assert-ExactCandidateRightsActivityPlan {
 
 # Validate the exact extra permission and two environment bindings, then reuse the unchanged
 # code-refresh guard. This mode never broadens the ordinary activity refresh allowlist.
+function Assert-RestrictedAnswerExportDecryptStatement {
+  param([Parameter(Mandatory)][object]$Statement, [Parameter(Mandatory)][string]$KeyArn)
+  $condition = $null; $equals = $null
+  if ($null -ne $Statement.PSObject.Properties["Condition"]) { $condition = $Statement.PSObject.Properties["Condition"].Value }
+  if ($null -ne $condition -and $null -ne $condition.PSObject.Properties["StringEquals"]) { $equals = $condition.PSObject.Properties["StringEquals"].Value }
+  foreach ($shape in @(
+    @{ Value = $Statement; Keys = @("Action", "Condition", "Effect", "Resource", "Sid") },
+    @{ Value = $condition; Keys = @("StringEquals") },
+    @{ Value = $equals; Keys = @("kms:EncryptionContext:purpose") }
+  )) {
+    if ($shape.Value -isnot [pscustomobject] -or
+        (@($shape.Value.PSObject.Properties.Name | Sort-Object) -join "|") -cne ($shape.Keys -join "|")) {
+      throw "Restricted-answer export widened or changed its decrypt-only statement."
+    }
+  }
+  $expected = [ordered]@{
+    Action = "kms:Decrypt"; Effect = "Allow"; Resource = $KeyArn; Sid = "DecryptRestrictedAnswersForCandidateExport"
+  }
+  foreach ($name in $expected.Keys) {
+    $value = $Statement.PSObject.Properties[$name].Value
+    if ($value -isnot [string] -or $value -cne $expected[$name]) {
+      throw "Restricted-answer export widened or changed its decrypt-only statement."
+    }
+  }
+  $purpose = $equals.PSObject.Properties["kms:EncryptionContext:purpose"].Value
+  if ($purpose -isnot [string] -or $purpose -cne "restricted-answer-vault-v1") {
+    throw "Restricted-answer export widened or changed its decrypt-only statement."
+  }
+}
+
 function ConvertTo-RestrictedAnswerExportActivityPlan {
   param([Parameter(Mandatory)][object]$Plan)
   if (-not (ConvertTo-ExactBoolean (Get-GatewayPlanVariableValue $Plan.variables "restricted_answer_export_enabled") "restricted_answer_export_enabled")) {
@@ -305,11 +335,9 @@ function ConvertTo-RestrictedAnswerExportActivityPlan {
   $sid = "DecryptRestrictedAnswersForCandidateExport"
   $added = @($afterPolicy.Statement | Where-Object { [string]$_.Sid -ceq $sid })
   if (@($beforePolicy.Statement | Where-Object { [string]$_.Sid -ceq $sid }).Count -ne 0 -or $added.Count -ne 1) { throw "The rights grant is not one new export statement." }
-  $expected = [pscustomobject]@{
-    Sid = $sid; Effect = "Allow"; Action = "kms:Decrypt"; Resource = $keyArn
-    Condition = [pscustomobject]@{ StringEquals = [pscustomobject]@{ "kms:EncryptionContext:purpose" = "restricted-answer-vault-v1" } }
-  }
-  if ((ConvertTo-GatewayCanonicalJson $added[0]) -cne (ConvertTo-GatewayCanonicalJson $expected)) { throw "Restricted-answer export widened or changed its decrypt-only statement." }
+  # Compare exact keys and typed scalar values, not JSON object property order. Keep the
+  # global JSON helper and the byte-exact source/unchanged-policy comparisons untouched.
+  Assert-RestrictedAnswerExportDecryptStatement -Statement $added[0] -KeyArn $keyArn
   $afterPolicy.Statement = @($afterPolicy.Statement | Where-Object { [string]$_.Sid -cne $sid })
   if ((ConvertTo-GatewayCanonicalJson $beforePolicy) -cne (ConvertTo-GatewayCanonicalJson $afterPolicy)) { throw "Restricted-answer export changed existing IAM statements." }
   $copy = $Plan | ConvertTo-Json -Depth 80 | ConvertFrom-Json
