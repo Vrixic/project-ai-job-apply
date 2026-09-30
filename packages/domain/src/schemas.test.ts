@@ -18,6 +18,72 @@ async function exportDefinition(name: string) {
 }
 
 describe("domain schema registry", () => {
+  it("allowlists the deployed vault export metadata without saved values or encryption material", async () => {
+    const validate = await exportDefinition("restrictedAnswerMetadata");
+    const metadata = {
+      id: "019d04cf-1f80-7000-8000-000000000070",
+      fieldKey: "authorization.us_authorized",
+      version: 1,
+      valueType: "boolean",
+      sensitivity: "restricted",
+      state: "active",
+      confirmedAt: "2026-09-28T12:00:00.000Z",
+      createdAt: "2026-09-28T12:00:00.000Z",
+    };
+    expect(validate(metadata)).toBe(true);
+    for (const valueType of ["string", "text", "boolean", "date", "decimal", "enum"]) {
+      for (const sensitivity of ["confidential", "restricted"]) {
+        expect(validate({ ...metadata, valueType, sensitivity })).toBe(true);
+      }
+    }
+    expect(
+      validate({
+        ...metadata,
+        state: "deleted",
+        version: 2,
+        context: "us",
+        expiresAt: metadata.createdAt,
+      }),
+    ).toBe(true);
+    for (const field of [
+      "value",
+      "plaintext",
+      "ciphertext",
+      "kmsKeyId",
+      "kms_key_id",
+      "encryptionAlgorithm",
+      "sourceReference",
+      "userId",
+      "ownerId",
+    ]) {
+      expect(validate({ ...metadata, [field]: "synthetic" }), field).toBe(false);
+    }
+    for (const field of Object.keys(metadata)) {
+      const incomplete: Record<string, unknown> = { ...metadata };
+      delete incomplete[field];
+      expect(validate(incomplete), field).toBe(false);
+    }
+    for (const invalid of [
+      { version: 0 },
+      { version: 1.5 },
+      { version: 2147483648 },
+      { sensitivity: "standard" },
+      { valueType: "object" },
+      { state: "expired" },
+      { fieldKey: "" },
+      { fieldKey: "x".repeat(121) },
+      { context: "" },
+      { context: null },
+      { context: "x".repeat(121) },
+      { confirmedAt: "invalid" },
+      { createdAt: "invalid" },
+      { expiresAt: "invalid" },
+      { id: "not-a-uuid" },
+    ]) {
+      expect(validate({ ...metadata, ...invalid }), JSON.stringify(invalid)).toBe(false);
+    }
+  });
+
   it("exports the exact bounded contribution-consent history without owner or preview digests", async () => {
     const validate = await exportDefinition("contributionConsent");
     const consent = {
