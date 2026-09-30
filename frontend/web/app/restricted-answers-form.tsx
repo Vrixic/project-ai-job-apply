@@ -8,7 +8,11 @@ import type {
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
 import { validateFoundationResponse } from "../lib/foundation-response-bff";
-import { restrictedAnswerField, restrictedAnswerFields } from "../lib/restricted-answer-fields";
+import {
+  isCanonicalRestrictedAnswerContext,
+  restrictedAnswerField,
+  restrictedAnswerFields,
+} from "../lib/restricted-answer-fields";
 
 const requestTimeoutMilliseconds = 20_000;
 const loadFailureMessage = "Restricted answers are temporarily unavailable.";
@@ -206,7 +210,7 @@ export function RestrictedAnswersForm({ authenticated }: { authenticated: boolea
       setMessage("Choose an answer, enter its value, and confirm that you want to save it.");
       return;
     }
-    if (normalizedContext && !/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/.test(normalizedContext)) {
+    if (normalizedContext && !isCanonicalRestrictedAnswerContext(normalizedContext)) {
       setMessage("Use a lowercase dotted context key, such as jurisdiction.us.");
       return;
     }

@@ -1,5 +1,6 @@
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import { RequestBodyTooLargeError, readBoundedRequestBody } from "./bounded-request-body";
+import { isCanonicalRestrictedAnswerContext } from "./restricted-answer-fields";
 
 const MAXIMUM_FOUNDATION_WRITE_BODY_BYTES = 64 * 1024;
 const FOUNDATION_WRITE_BODY_TIMEOUT_MILLISECONDS = 2_000;
@@ -77,9 +78,7 @@ export async function readFoundationWriteRequest(
       : queryEntries.length === 0 ||
         (queryEntries.length === 1 &&
           queryEntries[0]?.[0] === "context" &&
-          (queryEntries[0]?.[1].length ?? 0) >= 1 &&
-          (queryEntries[0]?.[1].length ?? 0) <= 120 &&
-          /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/.test(queryEntries[0]?.[1] ?? ""));
+          isCanonicalRestrictedAnswerContext(queryEntries[0]?.[1] ?? ""));
   if (!queryIsValid) {
     return rejectBeforeRead(request, 400, "invalid_request", "Invalid request");
   }

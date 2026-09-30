@@ -58,16 +58,39 @@ export function restrictedAnswerField(key: string): RestrictedAnswerFieldDefinit
   return restrictedAnswerFieldsByKey.get(key);
 }
 
+export function isCanonicalRestrictedAnswerContext(value: string): boolean {
+  if (value.length < 1 || value.length > 120) return false;
+
+  let atSegmentStart = true;
+  for (const character of value) {
+    if (character === ".") {
+      if (atSegmentStart) return false;
+      atSegmentStart = true;
+      continue;
+    }
+
+    const codePoint = character.codePointAt(0);
+    if (codePoint === undefined) return false;
+    const isLowercaseLetter = codePoint >= 97 && codePoint <= 122;
+    if (atSegmentStart) {
+      if (!isLowercaseLetter) return false;
+      atSegmentStart = false;
+      continue;
+    }
+
+    const isDigit = codePoint >= 48 && codePoint <= 57;
+    if (!isLowercaseLetter && !isDigit && character !== "_") return false;
+  }
+
+  return !atSegmentStart;
+}
+
 export function restrictedAnswerContext(searchParams: URLSearchParams): string | undefined | null {
   const entries = [...searchParams.entries()];
   if (entries.length === 0) return undefined;
   if (entries.length !== 1 || entries[0]?.[0] !== "context") return null;
   const value = entries[0]?.[1] ?? "";
-  return value.length >= 1 &&
-    value.length <= 120 &&
-    /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/.test(value)
-    ? value
-    : null;
+  return isCanonicalRestrictedAnswerContext(value) ? value : null;
 }
 
 export function isRestrictedAnswerVaultUiEnabled(

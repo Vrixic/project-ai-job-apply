@@ -180,6 +180,11 @@ describe("foundation write request boundary", () => {
     for (const query of [
       "?context=",
       "?context=Jurisdiction%20US",
+      "?context=.jurisdiction",
+      "?context=jurisdiction.",
+      "?context=jurisdiction..us",
+      "?context=1jurisdiction.us",
+      `?context=${"a".repeat(121)}`,
       "?context=a&context=b",
       "?context=a&private=1",
     ]) {
