@@ -5037,6 +5037,7 @@ class MemoryRestrictedAnswerVaultStore implements RestrictedAnswerVaultStore {
       valueType: string;
       sensitivity: string;
       confirmedAt: string;
+      createdAt: string;
       expiresAt?: string;
     }
   >();
@@ -5072,6 +5073,7 @@ class MemoryRestrictedAnswerVaultStore implements RestrictedAnswerVaultStore {
       valueType: command.valueType,
       sensitivity: command.sensitivity,
       confirmedAt: command.confirmedAt.toISOString(),
+      createdAt: existing?.createdAt ?? "2026-09-28T12:00:01.123456+00:00",
       ...(command.expiresAt ? { expiresAt: command.expiresAt.toISOString() } : {}),
     });
     const result = { id, version };
@@ -5091,6 +5093,7 @@ class MemoryRestrictedAnswerVaultStore implements RestrictedAnswerVaultStore {
         state: entry.state,
         version: entry.version,
         confirmedAt: entry.confirmedAt,
+        createdAt: entry.createdAt,
         ...(entry.expiresAt ? { expiresAt: entry.expiresAt } : {}),
       }));
   }
@@ -5168,6 +5171,7 @@ describe("restricted answer vault routes (D3-001)", () => {
       });
       expect(JSON.stringify(body)).not.toContain(`"value"`);
       expect(JSON.stringify(body)).not.toContain("true");
+      expect(body).not.toHaveProperty("createdAt");
 
       const listed = await app.inject({
         method: "GET",
@@ -5177,6 +5181,7 @@ describe("restricted answer vault routes (D3-001)", () => {
       expect(listed.statusCode).toBe(200);
       expect(listed.headers["cache-control"]).toBe("no-store");
       expect(listed.json().answers).toHaveLength(1);
+      expect(listed.json().answers[0].createdAt).toBe("2026-09-28T12:00:01.123456+00:00");
       expect(JSON.stringify(listed.json())).not.toContain("true");
 
       const corrected = await app.inject({
@@ -5210,6 +5215,16 @@ describe("restricted answer vault routes (D3-001)", () => {
         headers,
       });
       expect(deletedAgain.statusCode).toBe(204);
+      const tombstones = await app.inject({
+        method: "GET",
+        url: "/v1/profile/restricted-answers",
+        headers,
+      });
+      expect(tombstones.json().answers[0]).toMatchObject({
+        state: "deleted",
+        version: 3,
+        createdAt: "2026-09-28T12:00:01.123456+00:00",
+      });
     } finally {
       await app.close();
     }

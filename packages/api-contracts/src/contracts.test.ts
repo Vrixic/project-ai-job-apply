@@ -2,6 +2,38 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { compileComponentValidator, contract } from "./index.js";
 
+describe("RestrictedAnswer creation metadata compatibility", () => {
+  const validate = compileComponentValidator("RestrictedAnswer");
+  const metadata = {
+    id: "019d04cf-1f80-7000-8000-000000000071",
+    fieldKey: "authorization.us_authorized",
+    valueType: "boolean",
+    sensitivity: "restricted",
+    state: "active",
+    version: 1,
+    confirmedAt: "2026-01-01T12:00:00.000Z",
+  };
+
+  it("accepts unchanged save metadata and precise creation metadata in owner lists", () => {
+    expect(validate(metadata)).toBe(true);
+    expect(validate({ ...metadata, createdAt: "2026-09-30T12:00:00.123456+00:00" })).toBe(true);
+  });
+
+  it.each([null, 123, "not-a-time", "2026-02-30T12:00:00Z"])(
+    "rejects invalid creation metadata %s",
+    (createdAt) => {
+      expect(validate({ ...metadata, createdAt })).toBe(false);
+    },
+  );
+
+  it("continues rejecting values and ciphertext in metadata responses", () => {
+    expect(validate({ ...metadata, createdAt: metadata.confirmedAt, value: "true" })).toBe(false);
+    expect(validate({ ...metadata, createdAt: metadata.confirmedAt, ciphertext: "private" })).toBe(
+      false,
+    );
+  });
+});
+
 describe("PutJobPreferencesRequest", () => {
   const validate = compileComponentValidator("PutJobPreferencesRequest");
   const minimalPreferences = {

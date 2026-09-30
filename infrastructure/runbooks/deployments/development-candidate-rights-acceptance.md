@@ -40,11 +40,14 @@ references. The exact set and every metadata/value field must match; entry and o
 not matter. Missing or additional entries, superseded versions, changed values/context/expiry,
 duplicate references, unknown fields, and a deleted entry carrying plaintext refuse.
 
-Current integration gap: the artifact requires the database-generated `createdAt`, but the existing
-owner-facing vault list/write responses omit it. Those responses alone cannot prepare this exact
-independent snapshot. Do not infer creation time from the ID, copy it from the tested artifact,
-seed/read live SQL, or relax the exact comparison. An additive owner-list metadata field requires
-explicit owner API approval before implementation; no such API change is included here.
+Owner approved the additive `createdAt` metadata field on 2026-09-30. The owner-only vault list now
+projects the database-generated answer creation time using the export's PostgreSQL JSON timestamp
+representation, preserving sub-millisecond precision. It remains stable across correction/deletion.
+The shared v1 metadata schema makes this field optional so existing save responses remain unchanged;
+the PostgreSQL-backed list always supplies it. This source change is not yet deployed. Require the
+field from a compatible deployed owner-list response before preparing the independent snapshot.
+Do not infer creation time from the ID, copy it from the tested artifact, seed/read live SQL, or
+relax exact comparison. Fixture preparation and guarded lifecycle integration remain outstanding.
 
 Candidate-supplied `confirmedAt` can precede database insertion and its `createdAt` (encryption
 happens first), including for a historical answer already expired when saved. Both timestamps
