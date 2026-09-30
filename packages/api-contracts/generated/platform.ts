@@ -1350,6 +1350,11 @@ export interface components {
             version: number;
             /** Format: date-time */
             confirmedAt: string;
+            /**
+             * Format: date-time
+             * @description Database-generated answer creation time, included by the owner-list route. Optional for compatibility with unchanged save responses.
+             */
+            createdAt?: string;
             /** Format: date-time */
             expiresAt?: string;
         };

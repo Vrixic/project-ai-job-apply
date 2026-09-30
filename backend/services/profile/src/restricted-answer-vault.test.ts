@@ -5,6 +5,33 @@ import {
 } from "./restricted-answer-vault.js";
 import { FakeRestrictedAnswerCipher } from "./restricted-answer-vault-test-cipher.js";
 
+it("preserves the exact PostgreSQL creation timestamp instead of rounding to milliseconds", async () => {
+  const { PostgresRestrictedAnswerVaultStore } = await import("./restricted-answer-vault.js");
+  const createdAt = "2026-09-30T12:00:01.123456+00:00";
+  const query = async () => [
+    {
+      id: "019d04cf-1f80-7000-8000-000000000071",
+      fieldKey: "authorization.us_authorized",
+      context: null,
+      version: 1,
+      valueType: "boolean",
+      sensitivity: "restricted",
+      state: "active",
+      confirmedAt: new Date("2026-01-01T12:00:00.000Z"),
+      createdAt,
+      expiresAt: null,
+    },
+  ];
+  const store = new PostgresRestrictedAnswerVaultStore(
+    query as unknown as ConstructorParameters<typeof PostgresRestrictedAnswerVaultStore>[0],
+    undefined,
+  );
+  const [entry] = await store.list("synthetic-owner");
+  expect(entry?.createdAt).toBe(createdAt);
+  expect(entry).not.toHaveProperty("value");
+  expect(entry).not.toHaveProperty("ciphertext");
+});
+
 describe("FakeRestrictedAnswerCipher", () => {
   it("round-trips a value for the exact context it was encrypted under", async () => {
     const cipher = new FakeRestrictedAnswerCipher();

@@ -95,6 +95,7 @@ export interface RestrictedAnswerSummary {
   state: "active" | "deleted";
   version: number;
   confirmedAt: string;
+  createdAt: string;
   expiresAt?: string;
 }
 
@@ -391,11 +392,13 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
         sensitivity: RestrictedAnswerSensitivity;
         state: "active" | "deleted";
         confirmedAt: Date | string;
+        createdAt: string;
         expiresAt: Date | string | null;
       }>
     >`
       SELECT answer.id, answer.field_key, answer.context, version.version, version.value_type,
-             version.sensitivity, version.state, version.confirmed_at, version.expires_at
+             version.sensitivity, version.state, version.confirmed_at, version.expires_at,
+             to_jsonb(answer.created_at) #>> '{}' AS created_at
       FROM profile.restricted_answers AS answer
       JOIN LATERAL (
         SELECT * FROM profile.restricted_answer_versions
@@ -413,6 +416,8 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
       state: row.state,
       version: row.version,
       confirmedAt: iso(row.confirmedAt),
+      // Match the portable export's PostgreSQL JSON timestamp without losing sub-ms precision.
+      createdAt: row.createdAt,
       ...(row.expiresAt ? { expiresAt: iso(row.expiresAt) } : {}),
     }));
   }

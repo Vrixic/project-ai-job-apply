@@ -4288,6 +4288,11 @@
           "state": { "type": "string", "enum": ["active", "deleted"] },
           "version": { "type": "integer", "minimum": 1 },
           "confirmedAt": { "type": "string", "format": "date-time" },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Database-generated answer creation time, included by the owner-list route. Optional for compatibility with unchanged save responses."
+          },
           "expiresAt": { "type": "string", "format": "date-time" }
         },
         "additionalProperties": false

@@ -13,6 +13,18 @@ Defines versioned API schemas and generates type-safe clients for web, mobile, e
 
 Contracts contain transport shapes, not backend implementation or persistence models.
 
+The owner-only `GET /profile/restricted-answers` metadata includes database-generated `createdAt`,
+preserving the timestamp representation and precision used by candidate exports. Creation time
+belongs to the answer identity and does not change when a version is corrected or deleted. It is
+optional in the shared v1 `RestrictedAnswer` schema to support legacy lists and unchanged save
+responses. No response exposes an answer value or ciphertext, and existing scopes and routes are
+unchanged. Deploy the compatible Gateway/Profile implementation before requiring this field in
+an acceptance harness; schema generation alone is not deployment evidence.
+Rebuild and deploy strict response-validating consumers with the updated contract **before** the
+Gateway starts returning this field: older closed-object validators reject new response keys.
+Optionality permits new readers to accept old lists/save responses; it does not make old strict
+readers accept the new property. This change includes no frontend source edit or hosted deployment.
+
 The additive Phase 2 private-capture contract defines strict owner-scoped
 `POST /saved-job-captures` and `GET`/`DELETE /saved-job-captures/{captureId}` routes. The create
 command binds one client UUIDv7 and `Idempotency-Key` to the exact sanitized provider source,

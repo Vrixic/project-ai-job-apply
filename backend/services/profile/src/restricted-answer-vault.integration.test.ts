@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./index.js";
+import { PostgresRestrictedAnswerExportReader } from "./restricted-answer-export.js";
 import {
   PostgresRestrictedAnswerVaultStore,
   RestrictedAnswerVaultConflictError,
@@ -11,7 +12,6 @@ import {
   RestrictedAnswerVaultNotFoundError,
 } from "./restricted-answer-vault.js";
 import { FakeRestrictedAnswerCipher } from "./restricted-answer-vault-test-cipher.js";
-import { PostgresRestrictedAnswerExportReader } from "./restricted-answer-export.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -152,6 +152,45 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
 
   afterAll(async () => {
     await database.client.end();
+  });
+
+  it("lists the export-exact creation timestamp unchanged across correction and deletion", async () => {
+    const userId = await createUser(database.client);
+    const otherUserId = await createUser(database.client);
+    const command = {
+      userId,
+      fieldKey: "authorization.us_authorized",
+      expectedVersion: 0,
+      valueType: "boolean" as const,
+      value: "true",
+      sensitivity: "restricted" as const,
+      sourceReference: "synthetic.created-at",
+      confirmedAt: new Date("2026-01-01T12:00:00.000Z"),
+      idempotencyKey: `created-at-${userId}`,
+      traceId: "synthetic.created-at",
+    };
+    const created = await store.save(command);
+    // Metadata reads must work without any KMS cipher or decryption.
+    const metadataStore = new PostgresRestrictedAnswerVaultStore(database.client, undefined);
+    const [initial] = await metadataStore.list(userId);
+    expect(initial?.createdAt).toBeDefined();
+    const [exported] = await database.client<
+      Array<{ data: { profile: { restrictedAnswers: Array<{ id: string; createdAt: string }> } } }>
+    >`SELECT profile.export_candidate_data(${userId}::uuid) AS data`;
+    expect(initial?.createdAt).toBe(exported?.data.profile.restrictedAnswers[0]?.createdAt);
+    expect(await metadataStore.list(otherUserId)).toEqual([]);
+    await store.save({
+      ...command,
+      expectedVersion: 1,
+      value: "false",
+      idempotencyKey: `correct-created-at-${userId}`,
+    });
+    const [corrected] = await metadataStore.list(userId);
+    expect(corrected).toMatchObject({ version: 2, createdAt: initial?.createdAt });
+    await store.remove({ userId, id: created.id, expectedVersion: 2, traceId: command.traceId });
+    const [deleted] = await metadataStore.list(userId);
+    expect(deleted).toMatchObject({ state: "deleted", version: 3, createdAt: initial?.createdAt });
+    expect(JSON.stringify(deleted)).not.toMatch(/ciphertext|kmsKeyId|"value"/u);
   });
 
   it("creates an entry, lists it without the plaintext, and returns the plaintext only through readActiveValue", async () => {
