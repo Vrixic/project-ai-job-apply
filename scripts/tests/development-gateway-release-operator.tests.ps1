@@ -912,4 +912,95 @@ if (-not $operator.Contains('$allowThreeSerialAdvances = $false') -or
     ([regex]::Matches($operator, [regex]::Escape('-AllowThreeSerialAdvances:$allowThreeSerialAdvances'))).Count -ne 2) {
   throw "Both baseline readers must receive only the verified three-snapshot recovery result."
 }
+# Execute the actual recovery branch under a function-local baseline $planPath, exactly the
+# scope that shadowed the script's release-plan parameter in production.
+$script:PlanPath = "generated-release.tfplan"
+$script:expectedActivityMetadataPath = "$script:PlanPath.candidate-rights-activity.json"
+$script:recoveryBranch = [scriptblock]::Create($threeSnapshotGate.Value)
+$candidateRightsActivityMetadataSuffix = ".candidate-rights-activity.json"
+$SourceSha = "4c557c35e18647ffd106fe754dc84394b59e9370"
+$ReviewedWorkflowReceiptSha256 = "d2e18359f0e74858b72e9ac6424e2fce70d672d5efd2f4417abaaf82bc71df58"
+$ReviewedBaselineSha256 = "46640629f435ccf0b20953f8f272f132d698de471e534b7dd9f992720fc4956a"
+$ReviewedBaselineMetadataSha256 = "f88b7b755f9256d7e56e96ce084d885d21db4419858f3e3a55a128e2a2d831cc"
+$ReviewedPlanSha256 = "c8b77d18b4e63e20081bb9bb26ffd692b64315930033e718035401903550420e"
+$StateBucket = "generated-state-bucket"
+function Resolve-GatewayOperatorPath {
+  param([string]$Candidate, [switch]$MustExist)
+  if (-not $MustExist -or $Candidate -cnotin @($script:PlanPath, $script:expectedActivityMetadataPath)) {
+    throw "The recovery branch resolved the baseline instead of the release plan."
+  }
+  return $Candidate
+}
+function Invoke-AwsJson { param([string[]]$Arguments, [string]$Operation); return [pscustomobject]@{} }
+function Get-FileSha256 {
+  param([string]$Path)
+  if ($Path -cne $script:expectedActivityMetadataPath) { throw "The recovery branch hashed the wrong sidecar." }
+  return "d50a7362e06a2fe0c1ba5eae5906ad9e16896cb90558979a24a59cfb155758b9"
+}
+$script:exactRecoveryChecks = 0
+function Assert-ExactRestrictedExportThreeSnapshotVerification {
+  param([string]$SourceSha, [string]$ReceiptSha256, [string]$BaselineSha256, [string]$BaselineMetadataSha256,
+    [string]$PlanSha256, [string]$PlanMetadataSha256, [object]$Metadata, [object]$CurrentState, [object]$StateHistory)
+  if ($PlanMetadataSha256 -cne "d50a7362e06a2fe0c1ba5eae5906ad9e16896cb90558979a24a59cfb155758b9" -or
+      $Metadata.StateSerial -ne 395 -or $CurrentState.Serial -ne 398) { throw "Wrong recovery branch inputs." }
+  $script:exactRecoveryChecks++
+  return $true
+}
+function Invoke-ShadowedRecoveryBranch {
+  $planPath = "generated-baseline.tfplan"
+  $metadata = [pscustomobject]@{ StateSerial = 395 }
+  $state = [pscustomobject]@{ Serial = 398 }
+  $allowThreeSerialAdvances = $false
+  . $script:recoveryBranch
+  return $allowThreeSerialAdvances
+}
+$Action = "Verify"; $RefreshCandidateRightsActivity = $true; $EnableRestrictedAnswerExport = $true
+if (-not (Invoke-ShadowedRecoveryBranch) -or $script:exactRecoveryChecks -ne 1) {
+  throw "The actual recovery branch did not use the script-scoped release input."
+}
+foreach ($mode in @("Apply", "Plan")) {
+  $Action = $mode
+  if (Invoke-ShadowedRecoveryBranch) { throw "The recovery branch ran outside Verify." }
+}
+$Action = "Verify"
+foreach ($flag in @("RefreshCandidateRightsActivity", "EnableRestrictedAnswerExport")) {
+  Set-Variable $flag $false
+  if (Invoke-ShadowedRecoveryBranch) { throw "Recovery ran without both activation-mode switches." }
+  Set-Variable $flag $true
+}
+if ($script:exactRecoveryChecks -ne 1) { throw "A non-verification path reached the historical recovery guard." }
+
+$postStateFunction = @($ast.FindAll({ param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+      $node.Name -ceq "Assert-CandidateRightsActivityPostApplyState"
+    }, $true))
+if ($postStateFunction.Count -ne 1 -or
+    -not $operator.Contains('Assert-CandidateRightsActivityPostApplyState -Baseline $baseline -Metadata $metadata -State $state') -or
+    -not $operator.Contains('RestrictedExportRecoveryState = $(if ($allowThreeSerialAdvances)')) {
+  throw "The final activity check must consume only the exact baseline recovery result."
+}
+Invoke-Expression $postStateFunction[0].Extent.Text
+$recoveryLineage = "12345678-1234-1234-1234-123456789abc"
+$recoveryMetadata = [pscustomobject]@{ StateSerial = 395; StateLineage = $recoveryLineage }
+$recoveryState = [pscustomobject]@{ Serial = 398; Lineage = $recoveryLineage }
+$recoveryBaseline = [pscustomobject]@{ RestrictedExportRecoveryState = $recoveryState }
+Assert-CandidateRightsActivityPostApplyState $recoveryBaseline $recoveryMetadata $recoveryState
+Assert-CandidateRightsActivityPostApplyState ([pscustomobject]@{}) $recoveryMetadata ([pscustomobject]@{ Serial = 396; Lineage = $recoveryLineage })
+foreach ($serial in @(395, 397, 399)) {
+  Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $recoveryBaseline $recoveryMetadata ([pscustomobject]@{ Serial = $serial; Lineage = $recoveryLineage }) } "Final recovery accepted another serial."
+}
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState ([pscustomobject]@{}) $recoveryMetadata $recoveryState } "Final recovery accepted missing history validation."
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState ([pscustomobject]@{ RestrictedExportRecoveryState = $true }) $recoveryMetadata $recoveryState } "Final recovery accepted malformed evidence."
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $recoveryBaseline $recoveryMetadata ([pscustomobject]@{ Serial = 398; Lineage = "87654321-4321-4321-4321-cba987654321" }) } "Final recovery accepted another lineage."
+foreach ($flag in @("RefreshCandidateRightsActivity", "EnableRestrictedAnswerExport")) {
+  Set-Variable $flag $false
+  Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $recoveryBaseline $recoveryMetadata $recoveryState } "Final recovery accepted missing activation mode."
+  Set-Variable $flag $true
+}
+$SourceSha = "0" * 40
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $recoveryBaseline $recoveryMetadata $recoveryState } "Final recovery accepted another release source."
+$SourceSha = "4c557c35e18647ffd106fe754dc84394b59e9370"
+$Action = "Apply"
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $recoveryBaseline $recoveryMetadata $recoveryState } "Final recovery weakened Apply's exact-state rule."
+Write-Output "Actual recovery branch scope and final activity state flow passed (generated native boundaries; zero cloud calls)."
 Write-Output "Development gateway release operator, capture-input reconstruction, and search-boundary tests passed."
