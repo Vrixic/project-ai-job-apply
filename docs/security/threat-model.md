@@ -83,8 +83,6 @@ Accountable reviewers record findings, conditions, and treatment decisions in th
 [Phase 0 review record](phase-0-accountable-review-record.md). This table must not be edited to
 simulate reviewer acceptance.
 
-## Risk ownership and reassessment
-
 ## D3 restricted-answer export delta
 
 | Threat | Source control | Residual / release gate |
@@ -97,6 +95,8 @@ simulate reviewer acceptance.
 
 See [ADR-035](../adr/035-restricted-answer-values-in-candidate-export.md). No deployment or
 real-data approval is implied by this engineering delta.
+
+## Risk ownership and reassessment
 
 - The product owner accepts or rejects residual candidate/product risk.
 - The accountable security reviewer approves the threat/control treatment; repository authorship
