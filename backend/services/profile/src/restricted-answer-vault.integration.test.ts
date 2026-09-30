@@ -154,6 +154,116 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
     await database.client.end();
   });
 
+  it("verifies a real SQL export against independent list metadata and synthetic saved values", async () => {
+    const userId = await createUser(database.client);
+    const valueByField = new Map([
+      ["authorization.us_authorized", "false"],
+      ["authorization.sponsorship_required", "false"],
+    ]);
+    const base = {
+      userId,
+      expectedVersion: 0,
+      valueType: "boolean" as const,
+      value: "true",
+      sensitivity: "restricted" as const,
+      sourceReference: "synthetic.timestamp-acceptance",
+      confirmedAt: new Date("2026-01-01T12:00:00.000Z"),
+      traceId: "synthetic.timestamp-acceptance",
+    };
+    const active = await store.save({
+      ...base,
+      fieldKey: "authorization.us_authorized",
+      idempotencyKey: `active-${userId}`,
+    });
+    await store.save({
+      ...base,
+      fieldKey: "authorization.us_authorized",
+      expectedVersion: active.version,
+      value: "false",
+      idempotencyKey: `revised-${userId}`,
+    });
+    await store.save({
+      ...base,
+      fieldKey: "authorization.sponsorship_required",
+      value: "false",
+      expiresAt: new Date("2026-01-02T12:00:00.000Z"),
+      idempotencyKey: `expired-${userId}`,
+    });
+    const deleted = await store.save({
+      ...base,
+      fieldKey: "disclosure.non_compete",
+      idempotencyKey: `deleted-${userId}`,
+    });
+    await store.remove({
+      userId,
+      id: deleted.id,
+      expectedVersion: deleted.version,
+      traceId: base.traceId,
+    });
+    // Prepare expectations from owner-list metadata and the independently known write values,
+    // before obtaining the SQL export. Never populate expectations from the artifact under test.
+    const snapshot = (await store.list(userId)).map((entry) => ({
+      ...entry,
+      ...(entry.state === "active" ? { value: valueByField.get(entry.fieldKey) } : {}),
+    }));
+    const [exported] = await database.client<
+      Array<{
+        data: {
+          profile: {
+            restrictedAnswers: Array<{
+              id: string;
+              fieldKey: string;
+              version: number;
+              state: string;
+              value?: string;
+            }>;
+          };
+        };
+      }>
+    >`
+      SELECT profile.export_candidate_data(${userId}::uuid) AS data
+    `;
+    if (!exported) throw new Error("SyntheticExportMissing");
+    const reader = new PostgresRestrictedAnswerExportReader(database.client, cipher);
+    for (const entry of exported.data.profile.restrictedAnswers) {
+      if (entry.state === "active") entry.value = await reader.readValue(userId, entry);
+    }
+    const at = new Date().toISOString();
+    const artifact = {
+      schemaVersion: 1,
+      format: "candidate-data-export-v1",
+      exportId: "019d04cf-1f80-7000-8000-000000000040",
+      policyVersion: "d2-development-synthetic-v1",
+      generatedAt: at,
+      candidate: { email: "synthetic@example.test", createdAt: at, connectedAccounts: [] },
+      profile: exported.data.profile,
+      documents: { resumes: [] },
+      jobs: { reports: [], contributions: [] },
+      matching: { savedJobs: [], privateSavedPageCaptures: [] },
+      billing: { entitlement: { plan: "free", version: 0, effectiveAt: at } },
+      trust: { schemaVersion: 1, cases: [], caseEvents: [], contributorReputationEvidence: [] },
+      audit: { events: [] },
+    };
+    const checkerUrl = new URL(
+      "../../../../scripts/lib/candidate-rights-export.mjs",
+      import.meta.url,
+    );
+    const { validateRestrictedAnswerExport } = await import(checkerUrl.href);
+    expect(
+      validateRestrictedAnswerExport(Buffer.from(JSON.stringify(artifact)), {
+        expectedExportId: artifact.exportId,
+        expectedPolicyVersion: artifact.policyVersion,
+        expectedRestrictedAnswers: snapshot,
+      }),
+    ).toEqual({
+      valid: true,
+      activeValueCount: 1,
+      expiredValueCount: 1,
+      deletedTombstoneCount: 1,
+      revisedValueCount: 1,
+    });
+  });
+
   it("lists the export-exact creation timestamp unchanged across correction and deletion", async () => {
     const userId = await createUser(database.client);
     const otherUserId = await createUser(database.client);

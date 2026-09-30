@@ -254,6 +254,29 @@ export function readCandidateRightsExportEnvelope(input) {
   );
 }
 
+// Called only after source-schema date-time validation. Compare exact instants rather than
+// Date's millisecond rounding or PostgreSQL/ISO textual spelling. PostgreSQL uses at most six
+// fractional digits; this bounded acceptance transport also supports nanoseconds, but no more.
+function restrictedTimestamp(value) {
+  const match = value.match(
+    /^(\d{4}-\d{2}-\d{2}[tT ]\d{2}:\d{2}:\d{2})(?:\.([0-9]{1,9}))?([zZ]|[+-]\d{2}:\d{2})$/u,
+  );
+  if (!match) reject();
+  const wholeMilliseconds = Date.parse(`${match[1]}${match[3]}`);
+  if (!Number.isFinite(wholeMilliseconds) || wholeMilliseconds % 1000 !== 0) reject();
+  return (
+    BigInt(wholeMilliseconds / 1000) * 1_000_000_000n + BigInt((match[2] ?? "").padEnd(9, "0"))
+  );
+}
+
+function restrictedMetadataIdentity(entry) {
+  const identity = { ...entry };
+  for (const field of ["createdAt", "confirmedAt", "expiresAt"]) {
+    if (Object.hasOwn(identity, field)) identity[field] = restrictedTimestamp(identity[field]);
+  }
+  return identity;
+}
+
 /** Read-only synthetic acceptance against an independently prepared latest-version snapshot.
  * This does not prove live identity isolation, KMS access, deletion, or policy approval.
  */
@@ -300,6 +323,7 @@ export function validateRestrictedAnswerExport(artifactBytes, expected) {
     let expiredValueCount = 0;
     let deletedTombstoneCount = 0;
     let revisedValueCount = 0;
+    const generatedAt = restrictedTimestamp(artifact.generatedAt);
     for (const entry of snapshot) {
       const reference = JSON.stringify([entry.fieldKey, entry.context ?? null]);
       if (!fields.includes(entry.fieldKey) || ids.has(entry.id) || references.has(reference))
@@ -307,9 +331,10 @@ export function validateRestrictedAnswerExport(artifactBytes, expected) {
       if (
         // Confirmation is candidate-supplied and can precede SQL insertion, including an
         // already-expired historical answer. Both timestamps must precede export generation.
-        Date.parse(entry.createdAt) > Date.parse(artifact.generatedAt) ||
-        Date.parse(entry.confirmedAt) > Date.parse(artifact.generatedAt) ||
-        (entry.expiresAt && Date.parse(entry.expiresAt) <= Date.parse(entry.confirmedAt))
+        restrictedTimestamp(entry.createdAt) > generatedAt ||
+        restrictedTimestamp(entry.confirmedAt) > generatedAt ||
+        (entry.expiresAt &&
+          restrictedTimestamp(entry.expiresAt) <= restrictedTimestamp(entry.confirmedAt))
       )
         reject();
       ids.add(entry.id);
@@ -319,7 +344,7 @@ export function validateRestrictedAnswerExport(artifactBytes, expected) {
       } else {
         if (!Object.hasOwn(entry, "value")) reject();
         if (entry.version > 1) revisedValueCount += 1;
-        if (entry.expiresAt && Date.parse(entry.expiresAt) <= Date.parse(artifact.generatedAt)) {
+        if (entry.expiresAt && restrictedTimestamp(entry.expiresAt) <= generatedAt) {
           expiredValueCount += 1;
         } else activeValueCount += 1;
       }
@@ -328,11 +353,13 @@ export function validateRestrictedAnswerExport(artifactBytes, expected) {
       reject();
     const actualIds = new Set();
     for (const entry of entries) {
+      const expectedEntry = snapshot.find((item) => item.id === entry.id);
       if (
         actualIds.has(entry.id) ||
+        !expectedEntry ||
         !isDeepStrictEqual(
-          entry,
-          snapshot.find((item) => item.id === entry.id),
+          restrictedMetadataIdentity(entry),
+          restrictedMetadataIdentity(expectedEntry),
         )
       )
         reject();
