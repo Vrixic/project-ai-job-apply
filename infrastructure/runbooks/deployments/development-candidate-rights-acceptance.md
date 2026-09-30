@@ -21,6 +21,38 @@ authentication `900`, export lifecycle `1`, owners
 `identity,profile,documents,jobs,matching,billing,trust`, and executable subprocessor adapters `none`.
 This is generated-synthetic engineering policy, not real-candidate or public-policy approval.
 
+## Read-only restricted-answer artifact acceptance (D3-029/D3-030)
+
+The opt-in `node scripts/lib/candidate-rights-export.mjs --restricted-answer-acceptance`
+mode verifies a generated-synthetic export without making any network call or candidate-data
+change. Send its closed JSON envelope on stdin from an in-memory harness, never through command
+arguments, a shell transcript, or a committed file. The exact envelope keys are `schemaVersion`
+(integer `1`), `expectedExportId`, `expectedPolicyVersion` (`d2-development-synthetic-v1`),
+`expectedRestrictedAnswers`, and canonical padded `artifactBase64`.
+
+Prepare `expectedRestrictedAnswers` independently from the reviewed synthetic fixture and latest
+owner-visible metadata before requesting the export. Never derive the expectation by copying the
+artifact being tested. Each entry has the portable schema's exact metadata and, for active entries,
+the expected synthetic string value. Include an unexpired active value, an expired active value,
+a metadata-only deleted tombstone, and at least one active entry revised to a version greater than
+one. All entries must belong to the nine approved value fields and have unique IDs and field/context
+references. The exact set and every metadata/value field must match; entry and object-key order do
+not matter. Missing or additional entries, superseded versions, changed values/context/expiry,
+duplicate references, unknown fields, and a deleted entry carrying plaintext refuse.
+
+The artifact remains bounded to 1 MiB, the expected snapshot to 64 KiB and 100 entries, stdin to the
+combined envelope bound, and reading to one ten-second total deadline. Success reports only
+`valid`, `activeValueCount`, `expiredValueCount`, `deletedTombstoneCount`, and `revisedValueCount`.
+Failure reports only the fixed `CandidateRightsExportRejected` code. The ordinary verifier's
+stdin shape, bounds, counters and D2 acceptance lifecycle are unchanged.
+
+This mode is an artifact comparison tool, not a deployed acceptance receipt, fixture seeder,
+identity/owner-isolation proof, log-redaction scan, or expiry/deletion proof. The existing mutating
+acceptance operator does not yet prepare or bind this restricted-answer fixture. Fresh disposable
+identity/MFA, reviewed in-memory fixture preparation and integration into the guarded lifecycle,
+live artifact verification, isolation/failure checks, and cleanup remain required. It supplies no
+real-data, API, security/privacy, or production authority.
+
 ## Two-stage infrastructure and credential setup
 
 Provision the tagged managed secret and raise RDS retention before runtime activation. Keep

@@ -10,9 +10,13 @@ import {
   EXPORT_INPUT_TIMEOUT_MILLISECONDS,
   MAXIMUM_EXPORT_BYTES,
   MAXIMUM_EXPORT_ENVELOPE_BYTES,
+  MAXIMUM_RESTRICTED_EXPORT_ENVELOPE_BYTES,
   readCandidateRightsExportEnvelope,
+  readRestrictedAnswerExportEnvelope,
   validateCandidateRightsExport,
   validateCandidateRightsExportEnvelope,
+  validateRestrictedAnswerExport,
+  validateRestrictedAnswerExportEnvelope,
 } from "../lib/candidate-rights-export.mjs";
 
 // Generated values follow packages/domain/src/schemas.test.ts; no real artifact or identity.
@@ -146,6 +150,340 @@ function fixture(nonempty = false) {
 function bytes(value) {
   return Buffer.from(JSON.stringify(value));
 }
+
+function restrictedFixture() {
+  const artifact = fixture();
+  const entry = {
+    id: "019d04cf-1f80-7000-8000-000000000071",
+    fieldKey: "authorization.us_authorized",
+    version: 2,
+    valueType: "boolean",
+    sensitivity: "restricted",
+    state: "active",
+    confirmedAt: "2026-09-10T12:00:00.000Z",
+    createdAt: "2026-09-10T12:00:00.000Z",
+    value: "true",
+  };
+  artifact.profile.restrictedAnswers = [
+    entry,
+    {
+      ...entry,
+      id: "019d04cf-1f80-7000-8000-000000000072",
+      fieldKey: "authorization.sponsorship_required",
+      version: 1,
+      expiresAt: "2026-09-11T11:00:00.000Z",
+      value: "false",
+    },
+    {
+      ...entry,
+      id: "019d04cf-1f80-7000-8000-000000000073",
+      fieldKey: "disclosure.non_compete",
+      state: "deleted",
+    },
+  ];
+  delete artifact.profile.restrictedAnswers[2].value;
+  return {
+    artifact,
+    binding: {
+      ...expected,
+      expectedRestrictedAnswers: structuredClone(artifact.profile.restrictedAnswers),
+    },
+  };
+}
+
+const restrictedCounts = {
+  valid: true,
+  activeValueCount: 1,
+  expiredValueCount: 1,
+  deletedTombstoneCount: 1,
+  revisedValueCount: 1,
+};
+
+test("restricted acceptance matches exact independent latest metadata and values, order independently", () => {
+  const { artifact, binding } = restrictedFixture();
+  artifact.profile.restrictedAnswers.reverse();
+  artifact.profile.restrictedAnswers[0] = Object.fromEntries(
+    Object.entries(artifact.profile.restrictedAnswers[0]).reverse(),
+  );
+  const result = validateRestrictedAnswerExport(bytes(artifact), binding);
+  assert.deepEqual(result, restrictedCounts);
+  assert.ok(Object.isFrozen(result));
+  assert.deepEqual(
+    cli(
+      bytes({ schemaVersion: 1, ...binding, artifactBase64: bytes(artifact).toString("base64") }),
+      ["--restricted-answer-acceptance"],
+    ),
+    { status: 0, output: restrictedCounts },
+  );
+});
+
+for (const [name, mutate] of [
+  [
+    "omitted restricted metadata",
+    (a) => {
+      delete a.profile.restrictedAnswers;
+    },
+  ],
+  [
+    "missing active value",
+    (a) => {
+      delete a.profile.restrictedAnswers[0].value;
+    },
+  ],
+  [
+    "wrong value",
+    (a) => {
+      a.profile.restrictedAnswers[0].value = sentinel;
+    },
+  ],
+  [
+    "superseded version",
+    (a) => {
+      a.profile.restrictedAnswers[0].version = 1;
+    },
+  ],
+  [
+    "additional old version",
+    (a) => {
+      a.profile.restrictedAnswers.push({ ...a.profile.restrictedAnswers[0], version: 1 });
+    },
+  ],
+  [
+    "duplicate instead of expired entry",
+    (a) => {
+      a.profile.restrictedAnswers[1] = a.profile.restrictedAnswers[0];
+    },
+  ],
+  [
+    "deleted value",
+    (a) => {
+      a.profile.restrictedAnswers[2].value = sentinel;
+    },
+  ],
+  [
+    "context mismatch",
+    (a) => {
+      a.profile.restrictedAnswers[0].context = "another-context";
+    },
+  ],
+  [
+    "field mismatch",
+    (a) => {
+      a.profile.restrictedAnswers[0].fieldKey = "demographic.gender";
+    },
+  ],
+  [
+    "identity mismatch",
+    (a) => {
+      a.profile.restrictedAnswers[0].id = contributionId;
+    },
+  ],
+  [
+    "expiry mismatch",
+    (a) => {
+      a.profile.restrictedAnswers[1].expiresAt = at;
+    },
+  ],
+  [
+    "metadata mismatch",
+    (a) => {
+      a.profile.restrictedAnswers[0].confirmedAt = at;
+    },
+  ],
+  [
+    "another export",
+    (a) => {
+      a.exportId = contributionId;
+    },
+  ],
+]) {
+  test(`restricted acceptance refuses ${name} without reflecting values`, () => {
+    const { artifact, binding } = restrictedFixture();
+    mutate(artifact);
+    assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), rejected);
+  });
+}
+
+for (const [name, mutate] of [
+  [
+    "no expired case",
+    (e) => {
+      delete e[1].expiresAt;
+    },
+  ],
+  [
+    "no active case",
+    (e) => {
+      e[0].expiresAt = at;
+    },
+  ],
+  [
+    "no revised case",
+    (e) => {
+      e[0].version = 1;
+    },
+  ],
+  [
+    "no deleted case",
+    (e) => {
+      e[2].state = "active";
+      e[2].value = "false";
+    },
+  ],
+  [
+    "duplicate ids",
+    (e) => {
+      e[1].id = e[0].id;
+    },
+  ],
+  [
+    "duplicate logical references",
+    (e) => {
+      e[1].fieldKey = e[0].fieldKey;
+    },
+  ],
+  [
+    "unknown metadata-only field",
+    (e) => {
+      e[2].fieldKey = "credential.secret";
+    },
+  ],
+  [
+    "missing value",
+    (e) => {
+      delete e[0].value;
+    },
+  ],
+  [
+    "invalid sensitivity",
+    (e) => {
+      e[0].sensitivity = "public";
+    },
+  ],
+  [
+    "confirmation after export",
+    (e) => {
+      e[0].confirmedAt = "2026-09-12T12:00:00.000Z";
+    },
+  ],
+  [
+    "expiry before confirmation",
+    (e) => {
+      e[1].expiresAt = e[1].confirmedAt;
+    },
+  ],
+  [
+    "creation after confirmation",
+    (e) => {
+      e[0].createdAt = at;
+    },
+  ],
+]) {
+  test(`restricted acceptance requires a complete independent fixture: ${name}`, () => {
+    const { artifact, binding } = restrictedFixture();
+    mutate(binding.expectedRestrictedAnswers);
+    artifact.profile.restrictedAnswers = structuredClone(binding.expectedRestrictedAnswers);
+    assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), rejected);
+  });
+}
+
+test("restricted transport is closed, bounded, canonical and fixed-policy only", async () => {
+  const { artifact, binding } = restrictedFixture();
+  const input = {
+    schemaVersion: 1,
+    ...binding,
+    artifactBase64: bytes(artifact).toString("base64"),
+  };
+  assert.deepEqual(validateRestrictedAnswerExportEnvelope(bytes(input)), restrictedCounts);
+  assert.deepEqual(
+    await readRestrictedAnswerExportEnvelope(Readable.from([bytes(input)])),
+    restrictedCounts,
+  );
+  for (const change of [
+    { schemaVersion: 2 },
+    { expectedPolicyVersion: "another-policy" },
+    { extra: sentinel },
+    { expectedRestrictedAnswers: null },
+    { expectedRestrictedAnswers: [] },
+    { expectedRestrictedAnswers: Array(101).fill(binding.expectedRestrictedAnswers[0]) },
+    { artifactBase64: "Zh==" },
+    { artifactBase64: "" },
+    { artifactBase64: null },
+  ])
+    assert.deepEqual(
+      validateRestrictedAnswerExportEnvelope(bytes({ ...input, ...change })),
+      rejected,
+    );
+  assert.deepEqual(
+    validateRestrictedAnswerExportEnvelope(
+      Buffer.alloc(MAXIMUM_RESTRICTED_EXPORT_ENVELOPE_BYTES + 1),
+    ),
+    rejected,
+  );
+  const duplicate = JSON.stringify(input).replace(
+    '"expectedRestrictedAnswers":',
+    '"expectedRestrictedAnswers":[],"expectedRestrictedAnswers":',
+  );
+  assert.deepEqual(validateRestrictedAnswerExportEnvelope(Buffer.from(duplicate)), rejected);
+  assert.deepEqual(validateRestrictedAnswerExportEnvelope(Buffer.from([0xff])), rejected);
+  assert.deepEqual(validateRestrictedAnswerExportEnvelope(bytes(input).subarray(0, -1)), rejected);
+  assert.deepEqual(cli(bytes({ ...input, extra: sentinel }), ["--restricted-answer-acceptance"]), {
+    status: 1,
+    output: rejected,
+  });
+  assert.deepEqual(cli(bytes(input), ["--restricted-answer-acceptance", sentinel]), {
+    status: 1,
+    output: rejected,
+  });
+  assert.deepEqual(cli(bytes(input)), { status: 1, output: rejected }); // Ordinary transport is unchanged.
+});
+
+test("restricted snapshot and streaming bounds refuse before reflecting input", async () => {
+  const { artifact, binding } = restrictedFixture();
+  for (let i = 0; i < 18; i += 1) {
+    binding.expectedRestrictedAnswers.push({
+      ...binding.expectedRestrictedAnswers[0],
+      id: `019d04cf-1f80-7000-8000-${String(100 + i).padStart(12, "0")}`,
+      context: `generated-context-${i}`,
+      value: "x".repeat(3900),
+    });
+  }
+  artifact.profile.restrictedAnswers = structuredClone(binding.expectedRestrictedAnswers);
+  assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), rejected);
+  let emitted = 0;
+  const oversized = new Readable({
+    read() {
+      emitted += 1;
+      this.push(Buffer.alloc(65_536, 0x20));
+    },
+  });
+  assert.deepEqual(await readRestrictedAnswerExportEnvelope(oversized), rejected);
+  assert.equal(oversized.destroyed, true);
+  assert.ok(emitted < 31);
+  assert.deepEqual(await readRestrictedAnswerExportEnvelope(null), rejected);
+  assert.deepEqual(await readRestrictedAnswerExportEnvelope(Readable.from([sentinel])), rejected);
+});
+
+test("restricted streaming failures retain the shared total deadline and never reflect data", async (context) => {
+  const { artifact, binding } = restrictedFixture();
+  const raw = bytes({
+    schemaVersion: 1,
+    ...binding,
+    artifactBase64: bytes(artifact).toString("base64"),
+  });
+  const early = new PassThrough();
+  const earlyResult = readRestrictedAnswerExportEnvelope(early);
+  early.write(raw);
+  early.destroy();
+  assert.deepEqual(await earlyResult, rejected);
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const stalled = new PassThrough();
+  const stalledResult = readRestrictedAnswerExportEnvelope(stalled);
+  stalled.write(Buffer.from("{"));
+  context.mock.timers.tick(EXPORT_INPUT_TIMEOUT_MILLISECONDS);
+  assert.deepEqual(await stalledResult, rejected);
+  assert.equal(stalled.destroyed, true);
+});
 
 function envelope(artifactBytes = bytes(fixture()), changes = {}) {
   return {
