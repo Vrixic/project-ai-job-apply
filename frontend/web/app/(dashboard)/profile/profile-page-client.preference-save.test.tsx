@@ -4,13 +4,9 @@ import type { JobPreferenceSet, PutJobPreferencesResponse } from "@ai-job-apply/
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FoundationForm } from "./foundation-form";
+import { ProfilePageClient } from "./profile-page-client";
 
-vi.mock("./entitlement-status", () => ({ EntitlementStatus: () => null }));
-vi.mock("./job-search-form", () => ({ JobSearchForm: () => null }));
-vi.mock("./profile-facts-form", () => ({ ProfileFactsForm: () => null }));
-vi.mock("./resume-upload-form", () => ({ ResumeUploadForm: () => null }));
-vi.mock("./saved-jobs-panel", () => ({ SavedJobsPanel: () => null }));
+vi.mock("../../profile-facts-form", () => ({ ProfileFactsForm: () => null }));
 
 const privateProblemCanary = "synthetic-private-preference-problem-never-render";
 
@@ -64,16 +60,7 @@ function preferenceForm(container: HTMLElement): HTMLFormElement {
 }
 
 function renderFoundation(authenticated = true) {
-  return (
-    <FoundationForm
-      authConfigured
-      authConformanceEnabled={false}
-      authenticationFailed={false}
-      authenticated={authenticated}
-      crossUserProbeArmed={false}
-      workloadConformanceEnabled={false}
-    />
-  );
+  return <ProfilePageClient authenticated={authenticated} />;
 }
 
 function preferenceSet(role: string, version = 1): JobPreferenceSet {
@@ -179,6 +166,9 @@ describe("preference save request lifecycle", () => {
     expect(new Headers(requests[0]?.[1]?.headers).get("idempotency-key")).toMatch(/^preferences-/);
 
     await act(async () => pendingSave.resolve(saveResponse("Platform Engineer", "202")));
+    // Flushes a React-scheduler tick that a leaner component tree (no sibling
+    // Jobs/Resume/Settings sections) can otherwise leave pending at this instant.
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(container.textContent).toContain(
       "Preferences saved. Checking optional preference details.",
     );

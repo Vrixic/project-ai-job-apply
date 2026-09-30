@@ -1042,9 +1042,13 @@ aside {
   flex-direction: column;
   gap: 24px;
   height: calc(100vh - 64px);
+  margin-top: 0;
   padding: 24px 16px;
+  border: 0;
   border-right: 1px solid #cedbd3;
+  border-radius: 0;
   background: #f8fbf9;
+  box-shadow: none;
 }
 
 .dashboard-nav {
@@ -1053,6 +1057,8 @@ aside {
 }
 
 .dashboard-nav-item {
+  display: flex;
+  align-items: center;
   min-height: 42px;
   padding: 0 12px;
   border: 0;
@@ -1061,6 +1067,7 @@ aside {
   color: #14221a;
   font-weight: 650;
   text-align: left;
+  text-decoration: none;
 }
 
 .dashboard-nav-item:hover {

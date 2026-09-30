@@ -1,16 +1,18 @@
-import { cookies } from "next/headers";
+import { resolveProductBrand } from "@ai-job-apply/config/brand";
+import { redirect } from "next/navigation";
 import { getAuth0Client, isAuth0Configured } from "../lib/auth0";
-import { isLocalAuth0ConformanceEnabled } from "../lib/auth0-conformance";
-import {
-  CROSS_USER_PROBE_COOKIE_NAME,
-  isCrossUserIsolationConformanceEnabled,
-} from "../lib/cross-user-isolation-conformance";
-import { isPhase0WorkloadConformanceEnabled } from "../lib/phase0-workload-conformance";
-import { isRestrictedAnswerVaultUiEnabled } from "../lib/restricted-answer-fields";
-import { FoundationForm } from "./foundation-form";
+import { CandidateRightsPanel } from "./candidate-rights-panel";
+import { EntitlementStatus } from "./entitlement-status";
+import { JobSearchForm } from "./job-search-form";
 import { LandingPage } from "./landing-page";
+import { SavedJobsPanel } from "./saved-jobs-panel";
 
 export const dynamic = "force-dynamic";
+
+const productBrand = resolveProductBrand({
+  name: process.env.NEXT_PUBLIC_PRODUCT_BRAND_NAME,
+  candidateDomain: process.env.NEXT_PUBLIC_PRODUCT_BRAND_DOMAIN,
+});
 
 export default async function FoundationPage({
   searchParams,
@@ -26,21 +28,39 @@ export default async function FoundationPage({
     return <LandingPage authenticationFailed={authenticationFailed} />;
   }
 
-  const isolationConformanceEnabled = isCrossUserIsolationConformanceEnabled();
-  const cookieStore = isolationConformanceEnabled ? await cookies() : undefined;
-  const displayName =
-    typeof session?.user.name === "string" ? { displayName: session.user.name } : {};
+  if (session) {
+    redirect("/jobs");
+  }
 
+  // Only reachable when Auth0 is not configured (local/test): a minimal, unauthenticated fallback.
   return (
-    <FoundationForm
-      authConfigured={authConfigured}
-      authenticated={Boolean(session)}
-      authConformanceEnabled={isLocalAuth0ConformanceEnabled()}
-      authenticationFailed={authenticationFailed}
-      crossUserProbeArmed={Boolean(cookieStore?.get(CROSS_USER_PROBE_COOKIE_NAME))}
-      restrictedAnswerVaultUiEnabled={isRestrictedAnswerVaultUiEnabled()}
-      workloadConformanceEnabled={isPhase0WorkloadConformanceEnabled()}
-      {...displayName}
-    />
+    <main>
+      <section className="eyebrow">{productBrand.name}</section>
+      <h1>Tell us what work fits you.</h1>
+      <p className="lede">
+        These preferences will eventually drive fresh job discovery and rapid, tailored
+        applications. Application history stops at confirmed submission.
+      </p>
+
+      {authenticationFailed && (
+        <aside>
+          <strong>Sign-in was not completed.</strong>
+          <p>
+            The account may be unavailable or blocked. Try again after confirming the account is
+            active.
+          </p>
+        </aside>
+      )}
+
+      <JobSearchForm authenticated={false} />
+      <SavedJobsPanel authenticated={false} />
+      <EntitlementStatus authenticated={false} />
+      <CandidateRightsPanel authenticated={false} />
+
+      <aside>
+        Auth0 client credentials are not configured. The application fails closed; browser
+        development tokens are not supported.
+      </aside>
+    </main>
   );
 }
