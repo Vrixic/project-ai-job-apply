@@ -382,14 +382,36 @@ function Assert-GatewayRoleInlinePolicyRefreshDrift {
   if ($null -eq $expectedPolicy -or [string]$expectedPolicy.policy -cne [string]$afterInline[0].policy) {
     throw "The Gateway role inline policy differs from the exact source-evaluated policy."
   }
-  Assert-GatewayPolicyGainsExactlyOneStatement -BeforeJson ([string]$beforeInline[0].policy) `
-    -AfterJson ([string]$afterInline[0].policy) -Sid "InvokeExactDocumentTailoringRuntime" `
-    -AliasArn "arn:aws:lambda:us-east-2:${accountId}:function:ai-job-apply-development-document-processor:development" `
-    -Label "Gateway role refresh"
+  $beforePolicy = [string]$beforeInline[0].policy | ConvertFrom-Json
+  $afterPolicy = [string]$afterInline[0].policy | ConvertFrom-Json
+  $vaultSid = "EncryptDecryptRestrictedAnswerVault"
+  $vaultAdded = @($beforePolicy.Statement | Where-Object { [string]$_.Sid -ceq $vaultSid }).Count -eq 0 -and
+    @($afterPolicy.Statement | Where-Object { [string]$_.Sid -ceq $vaultSid }).Count -eq 1
+  if ($vaultAdded) {
+    if (-not (ConvertTo-ExactBoolean `
+          (Get-GatewayPlanVariableValue $Plan.variables "restricted_answer_vault_enabled") `
+          "restricted_answer_vault_enabled")) {
+      throw "The Restricted Answer Vault role refresh requires the exact enabled plan input."
+    }
+    $vaultKey = $planned["module.platform.aws_kms_key.restricted_answer_vault[0]"]
+    $vaultKeyArn = if ($null -eq $vaultKey) { "" } else { [string]$vaultKey.arn }
+    if ($vaultKeyArn -cnotmatch "^arn:aws:kms:us-east-2:${accountId}:key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$") {
+      throw "The Restricted Answer Vault role refresh lacks the exact source-evaluated KMS key."
+    }
+    Assert-GatewayPolicyGainsExactlyOneStatement -BeforeJson ([string]$beforeInline[0].policy) `
+      -AfterJson ([string]$afterInline[0].policy) -Sid $vaultSid -AliasArn $vaultKeyArn `
+      -Actions @("kms:Encrypt", "kms:Decrypt") -GrantKind "vault encryption grant" -Label "Gateway role refresh"
+  } else {
+    Assert-GatewayPolicyGainsExactlyOneStatement -BeforeJson ([string]$beforeInline[0].policy) `
+      -AfterJson ([string]$afterInline[0].policy) -Sid "InvokeExactDocumentTailoringRuntime" `
+      -AliasArn "arn:aws:lambda:us-east-2:${accountId}:function:ai-job-apply-development-document-processor:development" `
+      -Label "Gateway role refresh"
+  }
   $before.inline_policy = @(); $after.inline_policy = @()
   if ((ConvertTo-GatewayCanonicalJson $before) -cne (ConvertTo-GatewayCanonicalJson $after)) {
     throw "The Gateway role refresh changed more than its inline-policy snapshot."
   }
+  return $vaultAdded
 }
 
 # After the candidate-rights activity code refresh (D3-027) two IAM roles report their computed `inline_policy` snapshot as
@@ -659,6 +681,45 @@ function Assert-ApplicationsAttemptRecoveryProviderDrift {
   return $true
 }
 
+# The first refresh after the dedicated Restricted Answer Vault key is created reports `tags` as an empty
+# object where state recorded null. Accept only that provider normalization for the exact source-evaluated key.
+function Assert-RestrictedAnswerVaultKeyProviderDrift {
+  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][object]$Record)
+  if (-not (ConvertTo-ExactBoolean `
+        (Get-GatewayPlanVariableValue $Plan.variables "restricted_answer_vault_enabled") `
+        "restricted_answer_vault_enabled")) {
+    throw "Restricted Answer Vault key drift requires the exact enabled plan input."
+  }
+  $change = $Record.change
+  Assert-NoTerraformReplacementPaths $change
+  if ([string]$Record.address -cne "module.platform.aws_kms_key.restricted_answer_vault[0]" -or
+      [string]$Record.type -cne "aws_kms_key" -or [string]$Record.mode -cne "managed" -or
+      (@($change.actions) -join ",") -cne "update" -or $null -eq $change.before -or $null -eq $change.after -or
+      (ConvertTo-OptionalTerraformMetadataCanonicalValue $change "after_unknown") -cne "{}") {
+    throw "Restricted Answer Vault key drift has an unsafe shape."
+  }
+  $plannedValues = Get-GatewayOptionalProperty $Plan "planned_values"
+  $rootModule = Get-GatewayOptionalProperty $plannedValues "root_module"
+  if ($null -eq $rootModule) {
+    throw "Restricted Answer Vault key drift requires the exact source-evaluated planned root module."
+  }
+  $planned = Get-TerraformStateResourceMap $rootModule
+  $expected = $planned["module.platform.aws_kms_key.restricted_answer_vault[0]"]
+  $before = ConvertFrom-DevelopmentDocumentJson -Json ($change.before | ConvertTo-Json -Depth 100)
+  $after = ConvertFrom-DevelopmentDocumentJson -Json ($change.after | ConvertTo-Json -Depth 100)
+  if ($null -eq $expected -or
+      (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue $expected -SortArrays)) {
+    throw "Restricted Answer Vault key drift differs from the exact source-evaluated resource."
+  }
+  Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Restricted Answer Vault key tag drift"
+  Assert-DevelopmentDocumentAcceptedDriftSensitivity $Record @("tags")
+  if ((ConvertTo-DeploymentCanonicalValue $before -SortArrays) -cne
+      (ConvertTo-DeploymentCanonicalValue $after -SortArrays)) {
+    throw "Restricted Answer Vault key drift changed another resource attribute."
+  }
+}
+
 function Assert-AcceptedGatewayProviderDrift {
   param([Parameter(Mandatory)][object]$Plan)
 
@@ -670,6 +731,7 @@ function Assert-AcceptedGatewayProviderDrift {
     throw "Accepted gateway provider drift requires the exact source-evaluated planned root module."
   }
   $roleAddress = "module.platform.aws_iam_role.gateway_lambda[0]"
+  $vaultKeyAddress = "module.platform.aws_kms_key.restricted_answer_vault[0]"
   $bucketAddress = "module.platform.aws_s3_bucket.candidate_documents[0]"
   $handled = @()
   $recoveryAddresses = @(
@@ -687,9 +749,19 @@ function Assert-AcceptedGatewayProviderDrift {
   }
   $roleRecords = @($drift | Where-Object { [string]$_.address -ceq $roleAddress })
   if ($roleRecords.Count -gt 1) { throw "The Gateway role refresh was reported more than once." }
+  $vaultRoleRefresh = $false
   if ($roleRecords.Count -eq 1) {
-    Assert-GatewayRoleInlinePolicyRefreshDrift -Plan $Plan -Record $roleRecords[0]
+    $vaultRoleRefresh = Assert-GatewayRoleInlinePolicyRefreshDrift -Plan $Plan -Record $roleRecords[0]
     $handled += $roleAddress
+  }
+  $vaultKeyRecords = @($drift | Where-Object { [string]$_.address -ceq $vaultKeyAddress })
+  if ($vaultKeyRecords.Count -gt 1) { throw "Restricted Answer Vault key drift was reported more than once." }
+  if (($vaultKeyRecords.Count -eq 1) -ne $vaultRoleRefresh) {
+    throw "Restricted Answer Vault provider refresh must contain exactly the paired Gateway role and KMS key records."
+  }
+  if ($vaultKeyRecords.Count -eq 1) {
+    Assert-RestrictedAnswerVaultKeyProviderDrift -Plan $Plan -Record $vaultKeyRecords[0]
+    $handled += $vaultKeyAddress
   }
   $bucketRecords = @($drift | Where-Object { [string]$_.address -ceq $bucketAddress })
   if ($bucketRecords.Count -gt 1) { throw "The candidate-document bucket refresh was reported more than once." }
@@ -926,6 +998,8 @@ function Assert-GatewayPolicyGainsExactlyOneStatement {
     [Parameter(Mandatory)][string]$AfterJson,
     [Parameter(Mandatory)][string]$Sid,
     [Parameter(Mandatory)][string]$AliasArn,
+    [string[]]$Actions = @("lambda:InvokeFunction"),
+    [string]$GrantKind = "invoke grant",
     [AllowEmptyString()][string]$PrincipalRoleArn = "",
     [Parameter(Mandatory)][string]$Label
   )
@@ -945,9 +1019,9 @@ function Assert-GatewayPolicyGainsExactlyOneStatement {
   if ($PrincipalRoleArn) { $expectedProperties = @("Action", "Effect", "Principal", "Resource", "Sid") | Sort-Object }
   if (($properties -join "|") -cne ($expectedProperties -join "|") -or
       [string]$statement.Effect -cne "Allow" -or
-      ((ConvertTo-GatewayStringList $statement.Action) -join "|") -cne "lambda:InvokeFunction" -or
+      ((ConvertTo-GatewayStringList $statement.Action) -join "|") -cne ($Actions -join "|") -or
       ((ConvertTo-GatewayStringList $statement.Resource) -join "|") -cne $AliasArn) {
-    throw "The $Label statement is not the exact reviewed invoke grant."
+    throw "The $Label statement is not the exact reviewed $GrantKind."
   }
   if ($PrincipalRoleArn) {
     $principal = $statement.Principal

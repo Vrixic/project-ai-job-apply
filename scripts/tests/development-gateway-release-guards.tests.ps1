@@ -1201,6 +1201,148 @@ $createdRole = New-GatewayRoleDriftPlan
 $createdRole.resource_drift[-1].change.actions = @("delete", "create")
 Assert-Rejected { Assert-ExactGatewayReleasePlan $createdRole $artifact } "A Gateway role replacement was accepted as refresh drift."
 
+# ---- D3-001: paired provider refresh after the Restricted Answer Vault key is applied.
+$vaultKeyArn = "arn:aws:kms:us-east-2:${account}:key/12345678-1234-1234-1234-123456789abc"
+$vaultGrant = [ordered]@{
+  Sid = "EncryptDecryptRestrictedAnswerVault"; Effect = "Allow"
+  Action = @("kms:Encrypt", "kms:Decrypt"); Resource = $vaultKeyArn
+}
+$vaultBeforePolicy = $gatewayAfterPolicy
+$vaultAfterPolicy = ConvertTo-PolicyJson ([ordered]@{
+    Version = "2012-10-17"; Statement = @($logsStatement, $secretStatement, $roleGrant, $vaultGrant)
+  })
+function New-VaultProviderDriftPlan {
+  $defaultTags = [pscustomobject]@{ Environment = "development"; ManagedBy = "terraform"; Project = "ai-job-apply" }
+  $roleBefore = [pscustomobject]@{
+    arn = $gatewayRoleArnValue; name = "ai-job-apply-development-gateway-lambda"; path = "/"
+    inline_policy = @([pscustomobject]@{ name = "gateway-lambda-runtime"; policy = $vaultBeforePolicy })
+    tags = [pscustomobject]@{}
+  }
+  $roleAfter = Copy-Fixture $roleBefore
+  $roleAfter.inline_policy[0].policy = $vaultAfterPolicy
+  $keyBefore = [pscustomobject]@{
+    arn = $vaultKeyArn; id = "12345678-1234-1234-1234-123456789abc"
+    description = "ai-job-apply development restricted-answer vault (ADR-010)"
+    deletion_window_in_days = 30; enable_key_rotation = $true; tags = $null; tags_all = $defaultTags
+  }
+  $keyAfter = Copy-Fixture $keyBefore
+  $keyAfter.tags = [pscustomobject]@{}
+  $keyBeforeSensitive = [pscustomobject]@{ tags_all = [pscustomobject]@{} }
+  $keyAfterSensitive = [pscustomobject]@{ tags = [pscustomobject]@{}; tags_all = [pscustomobject]@{} }
+  return [pscustomobject]@{
+    variables = [pscustomobject]@{
+      restricted_answer_vault_enabled = [pscustomobject]@{ value = "true" }
+    }
+    planned_values = [pscustomobject]@{
+      root_module = [pscustomobject]@{
+        resources = @(
+          [pscustomobject]@{
+            address = "module.platform.aws_iam_role_policy.gateway_lambda[0]"
+            values = [pscustomobject]@{
+              name = "gateway-lambda-runtime"; role = "ai-job-apply-development-gateway-lambda"; policy = $vaultAfterPolicy
+            }
+          },
+          [pscustomobject]@{
+            address = "module.platform.aws_kms_key.restricted_answer_vault[0]"; values = $keyAfter
+          }
+        )
+      }
+    }
+    resource_drift = @(
+      (New-GatewayProviderDriftRecord -Address "module.platform.aws_iam_role.gateway_lambda[0]" `
+          -Type "aws_iam_role" -Before $roleBefore -After $roleAfter),
+      (New-GatewayProviderDriftRecord -Address "module.platform.aws_kms_key.restricted_answer_vault[0]" `
+          -Type "aws_kms_key" -Before $keyBefore -After $keyAfter `
+          -BeforeSensitive $keyBeforeSensitive -AfterSensitive $keyAfterSensitive)
+    )
+  }
+}
+
+$vaultDrift = New-VaultProviderDriftPlan
+$null = Assert-AcceptedGatewayProviderDrift -Plan $vaultDrift; $passed++
+
+$badVault = Copy-Fixture $vaultDrift
+$badVault.variables.restricted_answer_vault_enabled.value = "false"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault drift was accepted while the capability was disabled."
+
+$badVault = Copy-Fixture $vaultDrift; $badVault.resource_drift = @($badVault.resource_drift[0])
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault role drift was accepted without the paired key normalization."
+$badVault = Copy-Fixture $vaultDrift; $badVault.resource_drift = @($badVault.resource_drift[1])
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault key drift was accepted without the paired role refresh."
+
+$badVault = Copy-Fixture $vaultDrift
+$badVault.resource_drift = @($badVault.resource_drift) + @($badVault.resource_drift[1])
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Duplicate Vault key drift was accepted."
+
+$badVault = Copy-Fixture $vaultDrift
+$badVault.resource_drift[1].address = "module.platform.aws_kms_key.Restricted_answer_vault[0]"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "A case-changed Vault key address was accepted."
+
+$badVault = Copy-Fixture $vaultDrift; $badVault.resource_drift[1].type = "aws_kms_alias"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault key drift with the wrong resource type was accepted."
+$badVault = Copy-Fixture $vaultDrift; $badVault.resource_drift[1].change.actions = @("create")
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "A Vault key create was accepted as provider drift."
+$badVault = Copy-Fixture $vaultDrift
+$badVault.resource_drift[1].change | Add-Member NoteProperty replace_paths @(, @("tags"))
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault key drift with replacement paths was accepted."
+$badVault = Copy-Fixture $vaultDrift; $badVault.resource_drift[1].change.after_unknown = [pscustomobject]@{ tags = $true }
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault key drift with an unknown value was accepted."
+$badVault = Copy-Fixture $vaultDrift; $badVault.resource_drift[1].change.after_sensitive.tags = $true
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault key drift with changed sensitivity was accepted."
+
+$badVault = Copy-Fixture $vaultDrift
+$badVault.resource_drift[1].change.after.tags = [pscustomobject]@{ Owner = "unreviewed" }
+$badVault.planned_values.root_module.resources[1].values.tags = [pscustomobject]@{ Owner = "unreviewed" }
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Nonempty Vault key tags were accepted."
+$badVault = Copy-Fixture $vaultDrift; $badVault.planned_values.root_module.resources[1].values.description = "other"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault key drift differing from its planned resource was accepted."
+$badVault = Copy-Fixture $vaultDrift
+$badVault.resource_drift[1].change.after.description = "other"
+$badVault.planned_values.root_module.resources[1].values.description = "other"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault key drift changing another key attribute was accepted."
+$badVault = Copy-Fixture $vaultDrift
+$badVault.planned_values.root_module.resources = @($badVault.planned_values.root_module.resources | Where-Object {
+    [string]$_.address -cne "module.platform.aws_kms_key.restricted_answer_vault[0]"
+  })
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault drift without its planned key was accepted."
+
+foreach ($case in @(
+    @{ Label = "wildcard resource"; Statement = [ordered]@{ Sid = $vaultGrant.Sid; Effect = "Allow"; Action = $vaultGrant.Action; Resource = "*" } },
+    @{ Label = "extra action"; Statement = [ordered]@{ Sid = $vaultGrant.Sid; Effect = "Allow"; Action = @("kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey"); Resource = $vaultKeyArn } },
+    @{ Label = "reordered actions"; Statement = [ordered]@{ Sid = $vaultGrant.Sid; Effect = "Allow"; Action = @("kms:Decrypt", "kms:Encrypt"); Resource = $vaultKeyArn } },
+    @{ Label = "deny effect"; Statement = [ordered]@{ Sid = $vaultGrant.Sid; Effect = "Deny"; Action = $vaultGrant.Action; Resource = $vaultKeyArn } },
+    @{ Label = "condition"; Statement = [ordered]@{ Sid = $vaultGrant.Sid; Effect = "Allow"; Action = $vaultGrant.Action; Resource = $vaultKeyArn; Condition = [ordered]@{ StringLike = [ordered]@{ "kms:EncryptionContext:*" = "*" } } } }
+  )) {
+  $badVault = Copy-Fixture $vaultDrift
+  $policy = ConvertTo-PolicyJson ([ordered]@{
+      Version = "2012-10-17"; Statement = @($logsStatement, $secretStatement, $roleGrant, $case.Statement)
+    })
+  $badVault.resource_drift[0].change.after.inline_policy[0].policy = $policy
+  $badVault.planned_values.root_module.resources[0].values.policy = $policy
+  Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault role drift accepted a $($case.Label)."
+}
+
+$badVault = Copy-Fixture $vaultDrift
+$alteredVaultPolicy = ConvertTo-PolicyJson ([ordered]@{
+    Version = "2012-10-17"
+    Statement = @([ordered]@{ Sid = "WriteOwnedLogs"; Effect = "Allow"; Action = "logs:*"; Resource = "*" }, $secretStatement, $roleGrant, $vaultGrant)
+  })
+$badVault.resource_drift[0].change.after.inline_policy[0].policy = $alteredVaultPolicy
+$badVault.planned_values.root_module.resources[0].values.policy = $alteredVaultPolicy
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault role drift altered an existing statement."
+
+$badVault = Copy-Fixture $vaultDrift
+$badVault.planned_values.root_module.resources[0].values.policy = $vaultBeforePolicy
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault role drift differing from its planned policy was accepted."
+$badVault = Copy-Fixture $vaultDrift; $badVault.resource_drift[0].change.after.path = "/service/"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Vault role drift changed another role attribute."
+$badVault = Copy-Fixture $vaultDrift
+$badVault.resource_drift = @($badVault.resource_drift) + @(
+  New-GatewayProviderDriftRecord -Address "module.platform.aws_kms_key.unreviewed[0]" -Type "aws_kms_key" `
+    -Before ([pscustomobject]@{ a = 1 }) -After ([pscustomobject]@{ a = 2 })
+)
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badVault } "Unrelated drift beside the Vault refresh was accepted."
+
 # ---- D3-024: refresh drift on the candidate-document bucket's CORS rules, after the reviewed upload-origin step
 $corsLocal = "http://localhost:3000"; $corsHosted = "https://ai-job-apply-candidate.vercel.app"
 $corsBucketAddress = "module.platform.aws_s3_bucket.candidate_documents[0]"
