@@ -693,6 +693,12 @@ aside {
   background: #fff8f6;
 }
 
+.settings-logout {
+  display: flex;
+  width: fit-content;
+  margin: 32px auto 0;
+}
+
 .acknowledgement {
   display: flex;
   gap: 10px;
