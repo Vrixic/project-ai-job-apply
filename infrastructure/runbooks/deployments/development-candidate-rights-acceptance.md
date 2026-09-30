@@ -57,6 +57,16 @@ happens first), including for a historical answer already expired when saved. Bo
 must be no later than artifact generation, and expiry must follow confirmation. Creation is not
 required to precede confirmation. Exact expected metadata/value comparison remains unchanged.
 
+Timestamp identity is the exact instant, not a textual ISO/PostgreSQL spelling. The restricted
+checker accepts equivalent offsets and fractional padding while retaining every fractional digit
+up to nanoseconds (nine digits; PostgreSQL emits at most six). Adjacent microseconds/nanoseconds
+remain different, and chronology/expiry checks never round through JavaScript `Date`. Greater
+precision refuses. All other metadata and values remain exact; unknown fields still refuse.
+The ordinary D2 checker and transport are unchanged. A local generated PostgreSQL regression
+prepares expectations from owner-list metadata plus known saved values before querying the export,
+then enriches the actual SQL projection through the reader with a fake cipher. This is local SQL
+and representation evidence, not live KMS, hosted identity, or guarded account-deletion acceptance.
+
 The artifact remains bounded to 1 MiB, the expected snapshot to 64 KiB and 100 entries, stdin to the
 combined envelope bound, and reading to one ten-second total deadline. Success reports only
 `valid`, `activeValueCount`, `expiredValueCount`, `deletedTombstoneCount`, and `revisedValueCount`.

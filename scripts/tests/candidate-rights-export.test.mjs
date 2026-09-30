@@ -210,6 +210,60 @@ test("restricted acceptance permits confirmation before database insertion", () 
   assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), restrictedCounts);
 });
 
+test("restricted acceptance matches PostgreSQL JSON and owner-list timestamp spellings", () => {
+  const { artifact, binding } = restrictedFixture();
+  for (const entry of artifact.profile.restrictedAnswers) {
+    entry.confirmedAt = "2026-09-10T12:00:00+00:00";
+    entry.createdAt = "2026-09-10T17:30:00.000000+05:30";
+    if (entry.expiresAt) entry.expiresAt = "2026-09-11T11:00:00+00:00";
+  }
+  assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), restrictedCounts);
+});
+
+test("restricted acceptance rejects sub-millisecond creation after export", () => {
+  const { artifact, binding } = restrictedFixture();
+  artifact.profile.restrictedAnswers[0].createdAt = "2026-09-11T12:00:00.000001Z";
+  binding.expectedRestrictedAnswers = structuredClone(artifact.profile.restrictedAnswers);
+  assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), rejected);
+});
+
+test("restricted acceptance distinguishes adjacent microseconds despite equivalent date spellings", () => {
+  const { artifact, binding } = restrictedFixture();
+  binding.expectedRestrictedAnswers[0].createdAt = "2026-09-10T12:00:00.123456Z";
+  artifact.profile.restrictedAnswers[0].createdAt = "2026-09-10T12:00:00.123457+00:00";
+  assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), rejected);
+  artifact.profile.restrictedAnswers[0].createdAt = "2026-09-10T12:00:00.123456+00:00";
+  assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), restrictedCounts);
+});
+
+for (const [name, change] of [
+  [
+    "confirmation after export by one nanosecond",
+    (entries) => {
+      entries[0].confirmedAt = "2026-09-11T12:00:00.000000001Z";
+    },
+  ],
+  [
+    "equivalent expiry and confirmation instants",
+    (entries) => {
+      entries[1].expiresAt = "2026-09-10T17:30:00.000000+05:30";
+    },
+  ],
+  [
+    "more than nine fractional digits",
+    (entries) => {
+      entries[0].createdAt = "2026-09-10T12:00:00.1234567890Z";
+    },
+  ],
+]) {
+  test(`restricted acceptance refuses ${name} without timestamp rounding`, () => {
+    const { artifact, binding } = restrictedFixture();
+    change(artifact.profile.restrictedAnswers);
+    binding.expectedRestrictedAnswers = structuredClone(artifact.profile.restrictedAnswers);
+    assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), rejected);
+  });
+}
+
 test("restricted acceptance matches exact independent latest metadata and values, order independently", () => {
   const { artifact, binding } = restrictedFixture();
   artifact.profile.restrictedAnswers.reverse();
