@@ -8,13 +8,9 @@ import type {
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FoundationForm } from "./foundation-form";
+import { ProfilePageClient } from "./profile-page-client";
 
-vi.mock("./entitlement-status", () => ({ EntitlementStatus: () => null }));
-vi.mock("./job-search-form", () => ({ JobSearchForm: () => null }));
-vi.mock("./profile-facts-form", () => ({ ProfileFactsForm: () => null }));
-vi.mock("./resume-upload-form", () => ({ ResumeUploadForm: () => null }));
-vi.mock("./saved-jobs-panel", () => ({ SavedJobsPanel: () => null }));
+vi.mock("../../profile-facts-form", () => ({ ProfileFactsForm: () => null }));
 
 const operationId = "019c0000-0000-7000-8000-000000000301";
 const privateProblemCanary = "synthetic-private-operation-problem-never-render";
@@ -43,16 +39,7 @@ function requestPath(input: string | URL | Request): string {
 }
 
 function renderFoundation(authenticated = true) {
-  return (
-    <FoundationForm
-      authConfigured
-      authConformanceEnabled={false}
-      authenticationFailed={false}
-      authenticated={authenticated}
-      crossUserProbeArmed={false}
-      workloadConformanceEnabled={false}
-    />
-  );
+  return <ProfilePageClient authenticated={authenticated} />;
 }
 
 function preferenceSet(): JobPreferenceSet {

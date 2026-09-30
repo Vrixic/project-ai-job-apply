@@ -4,13 +4,9 @@ import type { JobPreferenceSet } from "@ai-job-apply/api-contracts";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FoundationForm } from "./foundation-form";
+import { ProfilePageClient } from "./profile-page-client";
 
-vi.mock("./entitlement-status", () => ({ EntitlementStatus: () => null }));
-vi.mock("./job-search-form", () => ({ JobSearchForm: () => null }));
-vi.mock("./profile-facts-form", () => ({ ProfileFactsForm: () => null }));
-vi.mock("./resume-upload-form", () => ({ ResumeUploadForm: () => null }));
-vi.mock("./saved-jobs-panel", () => ({ SavedJobsPanel: () => null }));
+vi.mock("../../profile-facts-form", () => ({ ProfileFactsForm: () => null }));
 
 const privateCanary = "private-preference-problem-must-not-render";
 
@@ -45,16 +41,7 @@ function preferenceSet(role: string): JobPreferenceSet {
 }
 
 function renderFoundation(authenticated = true) {
-  return (
-    <FoundationForm
-      authConfigured
-      authConformanceEnabled={false}
-      authenticationFailed={false}
-      authenticated={authenticated}
-      crossUserProbeArmed={false}
-      workloadConformanceEnabled={false}
-    />
-  );
+  return <ProfilePageClient authenticated={authenticated} />;
 }
 
 function button(container: HTMLElement, name: string): HTMLButtonElement {
