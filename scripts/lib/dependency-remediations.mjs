@@ -10,7 +10,9 @@ export const IMAGE_SIZE_REMEDIATION = Object.freeze({
   patchSha256: "37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608",
   lockPatchHash: "37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608",
   installedTreeSha256s: Object.freeze([
+    // Legacy Windows/WSL launchers, native Windows launchers, and Linux installation.
     "69353bb092411adf01d204d8d1d423770834e57af1a15e42b9c7ca4e4a937c07",
+    "9a13c3ef6192f85050c9f83fc9cddb48911a634ea29253fa39b9797d4b03bc3b",
     "cf10fa4cf9d5f85a86f0db1b29911a4760a810161675f6f745d3631fbabb809d",
   ]),
 });

@@ -115,14 +115,16 @@ function fixture(t) {
   return { root, patch, dependencyRoots: graph(root) };
 }
 
-test("pins only the reviewed Windows and Linux installation trees", () => {
+test("pins only the reviewed legacy Windows/WSL, native Windows and Linux installation trees", () => {
   assert.deepEqual(IMAGE_SIZE_REMEDIATION.installedTreeSha256s, [
     "69353bb092411adf01d204d8d1d423770834e57af1a15e42b9c7ca4e4a937c07",
+    "9a13c3ef6192f85050c9f83fc9cddb48911a634ea29253fa39b9797d4b03bc3b",
     "cf10fa4cf9d5f85a86f0db1b29911a4760a810161675f6f745d3631fbabb809d",
   ]);
   assert.ok(Object.isFrozen(IMAGE_SIZE_REMEDIATION.installedTreeSha256s));
   for (const digest of [
     "69353bb092411adf01d204d8d1d423770834e57af1a15e42b9c7ca4e4a937c00",
+    "9a13c3ef6192f85050c9f83fc9cddb48911a634ea29253fa39b9797d4b03bc30",
     "CF10FA4CF9D5F85A86F0DB1B29911A4760A810161675F6F745D3631FBABB809D",
     " cf10fa4cf9d5f85a86f0db1b29911a4760a810161675f6f745d3631fbabb809d",
     "0".repeat(64),
@@ -198,6 +200,16 @@ for (const [name, mutate] of [
     ({ root }) =>
       writeFileSync(path.join(root, "node_modules/image-size/dist/index.js"), "unreviewed loader"),
   ],
+  ...["image-size", "image-size.CMD", "image-size.ps1"].map((launcher) => [
+    `tampered generated launcher ${launcher}`,
+    ({ root }) => {
+      const target = path.join(root, "node_modules/image-size/node_modules/.bin", launcher);
+      // Windows produces all three; Linux can omit the platform-specific launchers.
+      // Either changing an existing launcher or injecting a new one must refuse.
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, "unreviewed launcher");
+    },
+  ]),
   [
     "unexpected installed file",
     ({ root }) =>
