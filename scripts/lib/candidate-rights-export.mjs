@@ -5,10 +5,14 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 export const MAXIMUM_EXPORT_BYTES = 1_048_576;
 export const MAXIMUM_EXPORT_ENVELOPE_BYTES = 4 * Math.ceil(MAXIMUM_EXPORT_BYTES / 3) + 1_024;
 export const EXPORT_INPUT_TIMEOUT_MILLISECONDS = 10_000;
+export const MAXIMUM_RESTRICTED_EXPECTATION_BYTES = 65_536;
+export const MAXIMUM_RESTRICTED_EXPORT_ENVELOPE_BYTES =
+  MAXIMUM_EXPORT_ENVELOPE_BYTES + MAXIMUM_RESTRICTED_EXPECTATION_BYTES;
 
 const REJECTED = Object.freeze({ valid: false, error: "CandidateRightsExportRejected" });
 const READY = Object.freeze({ ready: true });
@@ -209,7 +213,7 @@ export function validateCandidateRightsExportEnvelope(bytes) {
 }
 
 /** Complete bounded stdin bytes only; early close/error/timeout never validates a partial body. */
-export async function readCandidateRightsExportEnvelope(input) {
+async function readBoundedExportEnvelope(input, maximumBytes, validator) {
   if (!(input instanceof Readable)) return REJECTED;
   let timer;
   try {
@@ -219,7 +223,7 @@ export async function readCandidateRightsExportEnvelope(input) {
       for await (const chunk of input) {
         if (!(chunk instanceof Uint8Array)) reject();
         total += chunk.byteLength;
-        if (total > MAXIMUM_EXPORT_ENVELOPE_BYTES) reject();
+        if (total > maximumBytes) reject();
         chunks.push(Buffer.from(chunk));
       }
       return Buffer.concat(chunks, total);
@@ -230,7 +234,7 @@ export async function readCandidateRightsExportEnvelope(input) {
         EXPORT_INPUT_TIMEOUT_MILLISECONDS,
       );
     });
-    return validateCandidateRightsExportEnvelope(await Promise.race([read(), timeout]));
+    return validator(await Promise.race([read(), timeout]));
   } catch {
     return REJECTED;
   } finally {
@@ -242,12 +246,165 @@ export async function readCandidateRightsExportEnvelope(input) {
   }
 }
 
+export function readCandidateRightsExportEnvelope(input) {
+  return readBoundedExportEnvelope(
+    input,
+    MAXIMUM_EXPORT_ENVELOPE_BYTES,
+    validateCandidateRightsExportEnvelope,
+  );
+}
+
+/** Read-only synthetic acceptance against an independently prepared latest-version snapshot.
+ * This does not prove live identity isolation, KMS access, deletion, or policy approval.
+ */
+export function validateRestrictedAnswerExport(artifactBytes, expected) {
+  try {
+    if (
+      !exactKeys(expected, [
+        "expectedExportId",
+        "expectedPolicyVersion",
+        "expectedRestrictedAnswers",
+      ]) ||
+      expected.expectedPolicyVersion !== D2_POLICY_VERSION ||
+      !Array.isArray(expected.expectedRestrictedAnswers) ||
+      expected.expectedRestrictedAnswers.length < 3 ||
+      expected.expectedRestrictedAnswers.length > 100 ||
+      Buffer.byteLength(JSON.stringify(expected.expectedRestrictedAnswers), "utf8") >
+        MAXIMUM_RESTRICTED_EXPECTATION_BYTES ||
+      !validateCandidateRightsExport(artifactBytes, {
+        expectedExportId: expected.expectedExportId,
+        expectedPolicyVersion: expected.expectedPolicyVersion,
+      }).valid
+    )
+      reject();
+    const artifact = parseStrictJson(artifactBytes, MAXIMUM_EXPORT_BYTES);
+    const entries = artifact.profile.restrictedAnswers;
+    const snapshot = expected.expectedRestrictedAnswers;
+    if (
+      !Array.isArray(entries) ||
+      entries.length !== snapshot.length ||
+      !currentValidator()({
+        ...artifact,
+        profile: { ...artifact.profile, restrictedAnswers: snapshot },
+      })
+    )
+      reject();
+    // Reuse the source schema's closed value-field inventory; metadata-only legacy fields are
+    // compatible ordinary exports but cannot supply this deliberately narrower acceptance proof.
+    const fields =
+      currentValidator().schema.$defs.restrictedAnswerMetadata.allOf[1].then.properties.fieldKey
+        .enum;
+    const ids = new Set();
+    const references = new Set();
+    let activeValueCount = 0;
+    let expiredValueCount = 0;
+    let deletedTombstoneCount = 0;
+    let revisedValueCount = 0;
+    for (const entry of snapshot) {
+      const reference = JSON.stringify([entry.fieldKey, entry.context ?? null]);
+      if (!fields.includes(entry.fieldKey) || ids.has(entry.id) || references.has(reference))
+        reject();
+      if (
+        // Confirmation is candidate-supplied and can precede SQL insertion, including an
+        // already-expired historical answer. Both timestamps must precede export generation.
+        Date.parse(entry.createdAt) > Date.parse(artifact.generatedAt) ||
+        Date.parse(entry.confirmedAt) > Date.parse(artifact.generatedAt) ||
+        (entry.expiresAt && Date.parse(entry.expiresAt) <= Date.parse(entry.confirmedAt))
+      )
+        reject();
+      ids.add(entry.id);
+      references.add(reference);
+      if (entry.state === "deleted") {
+        deletedTombstoneCount += 1;
+      } else {
+        if (!Object.hasOwn(entry, "value")) reject();
+        if (entry.version > 1) revisedValueCount += 1;
+        if (entry.expiresAt && Date.parse(entry.expiresAt) <= Date.parse(artifact.generatedAt)) {
+          expiredValueCount += 1;
+        } else activeValueCount += 1;
+      }
+    }
+    if (!activeValueCount || !expiredValueCount || !deletedTombstoneCount || !revisedValueCount)
+      reject();
+    const actualIds = new Set();
+    for (const entry of entries) {
+      if (
+        actualIds.has(entry.id) ||
+        !isDeepStrictEqual(
+          entry,
+          snapshot.find((item) => item.id === entry.id),
+        )
+      )
+        reject();
+      actualIds.add(entry.id);
+    }
+    return Object.freeze({
+      valid: true,
+      activeValueCount,
+      expiredValueCount,
+      deletedTombstoneCount,
+      revisedValueCount,
+    });
+  } catch {
+    return REJECTED;
+  }
+}
+
+export function validateRestrictedAnswerExportEnvelope(bytes) {
+  let artifact;
+  try {
+    const envelope = parseStrictJson(bytes, MAXIMUM_RESTRICTED_EXPORT_ENVELOPE_BYTES);
+    if (
+      !exactKeys(envelope, [
+        "schemaVersion",
+        "expectedExportId",
+        "expectedPolicyVersion",
+        "expectedRestrictedAnswers",
+        "artifactBase64",
+      ]) ||
+      envelope.schemaVersion !== 1 ||
+      typeof envelope.artifactBase64 !== "string" ||
+      envelope.artifactBase64.length === 0 ||
+      envelope.artifactBase64.length > 4 * Math.ceil(MAXIMUM_EXPORT_BYTES / 3) ||
+      envelope.artifactBase64.length % 4 !== 0 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/u.test(envelope.artifactBase64)
+    )
+      reject();
+    artifact = Buffer.from(envelope.artifactBase64, "base64");
+    if (artifact.toString("base64") !== envelope.artifactBase64) reject();
+    return validateRestrictedAnswerExport(artifact, {
+      expectedExportId: envelope.expectedExportId,
+      expectedPolicyVersion: envelope.expectedPolicyVersion,
+      expectedRestrictedAnswers: envelope.expectedRestrictedAnswers,
+    });
+  } catch {
+    return REJECTED;
+  } finally {
+    artifact?.fill(0);
+  }
+}
+
+export function readRestrictedAnswerExportEnvelope(input) {
+  return readBoundedExportEnvelope(
+    input,
+    MAXIMUM_RESTRICTED_EXPORT_ENVELOPE_BYTES,
+    validateRestrictedAnswerExportEnvelope,
+  );
+}
+
 async function main() {
   let result = REJECTED;
   try {
     const args = process.argv.slice(2);
     if (args.length === 1 && args[0] === "--check-ready") {
       result = checkCandidateRightsExportReady();
+    } else if (
+      args.length === 1 &&
+      args[0] === "--restricted-answer-acceptance" &&
+      process.stdin.isTTY !== true
+    ) {
+      if (checkCandidateRightsExportReady() !== READY) reject();
+      result = await readRestrictedAnswerExportEnvelope(process.stdin);
     } else if (args.length === 0 && process.stdin.isTTY !== true) {
       if (checkCandidateRightsExportReady() !== READY) reject();
       result = await readCandidateRightsExportEnvelope(process.stdin);
