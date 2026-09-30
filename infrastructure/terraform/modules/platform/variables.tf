@@ -1264,7 +1264,7 @@ variable "restricted_answer_vault_enabled" {
 
   validation {
     condition     = !var.restricted_answer_vault_enabled || var.deploy_gateway_lambda
-    error_message = "The restricted-answer vault key requires the gateway Lambda, the only caller granted Encrypt/Decrypt on it."
+    error_message = "The restricted-answer vault key requires the gateway Lambda for the candidate's save/delete boundary."
   }
 }
 

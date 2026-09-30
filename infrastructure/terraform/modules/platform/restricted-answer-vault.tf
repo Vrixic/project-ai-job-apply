@@ -1,5 +1,5 @@
 # Restricted answer vault (ADR-010, D3-001): a dedicated key, separate from the shared platform key
-# that also encrypts the database itself. Root delegates authorization to IAM; the only grant is the
+# that also encrypts the database itself. Root delegates authorization to IAM; the normal grant is the
 # gateway Lambda role's own Encrypt/Decrypt statement in main.tf, scoped to this key alone. A
 # separately default-off candidate-export gate grants the private rights activity Decrypt only,
 # restricted to the existing vault encryption-context purpose.
