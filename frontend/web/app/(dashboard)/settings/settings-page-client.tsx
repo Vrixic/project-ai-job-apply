@@ -268,7 +268,7 @@ export function SettingsPageClient({
         </aside>
       )}
 
-      <a className="button-link" href="/auth/logout">
+      <a className="button-link settings-logout" href="/auth/logout">
         Log out
       </a>
     </section>
