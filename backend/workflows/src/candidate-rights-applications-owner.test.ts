@@ -67,7 +67,11 @@ function ownerExport(text: string) {
   }
 }
 
-function harness(ownerInventory: readonly string[], applicationsData?: unknown) {
+function harness(
+  ownerInventory: readonly string[],
+  applicationsData?: unknown,
+  restrictedAnswers?: unknown,
+) {
   const queries: string[] = [];
   const stored: { body?: Buffer } = {};
   const exportRow = {
@@ -91,7 +95,13 @@ function harness(ownerInventory: readonly string[], applicationsData?: unknown) 
     if (text.includes("applications.export_candidate_data") && applicationsData !== undefined) {
       return [{ data: applicationsData }];
     }
-    if (text.includes("export_candidate_data")) return [{ data: ownerExport(text) }];
+    if (text.includes("export_candidate_data")) {
+      const data = ownerExport(text);
+      if (text.includes("profile.export_candidate_data") && restrictedAnswers !== undefined) {
+        Object.assign(data.profile ?? {}, { restrictedAnswers });
+      }
+      return [{ data }];
+    }
     if (text.includes("FROM profile.candidate_data_exports")) return [exportRow];
     if (text.includes("FROM profile.account_deletion_requests")) return [deletionRow];
     if (text.includes("identity.external_identities")) return [];
@@ -141,6 +151,76 @@ const input = (action: "export_assemble" | "deletion_delete_active_systems") =>
     operationId: OPERATION,
     policyVersion: "d3-development-synthetic-v1",
   }) as never;
+
+const restrictedAnswer = {
+  id: "019c2b89-79b2-7000-8000-0000000000b1",
+  fieldKey: "authorization.us_authorized",
+  version: 1,
+  valueType: "boolean",
+  sensitivity: "restricted",
+  state: "active",
+  confirmedAt: AT,
+  createdAt: AT,
+};
+
+describe("Restricted Answer Vault portable metadata compatibility", () => {
+  it.each([BASE, WITH_APPLICATIONS])(
+    "assembles empty, active and deleted vault metadata under owner inventory %j",
+    async (...ownerInventory) => {
+      for (const metadata of [
+        [],
+        [restrictedAnswer],
+        [{ ...restrictedAnswer, context: "us", expiresAt: AT, version: 2, state: "deleted" }],
+      ]) {
+        const run = harness(ownerInventory, undefined, metadata);
+        await run.store.assembleExport(input("export_assemble"));
+        const exported = JSON.parse(run.stored.body?.toString("utf8") ?? "{}");
+        expect(exported.profile.restrictedAnswers).toEqual(metadata);
+        expect(validateCandidateDataExportV1(exported)).toBe(true);
+      }
+    },
+  );
+
+  it("refuses sensitive or internal fields before writing an artifact", async () => {
+    for (const forbidden of [
+      "value",
+      "plaintext",
+      "ciphertext",
+      "kmsKeyId",
+      "encryptionAlgorithm",
+      "sourceReference",
+      "userId",
+    ]) {
+      const run = harness(BASE, undefined, [{ ...restrictedAnswer, [forbidden]: "synthetic" }]);
+      await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+        "CandidateExportSchemaRejected",
+      );
+      expect(run.stored.body).toBeUndefined();
+    }
+  });
+
+  it("refuses malformed vault metadata before writing an artifact", async () => {
+    for (const invalid of [
+      null,
+      {},
+      [{ ...restrictedAnswer, version: 0 }],
+      [{ ...restrictedAnswer, sensitivity: "standard" }],
+      [{ ...restrictedAnswer, valueType: "object" }],
+      [{ ...restrictedAnswer, state: "expired" }],
+      [{ ...restrictedAnswer, fieldKey: "" }],
+      [{ ...restrictedAnswer, context: "x".repeat(121) }],
+      [{ ...restrictedAnswer, confirmedAt: "not-a-date" }],
+      [{ ...restrictedAnswer, id: "not-a-uuid" }],
+      [{ ...restrictedAnswer, createdAt: undefined }],
+    ]) {
+      const run = harness(BASE, undefined, invalid);
+      await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+        "CandidateExportSchemaRejected",
+      );
+      expect(run.stored.body).toBeUndefined();
+    }
+  });
+});
 
 describe("Applications as an optional eighth candidate-rights owner", () => {
   it("accepts exactly the seven-owner or eight-owner inventory and nothing else", () => {

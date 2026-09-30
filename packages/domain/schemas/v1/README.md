@@ -19,3 +19,9 @@ optional Applications section (packets and answers, approvals, attempts, and tec
 hiring outcomes or internal identifiers), but deliberately
 excludes OIDC subjects, access/refresh tokens, database-only ownership identifiers, object-store
 keys/versions, raw resume bytes, provider credentials, and unrestricted audit metadata.
+
+The optional `profile.restrictedAnswers` section accepts the latest-version metadata projection
+from Profile migration `0010_restricted_answer_vault`, including active entries and deletion
+tombstones. It does not accept plaintext values, ciphertext, KMS identifiers, or provenance
+references. Older exports may omit the section. This compatibility support does not implement
+saved-value export or authorize vault decryption in the candidate-rights worker.

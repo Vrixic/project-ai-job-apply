@@ -52,6 +52,11 @@
       "properties": {
         "preferences": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/preferences" }] },
         "facts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/profileFact" } },
+        "restrictedAnswers": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/restrictedAnswerMetadata" }
+        },
         "contributionConsents": {
           "type": "array",
           "maxItems": 10000,
@@ -816,6 +821,32 @@
         "salaryMinimum": { "type": "integer", "minimum": 0, "maximum": 10000000 },
         "salaryCurrency": { "type": "string", "pattern": "^[A-Z]{3}$" },
         "updatedAt": { "$ref": "#/$defs/dateTime" }
+      },
+      "additionalProperties": false
+    },
+    "restrictedAnswerMetadata": {
+      "type": "object",
+      "required": [
+        "id",
+        "fieldKey",
+        "version",
+        "valueType",
+        "sensitivity",
+        "state",
+        "confirmedAt",
+        "createdAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "fieldKey": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "context": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "valueType": { "enum": ["string", "text", "boolean", "date", "decimal", "enum"] },
+        "sensitivity": { "enum": ["confidential", "restricted"] },
+        "state": { "enum": ["active", "deleted"] },
+        "confirmedAt": { "$ref": "#/$defs/dateTime" },
+        "expiresAt": { "$ref": "#/$defs/dateTime" },
+        "createdAt": { "$ref": "#/$defs/dateTime" }
       },
       "additionalProperties": false
     },
