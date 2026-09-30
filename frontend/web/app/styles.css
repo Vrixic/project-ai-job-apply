@@ -692,3 +692,304 @@ aside {
   width: auto;
   margin-top: 3px;
 }
+
+/*
+ * Landing page theme tokens. The color scheme and font here are provisional -
+ * change the custom properties below to restyle the whole page.
+ */
+.landing-page {
+  --landing-font-heading: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --landing-font-body: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --landing-color-bg: #ffffff;
+  --landing-color-header-bg: #eaf7ef;
+  --landing-color-surface: #f4f9f6;
+  --landing-color-text: #0f1f17;
+  --landing-color-text-muted: #4b5f55;
+  --landing-color-border: #d7e6dd;
+  --landing-color-accent: #14633e;
+  --landing-color-cta-bg: #0d1a14;
+  --landing-color-cta-text: #ffffff;
+
+  width: 100%;
+  margin: 0;
+  font-family: var(--landing-font-body);
+  color: var(--landing-color-text);
+  background: var(--landing-color-bg);
+}
+
+.landing-page h1,
+.landing-page h2,
+.landing-page h3 {
+  font-family: var(--landing-font-heading);
+}
+
+.landing-header {
+  background: var(--landing-color-header-bg);
+}
+
+.landing-header-inner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 18px 0;
+}
+
+.landing-logo {
+  color: var(--landing-color-accent);
+  font-weight: 800;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.landing-nav {
+  display: flex;
+  flex: 1;
+  gap: 24px;
+  margin-left: 12px;
+}
+
+.landing-nav a {
+  color: var(--landing-color-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.landing-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.landing-link-button {
+  color: var(--landing-color-text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.landing-cta-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 10px;
+  background: var(--landing-color-cta-bg);
+  color: var(--landing-color-cta-text);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.landing-cta-large {
+  margin-top: 28px;
+  min-height: 52px;
+  padding: 0 28px;
+  font-size: 1.05rem;
+}
+
+.landing-auth-error {
+  width: min(1120px, calc(100% - 32px));
+  margin: 16px auto 0;
+  color: #8a2f21;
+  font-weight: 600;
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 48px;
+  width: min(1120px, calc(100% - 32px));
+  margin: clamp(40px, 8vw, 88px) auto;
+}
+
+.landing-hero-copy h1 {
+  max-width: none;
+  margin: 12px 0;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.landing-hero-visual {
+  display: flex;
+  justify-content: center;
+}
+
+.landing-mock-window {
+  width: min(420px, 100%);
+  padding: 20px;
+  border: 1px solid var(--landing-color-border);
+  border-radius: 16px;
+  background: var(--landing-color-surface);
+  box-shadow: 0 24px 60px rgb(15 31 23 / 12%);
+}
+
+.landing-mock-titlebar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.landing-mock-titlebar span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--landing-color-border);
+}
+
+.landing-mock-line {
+  height: 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  background: var(--landing-color-border);
+}
+
+.landing-mock-line-title {
+  width: 65%;
+  height: 16px;
+  background: var(--landing-color-accent);
+  opacity: 0.35;
+}
+
+.landing-mock-line-short {
+  width: 40%;
+}
+
+.landing-mock-chip {
+  width: 110px;
+  height: 32px;
+  margin-top: 8px;
+  border-radius: 8px;
+  background: var(--landing-color-accent);
+  opacity: 0.85;
+}
+
+.landing-capabilities,
+.landing-how {
+  width: min(1120px, calc(100% - 32px));
+  margin: clamp(40px, 8vw, 88px) auto;
+}
+
+.landing-capabilities h2,
+.landing-how h2 {
+  max-width: 620px;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  letter-spacing: -0.02em;
+}
+
+.landing-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.landing-capability-grid article {
+  padding: 22px;
+  border: 1px solid var(--landing-color-border);
+  border-radius: 14px;
+  background: var(--landing-color-surface);
+}
+
+.landing-capability-grid h3 {
+  margin-top: 0;
+}
+
+.landing-capability-grid p {
+  margin-bottom: 0;
+  color: var(--landing-color-text-muted);
+}
+
+.landing-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin: 32px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-steps li {
+  display: flex;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--landing-color-border);
+  border-radius: 14px;
+}
+
+.landing-steps h3 {
+  margin: 0 0 6px;
+}
+
+.landing-steps p {
+  margin: 0;
+  color: var(--landing-color-text-muted);
+}
+
+.landing-step-number {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--landing-color-accent);
+  color: #fff;
+  font-weight: 800;
+}
+
+.landing-final-cta {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: min(1120px, calc(100% - 32px));
+  margin: clamp(40px, 8vw, 88px) auto;
+  padding: clamp(40px, 8vw, 64px) 24px;
+  border-radius: 20px;
+  background: var(--landing-color-header-bg);
+  text-align: center;
+}
+
+.landing-final-cta h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+}
+
+.landing-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 48px;
+  color: var(--landing-color-text-muted);
+}
+
+.landing-footer a {
+  color: var(--landing-color-accent);
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .landing-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-hero-visual {
+    order: -1;
+  }
+
+  .landing-capability-grid,
+  .landing-steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-nav {
+    display: none;
+  }
+}
