@@ -46,6 +46,9 @@ representation, preserving sub-millisecond precision. It remains stable across c
 The shared v1 metadata schema makes this field optional so existing save responses remain unchanged;
 the PostgreSQL-backed list always supplies it. This source change is not yet deployed. Require the
 field from a compatible deployed owner-list response before preparing the independent snapshot.
+Rebuild/deploy the candidate client's strict response validators from the updated contract before
+releasing the Gateway producer; old closed-object validators reject the additional field. Existing
+lists without the field remain valid for new readers but cannot supply this exact acceptance proof.
 Do not infer creation time from the ID, copy it from the tested artifact, seed/read live SQL, or
 relax exact comparison. Fixture preparation and guarded lifecycle integration remain outstanding.
 

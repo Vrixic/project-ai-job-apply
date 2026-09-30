@@ -20,6 +20,10 @@ optional in the shared v1 `RestrictedAnswer` schema to support legacy lists and 
 responses. No response exposes an answer value or ciphertext, and existing scopes and routes are
 unchanged. Deploy the compatible Gateway/Profile implementation before requiring this field in
 an acceptance harness; schema generation alone is not deployment evidence.
+Rebuild and deploy strict response-validating consumers with the updated contract **before** the
+Gateway starts returning this field: older closed-object validators reject new response keys.
+Optionality permits new readers to accept old lists/save responses; it does not make old strict
+readers accept the new property. This change includes no frontend source edit or hosted deployment.
 
 The additive Phase 2 private-capture contract defines strict owner-scoped
 `POST /saved-job-captures` and `GET`/`DELETE /saved-job-captures/{captureId}` routes. The create
