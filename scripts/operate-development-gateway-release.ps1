@@ -226,7 +226,9 @@ function Assert-GatewayVerifySourceDelta {
   $allowed = @(
     "scripts/operate-development-gateway-release.ps1",
     "scripts/verify-development-gateway-lambda-boundary.ps1",
+    "scripts/lib/development-current-document-baseline.ps1",
     "scripts/lib/development-gateway-release-guards.ps1",
+    "scripts/tests/development-current-document-baseline.tests.ps1",
     "scripts/tests/development-gateway-release-operator.tests.ps1",
     "scripts/tests/development-gateway-release-guards.tests.ps1",
     "scripts/validate-serverless-workflow-infrastructure.mjs",
