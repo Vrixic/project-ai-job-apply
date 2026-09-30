@@ -16,7 +16,7 @@ $expectedParameters = @(
   'ExpectedDownloadGrantSeconds','ExpectedBackupRetentionDays','ExpectedRecentAuthMaxAgeSeconds',
   'ExpectedOwnerInventory','ExpectedSubprocessorInventory','ZeroDriftPlanPath',
   'ReviewedZeroDriftPlanSha256','ExecutionPlanPath','ReviewedExecutionPlanSha256','RecoveryFailureTimestamp','ReceiptPath',
-  'ReviewedReceiptSha256','RecoveryReplayReceiptPath','ReviewedRecoveryReplayReceiptSha256','Help'
+  'ReviewedReceiptSha256','RecoveryReplayReceiptPath','ReviewedRecoveryReplayReceiptSha256','RestrictedAnswerFixture','Help'
 )
 $actualParameters = @($ast.ParamBlock.Parameters.Name.VariablePath.UserPath)
 if (($actualParameters -join '|') -cne ($expectedParameters -join '|')) { throw 'The exact public parameter surface changed.' }
