@@ -50,7 +50,7 @@ Rebuild/deploy the candidate client's strict response validators from the update
 releasing the Gateway producer; old closed-object validators reject the additional field. Existing
 lists without the field remain valid for new readers but cannot supply this exact acceptance proof.
 Do not infer creation time from the ID, copy it from the tested artifact, seed/read live SQL, or
-relax exact comparison. Fixture preparation and guarded lifecycle integration remain outstanding.
+relax exact comparison. The opt-in fixture integration below requires this compatible deployed list.
 
 Candidate-supplied `confirmedAt` can precede database insertion and its `createdAt` (encryption
 happens first), including for a historical answer already expired when saved. Both timestamps
@@ -75,10 +75,47 @@ stdin shape, bounds, counters and D2 acceptance lifecycle are unchanged.
 
 This mode is an artifact comparison tool, not a deployed acceptance receipt, fixture seeder,
 identity/owner-isolation proof, log-redaction scan, or expiry/deletion proof. The existing mutating
-acceptance operator does not yet prepare or bind this restricted-answer fixture. Fresh disposable
-identity/MFA, reviewed in-memory fixture preparation and integration into the guarded lifecycle,
+acceptance operator now prepares and binds this fixture only when explicitly selected. Fresh disposable
+identity/MFA, a compatible immutable Gateway release, reviewed in-memory fixture preparation,
 live artifact verification, isolation/failure checks, and cleanup remain required. It supplies no
 real-data, API, security/privacy, or production authority.
+
+### Opt-in fixed vault fixture
+
+Select `RestrictedAnswerFixture: true` in the existing process-memory session's plan options, or
+`-RestrictedAnswerFixture` on the maintained PowerShell operator. Supply the same selection for
+Plan, Execute and later Verify. Omit it for the unchanged historical lifecycle. The selection
+requires `profile:read` and `profile:write`, the exact D2 synthetic policy, and matching concrete
+vault KMS key ARNs in the immutable Gateway and activity versions; the activity's export flag must
+be exactly `enabled`. Rebuild/deploy compatible clients before the approved Gateway metadata
+producer, and verify that exact release separately. This operator cannot perform that rollout.
+
+The opt-in plan is schema version 2 with `restrictedAnswerFixture=restricted-answers-v1` and one
+additional fixed first step; the old plan stays version 1 with 15 steps. Mode changes, modified
+fixture selectors or changed sequence refuse a previously reviewed plan. Plan is still read-only.
+Execute first requires an empty vault, including no tombstones, and refuses before writes if any
+entry exists. Through the existing candidate API it creates three fixed synthetic boolean answers,
+corrects work authorization from true to false, retains an expired sponsorship answer, and deletes
+the non-compete answer into a tombstone. No caller-selected fields, contexts or values are admitted.
+Every write uses the normal candidate scope; saves carry fresh idempotency keys. This is synthetic
+acceptance input, not an inferred answer or permission to fill any application form.
+
+Before export is requested, the latest owner-list response must contain exactly the three expected
+IDs/fields/versions/states with creation metadata and the timestamps from those writes. The
+independent snapshot combines that metadata with the fixed saved values, kept only in process
+memory. The exact downloaded bytes pass both the ordinary D2 checker and the restricted checker;
+each restricted coverage counter must be one. Existing nonempty D2 coverage, expiry, cancellation,
+recent-MFA recheck, account deletion, completed marker, health and drift gates remain required.
+The completed schema-2 receipt and session output add only aggregate `restrictedAnswerCoverage`
+and `RestrictedAnswerCoverage`, respectively; no value, row ID, timestamp, subject or artifact is
+retained. Verify with the opt-in switch refuses an old receipt or missing/invalid coverage.
+
+On preparation or export refusal, preserve the disposable identity and its generated records for
+scoped recovery. Do not restart automatically, overwrite the fixture, silently delete the account,
+or turn a failure into acceptance. The normal reviewed deletion lifecycle is the success cleanup.
+This addition does not yet implement the parsed-resume case or by-prefix deletion checks (D3-028),
+nor a second-identity isolation/failure exercise. Local fake API/native-transport tests do not prove
+live KMS, hosted authentication, account deletion or phase completion.
 
 ## Two-stage infrastructure and credential setup
 

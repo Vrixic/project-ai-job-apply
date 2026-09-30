@@ -269,6 +269,55 @@ test("child output exposes only exact aggregate plan and receipt shapes", () => 
   assert.throws(() => sanitizeOperatorResult("execute", mismatched), /operator_result_invalid/u);
 });
 
+test("restricted fixture is explicit, plan-bound and reports only fixed aggregate coverage", () => {
+  const selected = { ...options(), RestrictedAnswerFixture: true };
+  assert.deepEqual(validatePlanOptions(selected), selected);
+  for (const flag of [false, 1, "true", null]) {
+    assert.throws(
+      () => validatePlanOptions({ ...options(), RestrictedAnswerFixture: flag }),
+      /invalid_plan_options/u,
+    );
+  }
+  const restrictedPlan = { ...plan(), FixedSteps: 16 };
+  assert.deepEqual(sanitizeOperatorResult("plan", restrictedPlan, true), restrictedPlan);
+  assert.throws(() => sanitizeOperatorResult("plan", restrictedPlan), /operator_result_invalid/u);
+  assert.throws(() => sanitizeOperatorResult("plan", plan(), true), /operator_result_invalid/u);
+  const coverage = {
+    valid: true,
+    activeValueCount: 1,
+    expiredValueCount: 1,
+    deletedTombstoneCount: 1,
+    revisedValueCount: 1,
+  };
+  const restrictedReceipt = { ...receipt(), RestrictedAnswerCoverage: coverage };
+  assert.deepEqual(sanitizeOperatorResult("execute", restrictedReceipt, true), restrictedReceipt);
+  assert.throws(
+    () => sanitizeOperatorResult("execute", restrictedReceipt),
+    /operator_result_invalid/u,
+  );
+  assert.throws(
+    () => sanitizeOperatorResult("execute", receipt(), true),
+    /operator_result_invalid/u,
+  );
+  for (const key of Object.keys(coverage)) {
+    const changed = { ...restrictedReceipt, RestrictedAnswerCoverage: { ...coverage, [key]: 0 } };
+    assert.throws(
+      () => sanitizeOperatorResult("execute", changed, true),
+      /operator_result_invalid/u,
+    );
+  }
+  for (const extra of ["value", "id", "fieldKey", "createdAt"]) {
+    const changed = {
+      ...restrictedReceipt,
+      RestrictedAnswerCoverage: { ...coverage, [extra]: "generated-private" },
+    };
+    assert.throws(
+      () => sanitizeOperatorResult("execute", changed, true),
+      /operator_result_invalid/u,
+    );
+  }
+});
+
 test("in-memory attestation binds confirmed subject without retaining token or raw subject", () => {
   const confirmed = identity();
   const attestation = buildIdentityAttestation(confirmed);

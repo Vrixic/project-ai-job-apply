@@ -86,8 +86,10 @@ function generatedResultPath(path, kind) {
 }
 
 export function validatePlanOptions(value) {
+  const restricted = Object.hasOwn(value ?? {}, "RestrictedAnswerFixture");
   if (
-    !exactKeys(value, planKeys) ||
+    !exactKeys(value, restricted ? [...planKeys, "RestrictedAnswerFixture"] : planKeys) ||
+    (restricted && value.RestrictedAnswerFixture !== true) ||
     planKeys.some((key) => typeof value[key] !== "string") ||
     !/^[0-9]{12}$/u.test(value.ExpectedAccountId) ||
     !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(value.StateBucket) ||
@@ -117,21 +119,21 @@ export function validateSessionCommand(value) {
   throw new Error("invalid_session_command");
 }
 
-export function sanitizeOperatorResult(action, value) {
+export function sanitizeOperatorResult(action, value, restrictedAnswerFixture = false) {
   if (
     action === "plan" &&
     exactKeys(value, ["Outcome", "PlanPath", "PlanSha256", "FixedSteps", "CloudMutation"]) &&
     value.Outcome === "review-required" &&
     generatedResultPath(value.PlanPath, "plan") &&
     sha256.test(value.PlanSha256) &&
-    value.FixedSteps === 15 &&
+    value.FixedSteps === (restrictedAnswerFixture ? 16 : 15) &&
     value.CloudMutation === false
   ) {
     return {
       Outcome: value.Outcome,
       PlanPath: value.PlanPath,
       PlanSha256: value.PlanSha256,
-      FixedSteps: 15,
+      FixedSteps: value.FixedSteps,
       CloudMutation: false,
     };
   }
@@ -153,6 +155,7 @@ export function sanitizeOperatorResult(action, value) {
       "DeletionMarkersCompleted",
       "PersistentSyntheticIdentities",
       "ExportCoverage",
+      ...(restrictedAnswerFixture ? ["RestrictedAnswerCoverage"] : []),
     ]) &&
     value.Outcome === "verified-and-cleaned" &&
     generatedResultPath(value.ReceiptPath, "receipt") &&
@@ -168,9 +171,30 @@ export function sanitizeOperatorResult(action, value) {
         value.ExportCoverage[key] >= 1 &&
         value.ExportCoverage[key] <= 1048576,
     ) &&
-    value.ExportCoverage.contributionCount === value.ExportCoverage.contributionApprovalCount
+    value.ExportCoverage.contributionCount === value.ExportCoverage.contributionApprovalCount &&
+    (!restrictedAnswerFixture ||
+      (exactKeys(value.RestrictedAnswerCoverage, [
+        "valid",
+        "activeValueCount",
+        "expiredValueCount",
+        "deletedTombstoneCount",
+        "revisedValueCount",
+      ]) &&
+        value.RestrictedAnswerCoverage.valid === true &&
+        [
+          "activeValueCount",
+          "expiredValueCount",
+          "deletedTombstoneCount",
+          "revisedValueCount",
+        ].every((key) => value.RestrictedAnswerCoverage[key] === 1)))
   ) {
-    return { ...value, ExportCoverage: { ...value.ExportCoverage } };
+    return {
+      ...value,
+      ExportCoverage: { ...value.ExportCoverage },
+      ...(restrictedAnswerFixture
+        ? { RestrictedAnswerCoverage: { ...value.RestrictedAnswerCoverage } }
+        : {}),
+    };
   }
   throw new Error("operator_result_invalid");
 }
@@ -242,7 +266,11 @@ export async function runSessionOperator({
   if (action !== "plan" && action !== "execute") throw new Error("invalid_session_command");
   const request = { action, options: checked };
   if (action === "execute") {
-    const plan = sanitizeOperatorResult("plan", reviewedPlan);
+    const plan = sanitizeOperatorResult(
+      "plan",
+      reviewedPlan,
+      checked.RestrictedAnswerFixture === true,
+    );
     request.reviewedPlan = { path: plan.PlanPath, sha256: plan.PlanSha256 };
   }
   const executable = resolvePowerShell();
@@ -311,5 +339,5 @@ export async function runSessionOperator({
       } else done(parsed);
     });
   });
-  return sanitizeOperatorResult(action, result);
+  return sanitizeOperatorResult(action, result, checked.RestrictedAnswerFixture === true);
 }

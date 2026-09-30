@@ -30,7 +30,9 @@ try {
       ($request.action -ceq 'execute' -and $requestKeys -cne 'action,options,reviewedPlan') -or
       $request.action -cnotin @('plan', 'execute')) { throw 'Invalid session request.' }
   $optionKeys = @($request.options.PSObject.Properties.Name | Sort-Object) -join ','
-  if ($optionKeys -cne 'ExpectedAccountId,ReviewedZeroDriftPlanSha256,SourceSha,StateBucket,ZeroDriftPlanPath') { throw 'Invalid session options.' }
+  $restricted = $null -ne $request.options.PSObject.Properties['RestrictedAnswerFixture']
+  $expectedOptionKeys = if ($restricted) { 'ExpectedAccountId,RestrictedAnswerFixture,ReviewedZeroDriftPlanSha256,SourceSha,StateBucket,ZeroDriftPlanPath' } else { 'ExpectedAccountId,ReviewedZeroDriftPlanSha256,SourceSha,StateBucket,ZeroDriftPlanPath' }
+  if ($optionKeys -cne $expectedOptionKeys -or ($restricted -and ($request.options.RestrictedAnswerFixture -isnot [bool] -or $request.options.RestrictedAnswerFixture -ne $true))) { throw 'Invalid session options.' }
   $parameters = @{
     Action = $(if ($request.action -ceq 'plan') { 'Plan' } else { 'Execute' })
     ExpectedPolicyVersion = 'd2-development-synthetic-v1'
@@ -45,6 +47,7 @@ try {
     if ($request.options.$name -isnot [string]) { throw 'Invalid session option type.' }
     $parameters[$name] = $request.options.$name
   }
+  if ($restricted) { $parameters.RestrictedAnswerFixture = $true }
   if ($request.action -ceq 'execute') {
     if ((@($request.reviewedPlan.PSObject.Properties.Name | Sort-Object) -join ',') -cne 'path,sha256') { throw 'Invalid reviewed plan.' }
     $parameters.ExecutionPlanPath = [string]$request.reviewedPlan.path

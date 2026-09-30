@@ -58,12 +58,15 @@ param(
   [ValidatePattern("^[a-f0-9]{64}$")]
   [string]$ReviewedRecoveryReplayReceiptSha256 = "",
 
+  [switch]$RestrictedAnswerFixture,
+
   [switch]$Help
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
+. (Join-Path $PSScriptRoot "lib/candidate-rights-restricted-fixture.ps1")
 
 if ($Help) {
   @"
@@ -97,6 +100,10 @@ Access-token refresh does not renew the separately retained ID token's recent-MF
 
 Plan is read-only and writes one checksum-reviewable descriptor below the ignored development
 .terraform directory. Execute is the only normal mutation action. It exercises one disposable
+identity. Optional -RestrictedAnswerFixture selects the fixed empty-vault-only synthetic fixture,
+binds a schema-2 plan with 16 steps, and requires exact restricted export coverage. Use the same
+selection for Plan, Execute and Verify. The old lifecycle remains unchanged when omitted.
+The fixed lifecycle exercises that disposable
 identity through export, exact-version download, grant expiry, artifact cleanup, request/cancel,
 recent-MFA confirmation, Auth0 reconciliation, recovery-ledger completion, alert checks, and exact
 cleanup. RecoverUnconfirmed accepts only the exact UTC timestamp of a privacy-safe failed
@@ -318,6 +325,9 @@ function Read-SyntheticIdentityContext {
   $expires = [DateTimeOffset]::Parse([string]$attestation.expiresAt)
   $subject = [string]$accessClaims.sub
   $scope = @(([string]$accessClaims.scope).Split(' ', [StringSplitOptions]::RemoveEmptyEntries))
+  if ($RestrictedAnswerFixture -and -not $scope.Contains('profile:read')) {
+    throw 'The restricted fixture requires profile:read as well as profile:write.'
+  }
   $idAudience = @($idClaims.aud | ForEach-Object { [string]$_ })
   $amr = @($idClaims.amr | ForEach-Object { [string]$_ })
   $authTime = [DateTimeOffset]::FromUnixTimeSeconds([long]$idClaims.auth_time)
@@ -503,6 +513,9 @@ function Get-AcceptanceBoundary {
   $source = Assert-CallerAndSource -RequireSource:$RequireIdentity
   $snapshot = Read-StateSnapshot
   $runtime = Get-RuntimeBoundary $snapshot
+  if ($RestrictedAnswerFixture) {
+    Assert-RestrictedFixtureRuntime $runtime
+  }
   if ($RequireIdentity -and $runtime.IdTokenAudience -notmatch '^[A-Za-z0-9_-]{16,256}$') { throw "The gateway does not expose the exact candidate web ID-token audience." }
   # Validate the short-lived caller proof as soon as the state-bound issuer and audience are known.
   # Backup, queue, alarm, and drift inspection can be comparatively slow and must not consume the
@@ -515,6 +528,12 @@ function Get-AcceptanceBoundary {
   return [pscustomobject]@{ Source = $source; Snapshot = $snapshot; Runtime = $runtime; Secret = $secret; Backup = $backup; Health = $health; Drift = $drift; Identity = $identity }
 }
 
+function Get-FixedAcceptanceSequence {
+  $sequence = @('export-request', 'export-idempotent-replay', 'export-ready', 'exact-version-download', 'download-grant-expired', 'deletion-request', 'deletion-cancel', 'fresh-recent-mfa-recheck', 'deletion-request', 'recent-mfa-confirm', 'owner-auth0-export-cleanup-reconciliation', 'recovery-ledger-completed', 'alerts-and-queues', 'zero-compute', 'zero-drift')
+  if ($RestrictedAnswerFixture) { return @('restricted-answer-fixture') + $sequence }
+  return $sequence
+}
+
 function New-ExecutionPlan {
   param([Parameter(Mandatory)][object]$Boundary)
   $now = [DateTimeOffset]::UtcNow
@@ -523,7 +542,7 @@ function New-ExecutionPlan {
     $value = $Boundary.Runtime.Aliases.$name
     $aliasIdentity[$name] = [ordered]@{ aliasArnSha256 = $value.AliasArnSha256; version = $value.Version; codeSha256 = $value.CodeSha256 }
   }
-  return [ordered]@{
+  $plan = [ordered]@{
     schemaVersion = 1; kind = 'development-candidate-rights-acceptance-plan'; environment = 'development'; region = $Region
     sourceSha = $SourceSha; createdAt = $now.ToString('o'); expiresAt = $now.AddMinutes(15).ToString('o')
     state = [ordered]@{ lineage = $Boundary.Snapshot.Lineage; serial = $Boundary.Snapshot.Serial; versionIdSha256 = Get-TextSha256 $Boundary.Snapshot.VersionId }
@@ -534,17 +553,30 @@ function New-ExecutionPlan {
     aliases = $aliasIdentity
     health = $Boundary.Health
     zeroDriftPlanSha256 = $Boundary.Drift.Sha256
-    fixedSequence = @('export-request', 'export-idempotent-replay', 'export-ready', 'exact-version-download', 'download-grant-expired', 'deletion-request', 'deletion-cancel', 'fresh-recent-mfa-recheck', 'deletion-request', 'recent-mfa-confirm', 'owner-auth0-export-cleanup-reconciliation', 'recovery-ledger-completed', 'alerts-and-queues', 'zero-compute', 'zero-drift')
+    fixedSequence = @(Get-FixedAcceptanceSequence)
   }
+  if ($RestrictedAnswerFixture) {
+    $plan.schemaVersion = 2
+    $plan.restrictedAnswerFixture = 'restricted-answers-v1'
+  }
+  return $plan
 }
 
 function Read-ExecutionPlan {
   $path = Resolve-BelowOperatorRoot $ExecutionPlanPath -MustExist
   if ((Get-FileSha256 $path) -cne $ReviewedExecutionPlanSha256) { throw "The execution-plan checksum does not match the reviewed value." }
   $plan = ConvertFrom-OperatorJson (Get-Content -LiteralPath $path -Raw) "Execution plan"
-  $null = Assert-ExactPropertySet $plan @('schemaVersion','kind','environment','region','sourceSha','createdAt','expiresAt','state','policy','identity','auth0','backups','aliases','health','zeroDriftPlanSha256','fixedSequence') "Execution plan"
-  if ([int]$plan.schemaVersion -ne 1 -or [string]$plan.kind -cne 'development-candidate-rights-acceptance-plan' -or [string]$plan.sourceSha -cne $SourceSha -or [DateTimeOffset]::Parse([string]$plan.expiresAt) -le [DateTimeOffset]::UtcNow -or
-      [string]$plan.policy.sha256 -cne $ReviewedPolicySha256 -or [string]$plan.identity.classification -cne 'generated-synthetic-only' -or [string]$plan.auth0.revocationMode -cne 'delete_user_only' -or @($plan.fixedSequence).Count -ne 15) { throw "The reviewed execution plan is invalid or expired." }
+  $names = @('schemaVersion','kind','environment','region','sourceSha','createdAt','expiresAt','state','policy','identity','auth0','backups','aliases','health','zeroDriftPlanSha256','fixedSequence')
+  $schemaVersion = 1
+  $sequenceCount = 15
+  if ($RestrictedAnswerFixture) { $names += 'restrictedAnswerFixture'; $schemaVersion = 2; $sequenceCount = 16 }
+  $null = Assert-ExactPropertySet $plan $names "Execution plan"
+  if ($RestrictedAnswerFixture -and (@($plan.fixedSequence) -join ',') -cne (@(Get-FixedAcceptanceSequence) -join ',')) {
+    throw 'The reviewed restricted fixture sequence changed.'
+  }
+  if (($RestrictedAnswerFixture -and ([string]$plan.restrictedAnswerFixture -cne 'restricted-answers-v1' -or [string]$plan.fixedSequence[0] -cne 'restricted-answer-fixture')) -or
+      [int]$plan.schemaVersion -ne $schemaVersion -or [string]$plan.kind -cne 'development-candidate-rights-acceptance-plan' -or [string]$plan.sourceSha -cne $SourceSha -or [DateTimeOffset]::Parse([string]$plan.expiresAt) -le [DateTimeOffset]::UtcNow -or
+      [string]$plan.policy.sha256 -cne $ReviewedPolicySha256 -or [string]$plan.identity.classification -cne 'generated-synthetic-only' -or [string]$plan.auth0.revocationMode -cne 'delete_user_only' -or @($plan.fixedSequence).Count -ne $sequenceCount) { throw "The reviewed execution plan is invalid or expired." }
   return [pscustomobject]@{ Path = $path; Value = $plan }
 }
 
@@ -693,21 +725,23 @@ function Wait-CandidateRightsTask {
 }
 
 function Read-CandidateRightsExportHelperResult {
-  param([Parameter(Mandatory)][string]$Json, [switch]$CheckReady)
+  param([Parameter(Mandatory)][string]$Json, [switch]$CheckReady, [switch]$RestrictedAnswers)
   $result = ConvertFrom-OperatorJson $Json 'Candidate export verification'
   if ($CheckReady) {
     $null = Assert-ExactPropertySet $result @('ready') 'Candidate export verifier readiness'
     if ($result.ready -isnot [bool] -or $result.ready -ne $true) { throw 'Candidate export verifier is not ready.' }
   }
   else {
-    $countNames = @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount')
+    $countNames = if ($RestrictedAnswers) { @('activeValueCount','expiredValueCount','deletedTombstoneCount','revisedValueCount') } else { @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount') }
     $null = Assert-ExactPropertySet $result (@('valid') + $countNames) 'Candidate export verification'
     if ($result.valid -isnot [bool] -or $result.valid -ne $true) { throw 'Candidate export verification failed.' }
     foreach ($name in $countNames) {
       $count = $result.$name
       if (($count -isnot [int] -and $count -isnot [long]) -or $count -lt 0 -or $count -gt $maximumExportBytes) { throw 'Candidate export coverage count is invalid.' }
     }
-    if ($result.contributionApprovalCount -ne $result.contributionCount) { throw 'Candidate export approval coverage is invalid.' }
+    if ($RestrictedAnswers) {
+      foreach ($name in $countNames) { if ($result.$name -ne 1) { throw 'Restricted fixture export coverage is incomplete.' } }
+    } elseif ($result.contributionApprovalCount -ne $result.contributionCount) { throw 'Candidate export approval coverage is invalid.' }
   }
   return $result
 }
@@ -733,7 +767,8 @@ function Invoke-CandidateRightsExportHelper {
     [switch]$CheckReady,
     [string]$ExpectedExportId = '',
     [string]$ExpectedPolicyVersion = '',
-    [AllowNull()][byte[]]$Artifact = $null
+    [AllowNull()][byte[]]$Artifact = $null,
+    [AllowNull()][object[]]$ExpectedRestrictedAnswers = $null
   )
   $process = $null
   $output = $null
@@ -747,16 +782,21 @@ function Invoke-CandidateRightsExportHelper {
     $inputJson = ''
     if (-not $CheckReady) {
       if ($null -eq $Artifact -or $Artifact.Length -lt 1 -or $Artifact.Length -gt $maximumExportBytes) { throw 'artifact-bound' }
-      $inputJson = [ordered]@{
+      $envelope = [ordered]@{
         schemaVersion = 1
         expectedExportId = $ExpectedExportId
         expectedPolicyVersion = $ExpectedPolicyVersion
         artifactBase64 = [Convert]::ToBase64String($Artifact)
-      } | ConvertTo-Json -Compress
+      }
+      if ($null -ne $ExpectedRestrictedAnswers) {
+        if ($ExpectedRestrictedAnswers.Count -ne 3) { throw 'fixture-bound' }
+        $envelope.expectedRestrictedAnswers = $ExpectedRestrictedAnswers
+      }
+      $inputJson = $envelope | ConvertTo-Json -Depth 20 -Compress
     }
     $start = New-Object Diagnostics.ProcessStartInfo
     $start.FileName = $node.Source
-    $start.Arguments = '"' + $helperPath + '"' + $(if ($CheckReady) { ' --check-ready' } else { '' })
+    $start.Arguments = '"' + $helperPath + '"' + $(if ($CheckReady) { ' --check-ready' } elseif ($null -ne $ExpectedRestrictedAnswers) { ' --restricted-answer-acceptance' } else { '' })
     $start.WorkingDirectory = $repositoryRoot
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
@@ -791,7 +831,7 @@ function Invoke-CandidateRightsExportHelper {
     $remaining = [Math]::Max(0, $exportHelperTimeoutMilliseconds - [int]$clock.ElapsedMilliseconds)
     if ($errorRead -ne 0 -or -not $process.WaitForExit($remaining) -or $process.ExitCode -ne 0) { throw 'helper-rejected' }
     $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
-    return Read-CandidateRightsExportHelperResult -Json ($strictUtf8.GetString($output.ToArray())) -CheckReady:$CheckReady
+    return Read-CandidateRightsExportHelperResult -Json ($strictUtf8.GetString($output.ToArray())) -CheckReady:$CheckReady -RestrictedAnswers:($null -ne $ExpectedRestrictedAnswers)
   }
   catch { throw 'The generated-synthetic export verifier is unavailable or rejected the bounded artifact.' }
   finally {
@@ -823,7 +863,7 @@ function New-CandidateExportHttpClient {
 }
 
 function Test-ExactVersionGrant {
-  param([Parameter(Mandatory)][object]$Access, [Parameter(Mandatory)][string]$ExpectedExportId)
+  param([Parameter(Mandatory)][object]$Access, [Parameter(Mandatory)][string]$ExpectedExportId, [AllowNull()][object[]]$ExpectedRestrictedAnswers = $null)
   $client = $null
   $response = $null
   $stream = $null
@@ -852,6 +892,9 @@ function Test-ExactVersionGrant {
     if ($body.Length -eq 0) { throw 'artifact-empty' }
     $artifact = $body.ToArray()
     $coverage = Invoke-CandidateRightsExportHelper -ExpectedExportId $ExpectedExportId -ExpectedPolicyVersion $ExpectedPolicyVersion -Artifact $artifact
+    if ($null -ne $ExpectedRestrictedAnswers) {
+      $script:VerifiedRestrictedAnswerCoverage = Invoke-CandidateRightsExportHelper -ExpectedExportId $ExpectedExportId -ExpectedPolicyVersion $ExpectedPolicyVersion -Artifact $artifact -ExpectedRestrictedAnswers $ExpectedRestrictedAnswers
+    }
     return [pscustomobject]@{
       DownloadBytes = $artifact.Length
       GrantExpiresAt = [DateTimeOffset]::Parse([string]$Access.download.expiresAt)
@@ -906,19 +949,21 @@ function Wait-DeletionCompletion {
 function Invoke-FixedLifecycle {
   param([Parameter(Mandatory)][object]$Boundary, [Parameter(Mandatory)][object]$Plan)
   $script:VerifiedExportCoverage = $null
+  $script:VerifiedRestrictedAnswerCoverage = $null
   $null = Assert-SyntheticRefreshPrerequisites
   $null = Assert-CandidateRightsExportReady
   $script:Runtime = $Boundary.Runtime
   $token = $Boundary.Identity.Token
   $idToken = $Boundary.Identity.IdToken
   $started = [DateTimeOffset]::UtcNow
+  $restrictedSnapshot = if ($RestrictedAnswerFixture) { @(New-RestrictedAnswerFixture $token) } else { $null }
   $exportKey = "rights-export-$([guid]::NewGuid().ToString('N'))"
   $exportBody = [ordered]@{ format = 'candidate-data-export-v1' }
   $first = Invoke-CandidateApi POST '/me/data-exports' $token $exportBody @{ 'idempotency-key' = $exportKey; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
   $replay = Invoke-CandidateApi POST '/me/data-exports' $token $exportBody @{ 'idempotency-key' = $exportKey; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
   if ([string]$first.Body.id -cne [string]$replay.Body.id -or [string]$first.Body.policyVersion -cne $ExpectedPolicyVersion) { throw "Candidate export idempotency or policy binding failed." }
   $ready = Wait-ExportReady ([string]$first.Body.id) $token
-  $download = Test-ExactVersionGrant $ready ([string]$first.Body.id)
+  $download = if ($RestrictedAnswerFixture) { Test-ExactVersionGrant $ready ([string]$first.Body.id) -ExpectedRestrictedAnswers $restrictedSnapshot } else { Test-ExactVersionGrant $ready ([string]$first.Body.id) }
   $null = Assert-CandidateRightsAcceptanceCoverage $download.ExportCoverage
   $script:VerifiedExportCoverage = $download.ExportCoverage
   $grantUri = [Uri]([string]$ready.download.url)
@@ -949,7 +994,7 @@ function Invoke-FixedLifecycle {
   $expectedSubjectDigest = Get-CandidateDeletionSubjectDigest $Boundary.Runtime.Issuer $Boundary.Identity.Subject
   $null = Wait-DeletionCompletion ([string]$confirmRequest.Body.id) $expectedSubjectDigest
   $post = Assert-OperationalHealth $Boundary.Snapshot
-  return [ordered]@{
+  $receipt = [ordered]@{
     schemaVersion = 1; kind = 'development-candidate-rights-acceptance-receipt'; phase = 'verified-cleaned'; sourceSha = $SourceSha
     executionPlanSha256 = $ReviewedExecutionPlanSha256; policySha256 = $ReviewedPolicySha256; subjectSha256 = $Boundary.Identity.SubjectSha256
     startedAt = $started.ToString('o'); completedAt = [DateTimeOffset]::UtcNow.ToString('o')
@@ -959,12 +1004,24 @@ function Invoke-FixedLifecycle {
     queueCount = $post.QueueCount; queuedMessages = 0; alarmCount = $post.AlarmCount; alarmsOk = $true; activeCompute = 0
     stateLineage = $Boundary.Snapshot.Lineage; stateSerial = $Boundary.Snapshot.Serial; zeroDriftPlanSha256 = $ReviewedZeroDriftPlanSha256
   }
+  if ($RestrictedAnswerFixture) {
+    if ($null -eq $script:VerifiedRestrictedAnswerCoverage) { throw 'Restricted fixture export verification is missing.' }
+    $receipt.schemaVersion = 2
+    $receipt.restrictedAnswerCoverage = $script:VerifiedRestrictedAnswerCoverage
+  }
+  return $receipt
 }
 
 function Read-AggregateReceipt {
   $path = Resolve-BelowOperatorRoot $ReceiptPath -MustExist
   if ((Get-FileSha256 $path) -cne $ReviewedReceiptSha256) { throw "The candidate-rights receipt checksum does not match the reviewed value." }
   $receipt = ConvertFrom-OperatorJson (Get-Content -LiteralPath $path -Raw) "Candidate-rights receipt"
+  if ($RestrictedAnswerFixture) {
+    if ([int]$receipt.schemaVersion -ne 2) { throw 'The reviewed receipt does not include the restricted fixture.' }
+    $coverage = Get-OptionalProperty $receipt 'restrictedAnswerCoverage'
+    if ($null -eq $coverage) { throw 'The reviewed receipt omits restricted fixture coverage.' }
+    $null = Read-CandidateRightsExportHelperResult ($coverage | ConvertTo-Json -Compress) -RestrictedAnswers
+  }
   if ([string]$receipt.kind -cne 'development-candidate-rights-acceptance-receipt' -or [string]$receipt.phase -cne 'verified-cleaned' -or [string]$receipt.sourceSha -cne $SourceSha -or [int]$receipt.exportsRequested -ne 1 -or [int]$receipt.exportObjectsCleaned -ne 1 -or [int]$receipt.deletionMarkersCompleted -ne 1 -or [int]$receipt.ownerInventoriesReconciled -ne 7 -or $receipt.auth0Reconciled -ne $true -or [int]$receipt.persistentSyntheticIdentities -ne 0 -or [int]$receipt.queuedMessages -ne 0 -or [int]$receipt.activeCompute -ne 0) { throw "The reviewed candidate-rights aggregate receipt is incomplete." }
   return $receipt
 }
@@ -1011,7 +1068,9 @@ if (-not $script:TestOnly) {
       $receipt = Invoke-FixedLifecycle $boundary $reviewed.Value
       $path = Join-Path $operatorRoot "receipt-$($ReviewedExecutionPlanSha256.Substring(0,12)).json"
       Write-ExclusiveJson $path $receipt
-      [pscustomobject]@{ Outcome = 'verified-and-cleaned'; ReceiptPath = $path; ReceiptSha256 = Get-FileSha256 $path; ExportsRequested = 1; DeletionMarkersCompleted = 1; PersistentSyntheticIdentities = 0; ExportCoverage = $script:VerifiedExportCoverage }
+      $result = [ordered]@{ Outcome = 'verified-and-cleaned'; ReceiptPath = $path; ReceiptSha256 = Get-FileSha256 $path; ExportsRequested = 1; DeletionMarkersCompleted = 1; PersistentSyntheticIdentities = 0; ExportCoverage = $script:VerifiedExportCoverage }
+      if ($RestrictedAnswerFixture) { $result.RestrictedAnswerCoverage = $script:VerifiedRestrictedAnswerCoverage }
+      [pscustomobject]$result
     }
     'RecoverUnconfirmed' {
       $boundary = Get-AcceptanceBoundary -RequireIdentity
