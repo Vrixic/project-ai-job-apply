@@ -40,6 +40,17 @@ references. The exact set and every metadata/value field must match; entry and o
 not matter. Missing or additional entries, superseded versions, changed values/context/expiry,
 duplicate references, unknown fields, and a deleted entry carrying plaintext refuse.
 
+Current integration gap: the artifact requires the database-generated `createdAt`, but the existing
+owner-facing vault list/write responses omit it. Those responses alone cannot prepare this exact
+independent snapshot. Do not infer creation time from the ID, copy it from the tested artifact,
+seed/read live SQL, or relax the exact comparison. An additive owner-list metadata field requires
+explicit owner API approval before implementation; no such API change is included here.
+
+Candidate-supplied `confirmedAt` can precede database insertion and its `createdAt` (encryption
+happens first), including for a historical answer already expired when saved. Both timestamps
+must be no later than artifact generation, and expiry must follow confirmation. Creation is not
+required to precede confirmation. Exact expected metadata/value comparison remains unchanged.
+
 The artifact remains bounded to 1 MiB, the expected snapshot to 64 KiB and 100 entries, stdin to the
 combined envelope bound, and reading to one ten-second total deadline. Success reports only
 `valid`, `activeValueCount`, `expiredValueCount`, `deletedTombstoneCount`, and `revisedValueCount`.

@@ -199,6 +199,17 @@ const restrictedCounts = {
   revisedValueCount: 1,
 };
 
+test("restricted acceptance permits confirmation before database insertion", () => {
+  const { artifact, binding } = restrictedFixture();
+  // The candidate confirms first; KMS encryption precedes the SQL insert and its created_at.
+  // This also covers a saved historical answer already expired when it was inserted.
+  for (const entry of artifact.profile.restrictedAnswers) {
+    entry.createdAt = "2026-09-11T11:30:00.123Z";
+  }
+  binding.expectedRestrictedAnswers = structuredClone(artifact.profile.restrictedAnswers);
+  assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), restrictedCounts);
+});
+
 test("restricted acceptance matches exact independent latest metadata and values, order independently", () => {
   const { artifact, binding } = restrictedFixture();
   artifact.profile.restrictedAnswers.reverse();
@@ -373,9 +384,9 @@ for (const [name, mutate] of [
     },
   ],
   [
-    "creation after confirmation",
+    "creation after export",
     (e) => {
-      e[0].createdAt = at;
+      e[0].createdAt = "2026-09-12T12:00:00.000Z";
     },
   ],
 ]) {

@@ -305,7 +305,9 @@ export function validateRestrictedAnswerExport(artifactBytes, expected) {
       if (!fields.includes(entry.fieldKey) || ids.has(entry.id) || references.has(reference))
         reject();
       if (
-        Date.parse(entry.createdAt) > Date.parse(entry.confirmedAt) ||
+        // Confirmation is candidate-supplied and can precede SQL insertion, including an
+        // already-expired historical answer. Both timestamps must precede export generation.
+        Date.parse(entry.createdAt) > Date.parse(artifact.generatedAt) ||
         Date.parse(entry.confirmedAt) > Date.parse(artifact.generatedAt) ||
         (entry.expiresAt && Date.parse(entry.expiresAt) <= Date.parse(entry.confirmedAt))
       )
