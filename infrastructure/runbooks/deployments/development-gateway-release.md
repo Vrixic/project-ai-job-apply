@@ -450,6 +450,9 @@ fresh state read must still match that result, the pinned release source, and se
 Missing, malformed, or stale recovery evidence refuses; ordinary verification still accepts only
 one advance, and Apply still requires unchanged reviewed state. Operator tests execute the real
 recovery branch in the shadowing scope and exercise the final state check on both PowerShell hosts.
+They also execute the actual activity Verify command through live/drift stages with generated
+native mocks, require the helper call in that branch, and preserve CORS's separate one-advance
+check. Those mocks are regression coverage, not deployed acceptance.
 
 Before real-data activation, complete accountable security/privacy review. Generated-synthetic
 acceptance must prove exported latest active and expired values, metadata-only tombstones, owner

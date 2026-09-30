@@ -1863,9 +1863,10 @@ if ($DocumentUploadCorsOrigin -cne "") {
     & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
     if ($LASTEXITCODE -ne 0) { throw "The exact reviewed document upload CORS plan failed to apply." }
   } else {
-    # Re-read state after all artifact checks. The exact recovery result must still match;
-    # ordinary releases retain the one-advance rule and Apply's exact-state rule is unchanged.
-    Assert-CandidateRightsActivityPostApplyState -Baseline $baseline -Metadata $metadata -State $state
+    # CORS verification retains its original single-advance boundary.
+    if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne ([long]$metadata.StateSerial + 1)) {
+      throw "Post-change verification requires exactly one state advance from the reviewed plan."
+    }
   }
   Assert-DocumentUploadCorsLive (@($baselineOrigins) + @($origin)) $bucket
   $driftSha = Invoke-UploadCorsZeroDrift $baseline $origin
@@ -1928,10 +1929,9 @@ if ($RefreshCandidateRightsActivity) {
     & terraform "-chdir=$terraformDirectory" apply -input=false -lock-timeout=5m $path *> "$path.apply.log"
     if ($LASTEXITCODE -ne 0) { throw "The exact reviewed candidate-rights activity plan failed to apply." }
   } else {
-    # Verify is the post-apply recovery path: exactly one state advance from the reviewed plan's state.
-    if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne ([long]$metadata.StateSerial + 1)) {
-      throw "Post-change verification requires exactly one state advance from the reviewed plan."
-    }
+    # The final fresh state read must match the exact history-validated recovery evidence;
+    # ordinary releases retain their one-advance rule and Apply remains unchanged.
+    Assert-CandidateRightsActivityPostApplyState -Baseline $baseline -Metadata $metadata -State $state
   }
   Assert-CandidateRightsActivityLive $artifact $plan
   $driftSha = Invoke-CandidateRightsActivityZeroDrift $baseline $artifact

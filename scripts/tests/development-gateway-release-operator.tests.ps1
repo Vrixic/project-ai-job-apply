@@ -1002,5 +1002,80 @@ Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $recoveryBaseline
 $SourceSha = "4c557c35e18647ffd106fe754dc84394b59e9370"
 $Action = "Apply"
 Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $recoveryBaseline $recoveryMetadata $recoveryState } "Final recovery weakened Apply's exact-state rule."
-Write-Output "Actual recovery branch scope and final activity state flow passed (generated native boundaries; zero cloud calls)."
+$activityBranches = @($ast.FindAll({ param($node)
+      $node -is [Management.Automation.Language.IfStatementAst] -and
+      $node.Clauses[0].Item1.Extent.Text -ceq '$RefreshCandidateRightsActivity'
+    }, $true))
+if ($activityBranches.Count -ne 1) { throw "The activity command branch must be unique." }
+$activityBody = $activityBranches[0].Clauses[0].Item2
+# Execute the real command branch, including metadata/artifact/state/live/drift ordering. Omit
+# only its terminal process exit so that this test process can inspect the result and refusals.
+$script:activityCommand = [scriptblock]::Create((@($activityBody.Statements | Where-Object {
+        $_ -isnot [Management.Automation.Language.ExitStatementAst]
+      } | ForEach-Object { $_.Extent.Text }) -join "`n"))
+$Action = "Verify"
+$DocumentScanActivation = "None"; $DocumentUploadCorsOrigin = ""
+$RefreshDocumentProcessor = $false; $RefreshDocumentParser = $false; $EnableDocumentTailoringInvoke = $false
+$ReceiptPath = ""; $DocumentReceiptPath = ""
+$ExpectedAccountId = "111122223333"; $Region = "us-east-2"
+$script:commandState = $recoveryState
+$script:commandBaseline = [pscustomobject]@{
+  MetadataSchemaVersion = "7"; RestrictedExportRecoveryState = $recoveryState
+  Plan = [pscustomobject]@{ variables = [pscustomobject]@{} }
+}
+$script:activityCalls = [Collections.Generic.List[string]]::new()
+function Read-Baseline { $script:activityCalls.Add("baseline"); return $script:commandBaseline }
+function Get-VerifiedWorkflowActivityArtifact { $script:activityCalls.Add("artifact"); return [pscustomobject]@{ artifactSha256 = "a" * 64 } }
+function Test-Path { param([string]$LiteralPath, [string]$PathType); return $LiteralPath -ceq $script:expectedActivityMetadataPath }
+function Get-FileSha256 {
+  param([string]$Path)
+  if ($Path -cne $script:PlanPath) { throw "The activity command resolved a different release plan." }
+  return $ReviewedPlanSha256
+}
+function Get-Content {
+  param([string]$LiteralPath, [switch]$Raw)
+  if ($LiteralPath -cne $script:expectedActivityMetadataPath -or -not $Raw) { throw "Wrong activity metadata path." }
+  return $recoveryMetadata | ConvertTo-Json -Compress
+}
+function Get-CandidateRightsActivityExpectedMetadata { param($Baseline, $Artifact, $Path, $Hash); return $recoveryMetadata }
+function Assert-ReviewedPlanMetadata { param($Metadata, $Expected); $script:activityCalls.Add("metadata") }
+function Get-StateIdentity { $script:activityCalls.Add("fresh-state"); return $script:commandState }
+function Read-Plan { param($Path); return [pscustomobject]@{ variables = [pscustomobject]@{} } }
+function Assert-CandidateRightsActivityVariables { param($Before, $After, $Artifact, [switch]$EnableRestrictedAnswerExport); $script:activityCalls.Add("variables") }
+function Assert-ExactCandidateRightsActivityPlan { param($Plan, $Artifact, [switch]$EnableRestrictedAnswerExport); $script:activityCalls.Add("plan") }
+function Assert-CandidateRightsActivityLive { param($Artifact, $Plan); $script:activityCalls.Add("live") }
+function Invoke-CandidateRightsActivityZeroDrift { param($Baseline, $Artifact); $script:activityCalls.Add("zero-drift"); return "b" * 64 }
+function terraform { throw "The generated verification test must never dispatch Terraform apply or plan." }
+$result = & $script:activityCommand | ConvertFrom-Json
+if ($result.Outcome -cne "verified" -or $result.LiveState -cne "matches" -or $result.Drift -isnot [bool] -or $result.Drift -or
+    ($script:activityCalls -join "|") -cne "baseline|artifact|metadata|fresh-state|variables|plan|live|zero-drift") {
+  throw "The actual activity command did not reach live and zero-drift checks after exact recovery."
+}
+$script:commandBaseline.RestrictedExportRecoveryState = $null
+$script:activityCalls.Clear()
+Assert-Rejected { & $script:activityCommand } "The actual activity command accepted missing recovery evidence."
+if ($script:activityCalls.Contains("live") -or $script:activityCalls.Contains("zero-drift")) {
+  throw "The activity command continued after missing history validation."
+}
+$script:commandBaseline.RestrictedExportRecoveryState = $recoveryState
+$script:commandState = [pscustomobject]@{ Serial = 399; Lineage = $recoveryLineage }
+$script:activityCalls.Clear()
+Assert-Rejected { & $script:activityCommand } "The actual activity command accepted a state advance after history validation."
+if ($script:activityCalls.Contains("live") -or $script:activityCalls.Contains("zero-drift")) {
+  throw "The activity command continued after stale history validation."
+}
+$script:commandBaseline.RestrictedExportRecoveryState = $null
+$script:commandState = [pscustomobject]@{ Serial = 396; Lineage = $recoveryLineage }
+$ordinary = & $script:activityCommand | ConvertFrom-Json
+if ($ordinary.Outcome -cne "verified") { throw "Ordinary one-advance activity verification regressed." }
+$corsBranches = @($ast.FindAll({ param($node)
+      $node -is [Management.Automation.Language.IfStatementAst] -and
+      $node.Clauses[0].Item1.Extent.Text -ceq '$DocumentUploadCorsOrigin -cne ""'
+    }, $true))
+if ($corsBranches.Count -ne 1 -or $corsBranches[0].Extent.Text.Contains("Assert-CandidateRightsActivityPostApplyState") -or
+    -not $corsBranches[0].Extent.Text.Contains('[long]$state.Serial -ne ([long]$metadata.StateSerial + 1)') -or
+    -not $activityBody.Extent.Text.Contains('Assert-CandidateRightsActivityPostApplyState -Baseline $baseline -Metadata $metadata -State $state')) {
+  throw "The exact recovery helper must belong only to the activity command, never CORS."
+}
+Write-Output "Actual recovery scope, final state flow, and full activity Verify command passed (generated native boundaries; zero cloud calls)."
 Write-Output "Development gateway release operator, capture-input reconstruction, and search-boundary tests passed."
