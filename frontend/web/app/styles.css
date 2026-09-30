@@ -999,30 +999,52 @@ aside {
   }
 }
 
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-topbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 24px;
+  border-bottom: 1px solid #cedbd3;
+  background: #f8fbf9;
+}
+
+.app-topbar-brand {
+  margin: 0;
+  color: #14633e;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.app-topbar-user {
+  color: #14221a;
+  font-weight: 650;
+}
+
 .dashboard {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  min-height: 100vh;
+  flex: 1;
   align-items: start;
 }
 
 .dashboard-sidebar {
   position: sticky;
-  top: 0;
+  top: 64px;
   display: flex;
   flex-direction: column;
   gap: 24px;
-  height: 100vh;
+  height: calc(100vh - 64px);
   padding: 24px 16px;
   border-right: 1px solid #cedbd3;
   background: #f8fbf9;
-}
-
-.dashboard-brand {
-  margin: 0 0 0 8px;
-  color: #14633e;
-  font-weight: 800;
-  letter-spacing: -0.02em;
 }
 
 .dashboard-nav {
@@ -1054,20 +1076,6 @@ aside {
   width: min(920px, calc(100% - 64px));
   margin: 0 auto;
   padding: 32px 0 64px;
-}
-
-.dashboard-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e0e8e3;
-}
-
-.dashboard-topbar a {
-  color: #14633e;
-  font-weight: 700;
 }
 
 .dashboard-subtabs {

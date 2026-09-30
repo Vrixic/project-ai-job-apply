@@ -1060,84 +1060,90 @@ export function FoundationForm({
   ];
 
   return (
-    <div className="dashboard">
-      <aside className="dashboard-sidebar">
-        <p className="dashboard-brand">{productBrand.name}</p>
-        <nav aria-label="Sections" className="dashboard-nav">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="dashboard-nav-item"
-              aria-current={activeSection === item.id ? "page" : undefined}
-              onClick={() => setActiveSection(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
-      <div className="dashboard-content">
-        <header className="dashboard-topbar">
-          <span>Signed in{displayName ? ` as ${displayName}` : ""}</span>
-          <a href="/auth/logout">Log out</a>
-        </header>
+    <div className="app-shell">
+      <header className="app-topbar">
+        <p className="app-topbar-brand">{productBrand.name}</p>
+        {displayName && <span className="app-topbar-user">{displayName}</span>}
+      </header>
+      <div className="dashboard">
+        <aside className="dashboard-sidebar">
+          <nav aria-label="Sections" className="dashboard-nav">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="dashboard-nav-item"
+                aria-current={activeSection === item.id ? "page" : undefined}
+                onClick={() => setActiveSection(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </aside>
+        <div className="dashboard-content">
+          {statusOutput}
 
-        {statusOutput}
+          <section hidden={activeSection !== "jobs"} aria-labelledby="dashboard-jobs-heading">
+            <h1 id="dashboard-jobs-heading">Jobs</h1>
+            <div className="dashboard-subtabs" role="tablist" aria-label="Jobs view">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={jobsView === "search"}
+                className="dashboard-subtab"
+                onClick={() => setJobsView("search")}
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={jobsView === "saved"}
+                className="dashboard-subtab"
+                onClick={() => setJobsView("saved")}
+              >
+                Saved
+              </button>
+            </div>
+            <div hidden={jobsView !== "search"}>
+              <JobSearchForm authenticated />
+            </div>
+            <div hidden={jobsView !== "saved"}>
+              <SavedJobsPanel authenticated />
+            </div>
+          </section>
 
-        <section hidden={activeSection !== "jobs"} aria-labelledby="dashboard-jobs-heading">
-          <h1 id="dashboard-jobs-heading">Jobs</h1>
-          <div className="dashboard-subtabs" role="tablist" aria-label="Jobs view">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={jobsView === "search"}
-              className="dashboard-subtab"
-              onClick={() => setJobsView("search")}
-            >
-              Search
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={jobsView === "saved"}
-              className="dashboard-subtab"
-              onClick={() => setJobsView("saved")}
-            >
-              Saved
-            </button>
-          </div>
-          <div hidden={jobsView !== "search"}>
-            <JobSearchForm authenticated />
-          </div>
-          <div hidden={jobsView !== "saved"}>
-            <SavedJobsPanel authenticated />
-          </div>
-        </section>
+          <section hidden={activeSection !== "resume"} aria-labelledby="dashboard-resume-heading">
+            <h1 id="dashboard-resume-heading">Resume</h1>
+            <ResumeUploadForm
+              authenticated
+              maxStoredResumes={maxStoredResumes}
+              onDocumentParsed={handleDocumentParsed}
+              onDocumentDeleted={handleDocumentParsed}
+            />
+          </section>
 
-        <section hidden={activeSection !== "resume"} aria-labelledby="dashboard-resume-heading">
-          <h1 id="dashboard-resume-heading">Resume</h1>
-          <ResumeUploadForm
-            authenticated
-            maxStoredResumes={maxStoredResumes}
-            onDocumentParsed={handleDocumentParsed}
-            onDocumentDeleted={handleDocumentParsed}
-          />
-        </section>
+          <section hidden={activeSection !== "profile"} aria-labelledby="dashboard-profile-heading">
+            <h1 id="dashboard-profile-heading">Profile</h1>
+            {preferenceForm}
+            <ProfileFactsForm authenticated refreshVersion={profileRefreshVersion} />
+            {restrictedAnswerVaultUiEnabled && <RestrictedAnswersForm authenticated />}
+          </section>
 
-        <section hidden={activeSection !== "profile"} aria-labelledby="dashboard-profile-heading">
-          <h1 id="dashboard-profile-heading">Profile</h1>
-          {preferenceForm}
-          <ProfileFactsForm authenticated refreshVersion={profileRefreshVersion} />
-          {restrictedAnswerVaultUiEnabled && <RestrictedAnswersForm authenticated />}
-        </section>
-
-        <section hidden={activeSection !== "settings"} aria-labelledby="dashboard-settings-heading">
-          <h1 id="dashboard-settings-heading">Settings</h1>
-          <EntitlementStatus onSummary={handleEntitlementSummary} authenticated />
-          <CandidateRightsPanel authenticated />
-          {conformancePanel}
-        </section>
+          <section
+            hidden={activeSection !== "settings"}
+            aria-labelledby="dashboard-settings-heading"
+          >
+            <h1 id="dashboard-settings-heading">Settings</h1>
+            <EntitlementStatus onSummary={handleEntitlementSummary} authenticated />
+            <CandidateRightsPanel authenticated />
+            {conformancePanel}
+            <a className="button-link" href="/auth/logout">
+              Log out
+            </a>
+          </section>
+        </div>
       </div>
     </div>
   );
