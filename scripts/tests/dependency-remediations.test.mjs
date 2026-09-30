@@ -8,6 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -22,6 +23,27 @@ import {
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const clone = (value) => structuredClone(value);
+test("pins the affected OpenTelemetry gRPC dependency to the maintainer security patch", () => {
+  const metadata = JSON.parse(readFileSync(path.join(repository, "package.json"), "utf8"));
+  assert.equal(metadata.pnpm.overrides["@grpc/grpc-js@>=1.14.0 <1.14.5"], "1.14.5");
+  const lock = readFileSync(path.join(repository, "pnpm-lock.yaml"), "utf8");
+  assert.doesNotMatch(lock, /@grpc\/grpc-js@1\.14\.4|['"]?@grpc\/grpc-js['"]?: 1\.14\.4/u);
+  for (const workspace of ["packages/observability", "backend/gateway", "backend/workflows"]) {
+    const workspaceRequire = createRequire(path.join(repository, workspace, "package.json"));
+    // Inspect installed dependency boundaries without requiring workspace dist builds.
+    const observabilityRequire =
+      workspace === "packages/observability"
+        ? workspaceRequire
+        : createRequire(
+            workspaceRequire.resolve("./node_modules/@ai-job-apply/observability/package.json"),
+          );
+    const sdkRequire = createRequire(observabilityRequire.resolve("@opentelemetry/sdk-node"));
+    const exporterRequire = createRequire(
+      sdkRequire.resolve("@opentelemetry/otlp-grpc-exporter-base"),
+    );
+    assert.equal(exporterRequire("@grpc/grpc-js/package.json").version, "1.14.5");
+  }
+});
 function graph(root, installedPath = path.join(root, "node_modules/image-size")) {
   return [
     {
