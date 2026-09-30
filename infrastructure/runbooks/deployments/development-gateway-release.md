@@ -319,7 +319,7 @@ refuses a shape ADR-023 does not allow (the rule without the mapping, or any tri
 
 **Boundary.** ADR-023 accepts this only for generated-synthetic development processing. Nothing in the upload path
 checks content, so the operating rule is that only generated-synthetic resumes are uploaded while a trigger is on; real
-resumes stay blocked until the ADR-023 gates are met (see the [activation design](../../security/d3-023-document-processing-activation.md)).
+resumes stay blocked until the ADR-023 gates are met (see the [activation design](../../../docs/security/d3-023-document-processing-activation.md)).
 
 ## Allowing an upload origin (D3-024)
 
@@ -418,6 +418,23 @@ all prior statements and policy attributes remain unchanged. Only the activity g
 The saved metadata binds activation mode. The owner reviews the exact saved plan and metadata
 hashes before Apply. Apply/Verify read back the immutable chain, exact activity environment, and
 full rights policy, then require zero drift. Unexpected provider drift still refuses.
+
+After a successful export activation, Terraform may report an `inline_policy` refresh on the
+activity role because the separately managed rights policy has already gained the export grant.
+The verifier accepts only the exact source-evaluated activity role and dedicated same-account key,
+with all four prerequisites enabled, the same two inline-policy names, and exactly one added
+purpose-bound Decrypt statement. Existing statements, the other inline policy, role attributes,
+and sensitivity metadata must remain unchanged. Unknown values, replacement paths, duplicate
+records, and unrelated drift still refuse.
+
+If apply completed and live-chain checks passed but this final refresh check failed, do not apply
+again. Retain the original source, artifact receipt, baseline, saved plan, metadata, and hashes.
+After the verifier-only repair merges, run `-Action Verify -RefreshCandidateRightsActivity
+-EnableRestrictedAnswerExport` with those original inputs. The existing ancestor-source allowlist
+admits only its named verifier/runbook/delivery-record changes; it does not relabel or republish
+artifacts. Verification still requires the exact permitted state advance and a fresh zero-change
+plan. Local inspection of the retained plan is diagnostic evidence, not a substitute for the full
+standalone live verification.
 
 Before real-data activation, complete accountable security/privacy review. Generated-synthetic
 acceptance must prove exported latest active and expired values, metadata-only tombstones, owner

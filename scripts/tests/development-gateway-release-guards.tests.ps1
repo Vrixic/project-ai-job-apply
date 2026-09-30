@@ -1774,4 +1774,124 @@ $badRecovery.resource_drift = @($badRecovery.resource_drift) + @(
 )
 Assert-Rejected { Assert-AcceptedGatewayProviderDrift -Plan $badRecovery } "Unrelated drift beside the recovery normalization was accepted."
 
+# The independently managed rights policy changes the activity role's computed inline-policy snapshot.
+function New-RestrictedExportRoleDriftPlan {
+  $roleAddress = "module.platform.aws_iam_role.profile_readiness_activity[0]"
+  $roleName = "ai-job-apply-development-profile-readiness-activity"
+  $keyArn = "arn:aws:kms:us-east-2:${account}:key/12345678-1234-1234-1234-123456789abc"
+  $beforePolicy = [pscustomobject]@{ Version = "2012-10-17"; Statement = @(
+      [pscustomobject]@{ Sid = "Existing"; Effect = "Allow"; Action = "s3:GetObject"; Resource = "arn:aws:s3:::synthetic/*" }
+    ) }
+  $afterPolicy = Copy-Fixture $beforePolicy
+  # Terraform's JSON encoder sorts object keys; order must not change the grant's meaning.
+  $afterPolicy.Statement = @($afterPolicy.Statement) + @([pscustomobject][ordered]@{
+      Action = "kms:Decrypt"; Condition = [pscustomobject]@{ StringEquals = [pscustomobject]@{
+          "kms:EncryptionContext:purpose" = "restricted-answer-vault-v1"
+        } }; Effect = "Allow"; Resource = $keyArn; Sid = "DecryptRestrictedAnswersForCandidateExport"
+    })
+  $before = [pscustomobject]@{
+    arn = "arn:aws:iam::${account}:role/$roleName"; id = $roleName; name = $roleName; tags = [pscustomobject]@{}
+    inline_policy = @(
+      [pscustomobject]@{ name = "candidate-rights-activity-runtime"; policy = ($beforePolicy | ConvertTo-Json -Depth 20 -Compress) },
+      [pscustomobject]@{ name = "profile-readiness-activity-runtime"; policy = '{"Version":"2012-10-17","Statement":[]}' }
+    )
+  }
+  $after = Copy-Fixture $before
+  $after.inline_policy[0].policy = $afterPolicy | ConvertTo-Json -Depth 20 -Compress
+  return [pscustomobject]@{
+    variables = [pscustomobject]@{
+      restricted_answer_export_enabled = [pscustomobject]@{ value = "true" }
+      restricted_answer_vault_enabled = [pscustomobject]@{ value = "true" }
+      candidate_rights_enabled = [pscustomobject]@{ value = "true" }
+      deploy_profile_readiness_durable = [pscustomobject]@{ value = "true" }
+    }
+    planned_values = [pscustomobject]@{ root_module = [pscustomobject]@{ resources = @(
+          [pscustomobject]@{ address = "module.platform.aws_kms_key.platform"; values = [pscustomobject]@{ arn = $keyArn } },
+          [pscustomobject]@{ address = $roleAddress; values = (Copy-Fixture $after) },
+          [pscustomobject]@{ address = "module.platform.aws_kms_key.restricted_answer_vault[0]"; values = [pscustomobject]@{ arn = $keyArn } },
+          [pscustomobject]@{ address = "module.platform.aws_iam_role_policy.candidate_rights_activity[0]"; values = [pscustomobject]@{
+              name = "candidate-rights-activity-runtime"; role = $roleName; policy = $after.inline_policy[0].policy
+            } }
+        ) } }
+    resource_drift = @((New-GatewayProviderDriftRecord -Address $roleAddress -Type "aws_iam_role" -Before $before -After $after))
+  }
+}
+
+$exportRefresh = New-RestrictedExportRoleDriftPlan
+$null = Assert-AcceptedGatewayProviderDrift -Plan $exportRefresh; $passed++
+
+foreach ($flag in @("restricted_answer_export_enabled", "restricted_answer_vault_enabled", "candidate_rights_enabled", "deploy_profile_readiness_durable")) {
+  foreach ($value in @($false, "false", "TRUE", 1, @("true"))) {
+    $badExport = New-RestrictedExportRoleDriftPlan
+    $badExport.variables.PSObject.Properties[$flag].Value.value = $value
+    Assert-Rejected { Assert-AcceptedGatewayProviderDrift $badExport } "Export refresh accepted disabled or malformed $flag."
+  }
+}
+foreach ($mutation in @(
+    { param($p) $p.resource_drift = @($p.resource_drift[0], $p.resource_drift[0]) },
+    { param($p) $p.resource_drift[0].type = "aws_iam_role_policy" },
+    { param($p) $p.resource_drift[0].mode = "data" },
+    { param($p) $p.resource_drift[0].address = "module.platform.aws_iam_role.other[0]" },
+    { param($p) $p.resource_drift[0].change.actions = @("delete", "create") },
+    { param($p) $p.resource_drift[0].change | Add-Member NoteProperty replace_paths @(, @("name")) },
+    { param($p) $p.resource_drift[0].change.after_unknown = [pscustomobject]@{ name = $true } },
+    { param($p) $p.resource_drift[0].change.after_sensitive = [pscustomobject]@{ name = $true } },
+    { param($p) $p.resource_drift[0].change.before_sensitive = [pscustomobject]@{ name = $true } },
+    { param($p) $p.resource_drift[0].change.after.tags = [pscustomobject]@{ Extra = "unreviewed" } },
+    { param($p) $p.resource_drift[0].change.after.name = "other" },
+    { param($p) $p.resource_drift[0].change.after.arn = "arn:aws:iam::${account}:role/other" },
+    { param($p) $p.resource_drift[0].change.after.inline_policy[1].policy = '{"Version":"2012-10-17","Statement":[{}]}' },
+    { param($p) $p.resource_drift[0].change.after.inline_policy[1].name = "candidate-rights-activity-runtime" },
+    { param($p) $p.resource_drift[0].change.after.inline_policy = @($p.resource_drift[0].change.after.inline_policy[0]) },
+    { param($p) $p.resource_drift[0].change.after.inline_policy[0] | Add-Member NoteProperty extra "x" },
+    { param($p) $p.planned_values.root_module.resources[2].values.arn = "arn:aws:kms:us-east-2:999900001111:key/12345678-1234-1234-1234-123456789abc" }
+  )) {
+  $badExport = New-RestrictedExportRoleDriftPlan
+  & $mutation $badExport
+  # Even a source-evaluated role matching the mutated snapshot cannot legitimize an unsafe delta.
+  $badExport.planned_values.root_module.resources[1].values = Copy-Fixture $badExport.resource_drift[0].change.after
+  Assert-Rejected { Assert-AcceptedGatewayProviderDrift $badExport } "An unsafe export-role snapshot was accepted."
+}
+foreach ($mutation in @(
+    { param($p) $p.Statement[1].Action = "kms:*" },
+    { param($p) $p.Statement[1].Action = @("kms:Decrypt") },
+    { param($p) $p.Statement[1].Effect = "Deny" },
+    { param($p) $p.Statement[1].Resource = "*" },
+    { param($p) $p.Statement[1].Resource = @($p.Statement[1].Resource) },
+    { param($p) $p.Statement[1].Sid = "Other" },
+    { param($p) $p.Statement[1].Condition.StringEquals.'kms:EncryptionContext:purpose' = "other" },
+    { param($p) $p.Statement[1].Condition.StringEquals.'kms:EncryptionContext:purpose' = @("restricted-answer-vault-v1") },
+    { param($p) $p.Statement[1].Condition | Add-Member NoteProperty StringLike ([pscustomobject]@{}) },
+    { param($p) $p.Statement[1] | Add-Member NoteProperty NotAction "kms:Encrypt" },
+    { param($p) $p.Statement[0].Action = "s3:*" },
+    { param($p) $p.Statement = @($p.Statement[1]) },
+    { param($p) $p.Statement = @($p.Statement) + @($p.Statement[1]) },
+    { param($p) $p.Version = "other" },
+    { param($p) $p | Add-Member NoteProperty Id "unreviewed" }
+  )) {
+  $badExport = New-RestrictedExportRoleDriftPlan
+  $policy = $badExport.resource_drift[0].change.after.inline_policy[0].policy | ConvertFrom-Json
+  & $mutation $policy
+  $badExport.resource_drift[0].change.after.inline_policy[0].policy = $policy | ConvertTo-Json -Depth 30 -Compress
+  $badExport.planned_values.root_module.resources[1].values = Copy-Fixture $badExport.resource_drift[0].change.after
+  $badExport.planned_values.root_module.resources[3].values.policy = $badExport.resource_drift[0].change.after.inline_policy[0].policy
+  Assert-Rejected { Assert-AcceptedGatewayProviderDrift $badExport } "An unsafe export IAM delta was accepted despite matching planned values."
+}
+foreach ($index in @(1, 2, 3)) {
+  $badExport = New-RestrictedExportRoleDriftPlan
+  $badExport.planned_values.root_module.resources = @($badExport.planned_values.root_module.resources | Where-Object {
+      $_.address -cne $badExport.planned_values.root_module.resources[$index].address
+    })
+  Assert-Rejected { Assert-AcceptedGatewayProviderDrift $badExport } "Export refresh was accepted without a required planned resource."
+}
+$badExport = New-RestrictedExportRoleDriftPlan
+$badExport.resource_drift[0].change.before.inline_policy[0].policy = $badExport.resource_drift[0].change.after.inline_policy[0].policy
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift $badExport } "An already-existing export grant was accepted as an addition."
+$badExport = New-RestrictedExportRoleDriftPlan
+$badExport.planned_values.root_module.resources[3].values.policy = "{}"
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift $badExport } "A nonmatching source-evaluated rights policy was accepted."
+$badExport = New-RestrictedExportRoleDriftPlan
+$badExport.resource_drift += New-GatewayProviderDriftRecord "module.platform.aws_iam_role.other[0]" "aws_iam_role" ([pscustomobject]@{ a = 1 }) ([pscustomobject]@{ a = 2 })
+Assert-Rejected { Assert-AcceptedGatewayProviderDrift $badExport } "Unrelated drift alongside the export refresh was accepted."
+
 Write-Output "Development gateway release guard tests passed: $passed"
