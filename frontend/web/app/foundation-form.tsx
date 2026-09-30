@@ -26,6 +26,7 @@ import {
   type WorkMode,
 } from "./preference-form-state";
 import { ProfileFactsForm } from "./profile-facts-form";
+import { RestrictedAnswersForm } from "./restricted-answers-form";
 import { ResumeUploadForm } from "./resume-upload-form";
 import { SavedJobsPanel } from "./saved-jobs-panel";
 
@@ -168,6 +169,7 @@ export function FoundationForm({
   authenticated,
   crossUserProbeArmed,
   displayName,
+  restrictedAnswerVaultUiEnabled = false,
   workloadConformanceEnabled,
 }: {
   authConfigured: boolean;
@@ -176,6 +178,7 @@ export function FoundationForm({
   authenticated: boolean;
   crossUserProbeArmed: boolean;
   displayName?: string;
+  restrictedAnswerVaultUiEnabled?: boolean;
   workloadConformanceEnabled: boolean;
 }) {
   const [profileRefreshVersion, setProfileRefreshVersion] = useState(0);
@@ -1020,6 +1023,7 @@ export function FoundationForm({
             onDocumentDeleted={handleDocumentParsed}
           />
           <ProfileFactsForm authenticated refreshVersion={profileRefreshVersion} />
+          {restrictedAnswerVaultUiEnabled && <RestrictedAnswersForm authenticated />}
         </>
       )}
       <JobSearchForm authenticated={authenticated} />

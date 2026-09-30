@@ -248,3 +248,16 @@ submits: automated submission belongs to the browser extension, which is blocked
   requesting an ungranted scope must not break sign-in.
 - `NEXT_PUBLIC_APPLICATIONS_UI=enabled` (build time) shows the workspace on an active job for a
   signed-in candidate. The platform still refuses callers whose token lacks the permissions.
+
+## D3 Restricted Answer Vault settings
+
+`RestrictedAnswersForm` and `/api/platform/restricted-answers/**` provide candidate-managed,
+metadata-only access to the Profile-owned vault. The browser never receives a stored plaintext
+value. It can save a candidate-entered replacement with optimistic versioning and retry-safe
+idempotency, or delete one exact field/context entry. The BFF narrows the platform contract to the
+nine established restricted `never_infer` fields and fixed candidate-settings provenance; consent
+artifacts and technical challenges are absent by construction.
+
+`NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI=enabled` is a build-time public flag. It is unset by
+default and must stay unset in hosted targets until D3-012 approves real-candidate restricted data
+use and a separately reviewed deployment enables the panel.

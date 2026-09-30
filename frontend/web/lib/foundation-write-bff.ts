@@ -1,5 +1,6 @@
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import { RequestBodyTooLargeError, readBoundedRequestBody } from "./bounded-request-body";
+import { isCanonicalRestrictedAnswerContext } from "./restricted-answer-fields";
 
 const MAXIMUM_FOUNDATION_WRITE_BODY_BYTES = 64 * 1024;
 const FOUNDATION_WRITE_BODY_TIMEOUT_MILLISECONDS = 2_000;
@@ -10,6 +11,7 @@ export type FoundationWriteSchemaName =
   | "CreateResumeUploadRequest"
   | "CreateProfileFactRequest"
   | "UpdateProfileFactRequest"
+  | "SaveRestrictedAnswerRequest"
   | "CreateCandidateDataExportRequest"
   | "CreateAccountDeletionRequest"
   | "ConfirmAccountDeletionRequest";
@@ -20,6 +22,7 @@ const validators = new Map<FoundationWriteSchemaName, ReturnType<typeof compileC
     ["CreateResumeUploadRequest", compileComponentValidator("CreateResumeUploadRequest")],
     ["CreateProfileFactRequest", compileComponentValidator("CreateProfileFactRequest")],
     ["UpdateProfileFactRequest", compileComponentValidator("UpdateProfileFactRequest")],
+    ["SaveRestrictedAnswerRequest", compileComponentValidator("SaveRestrictedAnswerRequest")],
     [
       "CreateCandidateDataExportRequest",
       compileComponentValidator("CreateCandidateDataExportRequest"),
@@ -65,8 +68,18 @@ export async function readFoundationWriteRequest(
   request: Request,
   schemaName: FoundationWriteSchemaName,
   timeoutMilliseconds = FOUNDATION_WRITE_BODY_TIMEOUT_MILLISECONDS,
+  queryPolicy: "none" | "restricted-answer-context" = "none",
 ): Promise<{ body: string; idempotencyKey: string } | { failure: Response }> {
-  if (new URL(request.url).search.length > 0) {
+  const url = new URL(request.url);
+  const queryEntries = [...url.searchParams.entries()];
+  const queryIsValid =
+    queryPolicy === "none"
+      ? queryEntries.length === 0
+      : queryEntries.length === 0 ||
+        (queryEntries.length === 1 &&
+          queryEntries[0]?.[0] === "context" &&
+          isCanonicalRestrictedAnswerContext(queryEntries[0]?.[1] ?? ""));
+  if (!queryIsValid) {
     return rejectBeforeRead(request, 400, "invalid_request", "Invalid request");
   }
   if (!JSON_CONTENT_TYPE_PATTERN.test(request.headers.get("content-type") ?? "")) {

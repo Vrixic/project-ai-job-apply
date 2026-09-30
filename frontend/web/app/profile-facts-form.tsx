@@ -653,7 +653,7 @@ export function ProfileFactsForm({
         <p className="field-help">
           Direct-entered profile facts are stored as confidential. Restricted sponsorship,
           work-authorization, demographic, disability, veteran, and legal answers are not collected
-          here; their dedicated restricted-data flow is not yet available.
+          here; manage them in the dedicated Restricted Answer Vault when it is enabled.
         </p>
         <label>
           Fact name

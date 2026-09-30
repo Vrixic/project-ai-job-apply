@@ -15,6 +15,8 @@ export type FoundationResponseSchemaName =
   | "CreateResumeUploadResponse"
   | "ProfileFactCollection"
   | "ProfileFact"
+  | "RestrictedAnswerCollection"
+  | "RestrictedAnswer"
   | "CandidateDataExport"
   | "CandidateDataExportAccess"
   | "AccountDeletionRequest";
@@ -33,6 +35,8 @@ const validators = new Map<
   ["CreateResumeUploadResponse", compileComponentValidator("CreateResumeUploadResponse")],
   ["ProfileFactCollection", compileComponentValidator("ProfileFactCollection")],
   ["ProfileFact", compileComponentValidator("ProfileFact")],
+  ["RestrictedAnswerCollection", compileComponentValidator("RestrictedAnswerCollection")],
+  ["RestrictedAnswer", compileComponentValidator("RestrictedAnswer")],
   ["CandidateDataExport", compileComponentValidator("CandidateDataExport")],
   ["CandidateDataExportAccess", compileComponentValidator("CandidateDataExportAccess")],
   ["AccountDeletionRequest", compileComponentValidator("AccountDeletionRequest")],

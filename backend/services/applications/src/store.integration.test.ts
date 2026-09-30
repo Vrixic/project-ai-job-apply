@@ -41,6 +41,13 @@ describeWithDatabase("PostgresApplicationStore", () => {
   beforeAll(async () => {
     const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
     const env = { ...process.env, DATABASE_URL: databaseUrl };
+    // Delete guards require Profile's privacy authorization even when this suite runs first.
+    const profile = await execFileAsync(
+      process.execPath,
+      [fileURLToPath(new URL("../../profile/dist/src/migrate.js", import.meta.url))],
+      { env },
+    );
+    expect(profile.stdout.trim()).toContain("applied and verified.");
     const first = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const replay = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const expected = "Applications migrations through 0003_manual_submission applied and verified.";

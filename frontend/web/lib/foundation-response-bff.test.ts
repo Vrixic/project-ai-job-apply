@@ -187,6 +187,15 @@ const accountDeletionRequest = {
   requestedAt: "2026-08-25T12:00:00.000Z",
   updatedAt: "2026-08-25T12:00:00.000Z",
 };
+const restrictedAnswer = {
+  id: "019b4e12-7ea3-7c36-9357-aea35ab542d3",
+  fieldKey: "authorization.us_authorized",
+  valueType: "boolean",
+  sensitivity: "restricted",
+  state: "active",
+  version: 1,
+  confirmedAt: "2026-09-29T12:00:00.000Z",
+};
 
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
   EntitlementSummary: freeEntitlement,
@@ -199,6 +208,8 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
   CreateResumeUploadResponse: resumeUploadResponse,
   ProfileFactCollection: factCollection,
   ProfileFact: profileFact,
+  RestrictedAnswerCollection: { answers: [restrictedAnswer] },
+  RestrictedAnswer: restrictedAnswer,
   CandidateDataExport: candidateDataExport,
   CandidateDataExportAccess: candidateDataExportAccess,
   AccountDeletionRequest: accountDeletionRequest,

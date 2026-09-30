@@ -223,8 +223,10 @@ describe("ResumeUploadForm upload ownership", () => {
       syntheticPdf("revision-fenced.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
     );
     await act(async () => submit(form));
-    await flushAsyncWork();
-    expect(container.textContent).toContain("Resume uploaded to quarantine");
+    await vi.waitFor(async () => {
+      await flushAsyncWork();
+      expect(container.textContent).toContain("Resume uploaded to quarantine");
+    });
 
     await act(async () => {
       initialList.resolve(settledJsonResponse(emptyResumes));
