@@ -34,6 +34,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-029: Use one explicit public-job addition command in the extension](029-one-step-public-job-addition.md)
 - [ADR-030: AI gateway and grounded generation](030-ai-gateway-and-grounded-generation.md)
 - [ADR-031: Deterministic resume tailoring in the Documents runtime](031-deterministic-resume-tailoring-in-documents-runtime.md)
+- [ADR-035: Restricted answer values in candidate export](035-restricted-answer-values-in-candidate-export.md) (generated-synthetic engineering accepted; accountable review pending)
 
 ## Proposed delivery decisions
 

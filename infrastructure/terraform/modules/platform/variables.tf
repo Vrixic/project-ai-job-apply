@@ -1264,7 +1264,18 @@ variable "restricted_answer_vault_enabled" {
 
   validation {
     condition     = !var.restricted_answer_vault_enabled || var.deploy_gateway_lambda
-    error_message = "The restricted-answer vault key requires the gateway Lambda, the only caller granted Encrypt/Decrypt on it."
+    error_message = "The restricted-answer vault key requires the gateway Lambda for the candidate's save/delete boundary."
+  }
+}
+
+variable "restricted_answer_export_enabled" {
+  description = "Allow the private candidate-rights activity to decrypt latest non-deleted restricted answers into the candidate's encrypted export only."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.restricted_answer_export_enabled || (var.restricted_answer_vault_enabled && var.candidate_rights_enabled && var.deploy_profile_readiness_durable)
+    error_message = "Restricted-answer export requires the dedicated vault key and active candidate-rights durable runtime."
   }
 }
 

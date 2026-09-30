@@ -5,6 +5,7 @@ import {
   loadCandidateRightsPolicy,
   PostgresProfileStore,
   PostgresResumeProposalWriter,
+  PostgresRestrictedAnswerExportReader,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
 import type { Handler } from "aws-lambda";
@@ -24,6 +25,7 @@ import {
 } from "./candidate-rights-durable.js";
 import { AwsCandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
 import { resolveCandidateRightsAuth0Secret } from "./candidate-rights-secret.js";
+import { restrictedAnswerExportCipherFromEnvironment } from "./restricted-answer-export-cipher.js";
 import {
   type ProfileReadinessActivityInputV1,
   type ProfileReadinessActivityResultV1,
@@ -274,6 +276,7 @@ async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRights
     throw new Error("CandidateRightsRuntimeConfigurationIncomplete");
   }
   const policy = loadCandidateRightsPolicy(process.env);
+  const restrictedAnswerCipher = restrictedAnswerExportCipherFromEnvironment(process.env);
   if (policy.subprocessorInventory.length !== 0) {
     throw new Error("CandidateRightsSubprocessorAdapterUnavailable");
   }
@@ -287,6 +290,14 @@ async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRights
     artifactStore: new AwsCandidateExportArtifactStore(exportBucket, exportKmsKeyArn),
     documentObjectStore: new AwsCandidateDocumentObjectStore(documentBucket),
     resumeProposals: new PostgresResumeProposalWriter(),
+    ...(restrictedAnswerCipher
+      ? {
+          restrictedAnswerExport: new PostgresRestrictedAnswerExportReader(
+            (await getRuntimeDatabase()).client,
+            restrictedAnswerCipher,
+          ),
+        }
+      : {}),
     identityProvider: new Auth0CandidateIdentityProvider({ issuer, ...auth0 }),
     subprocessors: [],
     recoveryLedger: new AwsCandidateDeletionRecoveryLedger(recoveryBucket, exportKmsKeyArn),

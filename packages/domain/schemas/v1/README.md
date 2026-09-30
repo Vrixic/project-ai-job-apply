@@ -23,5 +23,7 @@ keys/versions, raw resume bytes, provider credentials, and unrestricted audit me
 The optional `profile.restrictedAnswers` section accepts the latest-version metadata projection
 from Profile migration `0010_restricted_answer_vault`, including active entries and deletion
 tombstones. It does not accept plaintext values, ciphertext, KMS identifiers, or provenance
-references. Older exports may omit the section. This compatibility support does not implement
-saved-value export or authorize vault decryption in the candidate-rights worker.
+references in the metadata-only SQL projection. Older exports may omit the section or saved values.
+Separately activated candidate-rights assembly may add the bounded string `value` to active
+entries, including expired answers; deleted entries cannot contain it. Superseded values are
+excluded. See [ADR-035](../../../../docs/adr/035-restricted-answer-values-in-candidate-export.md).

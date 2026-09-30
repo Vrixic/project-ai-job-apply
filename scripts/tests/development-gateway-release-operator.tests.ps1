@@ -121,6 +121,9 @@ foreach ($otherOperator in @("operate-development-document-migration.ps1", "oper
 # reviewed plan, and verifies the whole live chain and zero drift.
 foreach ($activityMarker in @(
     'RefreshCandidateRightsActivity', 'WorkflowReceiptPath', 'ReviewedWorkflowReceiptSha256',
+    'EnableRestrictedAnswerExport', 'TF_VAR_restricted_answer_export_enabled',
+    'Restricted-answer export activation requires its own candidate-rights activity refresh.',
+    '-EnableRestrictedAnswerExport:$EnableRestrictedAnswerExport', 'RestrictedAnswerExportEnabled',
     'development-candidate-rights-activity-guards.ps1',
     'A candidate-rights activity refresh is planned, applied, and verified on its own, from a retained baseline, and never with a release.',
     'A candidate-rights activity refresh requires a current schema-7 baseline.',
@@ -571,6 +574,7 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
     $restoreFlag,
     "outbox_starts_paused",
     "restricted_answer_vault_enabled",
+    "restricted_answer_export_enabled",
     "applications_attempt_recovery_enabled"
   )
   $declaredBooleanNames = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "infrastructure/terraform/environments/development") -File -Filter "*.tf" | ForEach-Object {
@@ -658,6 +662,7 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
   # default-off/empty inputs. The fresh baseline must contain the complete current inventory.
   $d3Defaults = [ordered]@{
     restricted_answer_vault_enabled = $false
+    restricted_answer_export_enabled = $false
     applications_attempt_recovery_enabled = $false
     applications_attempt_recovery_artifact_s3_key = ""
     applications_attempt_recovery_artifact_s3_object_version = ""

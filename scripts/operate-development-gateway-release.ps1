@@ -42,6 +42,7 @@ param(
   # into the durable workflow, from a verified core-workflow publication receipt, with Plan, Apply, and Verify. Runs on its
   # own from a current schema-7 baseline and is never combined with a release, an activation, or a CORS change.
   [switch]$RefreshCandidateRightsActivity,
+  [switch]$EnableRestrictedAnswerExport,
   [string]$WorkflowReceiptPath = "",
   [ValidatePattern("^(?:|[a-f0-9]{64})$")][string]$ReviewedWorkflowReceiptSha256 = "",
   # D3-001/D3-005: activate exactly one default-off platform capability from a current baseline.
@@ -84,6 +85,8 @@ Usage:
   Candidate-rights activity refresh (D3-027): -Action Plan|Apply|Verify -RefreshCandidateRightsActivity `
     -WorkflowReceiptPath VERIFIED_WORKFLOW_RECEIPT -ReviewedWorkflowReceiptSha256 RECEIPT_SHA256, from a current schema-7
     baseline, never with a release, an activation, or a CORS change; Apply and Verify also take -PlanPath and -ReviewedPlanSha256.
+    Add -EnableRestrictedAnswerExport only for the separately reviewed D3-030 activation: it also changes the export
+    flag from false to true, adds the exact decrypt-only rights grant, and binds the activity to the dedicated vault key.
   D3 platform activation, exactly one component and one reviewed plan at a time:
     -Action Plan|Apply|Verify -D3PlatformActivation RestrictedAnswerVault
     -Action Plan|Apply|Verify -D3PlatformActivation ApplicationsAttemptRecovery `
@@ -122,6 +125,9 @@ if ($ExpectedAccountId -notmatch '^[0-9]{12}$' -or [string]::IsNullOrWhiteSpace(
 
 if ($RefreshCandidateRightsActivity -and $Action -cnotin @("Plan", "Apply", "Verify")) {
   throw "The candidate-rights activity refresh is planned, applied, and verified only."
+}
+if ($EnableRestrictedAnswerExport -and -not $RefreshCandidateRightsActivity) {
+  throw "Restricted-answer export activation requires its own candidate-rights activity refresh."
 }
 if (-not $RefreshCandidateRightsActivity -and (-not [string]::IsNullOrWhiteSpace($WorkflowReceiptPath) -or $ReviewedWorkflowReceiptSha256 -cne "")) {
   throw "A workflow publication receipt is accepted only by the candidate-rights activity refresh."
@@ -532,6 +538,7 @@ function Get-GatewayCaptureSeedInputs {
   # Reconstruct only their declared defaults into the fresh plan. Never mutate or relabel the seed.
   $d3Defaults = [ordered]@{
     restricted_answer_vault_enabled = $false
+    restricted_answer_export_enabled = $false
     applications_attempt_recovery_enabled = $false
     applications_attempt_recovery_artifact_s3_key = ""
     applications_attempt_recovery_artifact_s3_object_version = ""
@@ -580,6 +587,7 @@ function Assert-GatewayCapturedSeedInputs {
       "candidate_deletion_restore_role_enabled",
       "outbox_starts_paused",
       "restricted_answer_vault_enabled",
+      "restricted_answer_export_enabled",
       "applications_attempt_recovery_enabled"
     )
   foreach ($name in $DeclaredVariableNames) {
@@ -1038,6 +1046,7 @@ function Set-CandidateRightsActivityVariables {
   $env:TF_VAR_profile_readiness_activity_artifact_s3_object_version = [string]$Artifact.versionId
   $env:TF_VAR_profile_readiness_activity_artifact_sha256 = [string]$Artifact.artifactSha256
   $env:TF_VAR_profile_readiness_activity_artifact_base64sha256 = [string]$Artifact.objectBase64Sha256
+  if ($EnableRestrictedAnswerExport) { $env:TF_VAR_restricted_answer_export_enabled = "true" }
 }
 function Get-LiveWorkflowLambda {
   param([Parameter(Mandatory)][string]$Name)
@@ -1059,11 +1068,25 @@ function Get-LiveWorkflowLambda {
 # version, the terminal Lambda, the outbox starter, and the terminal rule name the new durable version, and the durable role
 # may invoke exactly the new activity version.
 function Assert-CandidateRightsActivityLive {
-  param([Parameter(Mandatory)][object]$Artifact)
+  param([Parameter(Mandatory)][object]$Artifact, [Parameter(Mandatory)][object]$Plan)
   $activity = Get-LiveWorkflowLambda "profile-readiness-activity"
   $terminal = Get-LiveWorkflowLambda "profile-readiness-terminal"
   $durable = Get-LiveWorkflowLambda "profile-readiness-durable"
   $outbox = Get-LiveWorkflowLambda "outbox-starter"
+  if ($EnableRestrictedAnswerExport) {
+    $planned = Get-TerraformStateResourceMap $Plan.planned_values.root_module
+    $keyArn = [string]$planned["module.platform.aws_kms_key.restricted_answer_vault[0]"].arn
+    if ([string]$activity.Configuration.Environment.Variables.RESTRICTED_ANSWER_EXPORT_ENABLED -cne "enabled" -or
+        [string]$activity.Configuration.Environment.Variables.RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN -cne $keyArn) {
+      throw "The live rights activity lacks its exact restricted-answer export environment."
+    }
+    $rightsPolicy = Invoke-AwsJson @("iam", "get-role-policy", "--role-name", "ai-job-apply-development-profile-readiness-activity",
+      "--policy-name", "candidate-rights-activity-runtime", "--output", "json") "Candidate export rights policy readback"
+    $expectedPolicy = [string]$planned["module.platform.aws_iam_role_policy.candidate_rights_activity[0]"].policy | ConvertFrom-Json
+    if ((ConvertTo-GatewayCanonicalJson $rightsPolicy.PolicyDocument) -cne (ConvertTo-GatewayCanonicalJson $expectedPolicy)) {
+      throw "The live rights policy differs from the exact reviewed source-evaluated grant."
+    }
+  }
   foreach ($live in @($activity, $terminal)) {
     if ([string]$live.Configuration.CodeSha256 -cne [string]$Artifact.objectBase64Sha256 -or
         [string]$live.Configuration.Environment.Variables.RELEASE_SHA -cne [string]$Artifact.artifactSha256) {
@@ -1104,12 +1127,12 @@ function Invoke-CandidateRightsActivityZeroDrift {
   if ($exitCode -ne 0) { throw "The post-change Terraform plan is not zero drift. Inspect the ignored verification log." }
   $plan = Read-Plan $path
   $null = Assert-RetainedGatewayBaselinePlan $plan (Get-DeclaredTerraformVariableNames)
-  $null = Assert-CandidateRightsActivityVariables $Baseline.Plan.variables $plan.variables $Artifact
+  $null = Assert-CandidateRightsActivityVariables $Baseline.Plan.variables $plan.variables $Artifact -EnableRestrictedAnswerExport:$EnableRestrictedAnswerExport
   return Get-FileSha256 $path
 }
 function Get-CandidateRightsActivityExpectedMetadata {
   param([Parameter(Mandatory)][object]$Baseline, [Parameter(Mandatory)][object]$Artifact, [Parameter(Mandatory)][string]$PlanFile, [Parameter(Mandatory)][string]$PlanSha)
-  return @{
+  $metadata = @{
     SchemaVersion = "1"; Kind = "development-candidate-rights-activity-plan"; Environment = "development"
     AccountId = $ExpectedAccountId; Region = $Region; StateBucket = $StateBucket; StateKey = "platform.tfstate"
     StateLineage = [string]$Baseline.Metadata.StateLineage; StateSerial = [long]$Baseline.Metadata.StateSerial
@@ -1118,6 +1141,8 @@ function Get-CandidateRightsActivityExpectedMetadata {
     BaselineMetadataPath = $Baseline.MetadataPath; BaselineMetadataSha256 = $ReviewedBaselineMetadataSha256
     PlanPath = $PlanFile; PlanSha256 = $PlanSha
   }
+  if ($EnableRestrictedAnswerExport) { $metadata["RestrictedAnswerExportEnabled"] = $true }
+  return $metadata
 }
 
 # ---- D3-001/D3-005: independent platform capability activation ---------------------------------------------
@@ -1832,8 +1857,8 @@ if ($RefreshCandidateRightsActivity) {
     } finally { Restore-TerraformVariables $saved }
     if ($exitCode -ne 2) { if (Test-Path $path) { Remove-Item $path -Force }; throw "The candidate-rights activity refresh did not produce an exact reviewable change." }
     $plan = Read-Plan $path
-    $null = Assert-CandidateRightsActivityVariables $baseline.Plan.variables $plan.variables $artifact
-    $changes = @(Assert-ExactCandidateRightsActivityPlan $plan $artifact)
+    $null = Assert-CandidateRightsActivityVariables $baseline.Plan.variables $plan.variables $artifact -EnableRestrictedAnswerExport:$EnableRestrictedAnswerExport
+    $changes = @(Assert-ExactCandidateRightsActivityPlan $plan $artifact -EnableRestrictedAnswerExport:$EnableRestrictedAnswerExport)
     $sha = Get-FileSha256 $path
     $metadata = [ordered]@{}
     foreach ($entry in (Get-CandidateRightsActivityExpectedMetadata $baseline $artifact $path $sha).GetEnumerator() | Sort-Object Name) { $metadata[$entry.Name] = $entry.Value }
@@ -1855,8 +1880,8 @@ if ($RefreshCandidateRightsActivity) {
   Assert-ReviewedPlanMetadata $metadata (Get-CandidateRightsActivityExpectedMetadata $baseline $artifact $path $ReviewedPlanSha256)
   $state = Get-StateIdentity
   $plan = Read-Plan $path
-  $null = Assert-CandidateRightsActivityVariables $baseline.Plan.variables $plan.variables $artifact
-  $null = Assert-ExactCandidateRightsActivityPlan $plan $artifact
+  $null = Assert-CandidateRightsActivityVariables $baseline.Plan.variables $plan.variables $artifact -EnableRestrictedAnswerExport:$EnableRestrictedAnswerExport
+  $null = Assert-ExactCandidateRightsActivityPlan $plan $artifact -EnableRestrictedAnswerExport:$EnableRestrictedAnswerExport
 
   if ($Action -ceq "Apply") {
     if ([string]$state.Lineage -cne [string]$metadata.StateLineage -or [long]$state.Serial -ne [long]$metadata.StateSerial) {
@@ -1870,7 +1895,7 @@ if ($RefreshCandidateRightsActivity) {
       throw "Post-change verification requires exactly one state advance from the reviewed plan."
     }
   }
-  Assert-CandidateRightsActivityLive $artifact
+  Assert-CandidateRightsActivityLive $artifact $plan
   $driftSha = Invoke-CandidateRightsActivityZeroDrift $baseline $artifact
   [pscustomobject]@{ Outcome = $(if ($Action -ceq "Apply") { "applied-and-verified" } else { "verified" }); ActivityArtifactSha256 = [string]$artifact.artifactSha256; SourceSha = $SourceSha; LiveState = "matches"; Drift = $false; VerificationPlanSha256 = $driftSha } | ConvertTo-Json
   exit 0

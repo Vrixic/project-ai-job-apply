@@ -113,6 +113,21 @@ resource "aws_iam_role_policy" "profile_readiness_activity" {
 data "aws_iam_policy_document" "candidate_rights_activity" {
   count = var.candidate_rights_enabled ? 1 : 0
 
+  dynamic "statement" {
+    for_each = var.restricted_answer_export_enabled ? [true] : []
+    content {
+      sid       = "DecryptRestrictedAnswersForCandidateExport"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = [aws_kms_key.restricted_answer_vault[0].arn]
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:purpose"
+        values   = ["restricted-answer-vault-v1"]
+      }
+    }
+  }
+
   statement {
     sid       = "ReadCandidateRightsIdentitySecret"
     effect    = "Allow"
@@ -224,6 +239,10 @@ resource "aws_lambda_function" "profile_readiness_activity" {
         CANDIDATE_RIGHTS_OWNER_INVENTORY             = var.candidate_rights_owner_inventory
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
         CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN        = local.candidate_rights_maintenance_rule_arn
+      } : {},
+      var.restricted_answer_export_enabled ? {
+        RESTRICTED_ANSWER_EXPORT_ENABLED    = "enabled"
+        RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN = aws_kms_key.restricted_answer_vault[0].arn
       } : {}
     )
   }

@@ -83,6 +83,19 @@ Accountable reviewers record findings, conditions, and treatment decisions in th
 [Phase 0 review record](phase-0-accountable-review-record.md). This table must not be edited to
 simulate reviewer acceptance.
 
+## D3 restricted-answer export delta
+
+| Threat | Source control | Residual / release gate |
+|---|---|---|
+| Export becomes a general secret-read API | Profile reader and final schema restrict values to the nine established restricted/never-infer fields; no ordinary Gateway plaintext read route; credentials, consent artifacts, and unknown keys refuse before decryption | Gateway write currently validates key syntax rather than taxonomy eligibility. Existing unexpected entries need an explicit disposition; they are not silently omitted. D3-012 review remains required |
+| A foreign or stale reference decrypts the wrong answer | Owner, entry, field, context, latest active version, configured key ARN, and KMS encryption context are bound; correction/deletion during decryption is rechecked | Exports are point-in-time reads. Hosted owner isolation and correction/deletion races remain deployed acceptance work |
+| Deletion reveals a retained historical answer | Deleted entries cannot contain values in the strict schema and are never sent to the decrypt reader; superseded versions are refused | Retained ciphertext and account-level erasure/backup aging still require candidate-rights and privacy acceptance |
+| Provider failures leak answers into durable history | KMS adapter replaces provider messages with fixed codes; the activity returns fixed status/code only; plaintext is transient and only serialized into the encrypted rights artifact | Generated tests and mock KMS are not live log/history evidence or independent approval |
+| Worker compromise gains broader vault access | Separate default-off gate, Decrypt-only exact-key/purpose-bound IAM, no Encrypt/GenerateDataKey grant, strict guarded activation and full live policy/environment readback | IAM cannot enforce database-derived owner intent by itself. Compromise of the authorized private worker remains restricted-data risk for accountable security review |
+
+See [ADR-035](../adr/035-restricted-answer-values-in-candidate-export.md). No deployment or
+real-data approval is implied by this engineering delta.
+
 ## Risk ownership and reassessment
 
 - The product owner accepts or rejects residual candidate/product risk.

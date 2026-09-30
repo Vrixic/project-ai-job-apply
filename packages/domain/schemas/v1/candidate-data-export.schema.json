@@ -844,10 +844,37 @@
         "valueType": { "enum": ["string", "text", "boolean", "date", "decimal", "enum"] },
         "sensitivity": { "enum": ["confidential", "restricted"] },
         "state": { "enum": ["active", "deleted"] },
+        "value": { "type": "string", "minLength": 1, "maxLength": 3900 },
         "confirmedAt": { "$ref": "#/$defs/dateTime" },
         "expiresAt": { "$ref": "#/$defs/dateTime" },
         "createdAt": { "$ref": "#/$defs/dateTime" }
       },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "deleted" } }, "required": ["state"] },
+          "then": { "properties": { "value": false } }
+        },
+        {
+          "if": { "properties": { "value": {} }, "required": ["value"] },
+          "then": {
+            "properties": {
+              "fieldKey": {
+                "enum": [
+                  "authorization.us_authorized",
+                  "authorization.sponsorship_required",
+                  "authorization.export_control",
+                  "disclosure.non_compete",
+                  "disclosure.conflict_of_interest",
+                  "demographic.gender",
+                  "demographic.race_ethnicity",
+                  "demographic.veteran",
+                  "demographic.disability"
+                ]
+              }
+            }
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "profileFact": {

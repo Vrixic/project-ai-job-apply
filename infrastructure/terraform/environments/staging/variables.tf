@@ -499,6 +499,12 @@ variable "restricted_answer_vault_enabled" {
   default     = false
 }
 
+variable "restricted_answer_export_enabled" {
+  description = "Enable decrypt-only restricted-answer access for the candidate-rights export activity."
+  type        = bool
+  default     = false
+}
+
 variable "applications_attempt_recovery_enabled" {
   description = "Enable the isolated Applications stale-attempt recovery Lambda and schedule."
   type        = bool

@@ -216,6 +216,20 @@ The implementation must exclude credentials and restricted secret material, prev
 selection, define the portable schema, expire and delete the export object, audit access without
 copying exported values, and fail closed when ownership or provider reconciliation is incomplete.
 
+### Restricted-answer export delta (ADR-035)
+
+The default-off `restricted_answer_export_enabled` gate permits the private rights activity to
+read only exact owner/version references through Profile's restricted-answer reader, decrypt with
+the dedicated vault key and exact vault encryption context, and include the latest non-deleted
+candidate-supplied value in the encrypted, short-lived export artifact. Expired answers remain
+portable; superseded values and deleted-entry values are excluded. The SQL export function remains
+metadata-only. No new Gateway read route, general event, durable payload, log, or analytics value
+is introduced. Detected correction/deletion during decryption refuses assembly before an artifact
+write. Provider errors are fixed-code and candidate-value-free. The new role grant is Decrypt-only,
+exact-key, and purpose-bound; ordinary settings retain metadata-only reads. See
+[ADR-035](../adr/035-restricted-answer-values-in-candidate-export.md). Implementation, local tests,
+guarded deployment, hosted acceptance, and accountable review remain distinct evidence levels.
+
 ### Confirmed account deletion
 
 ```mermaid
