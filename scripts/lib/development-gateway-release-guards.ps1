@@ -553,7 +553,8 @@ function Assert-GatewayBucketCorsRefreshDrift {
   if ($null -eq $rootModule) { throw "The bucket CORS refresh needs the exact source-evaluated planned root module." }
   $planned = Get-TerraformStateResourceMap $rootModule
   $configuration = $planned["module.platform.aws_s3_bucket_cors_configuration.candidate_documents[0]"]
-  $plannedRules = if ($null -eq $configuration) { @() } else { @($configuration.cors_rule) }
+  # Retain an array on Windows PowerShell too; an if-expression otherwise unwraps one rule.
+  $plannedRules = @(if ($null -ne $configuration) { $configuration.cors_rule })
   if ($plannedRules.Count -ne 1 -or (@($plannedRules[0].allowed_origins) -join "|") -cne ($afterOrigins -join "|")) {
     throw "The candidate-document bucket CORS refresh differs from the source-evaluated CORS configuration."
   }
@@ -720,6 +721,101 @@ function Assert-RestrictedAnswerVaultKeyProviderDrift {
   }
 }
 
+# The separate candidate-rights policy adds one export grant, while the role resource retains
+# its old computed inline_policy snapshot until another apply commits the refreshed state.
+# Accept only that exact source-bound addition; this does not authorize an IAM mutation.
+function Assert-RestrictedExportRoleInlinePolicyRefreshDrift {
+  param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][object]$Record)
+  $address = "module.platform.aws_iam_role.profile_readiness_activity[0]"
+  $roleName = "ai-job-apply-development-profile-readiness-activity"
+  $policyName = "candidate-rights-activity-runtime"
+  $change = $Record.change
+  if ([string]$Record.address -cne $address -or [string]$Record.type -cne "aws_iam_role" -or
+      [string]$Record.mode -cne "managed" -or (@($change.actions) -join ",") -cne "update" -or
+      $null -eq $change.before -or $null -eq $change.after) {
+    throw "The restricted-export role refresh has an unsafe shape."
+  }
+  Assert-NoTerraformReplacementPaths $change
+  foreach ($tree in @("after_unknown", "before_sensitive", "after_sensitive")) {
+    if (@(Get-GatewayUnknownTrueLeafPaths -Value (Get-GatewayOptionalProperty $change $tree)).Count -ne 0) {
+      throw "The restricted-export role refresh must be known and nonsensitive."
+    }
+  }
+  if ((ConvertTo-DeploymentCanonicalValue (Get-GatewayOptionalProperty $change "before_sensitive")) -cne
+      (ConvertTo-DeploymentCanonicalValue (Get-GatewayOptionalProperty $change "after_sensitive"))) {
+    throw "The restricted-export role refresh changed sensitivity."
+  }
+  foreach ($flag in @("restricted_answer_export_enabled", "restricted_answer_vault_enabled", "candidate_rights_enabled", "deploy_profile_readiness_durable")) {
+    $value = $Plan.variables.PSObject.Properties[$flag].Value.PSObject.Properties["value"].Value
+    if (-not (ConvertTo-ExactBoolean $value $flag)) { throw "The restricted-export role refresh requires enabled prerequisites." }
+  }
+  $before = $change.before | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  $after = $change.after | ConvertTo-Json -Depth 50 | ConvertFrom-Json
+  if ($after.arn -isnot [string] -or $after.arn -cnotmatch "^arn:aws:iam::([0-9]{12}):role/$roleName$" -or
+      $after.name -isnot [string] -or $after.id -isnot [string] -or
+      $after.name -cne $roleName -or $after.id -cne $roleName) {
+    throw "The restricted-export refresh is not the exact activity role."
+  }
+  $accountId = [string]$Matches[1]
+  $planned = Get-TerraformStateResourceMap $Plan.planned_values.root_module
+  $key = $planned["module.platform.aws_kms_key.restricted_answer_vault[0]"]
+  if ($null -eq $key -or $key.arn -isnot [string] -or
+      $key.arn -cnotmatch "^arn:aws:kms:us-east-2:$accountId`:key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$") {
+    throw "The restricted-export role refresh needs the exact same-account dedicated key."
+  }
+  $plannedRole = $planned[$address]
+  if ($null -eq $plannedRole -or
+      (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne (ConvertTo-DeploymentCanonicalValue $plannedRole -SortArrays)) {
+    throw "The restricted-export role refresh differs from the source-evaluated role."
+  }
+  $beforeInline = @($before.inline_policy); $afterInline = @($after.inline_policy)
+  $names = "candidate-rights-activity-runtime|profile-readiness-activity-runtime"
+  if ($beforeInline.Count -ne 2 -or $afterInline.Count -ne 2 -or
+      (@($beforeInline.name | Sort-Object) -join "|") -cne $names -or
+      (@($afterInline.name | Sort-Object) -join "|") -cne $names) {
+    throw "The restricted-export role refresh changed the inline-policy inventory."
+  }
+  foreach ($left in $beforeInline) {
+    $right = @($afterInline | Where-Object { [string]$_.name -ceq [string]$left.name })[0]
+    if ($left.name -isnot [string] -or $right.name -isnot [string]) {
+      throw "The restricted-export role refresh has malformed policy names."
+    }
+    if ([string]$left.name -cne $policyName) {
+      if ((ConvertTo-DeploymentCanonicalValue $left) -cne (ConvertTo-DeploymentCanonicalValue $right)) {
+        throw "The restricted-export role refresh changed the other inline policy."
+      }
+      continue
+    }
+    if ((@($left.PSObject.Properties.Name | Sort-Object) -join "|") -cne "name|policy" -or
+        (@($right.PSObject.Properties.Name | Sort-Object) -join "|") -cne "name|policy" -or
+        $left.policy -isnot [string] -or $right.policy -isnot [string]) {
+      throw "The restricted-export role refresh has malformed inline-policy values."
+    }
+    $expectedPolicy = $planned["module.platform.aws_iam_role_policy.candidate_rights_activity[0]"]
+    if ($null -eq $expectedPolicy -or $expectedPolicy.name -isnot [string] -or $expectedPolicy.role -isnot [string] -or
+        $expectedPolicy.name -cne $policyName -or $expectedPolicy.role -cne $roleName -or $expectedPolicy.policy -isnot [string] -or
+        $expectedPolicy.policy -cne $right.policy) {
+      throw "The restricted-export role refresh differs from the exact source-evaluated rights policy."
+    }
+    $beforePolicy = $left.policy | ConvertFrom-Json; $afterPolicy = $right.policy | ConvertFrom-Json
+    foreach ($policy in @($beforePolicy, $afterPolicy)) {
+      if ((@($policy.PSObject.Properties.Name | Sort-Object) -join "|") -cne "Statement|Version" -or
+          $policy.Version -isnot [string] -or $policy.Version -cne "2012-10-17" -or $policy.Statement -isnot [array]) {
+        throw "The restricted-export role refresh changed the IAM policy envelope."
+      }
+    }
+    $expectedStatement = [pscustomobject]@{
+      Sid = "DecryptRestrictedAnswersForCandidateExport"; Effect = "Allow"; Action = "kms:Decrypt"; Resource = $key.arn
+      Condition = [pscustomobject]@{ StringEquals = [pscustomobject]@{ "kms:EncryptionContext:purpose" = "restricted-answer-vault-v1" } }
+    }
+    $null = Assert-SingleAddedIamStatement $beforePolicy $afterPolicy $expectedStatement
+  }
+  $before.inline_policy = @(); $after.inline_policy = @()
+  if ((ConvertTo-DeploymentCanonicalValue $before -SortArrays) -cne (ConvertTo-DeploymentCanonicalValue $after -SortArrays)) {
+    throw "The restricted-export role refresh changed unrelated role attributes."
+  }
+}
+
 function Assert-AcceptedGatewayProviderDrift {
   param([Parameter(Mandatory)][object]$Plan)
 
@@ -734,6 +830,13 @@ function Assert-AcceptedGatewayProviderDrift {
   $vaultKeyAddress = "module.platform.aws_kms_key.restricted_answer_vault[0]"
   $bucketAddress = "module.platform.aws_s3_bucket.candidate_documents[0]"
   $handled = @()
+  $exportRoleAddress = "module.platform.aws_iam_role.profile_readiness_activity[0]"
+  $exportRoleRecords = @($drift | Where-Object { [string]$_.address -ceq $exportRoleAddress })
+  if ($exportRoleRecords.Count -gt 1) { throw "The restricted-export role refresh was reported more than once." }
+  if ($exportRoleRecords.Count -eq 1) {
+    Assert-RestrictedExportRoleInlinePolicyRefreshDrift -Plan $Plan -Record $exportRoleRecords[0]
+    $handled += $exportRoleAddress
+  }
   $recoveryAddresses = @(
     "module.platform.aws_cloudwatch_event_rule.applications_attempt_recovery[0]",
     "module.platform.aws_cloudwatch_metric_alarm.applications_attempt_recovery_dead_letter[0]",
