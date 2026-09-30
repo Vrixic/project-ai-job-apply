@@ -356,6 +356,50 @@ $exportPlan = New-ExportActivationPlan
 $accepted = @(Assert-ExactCandidateRightsActivityPlan $exportPlan $artifact -EnableRestrictedAnswerExport)
 if ($accepted.Count -ne ($script:CandidateRightsActivityChangeSet.Count + 1)) { throw "Export activation did not retain its complete change set." }; $passed++
 Assert-Rejected { Assert-ExactCandidateRightsActivityPlan $exportPlan $artifact } "Ordinary refresh accepted export activation."
+# Terraform renders IAM object keys alphabetically. Object order has no policy meaning,
+# but scalar types, exact keys, values, and the existing statement sequence must stay strict.
+foreach ($order in @(
+  @("Action", "Condition", "Effect", "Resource", "Sid"),
+  @("Resource", "Sid", "Effect", "Condition", "Action"),
+  @("Condition", "Action", "Sid", "Resource", "Effect")
+)) {
+  $reordered = New-ExportActivationPlan
+  $grant = Get-ChangeOf $reordered "aws_iam_role_policy.candidate_rights_activity"
+  $policy = $grant.change.after.policy | ConvertFrom-Json
+  $statement = [ordered]@{}
+  foreach ($name in $order) { $statement[$name] = $policy.Statement[1].$name }
+  $policy.Statement[1] = [pscustomobject]$statement
+  $grant.change.after.policy = $policy | ConvertTo-Json -Depth 30 -Compress
+  $reordered.planned_values.root_module.resources[2].values.policy = $grant.change.after.policy
+  $accepted = @(Assert-ExactCandidateRightsActivityPlan $reordered $artifact -EnableRestrictedAnswerExport)
+  if ($accepted.Count -ne ($script:CandidateRightsActivityChangeSet.Count + 1)) { throw "Reordered IAM keys changed the complete activation set." }
+  $passed++
+}
+foreach ($case in @(
+  @{ Name = "extra statement key"; Mutate = { param($s) $s | Add-Member NoteProperty Principal "*" } },
+  @{ Name = "missing statement key"; Mutate = { param($s) $s.PSObject.Properties.Remove("Resource") } },
+  @{ Name = "singleton action array"; Mutate = { param($s) $s.Action = @("kms:Decrypt") } },
+  @{ Name = "singleton resource array"; Mutate = { param($s) $s.Resource = @($vaultArn) } },
+  @{ Name = "singleton effect array"; Mutate = { param($s) $s.Effect = @("Allow") } },
+  @{ Name = "singleton sid array"; Mutate = { param($s) $s.Sid = @("DecryptRestrictedAnswersForCandidateExport") } },
+  @{ Name = "singleton condition array"; Mutate = { param($s) $s.Condition = @($s.Condition) } },
+  @{ Name = "singleton condition object array"; Mutate = { param($s) $s.Condition.StringEquals = @($s.Condition.StringEquals) } },
+  @{ Name = "extra condition operator"; Mutate = { param($s) $s.Condition | Add-Member NoteProperty StringLike ([pscustomobject]@{ "kms:EncryptionContext:purpose" = "*" }) } },
+  @{ Name = "extra context key"; Mutate = { param($s) $s.Condition.StringEquals | Add-Member NoteProperty "kms:EncryptionContext:other" "x" } },
+  @{ Name = "singleton purpose array"; Mutate = { param($s) $s.Condition.StringEquals."kms:EncryptionContext:purpose" = @("restricted-answer-vault-v1") } },
+  @{ Name = "missing purpose"; Mutate = { param($s) $s.Condition.StringEquals.PSObject.Properties.Remove("kms:EncryptionContext:purpose") } },
+  @{ Name = "null purpose"; Mutate = { param($s) $s.Condition.StringEquals."kms:EncryptionContext:purpose" = $null } },
+  @{ Name = "case-changed action"; Mutate = { param($s) $s.Action = "KMS:Decrypt" } },
+  @{ Name = "missing condition"; Mutate = { param($s) $s.Condition = $null } }
+)) {
+  $bad = New-ExportActivationPlan
+  $grant = Get-ChangeOf $bad "aws_iam_role_policy.candidate_rights_activity"
+  $policy = $grant.change.after.policy | ConvertFrom-Json
+  & $case.Mutate $policy.Statement[1]
+  $grant.change.after.policy = $policy | ConvertTo-Json -Depth 30 -Compress
+  $bad.planned_values.root_module.resources[2].values.policy = $grant.change.after.policy
+  Assert-Rejected { Assert-ExactCandidateRightsActivityPlan $bad $artifact -EnableRestrictedAnswerExport } "Export activation accepted $($case.Name)."
+}
 foreach ($case in @(
   @{ Name = "disabled flag"; Mutate = { param($p) $p.variables.restricted_answer_export_enabled.value = $false } },
   @{ Name = "wrong runtime key"; Mutate = { param($p) (Get-ChangeOf $p "aws_lambda_function.profile_readiness_activity").change.after.environment[0].variables.RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN = "other" } },
