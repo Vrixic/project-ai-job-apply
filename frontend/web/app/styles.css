@@ -327,6 +327,11 @@ button:focus-visible {
   min-height: auto;
 }
 
+input[type="file"] {
+  display: flex;
+  align-items: center;
+}
+
 button,
 .button-link {
   border: 0;
