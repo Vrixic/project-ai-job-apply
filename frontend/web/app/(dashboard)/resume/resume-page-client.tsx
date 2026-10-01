@@ -9,8 +9,7 @@ export function ResumePageClient({ authenticated }: { authenticated: boolean }) 
     view.status === "ready" ? view.summary.limits?.maxStoredResumes : undefined;
 
   return (
-    <section aria-labelledby="dashboard-resume-heading">
-      <h1 id="dashboard-resume-heading">Resume</h1>
+    <section aria-label="Resume">
       <ResumeUploadForm authenticated={authenticated} maxStoredResumes={maxStoredResumes} />
     </section>
   );

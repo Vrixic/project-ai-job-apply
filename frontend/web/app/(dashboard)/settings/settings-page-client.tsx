@@ -208,9 +208,7 @@ export function SettingsPageClient({
   }
 
   return (
-    <section aria-labelledby="dashboard-settings-heading">
-      <h1 id="dashboard-settings-heading">Settings</h1>
-
+    <section aria-label="Settings">
       {message && <output aria-live="polite">{message}</output>}
       {workloadMetrics && (
         <section className="result" aria-live="polite">
