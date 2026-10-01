@@ -1,7 +1,7 @@
 "use client";
 
 import type { CanonicalJobSummary, JobSearchPage } from "@ai-job-apply/api-contracts";
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { JobDetailPanel } from "./job-detail-panel";
 import { JobReportControl } from "./job-report-control";
 import {
@@ -84,6 +84,7 @@ export function JobSearchForm({
   savedPanel?: ReactNode;
 }) {
   const [jobsView, setJobsView] = useState<"search" | "saved">("search");
+  const filterFormId = useId();
   const [fields, setFields] = useState(initialFields);
   const [submittedFields, setSubmittedFields] = useState<JobSearchFields>();
   const [items, setItems] = useState<CanonicalJobSummary[]>([]);
@@ -394,7 +395,7 @@ export function JobSearchForm({
     );
   }
 
-  const filterFields = (
+  const primaryFilters = (
     <>
       <label className="job-filter">
         <span>Keywords</span>
@@ -449,9 +450,15 @@ export function JobSearchForm({
           disabled={!authenticated || searching}
         />
       </label>
+    </>
+  );
+
+  const sortAndSubmit = (formId?: string) => (
+    <>
       <label className="job-filter job-filter-narrow">
         <span>Sort</span>
         <select
+          form={formId}
           value={fields.sort}
           onChange={(event) => update("sort", event.target.value as JobSearchFields["sort"])}
           disabled={!authenticated || searching}
@@ -460,7 +467,12 @@ export function JobSearchForm({
           <option value="freshness">Freshness</option>
         </select>
       </label>
-      <button className="job-filter-submit" type="submit" disabled={!authenticated || searching}>
+      <button
+        form={formId}
+        className="job-filter-submit"
+        type="submit"
+        disabled={!authenticated || searching}
+      >
         {searching && !cursor ? "Searching…" : "Search"}
       </button>
     </>
@@ -514,34 +526,40 @@ export function JobSearchForm({
     return (
       <>
         <div className="jobs-toolbar">
-          <div className="dashboard-subtabs" role="tablist" aria-label="Jobs view">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={jobsView === "search"}
-              className="dashboard-subtab"
-              onClick={() => setJobsView("search")}
-            >
-              Search
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={jobsView === "saved"}
-              className="dashboard-subtab"
-              onClick={() => setJobsView("saved")}
-            >
-              Saved
-            </button>
-          </div>
           <form
+            id={filterFormId}
             className="job-filter-bar"
             onSubmit={submit}
             aria-label="Job filters"
             hidden={jobsView !== "search"}
           >
-            {filterFields}
+            {primaryFilters}
           </form>
+          <div className="jobs-toolbar-row2">
+            <div className="dashboard-subtabs" role="tablist" aria-label="Jobs view">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={jobsView === "search"}
+                className="dashboard-subtab"
+                onClick={() => setJobsView("search")}
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={jobsView === "saved"}
+                className="dashboard-subtab"
+                onClick={() => setJobsView("saved")}
+              >
+                Saved
+              </button>
+            </div>
+            <div className="job-filter-secondary" hidden={jobsView !== "search"}>
+              {sortAndSubmit(filterFormId)}
+            </div>
+          </div>
         </div>
         <div hidden={jobsView !== "search"}>{results}</div>
         <div hidden={jobsView !== "saved"}>{savedPanel}</div>
@@ -552,7 +570,8 @@ export function JobSearchForm({
   return (
     <section className="job-search" aria-label="Search current jobs">
       <form className="job-filter-bar" onSubmit={submit} aria-label="Job filters">
-        {filterFields}
+        {primaryFilters}
+        {sortAndSubmit()}
       </form>
       {results}
     </section>
