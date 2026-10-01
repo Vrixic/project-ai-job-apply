@@ -422,12 +422,17 @@ aside {
 
 .jobs-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 12px;
   width: 100%;
   margin: 16px 0 24px;
+}
+
+.jobs-toolbar-row2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
 }
 
 .job-filter-bar {
@@ -446,6 +451,18 @@ aside {
 }
 
 .job-filter-bar[hidden] {
+  display: none;
+}
+
+.job-filter-secondary {
+  display: flex;
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.job-filter-secondary[hidden] {
   display: none;
 }
 
