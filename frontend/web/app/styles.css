@@ -600,12 +600,15 @@ aside {
 .resume-add-trigger {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 40px;
+  margin: 0;
   padding: 0 18px;
   border-radius: 999px;
   background: #14633e;
   color: white;
   font-weight: 750;
+  text-align: center;
   cursor: pointer;
   transition:
     transform 150ms ease,

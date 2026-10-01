@@ -6,7 +6,7 @@ import type {
   ResumeDocument,
   ResumeDocumentCollection,
 } from "@ai-job-apply/api-contracts";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
 
 const MAXIMUM_RESUME_BYTES = 5 * 1024 * 1024;
@@ -536,9 +536,7 @@ export function ResumeUploadForm({
     }
   }
 
-  async function upload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const selectedFile = file;
+  async function upload(selectedFile: File | undefined) {
     const generation = sessionGeneration.current;
     if (!selectedFile || !sessionIsCurrent(generation) || activeUpload.current) return;
     const controller = createSessionController(generation);
@@ -645,6 +643,11 @@ export function ResumeUploadForm({
               ? error.message
               : resumeUploadFailureMessage),
         );
+        // Reset the native value (not the `file` state) so re-picking the identical file
+        // still fires a change event; the "Selected file" text stays visible from `file`.
+        if (fileInput.current) {
+          fileInput.current.value = "";
+        }
       }
     } finally {
       releaseSessionController(controller);
@@ -672,9 +675,9 @@ export function ResumeUploadForm({
           {visibleDocuments.length}
           {maxStoredResumes !== undefined ? `/${maxStoredResumes}` : ""} stored
         </span>
-        <form className="resume-add" onSubmit={upload}>
+        <form className="resume-add" onSubmit={(event) => event.preventDefault()}>
           <label className="resume-add-trigger" htmlFor={resumeFileInputId}>
-            + Add resume
+            {visibleUploading ? "Encrypting and uploading…" : "+ Add resume"}
           </label>
           <input
             ref={fileInput}
@@ -683,8 +686,10 @@ export function ResumeUploadForm({
             type="file"
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(event) => {
+              const selected = event.target.files?.[0];
               if (authenticatedRef.current) {
-                setFile(event.target.files?.[0]);
+                setFile(selected);
+                if (selected) void upload(selected);
               } else {
                 event.target.value = "";
                 setFile(undefined);
@@ -693,17 +698,11 @@ export function ResumeUploadForm({
             disabled={!authenticated || visibleUploading || uploadGate.blocked}
             required
           />
-          {visibleFile && (
+          {visibleFile && !visibleUploading && (
             <span className="resume-add-filename" aria-live="polite">
               Selected file: {visibleFile.name}
             </span>
           )}
-          <button
-            type="submit"
-            disabled={!authenticated || !visibleFile || visibleUploading || uploadGate.blocked}
-          >
-            {visibleUploading ? "Encrypting and uploading…" : "Upload resume"}
-          </button>
           {uploadGate.blocked && <p role="status">{uploadGate.message}</p>}
         </form>
       </div>

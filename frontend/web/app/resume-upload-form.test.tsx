@@ -421,11 +421,9 @@ describe("ResumeUploadForm upload ownership", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await act(async () => root.render(<ResumeUploadForm authenticated />));
-    const form = await selectFile(
-      container,
-      syntheticPdf("registration-retry.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
-    );
-    await act(async () => submit(form));
+    const syntheticFile = () =>
+      syntheticPdf("registration-retry.pdf", async () => new Uint8Array([1, 2, 3]).buffer);
+    await selectFile(container, syntheticFile());
     await flushAsyncWork();
     expect(registrations).toHaveLength(1);
     const firstSignal = registrations[0]?.signal;
@@ -441,12 +439,10 @@ describe("ResumeUploadForm upload ownership", () => {
     expect(container.textContent).toContain(
       "Resume upload registration timed out. Try again to request a new upload grant.",
     );
-    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(
-      false,
-    );
+    expect(container.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
 
-    await act(async () => submit(form));
+    await selectFile(container, syntheticFile());
     await flushAsyncWork();
     expect(registrations).toHaveLength(2);
     const secondKey = new Headers(registrations[1]?.headers).get("idempotency-key");
@@ -485,17 +481,15 @@ describe("ResumeUploadForm upload ownership", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await act(async () => root.render(<ResumeUploadForm authenticated />));
-    const form = await selectFile(
-      container,
-      syntheticPdf("late-registration.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
-    );
-    await act(async () => submit(form));
+    const syntheticFile = () =>
+      syntheticPdf("late-registration.pdf", async () => new Uint8Array([1, 2, 3]).buffer);
+    await selectFile(container, syntheticFile());
     await flushAsyncWork();
     expect(registrations).toHaveLength(1);
     await act(async () => vi.advanceTimersByTimeAsync(20_000));
     expect(registrations[0]?.signal?.aborted).toBe(true);
 
-    await act(async () => submit(form));
+    await selectFile(container, syntheticFile());
     await flushAsyncWork();
     expect(registrations).toHaveLength(2);
     expect(registrations[1]?.signal?.aborted).toBe(false);
@@ -604,11 +598,9 @@ describe("ResumeUploadForm upload ownership", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await act(async () => root.render(<ResumeUploadForm authenticated />));
-    const form = await selectFile(
-      container,
-      syntheticPdf("storage-retry.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
-    );
-    await act(async () => submit(form));
+    const syntheticFile = () =>
+      syntheticPdf("storage-retry.pdf", async () => new Uint8Array([1, 2, 3]).buffer);
+    await selectFile(container, syntheticFile());
     await flushAsyncWork();
     expect(storageCalls).toHaveLength(1);
     const firstKey = new Headers(registrations[0]?.headers).get("idempotency-key");
@@ -630,7 +622,7 @@ describe("ResumeUploadForm upload ownership", () => {
     );
     expect(vi.getTimerCount()).toBe(0);
 
-    await act(async () => submit(form));
+    await selectFile(container, syntheticFile());
     await flushAsyncWork();
     expect(storageCalls).toHaveLength(2);
     const secondKey = new Headers(registrations[1]?.headers).get("idempotency-key");
@@ -671,11 +663,9 @@ describe("ResumeUploadForm upload ownership", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await act(async () => root.render(<ResumeUploadForm authenticated />));
-    const form = await selectFile(
-      container,
-      syntheticPdf("strict-storage.pdf", async () => new Uint8Array([1, 2, 3]).buffer),
-    );
-    await act(async () => submit(form));
+    const syntheticFile = () =>
+      syntheticPdf("strict-storage.pdf", async () => new Uint8Array([1, 2, 3]).buffer);
+    await selectFile(container, syntheticFile());
     await vi.waitFor(() =>
       expect(container.textContent).toContain(
         "The encrypted upload was not accepted. Retry with a new upload grant.",
@@ -683,7 +673,7 @@ describe("ResumeUploadForm upload ownership", () => {
     );
     expect(container.textContent).not.toContain("Resume uploaded to quarantine");
 
-    await act(async () => submit(form));
+    await selectFile(container, syntheticFile());
     await vi.waitFor(() =>
       expect(container.textContent).toContain(
         "Could not upload the resume. Try again with a new upload grant.",
@@ -933,16 +923,14 @@ describe("ResumeUploadForm upload gate", () => {
   }
   const controls = () => ({
     input: container.querySelector<HTMLInputElement>('input[type="file"]'),
-    button: container.querySelector<HTMLButtonElement>('button[type="submit"]'),
   });
 
-  it("disables the picker and button with the reason while a resume is unfinished", async () => {
+  it("disables the picker with the reason while a resume is unfinished", async () => {
     const recent = new Date(Date.now() - 60_000).toISOString();
     for (const status of ["awaiting_upload", "scanning", "parsing"] as const) {
       await mount([resumeDocument({ status, createdAt: recent })], 10);
-      const { input, button } = controls();
+      const { input } = controls();
       expect(input?.disabled, status).toBe(true);
-      expect(button?.disabled, status).toBe(true);
       expect(container.textContent, status).toContain(
         "Your resume is still being processed. You can upload another when it finishes.",
       );
@@ -952,9 +940,8 @@ describe("ResumeUploadForm upload gate", () => {
 
   it("disables upload when the plan's stored-resume limit is reached and says so", async () => {
     await mount([resumeDocument({ status: "parsed" })], 1);
-    const { input, button } = controls();
+    const { input } = controls();
     expect(input?.disabled).toBe(true);
-    expect(button?.disabled).toBe(true);
     expect(container.querySelector("form p[role='status']")?.textContent).toBe(
       "Your plan includes 1 stored resume.",
     );
