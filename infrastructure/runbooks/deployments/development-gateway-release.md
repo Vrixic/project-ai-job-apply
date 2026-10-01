@@ -360,6 +360,12 @@ refreshed state and the record stops appearing.
 
 ## Refreshing the candidate-rights activity code (D3-027)
 
+Current schema-7 baseline provenance permits regular-file renames only when each detected move
+matches its exact canonical deletion/addition records and both immutable endpoint trees contain
+regular blobs. The digest still binds the full no-renames source inventory and content patch.
+Malformed moves, missing endpoints, symlinks and gitlinks refuse. This does not waive current-source,
+zero-drift, state, receipt or resource-allowlist checks, and never makes a baseline applyable.
+
 The resume byte purge (ADR-034) runs in the profile-readiness activity Lambda's `rate(5 minutes)` maintenance handler, so
 its code has to reach that Lambda without changing anything else. The Gateway operator's `-RefreshCandidateRightsActivity`
 mode does this from a current schema-7 baseline and a verified core-workflow publication receipt, one reviewed plan at a

@@ -9,6 +9,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 30 D3-032 enters In progress: the current-baseline provenance guard now validates
+regular-file renames against canonical add/delete records and both immutable source trees.
+Native regression tests and the real merged source delta pass locally. D3-031's immutable
+workflow artifacts are published and independently verified, but baseline metadata, a saved
+activity-only deployment plan, runtime release and fresh-MFA acceptance remain. No API or cloud
+runtime change is made. D1/D3 remain In progress. See the [Phase 3 tasks](phase-3-application-preparation.md).
+
 September 30 D3-031 enters In progress: account-deletion prefix cleanup is being implemented using
 the existing document-object activity and resume purge, without API, migration or Terraform changes.
 Local focused tests (89) and isolated real-PostgreSQL tests (6) pass, including quarantine on

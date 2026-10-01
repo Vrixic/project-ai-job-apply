@@ -32,15 +32,36 @@ function Get-CurrentDocumentBaselineSourceDeltaSha256 {
   $range = "$DocumentReleaseSourceSha..$SourceSha"
   $detected = @(& git -C $RepositoryRoot diff --name-status --find-renames --find-copies-harder $range 2>$null)
   if ($LASTEXITCODE -ne 0 -or $detected.Count -eq 0 -or @($detected | Where-Object {
-        $_ -notmatch '^(?:A|M|D)\t[^\t]+$' -and $_ -notmatch '^C[0-9]+\t[^\t]+\t[^\t]+$'
+        $_ -cnotmatch '^(?:A|M|D)\t[^\t]+$' -and $_ -cnotmatch '^C[0-9]+\t[^\t]+\t[^\t]+$' -and
+        $_ -cnotmatch '^R[0-9]{3}\t[^\t]+\t[^\t]+$'
       }).Count -ne 0) {
-    throw "The current document baseline source delta is unreadable, renamed, or ambiguous."
+    throw "The current document baseline source delta is unreadable or ambiguous."
   }
   $records = @(& git -C $RepositoryRoot diff --name-status --no-renames $range 2>$null)
   $recordsExit = $LASTEXITCODE
   $numstat = @(& git -C $RepositoryRoot diff --numstat --no-renames $range 2>$null)
   if ($LASTEXITCODE -ne 0 -or $recordsExit -ne 0 -or $records.Count -eq 0 -or $records.Count -ne $numstat.Count) {
     throw "The current document baseline source records are incomplete."
+  }
+  # Rename detection is heuristic. Bind each detected move to the canonical deletion/addition;
+  # the existing endpoint-tree checks below still require both paths to be regular blobs.
+  $canonicalStatuses = New-Object 'Collections.Generic.Dictionary[string, string]' ([StringComparer]::Ordinal)
+  foreach ($record in $records) {
+    if ($record -cnotmatch '^(A|M|D)\t([^\t]+)$' -or $canonicalStatuses.ContainsKey($Matches[2])) {
+      throw "The current document baseline contains an unsupported or duplicate source record."
+    }
+    $canonicalStatuses.Add($Matches[2], $Matches[1])
+  }
+  $renamePaths = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($record in $detected) {
+    if ($record -cmatch '^R(?<score>[0-9]{3})\t(?<old>[^\t]+)\t(?<new>[^\t]+)$') {
+      if ([int]$Matches.score -gt 100 -or $Matches.old -ceq $Matches.new -or
+          -not $renamePaths.Add($Matches.old) -or -not $renamePaths.Add($Matches.new) -or
+          -not $canonicalStatuses.ContainsKey($Matches.old) -or $canonicalStatuses[$Matches.old] -cne "D" -or
+          -not $canonicalStatuses.ContainsKey($Matches.new) -or $canonicalStatuses[$Matches.new] -cne "A") {
+        throw "The current document baseline rename is not an exact canonical deletion/addition."
+      }
+    }
   }
   # Read both immutable endpoint trees once per invocation. No trusted cache or per-file Git
   # process is used; only changed paths must be regular blobs, as in the original validator.
