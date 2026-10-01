@@ -1,7 +1,7 @@
 "use client";
 
 import type { CanonicalJobSummary, JobSearchPage } from "@ai-job-apply/api-contracts";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { JobDetailPanel } from "./job-detail-panel";
 import { JobReportControl } from "./job-report-control";
 import {
@@ -75,7 +75,15 @@ async function readProblem(response: Response): Promise<{ code?: string; message
   }
 }
 
-export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
+export function JobSearchForm({
+  authenticated,
+  savedPanel,
+}: {
+  authenticated: boolean;
+  /** When provided, renders a Search/Saved toggle alongside the filter bar and shows this in the "Saved" view. */
+  savedPanel?: ReactNode;
+}) {
+  const [jobsView, setJobsView] = useState<"search" | "saved">("search");
   const [fields, setFields] = useState(initialFields);
   const [submittedFields, setSubmittedFields] = useState<JobSearchFields>();
   const [items, setItems] = useState<CanonicalJobSummary[]>([]);
@@ -386,82 +394,80 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
     );
   }
 
-  return (
-    <section className="job-search" aria-label="Search current jobs">
-      <p>
-        Search verified, unexpired postings. These results are not personalized or ranked from
-        private profile facts.
-      </p>
-      <form className="job-filter-bar" onSubmit={submit} aria-label="Job filters">
-        <label className="job-filter">
-          <span>Keywords</span>
-          <input
-            ref={keywordsRef}
-            type="search"
-            maxLength={200}
-            placeholder="Title, description, department, or company"
-            value={fields.query}
-            onChange={(event) => update("query", event.target.value)}
-            disabled={!authenticated || searching}
-          />
-        </label>
-        <label className="job-filter">
-          <span>Title</span>
-          <input
-            maxLength={200}
-            placeholder="Exact stored title"
-            value={fields.title}
-            onChange={(event) => update("title", event.target.value)}
-            disabled={!authenticated || searching}
-          />
-        </label>
-        <label className="job-filter">
-          <span>Company</span>
-          <input
-            maxLength={200}
-            value={fields.company}
-            onChange={(event) => update("company", event.target.value)}
-            disabled={!authenticated || searching}
-          />
-        </label>
-        <label className="job-filter">
-          <span>Location</span>
-          <input
-            maxLength={200}
-            value={fields.location}
-            onChange={(event) => update("location", event.target.value)}
-            disabled={!authenticated || searching}
-          />
-        </label>
-        <label className="job-filter job-filter-narrow">
-          <span>Verified within</span>
-          <input
-            type="number"
-            min={1}
-            max={365}
-            inputMode="numeric"
-            placeholder="Days"
-            value={fields.verifiedWithinDays}
-            onChange={(event) => update("verifiedWithinDays", event.target.value)}
-            disabled={!authenticated || searching}
-          />
-        </label>
-        <label className="job-filter job-filter-narrow">
-          <span>Sort</span>
-          <select
-            value={fields.sort}
-            onChange={(event) => update("sort", event.target.value as JobSearchFields["sort"])}
-            disabled={!authenticated || searching}
-          >
-            <option value="relevance">Relevance</option>
-            <option value="freshness">Freshness</option>
-          </select>
-        </label>
-        <button className="job-filter-submit" type="submit" disabled={!authenticated || searching}>
-          {searching && !cursor ? "Searching…" : "Search"}
-        </button>
-      </form>
+  const filterFields = (
+    <>
+      <label className="job-filter">
+        <span>Keywords</span>
+        <input
+          ref={keywordsRef}
+          type="search"
+          maxLength={200}
+          placeholder="Title, description, department, or company"
+          value={fields.query}
+          onChange={(event) => update("query", event.target.value)}
+          disabled={!authenticated || searching}
+        />
+      </label>
+      <label className="job-filter">
+        <span>Title</span>
+        <input
+          maxLength={200}
+          placeholder="Exact stored title"
+          value={fields.title}
+          onChange={(event) => update("title", event.target.value)}
+          disabled={!authenticated || searching}
+        />
+      </label>
+      <label className="job-filter">
+        <span>Company</span>
+        <input
+          maxLength={200}
+          value={fields.company}
+          onChange={(event) => update("company", event.target.value)}
+          disabled={!authenticated || searching}
+        />
+      </label>
+      <label className="job-filter">
+        <span>Location</span>
+        <input
+          maxLength={200}
+          value={fields.location}
+          onChange={(event) => update("location", event.target.value)}
+          disabled={!authenticated || searching}
+        />
+      </label>
+      <label className="job-filter job-filter-narrow">
+        <span>Verified within</span>
+        <input
+          type="number"
+          min={1}
+          max={365}
+          inputMode="numeric"
+          placeholder="Days"
+          value={fields.verifiedWithinDays}
+          onChange={(event) => update("verifiedWithinDays", event.target.value)}
+          disabled={!authenticated || searching}
+        />
+      </label>
+      <label className="job-filter job-filter-narrow">
+        <span>Sort</span>
+        <select
+          value={fields.sort}
+          onChange={(event) => update("sort", event.target.value as JobSearchFields["sort"])}
+          disabled={!authenticated || searching}
+        >
+          <option value="relevance">Relevance</option>
+          <option value="freshness">Freshness</option>
+        </select>
+      </label>
+      <button className="job-filter-submit" type="submit" disabled={!authenticated || searching}>
+        {searching && !cursor ? "Searching…" : "Search"}
+      </button>
+    </>
+  );
 
+  const results = (
+    <>
       {message && <output aria-live="polite">{message}</output>}
       {items.length > 0 && (
         <ol className="job-results" aria-label="Job search results">
@@ -501,6 +507,54 @@ export function JobSearchForm({ authenticated }: { authenticated: boolean }) {
           {searching ? "Loading…" : "Load more jobs"}
         </button>
       )}
+    </>
+  );
+
+  if (savedPanel) {
+    return (
+      <>
+        <div className="jobs-toolbar">
+          <div className="dashboard-subtabs" role="tablist" aria-label="Jobs view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={jobsView === "search"}
+              className="dashboard-subtab"
+              onClick={() => setJobsView("search")}
+            >
+              Search
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={jobsView === "saved"}
+              className="dashboard-subtab"
+              onClick={() => setJobsView("saved")}
+            >
+              Saved
+            </button>
+          </div>
+          <form
+            className="job-filter-bar"
+            onSubmit={submit}
+            aria-label="Job filters"
+            hidden={jobsView !== "search"}
+          >
+            {filterFields}
+          </form>
+        </div>
+        <div hidden={jobsView !== "search"}>{results}</div>
+        <div hidden={jobsView !== "saved"}>{savedPanel}</div>
+      </>
+    );
+  }
+
+  return (
+    <section className="job-search" aria-label="Search current jobs">
+      <form className="job-filter-bar" onSubmit={submit} aria-label="Job filters">
+        {filterFields}
+      </form>
+      {results}
     </section>
   );
 }
