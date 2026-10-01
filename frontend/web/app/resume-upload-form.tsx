@@ -666,18 +666,47 @@ export function ResumeUploadForm({
   const visibleReadFailure = authenticated ? readFailure : undefined;
 
   return (
-    <section className="profile-facts" aria-labelledby="resume-upload-heading">
-      <div className="section-heading">
-        <div>
-          <div className="eyebrow">Resume intake</div>
-          <h2 id="resume-upload-heading">Your source resumes</h2>
-        </div>
-        <span>{visibleDocuments.length} stored</span>
+    <section className="resume-intake" aria-label="Your source resumes">
+      <div className="resume-intake-header">
+        <span className="resume-count">
+          {visibleDocuments.length}
+          {maxStoredResumes !== undefined ? `/${maxStoredResumes}` : ""} stored
+        </span>
+        <form className="resume-add" onSubmit={upload}>
+          <label className="resume-add-trigger" htmlFor={resumeFileInputId}>
+            + Add resume
+          </label>
+          <input
+            ref={fileInput}
+            id={resumeFileInputId}
+            className="resume-add-input"
+            type="file"
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            onChange={(event) => {
+              if (authenticatedRef.current) {
+                setFile(event.target.files?.[0]);
+              } else {
+                event.target.value = "";
+                setFile(undefined);
+              }
+            }}
+            disabled={!authenticated || visibleUploading || uploadGate.blocked}
+            required
+          />
+          {visibleFile && (
+            <span className="resume-add-filename" aria-live="polite">
+              Selected file: {visibleFile.name}
+            </span>
+          )}
+          <button
+            type="submit"
+            disabled={!authenticated || !visibleFile || visibleUploading || uploadGate.blocked}
+          >
+            {visibleUploading ? "Encrypting and uploading…" : "Upload resume"}
+          </button>
+          {uploadGate.blocked && <p role="status">{uploadGate.message}</p>}
+        </form>
       </div>
-      <p>
-        PDF and DOCX files are encrypted, quarantined, and malware-scanned before parsing. Parsed
-        claims remain proposed until you review them; nothing is silently confirmed.
-      </p>
 
       {visibleLoading && visibleDocuments.length === 0 ? (
         <p>Loading resumes…</p>
@@ -756,36 +785,6 @@ export function ResumeUploadForm({
         </div>
       )}
 
-      <form className="compact-form" onSubmit={upload}>
-        <label>
-          Resume file
-          <span>PDF or DOCX, up to 5 MiB</span>
-          <input
-            ref={fileInput}
-            id={resumeFileInputId}
-            type="file"
-            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            onChange={(event) => {
-              if (authenticatedRef.current) {
-                setFile(event.target.files?.[0]);
-              } else {
-                event.target.value = "";
-                setFile(undefined);
-              }
-            }}
-            disabled={!authenticated || visibleUploading || uploadGate.blocked}
-            required
-          />
-          {visibleFile && <span aria-live="polite">Selected file: {visibleFile.name}</span>}
-        </label>
-        <button
-          type="submit"
-          disabled={!authenticated || !visibleFile || visibleUploading || uploadGate.blocked}
-        >
-          {visibleUploading ? "Encrypting and uploading…" : "Upload resume"}
-        </button>
-        {uploadGate.blocked && <p role="status">{uploadGate.message}</p>}
-      </form>
       {visibleMessage && <output>{visibleMessage}</output>}
     </section>
   );
