@@ -931,11 +931,8 @@ describe("coordinated onboarding flow", () => {
 
     await act(async () => root.render(resumeUpload(false)));
     await act(async () => root.render(resumeUpload()));
-    const fileInput = labelledControl<HTMLInputElement>(
-      container,
-      "Resume file",
-      'input[type="file"]',
-    );
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error("Could not find the resume file input");
     const file = new File([new Uint8Array([1, 2, 3])], "synthetic.pdf", {
       type: "application/pdf",
     });
@@ -1145,11 +1142,8 @@ describe("coordinated onboarding flow", () => {
     );
 
     await act(async () => root.render(resumeUpload(true, parsedCallback)));
-    const fileInput = labelledControl<HTMLInputElement>(
-      container,
-      "Resume file",
-      'input[type="file"]',
-    );
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error("Could not find the resume file input");
     const file = new File([new Uint8Array([1, 2, 3])], "synthetic.pdf", {
       type: "application/pdf",
     });
@@ -1209,11 +1203,8 @@ describe("coordinated onboarding flow", () => {
     );
 
     await act(async () => root.render(resumeUpload(true, parsedCallback)));
-    const fileInput = labelledControl<HTMLInputElement>(
-      container,
-      "Resume file",
-      'input[type="file"]',
-    );
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error("Could not find the resume file input");
     const file = new File([new Uint8Array([1, 2, 3])], "synthetic.pdf", {
       type: "application/pdf",
     });
@@ -1269,11 +1260,8 @@ describe("coordinated onboarding flow", () => {
     );
 
     await act(async () => root.render(resumeUpload(true, parsedCallback)));
-    const fileInput = labelledControl<HTMLInputElement>(
-      container,
-      "Resume file",
-      'input[type="file"]',
-    );
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error("Could not find the resume file input");
     const file = new File([new Uint8Array([1, 2, 3])], "synthetic.pdf", {
       type: "application/pdf",
     });
