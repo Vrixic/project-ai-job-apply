@@ -261,6 +261,93 @@ function Assert-ExactApplicationsRecoveryTwoSnapshotVerification {
 }
 
 # Non-reusable recovery for the single D3-030 apply, not a generic stale-baseline allowance.
+function Assert-ExactCandidateRightsThreeSnapshotVerification {
+  param(
+    [Parameter(Mandatory)][string]$SourceSha,
+    [Parameter(Mandatory)][string]$ReceiptSha256,
+    [Parameter(Mandatory)][string]$BaselineSha256,
+    [Parameter(Mandatory)][string]$BaselineMetadataSha256,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][string]$PlanMetadataSha256,
+    [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$CurrentState,
+    [Parameter(Mandatory)][object]$StateHistory,
+    [Parameter(Mandatory)][ValidateSet("ExportActivation", "ActivityRefresh")][string]$Mode
+  )
+  $pins = [ordered]@{
+    SourceSha = "4c557c35e18647ffd106fe754dc84394b59e9370"
+    ReceiptSha256 = "d2e18359f0e74858b72e9ac6424e2fce70d672d5efd2f4417abaaf82bc71df58"
+    BaselineSha256 = "46640629f435ccf0b20953f8f272f132d698de471e534b7dd9f992720fc4956a"
+    BaselineMetadataSha256 = "f88b7b755f9256d7e56e96ce084d885d21db4419858f3e3a55a128e2a2d831cc"
+    PlanSha256 = "c8b77d18b4e63e20081bb9bb26ffd692b64315930033e718035401903550420e"
+    PlanMetadataSha256 = "d50a7362e06a2fe0c1ba5eae5906ad9e16896cb90558979a24a59cfb155758b9"
+  }
+  $baselineSerial = 395
+  $expectedTimes = @("2026-09-30T17:22:03Z", "2026-09-30T17:22:28Z", "2026-09-30T17:22:41Z")
+  if ($Mode -ceq "ActivityRefresh") {
+    $pins = [ordered]@{
+      SourceSha = "7aec47235e7de0ad5708a72aebe06a55ee8fc71a"
+      ReceiptSha256 = "08c40cfa18ced077c755a58b6a7c1f6afab364cd5295a8a5d71f233482f5a5cb"
+      BaselineSha256 = "e7c8bcff3179bff2ff67002f4746dd64be09980c9b3a3a6fa2773dba17afbf3d"
+      BaselineMetadataSha256 = "220fdf94f0b00505038a04a930f00b9605b90cd6b9e992662f88cd63e64a5198"
+      PlanSha256 = "fb1472c3ee986122dd17bb6af8a850805a005a7b9a6f3321521e8525df0e13c9"
+      PlanMetadataSha256 = "1eec3aa342f54ac68022fd967142aabf6d594ae330de8a0174d395cd5a3f954e"
+    }
+    $baselineSerial = 401
+    $expectedTimes = @("2026-10-01T21:35:52Z", "2026-10-01T21:36:16Z", "2026-10-01T21:36:29Z")
+  }
+  foreach ($entry in $pins.GetEnumerator()) {
+    if ([string](Get-Variable -Name $entry.Name -ValueOnly) -cne [string]$entry.Value) {
+      throw "The three-snapshot candidate-rights verification differs from its exact reviewed evidence."
+    }
+  }
+  $toUtc = {
+    param([AllowNull()][object]$Value)
+    if ($Value -is [datetimeoffset]) { return $Value.ToUniversalTime() }
+    if ($Value -is [datetime]) { return [datetimeoffset]$Value.ToUniversalTime() }
+    if ($Value -isnot [string] -or $Value -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$') {
+      throw "The candidate-rights state history requires exact timezone-bound timestamps."
+    }
+    return ([datetimeoffset]::Parse($Value, [Globalization.CultureInfo]::InvariantCulture)).ToUniversalTime()
+  }
+  $createdAt = & $toUtc $Metadata.CreatedAt
+  if ([string]$Metadata.SchemaVersion -cne "7" -or [string]$Metadata.SourceSha -cne $pins.SourceSha -or
+      [long]$Metadata.StateSerial -ne $baselineSerial -or [long]$CurrentState.Serial -ne ($baselineSerial + 3) -or
+      [string]$Metadata.StateLineage -cnotmatch '^[a-f0-9-]{36}$' -or
+      [string]$Metadata.StateLineage -cne [string]$CurrentState.Lineage) {
+    throw "The three-snapshot candidate-rights verification has an unexpected baseline or current state."
+  }
+  $nextToken = Get-GatewayOptionalProperty $StateHistory "NextToken"
+  if ($null -ne $nextToken -and -not [string]::IsNullOrEmpty([string]$nextToken)) {
+    throw "The candidate-rights state history is incomplete."
+  }
+  $versions = @(Get-GatewayOptionalProperty $StateHistory "Versions" | Where-Object {
+      $null -ne $_ -and [string]$_.Key -ceq "platform.tfstate"
+    })
+  $newVersions = @($versions | Where-Object { (& $toUtc $_.LastModified) -gt $createdAt } |
+    Sort-Object { & $toUtc $_.LastModified })
+  $newMarkers = @(Get-GatewayOptionalProperty $StateHistory "DeleteMarkers" | Where-Object {
+      $null -ne $_ -and [string]$_.Key -ceq "platform.tfstate" -and (& $toUtc $_.LastModified) -gt $createdAt
+    })
+  if ($newVersions.Count -ne 3 -or $newMarkers.Count -ne 0) {
+    throw "Candidate-rights verification requires exactly three state snapshots and no deletion after the baseline."
+  }
+  $seen = @()
+  for ($index = 0; $index -lt 3; $index++) {
+    $version = $newVersions[$index]
+    if ($version.VersionId -isnot [string] -or [string]::IsNullOrWhiteSpace($version.VersionId) -or
+        $seen -ccontains $version.VersionId -or $version.IsLatest -isnot [bool] -or
+        $version.IsLatest -ne ($index -eq 2) -or
+        ($version.Size -isnot [long] -and $version.Size -isnot [int]) -or $version.Size -le 0 -or
+        (& $toUtc $version.LastModified) -ne (& $toUtc $expectedTimes[$index])) {
+      throw "The candidate-rights state snapshot does not match the exact historical apply."
+    }
+    $seen += $version.VersionId
+  }
+  return $true
+}
+
+# These two entry points select immutable historical evidence, not a reusable serial allowance.
 function Assert-ExactRestrictedExportThreeSnapshotVerification {
   param(
     [Parameter(Mandatory)][string]$SourceSha,
@@ -273,64 +360,22 @@ function Assert-ExactRestrictedExportThreeSnapshotVerification {
     [Parameter(Mandatory)][object]$CurrentState,
     [Parameter(Mandatory)][object]$StateHistory
   )
-  $pins = [ordered]@{
-    SourceSha = "4c557c35e18647ffd106fe754dc84394b59e9370"
-    ReceiptSha256 = "d2e18359f0e74858b72e9ac6424e2fce70d672d5efd2f4417abaaf82bc71df58"
-    BaselineSha256 = "46640629f435ccf0b20953f8f272f132d698de471e534b7dd9f992720fc4956a"
-    BaselineMetadataSha256 = "f88b7b755f9256d7e56e96ce084d885d21db4419858f3e3a55a128e2a2d831cc"
-    PlanSha256 = "c8b77d18b4e63e20081bb9bb26ffd692b64315930033e718035401903550420e"
-    PlanMetadataSha256 = "d50a7362e06a2fe0c1ba5eae5906ad9e16896cb90558979a24a59cfb155758b9"
-  }
-  foreach ($entry in $pins.GetEnumerator()) {
-    if ([string](Get-Variable -Name $entry.Name -ValueOnly) -cne [string]$entry.Value) {
-      throw "The three-snapshot export verification differs from its exact reviewed evidence."
-    }
-  }
-  $toUtc = {
-    param([AllowNull()][object]$Value)
-    if ($Value -is [datetimeoffset]) { return $Value.ToUniversalTime() }
-    if ($Value -is [datetime]) { return [datetimeoffset]$Value.ToUniversalTime() }
-    if ($Value -isnot [string] -or $Value -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$') {
-      throw "The export state history requires exact timezone-bound timestamps."
-    }
-    return ([datetimeoffset]::Parse($Value, [Globalization.CultureInfo]::InvariantCulture)).ToUniversalTime()
-  }
-  $createdAt = & $toUtc $Metadata.CreatedAt
-  if ([string]$Metadata.SchemaVersion -cne "7" -or [string]$Metadata.SourceSha -cne $pins.SourceSha -or
-      [long]$Metadata.StateSerial -ne 395 -or [long]$CurrentState.Serial -ne 398 -or
-      [string]$Metadata.StateLineage -cnotmatch '^[a-f0-9-]{36}$' -or
-      [string]$Metadata.StateLineage -cne [string]$CurrentState.Lineage) {
-    throw "The three-snapshot export verification has an unexpected baseline or current state."
-  }
-  $nextToken = Get-GatewayOptionalProperty $StateHistory "NextToken"
-  if ($null -ne $nextToken -and -not [string]::IsNullOrEmpty([string]$nextToken)) {
-    throw "The export state history is incomplete."
-  }
-  $versions = @(Get-GatewayOptionalProperty $StateHistory "Versions" | Where-Object {
-      $null -ne $_ -and [string]$_.Key -ceq "platform.tfstate"
-    })
-  $newVersions = @($versions | Where-Object { (& $toUtc $_.LastModified) -gt $createdAt } |
-    Sort-Object { & $toUtc $_.LastModified })
-  $newMarkers = @(Get-GatewayOptionalProperty $StateHistory "DeleteMarkers" | Where-Object {
-      $null -ne $_ -and [string]$_.Key -ceq "platform.tfstate" -and (& $toUtc $_.LastModified) -gt $createdAt
-    })
-  if ($newVersions.Count -ne 3 -or $newMarkers.Count -ne 0) {
-    throw "Export verification requires exactly three state snapshots and no deletion after the baseline."
-  }
-  $expectedTimes = @("2026-09-30T17:22:03Z", "2026-09-30T17:22:28Z", "2026-09-30T17:22:41Z")
-  $seen = @()
-  for ($index = 0; $index -lt 3; $index++) {
-    $version = $newVersions[$index]
-    if ($version.VersionId -isnot [string] -or [string]::IsNullOrWhiteSpace($version.VersionId) -or
-        $seen -ccontains $version.VersionId -or $version.IsLatest -isnot [bool] -or
-        $version.IsLatest -ne ($index -eq 2) -or
-        ($version.Size -isnot [long] -and $version.Size -isnot [int]) -or $version.Size -le 0 -or
-        (& $toUtc $version.LastModified) -ne (& $toUtc $expectedTimes[$index])) {
-      throw "The export state snapshot does not match the exact historical apply."
-    }
-    $seen += $version.VersionId
-  }
-  return $true
+  return Assert-ExactCandidateRightsThreeSnapshotVerification @PSBoundParameters -Mode ExportActivation
+}
+
+function Assert-ExactActivityRefreshThreeSnapshotVerification {
+  param(
+    [Parameter(Mandatory)][string]$SourceSha,
+    [Parameter(Mandatory)][string]$ReceiptSha256,
+    [Parameter(Mandatory)][string]$BaselineSha256,
+    [Parameter(Mandatory)][string]$BaselineMetadataSha256,
+    [Parameter(Mandatory)][string]$PlanSha256,
+    [Parameter(Mandatory)][string]$PlanMetadataSha256,
+    [Parameter(Mandatory)][object]$Metadata,
+    [Parameter(Mandatory)][object]$CurrentState,
+    [Parameter(Mandatory)][object]$StateHistory
+  )
+  return Assert-ExactCandidateRightsThreeSnapshotVerification @PSBoundParameters -Mode ActivityRefresh
 }
 
 function Assert-GatewayDocumentBaselineReceipt {
