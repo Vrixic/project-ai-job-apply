@@ -412,6 +412,7 @@ describe("candidate-rights AWS object boundaries", () => {
       const input = (command as { input: Record<string, unknown> }).input;
       if (name === "ListObjectVersionsCommand") {
         const key = String(input.Prefix);
+        if (key.endsWith("/")) return { Versions: [], DeleteMarkers: [], IsTruncated: false };
         const pass = inventories.get(key) ?? 0;
         inventories.set(key, pass + 1);
         return pass === 0
@@ -469,7 +470,12 @@ describe("AwsCandidateDocumentObjectStore resume purge (ADR-034)", () => {
 
   function fakeBucket(
     initial: Entry[],
-    options: { reappear?: Entry[]; deleteErrors?: boolean; pageSize?: number } = {},
+    options: {
+      reappear?: Entry[];
+      reappearWhenKey?: string;
+      deleteErrors?: boolean;
+      pageSize?: number;
+    } = {},
   ) {
     let versions = [...initial];
     const deleted: Entry[] = [];
@@ -503,7 +509,12 @@ describe("AwsCandidateDocumentObjectStore resume purge (ADR-034)", () => {
               (object) => object.Key === entry.Key && object.VersionId === entry.VersionId,
             ),
         );
-        if (options.reappear) versions.push(...options.reappear);
+        if (
+          options.reappear &&
+          (!options.reappearWhenKey ||
+            objects.some((entry) => entry.Key === options.reappearWhenKey))
+        )
+          versions.push(...options.reappear);
         return {};
       }
       throw new Error("Unexpected command");
@@ -574,6 +585,105 @@ describe("AwsCandidateDocumentObjectStore resume purge (ADR-034)", () => {
       deleted: 7,
       remaining: 0,
     });
+  });
+
+  const accountInventory = [
+    {
+      documentId,
+      sourceObjectKey: `quarantine/${documentId}/source`,
+      sourceObjectVersion: "v1",
+      normalizedObjectKey: `normalized/${documentId}/${"a".repeat(64)}/resume-parser-v7/resume.json`,
+      normalizedObjectVersion: "v3",
+    },
+  ];
+
+  it("account deletion removes unrecorded older-parser versions and markers, preserves other documents, and replays safely", async () => {
+    const bucket = fakeBucket([...mine, ...neighbors], { pageSize: 2 });
+    await expect(bucket.store.deleteAllVersionsAndMarkers(accountInventory)).resolves.toEqual({
+      exactInventoryEmpty: true,
+    });
+    expect(bucket.deleted.map((entry) => entry.VersionId).sort()).toEqual([
+      "marker-1",
+      "v1",
+      "v2",
+      "v3",
+    ]);
+    expect(bucket.current()).toEqual(neighbors);
+    await expect(bucket.store.deleteAllVersionsAndMarkers(accountInventory)).resolves.toEqual({
+      exactInventoryEmpty: true,
+    });
+    expect(bucket.deleted).toHaveLength(4);
+  });
+
+  it("account deletion refuses absence attestation when an unrecorded normalized key reappears", async () => {
+    const late = { Key: `normalized/${documentId}/old-parser/resume.json`, VersionId: "late-1" };
+    const bucket = fakeBucket(mine, { reappear: [late] });
+    await expect(bucket.store.deleteAllVersionsAndMarkers(accountInventory)).resolves.toEqual({
+      exactInventoryEmpty: false,
+    });
+  });
+
+  it("rechecks earlier document prefixes after a later document purge", async () => {
+    const later = { Key: `normalized/${otherId}/older-parser/resume.json`, VersionId: "later" };
+    const late = { Key: `normalized/${documentId}/older-parser/resume.json`, VersionId: "late" };
+    const bucket = fakeBucket([...mine, later], { reappear: [late], reappearWhenKey: later.Key });
+    await expect(
+      bucket.store.deleteAllVersionsAndMarkers([
+        ...accountInventory,
+        {
+          documentId: otherId,
+          sourceObjectKey: `quarantine/${otherId}/source`,
+          sourceObjectVersion: "absent-version",
+        },
+      ]),
+    ).resolves.toEqual({ exactInventoryEmpty: false });
+    expect(bucket.current()).toEqual([late]);
+  });
+
+  it("account deletion validates every document identity before any object mutation", async () => {
+    const bucket = fakeBucket(mine);
+    await expect(
+      bucket.store.deleteAllVersionsAndMarkers([
+        ...accountInventory,
+        {
+          documentId: `${documentId}/../${otherId}`,
+          sourceObjectKey: `quarantine/${documentId}/source`,
+          sourceObjectVersion: "v1",
+        },
+      ]),
+    ).rejects.toThrow("CandidateDocumentInventoryIdentityRejected");
+    expect(bucket.send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { Versions: [], DeleteMarkers: [] },
+    { IsTruncated: "false", Versions: [] },
+    { IsTruncated: false, Versions: {} },
+    { IsTruncated: false, DeleteMarkers: null },
+    { IsTruncated: false, Versions: [{ Key: `quarantine/${otherId}/source`, VersionId: "other" }] },
+    { IsTruncated: false, Versions: [{ Key: `quarantine/${documentId}/source`, VersionId: "" }] },
+    { IsTruncated: false, DeleteMarkers: [{ Key: `quarantine/${documentId}/source` }] },
+  ])("refuses malformed or out-of-prefix inventory before deletion: %j", async (page) => {
+    const send = vi.fn(async () => page);
+    const store = new AwsCandidateDocumentObjectStore("synthetic-document-bucket", { send });
+    await expect(store.deleteAllVersionsAndMarkers(accountInventory)).rejects.toThrow(
+      "CandidateDocumentInventoryInvalid",
+    );
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("refuses repeated pagination before issuing any delete command", async () => {
+    const send = vi.fn(async () => ({
+      IsTruncated: true,
+      Versions: [],
+      NextKeyMarker: `quarantine/${documentId}/source`,
+      NextVersionIdMarker: "same",
+    }));
+    const store = new AwsCandidateDocumentObjectStore("synthetic-document-bucket", { send });
+    await expect(store.deleteAllVersionsAndMarkers(accountInventory)).rejects.toThrow(
+      "CandidateDocumentInventoryPaginationRejected",
+    );
+    expect(send).toHaveBeenCalledTimes(2);
   });
 
   it("reports what a second listing still finds, so the caller cannot mistake it for empty", async () => {

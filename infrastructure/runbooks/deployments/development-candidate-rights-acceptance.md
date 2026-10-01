@@ -128,7 +128,11 @@ The reconstructed live plan compares the hash-only resume runtime identity befor
 This mode requires `documents:read` and `documents:write`, the reviewed
 `d2-development-synthetic-v1` policy, an empty disposable owner's resume inventory, and exact
 state/Gateway/activity bucket bindings. The Gateway's source KMS key must match the processor.
-The processor must use the state-pinned immutable parser version and `resume-parser-v1`.
+The processor must use the state-current or a retained earlier immutable numeric version of the
+same exact regional parser function, and `resume-parser-v1`. This follows the established
+document-processing acceptance boundary: a retained pin is not a reason to release a newer parser.
+The actual pinned version's configuration and code hash are checked, and the plan independently
+binds current and pinned version ARN hashes. A newer, foreign-function or mutable pin refuses.
 The GuardDuty plan must be ACTIVE for only `quarantine/` with tagging ENABLED, and the exact
 state scan rule and processor event-source mapping must already be enabled. The harness only
 observes these gates; it cannot enable triggers, release code, modify IAM or bypass malware scanning.

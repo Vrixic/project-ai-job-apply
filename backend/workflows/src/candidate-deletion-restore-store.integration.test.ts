@@ -11,6 +11,7 @@ import {
   PostgresProfileStore,
 } from "@ai-job-apply/profile-service";
 import type { CandidateRightsPolicy } from "@ai-job-apply/profile-service/candidate-rights";
+import { DeleteObjectsCommand, ListObjectVersionsCommand } from "@aws-sdk/client-s3";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -28,6 +29,7 @@ import {
 } from "./candidate-deletion-restore-policy.js";
 import { PostgresCandidateDeletionRestoreStore } from "./candidate-deletion-restore-store.js";
 import { PostgresCandidateRightsActivityStore } from "./candidate-rights-activities.js";
+import { AwsCandidateDocumentObjectStore } from "./candidate-rights-aws.js";
 import type { CandidateRightsActivityInputV1 } from "./candidate-rights-durable.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
 
@@ -181,7 +183,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
     await database.client`DELETE FROM identity.users WHERE id = ${entry.userId}`;
   }
 
-  it("persists journaled confirmation and completion times across real SQL rollback and marker retries", async () => {
+  it("persists confirmation across SQL rollback, retains quarantine on incomplete prefix purge, and retries completion", async () => {
     const userId = uuidv7();
     const subject = `generated-retry-${userId}`;
     const requestedAt = new Date(Date.now() - 60_000);
@@ -303,6 +305,50 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
       expect(iso(persisted?.quarantinedAt)).toBe(confirmedAt.toISOString());
       expect(iso(persisted?.requestUpdatedAt)).toBe(retryAt.toISOString());
       expect(iso(persisted?.ledgerUpdatedAt)).toBe(retryAt.toISOString());
+      const documentId = uuidv7();
+      const sourceKey = `quarantine/${documentId}/source`;
+      const normalizedKey = `normalized/${documentId}/current-parser/resume.json`;
+      const olderKey = `normalized/${documentId}/older-parser/resume.json`;
+      const neighborKey = `normalized/${uuidv7()}/older-parser/resume.json`;
+      await database.client`
+        INSERT INTO documents.resume_documents (id, user_id, file_name, media_type, size_bytes, sha256, source_object_key, status)
+        VALUES (${documentId}, ${userId}, 'generated.pdf', 'application/pdf', 1, ${"1".repeat(64)}, ${sourceKey}, 'awaiting_upload')
+      `;
+      type ObjectVersion = { Key: string; VersionId: string };
+      let versions: ObjectVersion[] = [
+        { Key: sourceKey, VersionId: "source" },
+        { Key: normalizedKey, VersionId: "current" },
+        { Key: olderKey, VersionId: "older" },
+        { Key: olderKey, VersionId: "marker-older" },
+        { Key: neighborKey, VersionId: "neighbor" },
+      ];
+      let reappear = true;
+      const documentObjectStore = new AwsCandidateDocumentObjectStore("generated-only-bucket", {
+        send: async (command: unknown) => {
+          if (command instanceof ListObjectVersionsCommand) {
+            const prefix = command.input.Prefix;
+            if (!prefix) throw new Error("SyntheticPrefixMissing");
+            const matching = versions.filter((entry) => entry.Key.startsWith(prefix));
+            return {
+              IsTruncated: false,
+              Versions: matching.filter((entry) => !entry.VersionId.startsWith("marker")),
+              DeleteMarkers: matching.filter((entry) => entry.VersionId.startsWith("marker")),
+            };
+          }
+          if (command instanceof DeleteObjectsCommand) {
+            const objects = command.input.Delete?.Objects ?? [];
+            versions = versions.filter(
+              (entry) =>
+                !objects.some(
+                  (object) => object.Key === entry.Key && object.VersionId === entry.VersionId,
+                ),
+            );
+            if (reappear) versions.push({ Key: olderKey, VersionId: "late" });
+            return {};
+          }
+          throw new Error("SyntheticUnexpectedObjectCommand");
+        },
+      });
       at = completedAt;
       const tags: Date[] = [];
       const activities = new PostgresCandidateRightsActivityStore({
@@ -314,12 +360,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
             throw new Error("SyntheticUnexpectedExport");
           },
         },
-        documentObjectStore: {
-          deleteAllVersionsAndMarkers: async (objects) => {
-            expect(objects).toEqual([]);
-            return { exactInventoryEmpty: true };
-          },
-        },
+        documentObjectStore,
         identityProvider: {
           revokeAndDelete: async (identities) => {
             expect(identities).toEqual([{ issuer, subject }]);
@@ -344,7 +385,27 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         operationId: journaled.operationId,
         policyVersion: policy.version,
       };
+      await expect(activities.deleteActiveSystems(input)).rejects.toThrow(
+        "CandidateDocumentObjectsRemain",
+      );
+      const [held] = await database.client<Record<string, unknown>[]>`
+        SELECT request.state, candidate.account_state,
+          (SELECT count(*)::int FROM documents.resume_documents WHERE user_id = ${userId}) AS document_count
+        FROM profile.account_deletion_requests request JOIN identity.users candidate ON candidate.id = request.user_id
+        WHERE request.id = ${request.id}
+      `;
+      expect(held).toMatchObject({
+        state: "quarantined",
+        accountState: "quarantined",
+        documentCount: 1,
+      });
+      reappear = false;
       await activities.deleteActiveSystems(input);
+      expect(versions).toEqual([{ Key: neighborKey, VersionId: "neighbor" }]);
+      const [purged] = await database.client<Record<string, unknown>[]>`
+        SELECT count(*)::int AS count FROM documents.resume_documents WHERE user_id = ${userId}
+      `;
+      expect(purged?.count).toBe(0);
       await activities.reconcileSubprocessors({
         ...input,
         action: "deletion_reconcile_subprocessors",

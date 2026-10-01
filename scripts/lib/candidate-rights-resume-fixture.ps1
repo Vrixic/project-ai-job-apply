@@ -175,11 +175,17 @@ function Get-RightsResumeRuntime {
   }
   $processorArn = [string](Get-StateOutput $Snapshot 'document_processor_alias_arn')
   $processor = Get-LambdaIdentity $processorArn 'Document processor'
-  $parserArn = [string](Get-StateOutput $Snapshot 'document_parser_version_arn')
-  if ($parserArn -cnotmatch "^arn:aws:lambda:us-east-2:$ExpectedAccountId`:function:[A-Za-z0-9_-]+:(?<version>[1-9][0-9]*)$") {
+  $currentParserArn = [string](Get-StateOutput $Snapshot 'document_parser_version_arn')
+  $parserArn = [string](Get-OptionalProperty $processor.Environment 'DOCUMENT_PARSER_FUNCTION_ARN')
+  $parserPattern = "^arn:aws:lambda:us-east-2:$ExpectedAccountId`:function:(?<name>[A-Za-z0-9_-]+):(?<version>[1-9][0-9]*)$"
+  $currentParser = [regex]::Match($currentParserArn, $parserPattern)
+  $pinnedParser = [regex]::Match($parserArn, $parserPattern)
+  if (-not $currentParser.Success -or -not $pinnedParser.Success -or
+      $currentParser.Groups['name'].Value -cne $pinnedParser.Groups['name'].Value -or
+      [long]$pinnedParser.Groups['version'].Value -gt [long]$currentParser.Groups['version'].Value) {
     throw 'The generated resume parser must be an immutable regional version.'
   }
-  $parserVersion = $Matches.version
+  $parserVersion = $pinnedParser.Groups['version'].Value
   $parser = Invoke-AwsJson @('lambda','get-function-configuration','--function-name',$parserArn,'--output','json') 'Document parser version'
   if ([string]$parser.Version -cne $parserVersion -or [string]$parser.CodeSha256 -cnotmatch '^[A-Za-z0-9+/]{43}=$') { throw 'The generated resume parser identity is invalid.' }
   foreach ($environment in @($processor.Environment,$parser.Environment.Variables)) {
@@ -210,7 +216,7 @@ function Get-RightsResumeRuntime {
     Identity = [ordered]@{
       bucketSha256 = Get-TextSha256 $bucket; kmsKeyArnSha256 = Get-TextSha256 $key
       processor = [ordered]@{ aliasArnSha256 = $processor.AliasArnSha256; version = $processor.Version; codeSha256 = $processor.CodeSha256 }
-      parser = [ordered]@{ versionArnSha256 = Get-TextSha256 $parserArn; codeSha256 = [string]$parser.CodeSha256 }
+      parser = [ordered]@{ currentVersionArnSha256 = Get-TextSha256 $currentParserArn; versionArnSha256 = Get-TextSha256 $parserArn; codeSha256 = [string]$parser.CodeSha256 }
       scanPlanArnSha256 = Get-TextSha256 $planArn; scanMappingSha256 = Get-TextSha256 ($mappingId + '|' + [string]$mapping.EventSourceArn)
       scanRuleSha256 = Get-TextSha256 ($ruleArn + '|' + [string]$rule.EventPattern)
     }
