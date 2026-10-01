@@ -212,6 +212,9 @@ function Get-LambdaIdentity($Arn, $Description) {
     'processor-bucket' { $environment.CANDIDATE_DOCUMENT_BUCKET = 'different' }
     'processor-key' { $environment.PLATFORM_KMS_KEY_ARN = 'different' }
     'processor-parser' { $environment.DOCUMENT_PARSER_FUNCTION_ARN = $parserArn.Replace(':7', ':8') }
+    'retained-parser' { $environment.DOCUMENT_PARSER_FUNCTION_ARN = $parserArn.Replace(':7', ':6') }
+    'foreign-parser' { $environment.DOCUMENT_PARSER_FUNCTION_ARN = $parserArn.Replace('generated-parser', 'other-parser') }
+    'mutable-pin' { $environment.DOCUMENT_PARSER_FUNCTION_ARN = $parserArn.Replace(':7', ':current') }
     'semantic-version' { $environment.DOCUMENT_PARSER_VERSION = 'different' }
     'foreign-plan' { $environment.GUARDDUTY_PROTECTION_PLAN_ARN = $scanArn.Replace('123456789012', '223456789012') }
   }
@@ -222,6 +225,10 @@ function Invoke-AwsJson($Arguments, $Description) {
     $value = [pscustomobject]@{ Version = '7'; CodeSha256 = ('A' * 43) + '='; Environment = [pscustomobject]@{ Variables = [pscustomobject]@{ CANDIDATE_DOCUMENT_BUCKET = $resume.Bucket; DOCUMENT_PARSER_VERSION = 'resume-parser-v1' } } }
     if ($script:runtimeCase -ceq 'parser-version') { $value.Version = '8' }
     if ($script:runtimeCase -ceq 'parser-hash') { $value.CodeSha256 = 'invalid' }
+    if ($script:runtimeCase -ceq 'retained-parser') {
+      Assert-Test ($Arguments[3] -ceq $parserArn.Replace(':7', ':6')) 'Retained parser inspected the current artifact instead.'
+      $value.Version = '6'
+    }
     return $value
   }
   if ($Arguments[0] -ceq 'guardduty') {
@@ -248,7 +255,10 @@ function Invoke-AwsJson($Arguments, $Description) {
 }
 $observed = Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime
 Assert-Test ($observed.Bucket -ceq $resume.Bucket -and ($observed.Identity | ConvertTo-Json -Depth 10 -Compress) -notmatch $resume.Bucket) 'Runtime boundary leaked raw bucket.'
-foreach ($case in @('mutable-parser','state-plan','processor-bucket','processor-key','processor-parser','semantic-version','foreign-plan','parser-version','parser-hash','scan-inactive','scan-prefix','scan-bucket','scan-tagging','mapping-disabled','mapping-target','rule-disabled','rule-target')) {
+$script:runtimeCase = 'retained-parser'
+$retained = Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime
+Assert-Test ($retained.Identity.parser.versionArnSha256 -ceq (Get-TextSha256 $parserArn.Replace(':7', ':6')) -and $retained.Identity.parser.currentVersionArnSha256 -ceq (Get-TextSha256 $parserArn)) 'Retained/current parser identities were not independently bound.'
+foreach ($case in @('mutable-parser','foreign-parser','mutable-pin','state-plan','processor-bucket','processor-key','processor-parser','semantic-version','foreign-plan','parser-version','parser-hash','scan-inactive','scan-prefix','scan-bucket','scan-tagging','mapping-disabled','mapping-target','rule-disabled','rule-target')) {
   $script:runtimeCase = $case
   Assert-Refused { Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime }
 }

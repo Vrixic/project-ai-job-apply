@@ -159,25 +159,39 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
     let keyMarker: string | undefined;
     let versionIdMarker: string | undefined;
     let isTruncated = true;
+    const cursors = new Set<string>();
     while (isTruncated) {
       const page = await this.client.send(
         new ListObjectVersionsCommand({
           Bucket: this.bucketName,
           Prefix: prefix,
+          MaxKeys: 1_000,
           ...(keyMarker ? { KeyMarker: keyMarker } : {}),
           ...(versionIdMarker ? { VersionIdMarker: versionIdMarker } : {}),
         }),
       );
+      if (typeof page.IsTruncated !== "boolean") {
+        throw new Error("CandidateDocumentInventoryInvalid");
+      }
       const append = (items: unknown) => {
-        if (!Array.isArray(items)) return;
+        if (items === undefined) return;
+        if (!Array.isArray(items)) throw new Error("CandidateDocumentInventoryInvalid");
         for (const item of items) {
           if (
-            item &&
-            typeof item === "object" &&
-            typeof (item as { Key?: unknown }).Key === "string" &&
-            matches((item as { Key: string }).Key) &&
-            typeof (item as { VersionId?: unknown }).VersionId === "string"
+            !item ||
+            typeof item !== "object" ||
+            typeof (item as { Key?: unknown }).Key !== "string" ||
+            !(item as { Key: string }).Key.startsWith(prefix) ||
+            (item as { Key: string }).Key.length > 1024 ||
+            Array.from((item as { Key: string }).Key).some(
+              (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
+            ) ||
+            typeof (item as { VersionId?: unknown }).VersionId !== "string" ||
+            (item as { VersionId: string }).VersionId.length === 0
           ) {
+            throw new Error("CandidateDocumentInventoryInvalid");
+          }
+          if (matches((item as { Key: string }).Key)) {
             inventory.push({
               Key: (item as { Key: string }).Key,
               VersionId: (item as { VersionId: string }).VersionId,
@@ -195,6 +209,9 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
       keyMarker = page.NextKeyMarker;
       versionIdMarker =
         typeof page.NextVersionIdMarker === "string" ? page.NextVersionIdMarker : undefined;
+      const cursor = JSON.stringify([keyMarker, versionIdMarker]);
+      if (cursors.has(cursor)) throw new Error("CandidateDocumentInventoryPaginationRejected");
+      cursors.add(cursor);
     }
     return inventory;
   }
@@ -203,6 +220,11 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
     objects: readonly CandidateDocumentObjectRef[],
   ): Promise<{ exactInventoryEmpty: boolean }> {
     const keys = exactObjectKeys(objects);
+    const documentIds = [...new Set(objects.map((object) => object.documentId))];
+    if (documentIds.some((id) => typeof id !== "string" || !RESUME_DOCUMENT_ID_PATTERN.test(id))) {
+      throw new Error("CandidateDocumentInventoryIdentityRejected");
+    }
+    const prefixes = documentIds.flatMap((id) => [`quarantine/${id}/`, `normalized/${id}/`]);
     for (const key of keys) {
       const inventory = await this.inventory(key);
       for (let offset = 0; offset < inventory.length; offset += 1_000) {
@@ -218,7 +240,14 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
         }
       }
     }
-    const remaining = await Promise.all(keys.map((key) => this.inventory(key)));
+    // Keep exact-key cleanup for retained inventories, then also remove older parser outputs
+    // that are absent from the row's latest normalized key. All identifiers are validated before I/O.
+    for (const documentId of documentIds) await this.purgeDocumentPrefixes(documentId);
+    // Recheck every prefix after the whole batch, not just immediately after each document's purge.
+    const remaining = await Promise.all([
+      ...keys.map((key) => this.inventory(key)),
+      ...prefixes.map((prefix) => this.listVersions(prefix, (key) => key.startsWith(prefix))),
+    ]);
     return { exactInventoryEmpty: remaining.every((items) => items.length === 0) };
   }
 

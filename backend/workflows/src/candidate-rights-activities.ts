@@ -39,6 +39,7 @@ export interface CandidateDocumentObjectRef {
 }
 
 export interface CandidateDocumentObjectStore {
+  /** Verifies recorded keys and both document-derived prefixes empty before owner-row deletion. */
   deleteAllVersionsAndMarkers(
     objects: readonly CandidateDocumentObjectRef[],
   ): Promise<{ exactInventoryEmpty: boolean }>;

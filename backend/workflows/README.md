@@ -74,6 +74,16 @@ version while the guarded acceptance operator proves every normal/provider gate 
 
 ## D2 isolated deletion recovery
 
+Account deletion's document-object activity removes recorded exact keys and every version and
+delete marker under the owned document IDs' `quarantine/<id>/` and `normalized/<id>/` prefixes.
+This includes older parser outputs absent from the Documents row's latest normalized key. All
+document IDs are validated before S3 I/O; malformed listings and repeated pagination refuse.
+A batch-wide second inventory must be empty before owner-row deletion can proceed. Incomplete
+cleanup leaves the account quarantined with its Documents inventory intact for retry. Neighboring
+document prefixes are not purged. This reuses ADR-034's resume purge without API or IAM changes;
+the [D3-031 record](../../docs/product/delivery/phase-3-application-preparation.md#task-register)
+distinguishes local verification from release and deployed acceptance.
+
 `candidate-deletion-restore-lambda.ts` is a temporary operator-only restore executor, not a durable
 application workflow or scheduled service. The exact version/configuration binds a verified private
 PITR copy; a fresh pool resolves only that target from the fixed source secret. Complete retained

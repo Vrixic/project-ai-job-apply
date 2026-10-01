@@ -9,6 +9,16 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+September 30 D3-031 enters In progress: account-deletion prefix cleanup is being implemented using
+the existing document-object activity and resume purge, without API, migration or Terraform changes.
+Local focused tests (89) and isolated real-PostgreSQL tests (6) pass, including quarantine on
+incomplete cleanup and successful retry. Full repository verification passes, including format/lint,
+all 37 typecheck tasks, package tests and all 23 builds. Reviewed release and deployed
+acceptance remain. D3-R8 historical objects are untouched. The local D3-028 correction admits
+the established retained immutable parser pin; 229 fixture assertions pass on both PowerShell
+hosts, and development read-only Status passes at state 401 without cloud mutation or candidate
+writes. D1/D3 remain In progress. See the [Phase 3 tasks](phase-3-application-preparation.md).
+
 September 30 D3-028 enters In progress: the opt-in generated-resume account-deletion acceptance
 harness is implemented and tested locally. It uploads one fixed synthetic PDF through the existing
 API and requires source/normalized prefix absence after the completed deletion marker. No backend
