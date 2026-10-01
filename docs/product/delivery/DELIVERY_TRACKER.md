@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-29
+Last updated: 2026-09-30
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -8,6 +8,13 @@ Program completion: Not completed
 This is the master record for the delivery phases defined in the [product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#20-delivery-roadmap). It intentionally tracks actual start and completion dates rather than predicted schedules.
 
 ## Summary
+
+September 30 D3-028 enters In progress: the opt-in generated-resume account-deletion acceptance
+harness is implemented and tested locally. It uploads one fixed synthetic PDF through the existing
+API and requires source/normalized prefix absence after the completed deletion marker. No backend
+API, frontend or cloud change is made. The reviewed live disposable-account run with fresh MFA
+remains required; D3-R8/D3-R9 stay Open and D1/D3 are not complete. See the
+[D3-028 task and evidence](phase-3-application-preparation.md#task-register).
 
 September 21 D3.1 added: a new delivery after D3 replaces the "profile facts" model with a
 structured candidate Profile (Personal, Education, Work experience, Skills, Application answers,

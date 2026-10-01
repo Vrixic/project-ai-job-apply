@@ -57,6 +57,78 @@ const identity = () => ({
   refreshToken: "generated-refresh-secret",
 });
 
+test("resume fixture is an exact opt-in and composes with the restricted fixture", () => {
+  for (const restricted of [false, true]) {
+    const selected = {
+      ...options(),
+      ResumeFixture: true,
+      ...(restricted ? { RestrictedAnswerFixture: true } : {}),
+    };
+    assert.deepEqual(validatePlanOptions(selected), selected);
+    for (const invalid of [false, "true", 1, null]) {
+      assert.throws(
+        () => validatePlanOptions({ ...selected, ResumeFixture: invalid }),
+        /invalid_plan_options/u,
+      );
+    }
+    const reviewed = { ...plan(), FixedSteps: restricted ? 18 : 17 };
+    assert.deepEqual(sanitizeOperatorResult("plan", reviewed, restricted, true), reviewed);
+    assert.throws(
+      () => sanitizeOperatorResult("plan", plan(), restricted, true),
+      /operator_result_invalid/u,
+    );
+    const completed = {
+      ...receipt(),
+      ResumeCoverage: {
+        valid: true,
+        parsedResumes: 1,
+        sourceVersionsBefore: 1,
+        normalizedVersionsBefore: 2,
+        sourceVersionsAfter: 0,
+        normalizedVersionsAfter: 0,
+        deleteMarkersAfter: 0,
+      },
+      ...(restricted
+        ? {
+            RestrictedAnswerCoverage: {
+              valid: true,
+              activeValueCount: 1,
+              expiredValueCount: 1,
+              deletedTombstoneCount: 1,
+              revisedValueCount: 1,
+            },
+          }
+        : {}),
+    };
+    assert.deepEqual(sanitizeOperatorResult("execute", completed, restricted, true), completed);
+    assert.throws(
+      () => sanitizeOperatorResult("execute", completed, restricted, false),
+      /operator_result_invalid/u,
+    );
+    for (const [name, invalid] of [
+      ["valid", "true"],
+      ["parsedResumes", 0],
+      ["sourceVersionsBefore", 0],
+      ["normalizedVersionsBefore", 1001],
+      ["sourceVersionsAfter", 1],
+      ["normalizedVersionsAfter", "0"],
+      ["deleteMarkersAfter", 1],
+      ["documentId", "unexpected"],
+    ]) {
+      assert.throws(
+        () =>
+          sanitizeOperatorResult(
+            "execute",
+            { ...completed, ResumeCoverage: { ...completed.ResumeCoverage, [name]: invalid } },
+            restricted,
+            true,
+          ),
+        /operator_result_invalid/u,
+      );
+    }
+  }
+});
+
 test("missing coverage failures retain only unique allowlisted names", () => {
   const names = Object.keys(receipt().ExportCoverage).filter((key) => key !== "valid");
   for (const missingCoverage of [["privateCaptureCount"], names]) {

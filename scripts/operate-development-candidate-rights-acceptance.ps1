@@ -60,6 +60,8 @@ param(
 
   [switch]$RestrictedAnswerFixture,
 
+  [switch]$ResumeFixture,
+
   [switch]$Help
 )
 
@@ -67,6 +69,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 . (Join-Path $PSScriptRoot "lib/candidate-rights-restricted-fixture.ps1")
+. (Join-Path $PSScriptRoot "lib/candidate-rights-resume-fixture.ps1")
 
 if ($Help) {
   @"
@@ -103,6 +106,9 @@ Plan is read-only and writes one checksum-reviewable descriptor below the ignore
 identity. Optional -RestrictedAnswerFixture selects the fixed empty-vault-only synthetic fixture,
 binds a schema-2 plan with 16 steps, and requires exact restricted export coverage. Use the same
 selection for Plan, Execute and Verify. The old lifecycle remains unchanged when omitted.
+Optional -ResumeFixture selects one generated PDF, requires enabled exact malware processing,
+binds a schema-3 plan (17 steps, or 18 with the vault fixture), and proves both document prefixes
+have no versions or delete markers after the completed deletion marker. It accepts no input file.
 The fixed lifecycle exercises that disposable
 identity through export, exact-version download, grant expiry, artifact cleanup, request/cancel,
 recent-MFA confirmation, Auth0 reconciliation, recovery-ledger completion, alert checks, and exact
@@ -328,6 +334,9 @@ function Read-SyntheticIdentityContext {
   if ($RestrictedAnswerFixture -and -not $scope.Contains('profile:read')) {
     throw 'The restricted fixture requires profile:read as well as profile:write.'
   }
+  if ($ResumeFixture -and (-not $scope.Contains('documents:read') -or -not $scope.Contains('documents:write'))) {
+    throw 'The generated resume fixture requires documents:read and documents:write.'
+  }
   $idAudience = @($idClaims.aud | ForEach-Object { [string]$_ })
   $amr = @($idClaims.amr | ForEach-Object { [string]$_ })
   $authTime = [DateTimeOffset]::FromUnixTimeSeconds([long]$idClaims.auth_time)
@@ -521,16 +530,22 @@ function Get-AcceptanceBoundary {
   # Backup, queue, alarm, and drift inspection can be comparatively slow and must not consume the
   # token's usable acceptance window before its first exact validation.
   $identity = if ($RequireIdentity) { Read-SyntheticIdentityContext $runtime.Issuer $runtime.IdTokenAudience $ExpectedRecentAuthMaxAgeSeconds } else { $null }
+  $resume = if ($ResumeFixture) { Get-RightsResumeRuntime $snapshot $runtime } else { $null }
   $secret = Assert-Auth0SecretBoundary $runtime.Auth0SecretArn
   $backup = Get-BackupInventory $snapshot
   $health = Assert-OperationalHealth $snapshot
   $drift = if ($RequireIdentity) { Read-ReviewedZeroDrift } else { $null }
-  return [pscustomobject]@{ Source = $source; Snapshot = $snapshot; Runtime = $runtime; Secret = $secret; Backup = $backup; Health = $health; Drift = $drift; Identity = $identity }
+  return [pscustomobject]@{ Source = $source; Snapshot = $snapshot; Runtime = $runtime; Secret = $secret; Backup = $backup; Health = $health; Drift = $drift; Identity = $identity; Resume = $resume }
 }
 
 function Get-FixedAcceptanceSequence {
   $sequence = @('export-request', 'export-idempotent-replay', 'export-ready', 'exact-version-download', 'download-grant-expired', 'deletion-request', 'deletion-cancel', 'fresh-recent-mfa-recheck', 'deletion-request', 'recent-mfa-confirm', 'owner-auth0-export-cleanup-reconciliation', 'recovery-ledger-completed', 'alerts-and-queues', 'zero-compute', 'zero-drift')
-  if ($RestrictedAnswerFixture) { return @('restricted-answer-fixture') + $sequence }
+  if ($RestrictedAnswerFixture) { $sequence = @('restricted-answer-fixture') + $sequence }
+  if ($ResumeFixture) {
+    $sequence = @('parsed-resume-fixture') + $sequence
+    $index = [Array]::IndexOf($sequence, 'recovery-ledger-completed') + 1
+    $sequence = @($sequence[0..($index - 1)]) + @('resume-prefix-absence') + @($sequence[$index..($sequence.Count - 1)])
+  }
   return $sequence
 }
 
@@ -559,6 +574,11 @@ function New-ExecutionPlan {
     $plan.schemaVersion = 2
     $plan.restrictedAnswerFixture = 'restricted-answers-v1'
   }
+  if ($ResumeFixture) {
+    $plan.schemaVersion = 3
+    $plan.resumeFixture = 'parsed-resume-v1'
+    $plan.resumeRuntime = $Boundary.Resume.Identity
+  }
   return $plan
 }
 
@@ -570,11 +590,13 @@ function Read-ExecutionPlan {
   $schemaVersion = 1
   $sequenceCount = 15
   if ($RestrictedAnswerFixture) { $names += 'restrictedAnswerFixture'; $schemaVersion = 2; $sequenceCount = 16 }
+  if ($ResumeFixture) { $names += @('resumeFixture','resumeRuntime'); $schemaVersion = 3; $sequenceCount += 2 }
   $null = Assert-ExactPropertySet $plan $names "Execution plan"
-  if ($RestrictedAnswerFixture -and (@($plan.fixedSequence) -join ',') -cne (@(Get-FixedAcceptanceSequence) -join ',')) {
-    throw 'The reviewed restricted fixture sequence changed.'
+  if (($RestrictedAnswerFixture -or $ResumeFixture) -and (@($plan.fixedSequence) -join ',') -cne (@(Get-FixedAcceptanceSequence) -join ',')) {
+    throw 'The reviewed fixture sequence changed.'
   }
-  if (($RestrictedAnswerFixture -and ([string]$plan.restrictedAnswerFixture -cne 'restricted-answers-v1' -or [string]$plan.fixedSequence[0] -cne 'restricted-answer-fixture')) -or
+  if (($RestrictedAnswerFixture -and [string]$plan.restrictedAnswerFixture -cne 'restricted-answers-v1') -or
+      ($ResumeFixture -and [string]$plan.resumeFixture -cne 'parsed-resume-v1') -or
       [int]$plan.schemaVersion -ne $schemaVersion -or [string]$plan.kind -cne 'development-candidate-rights-acceptance-plan' -or [string]$plan.sourceSha -cne $SourceSha -or [DateTimeOffset]::Parse([string]$plan.expiresAt) -le [DateTimeOffset]::UtcNow -or
       [string]$plan.policy.sha256 -cne $ReviewedPolicySha256 -or [string]$plan.identity.classification -cne 'generated-synthetic-only' -or [string]$plan.auth0.revocationMode -cne 'delete_user_only' -or @($plan.fixedSequence).Count -ne $sequenceCount) { throw "The reviewed execution plan is invalid or expired." }
   return [pscustomobject]@{ Path = $path; Value = $plan }
@@ -950,12 +972,14 @@ function Invoke-FixedLifecycle {
   param([Parameter(Mandatory)][object]$Boundary, [Parameter(Mandatory)][object]$Plan)
   $script:VerifiedExportCoverage = $null
   $script:VerifiedRestrictedAnswerCoverage = $null
+  $script:VerifiedResumeCoverage = $null
   $null = Assert-SyntheticRefreshPrerequisites
   $null = Assert-CandidateRightsExportReady
   $script:Runtime = $Boundary.Runtime
   $token = $Boundary.Identity.Token
   $idToken = $Boundary.Identity.IdToken
   $started = [DateTimeOffset]::UtcNow
+  $resumeFixture = if ($ResumeFixture) { New-RightsResumeFixture $token $Boundary.Resume } else { $null }
   $restrictedSnapshot = if ($RestrictedAnswerFixture) { @(New-RestrictedAnswerFixture $token) } else { $null }
   $exportKey = "rights-export-$([guid]::NewGuid().ToString('N'))"
   $exportBody = [ordered]@{ format = 'candidate-data-export-v1' }
@@ -993,6 +1017,10 @@ function Invoke-FixedLifecycle {
   if ([string]$confirmed.Body.state -cne 'quarantined') { throw "Deletion confirmation did not atomically quarantine the generated-synthetic identity." }
   $expectedSubjectDigest = Get-CandidateDeletionSubjectDigest $Boundary.Runtime.Issuer $Boundary.Identity.Subject
   $null = Wait-DeletionCompletion ([string]$confirmRequest.Body.id) $expectedSubjectDigest
+  if ($ResumeFixture) {
+    $script:VerifiedResumeCoverage = Confirm-RightsResumeDeletion $Boundary.Resume $resumeFixture
+    Assert-RightsResumeCoverage $script:VerifiedResumeCoverage
+  }
   $post = Assert-OperationalHealth $Boundary.Snapshot
   $receipt = [ordered]@{
     schemaVersion = 1; kind = 'development-candidate-rights-acceptance-receipt'; phase = 'verified-cleaned'; sourceSha = $SourceSha
@@ -1009,6 +1037,11 @@ function Invoke-FixedLifecycle {
     $receipt.schemaVersion = 2
     $receipt.restrictedAnswerCoverage = $script:VerifiedRestrictedAnswerCoverage
   }
+  if ($ResumeFixture) {
+    Assert-RightsResumeCoverage $script:VerifiedResumeCoverage
+    $receipt.schemaVersion = 3
+    $receipt.resumeCoverage = $script:VerifiedResumeCoverage
+  }
   return $receipt
 }
 
@@ -1017,10 +1050,15 @@ function Read-AggregateReceipt {
   if ((Get-FileSha256 $path) -cne $ReviewedReceiptSha256) { throw "The candidate-rights receipt checksum does not match the reviewed value." }
   $receipt = ConvertFrom-OperatorJson (Get-Content -LiteralPath $path -Raw) "Candidate-rights receipt"
   if ($RestrictedAnswerFixture) {
-    if ([int]$receipt.schemaVersion -ne 2) { throw 'The reviewed receipt does not include the restricted fixture.' }
+    $expectedSchema = if ($ResumeFixture) { 3 } else { 2 }
+    if ([int]$receipt.schemaVersion -ne $expectedSchema) { throw 'The reviewed receipt does not include the restricted fixture.' }
     $coverage = Get-OptionalProperty $receipt 'restrictedAnswerCoverage'
     if ($null -eq $coverage) { throw 'The reviewed receipt omits restricted fixture coverage.' }
     $null = Read-CandidateRightsExportHelperResult ($coverage | ConvertTo-Json -Compress) -RestrictedAnswers
+  }
+  if ($ResumeFixture) {
+    if ([int]$receipt.schemaVersion -ne 3) { throw 'The reviewed receipt does not include the resume fixture.' }
+    Assert-RightsResumeCoverage (Get-OptionalProperty $receipt 'resumeCoverage')
   }
   if ([string]$receipt.kind -cne 'development-candidate-rights-acceptance-receipt' -or [string]$receipt.phase -cne 'verified-cleaned' -or [string]$receipt.sourceSha -cne $SourceSha -or [int]$receipt.exportsRequested -ne 1 -or [int]$receipt.exportObjectsCleaned -ne 1 -or [int]$receipt.deletionMarkersCompleted -ne 1 -or [int]$receipt.ownerInventoriesReconciled -ne 7 -or $receipt.auth0Reconciled -ne $true -or [int]$receipt.persistentSyntheticIdentities -ne 0 -or [int]$receipt.queuedMessages -ne 0 -or [int]$receipt.activeCompute -ne 0) { throw "The reviewed candidate-rights aggregate receipt is incomplete." }
   return $receipt
@@ -1046,13 +1084,15 @@ if (-not $script:TestOnly) {
       $plan = New-ExecutionPlan $boundary
       $path = Join-Path $operatorRoot "plan-$([guid]::NewGuid().ToString('N')).json"
       Write-ExclusiveJson $path $plan
-      [pscustomobject]@{ Outcome = 'review-required'; PlanPath = $path; PlanSha256 = Get-FileSha256 $path; FixedSteps = 15; CloudMutation = $false }
+      [pscustomobject]@{ Outcome = 'review-required'; PlanPath = $path; PlanSha256 = Get-FileSha256 $path; FixedSteps = @(Get-FixedAcceptanceSequence).Count; CloudMutation = $false }
     }
     'Execute' {
       $reviewed = Read-ExecutionPlan
       $boundary = Get-AcceptanceBoundary -RequireIdentity
       $current = New-ExecutionPlan $boundary
-      foreach ($name in @('sourceSha','policy','identity','auth0','aliases','zeroDriftPlanSha256')) {
+      $comparisonNames = @('sourceSha','policy','identity','auth0','aliases','zeroDriftPlanSha256')
+      if ($ResumeFixture) { $comparisonNames += 'resumeRuntime' }
+      foreach ($name in $comparisonNames) {
         if (($reviewed.Value.$name | ConvertTo-Json -Depth 20 -Compress) -cne ($current.$name | ConvertTo-Json -Depth 20 -Compress)) { throw "The live $name boundary changed after plan review." }
       }
       # RDS advances LatestRestorableTime continuously and rotates snapshots under the reviewed
@@ -1070,6 +1110,7 @@ if (-not $script:TestOnly) {
       Write-ExclusiveJson $path $receipt
       $result = [ordered]@{ Outcome = 'verified-and-cleaned'; ReceiptPath = $path; ReceiptSha256 = Get-FileSha256 $path; ExportsRequested = 1; DeletionMarkersCompleted = 1; PersistentSyntheticIdentities = 0; ExportCoverage = $script:VerifiedExportCoverage }
       if ($RestrictedAnswerFixture) { $result.RestrictedAnswerCoverage = $script:VerifiedRestrictedAnswerCoverage }
+      if ($ResumeFixture) { $result.ResumeCoverage = $script:VerifiedResumeCoverage }
       [pscustomobject]$result
     }
     'RecoverUnconfirmed' {

@@ -16,7 +16,7 @@ $expectedParameters = @(
   'ExpectedDownloadGrantSeconds','ExpectedBackupRetentionDays','ExpectedRecentAuthMaxAgeSeconds',
   'ExpectedOwnerInventory','ExpectedSubprocessorInventory','ZeroDriftPlanPath',
   'ReviewedZeroDriftPlanSha256','ExecutionPlanPath','ReviewedExecutionPlanSha256','RecoveryFailureTimestamp','ReceiptPath',
-  'ReviewedReceiptSha256','RecoveryReplayReceiptPath','ReviewedRecoveryReplayReceiptSha256','RestrictedAnswerFixture','Help'
+  'ReviewedReceiptSha256','RecoveryReplayReceiptPath','ReviewedRecoveryReplayReceiptSha256','RestrictedAnswerFixture','ResumeFixture','Help'
 )
 $actualParameters = @($ast.ParamBlock.Parameters.Name.VariablePath.UserPath)
 if (($actualParameters -join '|') -cne ($expectedParameters -join '|')) { throw 'The exact public parameter surface changed.' }
@@ -165,6 +165,23 @@ try {
     if (-not $Condition) { throw $Description }
   }
   $generatedAttestationJson = Get-Content -LiteralPath $attestationPath -Raw
+  # The optional resume fixture needs both existing document scopes, without changing defaults.
+  try {
+    $ResumeFixture = $true
+    foreach ($scopeCase in @('profile:write','profile:write documents:read','profile:write documents:write')) {
+      $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = New-TestJwt -Scope $scopeCase
+      $refused = $false
+      try { $null = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300 }
+      catch { $refused = $_.Exception.Message -ceq 'The generated resume fixture requires documents:read and documents:write.' }
+      Assert-GeneratedAttestationCondition $refused 'Resume preparation admitted missing document scopes.'
+    }
+    $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = New-TestJwt -Scope 'profile:write documents:read documents:write'
+    $scopedIdentity = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 300
+    Assert-GeneratedAttestationCondition ($scopedIdentity.SubjectSha256 -ceq $identity.SubjectSha256) 'Document scopes changed the synthetic identity.'
+  } finally {
+    $ResumeFixture = $false
+    $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = New-TestJwt
+  }
   $legacyAttestationHash = Get-FileSha256 $attestationPath
   Assert-GeneratedAttestationCondition ($identity.AttestationSha256 -ceq $legacyAttestationHash) 'Legacy attestation no longer uses the original file checksum.'
   $originalAttestationFileHashFunction = ${function:Get-FileSha256}

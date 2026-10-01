@@ -117,6 +117,53 @@ This addition does not yet implement the parsed-resume case or by-prefix deletio
 nor a second-identity isolation/failure exercise. Local fake API/native-transport tests do not prove
 live KMS, hosted authentication, account deletion or phase completion.
 
+### Opt-in generated resume fixture (D3-028)
+
+Select `ResumeFixture: true` in the process-memory session's plan options, or `-ResumeFixture`
+on the maintained PowerShell operator. Keep the selection identical for Plan, Execute and Verify.
+The selector binds a schema-3 plan with 17 exact steps, or 18 when combined with the vault fixture.
+Historical schema-1 and vault-only schema-2 plans remain unchanged and cannot authorize this case.
+The reconstructed live plan compares the hash-only resume runtime identity before execution.
+
+This mode requires `documents:read` and `documents:write`, the reviewed
+`d2-development-synthetic-v1` policy, an empty disposable owner's resume inventory, and exact
+state/Gateway/activity bucket bindings. The Gateway's source KMS key must match the processor.
+The processor must use the state-pinned immutable parser version and `resume-parser-v1`.
+The GuardDuty plan must be ACTIVE for only `quarantine/` with tagging ENABLED, and the exact
+state scan rule and processor event-source mapping must already be enabled. The harness only
+observes these gates; it cannot enable triggers, release code, modify IAM or bypass malware scanning.
+
+Execute generates a fixed 625-byte PDF in memory containing only
+`Generated synthetic candidate - Skills: TypeScript`. It registers it through the existing
+`POST /v1/resumes/uploads` API, then uploads once using that grant. No arbitrary input file, bucket,
+document identifier, direct object deletion, parser invocation or SQL is accepted. The grant must
+target the exact regional S3 bucket over HTTPS without redirects, bind the fixed document key,
+SHA-256/checksum and KMS key, and expire within the normal five-minute window. Signed fields and
+candidate tokens are never printed or retained. Parsing is polled for at most five minutes and
+must yield one page and 50 characters; proposals are not confirmed as candidate facts.
+
+Both `quarantine/<document-id>/` and `normalized/<document-id>/` must start empty before upload,
+then contain source and normalized versions with no delete markers after parsing. Only after
+the existing account-deletion recovery marker reaches completed does the harness list both
+prefixes again and require zero versions and zero delete markers. Listings are read-only,
+bounded to 1000 entries per prefix and fail closed if truncated, malformed or out of scope.
+This is independent prefix verification, not a change to the account-deletion implementation.
+It does not cover deliberately seeded older-parser leftovers or explain historical orphan objects
+tracked in D3-R8. Failed/ambiguous uploads, parsing or cleanup preserve the disposable scope for
+reviewed recovery; no automatic retry, SQL cleanup or direct S3 deletion is performed.
+
+Completed receipts carry only `resumeCoverage`, and the session result only `ResumeCoverage`:
+`valid`, `parsedResumes`, source/normalized version counts before and after, and
+`deleteMarkersAfter`. No document ID, PDF, normalized text, source key, bucket or signed grant is
+stored in that evidence. A historical receipt cannot satisfy Verify with this mode selected.
+The ordinary nonempty D2 export coverage, expiry, cancellation, fresh-MFA, owner reconciliation,
+Auth0, recovery replay, queue/alert and zero-drift checks are still mandatory. Parsing consumes the
+same recent-MFA window; refresh never renews MFA and an expired proof still stops execution.
+
+Local mocked API/S3 observations and production PDF parsing validate the harness, not deployed
+deletion. D3-028 and D3-R9 remain open until a reviewed live disposable-account run succeeds.
+No real-resume permission under ADR-023 is granted by this synthetic mode.
+
 ## Two-stage infrastructure and credential setup
 
 Provision the tagged managed secret and raise RDS retention before runtime activation. Keep
