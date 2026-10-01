@@ -420,18 +420,33 @@ aside {
   background: #f8fbf9;
 }
 
-.job-filter-bar {
+.jobs-toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
-  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   width: 100%;
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid #cedbd3;
-  border-radius: 12px;
-  background: #fff;
+  margin: 16px 0 24px;
+}
+
+.job-filter-bar {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
+}
+
+.job-filter-bar[hidden] {
+  display: none;
 }
 
 .job-filter {
@@ -1127,6 +1142,10 @@ aside {
   display: flex;
   gap: 8px;
   margin: 16px 0 24px;
+}
+
+.jobs-toolbar .dashboard-subtabs {
+  margin: 0;
 }
 
 .dashboard-subtab {
