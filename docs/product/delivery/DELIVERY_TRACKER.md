@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -8,6 +8,13 @@ Program completion: Not completed
 This is the master record for the delivery phases defined in the [product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#20-delivery-roadmap). It intentionally tracks actual start and completion dates rather than predicted schedules.
 
 ## Summary
+
+October 1 D3-032 is Complete: #491 merged and the fresh maintained baseline capture passes at
+state 401 with zero drift. D3-033 enters In progress after the publication audit refuses newly
+reported CVE-2026-92081 in Fastify. The minimal 5.12.5 dependency patch passes targeted real-loopback
+HTTP/2 and HTTP/1 trailer tests and the unchanged centralized audit, with no risk exception.
+Merge, immutable publication, activity release and fresh-MFA acceptance remain. No API or cloud
+runtime change is made; D1/D3 remain In progress. See the [Phase 3 tasks](phase-3-application-preparation.md).
 
 September 30 D3-032 enters In progress: the current-baseline provenance guard now validates
 regular-file renames against canonical add/delete records and both immutable source trees.
