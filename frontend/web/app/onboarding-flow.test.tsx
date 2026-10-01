@@ -951,7 +951,7 @@ describe("coordinated onboarding flow", () => {
     expect(container.textContent).toContain("Resume processing is temporarily unavailable.");
     expect(container.textContent).not.toContain(privateProblemCanary);
     expect(container.textContent).toContain("Selected file: synthetic.pdf");
-    expect(buttonNamed(container, "Upload resume").disabled).toBe(false);
+    expect(fileInput.disabled).toBe(false);
   });
 
   it("shows fixed candidate-safe copy when resume status polling fails", async () => {
@@ -982,7 +982,7 @@ describe("coordinated onboarding flow", () => {
     expect(container.textContent).toContain("Resume processing is temporarily unavailable.");
     expect(container.textContent).toContain("synthetic-prior-account.pdf");
     expect(container.textContent).not.toContain(privateProblemCanary);
-    expect(buttonNamed(container, "Upload resume").disabled).toBe(true);
+    expect(container.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(true);
   });
 
   it("hides resume state immediately and ignores an initial load after sign-out", async () => {
@@ -1003,7 +1003,7 @@ describe("coordinated onboarding flow", () => {
     expect(loadSignal?.aborted).toBe(true);
     expect(container.textContent).toContain("0 stored");
     expect(container.textContent).not.toContain("synthetic-prior-account.pdf");
-    expect(buttonNamed(container, "Upload resume").disabled).toBe(true);
+    expect(container.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(true);
 
     await act(async () =>
       pendingLoad.resolve(jsonResponse({ documents: [resumeDocument("parsed")] })),
@@ -1039,7 +1039,7 @@ describe("coordinated onboarding flow", () => {
     expect(container.textContent).toContain("0 stored");
     expect(container.textContent).not.toContain("synthetic-prior-account.pdf");
     expect(container.textContent).not.toContain("Resume parsing finished");
-    expect(buttonNamed(container, "Upload resume").disabled).toBe(true);
+    expect(container.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(true);
 
     await act(async () =>
       pendingPoll.resolve(jsonResponse({ documents: [resumeDocument("parsed")] })),
@@ -1163,7 +1163,7 @@ describe("coordinated onboarding flow", () => {
     expect(registrationSignal?.aborted).toBe(true);
     expect(container.textContent).toContain("0 stored");
     expect(container.textContent).not.toContain("Selected file: synthetic.pdf");
-    expect(buttonNamed(container, "Upload resume").disabled).toBe(true);
+    expect(fileInput.disabled).toBe(true);
 
     await act(async () =>
       pendingRegistration.resolve(
@@ -1222,7 +1222,7 @@ describe("coordinated onboarding flow", () => {
     await act(async () => root.render(resumeUpload(false, parsedCallback)));
     expect(fileInput.value).toBe("");
     expect(container.textContent).not.toContain("Selected file: synthetic.pdf");
-    expect(buttonNamed(container, "Upload resume").disabled).toBe(true);
+    expect(fileInput.disabled).toBe(true);
 
     await act(async () => pendingBytes.resolve(new Uint8Array([1, 2, 3]).buffer));
     expect(registrationCalls).toBe(0);
@@ -1282,7 +1282,7 @@ describe("coordinated onboarding flow", () => {
     expect(storageSignal?.aborted).toBe(true);
     expect(container.textContent).toContain("0 stored");
     expect(container.textContent).not.toContain("Selected file: synthetic.pdf");
-    expect(buttonNamed(container, "Upload resume").disabled).toBe(true);
+    expect(fileInput.disabled).toBe(true);
 
     await act(async () => pendingStorage.resolve(new Response(null, { status: 204 })));
     expect(container.textContent).not.toContain("synthetic-prior-account.pdf");
