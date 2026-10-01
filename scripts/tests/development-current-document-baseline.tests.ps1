@@ -29,10 +29,26 @@ function git {
   }
   if ($arguments -contains "--name-status") {
     if ($script:gitMode -ceq "git-error") { $global:LASTEXITCODE = 1; return }
-    if ($script:gitMode -ceq "rename") { return "R100`told.ts`tnew.ts" }
+    if ($script:gitMode -like "rename*") {
+      if ($arguments -contains "--no-renames") {
+        if ($script:gitMode -ceq "rename-missing-add") { return "D`told.ts" }
+        if ($script:gitMode -ceq "rename-wrong-status") { return @("M`told.ts", "A`tnew.ts") }
+        if ($script:gitMode -ceq "rename-duplicate") { return @("D`told.ts", "D`told.ts") }
+        return @("D`told.ts", "A`tnew.ts")
+      }
+      if ($script:gitMode -ceq "rename-malformed") { return "R094`told.ts" }
+      if ($script:gitMode -ceq "rename-lowercase") { return "r094`told.ts`tnew.ts" }
+      if ($script:gitMode -ceq "rename-score") { return "R101`told.ts`tnew.ts" }
+      if ($script:gitMode -ceq "rename-same-path") { return "R100`told.ts`told.ts" }
+      if ($script:gitMode -ceq "rename-detected-duplicate") { return @("R094`told.ts`tnew.ts", "R094`told.ts`tnew.ts") }
+      if ($script:gitMode -ceq "rename-exact") { return "R100`told.ts`tnew.ts" }
+      if ($script:gitMode -ceq "rename-canonical-only") { return @("D`told.ts", "A`tnew.ts") }
+      return "R094`told.ts`tnew.ts"
+    }
     return "M`tbackend/services/jobs/src/synthetic-test.ts"
   }
   if ($arguments -contains "--numstat") {
+    if ($script:gitMode -like "rename*") { return @("0`t1`told.ts", "1`t0`tnew.ts") }
     if ($script:gitMode -ceq "missing-numstat") { return }
     if ($script:gitMode -ceq "binary") { return "-`t-`tbackend/services/jobs/src/synthetic-test.ts" }
     return "1`t1`tbackend/services/jobs/src/synthetic-test.ts"
@@ -43,6 +59,16 @@ function git {
     }
     $revision = [string]$arguments[-1]
     $script:treeCallRevisions += $revision
+    if ($script:gitMode -like "rename*") {
+      $oldEndpoint = $revision -ceq ("b" * 40)
+      $path = if ($oldEndpoint) { "old.ts" } else { "new.ts" }
+      $mode = "100644"; $kind = "blob"
+      if (($script:gitMode -ceq "rename-old-symlink" -and $oldEndpoint) -or
+          ($script:gitMode -ceq "rename-new-symlink" -and -not $oldEndpoint)) { $mode = "120000" }
+      if ($script:gitMode -ceq "rename-gitlink") { $mode = "160000"; $kind = "commit" }
+      if ($script:gitMode -ceq "rename-missing-tree" -and -not $oldEndpoint) { return }
+      return "$mode $kind $('c' * 40)`t$path"
+    }
     if ($script:gitMode -ceq "tree-error") { $global:LASTEXITCODE = 1; return }
     if ($script:gitMode -ceq "malformed-tree") { return "malformed" }
     if ($script:gitMode -ceq "missing-old" -and $revision -ceq ("b" * 40)) { return }
@@ -59,6 +85,7 @@ function git {
   }
   if ($arguments -contains "--full-index") {
     if ($script:gitMode -ceq "patch-error") { $global:LASTEXITCODE = 1; return }
+    if ($script:gitMode -ceq "rename-changed-patch") { return "diff --git changed-rename-content" }
     return "diff --git generated-unit-fixture"
   }
   throw "Unexpected Git operation in isolated baseline test."
@@ -193,9 +220,27 @@ try {
     $badCheck = @{} + $check; $badCheck.Metadata = $bad
     Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @badCheck } $change.Name
   }
-  foreach ($mode in @("nonancestor", "rename", "git-error", "missing-numstat", "symlink", "symlink-old", "gitlink", "invalid-mode", "path-case", "tree-error", "malformed-tree", "missing-old", "duplicate-tree", "patch-error")) {
+  foreach ($mode in @("nonancestor", "git-error", "missing-numstat", "symlink", "symlink-old", "gitlink", "invalid-mode", "path-case", "tree-error", "malformed-tree", "missing-old", "duplicate-tree", "patch-error")) {
     $script:gitMode = $mode
     Assert-Rejected { Assert-CurrentDocumentBaselineEvidence @check } $mode
+  }
+  $script:gitMode = "rename"
+  $renameDigest = Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $repositoryRoot -DocumentReleaseSourceSha $documentSource -SourceSha $SourceSha
+  $script:gitMode = "rename-canonical-only"
+  if ((Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $repositoryRoot -DocumentReleaseSourceSha $documentSource -SourceSha $SourceSha) -cne $renameDigest) {
+    throw "Rename detection changed the canonical add/delete provenance digest."
+  }
+  $script:gitMode = "rename-exact"
+  if ((Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $repositoryRoot -DocumentReleaseSourceSha $documentSource -SourceSha $SourceSha) -cne $renameDigest) {
+    throw "An exact regular-file move did not preserve the canonical provenance digest."
+  }
+  $script:gitMode = "rename-changed-patch"
+  if ((Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $repositoryRoot -DocumentReleaseSourceSha $documentSource -SourceSha $SourceSha) -ceq $renameDigest) {
+    throw "Rename provenance omitted the changed canonical content patch."
+  }
+  foreach ($mode in @("rename-malformed", "rename-lowercase", "rename-score", "rename-same-path", "rename-missing-add", "rename-wrong-status", "rename-duplicate", "rename-detected-duplicate", "rename-old-symlink", "rename-new-symlink", "rename-gitlink", "rename-missing-tree")) {
+    $script:gitMode = $mode
+    Assert-Rejected { Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $repositoryRoot -DocumentReleaseSourceSha $documentSource -SourceSha $SourceSha } $mode
   }
   $script:gitMode = "binary"
   if ((Get-CurrentDocumentBaselineSourceDeltaSha256 -RepositoryRoot $repositoryRoot -DocumentReleaseSourceSha $documentSource -SourceSha $SourceSha) -cne $post.DocumentSourceDeltaSha256) {
