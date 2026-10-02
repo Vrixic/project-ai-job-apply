@@ -7,6 +7,12 @@ owned confidential operational metadata, not product analytics or public API res
 work prevents ledger/document deletion; terminal metadata disappears with the owning document.
 Production actor/settlement, IAM, retention and restore enforcement remain uncomposed/default-off.
 
+The source-only private initializer now uses a fresh ledger grant/claim before its three fixed
+slot writes, and records settlement only after all original positive single-attempt acknowledgements
+and pinned reads. A local timeout, late write, object presence or read-only replay never records
+settlement. This connection adds no candidate values to control metadata or public responses.
+Other actors and the production drain authority remain uncomposed.
+
 - Status: Engineering baseline; accountable security/privacy approval pending
 - Last updated: 2026-08-08
 

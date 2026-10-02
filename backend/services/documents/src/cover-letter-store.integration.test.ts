@@ -23,6 +23,7 @@ import {
 import { CoverLetterProviderInitializer } from "./cover-letter-provider-initialize.js";
 import { CoverLetterProviderRecovery } from "./cover-letter-provider-recovery.js";
 import { type CoverLetterObjectStore, PostgresCoverLetterStore } from "./cover-letter-store.js";
+import { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const execFileAsync = promisify(execFile);
@@ -44,6 +45,13 @@ const generation = {
     max: 3,
     onnotice: () => undefined,
   });
+  // The outer candidate leases may occupy all three document connections concurrently.
+  // Control transactions need a separate pool, not a nested query waiting on its own lease.
+  const workClient = postgres(databaseUrl ?? "postgres://invalid", {
+    max: 1,
+    onnotice: () => undefined,
+  });
+  const work = new PostgresCoverLetterWorkStore(workClient, () => true);
   const objects = new Map<string, Uint8Array>();
   const putIfAbsent = vi.fn<CoverLetterObjectStore["putIfAbsent"]>(async (input) => {
     const existing = objects.get(input.objectKey);
@@ -70,6 +78,7 @@ const generation = {
   });
   afterAll(async () => {
     await client.end();
+    await workClient.end();
   });
 
   async function withOwner(run: (owner: string) => Promise<void>): Promise<void> {
@@ -78,6 +87,11 @@ const generation = {
     try {
       await run(owner);
     } finally {
+      const letters = await client<
+        Array<{ id: string }>
+      >`SELECT id FROM documents.cover_letters WHERE user_id = ${owner}`;
+      for (const letter of letters) await work.revokeUnclaimed(owner, letter.id);
+      await client`DELETE FROM documents.cover_letters WHERE user_id = ${owner}`;
       await client`DELETE FROM documents.audit_events WHERE user_id = ${owner}`;
       await client`DELETE FROM identity.users WHERE id = ${owner}`;
     }
@@ -390,95 +404,145 @@ const generation = {
     });
   });
 
-  it("only the committed first reservation initializes slots and replay cannot recreate a removed slot", async () => {
-    await withOwner(async (owner) => {
-      const now = new Date("2026-10-02T12:00:00.000Z");
-      const fact: GraphFact = {
-        id: factId,
-        kind: "skill",
-        key: "skill",
-        value: "TypeScript",
-        verification: "confirmed",
-        sensitivity: "standard",
-        source: { type: "user", reference: "synthetic" },
-        version: 1,
-      };
-      const evidence = {
-        facts: [fact],
-        job: { title: "Engineer", company: "Synthetic", description: "Build reliable systems." },
-      };
-      const identity = {
-        id: randomUUID(),
-        ownerUserId: owner,
-        applicationId: randomUUID(),
-        ...coverLetterContext({ ...evidence, now }),
-        noticeVersion: "openai-cover-letter.v1",
-        approvedAt: now,
-        expiresAt: new Date(now.getTime() + 15 * 60_000),
-      };
-      const slots = new Map<CoverLetterProviderSlot, Uint8Array>();
-      const reference = (bytes: Uint8Array) => ({
-        objectVersion: "synthetic-version",
-        etag: '"synthetic-etag"',
-        sha256: coverLetterProviderSha256(bytes),
-        sizeBytes: bytes.length,
-      });
-      const put = vi.fn(async (id: string, slot: CoverLetterProviderSlot, bytes: Uint8Array) => {
-        expect(id).toBe(identity.id);
-        const prior = slots.get(slot);
-        if (prior) return { created: false, reference: reference(prior) };
-        slots.set(slot, Uint8Array.from(bytes));
-        return { created: true, reference: reference(bytes) };
-      });
-      const initializer = new CoverLetterProviderInitializer(
-        store,
-        { load: async () => evidence },
-        {
-          putIfAbsent: put,
-          find: async (_id, slot) => {
-            const bytes = slots.get(slot);
-            return bytes ? reference(bytes) : undefined;
-          },
-          read: async (_id, slot) => {
-            const bytes = slots.get(slot);
-            if (!bytes) throw new CoverLetterIntegrityError();
-            return bytes;
-          },
-        },
-        () => true,
-        () => now,
-      );
-      const results = await Promise.all([
-        initializer.initialize(identity),
-        initializer.initialize(identity),
-        initializer.initialize(identity),
-      ]);
-      expect(results.some((result) => result.kind === "initialized")).toBe(true);
-      expect(put.mock.calls.map((call) => call[1])).toEqual(["request", "result", "dispatch"]);
-      const [count] = await client<
-        Array<{ count: number }>
-      >`SELECT count(*)::int AS count FROM documents.cover_letters WHERE user_id = ${owner}`;
-      expect(count?.count).toBe(1);
-      const [inventory] = await client<
-        Array<{ data: Array<{ documentId: string; sourceObjectKey: string }> }>
-      >`SELECT documents.candidate_object_inventory(${owner}::uuid) AS data`;
-      expect(inventory?.data).toEqual(
-        expect.arrayContaining([
+  it.each([undefined, "request", "result", "dispatch"] as const)(
+    "first reservation alone claims slot authority; lost %s acknowledgement stays unresolved",
+    async (lostAck) => {
+      await withOwner(async (owner) => {
+        const now = new Date();
+        const fact: GraphFact = {
+          id: factId,
+          kind: "skill",
+          key: "skill",
+          value: "TypeScript",
+          verification: "confirmed",
+          sensitivity: "standard",
+          source: { type: "user", reference: "synthetic" },
+          version: 1,
+        };
+        const evidence = {
+          facts: [fact],
+          job: { title: "Engineer", company: "Synthetic", description: "Build reliable systems." },
+        };
+        const identity = {
+          id: randomUUID(),
+          ownerUserId: owner,
+          applicationId: randomUUID(),
+          ...coverLetterContext({ ...evidence, now }),
+          noticeVersion: "openai-cover-letter.v1",
+          approvedAt: now,
+          expiresAt: new Date(now.getTime() + 15 * 60_000),
+        };
+        const slots = new Map<CoverLetterProviderSlot, Uint8Array>();
+        const reference = (bytes: Uint8Array) => ({
+          objectVersion: "synthetic-version",
+          etag: '"synthetic-etag"',
+          sha256: coverLetterProviderSha256(bytes),
+          sizeBytes: bytes.length,
+        });
+        const put = vi.fn(async (id: string, slot: CoverLetterProviderSlot, bytes: Uint8Array) => {
+          expect(id).toBe(identity.id);
+          const [authorization] = await workClient<Array<{ state: string }>>`
+          SELECT state FROM documents.cover_letter_work_authorizations
+          WHERE document_id = ${id} AND purpose = 'private_slots'
+        `;
+          expect(authorization?.state).toBe("running");
+          const prior = slots.get(slot);
+          if (prior) return { created: false, reference: reference(prior) };
+          slots.set(slot, Uint8Array.from(bytes));
+          if (slot === lostAck) throw new Error("Synthetic lost write acknowledgement");
+          return { created: true, reference: reference(bytes) };
+        });
+        const initializer = new CoverLetterProviderInitializer(
+          store,
+          { load: async () => evidence },
           {
-            documentId: identity.id,
-            sourceObjectKey: `normalized/${identity.id}/cover-letter.v1.json`,
+            putIfAbsent: put,
+            find: async (_id, slot) => {
+              const bytes = slots.get(slot);
+              return bytes ? reference(bytes) : undefined;
+            },
+            read: async (_id, slot) => {
+              const bytes = slots.get(slot);
+              if (!bytes) throw new CoverLetterIntegrityError();
+              return bytes;
+            },
           },
-        ]),
-      );
-      slots.delete("dispatch");
-      expect(await initializer.initialize(identity)).toEqual({ kind: "in_progress" });
-      expect(put).toHaveBeenCalledTimes(3);
-      expect(slots.has("dispatch")).toBe(false);
-      await client`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
-      expect(await initializer.initialize(identity)).toEqual({ kind: "in_progress" });
-      expect(put).toHaveBeenCalledTimes(3);
-    });
-  });
+          () => true,
+          () => now,
+          undefined,
+          work,
+        );
+        const results = await Promise.all([
+          initializer.initialize(identity),
+          initializer.initialize(identity),
+          initializer.initialize(identity),
+        ]);
+        if (!lostAck) expect(results.some((result) => result.kind === "initialized")).toBe(true);
+        expect((await initializer.initialize(identity)).kind).toBe(
+          !lostAck || lostAck === "dispatch" ? "initialized" : "in_progress",
+        );
+        const written =
+          lostAck === "request"
+            ? ["request"]
+            : lostAck === "result"
+              ? ["request", "result"]
+              : ["request", "result", "dispatch"];
+        expect(put.mock.calls.map((call) => call[1])).toEqual(written);
+        const [authorization] = await workClient<
+          Array<{ id: string; state: string; requestSha256: string }>
+        >`
+        SELECT id, state, request_sha256 AS "requestSha256"
+        FROM documents.cover_letter_work_authorizations WHERE document_id = ${identity.id}
+      `;
+        if (!authorization) throw new Error("Synthetic work row missing");
+        expect(authorization.state).toBe(lostAck === undefined ? "settled" : "running");
+        expect(authorization.requestSha256).toBe(
+          coverLetterProviderSha256(slots.get("request") ?? new Uint8Array()),
+        );
+        if (lostAck) {
+          expect(await work.readDrainState(owner, identity.id)).toBe("untracked");
+          await work.revokeUnclaimed(owner, identity.id);
+          expect(await work.readDrainState(owner, identity.id)).toBe("pending");
+          await expect(
+            client`DELETE FROM documents.cover_letters WHERE id = ${identity.id}`,
+          ).rejects.toMatchObject({ code: "55000" });
+        }
+        const [count] = await client<
+          Array<{ count: number }>
+        >`SELECT count(*)::int AS count FROM documents.cover_letters WHERE user_id = ${owner}`;
+        expect(count?.count).toBe(1);
+        const [inventory] = await client<
+          Array<{ data: Array<{ documentId: string; sourceObjectKey: string }> }>
+        >`SELECT documents.candidate_object_inventory(${owner}::uuid) AS data`;
+        expect(inventory?.data).toEqual(
+          expect.arrayContaining([
+            {
+              documentId: identity.id,
+              sourceObjectKey: `normalized/${identity.id}/cover-letter.v1.json`,
+            },
+          ]),
+        );
+        slots.delete("dispatch");
+        expect(await initializer.initialize(identity)).toEqual({ kind: "in_progress" });
+        expect(put).toHaveBeenCalledTimes(written.length);
+        expect(slots.has("dispatch")).toBe(false);
+        await client`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+        expect(await initializer.initialize(identity)).toEqual({ kind: "in_progress" });
+        expect(put).toHaveBeenCalledTimes(written.length);
+        if (lostAck) {
+          // Cleanup only: all in-memory fixture writes have finished, with no SDK/provider effects.
+          // Production must never derive settlement from an object read or timeout like this test.
+          await work.recordSettled({
+            id: authorization.id,
+            documentId: identity.id,
+            purpose: "private_slots",
+            requestSha256: authorization.requestSha256,
+          });
+          expect(await work.readDrainState(owner, identity.id)).toBe("settled");
+        }
+      });
+    },
+  );
 
   it("persists a ready draft once, reads exact bindings and keeps SQL/audit value-free", async () => {
     await withOwner(async (owner) => {

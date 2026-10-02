@@ -98,7 +98,7 @@ async function fixture(
         settings.failAfterResult = false;
         throw Error("SyntheticLostResultACK");
       }
-      return { VersionId: version.version };
+      return { VersionId: version.version, $metadata: { attempts: 1, httpStatusCode: 200 } };
     }
     if (command instanceof HeadObjectCommand || command instanceof GetObjectCommand) {
       const history = versions.get(command.input.Key as string) ?? [];
@@ -124,7 +124,10 @@ async function fixture(
     }
     throw Error("SyntheticUnexpectedCommand");
   });
-  const objects = new S3CoverLetterProviderObjects("synthetic-bucket", kms, { send });
+  const objects = new S3CoverLetterProviderObjects("synthetic-bucket", kms, {
+    send,
+    config: { maxAttempts: async () => 1 },
+  });
   const requestBytes = encodeCoverLetterProviderObject("request", {
     ...request,
     maxOutputChars: settings.maxOutputChars ?? request.maxOutputChars,

@@ -9,6 +9,20 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 private slot initialization now requires a fresh exact-bound Documents ledger grant and
+one positive claim before any write. Settlement requires all three original positively acknowledged
+and pinned creations; partial writes, lost acknowledgements, local abort/late completion and
+read-only replay never settle work. S3 writes require a single-attempt policy and one-attempt HTTP
+200 receipt; offline installed-SDK tests prove one HTTP PUT on server error. Documents passes 436
+unit and 56 real PostgreSQL cases, including three new connected lost-acknowledgement/deletion
+cases. The existing SQL initializer test now uses a separate control pool to avoid nested lease
+exhaustion. Synthetic fixture settlement is not a production drain authority. Provider/final-document
+actors, IAM, retention, read/export/restore and external acceptance remain unfinished. No public API,
+frontend, migration, Terraform, cloud/provider call, deployment or activation change. D1/D3 remain
+In progress. Repo typecheck/tests/all builds, formatting and baseline-only lint pass. The maintained
+committed-source verifier follows this checkpoint. The disposable synthetic database/container is
+removed, Docker Desktop/WSL stopped, and retained Compose volumes untouched.
+
 October 2 private generation work authorization now has a Documents-owned forward-only `0007`
 ledger: immutable request/consent binding, one claim per fixed phase, non-renewable server-timed
 admission and irreversible explicit settlement/cancellation. Quarantine can permanently fence

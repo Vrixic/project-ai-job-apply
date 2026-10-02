@@ -11,6 +11,8 @@ import {
 } from "./cover-letter-provider-contract.js";
 
 export interface CoverLetterProviderObjectClient {
+  /** Mutations require an explicitly configured single-attempt SDK, checked before every PUT. */
+  readonly config?: { readonly maxAttempts: () => Promise<number> };
   send(command: unknown, options: { abortSignal: AbortSignal }): Promise<Record<string, unknown>>;
 }
 export interface CoverLetterProviderObjects {
@@ -93,6 +95,20 @@ export class S3CoverLetterProviderObjects implements CoverLetterProviderObjects 
       throw new CoverLetterProviderTransportError();
   }
 
+  private async requireSingleWriteAttempt(signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    if (!this.client.config || (await bounded(this.client.config.maxAttempts(), signal)) !== 1)
+      throw new CoverLetterProviderTransportError();
+    signal.throwIfAborted();
+  }
+
+  private acknowledgedWrite(response: Record<string, unknown>): boolean {
+    const metadata = response.$metadata as
+      | { attempts?: unknown; httpStatusCode?: unknown }
+      | undefined;
+    return metadata?.attempts === 1 && metadata.httpStatusCode === 200;
+  }
+
   private async head(
     documentId: string,
     slot: CoverLetterProviderSlot,
@@ -170,6 +186,7 @@ export class S3CoverLetterProviderObjects implements CoverLetterProviderObjects 
       timeout.throwIfAborted();
       let version: string | undefined;
       let created = false;
+      await this.requireSingleWriteAttempt(timeout);
       try {
         const response = await bounded(
           this.client.send(
@@ -193,6 +210,7 @@ export class S3CoverLetterProviderObjects implements CoverLetterProviderObjects 
           timeout,
         );
         if (
+          !this.acknowledgedWrite(response) ||
           typeof response.VersionId !== "string" ||
           !response.VersionId ||
           response.VersionId === "null"
@@ -243,6 +261,7 @@ export class S3CoverLetterProviderObjects implements CoverLetterProviderObjects 
         throw new CoverLetterProviderTransportError();
       const timeout = deadline(signal);
       timeout.throwIfAborted();
+      await this.requireSingleWriteAttempt(timeout);
       const previous = decodeCoverLetterProviderObject(
         slot,
         await this.read(documentId, slot, pinned, timeout),
@@ -255,6 +274,7 @@ export class S3CoverLetterProviderObjects implements CoverLetterProviderObjects 
         throw new CoverLetterProviderTransportError();
       const sha256 = coverLetterProviderSha256(bytes);
       timeout.throwIfAborted();
+      await this.requireSingleWriteAttempt(timeout);
       let response: Record<string, unknown>;
       try {
         response = await bounded(
@@ -288,6 +308,7 @@ export class S3CoverLetterProviderObjects implements CoverLetterProviderObjects 
         throw error;
       }
       if (
+        !this.acknowledgedWrite(response) ||
         typeof response.VersionId !== "string" ||
         !response.VersionId ||
         response.VersionId === "null"

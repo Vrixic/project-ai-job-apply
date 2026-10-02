@@ -11,6 +11,7 @@ import {
 } from "./cover-letter-provider-contract.js";
 import { CoverLetterProviderInitializer } from "./cover-letter-provider-initialize.js";
 import type { CoverLetterMetadata, PostgresCoverLetterStore } from "./cover-letter-store.js";
+import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 
 const now = new Date("2026-10-02T12:00:00.000Z");
 const id = "019a4000-0000-7000-8000-000000000001";
@@ -24,7 +25,14 @@ const fact: GraphFact = {
   source: { type: "user", reference: "synthetic" },
   version: 1,
 };
-function fixture(settings: { defaultOff?: boolean; facts?: GraphFact[]; timeoutMs?: number } = {}) {
+function fixture(
+  settings: {
+    defaultOff?: boolean;
+    withoutWork?: boolean;
+    facts?: GraphFact[];
+    timeoutMs?: number;
+  } = {},
+) {
   let clock = now;
   let enabled = true;
   let reserved = false;
@@ -87,9 +95,26 @@ function fixture(settings: { defaultOff?: boolean; facts?: GraphFact[]; timeoutM
     sha256: coverLetterProviderSha256(bytes),
     sizeBytes: bytes.length,
   });
+  const work = {
+    issue: vi.fn<PostgresCoverLetterWorkStore["issue"]>(async (input) => ({
+      kind: "issued",
+      authorization: {
+        ...input,
+        id,
+        state: "issued",
+        issuedAt: clock,
+        expiresAt: new Date(Math.min(clock.getTime() + 90_000, input.consentExpiresAt.getTime())),
+        startedAt: null,
+        terminalAt: null,
+      },
+    })),
+    claim: vi.fn<PostgresCoverLetterWorkStore["claim"]>(async () => ({ kind: "claimed" })),
+    recordSettled: vi.fn<PostgresCoverLetterWorkStore["recordSettled"]>(async () => undefined),
+  };
   const put = vi.fn(
     async (documentId: string, slot: CoverLetterProviderSlot, bytes: Uint8Array) => {
       expect(reserved).toBe(true);
+      expect(work.claim).toHaveBeenCalledTimes(1);
       expect(lease).toBeGreaterThan(0);
       expect(documentId).toBe(id);
       const existing = slots.get(slot);
@@ -122,6 +147,7 @@ function fixture(settings: { defaultOff?: boolean; facts?: GraphFact[]; timeoutM
     settings.defaultOff ? undefined : () => enabled,
     () => clock,
     settings.timeoutMs,
+    settings.withoutWork ? undefined : work,
   );
   return {
     run: () => initializer.initialize(identity),
@@ -133,6 +159,7 @@ function fixture(settings: { defaultOff?: boolean; facts?: GraphFact[]; timeoutM
     put,
     find,
     read,
+    work,
     slots,
     clock: (value: Date) => {
       clock = value;
@@ -161,6 +188,124 @@ describe("private first-reservation generation-slot initializer", () => {
     expect(f.put).not.toHaveBeenCalled();
   });
 
+  it("refuses missing work authority before any I/O", async () => {
+    const f = fixture({ withoutWork: true });
+    expect(await f.run()).toEqual({ kind: "failed", errorCode: "generation_unavailable" });
+    expect(f.source.load).not.toHaveBeenCalled();
+    expect(f.reserve).not.toHaveBeenCalled();
+    expect(f.put).not.toHaveBeenCalled();
+  });
+
+  it("never steals previously issued authority or retries a refused claim", async () => {
+    for (const refusal of ["already_issued", "unavailable"] as const) {
+      const f = fixture();
+      if (refusal === "already_issued") {
+        const issue = f.work.issue.getMockImplementation();
+        if (!issue) throw new Error("Synthetic issue missing");
+        f.work.issue.mockImplementation(async (input) => ({
+          ...(await issue(input)),
+          kind: refusal,
+        }));
+      } else f.work.claim.mockResolvedValue({ kind: refusal });
+      expect(await f.run()).toEqual({ kind: "in_progress" });
+      expect(await f.run()).toEqual({ kind: "in_progress" });
+      expect(f.work.issue).toHaveBeenCalledTimes(1);
+      expect(f.work.claim).toHaveBeenCalledTimes(refusal === "already_issued" ? 0 : 1);
+      expect(f.put).not.toHaveBeenCalled();
+      expect(f.work.recordSettled).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each(["owner", "document", "digest", "purpose", "state", "expired", "renewed", "consent"])(
+    "rejects an incorrectly bound %s authorization before claiming",
+    async (change) => {
+      const f = fixture();
+      const issue = f.work.issue.getMockImplementation();
+      if (!issue) throw new Error("Synthetic issue missing");
+      f.work.issue.mockImplementation(async (input) => {
+        const result = await issue(input);
+        const auth = result.authorization;
+        if (change === "owner") auth.ownerUserId = "synthetic-other-owner";
+        if (change === "document") auth.documentId = "019a4000-0000-7000-8000-000000000002";
+        if (change === "digest") auth.requestSha256 = "f".repeat(64);
+        if (change === "purpose") auth.purpose = "provider_dispatch";
+        if (change === "state") auth.state = "running";
+        if (change === "expired") auth.expiresAt = now;
+        if (change === "renewed") auth.expiresAt = new Date(now.getTime() + 90_001);
+        if (change === "consent") auth.consentExpiresAt = new Date(now.getTime() + 1);
+        return result;
+      });
+      expect(await f.run()).toEqual({ kind: "in_progress" });
+      expect(f.work.claim).not.toHaveBeenCalled();
+      expect(f.put).not.toHaveBeenCalled();
+      expect(f.work.recordSettled).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["issue", "claim"] as const)(
+    "keeps ambiguous %s errors private and unresolved",
+    async (method) => {
+      const f = fixture();
+      f.work[method].mockRejectedValue(new Error("synthetic-private-control-failure"));
+      expect(await f.run()).toEqual({ kind: "in_progress" });
+      expect(f.put).not.toHaveBeenCalled();
+      expect(f.work.recordSettled).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not turn settlement failure or read-only replay into positive settlement", async () => {
+    const f = fixture();
+    f.work.recordSettled.mockRejectedValue(new Error("Synthetic ambiguous settlement"));
+    expect(await f.run()).toEqual({ kind: "in_progress" });
+    expect((await f.run()).kind).toBe("initialized");
+    expect(f.put).toHaveBeenCalledTimes(3);
+    expect(f.work.claim).toHaveBeenCalledTimes(1);
+    expect(f.work.recordSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it("awaits the original delayed claim but does not write after its local deadline", async () => {
+    const f = fixture({ timeoutMs: 20 });
+    f.work.claim.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      return { kind: "claimed" };
+    });
+    expect(await f.run()).toEqual({ kind: "in_progress" });
+    expect(f.work.claim).toHaveBeenCalledTimes(1);
+    expect(f.put).not.toHaveBeenCalled();
+    expect(f.work.recordSettled).not.toHaveBeenCalled();
+  });
+
+  it("keeps a late original write unresolved after local abort and never recreates it", async () => {
+    const f = fixture({ timeoutMs: 20 });
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let late: Promise<Awaited<ReturnType<typeof f.put>>> | undefined;
+    f.put.mockImplementation((_documentId, slot, bytes) => {
+      late = gate.then(() => {
+        f.slots.set(slot, Uint8Array.from(bytes));
+        return {
+          created: true,
+          reference: {
+            objectVersion: "synthetic-version",
+            etag: `"${coverLetterProviderSha256(bytes)}"`,
+            sha256: coverLetterProviderSha256(bytes),
+            sizeBytes: bytes.length,
+          },
+        };
+      });
+      return late;
+    });
+    expect(await f.run()).toEqual({ kind: "in_progress" });
+    release();
+    await late;
+    expect(f.slots.has("request")).toBe(true);
+    expect(await f.run()).toEqual({ kind: "in_progress" });
+    expect(f.put).toHaveBeenCalledTimes(1);
+    expect(f.work.recordSettled).not.toHaveBeenCalled();
+  });
+
   it("creates owned request/result/dispatch in order under a lease and returns references only", async () => {
     const f = fixture();
     const result = await f.run();
@@ -173,12 +318,28 @@ describe("private first-reservation generation-slot initializer", () => {
       },
     });
     expect(f.put.mock.calls.map((call) => call[1])).toEqual(["request", "result", "dispatch"]);
+    expect(f.work.issue).toHaveBeenCalledWith({
+      ownerUserId: f.identity.ownerUserId,
+      documentId: id,
+      purpose: "private_slots",
+      requestSha256: coverLetterProviderSha256(f.slots.get("request") ?? new Uint8Array()),
+      consentExpiresAt: f.identity.expiresAt,
+    });
+    expect(f.work.issue.mock.invocationCallOrder[0]).toBeLessThan(
+      f.work.claim.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(f.work.recordSettled.mock.invocationCallOrder[0]).toBeGreaterThan(
+      f.put.mock.invocationCallOrder[2] ?? 0,
+    );
     expect(f.reserve.mock.invocationCallOrder[0]).toBeLessThan(
       f.put.mock.invocationCallOrder[0] ?? 0,
     );
     expect(JSON.stringify(result)).not.toContain("TypeScript");
     expect(await f.run()).toEqual(result);
     expect(f.put).toHaveBeenCalledTimes(3);
+    expect(f.work.issue).toHaveBeenCalledTimes(1);
+    expect(f.work.claim).toHaveBeenCalledTimes(1);
+    expect(f.work.recordSettled).toHaveBeenCalledTimes(1);
   });
 
   it.each(["request", "dispatch", "result"] as const)(
@@ -203,6 +364,7 @@ describe("private first-reservation generation-slot initializer", () => {
       const replay = await f.run();
       expect(replay.kind).toBe(slot === "dispatch" ? "initialized" : "in_progress");
       expect(f.put).toHaveBeenCalledTimes(count);
+      expect(f.work.recordSettled).not.toHaveBeenCalled();
     },
   );
 

@@ -17,6 +17,7 @@ import {
 } from "./cover-letter-provider-contract.js";
 import type { CoverLetterProviderObjects } from "./cover-letter-provider-objects.js";
 import type { PostgresCoverLetterStore } from "./cover-letter-store.js";
+import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 
 export type CoverLetterInitializationOutcome =
   | { kind: "initialized"; input: CoverLetterProviderInput }
@@ -59,6 +60,7 @@ export class CoverLetterProviderInitializer {
     private readonly enabled: () => boolean = () => false,
     private readonly clock: () => Date = () => new Date(),
     private readonly timeoutMs = 60_000,
+    private readonly work?: Pick<PostgresCoverLetterWorkStore, "issue" | "claim" | "recordSettled">,
   ) {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000)
       throw new CoverLetterIntegrityError();
@@ -67,7 +69,9 @@ export class CoverLetterProviderInitializer {
   async initialize(
     input: CoverLetterPreparationIdentity,
   ): Promise<CoverLetterInitializationOutcome> {
-    if (!this.enabled()) return { kind: "failed", errorCode: "generation_unavailable" };
+    if (!this.enabled() || !this.work)
+      return { kind: "failed", errorCode: "generation_unavailable" };
+    const work = this.work;
     const identity = structuredClone(input);
     const fresh = () => {
       const approved = identity.approvedAt.getTime();
@@ -149,6 +153,48 @@ export class CoverLetterProviderInitializer {
         };
         if (reservation.kind === "claimed") {
           if (reservation.metadata.status !== "pending") throw new CoverLetterIntegrityError();
+          deadline.throwIfAborted();
+          // Await committed control results, never race them against a local abort. Only a
+          // positively acknowledged first grant/claim can issue any private slot write.
+          const issued = await work.issue({
+            ownerUserId: identity.ownerUserId,
+            documentId: identity.id,
+            purpose: "private_slots",
+            requestSha256: hash,
+            consentExpiresAt: identity.expiresAt,
+          });
+          const authorization = issued.authorization;
+          const issuedAt = authorization.issuedAt.getTime();
+          const expiresAt = authorization.expiresAt.getTime();
+          if (
+            issued.kind !== "issued" ||
+            authorization.state !== "issued" ||
+            !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
+              authorization.id,
+            ) ||
+            !Number.isFinite(issuedAt) ||
+            !Number.isFinite(expiresAt) ||
+            expiresAt <= issuedAt ||
+            expiresAt > issuedAt + 90_000 ||
+            expiresAt <= this.clock().getTime() ||
+            expiresAt > identity.expiresAt.getTime() ||
+            authorization.ownerUserId !== identity.ownerUserId ||
+            authorization.documentId !== identity.id ||
+            authorization.purpose !== "private_slots" ||
+            authorization.requestSha256 !== hash ||
+            authorization.consentExpiresAt.getTime() !== identity.expiresAt.getTime()
+          )
+            return { kind: "in_progress" } as const;
+          deadline.throwIfAborted();
+          if (!this.enabled() || !fresh()) return { kind: "in_progress" } as const;
+          const reference = {
+            id: authorization.id,
+            documentId: identity.id,
+            purpose: "private_slots" as const,
+            requestSha256: hash,
+          };
+          if ((await work.claim(reference)).kind !== "claimed")
+            return { kind: "in_progress" } as const;
           // Dispatch is created last, only after positively acknowledged request/result placeholders.
           for (const [slot, bytes] of [
             ["request", requestBytes],
@@ -184,6 +230,10 @@ export class CoverLetterProviderInitializer {
             if (!Buffer.from(pinned.bytes).equals(Buffer.from(bytes)))
               throw new CoverLetterIntegrityError();
           }
+          // Every original creation was positively acknowledged and pinned. The production
+          // S3 port admits single-attempt PUTs only; no further write can occur in this actor.
+          // Aborted, partial, conflicting, lost-ACK or failed paths never settle in finally/catch.
+          await work.recordSettled(reference);
         }
         deadline.throwIfAborted();
         const reference = await bounded(

@@ -17,3 +17,13 @@ rows cannot be removed to reissue authority while their document exists.
 Ledger settlement is not a production quiescence proof: every writer/provider must use the claims,
 and a trusted actor must positively prove all original effects stopped before recording settlement.
 No runtime handler, IAM enforcement or provider/drain port is composed here.
+
+The private slot initializer now requires this ledger before any creation: only a fresh exact-bound
+`private_slots` grant and its one committed claim can create request/result/dispatch, with dispatch
+last. Only the original actor's three positively acknowledged and pinned writes can settle that
+phase. Partial/conflicting/aborted/lost-acknowledgement paths and read-only replay never settle it.
+The S3 transport requires an explicit single-attempt SDK policy and a one-attempt HTTP 200 receipt
+before acknowledging any creation or conditional replacement. Real SDK offline tests verify one
+HTTP PUT on a server error. The initializer alone is connected, not the provider/final-document
+actors or production drain authority. Tests use synthetic SQL/object data, not live S3/KMS/model
+permissions or accountable privacy acceptance.

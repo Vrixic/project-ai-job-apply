@@ -1,4 +1,9 @@
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { describe, expect, it, vi } from "vitest";
 import {
   COVER_LETTER_PROVIDER_MODEL,
@@ -44,9 +49,136 @@ const service = (
     command: unknown,
     options: { abortSignal: AbortSignal },
   ) => Promise<Record<string, unknown>>,
-) => new S3CoverLetterProviderObjects("synthetic-bucket", kms, { send });
+) =>
+  new S3CoverLetterProviderObjects("synthetic-bucket", kms, {
+    send,
+    config: { maxAttempts: async () => 1 },
+  });
 
 describe("isolated provider owned encrypted objects (offline S3)", () => {
+  it.each([undefined, 0, 2, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses missing or non-single-attempt write policy (%s) before I/O",
+    async (attempts) => {
+      const send = vi.fn();
+      const store = new S3CoverLetterProviderObjects("synthetic-bucket", kms, {
+        send,
+        ...(attempts === undefined ? {} : { config: { maxAttempts: async () => attempts } }),
+      });
+      await expect(store.putIfAbsent(documentId, "dispatch", bytes)).rejects.toThrow(
+        CoverLetterProviderTransportError,
+      );
+      await expect(
+        store.transitionIfMatch(documentId, "dispatch", reference, bytes),
+      ).rejects.toThrow(CoverLetterProviderTransportError);
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    undefined,
+    { attempts: 2, httpStatusCode: 200 },
+    { attempts: 1, httpStatusCode: 500 },
+    { attempts: "1", httpStatusCode: 200 },
+  ])("does not acknowledge an uncertain write receipt (%s)", async (metadata) => {
+    const send = vi.fn(async (_command: unknown) => ({
+      VersionId: reference.objectVersion,
+      $metadata: metadata,
+    }));
+    await expect(service(send).putIfAbsent(documentId, "dispatch", bytes)).rejects.toThrow(
+      CoverLetterProviderTransportError,
+    );
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]?.[0]).toBeInstanceOf(PutObjectCommand);
+  });
+
+  it("bounds stalled policy resolution without sending a write", async () => {
+    const send = vi.fn();
+    const controller = new AbortController();
+    const store = new S3CoverLetterProviderObjects("synthetic-bucket", kms, {
+      send,
+      config: { maxAttempts: async () => new Promise(() => undefined) },
+    });
+    const rejected = expect(
+      store.putIfAbsent(documentId, "dispatch", bytes, controller.signal),
+    ).rejects.toThrow(CoverLetterProviderTransportError);
+    controller.abort();
+    await rejected;
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it.each([200, 500])(
+    "uses one HTTP write with the installed SDK on status %s (offline)",
+    async (statusCode) => {
+      const methods: string[] = [];
+      const client = new S3Client({
+        region: "us-east-2",
+        maxAttempts: 1,
+        credentials: { accessKeyId: "SYNTHETIC", secretAccessKey: "synthetic-only" },
+        requestHandler: {
+          handle: async (request: { method: string }) => {
+            methods.push(request.method);
+            if (statusCode === 500)
+              return {
+                response: {
+                  statusCode,
+                  headers: { "content-type": "application/xml" },
+                  body: Buffer.from(
+                    "<Error><Code>ServiceUnavailable</Code><Message>Synthetic</Message></Error>",
+                  ),
+                },
+              };
+            return {
+              response: {
+                statusCode: 200,
+                headers: {
+                  "x-amz-version-id": reference.objectVersion,
+                  ...(request.method === "HEAD"
+                    ? {
+                        etag: reference.etag,
+                        "content-length": String(bytes.length),
+                        "content-type": "application/json",
+                        "x-amz-server-side-encryption": "aws:kms",
+                        "x-amz-server-side-encryption-aws-kms-key-id": kms,
+                        "x-amz-meta-document-id": documentId,
+                        "x-amz-meta-generation-slot": "dispatch",
+                        "x-amz-meta-generation-sha256": sha256,
+                      }
+                    : {}),
+                },
+                body: Buffer.alloc(0),
+              },
+            };
+          },
+        },
+      });
+      const store = new S3CoverLetterProviderObjects("synthetic-bucket", kms, {
+        config: client.config,
+        send: async (command, options) => ({
+          ...(await client.send(
+            command as PutObjectCommand | HeadObjectCommand | GetObjectCommand,
+            options,
+          )),
+        }),
+      });
+      try {
+        if (statusCode === 200) {
+          expect(await store.putIfAbsent(documentId, "dispatch", bytes)).toEqual({
+            created: true,
+            reference,
+          });
+          expect(methods).toEqual(["PUT", "HEAD"]);
+        } else {
+          await expect(store.putIfAbsent(documentId, "dispatch", bytes)).rejects.toThrow(
+            CoverLetterProviderTransportError,
+          );
+          expect(methods).toEqual(["PUT"]);
+        }
+      } finally {
+        client.destroy();
+      }
+    },
+  );
+
   it("conditionally writes only the derived owner slot with KMS and checksum", async () => {
     const send = vi.fn(async (command: unknown, options: { abortSignal: AbortSignal }) => {
       expect(options.abortSignal).toBeInstanceOf(AbortSignal);
@@ -59,7 +191,10 @@ describe("isolated provider owned encrypted objects (offline S3)", () => {
           SSEKMSKeyId: kms,
           ChecksumSHA256: Buffer.from(sha256, "hex").toString("base64"),
         });
-        return { VersionId: reference.objectVersion };
+        return {
+          VersionId: reference.objectVersion,
+          $metadata: { attempts: 1, httpStatusCode: 200 },
+        };
       }
       expect(command).toBeInstanceOf(HeadObjectCommand);
       expect((command as HeadObjectCommand).input.VersionId).toBe(reference.objectVersion);
@@ -304,7 +439,7 @@ describe("precreated provider slot conditional transitions (offline S3)", () => 
         if (writeError) throw writeError;
         if (current.etag !== command.input.IfMatch) throw { name: "PreconditionFailed" };
         current = ready;
-        return { VersionId: ready.objectVersion };
+        return { VersionId: ready.objectVersion, $metadata: { attempts: 1, httpStatusCode: 200 } };
       }
       if (command instanceof HeadObjectCommand) {
         const pinned = command.input.VersionId === ready.objectVersion ? ready : prior;
@@ -326,6 +461,21 @@ describe("precreated provider slot conditional transitions (offline S3)", () => 
     });
     return { store: service(send), send, prior, ready, next };
   };
+
+  it("rechecks single-attempt policy after reading the original placeholder", async () => {
+    const f = setup("dispatch");
+    const attempts = vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(2);
+    const store = new S3CoverLetterProviderObjects("synthetic-bucket", kms, {
+      send: f.send,
+      config: { maxAttempts: attempts },
+    });
+    await expect(store.transitionIfMatch(documentId, "dispatch", f.prior, f.next)).rejects.toThrow(
+      CoverLetterProviderTransportError,
+    );
+    expect(f.send.mock.calls.every(([command]) => !(command instanceof PutObjectCommand))).toBe(
+      true,
+    );
+  });
   it.each(["dispatch", "result"] as const)(
     "transitions owned %s only using its pinned ETag",
     async (slot) => {

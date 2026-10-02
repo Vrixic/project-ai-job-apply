@@ -122,6 +122,16 @@ accepted deletion requirements nor represents accountable security/privacy appro
 
 ## Consequences
 
+The private initializer now enforces the Documents ledger: a fresh exact-bound `private_slots`
+authorization must be positively claimed before any creation. It never races committed control
+results against local cancellation. The S3 port requires an explicit single-attempt policy and
+positive one-attempt HTTP 200 write metadata before returning an acknowledged pinned version.
+Settlement follows only all three original acknowledged/pinned writes; partial, conflicting,
+aborted or lost-acknowledgement paths remain running. Read-only replay never settles them, even
+when every original slot is visible. Offline installed-SDK and connected PostgreSQL tests cover
+these boundaries. This is only initializer enforcement, not provider/final-document composition,
+trusted remote quiescence, live IAM/KMS or accountable approval. The proposal remains incomplete.
+
 The proposed private Documents control ledger now has a forward-only `0007` migration. Three
 fixed purposes (`private_slots`, `provider_dispatch`, `final_document`) bind the same original
 request digest/consent per document. Each purpose can be issued and claimed once, using server time

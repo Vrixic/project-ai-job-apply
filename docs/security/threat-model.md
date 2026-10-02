@@ -6,6 +6,16 @@
 
 ## D3 cover-letter delta (2026-10-02, engineering evidence only)
 
+Private slot creation now enforces the work ledger before its first write. Only a fresh exact-bound
+grant and positive original claim permit creation; replay cannot claim, recreate or settle work.
+The S3 port checks single-attempt configuration before every PUT and requires positive one-attempt
+HTTP 200 metadata plus a pinned owned version. Only all three original acknowledged writes allow
+the initializer to settle. Lost acknowledgements, partial creation, local abort and late completion
+leave the ledger unresolved, including when read-only replay can see every object. Real PostgreSQL
+cases retain running work and refuse deletion until explicit synthetic fixture settlement. Offline
+installed-SDK checks prove one HTTP write attempt, not deployed IAM/KMS or remote-provider drain.
+Provider/final-document actor enforcement, retention and production quiescence remain unfinished.
+
 The private Documents work ledger prevents renewable/replayed authority and accidental deletion of
 unresolved work. Each phase can claim once within its immutable server-time admission window; SQL
 enforces owner/request/consent binding, quarantine refusal and irreversible terminal states.
