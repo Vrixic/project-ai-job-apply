@@ -1,6 +1,7 @@
 # D3-013 Provider Fixture Request (Greenhouse, Lever, Ashby application forms)
 
 - Status: Prepared for human action. Nothing here is authorized, acquired, or accepted. On 2026-09-19 the product owner adopted the proposed variant matrix and acceptance thresholds below as written (owner statement); every human step below is still open.
+- **Owner decision (2026-10-02, scope-narrowing to reduce D3 critical-path time):** acquire and accept fixtures for **Greenhouse only** first, across the full nine-variant matrix below. Lever and Ashby are deferred to a fast-follow after D3-007/D3-013 close for Greenhouse. Exit criterion 12 only requires evidence for "every **enabled** adapter," so a Greenhouse-only adapter set satisfies it; Lever and Ashby stay declared with no supported variants (off) in the meantime. This cuts the human/QA source-authorization, capture, sanitization, and representativeness-acceptance work by roughly two-thirds without changing the exit criterion itself.
 - Task: D3-013 (blocks D3-007 and the last D3 exit criterion)
 - Governing records: [ADR-021](../../adr/021-own-provider-fixtures-with-adapter-deliveries.md),
   [ATS fixture policy](ats-fixture-policy.md), fixture metadata schema
