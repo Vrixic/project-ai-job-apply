@@ -17,6 +17,15 @@ interface S3Sender {
   send(command: unknown): Promise<Record<string, unknown>>;
 }
 
+/** Trusted private owner port, not a caller assertion or local timeout calculation.
+ * Positive proof must bind the quarantined document and all original private writers/provider
+ * executions, with no renewable creation/dispatch authority. Unknown work must return false.
+ * No production proof implementation is composed yet; absence fails closed for generation.
+ */
+export interface CandidateGenerationQuiescence {
+  confirm(documentId: string, signal: AbortSignal): Promise<boolean>;
+}
+
 interface DocumentObjectVersion extends ObjectIdentifier {
   deleteMarker: boolean;
   isLatest?: boolean;
@@ -153,8 +162,32 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
   constructor(
     private readonly bucketName: string,
     private readonly client: S3Sender = new S3Client({}),
+    private readonly generationQuiescence?: CandidateGenerationQuiescence,
   ) {
     if (!bucketName) throw new Error("CandidateDocumentStoreConfigurationInvalid");
+  }
+
+  private async requireGenerationQuiescence(documentId: string): Promise<void> {
+    const proof = this.generationQuiescence;
+    if (!proof) throw new Error("CandidateGenerationQuiescenceUnconfirmed");
+    const signal = AbortSignal.timeout(10_000);
+    let onAbort: () => void = () => undefined;
+    try {
+      const confirmed = await Promise.race([
+        proof.confirm(documentId, signal),
+        new Promise<never>((_, reject) => {
+          onAbort = () => reject(new Error("CandidateGenerationQuiescenceUnconfirmed"));
+          signal.addEventListener("abort", onAbort, { once: true });
+          if (signal.aborted) onAbort();
+        }),
+      ]);
+      if (confirmed !== true || signal.aborted)
+        throw new Error("CandidateGenerationQuiescenceUnconfirmed");
+    } catch {
+      throw new Error("CandidateGenerationQuiescenceUnconfirmed");
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+    }
   }
 
   private async inventory(key: string): Promise<ObjectIdentifier[]> {
@@ -243,6 +276,16 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
     }
     const prefixes = documentIds.flatMap((id) => [`quarantine/${id}/`, `normalized/${id}/`]);
     const generationKeys = new Set(documentIds.flatMap(generationSlotKeys));
+    // Pending SQL reservations may have no objects yet. A current empty S3 prefix cannot
+    // establish that an outstanding initializer or remote provider has stopped.
+    const generations = documentIds.filter((id) =>
+      keys.some(
+        (key) =>
+          key === `normalized/${id}/cover-letter.v1.json` ||
+          (generationKeys.has(key) && key.startsWith(`normalized/${id}/`)),
+      ),
+    );
+    for (const documentId of generations) await this.requireGenerationQuiescence(documentId);
     for (const key of keys) {
       // Generation history is deleted only by the fenced prefix sweep below, even if an
       // exact owner inventory includes a slot. Never expose an older placeholder first.
@@ -288,6 +331,15 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
     let deleted = 0;
     for (const prefix of prefixes) {
       let inventory = await list(prefix);
+      if (
+        inventory.some(
+          (item) =>
+            !!item.Key &&
+            (generationKeys.has(item.Key) ||
+              item.Key === `normalized/${documentId}/cover-letter.v1.json`),
+        )
+      )
+        await this.requireGenerationQuiescence(documentId);
       const fences = new Map<string, string>();
       for (const key of [...new Set(inventory.map((item) => item.Key))]) {
         if (!key || !generationKeys.has(key)) continue;

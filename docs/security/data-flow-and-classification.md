@@ -131,6 +131,14 @@ tests include the installed SDK with synthetic HTTP responses, not live network/
 Local timeout/cancellation is not remote quiescence. Authorization, retention and production
 composition remain required before activation.
 
+Candidate object cleanup now requires an injected private quiescence confirmation for every
+inventoried cover-letter reservation before object deletion, including pending rows with no S3
+versions. Observed generation slots/final drafts also trigger the gate in prefix cleanup. No
+production confirmation authority is composed; missing or unknown proof fails closed and retains
+the owner deletion/quarantine state. A ten-second read deadline causes refusal, not quiescence.
+Eight offline gate cases and six real PostgreSQL cases use synthetic confirmation, not live drain
+evidence. Ordinary resume-only cleanup is unchanged. Persisted authorization/drain remains open.
+
 Private initialization now has a source-only default-off factory. Owned evidence and original
 consent construct the immutable request; a committed SQL reservation precedes request/result/
 dispatch creation under the active-candidate lease. Dispatch is created last. Only the first

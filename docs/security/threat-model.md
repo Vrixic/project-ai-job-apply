@@ -6,6 +6,14 @@
 
 ## D3 cover-letter delta (2026-10-02, engineering evidence only)
 
+An empty object prefix is not quiescence: a pending SQL reservation may still have a late private
+initializer. Cleanup now requires an injected trusted private proof before any inventoried letter
+deletion, and before prefix cleanup of observed generation/final-draft keys. Missing, non-true,
+failed or stalled proof refuses deletion; no local timeout is converted into success. Eight offline
+gate cases and six connected PostgreSQL cases retain owner rows/quarantine before an explicitly
+confirmed synthetic retry. No production proof port exists yet; bounded non-renewable writer/
+provider authorization, retention, cloud IAM and accountable acceptance remain open.
+
 Private Invoke now has a source-only default-off exact-numeric-version SDK adapter. Strict
 reference-only envelopes, bounded UTF-8/canonical JSON replies, single-attempt SDK policy and
 no log tails reduce transport leakage and replay risk; sixty offline cases include real SDK

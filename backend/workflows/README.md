@@ -74,6 +74,15 @@ version while the guarded acceptance operator proves every normal/provider gate 
 
 ## D3 requested cover-letter preparation (local implementation)
 
+Candidate document cleanup now refuses inventoried cover-letter reservations without an injected
+private writer/provider quiescence authority, including pending SQL rows with empty S3 prefixes.
+Observed generation slots/final draft keys also require positive proof before prefix cleanup.
+Missing/false/malformed/failed/stalled proof returns a fixed error, never inferred success from
+local cancellation or elapsed time. The source runtime supplies no proof port yet, so generation
+cleanup is default-denied; ordinary resume-only cleanup is unchanged. Eight new offline gate tests
+and six connected synthetic PostgreSQL cases pass with an explicit test-only confirmation port.
+The persisted authority/drain, retention and reviewed IAM/runtime remain required before activation.
+
 `application-preparation-durable.ts` supplies an identifier-only durable factory, an exact
 numeric private activity target, named five-attempt retries and bounded failure compensation.
 The private activity projects fixed outcomes; it never returns candidate text. A completed

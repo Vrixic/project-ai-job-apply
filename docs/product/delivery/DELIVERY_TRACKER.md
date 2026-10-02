@@ -9,6 +9,18 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 candidate object cleanup now fails closed without private-writer/provider quiescence
+proof for inventoried cover-letter reservations, including pending rows with empty S3 prefixes.
+Observed generation/final-draft objects require the same gate; ordinary resume-only cleanup is
+unchanged. Eight new offline tests pass within 1,391 Workflows cases (17 declared integration skips);
+six connected PostgreSQL deletion/restore cases pass with synthetic data and confirmation ports.
+The production drain authority remains unimplemented: this gate prevents premature deletion but
+does not manufacture quiescence. The disposable PostgreSQL container/database is removed and
+Docker Desktop/WSL are stopped. Repo typecheck/tests, all builds, formatting and baseline-only lint
+pass. Full verifier again stops at the separate stale document migration test fixture; its update
+remains pending owner approval. No public API/frontend, SQL migration,
+Terraform/guard edit, AWS/model call, deployment or activation; D1/D3 remain In progress.
+
 October 2 private provider invocation now has a default-off, reference-only SDK adapter pinned
 to an exact numeric Lambda version. It requires a single-attempt SDK policy, sends no prompt,
 result text or log request, and preserves ambiguous remote outcomes for original-result recovery.

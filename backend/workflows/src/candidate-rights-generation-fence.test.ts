@@ -28,6 +28,7 @@ function bucket(
     loseFence?: boolean;
     lateCreation?: boolean;
     omitFenceAck?: boolean;
+    unconfirmedQuiescence?: boolean;
   } = {},
 ) {
   const slots = ["request", "dispatch", "result"];
@@ -150,7 +151,11 @@ function bucket(
     throw Error("SyntheticUnexpectedCommand");
   });
   return {
-    store: new AwsCandidateDocumentObjectStore("synthetic-bucket", { send }),
+    store: new AwsCandidateDocumentObjectStore(
+      "synthetic-bucket",
+      { send },
+      options.unconfirmedQuiescence ? undefined : { confirm: async () => true },
+    ),
     send,
     entries: () => entries,
     neighbor,
@@ -162,6 +167,68 @@ function bucket(
 }
 
 describe("cover-letter generation purge fences (offline versioned S3)", () => {
+  it("refuses generation history cleanup without private writer/provider proof", async () => {
+    const fixture = bucket({ unconfirmedQuiescence: true });
+    await expect(fixture.store.purgeDocumentPrefixes(documentId)).rejects.toThrow(
+      "CandidateGenerationQuiescenceUnconfirmed",
+    );
+    expect(fixture.removed).toEqual([]);
+    expect(fixture.createdFences).toEqual([]);
+  });
+  it.each([undefined, false, "true", 1, new Error("synthetic private diagnostic")])(
+    "refuses empty-prefix pending reservation cleanup on absent/invalid/failed proof %s",
+    async (value) => {
+      const send = vi.fn(async () => ({}));
+      const confirm = vi.fn(async () => {
+        if (value instanceof Error) throw value;
+        return value as boolean;
+      });
+      const store = new AwsCandidateDocumentObjectStore(
+        "synthetic-bucket",
+        { send },
+        value === undefined ? undefined : { confirm },
+      );
+      await expect(
+        store.deleteAllVersionsAndMarkers([
+          {
+            documentId,
+            sourceObjectKey: `normalized/${documentId}/cover-letter.v1.json`,
+          },
+        ]),
+      ).rejects.toThrow("CandidateGenerationQuiescenceUnconfirmed");
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+  it("checks every pending reservation before any candidate object deletion", async () => {
+    const send = vi.fn(async () => ({}));
+    const confirm = vi.fn(async (id: string) => id === documentId);
+    const store = new AwsCandidateDocumentObjectStore("synthetic-bucket", { send }, { confirm });
+    await expect(
+      store.deleteAllVersionsAndMarkers(
+        [documentId, otherId].map((id) => ({
+          documentId: id,
+          sourceObjectKey: `normalized/${id}/cover-letter.v1.json`,
+        })),
+      ),
+    ).rejects.toThrow("CandidateGenerationQuiescenceUnconfirmed");
+    expect(confirm.mock.calls.map(([id]) => id)).toEqual([documentId, otherId]);
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("bounds an unresolved proof and never deletes on a local deadline", async () => {
+    const send = vi.fn(async () => ({}));
+    const confirm = vi.fn(async () => new Promise<boolean>(() => undefined));
+    const store = new AwsCandidateDocumentObjectStore("synthetic-bucket", { send }, { confirm });
+    const pending = expect(
+      store.deleteAllVersionsAndMarkers([
+        {
+          documentId,
+          sourceObjectKey: `normalized/${documentId}/cover-letter.v1.json`,
+        },
+      ]),
+    ).rejects.toThrow("CandidateGenerationQuiescenceUnconfirmed");
+    await pending;
+    expect(send).not.toHaveBeenCalled();
+  }, 15_000);
   it("keeps current delete markers until all history is gone, including probes within batches", async () => {
     const fixture = bucket();
     expect(await fixture.store.purgeDocumentPrefixes(documentId)).toEqual({

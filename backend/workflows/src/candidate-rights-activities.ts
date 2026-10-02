@@ -33,7 +33,8 @@ export interface CandidateExportArtifactStore {
 export interface CandidateDocumentObjectRef {
   documentId: string;
   sourceObjectKey: string;
-  sourceObjectVersion: string;
+  /** Pending cover-letter reservations inventory their key before a version exists. */
+  sourceObjectVersion?: string;
   normalizedObjectKey?: string;
   normalizedObjectVersion?: string;
 }

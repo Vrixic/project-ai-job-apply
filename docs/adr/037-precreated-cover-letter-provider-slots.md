@@ -87,6 +87,21 @@ remain in progress for original-result recovery, never fresh model dispatch. Six
 include real installed SDK serialization and one HTTP attempt on a server error. Local cancellation
 is not remote quiescence; production composition and bounded authorization/retention remain open.
 
+The source-only candidate object purge now requires positive confirmation from an injected private
+quiescence authority before cleaning any inventoried cover-letter reservation, even when no S3
+object/version exists. Observed generation slots or final draft keys also require confirmation
+before prefix cleanup. Missing, false, malformed, failed or stalled proof refuses cleanup with a
+fixed error; elapsed local time never becomes proof. Ordinary resume-only cleanup is unchanged.
+Eight new offline gate cases and the six connected PostgreSQL deletion/restore cases pass: pending
+letter rows/quarantine survive missing proof, while an explicit synthetic confirmed retry completes.
+The confirmation fixture is not a production authority. A persisted non-renewable private-write/
+provider drain implementation and deployed IAM/runtime evidence still block activation.
+
+AWS documents that bucket policy can require `s3:if-match` on provider writes. The reviewed future
+policy must restrict the exact generation replacement slots and must not copy the documentation's
+multipart exemption as broad creation authority. This does not restrict the separate private
+initializer's `If-None-Match` writes or establish their drain. No IAM/Terraform change is made here.
+
 The maintenance role currently declares document `s3:DeleteObjectVersion`, not the
 `s3:DeleteObject` authority required to create a delete marker. A narrowly scoped IAM/boundary
 change and its guarded plan need separate owner review before deploying generation-slot cleanup;
@@ -113,3 +128,4 @@ The proposed protocol remains incomplete until every prerequisite above is prove
 
 S3 behavior references: [conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)
 and [versioning workflows](https://docs.aws.amazon.com/AmazonS3/latest/userguide/versioning-workflows.html).
+Provider policy reference: [enforcing conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html).

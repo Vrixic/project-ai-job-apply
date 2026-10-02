@@ -315,6 +315,13 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
       const olderKey = `normalized/${documentId}/older-parser/resume.json`;
       const neighborKey = `normalized/${uuidv7()}/older-parser/resume.json`;
       const generationKey = `normalized/${documentId}/generation/result.v1.json`;
+      const pendingLetterId = uuidv7();
+      await database.client`
+        INSERT INTO documents.cover_letters (id, user_id, application_id, version, job_revision,
+          confirmed_facts_hash, object_key)
+        VALUES (${pendingLetterId}, ${userId}, ${uuidv7()}, 1, ${"a".repeat(64)}, ${"b".repeat(64)},
+          ${`normalized/${pendingLetterId}/cover-letter.v1.json`})
+      `;
       await database.client`
         INSERT INTO documents.resume_documents (id, user_id, file_name, media_type, size_bytes, sha256, source_object_key, status)
         VALUES (${documentId}, ${userId}, 'generated.pdf', 'application/pdf', 1, ${"1".repeat(64)}, ${sourceKey}, 'awaiting_upload')
@@ -331,43 +338,48 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
       ];
       let reappear = true;
       let fenceSequence = 0;
-      const documentObjectStore = new AwsCandidateDocumentObjectStore("generated-only-bucket", {
-        send: async (command: unknown) => {
-          if (command instanceof ListObjectVersionsCommand) {
-            const prefix = command.input.Prefix;
-            if (!prefix) throw new Error("SyntheticPrefixMissing");
-            const matching = versions.filter((entry) => entry.Key.startsWith(prefix));
-            const listed = matching.map((entry) => ({
-              ...entry,
-              IsLatest: versions.filter((item) => item.Key === entry.Key).at(-1) === entry,
-            }));
-            return {
-              IsTruncated: false,
-              Versions: listed.filter((entry) => !entry.VersionId.startsWith("marker")),
-              DeleteMarkers: listed.filter((entry) => entry.VersionId.startsWith("marker")),
-            };
-          }
-          if (command instanceof DeleteObjectCommand) {
-            expect(command.input.Key).toBe(generationKey);
-            expect(command.input.VersionId).toBeUndefined();
-            const version = `marker-fence-${++fenceSequence}`;
-            versions.push({ Key: generationKey, VersionId: version });
-            return { $metadata: { httpStatusCode: 204 }, DeleteMarker: true, VersionId: version };
-          }
-          if (command instanceof DeleteObjectsCommand) {
-            const objects = command.input.Delete?.Objects ?? [];
-            versions = versions.filter(
-              (entry) =>
-                !objects.some(
-                  (object) => object.Key === entry.Key && object.VersionId === entry.VersionId,
-                ),
-            );
-            if (reappear) versions.push({ Key: olderKey, VersionId: "late" });
-            return {};
-          }
-          throw new Error("SyntheticUnexpectedObjectCommand");
+      let generationQuiescent = false;
+      const documentObjectStore = new AwsCandidateDocumentObjectStore(
+        "generated-only-bucket",
+        {
+          send: async (command: unknown) => {
+            if (command instanceof ListObjectVersionsCommand) {
+              const prefix = command.input.Prefix;
+              if (!prefix) throw new Error("SyntheticPrefixMissing");
+              const matching = versions.filter((entry) => entry.Key.startsWith(prefix));
+              const listed = matching.map((entry) => ({
+                ...entry,
+                IsLatest: versions.filter((item) => item.Key === entry.Key).at(-1) === entry,
+              }));
+              return {
+                IsTruncated: false,
+                Versions: listed.filter((entry) => !entry.VersionId.startsWith("marker")),
+                DeleteMarkers: listed.filter((entry) => entry.VersionId.startsWith("marker")),
+              };
+            }
+            if (command instanceof DeleteObjectCommand) {
+              expect(command.input.Key).toBe(generationKey);
+              expect(command.input.VersionId).toBeUndefined();
+              const version = `marker-fence-${++fenceSequence}`;
+              versions.push({ Key: generationKey, VersionId: version });
+              return { $metadata: { httpStatusCode: 204 }, DeleteMarker: true, VersionId: version };
+            }
+            if (command instanceof DeleteObjectsCommand) {
+              const objects = command.input.Delete?.Objects ?? [];
+              versions = versions.filter(
+                (entry) =>
+                  !objects.some(
+                    (object) => object.Key === entry.Key && object.VersionId === entry.VersionId,
+                  ),
+              );
+              if (reappear) versions.push({ Key: olderKey, VersionId: "late" });
+              return {};
+            }
+            throw new Error("SyntheticUnexpectedObjectCommand");
+          },
         },
-      });
+        { confirm: async () => generationQuiescent },
+      );
       at = completedAt;
       const tags: Date[] = [];
       const activities = new PostgresCandidateRightsActivityStore({
@@ -404,6 +416,23 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         operationId: journaled.operationId,
         policyVersion: policy.version,
       };
+      await expect(activities.deleteActiveSystems(input)).rejects.toThrow(
+        "CandidateGenerationQuiescenceUnconfirmed",
+      );
+      expect(versions.some((entry) => entry.Key === sourceKey)).toBe(true);
+      expect(fenceSequence).toBe(0);
+      const [pendingHeld] = await database.client<Record<string, unknown>[]>`
+        SELECT request.state, candidate.account_state,
+          (SELECT count(*)::int FROM documents.cover_letters WHERE user_id = ${userId}) AS letter_count
+        FROM profile.account_deletion_requests request JOIN identity.users candidate ON candidate.id = request.user_id
+        WHERE request.id = ${request.id}
+      `;
+      expect(pendingHeld).toMatchObject({
+        state: "quarantined",
+        accountState: "quarantined",
+        letterCount: 1,
+      });
+      generationQuiescent = true;
       await expect(activities.deleteActiveSystems(input)).rejects.toThrow(
         "ResumePurgeObjectDeletionIncomplete",
       );
