@@ -17,7 +17,12 @@ bounded streams and late-body disposal are covered. Installed-SDK offline respon
 HTTP PUT on success/server error. The PostgreSQL final writer still needs ledger enforcement and
 receipt-based settlement/read-only recovery; local abort is not remote-quiescence proof. No public
 API/frontend, migration, guard/Terraform, cloud/model call, deployment or activation change.
-Repository-wide verification follows; D1/D3 remain In progress.
+Source checkpoint `0c39906` passes the full maintained repository verifier: contracts regenerated
+with no diff, synthetic operator/receipt regressions, formatting (946 files), baseline-only lint
+(15 warnings/58 infos), typecheck, dependency security, repo tests, all 23 builds (20 cached),
+Compose and product-scope checks. Four added local evidence links and whitespace checks pass.
+No database integrations were rerun for this storage-only change; Docker/WSL remain stopped.
+The checkpoint is local/unpublished, not a PR or deployment. D1/D3 remain In progress.
 
 October 2 isolated provider effects now require one original Documents `provider_dispatch` claim
 before dispatch replacement, model access or result replacement. The fixed-purpose control methods

@@ -354,6 +354,18 @@ A box is ticked only when its whole wording has linked, inspected evidence. Loca
 
 ## Decisions and scope changes
 
+2026-10-02 final-object transport verification: source checkpoint `0c39906` passes the complete
+[maintained repository verifier](../../../scripts/verify-phase0.ps1) without exemptions: contract
+generation with no generated diff, infrastructure/toolchain and synthetic operator guards,
+current/historical document migration receipt cases, formatting (946 files), existing lint baseline
+(15 warnings/58 infos), typecheck, dependency-security regressions, repository tests, all 23 builds
+(20 cached), Compose validation and product-scope checks. All 482 Documents unit cases and 50
+focused transport cases pass. Four added local evidence links and whitespace checks pass. Database
+integrations were not rerun for this storage-only change; no database/cloud/model/UI behavior is
+claimed. Docker Desktop/WSL remain stopped. Only this evidence update follows verification on the
+same feature branch. No push/PR, deployment or activation. Final-writer ledger enforcement and the
+other recorded runtime/acceptance prerequisites remain open; D1/D3 remain In progress.
+
 2026-09-30 verifier follow-up: full infrastructure validation passes with portable Terraform
 1.16.2, including 697 deletion-replay checks and 908 restore-role assertions. Final focused
 gateway guards pass 577 assertions on each PowerShell host. Repository typecheck, lint, and
