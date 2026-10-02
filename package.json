@@ -26,7 +26,8 @@
       "xcode@3.0.1>uuid": "11.1.1"
     },
     "patchedDependencies": {
-      "image-size@1.2.1": "patches/image-size@1.2.1.patch"
+      "image-size@1.2.1": "patches/image-size@1.2.1.patch",
+      "node-forge@1.4.0": "patches/node-forge@1.4.0.patch"
     }
   },
   "scripts": {
@@ -54,7 +55,7 @@
     "lint": "biome lint .",
     "skills:validate": "node scripts/validate-skills.mjs",
     "test": "turbo run test --concurrency=1",
-    "test:dependency-security": "node --test scripts/tests/image-size-security.test.mjs scripts/tests/dependency-remediations.test.mjs",
+    "test:dependency-security": "node --test scripts/tests/image-size-security.test.mjs scripts/tests/dependency-remediations.test.mjs scripts/tests/node-forge-security.test.mjs scripts/tests/node-forge-remediation.test.mjs",
     "test:d1-browser-assurance": "node scripts/tests/d1-browser-assurance/run.mjs",
     "test:d1-admin-browser-assurance": "node scripts/tests/d1-admin-browser-assurance/run.mjs",
     "test:d1-public-job-page-assurance": "turbo run build --filter=@ai-job-apply/web && node scripts/tests/d1-public-job-page-assurance/run.mjs",

@@ -9,6 +9,16 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 1 D3-034 is Complete: after #496 merged as `0311416`, standalone Verify passes
+against the original `7aec472` release evidence at state 404, with the exact activity artifact,
+live chain and zero Terraform drift. A fresh current-source baseline also has zero meaningful
+changes. Separate Gateway publication then stops at a newly reported node-forge advisory before
+any upload. D3-035 tracks an exact local source remediation and strict audit validation, not an
+exception, API change or deployment. Full local verification passes (183 dependency-security
+cases, 37 typecheck tasks, 38 test tasks and 23 builds); owner review/merge and the subsequent
+Gateway release remain. D1/D3 stay In progress. See the
+[Phase 3 tasks](phase-3-application-preparation.md#task-register).
+
 October 1 D3-031's activity-only release from `7aec472` is applied in development after
 #494 merged. D3-033's publication-blocker fix is Complete. Immutable publication and independent
 exact-version readback pass; Apply's live-chain

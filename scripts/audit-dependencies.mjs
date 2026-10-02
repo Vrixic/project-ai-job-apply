@@ -6,6 +6,10 @@ import {
   parseToolJson,
   verifyImageSizeRemediation,
 } from "./lib/dependency-remediations.mjs";
+import {
+  separateNodeForgeAdvisory,
+  verifyNodeForgeRemediation,
+} from "./lib/node-forge-remediation.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 // biome-ignore lint/suspicious/noUndeclaredEnvVars: This root CLI runs directly through pnpm, outside Turbo caching.
@@ -34,10 +38,16 @@ try {
   // Always verify the actual installation, including when the registry omits known advisories.
   const dependencyRoots = runPnpm(["why", "image-size", "--recursive", "--json"], [0]);
   const remediation = verifyImageSizeRemediation({ repositoryRoot, dependencyRoots });
+  const forgeRoots = runPnpm(["why", "node-forge", "--recursive", "--json"], [0]);
+  const forgeRemediation = verifyNodeForgeRemediation({
+    repositoryRoot,
+    dependencyRoots: forgeRoots,
+  });
   const report = runPnpm(["audit", "--audit-level", "high", "--json"], [0, 1]);
-  const result = evaluateAuditReport(report);
+  const forgeResult = separateNodeForgeAdvisory(report);
+  const result = evaluateAuditReport(forgeResult.report);
   process.stdout.write(
-    `Dependency audit passed: exact local image-size remediation verified across ${remediation.dependencyPaths} mobile build paths; ${result.remediatedAdvisories} known advisory records remediated, ${result.registryOmittedAdvisories} omitted by the registry. No risk exceptions.\n`,
+    `Dependency audit passed: exact local image-size and node-forge remediations verified across ${remediation.dependencyPaths} and ${forgeRemediation.dependencyPaths} mobile build paths; ${result.remediatedAdvisories + forgeResult.remediatedAdvisories} known advisory records remediated, ${result.registryOmittedAdvisories + forgeResult.registryOmittedAdvisories} omitted by the registry. No risk exceptions.\n`,
   );
 } catch {
   process.stderr.write(

@@ -321,7 +321,7 @@ Both are included in maintained infrastructure and full repository verification.
 - `validate-serverless-workflow-infrastructure.mjs` — Enforces the steady-state Lambda durable,
   migration-only container, and retired-path absence policies.
 - `audit-dependencies.mjs` — Audits the complete lockfile and verifies the exact local
-  `image-size@1.2.1` remediation: patch, lock binding, installed package bytes, and mobile-only
+  `image-size@1.2.1` and Node-only `node-forge@1.4.0` remediations: patch, lock binding, installed package bytes, and mobile-only
   dependency paths. No vulnerability exception or expiry renewal is used. Unexpected advisories
   and registry/tool failures remain blocking.
 - `pnpm test:dependency-security` — Runs bounded parser regressions and applied-remediation audit
