@@ -119,7 +119,7 @@ export class PostgresCoverLetterStore {
     });
   }
 
-  /** Only the bounded ModelGateway call runs under this lease, not nested store transactions. */
+  /** Bounded model/result reads use this lease; immutable completion uses its own transaction. */
   async withGenerationLease<T>(ownerUserId: string, run: () => Promise<T>): Promise<T> {
     return this.client.begin(async (transaction) => {
       await transaction`SELECT identity.require_active_candidate(${ownerUserId}::uuid)`;
@@ -189,6 +189,27 @@ export class PostgresCoverLetterStore {
     if (!row || row.applicationId !== applicationId || row.contentSha256 !== contentSha256)
       throw new CoverLetterIntegrityError();
     return this.readReady(row);
+  }
+
+  /** Active-candidate, owner-scoped metadata lookup; never creates a reservation or reads objects. */
+  async generationMetadata(input: {
+    id: string;
+    ownerUserId: string;
+    applicationId: string;
+    jobRevision: string;
+    confirmedFactsHash: string;
+  }): Promise<CoverLetterMetadata | null> {
+    return this.client.begin(async (transaction) => {
+      await transaction`SELECT identity.require_active_candidate(${input.ownerUserId}::uuid)`;
+      const row = await find(transaction, input.ownerUserId, input.id);
+      if (!row || row.applicationId !== input.applicationId) return null;
+      if (
+        row.jobRevision !== input.jobRevision ||
+        row.confirmedFactsHash !== input.confirmedFactsHash
+      )
+        throw new CoverLetterIntegrityError();
+      return row;
+    });
   }
 
   /** Retry recovery uses the original operation identity, never a newer application draft. */

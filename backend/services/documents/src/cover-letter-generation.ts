@@ -11,14 +11,14 @@ import type {
   ApplicationPacketPreparation,
 } from "@ai-job-apply/api-contracts";
 import { COVER_LETTER_DISCLOSURE_VERSION } from "@ai-job-apply/api-contracts";
-import { FactGraph, type GraphFact } from "@ai-job-apply/domain";
+import type { GraphFact } from "@ai-job-apply/domain";
 import {
   type CoverLetterDocument,
   CoverLetterIntegrityError,
   coverLetterFile,
   coverLetterPreview,
-  createCoverLetterDocument,
 } from "./cover-letter.js";
+import { coverLetterReadyBinding, finalizeCoverLetterDraft } from "./cover-letter-finalize.js";
 import type { PostgresCoverLetterStore } from "./cover-letter-store.js";
 
 type FailureCode = NonNullable<ApplicationPacketPreparation["errorCode"]>;
@@ -104,41 +104,13 @@ export class CoverLetterGenerationService {
       });
     });
     if (!generated) return { kind: "failed", errorCode: "disclosure_expired" };
-    if (generated.status !== "needs_review") {
-      const errorCode: FailureCode =
-        generated.status === "refused"
-          ? "no_confirmed_evidence"
-          : generated.status === "rejected"
-            ? "grounding_failed"
-            : "generation_unavailable";
-      return { kind: "failed", errorCode };
-    }
-    const document = createCoverLetterDocument(
+    return finalizeCoverLetterDraft(
+      this.store,
       reservation.metadata,
       generated,
-      reservation.metadata.createdAt,
+      evidence.facts,
+      this.clock,
     );
-    try {
-      // Neither format can be offered unless both production parsers reproduce the saved text.
-      await coverLetterFile(
-        document,
-        identity.ownerUserId,
-        identity.applicationId,
-        document.contentSha256,
-        "pdf",
-      );
-      await coverLetterFile(
-        document,
-        identity.ownerUserId,
-        identity.applicationId,
-        document.contentSha256,
-        "docx",
-      );
-    } catch {
-      return { kind: "failed", errorCode: "render_failed" };
-    }
-    await this.store.complete(document);
-    return { kind: "ready", letter: this.ready(document, evidence.facts) };
   }
 
   async recover(identity: CoverLetterPreparationIdentity): Promise<CoverLetterReadyBinding | null> {
@@ -242,12 +214,6 @@ export class CoverLetterGenerationService {
     document: CoverLetterDocument,
     facts: readonly GraphFact[],
   ): CoverLetterReadyBinding {
-    const ids = [...new Set(document.paragraphs.flatMap((paragraph) => paragraph.factIds))].sort();
-    const graph = FactGraph.build(facts, this.clock());
-    const confidence = ids.reduce((minimum, id) => {
-      const usability = graph.usability(id);
-      return usability?.usable ? Math.min(minimum, usability.confidence) : 0;
-    }, 1);
-    return { contentSha256: document.contentSha256, sourceFactIds: ids, confidence };
+    return coverLetterReadyBinding(document, facts, this.clock());
   }
 }

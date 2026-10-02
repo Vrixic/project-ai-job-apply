@@ -60,9 +60,14 @@ The private read-only recovery primitive now verifies SQL-owned reservation iden
 request/result bindings, the freshly reconstructed prompt and original authorized dispatch time
 before shared pure grounding. Twenty-three offline cases cover expired-original recovery,
 missing/pending slots, changed evidence/ownership, corruption and unsupported claims. It has no
-provider or write capability. Service-level partial-result finalization/rendering and production
-handler bootstrap remain unfinished. The local handling deadline is not a privacy-quiescence
-protocol.
+provider or write capability. A separate private recovery service now reads the SQL-owned
+reservation without creating work, reloads owned evidence, reads/grounds under an active-candidate
+lease and shares PDF/DOCX production-parser checks with ordinary generation before immutable
+completion. Completion independently checks the candidate lease. Seventeen offline service cases
+and two new real PostgreSQL cases cover finalization/replay, ownership and quarantine; there is
+no model, Invoke or reservation capability in this service. The private initializer/Invoke and
+production activity/handler bootstrap remain unfinished. The local handling deadline is not a
+privacy-quiescence protocol.
 
 The maintenance role currently declares document `s3:DeleteObjectVersion`, not the
 `s3:DeleteObject` authority required to create a delete marker. A narrowly scoped IAM/boundary

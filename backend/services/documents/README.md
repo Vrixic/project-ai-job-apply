@@ -76,9 +76,16 @@ be grounded after disclosure expiry without renewing consent or calling a provid
 pending results return no draft; changed bindings, corruption and malformed transport fail with a
 fixed content-free error, while unsupported model claims are withheld by the shared evaluator.
 Twenty-three offline cases pass. The primitive has no object creation, transition, database,
-model or rendering capability. Invocation initialization and service-level partial-result
-finalization/rendering are still unfinished; the existing generation service is not wired to this
-reader. Documents now passes 295 unit cases; historical PostgreSQL evidence is unchanged.
+model or rendering capability. `src/cover-letter-draft-recovery.ts` now composes this reader with
+an active-candidate owner-scoped metadata lookup, owned evidence, bounded read leases and shared
+parser-verified finalization. It has no model/Invoke/reservation capability. Missing reservations
+never create work; missing/pending provider results stay in progress. Existing immutable final
+drafts are read directly without another provider-result read. Original authorized results can
+finish after consent expiry; each immutable completion independently checks the candidate lease.
+Seventeen new service cases cover both parser checks, immutable retry/lost completion responses,
+context changes and quarantine. Documents passes 312 unit and 35 real PostgreSQL cases, including
+two new owned metadata/finalization cases with offline object ports, not live S3/KMS/provider.
+The private initializer/Invoke and live activity composition remain unfinished and default-dark.
 
 `src/cover-letter.ts` validates a grounded, review-required draft, binds its text/provenance and
 job/evidence context to an immutable content hash, and renders packet-bound PDF/DOCX with
@@ -100,8 +107,8 @@ the shared full-job/evidence binding, withholds grounding failures and verifies 
 before marking a draft ready. A repeated internal request recovers the saved draft or reports
 in-progress; it cannot generate again. The bounded model call holds the active-candidate lease
 without nesting store transactions, so quarantine cannot race provider dispatch. Binding and
-file reads invalidate on current context changes and never call a model. Local evidence: 272
-Documents unit and 33 real PostgreSQL tests (offline provider/object transport).
+file reads invalidate on current context changes and never call a model. Local evidence: 312
+Documents unit and 35 real PostgreSQL tests (offline provider/object transport).
 The heavy AI/rendering boundary has a private `cover-letter-runtime` package entrypoint for
 activity composition; it is deliberately not exported from the Gateway's lightweight root.
 

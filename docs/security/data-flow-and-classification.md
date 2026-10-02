@@ -115,8 +115,13 @@ evidence against the exact saved prompt, pinned encrypted references, original a
 time and result/model binding before shared grounding. It has only find/read capabilities and no
 model, write or dispatch port. Original results may be grounded after consent expiry without
 renewal; missing/pending results do not grant another call. Twenty-three offline cases are not
-service-level parser/finalization, quarantine/quiescence or deployed privacy evidence. The existing
-generation service is not yet wired to this reader; all activation prerequisites above remain.
+deployed privacy or remote-quiescence evidence. The separate private recovery service now loads
+owned reservation metadata without creating work, reads original results under an active-candidate
+lease, and uses the shared PDF/DOCX parser checks before immutable completion. Completion reacquires
+the active-candidate lease; the service has no ModelGateway, Invoke or reservation port. Seventeen
+offline service cases and two new PostgreSQL cases verify finalization, immutable replay, owner
+scope and quarantine refusal. Runtime initialization/invocation, remote quiescence and retention
+remain uncomposed; all activation prerequisites above remain.
 
 ## Phase 0 preference flow
 

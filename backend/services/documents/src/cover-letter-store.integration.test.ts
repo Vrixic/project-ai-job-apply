@@ -2,12 +2,25 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { coverLetterContext, ModelGateway, type ModelProvider } from "@ai-job-apply/ai-sdk";
+import {
+  coverLetterContext,
+  ModelGateway,
+  type ModelProvider,
+  prepareCoverLetterPrompt,
+} from "@ai-job-apply/ai-sdk";
 import type { GraphFact } from "@ai-job-apply/domain";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CoverLetterIntegrityError, createCoverLetterDocument } from "./cover-letter.js";
+import { CoverLetterDraftRecoveryService } from "./cover-letter-draft-recovery.js";
 import { CoverLetterGenerationService } from "./cover-letter-generation.js";
+import {
+  COVER_LETTER_PROVIDER_MODEL,
+  type CoverLetterProviderSlot,
+  coverLetterProviderSha256,
+  encodeCoverLetterProviderObject,
+} from "./cover-letter-provider-contract.js";
+import { CoverLetterProviderRecovery } from "./cover-letter-provider-recovery.js";
 import { type CoverLetterObjectStore, PostgresCoverLetterStore } from "./cover-letter-store.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -229,6 +242,150 @@ const generation = {
           { documentId: second.id, sourceObjectKey: second.objectKey },
         ]),
       );
+    });
+  });
+
+  it("reads only existing owner-scoped generation metadata and denies quarantine before recovery I/O", async () => {
+    await withOwner(async (owner) => {
+      const request = input(owner);
+      const before = putIfAbsent.mock.calls.length;
+      expect(await store.generationMetadata(request)).toBeNull();
+      const reserved = await store.reserve(request);
+      expect(await store.generationMetadata(request)).toEqual(reserved);
+      expect(
+        await store.generationMetadata({ ...request, applicationId: randomUUID() }),
+      ).toBeNull();
+      await withOwner(async (other) => {
+        expect(await store.generationMetadata({ ...request, ownerUserId: other })).toBeNull();
+      });
+      await expect(
+        store.generationMetadata({ ...request, jobRevision: "c".repeat(64) }),
+      ).rejects.toThrow(CoverLetterIntegrityError);
+      expect(putIfAbsent.mock.calls.length).toBe(before);
+      const [count] = await client<
+        Array<{ count: number }>
+      >`SELECT count(*)::int AS count FROM documents.cover_letters WHERE user_id = ${owner}`;
+      expect(count?.count).toBe(1);
+      await client`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+      await expect(store.generationMetadata(request)).rejects.toMatchObject({ code: "42501" });
+      const document = createCoverLetterDocument(reserved, generation, reserved.createdAt);
+      await expect(store.complete(document)).rejects.toMatchObject({ code: "42501" });
+      expect(putIfAbsent.mock.calls.length).toBe(before);
+    });
+  });
+
+  it("finalizes an original provider result after expiry using real owned transactions and both production parsers", async () => {
+    await withOwner(async (owner) => {
+      const approved = new Date("2026-10-02T12:00:00.000Z");
+      const fact: GraphFact = {
+        id: factId,
+        kind: "skill",
+        key: "skill",
+        value: "TypeScript",
+        verification: "confirmed",
+        sensitivity: "standard",
+        source: { type: "user", reference: "synthetic" },
+        version: 1,
+      };
+      const evidence = {
+        facts: [fact],
+        job: { title: "Engineer", company: "Synthetic", description: "Build reliable systems." },
+      };
+      const bindings = coverLetterContext({ ...evidence, now: approved });
+      const identity = {
+        id: randomUUID(),
+        ownerUserId: owner,
+        applicationId: randomUUID(),
+        ...bindings,
+        noticeVersion: "openai-cover-letter.v1",
+        approvedAt: approved,
+        expiresAt: new Date(approved.getTime() + 15 * 60_000),
+      };
+      await store.reserve({ ...identity, jobRevision: bindings.jobContextHash });
+      const prompt = prepareCoverLetterPrompt({ ...evidence, now: approved });
+      if (!prompt) throw new Error("Synthetic prompt missing");
+      const request = encodeCoverLetterProviderObject("request", {
+        schemaVersion: 1,
+        documentId: identity.id,
+        noticeVersion: "openai-cover-letter.v1",
+        promptVersion: "1.0.0",
+        ...bindings,
+        approvedAt: approved.toISOString(),
+        expiresAt: identity.expiresAt.toISOString(),
+        ...prompt,
+        maxOutputChars: 8_000,
+      });
+      const hash = coverLetterProviderSha256(request);
+      const text = JSON.stringify({
+        paragraphs: [{ text: "I have experience with TypeScript.", factIds: [factId] }],
+      });
+      const slots = new Map<CoverLetterProviderSlot, Uint8Array>([
+        ["request", request],
+        [
+          "dispatch",
+          encodeCoverLetterProviderObject("dispatch", {
+            schemaVersion: 1,
+            documentId: identity.id,
+            requestSha256: hash,
+            state: "claimed",
+            dispatchedAt: approved.toISOString(),
+          }),
+        ],
+        [
+          "result",
+          encodeCoverLetterProviderObject("result", {
+            schemaVersion: 1,
+            documentId: identity.id,
+            requestSha256: hash,
+            state: "ready",
+            dispatchedAt: approved.toISOString(),
+            text,
+            model: COVER_LETTER_PROVIDER_MODEL,
+            outputCharacters: text.length,
+          }),
+        ],
+      ]);
+      const readResult = vi.fn(async (id: string, slot: CoverLetterProviderSlot) => {
+        expect(id).toBe(identity.id);
+        const bytes = slots.get(slot);
+        if (!bytes) throw new CoverLetterIntegrityError();
+        return bytes;
+      });
+      const reader = new CoverLetterProviderRecovery({
+        find: async (_id, slot) => {
+          const bytes = slots.get(slot);
+          return bytes
+            ? {
+                objectVersion: "synthetic-provider-version",
+                etag: '"synthetic-etag"',
+                sha256: coverLetterProviderSha256(bytes),
+                sizeBytes: bytes.byteLength,
+              }
+            : undefined;
+        },
+        read: readResult,
+      });
+      const service = new CoverLetterDraftRecoveryService(
+        store,
+        { load: async () => evidence },
+        reader,
+        () => new Date(approved.getTime() + 60 * 60_000),
+      );
+      const before = putIfAbsent.mock.calls.length;
+      const result = await service.recover(identity);
+      expect(result.kind).toBe("ready");
+      if (result.kind !== "ready") throw new Error("Synthetic recovery did not complete");
+      expect(await service.recover(identity)).toEqual(result);
+      expect(readResult).toHaveBeenCalledTimes(3);
+      expect(putIfAbsent.mock.calls.length - before).toBe(1);
+      const saved = await store.read(owner, identity.applicationId, result.letter.contentSha256);
+      expect(saved?.paragraphs).toEqual([
+        { text: "I have experience with TypeScript.", factIds: [factId] },
+      ]);
+      await client`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+      await expect(service.recover(identity)).rejects.toMatchObject({ code: "42501" });
+      expect(readResult).toHaveBeenCalledTimes(3);
+      expect(putIfAbsent.mock.calls.length - before).toBe(1);
     });
   });
 

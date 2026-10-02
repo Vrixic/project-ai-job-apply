@@ -9,6 +9,20 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 service-level recovery now completes a saved original provider result through shared
+grounding, PDF/DOCX production-parser checks and immutable Documents finalization, including after
+original consent expiry. The separate private recovery service has no model, Invoke or reservation
+capability. Owner-scoped metadata lookup and result-read/final-write leases refuse inactive
+candidates. Documents passes 312 unit and 35 PostgreSQL cases; six connected preparation workflow
+cases also pass with synthetic data and offline provider/object ports. No new SQL migration,
+public API/frontend change, cloud deployment or activation is included. Private initializer/Invoke,
+remote privacy quiescence, retention and runtime/read/export/restore composition remain unfinished.
+The full-verifier migration-inventory guard remains unchanged pending owner review; D1/D3 remain
+In progress.
+Independent repo typecheck (38 tasks), tests (39 tasks), all 23 builds, formatting (934 files)
+and baseline lint (15 warnings/58 infos) pass; unchanged tasks reuse local cache. The disposable
+synthetic PostgreSQL container/database is removed and Docker Desktop/WSL are stopped.
+
 October 2 follow-up separates pure prompt construction/grounding from provider access and adds
 a private read-only encrypted-result recovery primitive. The AI SDK passes 81 cases, including
 14 parity/boundary cases; 23 Documents recovery cases verify original dispatch authorization,
