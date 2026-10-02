@@ -22,7 +22,10 @@ enforcement, remote control, trusted failed-call settlement, retention, runtime/
 and external acceptance remain open; D1/D3 stay In progress. Independent repo typecheck/tests,
 all 23 builds (20 cached), formatting (946 files) and baseline-only lint (15 warnings/58 infos) pass.
 The disposable synthetic database/container is removed, Docker Desktop/WSL stopped and retained
-Compose volumes untouched. Committed-source maintained verification follows.
+Compose volumes untouched. Committed source `be32c8e` passes the full maintained verifier without
+exemptions: regenerated contracts with no diff, synthetic operator guards, dependency security
+(142 cases), repo tests, all 23 builds (22 cached), Compose and product-scope checks. The added
+local evidence links and whitespace checks pass. No push, PR or activation is included.
 
 October 2 private slot initialization now requires a fresh exact-bound Documents ledger grant and
 one positive claim before any write. Settlement requires all three original positively acknowledged
