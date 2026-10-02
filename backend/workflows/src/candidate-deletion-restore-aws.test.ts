@@ -136,7 +136,15 @@ function setup(fixtures = [fixture()], timeoutMs?: number) {
         };
       else throw new Error("Non-read-only command rejected by synthetic sender");
     }
-    return overrides[name] ? overrides[name](result, input) : result;
+    const override =
+      name === "ListObjectVersionsCommand"
+        ? overrides.ListObjectVersionsCommand
+        : name === "GetObjectCommand"
+          ? overrides.GetObjectCommand
+          : name === "GetObjectRetentionCommand"
+            ? overrides.GetObjectRetentionCommand
+            : overrides.GetObjectTaggingCommand;
+    return override ? override.call(overrides, result, input) : result;
   });
   const decrypt = vi.fn(async (value: unknown, options?: { abortSignal?: AbortSignal }) => {
     const command = value as Command;

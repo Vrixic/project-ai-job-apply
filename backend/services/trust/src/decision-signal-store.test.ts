@@ -21,9 +21,11 @@ describe("authoritative Trust proof bindings", () => {
           independentEvidenceDigestSha256: "b".repeat(64),
         },
       ]);
-      const value = await new PostgresTrustDecisionSignalStore(query as unknown as postgres.Sql)[
-        method
-      ](ids);
+      const store = new PostgresTrustDecisionSignalStore(query as unknown as postgres.Sql);
+      const value =
+        method === "readDecision"
+          ? await store.readDecision(ids)
+          : await store.readLatestDecision(ids);
       expect(value).toMatchObject({
         status: "accepted",
         evidenceDigestSha256: "a".repeat(64),
@@ -69,9 +71,11 @@ describe("authoritative Trust proof bindings", () => {
           independentEvidenceDigestSha256: null,
         },
       ]);
-      const value = await new PostgresTrustDecisionSignalStore(query as unknown as postgres.Sql)[
-        method
-      ](ids);
+      const store = new PostgresTrustDecisionSignalStore(query as unknown as postgres.Sql);
+      const value =
+        method === "readDecision"
+          ? await store.readDecision(ids)
+          : await store.readLatestDecision(ids);
       expect(value).toMatchObject({ status: "accepted", evidenceDigestSha256: "a".repeat(64) });
       expect(value).not.toHaveProperty("independentEvidenceDigestSha256");
     },
@@ -91,9 +95,12 @@ describe("authoritative Trust proof bindings", () => {
             independentEvidenceDigestSha256: invalid,
           },
         ]);
-        expect(
-          await new PostgresTrustDecisionSignalStore(query as unknown as postgres.Sql)[method](ids),
-        ).toBeNull();
+        const store = new PostgresTrustDecisionSignalStore(query as unknown as postgres.Sql);
+        const value =
+          method === "readDecision"
+            ? await store.readDecision(ids)
+            : await store.readLatestDecision(ids);
+        expect(value).toBeNull();
       }
     },
   );

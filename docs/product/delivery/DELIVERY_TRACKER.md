@@ -9,6 +9,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+PR #506 merged as `84c8c88` on 2026-10-02. The independent test-only static-dispatch follow-up
+and its verification records now use a new backend branch based on that exact merged main.
+This merge does not approve the pending API/guard changes or activate the cover-letter runtime.
+
+Backend test-only static-dispatch cleanup is locally verified: Trust proof tests explicitly choose
+their two existing owned reads, and the candidate-restore AWS mock selects only its four existing
+allowed read commands while preserving the override receiver. All cases/assertions are retained.
+Trust passes 63 unit cases; the focused restore suite passes 115, both workspace typechecks and
+scoped Biome pass. The fresh maintained full verifier passes: unchanged regenerated contracts,
+operator guards, formatting, lint, 38 typecheck tasks (34 cached), 39 test tasks (36 cached),
+23 builds (20 cached), dependency-security regressions, Compose and scope. Workflow unit evidence
+is 1412 passed/20 integration skipped. Scanner clearance is not yet claimed. No production
+API/runtime, frontend, operational guard, Terraform or deployment change.
+The separate Profile, runtime-pin/guard and private read-boundary approvals remain pending.
+
 Hosted backend checkpoint `749d95d` is terminal: quality, catalog invariants, PostgreSQL integration
 and both migration/web container builds pass. Integration runs 33 successful tasks, but Documents
 reports 46 passed and 66 work-ledger tests skipped; the earlier local 112-test PostgreSQL pass
