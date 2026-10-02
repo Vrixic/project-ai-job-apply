@@ -40,6 +40,39 @@ Real-candidate use, public policy, and counsel's conclusions remain gated by D6-
 | 5 | Submission | Accepted with attribution | A candidate-approved, hash-bound packet submitted through an accepted adapter; every result recorded with who submitted (platform adapter, or the candidate through takeover or attestation); an ambiguous result blocks a second submission until reconciled | Blind retry after an ambiguous result; recording a candidate submission as a platform one | Confirm the history fields suffice or add an explicit submitter field before the extension executor ships (engineering; D3-008 closure) |
 | 6 | Engineering defaults | Accepted as listed in the approval packet | 24-hour approval; 0.90 auto-review threshold; one live application per job; duplicate-risk acknowledgement for "not submitted"; 15-minute AI disclosure approval | Changing them without updating this record | None |
 
+## OpenAI development decision (2026-10-02)
+
+Vrij Patel selected OpenAI `gpt-6-luna` in chat and answered "yes" to the development data-handling
+scope: only the reviewer's own account and generated-synthetic candidates, explicit disclosure,
+restricted facts excluded, and mandatory draft review. This is an accountable development
+decision, not counsel, procurement, independent security review, or public-launch approval.
+The amendment becomes effective on the owner's merge of the accompanying backend adapter PR.
+
+The reviewed technical basis is OpenAI's
+[model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna) and
+[data controls](https://developers.openai.com/api/docs/guides/your-data), accessed 2026-10-02.
+API content is not used for training by default unless the customer opts in. Default abuse
+monitoring can retain prompts/responses for up to 30 days, with longer legal/safety exceptions.
+`store: false` disables ordinary Responses persistence, not abuse monitoring or all application
+state; encrypted prompt-cache tensors can remain for up to 24 hours. No Zero Data Retention
+approval is claimed. Model access in the platform's account has not been tested.
+
+Proposed candidate notice, to be reviewed with the separately approved API/consent wiring:
+"With your permission, we send your confirmed, non-restricted career facts and this job's text
+to OpenAI (gpt-6-luna) to draft this cover letter or narrative answer. OpenAI does not use API
+content for training by default. Provider abuse-monitoring logs may retain content for up to
+30 days, with longer legal or safety exceptions; temporary prompt caching may also retain data.
+You must review the draft before it can be used. You can decline and write your own text."
+
+This narrows disposition 1's unselected-provider blocker to the named development selection.
+It does not approve a particular contract/DPA version, legal entity, region, procurement terms,
+or an exact candidate notice implementation. Those details remain unrecorded; the general
+[subprocessor activation gate](subprocessors.md#activation-gate) is not waived. No real model
+call is authorized by this code slice: the adapter remains uncomposed and default-off, and live
+evaluation/activation needs the remaining provider conditions and reviewed consent wiring.
+No restricted, never-infer, attestation, signature, CAPTCHA or MFA data is permitted in prompts.
+No other real candidate, staging, production, employer submission, or backend API change is approved.
+
 ## Revalidation triggers
 
 Revisit this record when any of these change: an AI provider or model is chosen or replaced; a new ATS adapter

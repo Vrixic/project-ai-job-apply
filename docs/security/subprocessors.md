@@ -1,7 +1,7 @@
 # Subprocessor and External-System Register
 
 - Status: Candidate register; procurement, DPA, security, privacy, retention, and counsel review pending
-- Last updated: 2026-08-25
+- Last updated: 2026-10-02
 
 | System | Intended purpose | Candidate data | State |
 |---|---|---|---|
@@ -11,7 +11,7 @@
 | Temporal Cloud | Retired Phase 0 workflow provider | Historical opaque synthetic workflow metadata only | Access keys revoked; AWS runtime secrets scheduled for deletion; no active product data flow or executable dependency |
 | Auth0 by Okta | Authentication and sessions | Minimum identity claims, authentication methods, and session/security metadata | Development tenant and web conformance active for synthetic engineering use; synthetic staging temporarily shares the issuer under ADR-014. Contracting entity/region, DPA, provider review, dedicated real-user tenants, and accountable approval remain pending. |
 | AWS CloudWatch / OpenTelemetry libraries | Operational telemetry | Redacted identifiers and measurements | Encrypted CloudWatch logs, traces, metrics, alarms, and alert exercises are deployed; provider/legal-entity terms, access/retention review, and accountable approval remain pending for real candidate data |
-| AI model provider | Later structured extraction/tailoring | Minimum required candidate/job context | Not selected |
+| AI model provider (OpenAI) | Grounded cover-letter and narrative drafts | Confirmed non-restricted career facts and job text only | Owner selected `gpt-6-luna` and accepted limited development data handling on 2026-10-02; [decision and remaining conditions](d3-012-accountable-disposition.md#openai-development-decision-2026-10-02). Default-off adapter only, no live calls or runtime composition. Exact contracting entity/region, contract/DPA/subprocessors, notice/consent wiring, credentials, evaluation and activation remain pending; no general real-candidate or public-launch approval. |
 | Email provider | Later approved delivery/outreach sending | Approved message and recipient | Not selected |
 | Billing provider | Later subscription and entitlement normalization | Customer/billing identifiers | Stripe proposed, not activated |
 
