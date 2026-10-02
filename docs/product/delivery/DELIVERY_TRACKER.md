@@ -19,7 +19,8 @@ Documents cases), including migration replay. SQL protects unresolved deletion a
 delete-and-reissue. The primitive is private/default-off, not a composed quiescence authority.
 The owner approved the exact 52-migration guard/fixture update, retaining the exact 48/49/51
 inventories and strict event validation. Repo typecheck/tests/all builds, formatting and
-baseline-only lint pass; committed-source guard verification is running. No API/frontend,
+baseline-only lint pass. Committed source `1790ca0` passes the full repository verifier and
+both-host guard/fixture checks (244 inventory assertions); 11 added local links pass. No API/frontend,
 Terraform, deployment or activation change.
 The disposable synthetic database/container is removed and Docker Desktop/WSL stopped. All actors,
 trusted external settlement, IAM, retention, read/export/restore and external acceptance remain
