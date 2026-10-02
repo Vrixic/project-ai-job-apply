@@ -118,7 +118,15 @@ export class ModelGateway {
       throw new ModelGatewayError("DISCLOSURE_CATEGORY_MISSING");
     }
     const age = this.clock().getTime() - disclosure.approvedAt.getTime();
-    if (age < 0 || age > this.disclosureMaxAgeMs) throw new ModelGatewayError("DISCLOSURE_STALE");
+    if (
+      !Number.isFinite(age) ||
+      !Number.isFinite(this.disclosureMaxAgeMs) ||
+      this.disclosureMaxAgeMs < 0 ||
+      age < 0 ||
+      age > this.disclosureMaxAgeMs
+    ) {
+      throw new ModelGatewayError("DISCLOSURE_STALE");
+    }
     if (request.system.length + request.user.length > this.maxInputChars) {
       throw new ModelGatewayError("INPUT_TOO_LARGE");
     }

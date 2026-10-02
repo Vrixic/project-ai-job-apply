@@ -2,10 +2,10 @@ import type { GraphFact } from "@ai-job-apply/domain";
 import { describe, expect, it } from "vitest";
 import { type DataDisclosureApproval, ModelGateway, type ModelProvider } from "./gateway.js";
 import {
+  type GenerationDependencies,
   generateCoverLetter,
   generateNarrativeAnswer,
   toGeneratedProposal,
-  type GenerationDependencies,
 } from "./generation.js";
 import { ScriptedProvider, TemplateProvider } from "./testing.js";
 
@@ -137,6 +137,63 @@ describe("ModelGateway", () => {
     await expect(slow.generate(request, disclosure)).rejects.toMatchObject({
       code: "PROVIDER_TIMEOUT",
     });
+  });
+
+  it.each(["approval", "clock"])(
+    "rejects an invalid %s timestamp before any provider call",
+    async (invalid) => {
+      const provider = new ScriptedProvider("{}");
+      const g = new ModelGateway(provider, {
+        enabled: () => true,
+        clock: () => (invalid === "clock" ? new Date(Number.NaN) : NOW),
+      });
+      const approval = {
+        ...disclosure,
+        approvedAt: invalid === "approval" ? new Date(Number.NaN) : disclosure.approvedAt,
+      };
+      await expect(g.generate(request, approval)).rejects.toMatchObject({
+        code: "DISCLOSURE_STALE",
+      });
+      expect(provider.calls).toHaveLength(0);
+    },
+  );
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+    "fails closed on an invalid disclosure window (%s)",
+    async (disclosureMaxAgeMs) => {
+      const provider = new ScriptedProvider("{}");
+      const g = new ModelGateway(provider, {
+        enabled: () => true,
+        clock: () => NOW,
+        disclosureMaxAgeMs,
+      });
+      await expect(g.generate(request, disclosure)).rejects.toMatchObject({
+        code: "DISCLOSURE_STALE",
+      });
+      expect(provider.calls).toHaveLength(0);
+    },
+  );
+
+  it.each([0, 15 * 60 * 1000])("preserves valid disclosure boundary age %s", async (age) => {
+    const provider = new ScriptedProvider("{}");
+    await expect(
+      gateway(provider).generate(request, {
+        ...disclosure,
+        approvedAt: new Date(NOW.getTime() - age),
+      }),
+    ).resolves.toMatchObject({ value: {} });
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it("rejects disclosure one millisecond beyond its existing lifetime", async () => {
+    const provider = new ScriptedProvider("{}");
+    await expect(
+      gateway(provider).generate(request, {
+        ...disclosure,
+        approvedAt: new Date(NOW.getTime() - 15 * 60 * 1000 - 1),
+      }),
+    ).rejects.toMatchObject({ code: "DISCLOSURE_STALE" });
+    expect(provider.calls).toHaveLength(0);
   });
 });
 
