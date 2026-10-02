@@ -6,6 +6,17 @@
 
 ## D3 cover-letter delta (2026-10-02, engineering evidence only)
 
+The isolated provider now requires one original fixed-purpose ledger claim before its dispatch
+replacement, model call or result replacement. The private control operation consumes existing
+authority only, resolving the stored owner and rechecking active candidate, immutable binding and
+server-time admission under lock. The provider cannot issue/renew work or settle another phase.
+Only the original acknowledged dispatch/completed-model/acknowledged-result path records settlement;
+object presence and read-only replay cannot settle ambiguous effects. Delayed control responses are
+awaited as original committed results; expiry, kill switches and local deadlines are rechecked
+before effects. Offline and real SQL fixtures do not prove production authenticated control RPC,
+provider IAM, failed-call remote settlement, retention or final-document enforcement. Those remain
+blocking before activation; neither local timeout nor a rejected model request proves quiescence.
+
 Private slot creation now enforces the work ledger before its first write. Only a fresh exact-bound
 grant and positive original claim permit creation; replay cannot claim, recreate or settle work.
 The S3 port checks single-attempt configuration before every PUT and requires positive one-attempt
@@ -14,7 +25,7 @@ the initializer to settle. Lost acknowledgements, partial creation, local abort 
 leave the ledger unresolved, including when read-only replay can see every object. Real PostgreSQL
 cases retain running work and refuse deletion until explicit synthetic fixture settlement. Offline
 installed-SDK checks prove one HTTP write attempt, not deployed IAM/KMS or remote-provider drain.
-Provider/final-document actor enforcement, retention and production quiescence remain unfinished.
+Production provider/final-document composition, retention and quiescence remain unfinished.
 
 The private Documents work ledger prevents renewable/replayed authority and accidental deletion of
 unresolved work. Each phase can claim once within its immutable server-time admission window; SQL

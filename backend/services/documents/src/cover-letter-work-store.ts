@@ -154,6 +154,53 @@ export class PostgresCoverLetterWorkStore {
     });
   }
 
+  /** Fixed-purpose private admission; never creates or renews provider authority. */
+  async claimProviderDispatch(input: {
+    documentId: string;
+    requestSha256: string;
+    consentExpiresAt: Date;
+  }): Promise<{ kind: "claimed"; reference: CoverLetterWorkReference } | { kind: "unavailable" }> {
+    return this.guarded(async () => {
+      const binding = structuredClone(input);
+      if (
+        !UUID.test(binding.documentId) ||
+        !HASH.test(binding.requestSha256) ||
+        !Number.isFinite(binding.consentExpiresAt.getTime())
+      )
+        throw Error();
+      // This private control operation consumes existing authority only. The isolated actor
+      // cannot issue work, select an owner, renew consent, or receive candidate values.
+      const authorization = await find(this.client, binding.documentId, "provider_dispatch");
+      if (
+        authorization?.state !== "issued" ||
+        authorization.requestSha256 !== binding.requestSha256 ||
+        authorization.consentExpiresAt.getTime() !== binding.consentExpiresAt.getTime()
+      )
+        return { kind: "unavailable" } as const;
+      const reference: CoverLetterWorkReference = {
+        id: authorization.id,
+        documentId: authorization.documentId,
+        purpose: "provider_dispatch",
+        requestSha256: authorization.requestSha256,
+      };
+      // The original claim transaction rechecks the stored owner's active-candidate lease,
+      // immutable binding, server-time expiry and one-time state under lock.
+      const result = await this.claim(reference);
+      return result.kind === "claimed"
+        ? { kind: "claimed" as const, reference }
+        : { kind: "unavailable" as const };
+    });
+  }
+
+  /** Isolated-provider settlement cannot mutate another phase's control record. */
+  async settleProviderDispatch(reference: CoverLetterWorkReference): Promise<void> {
+    return this.guarded(async () => {
+      const ref = structuredClone(reference);
+      if (ref.purpose !== "provider_dispatch") throw Error();
+      await this.recordSettled(ref);
+    });
+  }
+
   /** Trusted positive settlement ONLY. No catch/finally/timeout-based automatic settlement. */
   async recordSettled(reference: CoverLetterWorkReference): Promise<void> {
     return this.guarded(async () => {

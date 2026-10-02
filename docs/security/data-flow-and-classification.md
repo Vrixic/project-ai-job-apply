@@ -13,6 +13,13 @@ and pinned reads. A local timeout, late write, object presence or read-only repl
 settlement. This connection adds no candidate values to control metadata or public responses.
 Other actors and the production drain authority remain uncomposed.
 
+The source-only isolated provider now claims existing fixed-purpose authority through a private
+control capability before external effects. The request contains document ID, original digest and
+consent expiry only; the acknowledgement contains an opaque authorization reference, not candidate
+owner IDs, prompts or model text. Settlement is restricted to that provider phase and only follows
+the original positive dispatch/model/result path. Connected local fixtures use in-process control
+and offline object/model ports; authenticated remote control/IAM and production drain remain open.
+
 - Status: Engineering baseline; accountable security/privacy approval pending
 - Last updated: 2026-08-08
 

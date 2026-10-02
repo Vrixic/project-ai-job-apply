@@ -9,6 +9,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 isolated provider effects now require one original Documents `provider_dispatch` claim
+before dispatch replacement, model access or result replacement. The fixed-purpose control methods
+consume existing authority only and cannot renew consent, choose an owner or settle another phase.
+The original positive dispatch/model/result path alone settles; lost acknowledgements, local abort,
+late model responses and read-only ready-result recovery do not. Documents passes 454 unit and 68
+real PostgreSQL cases, including 12 new SQL admission/provider-effect cases. The compiled isolated
+handler imports no SQL runtime. These are in-process control/offline object/model fixtures, not
+authenticated remote RPC, live provider/IAM or production drain evidence. No public API/frontend,
+migration, Terraform/guard, cloud/model call, deployment or activation change. Final-document
+enforcement, remote control, trusted failed-call settlement, retention, runtime/read/export/restore
+and external acceptance remain open; D1/D3 stay In progress. Independent repo typecheck/tests,
+all 23 builds (20 cached), formatting (946 files) and baseline-only lint (15 warnings/58 infos) pass.
+The disposable synthetic database/container is removed, Docker Desktop/WSL stopped and retained
+Compose volumes untouched. Committed-source maintained verification follows.
+
 October 2 private slot initialization now requires a fresh exact-bound Documents ledger grant and
 one positive claim before any write. Settlement requires all three original positively acknowledged
 and pinned creations; partial writes, lost acknowledgements, local abort/late completion and

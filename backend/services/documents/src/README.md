@@ -16,7 +16,7 @@ granting another model dispatch. Unresolved rows block cascaded deletion, and in
 rows cannot be removed to reissue authority while their document exists.
 Ledger settlement is not a production quiescence proof: every writer/provider must use the claims,
 and a trusted actor must positively prove all original effects stopped before recording settlement.
-No runtime handler, IAM enforcement or provider/drain port is composed here.
+No production runtime, IAM enforcement or drain authority is composed here.
 
 The private slot initializer now requires this ledger before any creation: only a fresh exact-bound
 `private_slots` grant and its one committed claim can create request/result/dispatch, with dispatch
@@ -24,6 +24,17 @@ last. Only the original actor's three positively acknowledged and pinned writes 
 phase. Partial/conflicting/aborted/lost-acknowledgement paths and read-only replay never settle it.
 The S3 transport requires an explicit single-attempt SDK policy and a one-attempt HTTP 200 receipt
 before acknowledging any creation or conditional replacement. Real SDK offline tests verify one
-HTTP PUT on a server error. The initializer alone is connected, not the provider/final-document
-actors or production drain authority. Tests use synthetic SQL/object data, not live S3/KMS/model
+HTTP PUT on a server error. These acknowledgements alone are not a production drain authority.
+Tests use synthetic SQL/object data, not live S3/KMS/model
 permissions or accountable privacy acceptance.
+
+The isolated provider now requires a fixed-purpose control port before any dispatch replacement,
+model call or result replacement. It can only claim a pre-issued `provider_dispatch` authorization
+with the original request/consent binding and settle that phase; it cannot issue/renew authority,
+choose a candidate owner or settle another phase. The Documents private control method resolves
+the persisted owner and uses the existing atomic active-candidate/server-time claim. Only the
+original positive dispatch/model/result path can settle. Read-only ready-result recovery, ambiguous
+control/write responses and local timeout/late model completion never settle running work.
+The isolated compiled handler imports no SQL runtime. The connected SQL tests use an in-process
+control port and offline model/objects, not a deployed authenticated RPC. Remote control/IAM,
+final-document enforcement, retention and production drain composition remain unfinished.

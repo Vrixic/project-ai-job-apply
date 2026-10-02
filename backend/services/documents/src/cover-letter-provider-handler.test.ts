@@ -16,6 +16,7 @@ import {
   coverLetterProviderTransitionPort,
   S3CoverLetterProviderObjects,
 } from "./cover-letter-provider-objects.js";
+import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 
 const documentId = "019d04cf-1f80-7000-8000-000000000001";
 const otherId = "019d04cf-1f80-7000-8000-000000000002";
@@ -46,6 +47,7 @@ interface Version {
 async function fixture(
   settings: {
     defaultOff?: boolean;
+    withoutWork?: boolean;
     modelEnabled?: boolean;
     timeoutMs?: number;
     failAfterClaim?: boolean;
@@ -133,6 +135,7 @@ async function fixture(
     maxOutputChars: settings.maxOutputChars ?? request.maxOutputChars,
   });
   const savedRequest = await objects.putIfAbsent(documentId, "request", requestBytes);
+  const originalRequestSha256 = savedRequest.reference.sha256;
   const binding = { schemaVersion: 1, documentId, requestSha256: savedRequest.reference.sha256 };
   await objects.putIfAbsent(
     documentId,
@@ -155,9 +158,36 @@ async function fixture(
     },
   );
   const port = coverLetterProviderTransitionPort(objects);
+  let workClaimed = false;
+  const work = {
+    claimProviderDispatch: vi.fn<PostgresCoverLetterWorkStore["claimProviderDispatch"]>(
+      async (binding) => {
+        expect(binding).toEqual({
+          documentId,
+          requestSha256: originalRequestSha256,
+          consentExpiresAt: new Date(request.expiresAt),
+        });
+        if (workClaimed) return { kind: "unavailable" };
+        workClaimed = true;
+        return {
+          kind: "claimed",
+          reference: {
+            id: otherId,
+            documentId,
+            purpose: "provider_dispatch",
+            requestSha256: binding.requestSha256,
+          },
+        };
+      },
+    ),
+    settleProviderDispatch: vi.fn<PostgresCoverLetterWorkStore["settleProviderDispatch"]>(
+      async () => undefined,
+    ),
+  };
   const handler = createCoverLetterIsolatedProviderHandler({
     objects: port,
     gateway,
+    ...(settings.withoutWork ? {} : { work }),
     ...(settings.defaultOff ? {} : { enabled: () => enabled }),
     clock: () => new Date(now),
     ...(settings.timeoutMs !== undefined ? { timeoutMs: settings.timeoutMs } : {}),
@@ -195,6 +225,7 @@ async function fixture(
     port,
     identity,
     gateway,
+    work,
     current,
     overwrite,
     setNow: (value: Date) => {
@@ -217,6 +248,85 @@ async function fixture(
 
 afterEach(() => vi.restoreAllMocks());
 describe("isolated cover-letter provider handler (offline model and S3)", () => {
+  it("refuses missing control authority before all object/model access", async () => {
+    const test = await fixture({ withoutWork: true });
+    expect((await test.handler(test.input)).outcome).toBe("failed");
+    expect(test.send).not.toHaveBeenCalled();
+    expect(test.complete).not.toHaveBeenCalled();
+  });
+
+  it.each(["denied", "lost_ack"])("does not dispatch after a %s ledger claim", async (reason) => {
+    const test = await fixture();
+    if (reason === "denied")
+      test.work.claimProviderDispatch.mockResolvedValue({ kind: "unavailable" });
+    else
+      test.work.claimProviderDispatch.mockRejectedValue(
+        new Error("Synthetic private control diagnostic"),
+      );
+    expect((await test.handler(test.input)).outcome).toBe("in_progress");
+    expect(test.send.mock.calls.some(([command]) => command instanceof PutObjectCommand)).toBe(
+      false,
+    );
+    expect(test.complete).not.toHaveBeenCalled();
+    expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
+  });
+
+  it.each(["identity", "document", "purpose", "digest"])(
+    "rejects a mismatched %s ledger receipt before dispatch",
+    async (change) => {
+      const test = await fixture();
+      const claim = test.work.claimProviderDispatch.getMockImplementation();
+      if (!claim) throw new Error("Synthetic claim missing");
+      test.work.claimProviderDispatch.mockImplementation(async (binding) => {
+        const result = await claim(binding);
+        if (result.kind !== "claimed") return result;
+        if (change === "identity") result.reference.id = "invalid";
+        if (change === "document") result.reference.documentId = otherId;
+        if (change === "purpose") result.reference.purpose = "final_document";
+        if (change === "digest") result.reference.requestSha256 = "f".repeat(64);
+        return result;
+      });
+      expect((await test.handler(test.input)).outcome).toBe("in_progress");
+      expect(test.send.mock.calls.some(([command]) => command instanceof PutObjectCommand)).toBe(
+        false,
+      );
+      expect(test.complete).not.toHaveBeenCalled();
+      expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["timeout", "disable", "expiry"])(
+    "waits for original control acknowledgement but refuses effects after %s",
+    async (change) => {
+      const test = await fixture({ ...(change === "timeout" ? { timeoutMs: 20 } : {}) });
+      const claim = test.work.claimProviderDispatch.getMockImplementation();
+      if (!claim) throw new Error("Synthetic claim missing");
+      test.work.claimProviderDispatch.mockImplementation(async (binding) => {
+        const result = await claim(binding);
+        if (change === "timeout") await new Promise((resolve) => setTimeout(resolve, 40));
+        if (change === "disable") test.disable();
+        if (change === "expiry") test.setNow(new Date("2026-10-02T12:16:00.000Z"));
+        return result;
+      });
+      expect((await test.handler(test.input)).outcome).toBe("in_progress");
+      expect(test.send.mock.calls.some(([command]) => command instanceof PutObjectCommand)).toBe(
+        false,
+      );
+      expect(test.complete).not.toHaveBeenCalled();
+      expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not repeat settlement after its acknowledgement fails or after read-only recovery", async () => {
+    const test = await fixture();
+    test.work.settleProviderDispatch.mockRejectedValue(new Error("Synthetic ambiguous settlement"));
+    expect((await test.handler(test.input)).outcome).toBe("in_progress");
+    expect((await test.handler(test.input)).outcome).toBe("ready");
+    expect(test.work.claimProviderDispatch).toHaveBeenCalledOnce();
+    expect(test.work.settleProviderDispatch).toHaveBeenCalledOnce();
+    expect(test.complete).toHaveBeenCalledOnce();
+  });
+
   it("is default-off before any SDK/model access and exposes no creation capability", async () => {
     const test = await fixture({ defaultOff: true });
     expect(await test.handler(test.input)).toEqual({
@@ -246,6 +356,20 @@ describe("isolated cover-letter provider handler (offline model and S3)", () => 
       outputCharacters: modelText.length,
     });
     expect(test.complete).toHaveBeenCalledOnce();
+    expect(test.work.claimProviderDispatch).toHaveBeenCalledOnce();
+    expect(test.work.settleProviderDispatch).toHaveBeenCalledOnce();
+    const writes = test.send.mock.calls.flatMap(([command], index) =>
+      command instanceof PutObjectCommand ? [test.send.mock.invocationCallOrder[index] ?? 0] : [],
+    );
+    expect(test.work.claimProviderDispatch.mock.invocationCallOrder[0]).toBeLessThan(
+      writes[0] ?? 0,
+    );
+    expect(test.work.settleProviderDispatch.mock.invocationCallOrder[0]).toBeGreaterThan(
+      writes[1] ?? 0,
+    );
+    await test.handler(test.input);
+    expect(test.work.claimProviderDispatch).toHaveBeenCalledOnce();
+    expect(test.work.settleProviderDispatch).toHaveBeenCalledOnce();
     expect(
       test.send.mock.calls.filter(([command]) => command instanceof PutObjectCommand),
     ).toHaveLength(2);
@@ -286,6 +410,7 @@ describe("isolated cover-letter provider handler (offline model and S3)", () => 
     expect((await test.handler(test.input)).outcome).toBe("in_progress");
     expect((await test.handler(test.input)).outcome).toBe("ready");
     expect(test.complete).toHaveBeenCalledOnce();
+    expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
   });
   it("does not regenerate when the model result could not be persisted", async () => {
     const test = await fixture({ refuseResult: true });
@@ -416,6 +541,7 @@ describe("isolated cover-letter provider handler (offline model and S3)", () => 
     expect(
       test.send.mock.calls.filter(([command]) => command instanceof PutObjectCommand),
     ).toHaveLength(1);
+    expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
   });
   it("rejects malformed envelopes with only a fixed error and never evaluates accessors", async () => {
     const test = await fixture();

@@ -1,9 +1,18 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { ModelGateway } from "@ai-job-apply/ai-sdk";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  COVER_LETTER_PROVIDER_MODEL,
+  type CoverLetterProviderSlot,
+  coverLetterProviderSha256,
+  encodeCoverLetterProviderObject,
+} from "./cover-letter-provider-contract.js";
+import { createCoverLetterIsolatedProviderHandler } from "./cover-letter-provider-handler.js";
+import type { CoverLetterProviderTransitionObjects } from "./cover-letter-provider-objects.js";
 import { PostgresCoverLetterStore } from "./cover-letter-store.js";
 import {
   type CoverLetterWorkAuthorization,
@@ -40,7 +49,7 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
   let ownerUserId: string;
   let documentId: string;
   let consentExpiresAt: Date;
-  const requestSha256 = "a".repeat(64);
+  let requestSha256 = "a".repeat(64);
 
   beforeAll(async () => {
     const inherited = Object.fromEntries(
@@ -57,6 +66,7 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
     }
   }, 90_000);
   beforeEach(async () => {
+    requestSha256 = "a".repeat(64);
     ownerUserId = uuidv7();
     documentId = uuidv7();
     consentExpiresAt = new Date(Date.now() + 15 * 60_000);
@@ -97,6 +107,193 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
         clock_timestamp() - interval '1 minute')`;
     return { id, documentId, purpose, requestSha256 };
   }
+
+  const providerBinding = () => ({ documentId, requestSha256, consentExpiresAt });
+  it("provider admission never creates authority or consumes a private-slot grant", async () => {
+    expect(await work.claimProviderDispatch(providerBinding())).toEqual({ kind: "unavailable" });
+    await issue("private_slots");
+    expect(await work.claimProviderDispatch(providerBinding())).toEqual({ kind: "unavailable" });
+    const rows =
+      await sql`SELECT purpose, state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId}`;
+    expect(rows).toEqual([{ purpose: "private_slots", state: "issued" }]);
+  });
+  it("provider admission has one concurrent winner and cannot renew its original grant", async () => {
+    const original = (await issue("provider_dispatch")).authorization;
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () => work.claimProviderDispatch(providerBinding())),
+    );
+    expect(results.filter((result) => result.kind === "claimed")).toHaveLength(1);
+    const winner = results.find((result) => result.kind === "claimed");
+    expect(winner).toEqual({
+      kind: "claimed",
+      reference: {
+        id: original.id,
+        documentId,
+        purpose: "provider_dispatch",
+        requestSha256,
+      },
+    });
+    expect(await work.claimProviderDispatch(providerBinding())).toEqual({ kind: "unavailable" });
+    const replay = (await issue("provider_dispatch")).authorization;
+    expect(replay).toMatchObject({
+      id: original.id,
+      issuedAt: original.issuedAt,
+      expiresAt: original.expiresAt,
+      state: "running",
+    });
+  });
+  it("provider admission rejects a different document, request or consent without consuming the original", async () => {
+    await issue("provider_dispatch");
+    for (const changed of [
+      { documentId: uuidv7() },
+      { requestSha256: "f".repeat(64) },
+      { consentExpiresAt: new Date(consentExpiresAt.getTime() + 1) },
+    ])
+      expect(await work.claimProviderDispatch({ ...providerBinding(), ...changed })).toEqual({
+        kind: "unavailable",
+      });
+    expect((await work.claimProviderDispatch(providerBinding())).kind).toBe("claimed");
+  });
+  it.each(["expired", "revoked", "quarantined"])(
+    "provider admission cannot bypass %s authority",
+    async (state) => {
+      if (state === "expired") await seedExpired("provider_dispatch");
+      else await issue("provider_dispatch");
+      if (state === "revoked") await work.revokeUnclaimed(ownerUserId, documentId);
+      if (state === "quarantined") {
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
+        await expect(work.claimProviderDispatch(providerBinding())).rejects.toThrow(
+          "CoverLetterWorkUnavailable",
+        );
+      } else
+        expect(await work.claimProviderDispatch(providerBinding())).toEqual({
+          kind: "unavailable",
+        });
+      const rows =
+        await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId}`;
+      expect(rows.some((row) => row.state === "running")).toBe(false);
+    },
+  );
+
+  it.each(["none", "control_ack", "dispatch_ack", "result_ack", "settlement_ack", "model_timeout"])(
+    "connects isolated provider effects to SQL authority, retaining ambiguous %s work",
+    async (failure) => {
+      // Real control transactions, but all object/model transports are in-memory synthetic fakes.
+      const request = encodeCoverLetterProviderObject("request", {
+        schemaVersion: 1,
+        documentId,
+        noticeVersion: "openai-cover-letter.v1",
+        promptVersion: "1.0.0",
+        jobContextHash: "b".repeat(64),
+        confirmedFactsHash: "c".repeat(64),
+        approvedAt: new Date(consentExpiresAt.getTime() - 15 * 60_000).toISOString(),
+        expiresAt: consentExpiresAt.toISOString(),
+        system: "Synthetic grounded rules",
+        user: "Synthetic TypeScript fact",
+        maxOutputChars: 8_000,
+      });
+      requestSha256 = coverLetterProviderSha256(request);
+      await issue("provider_dispatch");
+      const binding = { schemaVersion: 1, documentId, requestSha256 };
+      const slots = new Map<CoverLetterProviderSlot, Uint8Array>([
+        ["request", request],
+        ["dispatch", encodeCoverLetterProviderObject("dispatch", { ...binding, state: "issued" })],
+        ["result", encodeCoverLetterProviderObject("result", { ...binding, state: "pending" })],
+      ]);
+      const reference = (bytes: Uint8Array) => ({
+        objectVersion: "synthetic-version",
+        etag: `"${coverLetterProviderSha256(bytes)}"`,
+        sha256: coverLetterProviderSha256(bytes),
+        sizeBytes: bytes.length,
+      });
+      const phaseState = async () => {
+        const [row] = await sql`SELECT state FROM documents.cover_letter_work_authorizations
+          WHERE document_id = ${documentId} AND purpose = 'provider_dispatch'`;
+        return row?.state;
+      };
+      const transition = vi.fn<CoverLetterProviderTransitionObjects["transitionIfMatch"]>(
+        async (_id, slot, prior, bytes) => {
+          expect(await phaseState()).toBe("running");
+          const old = slots.get(slot);
+          if (!old || reference(old).etag !== prior.etag) return { changed: false };
+          slots.set(slot, Uint8Array.from(bytes));
+          if (failure === `${slot}_ack`) throw Error("Synthetic lost write acknowledgement");
+          return { changed: true, reference: reference(bytes) };
+        },
+      );
+      let releaseModel: (value: { text: string }) => void = () => undefined;
+      const pendingModel = new Promise<{ text: string }>((resolve) => {
+        releaseModel = resolve;
+      });
+      const text = JSON.stringify({
+        paragraphs: [{ text: "Synthetic TypeScript experience.", factIds: [documentId] }],
+      });
+      const complete = vi.fn(async () => {
+        expect(await phaseState()).toBe("running");
+        return failure === "model_timeout" ? pendingModel : { text };
+      });
+      const claim = vi.fn(
+        async (input: Parameters<PostgresCoverLetterWorkStore["claimProviderDispatch"]>[0]) => {
+          const result = await work.claimProviderDispatch(input);
+          if (failure === "control_ack") throw Error("Synthetic lost control acknowledgement");
+          return result;
+        },
+      );
+      const settle = vi.fn(
+        async (ref: Parameters<PostgresCoverLetterWorkStore["settleProviderDispatch"]>[0]) => {
+          await work.settleProviderDispatch(ref);
+          if (failure === "settlement_ack")
+            throw Error("Synthetic lost settlement acknowledgement");
+        },
+      );
+      const handler = createCoverLetterIsolatedProviderHandler({
+        enabled: () => true,
+        timeoutMs: failure === "model_timeout" ? 200 : 60_000,
+        gateway: new ModelGateway(
+          { identity: COVER_LETTER_PROVIDER_MODEL, complete },
+          { enabled: () => true, timeoutMs: 1_000 },
+        ),
+        work: { claimProviderDispatch: claim, settleProviderDispatch: settle },
+        objects: {
+          transitionIfMatch: transition,
+          find: async (_id, slot) => {
+            const bytes = slots.get(slot);
+            return bytes ? reference(bytes) : undefined;
+          },
+          read: async (_id, slot) => {
+            const bytes = slots.get(slot);
+            if (!bytes) throw Error("Synthetic missing slot");
+            return Uint8Array.from(bytes);
+          },
+        },
+      });
+      const input = { schemaVersion: 1 as const, documentId, request: reference(request) };
+      expect((await handler(input)).outcome).toBe(failure === "none" ? "ready" : "in_progress");
+      if (failure === "model_timeout") {
+        releaseModel({ text });
+        await pendingModel;
+      }
+      const readyReplay = ["none", "result_ack", "settlement_ack"].includes(failure);
+      expect((await handler(input)).outcome).toBe(readyReplay ? "ready" : "in_progress");
+      expect(complete).toHaveBeenCalledTimes(
+        ["control_ack", "dispatch_ack"].includes(failure) ? 0 : 1,
+      );
+      expect(transition).toHaveBeenCalledTimes(
+        failure === "control_ack" ? 0 : ["dispatch_ack", "model_timeout"].includes(failure) ? 1 : 2,
+      );
+      expect(settle).toHaveBeenCalledTimes(["none", "settlement_ack"].includes(failure) ? 1 : 0);
+      const settled = ["none", "settlement_ack"].includes(failure);
+      expect(await phaseState()).toBe(settled ? "settled" : "running");
+      await work.revokeUnclaimed(ownerUserId, documentId);
+      expect(await work.readDrainState(ownerUserId, documentId)).toBe(
+        settled ? "settled" : "pending",
+      );
+      if (!settled)
+        await expect(
+          sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+        ).rejects.toMatchObject({ code: "55000" });
+    },
+  );
 
   it("commits one original grant across concurrent issue requests", async () => {
     const results = await Promise.all(Array.from({ length: 12 }, () => issue()));

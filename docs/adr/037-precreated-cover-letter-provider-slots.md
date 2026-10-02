@@ -122,6 +122,16 @@ accepted deletion requirements nor represents accountable security/privacy appro
 
 ## Consequences
 
+The isolated handler now requires a fixed-purpose private control claim before any external effect.
+It consumes an existing `provider_dispatch` authorization, never issues/renews work or selects a
+candidate owner. Documents resolves the stored owner and reuses its atomic active-candidate,
+immutable-binding and server-time claim. The settlement capability is provider-phase-only. Only
+the original positive dispatch/completed-model/result acknowledgements settle that phase; replay,
+object presence, lost acknowledgements or a local timeout do not. The compiled isolated handler
+imports no database runtime. Connected SQL/offline object/model evidence is not authenticated
+remote RPC or live provider/IAM evidence. Final-document enforcement, failed-call remote settlement,
+retention and full runtime/drain composition remain unfinished, so the proposal stays incomplete.
+
 The private initializer now enforces the Documents ledger: a fresh exact-bound `private_slots`
 authorization must be positively claimed before any creation. It never races committed control
 results against local cancellation. The S3 port requires an explicit single-attempt policy and
@@ -129,7 +139,7 @@ positive one-attempt HTTP 200 write metadata before returning an acknowledged pi
 Settlement follows only all three original acknowledged/pinned writes; partial, conflicting,
 aborted or lost-acknowledgement paths remain running. Read-only replay never settles them, even
 when every original slot is visible. Offline installed-SDK and connected PostgreSQL tests cover
-these boundaries. This is only initializer enforcement, not provider/final-document composition,
+these boundaries. This is initializer enforcement, not production provider/final-document composition,
 trusted remote quiescence, live IAM/KMS or accountable approval. The proposal remains incomplete.
 
 The proposed private Documents control ledger now has a forward-only `0007` migration. Three

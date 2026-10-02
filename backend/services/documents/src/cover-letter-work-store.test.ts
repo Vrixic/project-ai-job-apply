@@ -13,22 +13,61 @@ const ref = {
 const consentExpiresAt = new Date("2026-10-02T12:00:00Z");
 
 describe("private generation work control fails closed before database access", () => {
-  it.each(["issue", "claim", "recordSettled", "revokeUnclaimed", "readDrainState"] as const)(
-    "defaults off for %s",
-    async (method) => {
+  it.each([
+    "issue",
+    "claim",
+    "claimProviderDispatch",
+    "settleProviderDispatch",
+    "recordSettled",
+    "revokeUnclaimed",
+    "readDrainState",
+  ] as const)("defaults off for %s", async (method) => {
+    const sql = vi.fn();
+    const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql);
+    const result =
+      method === "issue"
+        ? store.issue({ ...ref, ownerUserId: owner, consentExpiresAt })
+        : method === "claim"
+          ? store.claim(ref)
+          : method === "claimProviderDispatch"
+            ? store.claimProviderDispatch({
+                documentId,
+                requestSha256: ref.requestSha256,
+                consentExpiresAt,
+              })
+            : method === "settleProviderDispatch"
+              ? store.settleProviderDispatch({ ...ref, purpose: "provider_dispatch" })
+              : method === "recordSettled"
+                ? store.recordSettled(ref)
+                : method === "revokeUnclaimed"
+                  ? store.revokeUnclaimed(owner, documentId)
+                  : store.readDrainState(owner, documentId);
+    await expect(result).rejects.toThrow("CoverLetterWorkUnavailable");
+    expect(sql).not.toHaveBeenCalled();
+  });
+  it.each(["private_slots", "final_document"] as const)(
+    "provider settlement cannot mutate %s authority",
+    async (purpose) => {
       const sql = vi.fn();
-      const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql);
-      const result =
-        method === "issue"
-          ? store.issue({ ...ref, ownerUserId: owner, consentExpiresAt })
-          : method === "claim"
-            ? store.claim(ref)
-            : method === "recordSettled"
-              ? store.recordSettled(ref)
-              : method === "revokeUnclaimed"
-                ? store.revokeUnclaimed(owner, documentId)
-                : store.readDrainState(owner, documentId);
-      await expect(result).rejects.toThrow("CoverLetterWorkUnavailable");
+      const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql, () => true);
+      await expect(store.settleProviderDispatch({ ...ref, purpose })).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
+      expect(sql).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["document", "hash", "time"])(
+    "rejects malformed provider admission %s before SQL",
+    async (kind) => {
+      const sql = vi.fn();
+      const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql, () => true);
+      const input = { documentId, requestSha256: ref.requestSha256, consentExpiresAt };
+      if (kind === "document") input.documentId = "synthetic-private-diagnostic";
+      if (kind === "hash") input.requestSha256 = "synthetic-private-diagnostic";
+      if (kind === "time") input.consentExpiresAt = new Date("invalid");
+      await expect(store.claimProviderDispatch(input)).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
       expect(sql).not.toHaveBeenCalled();
     },
   );

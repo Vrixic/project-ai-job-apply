@@ -14,6 +14,7 @@ import {
   validateCoverLetterProviderReference,
 } from "./cover-letter-provider-contract.js";
 import type { CoverLetterProviderTransitionObjects } from "./cover-letter-provider-objects.js";
+import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 
 async function bounded<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted();
@@ -43,6 +44,8 @@ export function createCoverLetterIsolatedProviderHandler(options: {
   clock?: () => Date;
   /** Total local handling bound; cancellation is NOT proof of remote/provider quiescence. */
   timeoutMs?: number;
+  /** Private control RPC capability only. Never compose database access in this isolated actor. */
+  work?: Pick<PostgresCoverLetterWorkStore, "claimProviderDispatch" | "settleProviderDispatch">;
 }): (input: unknown) => Promise<CoverLetterProviderOutput> {
   const timeoutMs = options.timeoutMs ?? 60_000;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000)
@@ -66,7 +69,13 @@ export function createCoverLetterIsolatedProviderHandler(options: {
     const inProgress: CoverLetterProviderOutput = { ...failed, outcome: "in_progress" };
     let claimAttempted = false;
     try {
-      if (!enabled() || !validateCoverLetterProviderModel(options.gateway.identity)) return failed;
+      if (
+        !enabled() ||
+        !options.work ||
+        !validateCoverLetterProviderModel(options.gateway.identity)
+      )
+        return failed;
+      const work = options.work;
       const deadline = AbortSignal.timeout(timeoutMs);
       const read = async (
         slot: CoverLetterProviderSlot,
@@ -168,6 +177,26 @@ export function createCoverLetterIsolatedProviderHandler(options: {
       });
       deadline.throwIfAborted();
       claimAttempted = true;
+      // Await the original committed control response, not a raced local timeout. The fixed
+      // purpose consumes previously issued authority; duplicates can never renew or steal it.
+      const authorization = await work.claimProviderDispatch({
+        documentId: input.documentId,
+        requestSha256: input.request.sha256,
+        consentExpiresAt: new Date(request.expiresAt),
+      });
+      if (authorization.kind !== "claimed") return inProgress;
+      const reference = { ...authorization.reference };
+      if (
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
+          reference.id,
+        ) ||
+        reference.documentId !== input.documentId ||
+        reference.purpose !== "provider_dispatch" ||
+        reference.requestSha256 !== input.request.sha256
+      )
+        return inProgress;
+      deadline.throwIfAborted();
+      if (!enabled() || !fresh()) return inProgress;
       const claim = await bounded(
         objects.transitionIfMatch(
           input.documentId,
@@ -258,6 +287,10 @@ export function createCoverLetterIsolatedProviderHandler(options: {
         saved.reference.sizeBytes !== resultBytes.length
       )
         return failed;
+      // Only this original actor observed positive single-attempt dispatch/result write receipts
+      // and a completed model response. It will issue no more effects. Replay/object presence,
+      // a local deadline, SDK/RPC rejection or late model response never records settlement.
+      await work.settleProviderDispatch(reference);
       return {
         schemaVersion: 1,
         documentId: input.documentId,
