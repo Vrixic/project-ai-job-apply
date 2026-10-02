@@ -37,6 +37,114 @@ function field(
 }
 
 describe("metric event validation", () => {
+  it("refuses extra envelope properties, including non-enumerable and symbol properties", () => {
+    const valid = { name: "application_funnel", value: 1, dimensions: { stage: "created" } };
+    for (const event of [
+      { ...valid, candidateValue: "generated-private-answer" },
+      Object.defineProperty({ ...valid }, "ownerId", { value: "generated-owner" }),
+      { ...valid, [Symbol("private")]: "generated-private-answer" },
+    ]) {
+      expect(() => assertMetricEvent(event as MetricEvent)).toThrow(InvalidMetricError);
+      const sink = new InMemoryMetricSink();
+      safeRecord(sink, event as MetricEvent);
+      expect(sink.events).toHaveLength(0);
+    }
+  });
+
+  it("refuses malformed records and coercible dimension values", () => {
+    const valid = { name: "application_funnel", value: 1, dimensions: { stage: "created" } };
+    for (const event of [
+      null,
+      [],
+      new Date(),
+      Object.assign(Object.create({ ownerId: "generated-owner" }), valid),
+      { ...valid, dimensions: [] },
+      { ...valid, dimensions: new Date() },
+      { ...valid, dimensions: { stage: 123 } },
+      { ...valid, dimensions: { stage: { toString: () => "created" } } },
+      { ...valid, dimensions: { [Symbol("owner")]: "generated-owner" } },
+    ]) {
+      expect(() => assertMetricEvent(event as unknown as MetricEvent)).toThrow(InvalidMetricError);
+    }
+  });
+
+  it("does not invoke envelope or dimension accessors", () => {
+    let reads = 0;
+    const valid = { name: "application_funnel", value: 1, dimensions: { stage: "created" } };
+    const accessor = {
+      enumerable: true,
+      get() {
+        reads++;
+        return "created";
+      },
+    };
+    for (const event of [
+      Object.defineProperty({ ...valid }, "name", accessor),
+      { ...valid, dimensions: Object.defineProperty({}, "stage", accessor) },
+    ]) {
+      expect(() => assertMetricEvent(event as MetricEvent)).toThrow(InvalidMetricError);
+      safeRecord(new InMemoryMetricSink(), event as MetricEvent);
+    }
+    expect(reads).toBe(0);
+  });
+
+  it("isolates the caller from sink mutation and retained-event mutation", () => {
+    const event: MetricEvent = {
+      name: "application_funnel",
+      value: 1,
+      dimensions: { stage: "created" },
+    };
+    safeRecord(
+      {
+        record(received) {
+          received.value = 99;
+          received.dimensions.stage = "cancelled";
+        },
+      },
+      event,
+    );
+    expect(event).toEqual({
+      name: "application_funnel",
+      value: 1,
+      dimensions: { stage: "created" },
+    });
+    const sink = new InMemoryMetricSink();
+    sink.record(event);
+    event.dimensions.stage = "cancelled";
+    expect(sink.events[0]?.dimensions.stage).toBe("created");
+  });
+
+  it("never forwards extra properties to an arbitrary injected sink", () => {
+    const received: MetricEvent[] = [];
+    const event = {
+      name: "application_funnel",
+      value: 1,
+      dimensions: { stage: "created" },
+      candidateValue: "generated-private-answer",
+    };
+    safeRecord({ record: (metric) => received.push(metric) }, event as MetricEvent);
+    expect(received).toEqual([]);
+  });
+
+  it("supports frozen and null-prototype records through detached plain snapshots", () => {
+    const dimensions = Object.freeze(Object.assign(Object.create(null), { stage: "created" }));
+    const event = Object.freeze(
+      Object.assign(Object.create(null), {
+        name: "application_funnel",
+        value: 1,
+        dimensions,
+      }),
+    ) as MetricEvent;
+    const sink = new InMemoryMetricSink();
+    safeRecord(sink, event);
+    expect(sink.events).toEqual([
+      { name: "application_funnel", value: 1, dimensions: { stage: "created" } },
+    ]);
+    expect(sink.events[0]).not.toBe(event);
+    expect(sink.events[0]?.dimensions).not.toBe(dimensions);
+    expect(Object.getPrototypeOf(sink.events[0])).toBe(Object.prototype);
+  });
+
   it("accepts only allow-listed names and short opaque dimension tokens", () => {
     expect(() =>
       assertMetricEvent({

@@ -9,6 +9,19 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 1 backend-only scope: PR #498's Expo toolchain remediation is withdrawn and its tested
+branch preserved for frontend ownership. The release audit stays blocking; no bypass, API change
+or cloud publication/deployment used that patch. D3-036 hardens the existing Applications metric
+envelope and sink isolation without enabling analytics or changing candidate responses. Local
+regressions reproduce extra-property forwarding, accessor evaluation and sink mutation before
+the fix. Full repository verification passes (37 typechecks, 38 test tasks, 23 builds,
+format and baseline-only lint); review remains. D3-010 still needs bounded dimension identities,
+owner-approved analytics preference API, a production sink and privacy disposition; these remain
+off the journey critical path under the October 2 decision in #502. D1/D3 stay
+In progress. The earlier D3-034 standalone verification gap is closed after #496 merged:
+original release inputs verify the matching live chain and zero drift at state 404. See the
+[Phase 3 tasks](phase-3-application-preparation.md#task-register).
+
 October 1 D3-031's activity-only release from `7aec472` is applied in development after
 #494 merged. D3-033's publication-blocker fix is Complete. Immutable publication and independent
 exact-version readback pass; Apply's live-chain
