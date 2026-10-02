@@ -10,7 +10,7 @@ RUN pnpm contracts:generate \
   && pnpm --filter @ai-job-apply/database-migrations build \
   && pnpm --filter @ai-job-apply/profile-service... build \
   && pnpm --filter @ai-job-apply/jobs-service... build \
-  && pnpm --filter @ai-job-apply/documents-service build \
+  && pnpm --filter @ai-job-apply/documents-service... build \
   && pnpm --filter @ai-job-apply/matching-service build \
   && pnpm --filter @ai-job-apply/billing-service build \
   && pnpm --filter @ai-job-apply/trust-service build \

@@ -9,6 +9,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+Hosted CI at `c92aeb9` completed: quality and catalog pass, but integration fails on a Profile
+fact-update concurrency race and the cold migration image cannot resolve the new Documents AI SDK
+dependency. The backend build-order correction uses Documents' recursive dependency build; local
+no-cache compilation, seven-owner packaging, strict 57-migration/83-relation smoke checks and
+timestamp normalization pass. The build-stage image exports and unpacks successfully (local digest
+`sha256:b85851df8f0687e1a8bb6f015f75b0c706dff1bd55125cc1b68aa8f31dad549b`);
+the fresh maintained verifier passes with regenerated contracts unchanged, synthetic operator
+guards, formatting (952 files), lint, all 38 typecheck tasks (cached), dependency-security
+regressions, repository tests, all 23 builds (22 cached), Compose and product-scope checks.
+Docker Desktop and WSL are stopped; shared volumes and the local build-stage image are retained.
+The full runtime image separately fails because its pinned `libssl3-3.5.8-r0.apk` URL returns 404.
+Scoped Profile concurrency and runtime-pin/guard updates await separate owner approval. Hosted
+Semgrep and dependency audit still fail; no exception, frontend change, deployment or apply.
+D1/D3 remain In progress. [Exact hosted run](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37062920778).
+
 Backend checkpoint `9593500` passes the complete maintained local verifier after the exact replay
 pin/fixture correction: regenerated contracts with no diff, operator/toolchain/policy guards,
 formatting (952 files), baseline lint (15 warnings/58 infos), all 38 typecheck tasks (37 cached),
