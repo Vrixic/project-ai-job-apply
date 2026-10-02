@@ -1,7 +1,16 @@
 # ADR-036: Structured Education and Work Experience Entries
 
-Status: Proposed
+Status: Input to D3.1-001; not independently accepted
 Date: 2026-10-02
+
+[D3.1 - Structured candidate profile](../product/delivery/phase-3-1-structured-profile.md) already
+covers this ground as part of one unified structured Profile (Personal, Education, Work
+experience, Skills, Application answers, Resume), with its own first task, D3.1-001, to design and
+accept an ADR including a full consumer map and a security/privacy review. This document is kept
+as prior analysis of the Education/Work Experience gap specifically - narrower than D3.1's scope
+and without a consumer map or security/privacy review - for whoever picks up D3.1-001 to read and
+fold in, superseded by, or reject. It is not an independently accepted decision and should not be
+implemented against on its own.
 
 ## Context
 
