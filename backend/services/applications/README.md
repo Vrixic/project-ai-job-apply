@@ -54,9 +54,18 @@ routes exist but fail closed (503) until a store is wired, and it is not part of
 - `src/packet-source.ts` - builds packet proposals from candidate-confirmed, usable facts only (one
   documented exact mapping today), leaves competing facts to the candidate, and lets candidate
   entries win.
-- `src/metrics.ts` - privacy-safe measurement: allow-listed names and opaque dimension tokens, per-field
+- `src/metrics.ts` - closed telemetry envelopes and allow-listed names/string dimension tokens, per-field
   correction, attempt outcome and latency, generation outcome, and rates by adapter/variant/model/prompt
   version.
+
+Metric validation rejects extra envelope fields (including hidden/symbol properties), inherited
+or non-record payloads, accessors and coercible non-string dimensions. Recording uses a detached
+snapshot, so a sink cannot mutate its caller and subsequent caller changes cannot alter retained
+events. Invalid events and sink failures remain best effort and cannot change candidate responses.
+This is envelope hardening, not production analytics activation or complete dimension privacy:
+token syntax does not exclude identifiers or bound cardinality. Registered dimension identities,
+explicit analytics preference/API approval, a production sink and accountable privacy review
+remain D3-010 prerequisites.
 
 Tests: 56 unit and 25 PostgreSQL integration tests, including lifecycle parity between the domain and the
 database guard, cross-owner isolation, an 8-way concurrent submission race, no-value-leak checks, and crash

@@ -2,10 +2,10 @@ import type { PacketFieldEntry } from "./packet.js";
 import type { AttemptRecord } from "./store.js";
 
 /**
- * D3-010 measurement. Events carry only allow-listed dimensions whose values are short opaque
- * tokens, so a metric can never hold a candidate value, free text, URL, or identifier. Every
- * quality metric is dimensioned by adapter, variant, adapter version, model, and prompt version so
- * regressions are observable per version.
+ * D3-010 measurement. Events use closed envelopes and allow-listed dimension names with short
+ * string tokens. Token syntax alone is NOT identifier exclusion or a cardinality/privacy proof;
+ * a production exporter still needs bounded registered identities and analytics consent. Rate
+ * helpers group relevant events by adapter/variant or model/prompt version.
  */
 export const metricNames = [
   "application_funnel",
@@ -46,20 +46,67 @@ const TOKEN = /^[a-z0-9][a-z0-9_.:-]{0,63}$/;
 
 export class InvalidMetricError extends Error {
   constructor() {
-    super("Metric events must use allow-listed names and short opaque dimension tokens");
+    super("Metric events must use closed envelopes, allow-listed names and short string tokens");
     this.name = "InvalidMetricError";
   }
 }
 
-export function assertMetricEvent(event: MetricEvent): void {
-  if (!(metricNames as readonly string[]).includes(event.name) || !Number.isFinite(event.value)) {
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/** Validate data descriptors without invoking accessors, then copy only the closed envelope. */
+function snapshotMetricEvent(event: MetricEvent): MetricEvent {
+  if (!isPlainRecord(event)) throw new InvalidMetricError();
+  const descriptors = Object.getOwnPropertyDescriptors(event);
+  const keys = Reflect.ownKeys(descriptors);
+  if (
+    keys.length !== 3 ||
+    keys.some((key) => !["name", "value", "dimensions"].includes(String(key))) ||
+    ["name", "value", "dimensions"].some(
+      (key) => !descriptors[key] || !Object.hasOwn(descriptors[key], "value"),
+    )
+  ) {
     throw new InvalidMetricError();
   }
-  for (const [name, value] of Object.entries(event.dimensions)) {
-    if (!(dimensionNames as readonly string[]).includes(name) || !TOKEN.test(value ?? "")) {
+  const name: unknown = descriptors.name?.value;
+  const value: unknown = descriptors.value?.value;
+  const rawDimensions: unknown = descriptors.dimensions?.value;
+  if (
+    typeof name !== "string" ||
+    !(metricNames as readonly string[]).includes(name) ||
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    !isPlainRecord(rawDimensions)
+  ) {
+    throw new InvalidMetricError();
+  }
+  const dimensions: MetricEvent["dimensions"] = {};
+  const dimensionDescriptors = Object.getOwnPropertyDescriptors(rawDimensions);
+  for (const dimension of Reflect.ownKeys(dimensionDescriptors)) {
+    if (
+      typeof dimension !== "string" ||
+      !(dimensionNames as readonly string[]).includes(dimension)
+    ) {
       throw new InvalidMetricError();
     }
+    const descriptor = dimensionDescriptors[dimension];
+    if (
+      !descriptor ||
+      !Object.hasOwn(descriptor, "value") ||
+      typeof descriptor.value !== "string" ||
+      !TOKEN.test(descriptor.value)
+    )
+      throw new InvalidMetricError();
+    dimensions[dimension as DimensionName] = descriptor.value;
   }
+  return { name: name as MetricName, value, dimensions };
+}
+
+export function assertMetricEvent(event: MetricEvent): void {
+  snapshotMetricEvent(event);
 }
 
 /** Lowercases and tokenizes a version-like string; returns "unknown" instead of failing a request. */
@@ -75,8 +122,7 @@ export class InMemoryMetricSink implements MetricSink {
   readonly events: MetricEvent[] = [];
 
   record(event: MetricEvent): void {
-    assertMetricEvent(event);
-    this.events.push({ ...event, dimensions: { ...event.dimensions } });
+    this.events.push(snapshotMetricEvent(event));
   }
 }
 
@@ -84,8 +130,7 @@ export class InMemoryMetricSink implements MetricSink {
 export function safeRecord(sink: MetricSink | undefined, event: MetricEvent): void {
   if (!sink) return;
   try {
-    assertMetricEvent(event);
-    sink.record(event);
+    sink.record(snapshotMetricEvent(event));
   } catch {
     // Telemetry is best effort and must not change application behavior.
   }
