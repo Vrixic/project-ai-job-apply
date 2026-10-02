@@ -20,7 +20,13 @@ Trust passes 63 unit cases; the focused restore suite passes 115, both workspace
 scoped Biome pass. The fresh maintained full verifier passes: unchanged regenerated contracts,
 operator guards, formatting, lint, 38 typecheck tasks (34 cached), 39 test tasks (36 cached),
 23 builds (20 cached), dependency-security regressions, Compose and scope. Workflow unit evidence
-is 1412 passed/20 integration skipped. Scanner clearance is not yet claimed. No production
+is 1412 passed/20 integration skipped. Hosted source `76e4c0f` passes quality, catalog,
+integration (33 tasks) and both container builds. Documents' 66 work-ledger cases remain skipped
+in hosted integration, separate from the earlier local PostgreSQL evidence. The same pinned
+scanner removes all three targeted findings (68 to 65); neither changed test file has a finding.
+The remaining 65 findings and dependency audit still fail, with no gate waiver.
+[Exact CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37071491872),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37071491879). No production
 API/runtime, frontend, operational guard, Terraform or deployment change.
 The separate Profile, runtime-pin/guard and private read-boundary approvals remain pending.
 
