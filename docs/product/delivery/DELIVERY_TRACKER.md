@@ -9,6 +9,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 backend source checkpoint `defc769` is published in draft
+[PR #506](https://github.com/Vrixic/project-ai-job-apply/pull/506), the only authored open PR at
+publication. It remains default-dark and not ready for production activation: runtime/RPC/IAM,
+trusted failed-call settlement, retention/read/export/restore and external acceptance are unfinished.
+Local full-verifier evidence is recorded below. Initial hosted repository checks are running;
+automatic Vercel preview checks passed, but do not verify the backend provider path. No AWS apply
+or backend activation occurred. D1/D3 remain In progress.
+
 October 2 private cover-letter preparation now connects initialization, one original provider grant,
 one Invoke and owned recovery/finalization. Fixed-purpose issuance requires settled original slot
 work with exact owner/request/consent binding under lock. Replay, ambiguous acknowledgements,

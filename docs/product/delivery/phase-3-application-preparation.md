@@ -358,6 +358,15 @@ A box is ticked only when its whole wording has linked, inspected evidence. Loca
 
 ## Decisions and scope changes
 
+2026-10-02 verified backend checkpoint `defc769` is published in draft
+[PR #506](https://github.com/Vrixic/project-ai-job-apply/pull/506). No other authored PR was open at
+publication, preserving the two-PR maximum. Initial hosted repository checks are running; automatic
+Vercel preview checks passed without frontend changes, not backend end-to-end acceptance. The PR
+remains draft while runtime/authenticated RPC/IAM, trusted failed-call settlement, retention,
+read/export/restore and external acceptance are unfinished. No AWS apply or backend activation.
+The CLI's PR-create path failed in its local git wrapper before creating a PR; the exact authenticated
+GitHub API created the draft after confirming no duplicate existed. D1/D3 remain In progress.
+
 2026-10-02 private source preparation now connects original slot initialization, positively
 settled-slot provider issuance, one Invoke and owned recovery/finalization. No public API or
 deployment boundary changes. Existing grants and ambiguous control/Invoke acknowledgements cannot
