@@ -98,7 +98,14 @@ finish after consent expiry; each immutable completion independently checks the 
 Seventeen new service cases cover both parser checks, immutable retry/lost completion responses,
 context changes and quarantine. Documents passes 333 unit and 36 real PostgreSQL cases, including
 two new owned metadata/finalization cases with offline object ports, not live S3/KMS/provider.
-Private Invoke and live activity composition remain unfinished and default-dark.
+`src/cover-letter-provider-invoke.ts` now supplies a default-off private SDK adapter pinned to an
+exact numeric Lambda version. It snapshots strict identifier/reference inputs, requires the SDK's
+single-attempt policy, invokes synchronously without logs, and admits only bounded strict original
+responses. Ambiguous transport/function/receipt failures stay in progress for original recovery;
+local abort never proves remote quiescence. Sixty focused tests pass, including the installed SDK
+with offline HTTP success/failure responses. It has no model, database or object-write capability.
+Live activity composition remains unfinished and default-dark until privacy, retention and reviewed
+runtime/IAM prerequisites pass. No provider or AWS call was used for these tests.
 
 `src/cover-letter.ts` validates a grounded, review-required draft, binds its text/provenance and
 job/evidence context to an immutable content hash, and renders packet-bound PDF/DOCX with

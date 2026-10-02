@@ -79,6 +79,14 @@ initialization may need bounded operation compensation and a new explicitly appr
 not creation on replay. This initializer does not invoke a provider. Late private S3 creation after
 a local abort is still an unresolved quiescence risk; no runtime composition/activation is added.
 
+The source-only private Invoke adapter now defaults off and pins an exact numeric function version.
+It sends strict document/reference metadata only, requires single-attempt SDK configuration, and
+requests neither log tails nor asynchronous invocation. Bounded original-response validation rejects
+unexpected versions, function errors, logs and content-bearing outputs. Ambiguous remote outcomes
+remain in progress for original-result recovery, never fresh model dispatch. Sixty offline cases
+include real installed SDK serialization and one HTTP attempt on a server error. Local cancellation
+is not remote quiescence; production composition and bounded authorization/retention remain open.
+
 The maintenance role currently declares document `s3:DeleteObjectVersion`, not the
 `s3:DeleteObject` authority required to create a delete marker. A narrowly scoped IAM/boundary
 change and its guarded plan need separate owner review before deploying generation-slot cleanup;

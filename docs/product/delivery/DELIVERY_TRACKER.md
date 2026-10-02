@@ -9,6 +9,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 private provider invocation now has a default-off, reference-only SDK adapter pinned
+to an exact numeric Lambda version. It requires a single-attempt SDK policy, sends no prompt,
+result text or log request, and preserves ambiguous remote outcomes for original-result recovery.
+Sixty focused cases pass, including real installed SDK serialization with offline HTTP responses.
+The owner-approved migration guard now recognizes the exact 51-migration inventory while retaining
+the exact 48/49 boundaries and rejecting mixed/unknown inventories; 238 synthetic assertions pass.
+Full verifier passes the updated D2 guard but stops at a separate stale document migration
+operator test (Profile `0010`/Documents `0005` expectations versus current `0011`/`0006`). A scoped
+test-fixture update needs separate owner approval; it is not silently changed. Independent repo
+typecheck, tests, all 23 builds, dependency-security tests and formatting (938 files) pass; lint
+retains baseline 15 warnings/58 infos. Unchanged tasks reuse local cache. No public API/frontend,
+new migration, Terraform,
+AWS call, deployment or activation is included. Bounded private-write/remote-provider quiescence,
+retention and production runtime/read/export/restore composition remain open; D1/D3 stay In progress.
+
 October 2 private generation-slot initialization now has a default-off source factory with no
 model or Invoke capability. Only the committed first SQL reservation winner can create the
 request/pending-result/issued-dispatch slots, in that order under the active-candidate lease.

@@ -123,6 +123,14 @@ offline service cases and two new PostgreSQL cases verify finalization, immutabl
 scope and quarantine refusal. Runtime initialization/invocation, remote quiescence and retention
 remain uncomposed; all activation prerequisites above remain.
 
+Private invocation now has a source-only default-off SDK adapter pinned to an exact numeric Lambda
+version. Only document identifiers and encrypted object references enter its compact request;
+only bounded strict original status/reference responses leave it. It requires single-attempt SDK
+policy, requests no log tail and treats ambiguous remote responses as in progress. Sixty offline
+tests include the installed SDK with synthetic HTTP responses, not live network/provider evidence.
+Local timeout/cancellation is not remote quiescence. Authorization, retention and production
+composition remain required before activation.
+
 Private initialization now has a source-only default-off factory. Owned evidence and original
 consent construct the immutable request; a committed SQL reservation precedes request/result/
 dispatch creation under the active-candidate lease. Dispatch is created last. Only the first

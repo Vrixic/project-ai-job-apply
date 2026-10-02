@@ -6,6 +6,13 @@
 
 ## D3 cover-letter delta (2026-10-02, engineering evidence only)
 
+Private Invoke now has a source-only default-off exact-numeric-version SDK adapter. Strict
+reference-only envelopes, bounded UTF-8/canonical JSON replies, single-attempt SDK policy and
+no log tails reduce transport leakage and replay risk; sixty offline cases include real SDK
+serialization. Ambiguous outcomes retain original recovery identity. This does not authorize
+dispatch after quarantine, prove remote quiescence or solve transient retention. No live provider,
+cloud IAM or production composition is included; accountable privacy/security review remains open.
+
 Private slot initialization now has a source-only default-off factory: the committed first
 Documents reservation winner creates request/result/dispatch placeholders under the candidate
 lease, with dispatch last. Replays only read pinned original slots and never recreate missing
