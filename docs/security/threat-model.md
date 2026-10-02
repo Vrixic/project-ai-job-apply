@@ -6,6 +6,15 @@
 
 ## D3 cover-letter delta (2026-10-02, engineering evidence only)
 
+Private owned-evidence composition now checks candidate activity and application ownership before
+Profile values, reads the bound active posting through Jobs, removes restricted facts and snapshots
+the graph/posting. End-of-read expiry/kill-switch checks and fixed failures prevent silent stale
+context or diagnostic leakage. Twenty-one offline cases and three PostgreSQL cases prove local
+owner separation/quarantine with supported owner-specific codecs and a distinct lease connection;
+four Profile projection tests preserve evidence and detach mutable values. These checks neither
+authorize dispatch nor prove live managed authentication, provider behavior, retention or cloud
+quiescence. The factory remains uncomposed/default-off and accountable review remains open.
+
 An empty object prefix is not quiescence: a pending SQL reservation may still have a late private
 initializer. Cleanup now requires an injected trusted private proof before any inventoried letter
 deletion, and before prefix cleanup of observed generation/final-draft keys. Missing, non-true,

@@ -9,6 +9,25 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 private evidence composition now uses the existing owned Applications, Profile and Jobs
+read modules under an active-candidate lease. It checks the application before candidate reads,
+excludes restricted facts, snapshots the complete posting/graph and rechecks expiry/kill switches.
+Twenty-one evidence cases, four shared Profile projection cases and three real PostgreSQL cases
+pass. Real integration identified owner database codec mismatch; supported separate one-connection
+clients and a distinct lease pool fix it without cross-owner SQL or nested-pool deadlock. The
+Gateway preserves its existing projection signature. Workflows passes 1,412 tests (20 declared
+integration skips); local owner authentication is simulated, with no model/S3/cloud calls.
+Repo typecheck/tests/build, formatting (943 files) and baseline lint (15 warnings/58 infos) pass.
+The owner approved the scoped document migration test-fixture update. Current Profile/Documents/
+Applications markers now match exact source; the historical fixture keeps its earlier five
+Documents migrations and strict six-event contract. Tests pass on PowerShell 5.1 and 7;
+the full repository verifier passes without bypasses, including dependency security, all tests,
+23 builds, Compose configuration and product-scope checks.
+The disposable synthetic PostgreSQL container/database is removed, Docker Desktop/WSL stopped,
+and retained Compose volumes untouched. No public API/frontend, migration, Terraform/guard implementation edit,
+deployment or activation. Production handler composition, bounded authorization/drain, retention,
+read/export/restore and external acceptance remain unfinished; D1/D3 remain In progress.
+
 October 2 candidate object cleanup now fails closed without private-writer/provider quiescence
 proof for inventoried cover-letter reservations, including pending rows with empty S3 prefixes.
 Observed generation/final-draft objects require the same gate; ordinary resume-only cleanup is

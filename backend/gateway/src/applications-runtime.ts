@@ -24,6 +24,7 @@ import {
 } from "@ai-job-apply/documents-service";
 import type { GraphFact } from "@ai-job-apply/domain";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
+import { profileFactToGraphFact } from "@ai-job-apply/profile-service";
 import type postgres from "postgres";
 import type { ResumeTailoringClient } from "./resume-tailoring-client.js";
 
@@ -44,20 +45,7 @@ export interface ApplicationsRuntimeOptions {
 }
 
 export function toGraphFact(fact: ProfileFact): GraphFact {
-  return {
-    id: fact.id,
-    kind: fact.kind,
-    key: fact.key,
-    value: fact.value,
-    verification: fact.verification,
-    sensitivity: fact.sensitivity,
-    source: { type: fact.source.type, reference: fact.source.reference },
-    ...(fact.evidence ? { evidence: { supportingSpans: fact.evidence.supportingSpans } } : {}),
-    ...(fact.availability ? { availability: fact.availability } : {}),
-    ...(fact.effectiveFrom ? { effectiveFrom: fact.effectiveFrom } : {}),
-    ...(fact.effectiveTo ? { effectiveTo: fact.effectiveTo } : {}),
-    version: fact.version,
-  } as GraphFact;
+  return profileFactToGraphFact(fact);
 }
 
 /** Field definitions from `data/taxonomies/application-fields.v1.json`. */

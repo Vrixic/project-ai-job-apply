@@ -36,6 +36,16 @@ The Phase 0 slice does not call ATS, AI, email, calendar, billing, or browser-au
 
 ## D3 requested cover-letter path (source and local evidence only)
 
+The private owned-evidence factory now reads through the existing Applications, Jobs and Profile
+owner APIs under an active-candidate lease. Application identity/ownership is checked before
+posting or candidate values are read. Restricted facts are removed; detached fact-graph projections
+omit transport timestamps and the complete posting is snapshotted before asynchronous Profile
+reads. Kill-switch/expiry checks refuse stale outputs and fixed failures never reflect owner data.
+Twenty-one offline and three PostgreSQL cases use the real local owner modules, each supported
+client and a separate lease pool; simulated authentication is not managed-login/deployed evidence.
+This default-off factory is not a composed production runtime and cannot call a provider or write
+objects. Non-renewable dispatch/drain, retention and runtime/IAM remain required before activation.
+
 The approved backend scope adds an optional versioned disclosure acknowledgement to Prepare.
 Applications commits the base packet, short-lived preparation, identifier-only event, audit and
 idempotency receipt atomically. A durable factory and private activity now have connected local

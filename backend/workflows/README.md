@@ -74,6 +74,17 @@ version while the guarded acceptance operator proves every normal/provider gate 
 
 ## D3 requested cover-letter preparation (local implementation)
 
+`application-preparation-evidence.ts` supplies a default-off private owner-read composition:
+active-candidate lease, owned application binding, active Jobs posting and Profile facts. Restricted
+facts are excluded; Profile's shared graph projection snapshots values/provenance without audit
+timestamps. The full posting is snapshotted for context hashing, while AI SDK bounds the prompt.
+It rechecks the kill switch and posting expiry before returning, and failures reveal no private
+owner diagnostics. Twenty-one offline cases and three real PostgreSQL cases verify ownership,
+quarantine, freshness and minimization. The integration uses each owner's supported database client
+and a separate lease pool, all capped at one connection, avoiding codec mismatch and nested-pool
+deadlock. Authentication is simulated; no S3/provider or deployed read evidence is claimed.
+The source factory is not composed into a production handler yet; privacy/runtime gates remain.
+
 Candidate document cleanup now refuses inventoried cover-letter reservations without an injected
 private writer/provider quiescence authority, including pending SQL rows with empty S3 prefixes.
 Observed generation slots/final draft keys also require positive proof before prefix cleanup.

@@ -102,6 +102,16 @@ policy must restrict the exact generation replacement slots and must not copy th
 multipart exemption as broad creation authority. This does not restrict the separate private
 initializer's `If-None-Match` writes or establish their drain. No IAM/Terraform change is made here.
 
+The private owned-evidence factory now composes existing Applications, Jobs and Profile reads
+under the active-candidate lease; it validates owned application identity before candidate values,
+excludes restricted facts, snapshots the complete posting/graph and rechecks expiry/kill switches.
+Twenty-one offline and three real PostgreSQL cases pass. Integration identified incompatible
+owner database codecs: supported owner-specific one-connection clients plus a distinct lease pool
+are required, not nested owner reads on a shared one-connection pool. Four Profile projection cases
+preserve evidence/value detachment, and the Gateway delegates to the same projection without a wire
+change. Authentication is simulated. The factory stays default-off/uncomposed; no production
+authorization/drain, provider/IAM, retention or handler bootstrap is proven by these reads.
+
 The maintenance role currently declares document `s3:DeleteObjectVersion`, not the
 `s3:DeleteObject` authority required to create a delete marker. A narrowly scoped IAM/boundary
 change and its guarded plan need separate owner review before deploying generation-slot cleanup;
