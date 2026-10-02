@@ -17,6 +17,26 @@ interface S3Sender {
   send(command: unknown): Promise<Record<string, unknown>>;
 }
 
+/** Trusted private owner port, not a caller assertion or local timeout calculation.
+ * Positive proof must bind the quarantined document and all original private writers/provider
+ * executions, with no renewable creation/dispatch authority. Unknown work must return false.
+ * No production proof implementation is composed yet; absence fails closed for generation.
+ */
+export interface CandidateGenerationQuiescence {
+  confirm(documentId: string, signal: AbortSignal): Promise<boolean>;
+}
+
+interface DocumentObjectVersion extends ObjectIdentifier {
+  deleteMarker: boolean;
+  isLatest?: boolean;
+}
+
+function generationSlotKeys(documentId: string): string[] {
+  return ["request", "dispatch", "result"].map(
+    (slot) => `normalized/${documentId}/generation/${slot}.v1.json`,
+  );
+}
+
 const RESUME_DOCUMENT_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
@@ -142,20 +162,46 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
   constructor(
     private readonly bucketName: string,
     private readonly client: S3Sender = new S3Client({}),
+    private readonly generationQuiescence?: CandidateGenerationQuiescence,
   ) {
     if (!bucketName) throw new Error("CandidateDocumentStoreConfigurationInvalid");
   }
 
+  private async requireGenerationQuiescence(documentId: string): Promise<void> {
+    const proof = this.generationQuiescence;
+    if (!proof) throw new Error("CandidateGenerationQuiescenceUnconfirmed");
+    const signal = AbortSignal.timeout(10_000);
+    let onAbort: () => void = () => undefined;
+    try {
+      const confirmed = await Promise.race([
+        proof.confirm(documentId, signal),
+        new Promise<never>((_, reject) => {
+          onAbort = () => reject(new Error("CandidateGenerationQuiescenceUnconfirmed"));
+          signal.addEventListener("abort", onAbort, { once: true });
+          if (signal.aborted) onAbort();
+        }),
+      ]);
+      if (confirmed !== true || signal.aborted)
+        throw new Error("CandidateGenerationQuiescenceUnconfirmed");
+    } catch {
+      throw new Error("CandidateGenerationQuiescenceUnconfirmed");
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+    }
+  }
+
   private async inventory(key: string): Promise<ObjectIdentifier[]> {
-    return this.listVersions(key, (candidate) => candidate === key);
+    return (await this.listVersions(key, (candidate) => candidate === key)).map(
+      ({ Key, VersionId }) => ({ Key, VersionId }),
+    );
   }
 
   /** Every version and delete marker whose key is listed under `prefix` and accepted by `matches`. */
   private async listVersions(
     prefix: string,
     matches: (key: string) => boolean,
-  ): Promise<ObjectIdentifier[]> {
-    const inventory: ObjectIdentifier[] = [];
+  ): Promise<DocumentObjectVersion[]> {
+    const inventory: DocumentObjectVersion[] = [];
     let keyMarker: string | undefined;
     let versionIdMarker: string | undefined;
     let isTruncated = true;
@@ -173,7 +219,7 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
       if (typeof page.IsTruncated !== "boolean") {
         throw new Error("CandidateDocumentInventoryInvalid");
       }
-      const append = (items: unknown) => {
+      const append = (items: unknown, deleteMarker: boolean) => {
         if (items === undefined) return;
         if (!Array.isArray(items)) throw new Error("CandidateDocumentInventoryInvalid");
         for (const item of items) {
@@ -195,12 +241,16 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
             inventory.push({
               Key: (item as { Key: string }).Key,
               VersionId: (item as { VersionId: string }).VersionId,
+              deleteMarker,
+              ...(typeof (item as { IsLatest?: unknown }).IsLatest === "boolean"
+                ? { isLatest: (item as { IsLatest: boolean }).IsLatest }
+                : {}),
             });
           }
         }
       };
-      append(page.Versions);
-      append(page.DeleteMarkers);
+      append(page.Versions, false);
+      append(page.DeleteMarkers, true);
       isTruncated = page.IsTruncated === true;
       if (!isTruncated) break;
       if (typeof page.NextKeyMarker !== "string" || page.NextKeyMarker.length === 0) {
@@ -225,7 +275,21 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
       throw new Error("CandidateDocumentInventoryIdentityRejected");
     }
     const prefixes = documentIds.flatMap((id) => [`quarantine/${id}/`, `normalized/${id}/`]);
+    const generationKeys = new Set(documentIds.flatMap(generationSlotKeys));
+    // Pending SQL reservations may have no objects yet. A current empty S3 prefix cannot
+    // establish that an outstanding initializer or remote provider has stopped.
+    const generations = documentIds.filter((id) =>
+      keys.some(
+        (key) =>
+          key === `normalized/${id}/cover-letter.v1.json` ||
+          (generationKeys.has(key) && key.startsWith(`normalized/${id}/`)),
+      ),
+    );
+    for (const documentId of generations) await this.requireGenerationQuiescence(documentId);
     for (const key of keys) {
+      // Generation history is deleted only by the fenced prefix sweep below, even if an
+      // exact owner inventory includes a slot. Never expose an older placeholder first.
+      if (generationKeys.has(key)) continue;
       const inventory = await this.inventory(key);
       for (let offset = 0; offset < inventory.length; offset += 1_000) {
         const batch = inventory.slice(offset, offset + 1_000);
@@ -263,11 +327,59 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
     }
     const prefixes = [`quarantine/${documentId}/`, `normalized/${documentId}/`];
     const list = (prefix: string) => this.listVersions(prefix, (key) => key.startsWith(prefix));
+    const generationKeys = new Set(generationSlotKeys(documentId));
     let deleted = 0;
     for (const prefix of prefixes) {
-      const inventory = await list(prefix);
-      for (let offset = 0; offset < inventory.length; offset += 1_000) {
-        const batch = inventory.slice(offset, offset + 1_000);
+      let inventory = await list(prefix);
+      if (
+        inventory.some(
+          (item) =>
+            !!item.Key &&
+            (generationKeys.has(item.Key) ||
+              item.Key === `normalized/${documentId}/cover-letter.v1.json`),
+        )
+      )
+        await this.requireGenerationQuiescence(documentId);
+      const fences = new Map<string, string>();
+      for (const key of [...new Set(inventory.map((item) => item.Key))]) {
+        if (!key || !generationKeys.has(key)) continue;
+        // A current delete marker refuses If-Match writes. Keep this new fence while all
+        // historical versions/markers are removed, so old authorization cannot resurface.
+        const response = await this.client.send(
+          new DeleteObjectCommand({
+            Bucket: this.bucketName,
+            Key: key,
+          }),
+        );
+        const metadata = response.$metadata as { httpStatusCode?: unknown } | undefined;
+        if (
+          metadata?.httpStatusCode !== 204 ||
+          response.DeleteMarker !== true ||
+          typeof response.VersionId !== "string" ||
+          !response.VersionId ||
+          response.VersionId === "null"
+        )
+          throw new Error("ResumePurgeGenerationFenceUnconfirmed");
+        fences.set(key, response.VersionId);
+      }
+      const isFence = (item: DocumentObjectVersion) =>
+        !!item.Key && fences.get(item.Key) === item.VersionId;
+      const assertFences = (items: DocumentObjectVersion[]) => {
+        for (const [key, version] of fences) {
+          const latest = items.filter((item) => item.Key === key && item.isLatest === true);
+          if (latest.length !== 1 || !latest[0]?.deleteMarker || latest[0].VersionId !== version)
+            throw new Error("ResumePurgeGenerationFenceUnconfirmed");
+        }
+      };
+      if (fences.size) {
+        inventory = await list(prefix);
+        assertFences(inventory);
+      }
+      const historical = inventory.filter((item) => !isFence(item));
+      for (let offset = 0; offset < historical.length; offset += 1_000) {
+        const batch = historical
+          .slice(offset, offset + 1_000)
+          .map(({ Key, VersionId }) => ({ Key, VersionId }));
         const result = await this.client.send(
           new DeleteObjectsCommand({
             Bucket: this.bucketName,
@@ -278,6 +390,27 @@ export class AwsCandidateDocumentObjectStore implements CandidateDocumentObjectS
           throw new Error("ResumePurgeObjectDeletionIncomplete");
         }
         deleted += batch.length;
+      }
+      if (fences.size) {
+        const remaining = await list(prefix);
+        assertFences(remaining);
+        if (remaining.some((item) => !isFence(item)))
+          throw new Error("ResumePurgeObjectDeletionIncomplete");
+        // Only after every historical version is gone can removing the fences expose
+        // absence rather than an older issued/pending grant. A conditional-only provider
+        // cannot create into that absence. IAM enforcement/quiescence remain prerequisites.
+        const result = await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucketName,
+            Delete: {
+              Objects: [...fences].map(([Key, VersionId]) => ({ Key, VersionId })),
+              Quiet: true,
+            },
+          }),
+        );
+        if (Array.isArray(result.Errors) && result.Errors.length > 0)
+          throw new Error("ResumePurgeObjectDeletionIncomplete");
+        deleted += fences.size;
       }
     }
     let remaining = 0;

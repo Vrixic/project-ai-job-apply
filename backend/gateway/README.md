@@ -13,6 +13,22 @@ The gateway is the authenticated entry point for web, mobile, extension, and adm
 
 The gateway must not perform long-running AI, ingestion, or browser work. It creates durable resources and returns their identifiers.
 
+## D3 cover-letter source boundary (2026-10-02)
+
+Explicit versioned cover-letter opt-in on Prepare routes to a durable `202` operation; omission
+retains `201 Application`. The three new owner reads cover preparation status, exact packet-bound
+preview and PDF/DOCX download. They require `applications:read`, reject unknown/body/query inputs
+and return `no-store`. Operation success carries an immutable packet/revision reference, not the
+application's mutable later state. HTTP never performs model generation.
+
+The runtime accepts only a Documents context/read port, with no provider credential or AI call.
+Approval rechecks a carried letter's current evidence/job binding; missing ports or transport
+failures refuse with `503` before approval. Preparation acceptance/status remain default-off behind
+`coverLetterPreparationEnabled`, which no production entry point enables. Compatible migrations,
+owned dispatch/terminal recovery and ADR-016 isolated provider composition must precede enabling it.
+Route unit tests use test tokens and fake owner ports; PostgreSQL lifecycle regression checks use
+synthetic data. This is backend source/local evidence, not UI, managed-OIDC or deployed acceptance.
+
 ## Phase 2 implementation and deployment boundary
 
 D2-066 adds exact bodyless/queryless `GET /v1/jobs/contributions` under `jobs:contribute`.

@@ -264,13 +264,40 @@ function Assert-D2RuntimePauseReceipt {
       $cutoff -gt $Now -or $earliest -ne $cutoff.AddSeconds(21600 + $Receipt.oldMaximumTimeoutSeconds + 60) -or
       ($RequireElapsed -and $Now -lt $earliest)) { throw 'D2RuntimePauseRetirementNotProven' }
 }
+function Assert-D2RuntimeMigrationInventory {
+  param([System.Collections.IDictionary]$Inventory)
+  $expected = [ordered]@{
+    profile = '0001_foundation|0002_serverless_outbox|0003_retire_legacy_dispatch|0004_profile_fact_versions|0005_resume_fact_proposals|0006_candidate_rights|0007_candidate_rights_export_null_omission|0008_ugc_contribution_consents|0009_ugc_contribution_consent_candidate_rights|0010_restricted_answer_vault'
+    jobs = '0001_job_catalog|0002_duplicate_resolution|0003_duplicate_resolution_audit_guard|0004_job_search|0005_ingestion_orchestration|0006_public_job_reader|0007_matchable_job_attributes|0008_job_reporting_and_moderation|0009_provider_ingestion_sources|0010_public_job_truth_fields|0011_positive_source_withdrawal|0012_candidate_rights|0013_public_job_sitemap|0014_job_contribution_intake|0015_source_revalidation_lifecycle|0016_job_contribution_candidate_rights|0017_job_contribution_processing|0018_job_contribution_processing_delivery|0019_job_contribution_provider_publication|0020_contribution_trust_reprocessing|0021_development_contribution_operation_lease|0022_development_contribution_provider_leases|0023_contribution_verification_refresh|0024_contribution_appeal_restoration'
+    documents = '0001_resume_intake|0002_resume_processing|0003_candidate_rights|0004_resume_deletion|0005_resume_purge'
+    matching = '0001_saved_jobs|0002_candidate_rights|0003_private_saved_page_captures'
+    billing = '0001_entitlement_projection|0002_candidate_rights'
+    trust = '0001_ugc_trust_foundation|0002_candidate_rights|0003_decision_signals|0004_accepted_independent_evidence'
+  }
+  if ($Inventory.Count -ne $expected.Count) { throw 'D2RuntimeMigrationBoundaryUnsupported' }
+  $modern = ($Inventory['profile'] -join '|') -ceq ($expected.profile + '|0011_active_candidate_lease')
+  if ($modern) {
+    $expected.profile += '|0011_active_candidate_lease'
+    $expected.documents += '|0006_cover_letters'
+    if (($Inventory['documents'] -join '|') -ceq ($expected.documents + '|0007_cover_letter_work_authorizations')) {
+      $expected.documents += '|0007_cover_letter_work_authorizations'
+    }
+    $expected.trust += '|0005_development_test_removal'
+  } elseif (($Inventory['trust'] -join '|') -ceq ($expected.trust + '|0005_development_test_removal')) {
+    $expected.trust += '|0005_development_test_removal'
+  }
+  foreach ($owner in $expected.Keys) {
+    if (-not $Inventory.Contains($owner) -or ($Inventory[$owner] -join '|') -cne $expected[$owner]) {
+      throw 'D2RuntimeMigrationBoundaryUnsupported'
+    }
+  }
+}
 function Get-D2RuntimeMigrationMessages {
   param([string]$RepositoryRoot, [string]$SourceSha)
   if ($SourceSha -cnotmatch '^[a-f0-9]{40}$') { throw 'D2RuntimeMigrationSourceInvalid' }
   $labels = [ordered]@{ profile = 'Database'; jobs = 'Jobs'; documents = 'Documents'; matching = 'Matching'; billing = 'Billing'; trust = 'Trust' }
   $messages = [Collections.Generic.List[string]]::new()
-  $count = 0
-  $expectedCount = 48
+  $inventory = [ordered]@{}
   foreach ($owner in $labels.Keys) {
     $raw = @(& git -C $RepositoryRoot show "$SourceSha`:backend/services/$owner/src/migrate.ts" 2>$null)
     if ($LASTEXITCODE -ne 0 -or $raw.Count -eq 0) { throw 'D2RuntimeMigrationSourceUnavailable' }
@@ -284,15 +311,12 @@ function Get-D2RuntimeMigrationMessages {
     for ($index = 0; $index -lt $versions.Count; $index++) {
       if (-not $versions[$index].StartsWith(('{0:D4}_' -f ($index + 1)), [StringComparison]::Ordinal)) { throw 'D2RuntimeMigrationInventoryInvalid' }
     }
-    if (($owner -ceq 'jobs' -and $versions[-1] -cne '0024_contribution_appeal_restoration') -or
-        ($owner -ceq 'trust' -and $versions[-1] -cnotin @('0004_accepted_independent_evidence','0005_development_test_removal'))) { throw 'D2RuntimeMigrationBoundaryUnsupported' }
-    if ($owner -ceq 'trust' -and $versions[-1] -ceq '0005_development_test_removal') { $expectedCount = 49 }
+    $inventory[$owner] = $versions
     $statement = 'console.log(`' + $labels[$owner] + ' migrations through ${migrationVersions.at(-1)} applied and verified.`);'
     if ([regex]::Matches($source, 'console\.log\s*\(').Count -ne 1 -or -not $source.Contains($statement)) { throw 'D2RuntimeMigrationLogContractInvalid' }
     $messages.Add("$($labels[$owner]) migrations through $($versions[-1]) applied and verified.")
-    $count += $versions.Count
   }
-  if ($count -ne $expectedCount) { throw 'D2RuntimeMigrationBoundaryUnsupported' }
+  Assert-D2RuntimeMigrationInventory $inventory
   $messages.Add('All service-owned database migrations applied and verified.')
   return $messages.ToArray()
 }

@@ -283,6 +283,55 @@ Assert-True ($declaredRootNames -ccontains 'deploy_applications' -and $declaredR
 $messages = @(Get-D2RuntimeMigrationMessages $repositoryRoot $head)
 Assert-True ($messages.Count -eq 7 -and $messages[1] -ceq 'Jobs migrations through 0024_contribution_appeal_restoration applied and verified.' -and
   $messages[5] -cin @('Trust migrations through 0004_accepted_independent_evidence applied and verified.','Trust migrations through 0005_development_test_removal applied and verified.')) 'Actual source is not a supported exact migration boundary.'
+$inventory = [ordered]@{}
+foreach ($owner in @('profile','jobs','documents','matching','billing','trust')) {
+  $source = @(& git -C $repositoryRoot show "$head`:backend/services/$owner/src/migrate.ts") -join "`n"
+  $list = [regex]::Match($source,'(?s)const migrationVersions = \[(.*?)\] as const;').Groups[1].Value
+  $inventory[$owner] = @([regex]::Matches($list,'"([0-9]{4}_[a-z][a-z0-9_]{0,99})"') | ForEach-Object { $_.Groups[1].Value })
+}
+Assert-D2RuntimeMigrationInventory $inventory; $passed++
+$modern51 = [ordered]@{}
+foreach ($owner in $inventory.Keys) { $modern51[$owner] = @($inventory[$owner]) }
+$modern51.documents = @($inventory.documents | Where-Object { $_ -cne '0007_cover_letter_work_authorizations' })
+Assert-D2RuntimeMigrationInventory $modern51; $passed++
+$modern52 = [ordered]@{}
+foreach ($owner in $modern51.Keys) { $modern52[$owner] = @($modern51[$owner]) }
+$modern52.documents += '0007_cover_letter_work_authorizations'
+Assert-D2RuntimeMigrationInventory $modern52; $passed++
+$legacy49 = [ordered]@{}
+foreach ($owner in $inventory.Keys) { $legacy49[$owner] = @($inventory[$owner]) }
+$legacy49.profile = @($inventory.profile | Where-Object { $_ -cne '0011_active_candidate_lease' })
+$legacy49.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0006_cover_letters', '0007_cover_letter_work_authorizations') })
+Assert-D2RuntimeMigrationInventory $legacy49; $passed++
+$legacy48 = [ordered]@{}
+foreach ($owner in $legacy49.Keys) { $legacy48[$owner] = @($legacy49[$owner]) }
+$legacy48.trust = @($legacy49.trust | Where-Object { $_ -cne '0005_development_test_removal' })
+Assert-D2RuntimeMigrationInventory $legacy48; $passed++
+foreach ($mutation in @(
+    { param($x) $x.profile = @($legacy49.profile) },
+    { param($x) $x.documents = @($legacy49.documents) },
+    { param($x) $x.trust = @($legacy48.trust) },
+    { param($x) $x.jobs[0] = '0001_unknown_inventory' },
+    { param($x) $x.documents += '0007_unknown_migration' },
+    { param($x) $x.Remove('billing') },
+    { param($x) $x['unknown'] = @('0001_unknown_owner') }
+  )) {
+  $badInventory = [ordered]@{}
+  foreach ($owner in $inventory.Keys) { $badInventory[$owner] = @($inventory[$owner] | ForEach-Object { $_ }) }
+  & $mutation $badInventory
+  Assert-Rejected { Assert-D2RuntimeMigrationInventory $badInventory } 'Unknown or mixed migration inventory accepted.'
+}
+foreach ($mutation in @(
+    { param($x) $x.profile = @($legacy49.profile) },
+    { param($x) $x.documents = @($x.documents | Where-Object { $_ -cne '0006_cover_letters' }) },
+    { param($x) $x.documents[-1] = '0007_unknown_work_authorization' },
+    { param($x) $x.documents += '0008_unknown_extension' }
+  )) {
+  $badInventory = [ordered]@{}
+  foreach ($owner in $modern52.Keys) { $badInventory[$owner] = @($modern52[$owner] | ForEach-Object { $_ }) }
+  & $mutation $badInventory
+  Assert-Rejected { Assert-D2RuntimeMigrationInventory $badInventory } 'Unknown or mixed work-authorization inventory accepted.'
+}
 # Full actual readback function, with a closed synthetic AWS port. No account, body, log or
 # credential fixture is read from disk; all objects below are generated identifiers only.
 $ExpectedAccountId = $account; $region = 'us-east-2'; $StateBucket = 'synthetic-state'; $SourceSha = $sourceSha

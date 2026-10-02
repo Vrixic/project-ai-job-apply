@@ -49,13 +49,13 @@ if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -o
 }
 
 $currentSuccessMarkers = @(
-  "Database migrations through 0010_restricted_answer_vault applied and verified.",
+  "Database migrations through 0011_active_candidate_lease applied and verified.",
   "Jobs migrations through 0024_contribution_appeal_restoration applied and verified.",
-  "Documents migrations through 0005_resume_purge applied and verified.",
+  "Documents migrations through 0007_cover_letter_work_authorizations applied and verified.",
   "Matching migrations through 0003_private_saved_page_captures applied and verified.",
   "Billing migrations through 0002_candidate_rights applied and verified.",
   "Trust migrations through 0005_development_test_removal applied and verified.",
-  "Applications migrations through 0003_manual_submission applied and verified.",
+  "Applications migrations through 0005_preparation_dispatch applied and verified.",
   "All service-owned database migrations applied and verified."
 )
 if (@([regex]::Matches($source, 'AggregateSuccessLogCount\s+= \$stoppedTask.AggregateSuccessLogCount')).Count -ne 3 -or
@@ -87,7 +87,7 @@ $historicalLogFiles["backend/services/database-migrations/src/index.ts"] =
   $historicalLogFiles["backend/services/database-migrations/src/index.ts"].Replace(
     '  { owner: "trust", executable: "trust/dist/src/migrate.js" },' + "`n", "").Replace(
     '  { owner: "applications", executable: "applications/dist/src/migrate.js" },' + "`n", "")
-foreach ($ownerAndMaximum in @(@("profile", 7), @("jobs", 13), @("matching", 2))) {
+foreach ($ownerAndMaximum in @(@("profile", 7), @("jobs", 13), @("documents", 5), @("matching", 2))) {
   $path = "backend/services/$($ownerAndMaximum[0])/src/migrate.ts"
   $versionBlock = [regex]::Match($historicalLogFiles[$path], '(?s)const migrationVersions = \[(.*?)\] as const;')
   $versions = @([regex]::Matches($versionBlock.Groups[1].Value, '"([0-9]{4}_[a-z][a-z0-9_]{0,99})",') |

@@ -50,7 +50,8 @@ describeWithDatabase("PostgresApplicationStore", () => {
     expect(profile.stdout.trim()).toContain("applied and verified.");
     const first = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const replay = await execFileAsync(process.execPath, [migrationExecutable], { env });
-    const expected = "Applications migrations through 0003_manual_submission applied and verified.";
+    const expected =
+      "Applications migrations through 0005_preparation_dispatch applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
     await store.ping();

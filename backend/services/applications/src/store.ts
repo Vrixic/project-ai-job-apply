@@ -1,3 +1,4 @@
+import { COVER_LETTER_DISCLOSURE_VERSION } from "@ai-job-apply/api-contracts";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import {
@@ -31,8 +32,29 @@ import {
   type PacketApproval,
   type PacketFieldEntry,
   type PacketInputs,
+  PacketInvariantError,
   verifyPacketHash,
 } from "./packet.js";
+import {
+  type GenerationClaim,
+  type PreparationContext,
+  type PreparationFailureCode,
+  PreparationNotFoundError,
+  type PreparationRecord,
+  type PreparationRequest,
+} from "./preparation.js";
+import {
+  isPreparationFunctionArn,
+  MAX_PREPARATION_DISPATCH_BATCH,
+  matchesPreparationExecutionArn,
+  PREPARATION_DISPATCH_LEASE_MS,
+  type PreparationDispatch,
+  type PreparationDispatchClaim,
+  PreparationDispatchError,
+  type PreparationNudge,
+  type PreparationTerminalInput,
+  preparationExecutionName,
+} from "./preparation-dispatch.js";
 import {
   type ApplicationEvent,
   type ApplicationStatus,
@@ -294,6 +316,7 @@ interface CommandNote {
 }
 
 type CommandOperation =
+  | "queue_preparation"
   | "create_application"
   | "create_packet"
   | "approve"
@@ -420,38 +443,7 @@ export class PostgresApplicationStore {
       fields: command.packet.fields,
     });
     return this.commandResult(command, "create_packet", requestHash, async (tx, app, now) => {
-      nextStatus(app.status, "packet_created");
-      const [{ version } = { version: 0 }] = await tx<{ version: number }[]>`
-        SELECT coalesce(max(version), 0)::int AS version FROM applications.packets
-        WHERE application_id = ${app.id}
-      `;
-      const packet = assemblePacket(
-        {
-          ...command.packet,
-          id: uuidv7(),
-          userId: app.owner_user_id,
-          applicationId: app.id,
-          canonicalJobId: app.canonical_job_id,
-          version: version + 1,
-          createdAt: now,
-        },
-        this.options.definitions,
-        this.options.confidenceThreshold,
-      );
-      await tx`
-        INSERT INTO applications.packets
-          (id, application_id, owner_user_id, version, packet_hash, job_revision, form_adapter_id,
-           form_variant_id, form_hash, resume_hash, cover_letter_hash, fields, created_at)
-        VALUES (${packet.id}, ${app.id}, ${app.owner_user_id}, ${packet.version}, ${packet.packetHash},
-          ${packet.jobRevision}, ${packet.form?.adapterId ?? null}, ${packet.form?.variantId ?? null},
-          ${packet.form?.formHash ?? null}, ${packet.artifactHashes.resume ?? null},
-          ${packet.artifactHashes.coverLetter ?? null},
-          ${tx.json(packet.fields as unknown as postgres.JSONValue)}, ${now})
-      `;
-      return this.change(tx, app, "packet_created", now, {
-        packetId: packet.id,
-        currentPacketId: packet.id,
-      });
+      return this.writePacket(tx, app, now, command.packet);
     });
   }
 
@@ -850,6 +842,675 @@ export class PostgresApplicationStore {
   }
 
   // ---- Internals --------------------------------------------------------------------------
+
+  /** Replay before loading volatile owner evidence or rendering another base packet. */
+  async replayPreparation(command: {
+    ownerUserId: string;
+    applicationId: string;
+    idempotencyKey: string;
+    request: PreparationRequest;
+  }): Promise<PreparationRecord | null> {
+    const requestHash = canonicalHash({
+      operation: "queue_preparation",
+      applicationId: command.applicationId,
+      request: command.request,
+    });
+    return this.client.begin(async (tx) => {
+      await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
+      await this.lockApplication(tx, command.ownerUserId, command.applicationId);
+      const receipt = await this.findReceipt(
+        tx,
+        command.ownerUserId,
+        command.idempotencyKey,
+        "queue_preparation",
+        requestHash,
+      );
+      if (!receipt) return null;
+      if (!receipt.note?.subjectId) throw new ApplicationIntegrityError("preparation receipt");
+      return this.readPreparation(
+        tx,
+        command.ownerUserId,
+        command.applicationId,
+        receipt.note.subjectId,
+      );
+    });
+  }
+
+  async queuePreparation(command: {
+    ownerUserId: string;
+    applicationId: string;
+    idempotencyKey: string;
+    request: PreparationRequest;
+    context: PreparationContext;
+    packet: Pick<PacketInputs, "jobRevision" | "form" | "fields" | "artifactHashes">;
+  }): Promise<{ replayed: boolean; preparation: PreparationRecord; view: ApplicationView }> {
+    const requestHash = canonicalHash({
+      operation: "queue_preparation",
+      applicationId: command.applicationId,
+      request: command.request,
+    });
+    return this.retryOnKeyRace(command.ownerUserId, () =>
+      this.client.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
+        const app = await this.lockApplication(tx, command.ownerUserId, command.applicationId);
+        const prior = await this.findReceipt(
+          tx,
+          command.ownerUserId,
+          command.idempotencyKey,
+          "queue_preparation",
+          requestHash,
+        );
+        if (prior) {
+          if (!prior.note?.subjectId) throw new ApplicationIntegrityError("preparation receipt");
+          return {
+            replayed: true,
+            preparation: await this.readPreparation(
+              tx,
+              command.ownerUserId,
+              app.id,
+              prior.note.subjectId,
+            ),
+            view: await this.readView(tx, command.ownerUserId, app.id),
+          };
+        }
+        if (Number(app.revision) !== command.request.expectedRevision)
+          throw new ApplicationRevisionConflictError();
+        const active = await tx`
+        SELECT id FROM applications.packet_preparations WHERE application_id = ${app.id}
+          AND state IN ('queued', 'running')
+      `;
+        if (active.length) throw new ApplicationRevisionConflictError();
+        if (
+          command.request.coverLetter?.disclosure.noticeVersion !==
+            COVER_LETTER_DISCLOSURE_VERSION ||
+          command.request.coverLetter.disclosure.acknowledged !== true ||
+          !/^[a-f0-9]{64}$/u.test(command.context.jobContextHash) ||
+          !/^[a-f0-9]{64}$/u.test(command.context.confirmedFactsHash) ||
+          command.packet.fields.some((field) => field.fieldKey === "documents.cover_letter")
+        )
+          throw new PacketInvariantError("Invalid explicit cover-letter preparation");
+        const now = this.clock();
+        if (!Number.isFinite(now.getTime()))
+          throw new PacketInvariantError("Invalid preparation clock");
+        const updated = await this.writePacket(tx, app, now, command.packet);
+        if (!updated.current_packet_id) throw new ApplicationIntegrityError("base packet");
+        const id = uuidv7();
+        await tx`
+        INSERT INTO applications.packet_preparations (
+          id, application_id, owner_user_id, base_packet_id, expected_revision,
+          job_context_hash, confirmed_facts_hash, notice_version, approved_at, expires_at, created_at, updated_at
+        ) VALUES (${id}, ${app.id}, ${app.owner_user_id}, ${updated.current_packet_id},
+          ${Number(updated.revision)}, ${command.context.jobContextHash},
+          ${command.context.confirmedFactsHash}, ${COVER_LETTER_DISCLOSURE_VERSION}, ${now},
+          ${new Date(now.getTime() + 15 * 60_000)}, ${now}, ${now})
+      `;
+        await tx`
+        INSERT INTO applications.preparation_outbox (id, preparation_id, owner_user_id, payload, created_at)
+        VALUES (${uuidv7()}, ${id}, ${app.owner_user_id},
+          ${tx.json({ preparationId: id })}, ${now})
+      `;
+        await this.auditPreparation(tx, id, app.owner_user_id, "queued", now);
+        await this.writeReceipt(
+          tx,
+          command,
+          "queue_preparation",
+          requestHash,
+          app.id,
+          Number(updated.revision),
+          now,
+          { code: "preparation_queued", subjectId: id },
+        );
+        return {
+          replayed: false,
+          preparation: await this.readPreparation(tx, command.ownerUserId, app.id, id),
+          view: await this.readView(tx, command.ownerUserId, app.id),
+        };
+      }),
+    );
+  }
+
+  async getPreparation(
+    ownerUserId: string,
+    applicationId: string,
+    id: string,
+  ): Promise<PreparationRecord> {
+    return this.readPreparation(this.client, ownerUserId, applicationId, id);
+  }
+
+  /** Internal worker boundary: the immutable event must name the exact owned operation. */
+  async getPreparationForEvent(eventId: string, preparationId: string): Promise<PreparationRecord> {
+    const [target] = await this.client<Array<{ owner: string; applicationId: string }>>`
+      SELECT preparation.owner_user_id AS owner, preparation.application_id AS "applicationId"
+      FROM applications.preparation_outbox event
+      JOIN applications.packet_preparations preparation ON preparation.id = event.preparation_id
+      WHERE event.id = ${eventId} AND preparation.id = ${preparationId}
+    `;
+    if (!target) throw new PreparationNotFoundError();
+    return this.readPreparation(this.client, target.owner, target.applicationId, preparationId);
+  }
+
+  async claimPreparationGeneration(
+    eventId: string,
+    preparationId: string,
+    current: PreparationContext,
+  ): Promise<GenerationClaim> {
+    const target = await this.getPreparationForEvent(eventId, preparationId);
+    return this.client.begin(async (tx) => {
+      await tx`SELECT identity.require_active_candidate(${target.ownerUserId}::uuid)`;
+      const app = await this.lockApplication(tx, target.ownerUserId, target.applicationId);
+      const preparation = await this.readPreparation(
+        tx,
+        target.ownerUserId,
+        app.id,
+        preparationId,
+        true,
+      );
+      if (preparation.state === "succeeded" || preparation.state === "failed")
+        return { kind: "terminal", preparation };
+      if (preparation.state === "running") return { kind: "already_claimed", preparation };
+      const now = this.clock();
+      const age = now.getTime() - preparation.approvedAt.getTime();
+      const errorCode: PreparationFailureCode | null =
+        !Number.isFinite(age) || age < 0 || now > preparation.expiresAt
+          ? "disclosure_expired"
+          : Number(app.revision) !== preparation.expectedRevision ||
+              app.current_packet_id !== preparation.basePacketId ||
+              app.status !== "review_required"
+            ? "application_changed"
+            : preparation.jobContextHash !== current.jobContextHash ||
+                preparation.confirmedFactsHash !== current.confirmedFactsHash
+              ? "bindings_changed"
+              : null;
+      if (errorCode) {
+        await this.failPreparationRow(
+          tx,
+          preparation,
+          errorCode,
+          Number.isFinite(now.getTime()) && now >= preparation.createdAt
+            ? now
+            : preparation.createdAt,
+        );
+        return {
+          kind: "terminal",
+          preparation: await this.readPreparation(tx, target.ownerUserId, app.id, preparationId),
+        };
+      }
+      await tx`
+        UPDATE applications.packet_preparations SET state = 'running', generation_claimed_at = ${now},
+          updated_at = ${now} WHERE id = ${preparationId}
+      `;
+      await this.auditPreparation(tx, preparationId, target.ownerUserId, "generation_claimed", now);
+      return {
+        kind: "claimed",
+        preparation: await this.readPreparation(tx, target.ownerUserId, app.id, preparationId),
+      };
+    });
+  }
+
+  async completePreparation(
+    eventId: string,
+    preparationId: string,
+    current: PreparationContext,
+    letter: { contentSha256: string; sourceFactIds: readonly string[]; confidence: number },
+  ): Promise<PreparationRecord> {
+    const target = await this.getPreparationForEvent(eventId, preparationId);
+    return this.client.begin(async (tx) => {
+      await tx`SELECT identity.require_active_candidate(${target.ownerUserId}::uuid)`;
+      const app = await this.lockApplication(tx, target.ownerUserId, target.applicationId);
+      const preparation = await this.readPreparation(
+        tx,
+        target.ownerUserId,
+        app.id,
+        preparationId,
+        true,
+      );
+      if (preparation.state === "succeeded" || preparation.state === "failed") return preparation;
+      if (preparation.state !== "running")
+        throw new ApplicationIntegrityError("generation not claimed");
+      const now = this.clock();
+      const failure =
+        Number(app.revision) !== preparation.expectedRevision ||
+        app.current_packet_id !== preparation.basePacketId ||
+        app.status !== "review_required"
+          ? "application_changed"
+          : preparation.jobContextHash !== current.jobContextHash ||
+              preparation.confirmedFactsHash !== current.confirmedFactsHash
+            ? "bindings_changed"
+            : null;
+      if (failure) {
+        await this.failPreparationRow(tx, preparation, failure, now);
+        return this.readPreparation(tx, target.ownerUserId, app.id, preparationId);
+      }
+      if (
+        !/^[a-f0-9]{64}$/u.test(letter.contentSha256) ||
+        letter.sourceFactIds.length < 1 ||
+        letter.sourceFactIds.length > 40 ||
+        !Number.isFinite(letter.confidence) ||
+        letter.confidence < 0 ||
+        letter.confidence > 1 ||
+        letter.sourceFactIds.some((id) => !/^[a-f0-9-]{36}$/u.test(id))
+      )
+        throw new PacketInvariantError("Invalid grounded cover-letter binding");
+      const base = (await this.readView(tx, target.ownerUserId, app.id)).currentPacket;
+      if (!base) throw new ApplicationIntegrityError("preparation packet");
+      const updated = await this.writePacket(tx, app, now, {
+        jobRevision: base.jobRevision,
+        form: base.form,
+        artifactHashes: { ...base.artifactHashes, coverLetter: letter.contentSha256 },
+        fields: [
+          ...base.fields
+            .filter((field) => field.fieldKey !== "documents.cover_letter")
+            .map((field) => ({
+              fieldKey: field.fieldKey,
+              value: field.value,
+              origin: field.origin,
+              sourceFactIds: field.sourceFactIds,
+              confidence: field.confidence,
+              sourceConfirmed: !field.reasons.includes("unconfirmed_source"),
+            })),
+          {
+            fieldKey: "documents.cover_letter",
+            value: letter.contentSha256,
+            origin: "generated",
+            sourceFactIds: [...letter.sourceFactIds],
+            sourceConfirmed: true,
+            confidence: letter.confidence,
+          },
+        ],
+      });
+      const packet = (await this.readView(tx, target.ownerUserId, app.id)).currentPacket;
+      if (
+        !packet?.fields.some(
+          (field) =>
+            field.fieldKey === "documents.cover_letter" &&
+            field.requiresReview &&
+            field.reasons.includes("generated_content"),
+        )
+      )
+        throw new PacketInvariantError("Generated cover letter must require review");
+      await tx`
+        UPDATE applications.packet_preparations SET state = 'succeeded',
+          result_packet_id = ${updated.current_packet_id}, updated_at = ${now} WHERE id = ${preparationId}
+      `;
+      await this.auditPreparation(tx, preparationId, target.ownerUserId, "succeeded", now);
+      return this.readPreparation(tx, target.ownerUserId, app.id, preparationId);
+    });
+  }
+
+  async failPreparation(
+    eventId: string,
+    preparationId: string,
+    errorCode: PreparationFailureCode,
+  ): Promise<PreparationRecord> {
+    const target = await this.getPreparationForEvent(eventId, preparationId);
+    return this.client.begin(async (tx) => {
+      await this.lockApplication(tx, target.ownerUserId, target.applicationId);
+      const row = await this.readPreparation(
+        tx,
+        target.ownerUserId,
+        target.applicationId,
+        preparationId,
+        true,
+      );
+      if (row.state !== "succeeded" && row.state !== "failed")
+        await this.failPreparationRow(tx, row, errorCode, this.clock());
+      return this.readPreparation(tx, target.ownerUserId, target.applicationId, preparationId);
+    });
+  }
+
+  /** Private bounded reconciler: publication is not recorded until durable start is acknowledged. */
+  async claimPreparationNudges(limit: number): Promise<PreparationNudge[]> {
+    this.preparationBatchLimit(limit);
+    const now = this.preparationDispatchNow();
+    const stale = new Date(now.getTime() - PREPARATION_DISPATCH_LEASE_MS);
+    return this.client.begin(
+      async (tx) => tx<PreparationNudge[]>`
+      WITH candidates AS (
+        SELECT event.id FROM applications.preparation_outbox event
+        JOIN applications.packet_preparations preparation ON preparation.id = event.preparation_id
+        WHERE event.published_at IS NULL AND event.terminal_status IS NULL
+          AND (preparation.state IN ('queued', 'running') OR event.workflow_function_arn IS NOT NULL)
+          AND (event.nudge_claimed_at IS NULL OR event.nudge_claimed_at <= ${stale})
+        ORDER BY event.nudge_claimed_at NULLS FIRST, event.created_at, event.id FOR UPDATE OF event SKIP LOCKED LIMIT ${limit}
+      )
+      UPDATE applications.preparation_outbox event SET nudge_claimed_at = ${now}
+      FROM candidates WHERE event.id = candidates.id
+      RETURNING event.id AS "eventId", event.preparation_id AS "preparationId"
+    `,
+    );
+  }
+
+  /** Bind a stable exact version before external start. Recovery never retargets a bound event. */
+  async claimPreparationDispatch(
+    eventId: string,
+    functionArn: string,
+    expectedPreparationId?: string,
+  ): Promise<PreparationDispatchClaim> {
+    const name = preparationExecutionName(eventId);
+    if (!isPreparationFunctionArn(functionArn)) throw new PreparationDispatchError();
+    const now = this.preparationDispatchNow();
+    const [target] = await this.client<
+      Array<{ owner: string; applicationId: string; preparationId: string }>
+    >`
+      SELECT preparation.owner_user_id AS owner, preparation.application_id AS "applicationId", preparation.id AS "preparationId"
+      FROM applications.preparation_outbox event
+      JOIN applications.packet_preparations preparation ON preparation.id = event.preparation_id
+      WHERE event.id = ${eventId}
+        AND (${expectedPreparationId ?? null}::uuid IS NULL OR preparation.id = ${expectedPreparationId ?? null}::uuid)
+    `;
+    if (!target) return { kind: "missing" };
+    return this.client.begin(async (tx) => {
+      await tx`SELECT identity.require_active_candidate(${target.owner}::uuid)`;
+      const app = await this.lockApplication(tx, target.owner, target.applicationId);
+      const preparation = await this.readPreparation(
+        tx,
+        target.owner,
+        app.id,
+        target.preparationId,
+        true,
+      );
+      const [event] = await tx<
+        Array<{
+          functionArn: string | null;
+          leaseExpiresAt: Date | null;
+          executionArn: string | null;
+          terminalStatus: string | null;
+        }>
+      >`
+        SELECT workflow_function_arn AS "functionArn", dispatch_expires_at AS "leaseExpiresAt",
+          durable_execution_arn AS "executionArn", terminal_status AS "terminalStatus"
+        FROM applications.preparation_outbox WHERE id = ${eventId} FOR UPDATE
+      `;
+      if (!event) return { kind: "missing" };
+      if (event.terminalStatus) return { kind: "terminal" };
+      const operationTerminal = preparation.state === "succeeded" || preparation.state === "failed";
+      if (operationTerminal && !event.functionArn) return { kind: "terminal" };
+      if (event.executionArn)
+        return { kind: "started", dispatch: await this.readPreparationDispatch(tx, eventId) };
+      if (
+        !operationTerminal &&
+        (Number(app.revision) !== preparation.expectedRevision ||
+          app.current_packet_id !== preparation.basePacketId ||
+          app.status !== "review_required")
+      ) {
+        await this.failPreparationRow(tx, preparation, "application_changed", now);
+        return { kind: "terminal" };
+      }
+      if (preparation.state === "queued" && now.getTime() > preparation.expiresAt.getTime()) {
+        await this.failPreparationRow(tx, preparation, "disclosure_expired", now);
+        return { kind: "terminal" };
+      }
+      if (event.leaseExpiresAt && event.leaseExpiresAt.getTime() > now.getTime())
+        return { kind: "busy" };
+      if (
+        event.functionArn &&
+        event.functionArn.replace(/:\d+$/u, "") !== functionArn.replace(/:\d+$/u, "")
+      )
+        throw new PreparationDispatchError();
+      await tx`
+        UPDATE applications.preparation_outbox SET
+          workflow_function_arn = COALESCE(workflow_function_arn, ${functionArn}),
+          durable_execution_name = COALESCE(durable_execution_name, ${name}),
+          bound_at = COALESCE(bound_at, ${now}), dispatch_lease_id = ${uuidv7()},
+          dispatch_claimed_at = ${now}, dispatch_expires_at = ${new Date(now.getTime() + PREPARATION_DISPATCH_LEASE_MS)}
+        WHERE id = ${eventId}
+      `;
+      return { kind: "claimed", dispatch: await this.readPreparationDispatch(tx, eventId) };
+    });
+  }
+
+  /** A late old claimant cannot overwrite a newer lease; acknowledged starts are immutable. */
+  async markPreparationStarted(
+    eventId: string,
+    leaseId: string,
+    executionArn: string,
+  ): Promise<boolean> {
+    preparationExecutionName(eventId);
+    const now = this.preparationDispatchNow();
+    return this.client.begin(async (tx) => {
+      const [row] = await tx<
+        Array<{
+          functionArn: string | null;
+          executionName: string | null;
+          executionArn: string | null;
+          leaseId: string | null;
+        }>
+      >`
+        SELECT workflow_function_arn AS "functionArn", durable_execution_name AS "executionName",
+          durable_execution_arn AS "executionArn", dispatch_lease_id AS "leaseId"
+        FROM applications.preparation_outbox WHERE id = ${eventId} FOR UPDATE
+      `;
+      if (
+        !row?.functionArn ||
+        !row.executionName ||
+        !matchesPreparationExecutionArn(executionArn, row.functionArn, row.executionName)
+      )
+        throw new PreparationDispatchError();
+      if (row.executionArn) return row.executionArn === executionArn;
+      if (row.leaseId !== leaseId) return false;
+      await tx`
+        UPDATE applications.preparation_outbox SET durable_execution_arn = ${executionArn},
+          durable_started_at = ${now}, published_at = ${now},
+          dispatch_lease_id = NULL, dispatch_claimed_at = NULL, dispatch_expires_at = NULL
+        WHERE id = ${eventId}
+      `;
+      return true;
+    });
+  }
+
+  /** Bounded status-poll recovery for a lost terminal event; no prompts/provider state leave SQL. */
+  async claimPreparationExecutionsForReconciliation(limit: number): Promise<PreparationDispatch[]> {
+    this.preparationBatchLimit(limit);
+    const now = this.preparationDispatchNow();
+    const stale = new Date(now.getTime() - PREPARATION_DISPATCH_LEASE_MS);
+    const events = await this.client<Array<{ id: string }>>`
+      WITH due AS (
+        SELECT id FROM applications.preparation_outbox
+        WHERE durable_started_at <= ${stale} AND terminal_status IS NULL
+          AND (nudge_claimed_at IS NULL OR nudge_claimed_at <= ${stale})
+        ORDER BY nudge_claimed_at NULLS FIRST, durable_started_at, id
+        LIMIT ${limit} FOR UPDATE SKIP LOCKED
+      )
+      UPDATE applications.preparation_outbox event SET nudge_claimed_at = ${now}
+      FROM due WHERE event.id = due.id RETURNING event.id
+    `;
+    return Promise.all(events.map((event) => this.readPreparationDispatch(this.client, event.id)));
+  }
+
+  async getPreparationDispatch(eventId: string): Promise<PreparationDispatch | undefined> {
+    preparationExecutionName(eventId);
+    const [event] = await this.client<Array<{ id: string }>>`
+      SELECT id FROM applications.preparation_outbox WHERE id = ${eventId} AND workflow_function_arn IS NOT NULL
+    `;
+    return event ? this.readPreparationDispatch(this.client, event.id) : undefined;
+  }
+
+  /** Owned settlement and terminal receipt commit together, including a lost start acknowledgement. */
+  async settlePreparationExecution(input: PreparationTerminalInput): Promise<boolean> {
+    const now = this.preparationDispatchNow();
+    const name = preparationExecutionName(input.eventId);
+    if (
+      !isPreparationFunctionArn(input.functionArn) ||
+      input.executionName !== name ||
+      !matchesPreparationExecutionArn(input.executionArn, input.functionArn, name) ||
+      !["SUCCEEDED", "FAILED", "STOPPED", "TIMED_OUT"].includes(input.status) ||
+      !(input.startTimestamp instanceof Date) ||
+      !(input.endTimestamp instanceof Date) ||
+      !Number.isFinite(input.startTimestamp.getTime()) ||
+      !Number.isFinite(input.endTimestamp.getTime()) ||
+      input.endTimestamp < input.startTimestamp ||
+      input.endTimestamp.getTime() > now.getTime() + 300_000
+    )
+      throw new PreparationDispatchError();
+    const target = await this.getPreparationForEvent(input.eventId, input.preparationId);
+    return this.client.begin(async (tx) => {
+      await this.lockApplication(tx, target.ownerUserId, target.applicationId);
+      const preparation = await this.readPreparation(
+        tx,
+        target.ownerUserId,
+        target.applicationId,
+        input.preparationId,
+        true,
+      );
+      const [row] = await tx<
+        Array<{
+          functionArn: string | null;
+          executionName: string | null;
+          boundAt: Date | null;
+          executionArn: string | null;
+          terminalStatus: string | null;
+          terminalStart: Date | null;
+          terminalEnd: Date | null;
+        }>
+      >`
+        SELECT workflow_function_arn AS "functionArn", durable_execution_name AS "executionName", bound_at AS "boundAt",
+          durable_execution_arn AS "executionArn", terminal_status AS "terminalStatus",
+          terminal_start_at AS "terminalStart", terminal_end_at AS "terminalEnd"
+        FROM applications.preparation_outbox WHERE id = ${input.eventId} FOR UPDATE
+      `;
+      if (
+        !row ||
+        row.functionArn !== input.functionArn ||
+        row.executionName !== input.executionName ||
+        !row.boundAt ||
+        input.startTimestamp.getTime() < row.boundAt.getTime() - 300_000 ||
+        (row.executionArn && row.executionArn !== input.executionArn)
+      )
+        throw new PreparationDispatchError();
+      if (row.terminalStatus) {
+        if (
+          row.terminalStatus !== input.status ||
+          row.terminalStart?.getTime() !== input.startTimestamp.getTime() ||
+          row.terminalEnd?.getTime() !== input.endTimestamp.getTime()
+        )
+          throw new PreparationDispatchError();
+        return true;
+      }
+      // AWS SUCCEEDED only proves workflow processing. Never promote a still-active operation.
+      if (preparation.state === "queued" || preparation.state === "running")
+        await this.failPreparationRow(tx, preparation, "generation_unavailable", now);
+      await tx`
+        UPDATE applications.preparation_outbox SET durable_execution_arn = ${input.executionArn},
+          durable_started_at = COALESCE(durable_started_at, ${now}), published_at = COALESCE(published_at, ${now}),
+          dispatch_lease_id = NULL, dispatch_claimed_at = NULL, dispatch_expires_at = NULL,
+          terminal_status = ${input.status}, terminal_start_at = ${input.startTimestamp}, terminal_end_at = ${input.endTimestamp}
+        WHERE id = ${input.eventId}
+      `;
+      return true;
+    });
+  }
+
+  private preparationBatchLimit(limit: number): void {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PREPARATION_DISPATCH_BATCH)
+      throw new PreparationDispatchError();
+  }
+  private preparationDispatchNow(): Date {
+    const now = this.clock();
+    if (!Number.isFinite(now.getTime())) throw new PreparationDispatchError();
+    return now;
+  }
+  private async readPreparationDispatch(
+    tx: Sql | Tx,
+    eventId: string,
+  ): Promise<PreparationDispatch> {
+    const [row] = await tx<PreparationDispatch[]>`
+      SELECT id AS "eventId", preparation_id AS "preparationId", workflow_function_arn AS "functionArn",
+        durable_execution_name AS "executionName", bound_at AS "boundAt", dispatch_lease_id AS "leaseId",
+        dispatch_expires_at AS "leaseExpiresAt", durable_execution_arn AS "executionArn",
+        durable_started_at AS "startedAt", terminal_status AS "terminalStatus"
+      FROM applications.preparation_outbox WHERE id = ${eventId} AND workflow_function_arn IS NOT NULL
+    `;
+    if (!row) throw new PreparationDispatchError();
+    return row;
+  }
+
+  private async readPreparation(
+    tx: Sql | Tx,
+    ownerUserId: string,
+    applicationId: string,
+    id: string,
+    lock = false,
+  ): Promise<PreparationRecord> {
+    const [row] = await tx<PreparationRecord[]>`
+      SELECT id, owner_user_id AS "ownerUserId", application_id AS "applicationId",
+        base_packet_id AS "basePacketId", expected_revision::float8 AS "expectedRevision",
+        job_context_hash AS "jobContextHash", confirmed_facts_hash AS "confirmedFactsHash",
+        notice_version AS "noticeVersion", approved_at AS "approvedAt", expires_at AS "expiresAt",
+        generation_claimed_at AS "generationClaimedAt", state, result_packet_id AS "resultPacketId",
+        error_code AS "errorCode", created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM applications.packet_preparations
+      WHERE id = ${id} AND owner_user_id = ${ownerUserId} AND application_id = ${applicationId}
+      ${lock ? tx`FOR UPDATE` : tx``}
+    `;
+    if (!row) throw new PreparationNotFoundError();
+    return row;
+  }
+
+  private async auditPreparation(
+    tx: Tx,
+    preparationId: string,
+    ownerUserId: string,
+    action: "queued" | "generation_claimed" | "succeeded" | "failed",
+    now: Date,
+  ): Promise<void> {
+    await tx`
+      INSERT INTO applications.preparation_audit (id, preparation_id, owner_user_id, action, occurred_at)
+      VALUES (${uuidv7()}, ${preparationId}, ${ownerUserId}, ${action}, ${now})
+    `;
+  }
+
+  private async failPreparationRow(
+    tx: Tx,
+    row: PreparationRecord,
+    errorCode: PreparationFailureCode,
+    now: Date,
+  ): Promise<void> {
+    await tx`
+      UPDATE applications.packet_preparations SET state = 'failed', error_code = ${errorCode},
+        updated_at = ${now} WHERE id = ${row.id}
+    `;
+    await this.auditPreparation(tx, row.id, row.ownerUserId, "failed", now);
+  }
+
+  private async writePacket(
+    tx: Tx,
+    app: ApplicationRow,
+    now: Date,
+    inputs: Pick<PacketInputs, "jobRevision" | "form" | "fields" | "artifactHashes">,
+  ): Promise<ApplicationRow> {
+    nextStatus(app.status, "packet_created");
+    const [{ version } = { version: 0 }] = await tx<{ version: number }[]>`
+        SELECT coalesce(max(version), 0)::int AS version FROM applications.packets
+        WHERE application_id = ${app.id}
+      `;
+    const packet = assemblePacket(
+      {
+        ...inputs,
+        id: uuidv7(),
+        userId: app.owner_user_id,
+        applicationId: app.id,
+        canonicalJobId: app.canonical_job_id,
+        version: version + 1,
+        createdAt: now,
+      },
+      this.options.definitions,
+      this.options.confidenceThreshold,
+    );
+    await tx`
+        INSERT INTO applications.packets
+          (id, application_id, owner_user_id, version, packet_hash, job_revision, form_adapter_id,
+           form_variant_id, form_hash, resume_hash, cover_letter_hash, fields, created_at)
+        VALUES (${packet.id}, ${app.id}, ${app.owner_user_id}, ${packet.version}, ${packet.packetHash},
+          ${packet.jobRevision}, ${packet.form?.adapterId ?? null}, ${packet.form?.variantId ?? null},
+          ${packet.form?.formHash ?? null}, ${packet.artifactHashes.resume ?? null},
+          ${packet.artifactHashes.coverLetter ?? null},
+          ${tx.json(packet.fields as unknown as postgres.JSONValue)}, ${now})
+      `;
+    return this.change(tx, app, "packet_created", now, {
+      packetId: packet.id,
+      currentPacketId: packet.id,
+    });
+  }
 
   private async commandResult(
     command: Parameters<PostgresApplicationStore["mutate"]>[0],

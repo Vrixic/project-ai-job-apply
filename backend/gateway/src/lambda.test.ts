@@ -1479,9 +1479,12 @@ describe("Applications routes at the Lambda boundary", () => {
     }
     expect(declared.length).toBeGreaterThan(10);
     for (const [method, template] of declared) {
-      const path = template.replace("{applicationId}", id).replace("{attemptId}", attempt);
+      const path = template
+        .replace("{applicationId}", id)
+        .replace("{attemptId}", attempt)
+        .replace("{preparationId}", attempt);
       const { handler } = dispatcher();
-      const query = path.endsWith("/resume/file") ? "format=pdf" : "";
+      const query = path.endsWith("/file") ? "format=pdf" : "";
       const commandBody = method === "POST" && !path.endsWith("/dispatch") ? "{}" : undefined;
       const response = await invoke(
         handler,
@@ -1494,8 +1497,8 @@ describe("Applications routes at the Lambda boundary", () => {
     }
   });
 
-  it("accepts only one docx or pdf format on the resume file route, and no query on the preview", async () => {
-    const file = `/v1/applications/${id}/resume/file`;
+  it.each(["resume", "cover-letter"])("bounds %s file format and preview queries", async (kind) => {
+    const file = `/v1/applications/${id}/${kind}/file`;
     for (const [query, status] of [
       ["format=docx", 200],
       ["format=pdf", 200],
@@ -1516,11 +1519,31 @@ describe("Applications routes at the Lambda boundary", () => {
       (
         await invoke(
           handler,
-          invocation("GET", `/v1/applications/${id}/resume`, { rawQueryString: "format=pdf" }),
+          invocation("GET", `/v1/applications/${id}/${kind}`, { rawQueryString: "format=pdf" }),
         )
       ).statusCode,
     ).toBe(400);
   });
+
+  it.each(["cover-letter", `packet-preparations/${attempt}`])(
+    "protects the %s read boundary and rejects bodies or surplus query parameters",
+    async (suffix) => {
+      const { handler, inject } = dispatcher();
+      const path = `/v1/applications/${id}/${suffix}`;
+      const anonymous = invocation("GET", path);
+      delete anonymous.requestContext.authorizer;
+      expect((await invoke(handler, anonymous)).statusCode).toBe(401);
+      expect((await invoke(handler, invocation("GET", path, { body: "{}" }))).statusCode).toBe(400);
+      expect(
+        (await invoke(handler, invocation("GET", path, { rawQueryString: "owner=other" })))
+          .statusCode,
+      ).toBe(400);
+      expect((await invoke(handler, invocation("POST", path, { body: "{}" }))).statusCode).toBe(
+        404,
+      );
+      expect(inject).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects an unauthenticated call before dispatch", async () => {
     const { inject, handler } = dispatcher();

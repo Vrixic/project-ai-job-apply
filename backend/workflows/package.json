@@ -28,9 +28,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ai-job-apply/ai-sdk": "workspace:*",
     "@ai-job-apply/applications-service": "workspace:*",
     "@ai-job-apply/config": "workspace:*",
     "@ai-job-apply/domain": "workspace:*",
+    "@ai-job-apply/documents-service": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "@ai-job-apply/ingestion-worker": "workspace:*",
     "@ai-job-apply/jobs-service": "workspace:*",

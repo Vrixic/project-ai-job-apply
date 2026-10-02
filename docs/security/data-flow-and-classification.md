@@ -1,5 +1,25 @@
 # Data Flow and Classification
 
+The private Documents generation work ledger stores owner/document UUIDs, original request digest,
+consent expiry, fixed phase, admission/settlement times and state only. It stores no candidate fact,
+prompt/output, credential or provider body; references never include candidate text. These are
+owned confidential operational metadata, not product analytics or public API responses. Unresolved
+work prevents ledger/document deletion; terminal metadata disappears with the owning document.
+Production actor/settlement, IAM, retention and restore enforcement remain uncomposed/default-off.
+
+The source-only private initializer now uses a fresh ledger grant/claim before its three fixed
+slot writes, and records settlement only after all original positive single-attempt acknowledgements
+and pinned reads. A local timeout, late write, object presence or read-only replay never records
+settlement. This connection adds no candidate values to control metadata or public responses.
+Other actors and the production drain authority remain uncomposed.
+
+The source-only isolated provider now claims existing fixed-purpose authority through a private
+control capability before external effects. The request contains document ID, original digest and
+consent expiry only; the acknowledgement contains an opaque authorization reference, not candidate
+owner IDs, prompts or model text. Settlement is restricted to that provider phase and only follows
+the original positive dispatch/model/result path. Connected local fixtures use in-process control
+and offline object/model ports; authenticated remote control/IAM and production drain remain open.
+
 - Status: Engineering baseline; accountable security/privacy approval pending
 - Last updated: 2026-08-08
 
@@ -33,6 +53,131 @@ The Phase 0 slice does not call ATS, AI, email, calendar, billing, or browser-au
 | Internal | Operation state, match features, opaque IDs | Authorization, encryption, audit | Public responses without ownership |
 | Confidential PII | Email, resume, history, preferences | TLS, KMS, owner-scoped access, redacted telemetry | Events, fixtures, analytics, logs |
 | Restricted | OAuth/session tokens, sensitive answers | Separate secrets/keys, just-in-time access, mandatory audit | Logs, analytics, fixtures, general events |
+
+## D3 requested cover-letter path (source and local evidence only)
+
+The private owned-evidence factory now reads through the existing Applications, Jobs and Profile
+owner APIs under an active-candidate lease. Application identity/ownership is checked before
+posting or candidate values are read. Restricted facts are removed; detached fact-graph projections
+omit transport timestamps and the complete posting is snapshotted before asynchronous Profile
+reads. Kill-switch/expiry checks refuse stale outputs and fixed failures never reflect owner data.
+Twenty-one offline and three PostgreSQL cases use the real local owner modules, each supported
+client and a separate lease pool; simulated authentication is not managed-login/deployed evidence.
+This default-off factory is not a composed production runtime and cannot call a provider or write
+objects. Non-renewable dispatch/drain, retention and runtime/IAM remain required before activation.
+
+The approved backend scope adds an optional versioned disclosure acknowledgement to Prepare.
+Applications commits the base packet, short-lived preparation, identifier-only event, audit and
+idempotency receipt atomically. A durable factory and private activity now have connected local
+PostgreSQL tests. Gateway handlers now connect owner-scoped acceptance/status/preview/file ports;
+production dispatch/recovery and isolated Documents/provider runtime composition remain unfinished.
+Preparation acceptance/status stay explicitly default-off in the production runtime factory.
+The owned outbox now stores only dispatch identifiers, exact numeric workflow targets, bounded
+leases and execution/terminal metadata. The source-only starter matches event/preparation before
+claiming and emits canonical identifier-only Invoke bytes; no prompt, result or trace is included.
+Local PostgreSQL and offline SDK tests verify this boundary, not deployed delivery or recovery.
+Source-only terminal handlers independently confirm EventBridge nudges through metadata-only
+AWS reads, excluding input/result/error payloads. Exact stored execution identity and fixed
+terminal status/times bind settlement; recovery may continue while new dispatch stays off.
+SQS and scheduled reconciliation emit only identifiers, batch failures or aggregate counts.
+Production clients, IAM, artifacts and trigger composition remain unfinished and unactivated.
+The activity passes only server-owned identity/context/disclosure metadata to Documents, which
+reloads candidate facts and the job through their owner APIs. Confirmed non-restricted career
+facts alone enter the prompt; the job is untrusted data. The model remains default-off and is
+called only through the AI SDK. Neither consent nor the dispatch claim is renewed on retry.
+
+Documents reserves the exact normalized object key before any model call. A repeated internal
+delivery can recover a ready draft or wait, never generate a second time. The bounded model call
+holds Identity's active-candidate lease; quarantine prevents later dispatches. Grounding withholds
+all text on findings, including citations excluded from this request's fact selection. Both PDF
+and DOCX are verified with production parsers before immutable ready metadata is committed.
+Draft text is confined to the encrypted Documents object boundary and owner responses, never
+SQL, event payloads, durable checkpoints, audit values or telemetry. Pending and ready keys enter
+exact candidate deletion inventory. Export content assembly and restore wiring remain unfinished.
+
+Packet finalization binds the saved content hash and requires explicit review. Current evidence,
+job and application changes prevent supersession/approval carryover; preview/file reads never
+regenerate. Local tests use synthetic candidate facts and offline provider/object transports.
+No AWS write, live model call, activation, deployment or accountable privacy/security approval is
+claimed by this implementation. Provider activation/procurement/region/evaluation gates remain.
+
+Production composition must preserve [ADR-016](../adr/016-scale-to-zero-application-runtime.md):
+database activities use private access only; internet-facing provider activities run outside the
+VPC with minimum identifier/object references, approved managed secrets and no database credentials.
+The tested generation library's AI gateway port is not authority to compose the live provider
+inside the private database activity. Owned encrypted transport and isolated runtime composition
+remain unfinished; raw prompts/results must not enter durable invocation payloads or checkpoints.
+
+A private isolated-provider transport foundation now defines reference-only invocation/output
+envelopes and canonical encrypted request/dispatch/result slots under the already-reserved
+normalized document ID. Request objects bind original consent/context; plaintext remains
+Confidential PII, including in failed or abandoned generation. Slot references bind exact version,
+hash, size, KMS key and document identity. Conditional-write conflicts return existing references
+and never independently grant another model dispatch. Offline tests prove transport validation,
+not provider execution or complete deletion safety. The existing owner inventory/prefix purge
+must include every slot/version. Before composition/activation, implement one-dispatch recovery,
+transient retention and bounded privacy quiescence for ambiguous Invoke: private cancellation
+does not prove an isolated function stopped, so deletion protection cannot be released while
+late provider/object writes remain possible. No provider credential enters this transport.
+
+[Proposed ADR-037](../adr/037-precreated-cover-letter-provider-slots.md) defines owner-precreated
+issued/pending slots and ETag-pinned claimed/ready replacement. Offline tests refuse duplicate,
+missing or conflicting writes without creating a slot. Provider creation authority must be
+excluded at composition. The source-only Workflows purge now preserves verified current delete
+markers until historical versions are gone, then removes the fences and rechecks absence.
+Offline tests probe late conditional writes inside delete batches; connected synthetic PostgreSQL
+tests prove row retention on incomplete cleanup and successful retry. Required marker-creation
+IAM is not configured, and conditional replacement does not establish remote dispatch quiescence
+after quarantine. These production prerequisites remain blocking before activation.
+
+The source-only isolated handler now takes a frozen transition-only object capability and calls
+only ModelGateway, after a positively acknowledged dispatch claim and original consent/model
+checks. Ambiguous claim/result writes report `in_progress` for original-result recovery rather
+than prematurely asserting terminal product failure. Saved JSON includes strict approved model
+provenance and original output size, never invocation text. Twenty-five offline handler cases
+cover duplicate/lost-ACK recovery, expiry, missing slots, deletion during model execution and
+late completion after a local deadline. Private partial-result grounding/rendering and
+authorization/quiescence/retention composition are unfinished; these tests are not live-provider
+or deployed privacy proof. Neither factory flags nor caller cancellation authorize activation.
+
+The private recovery reader now checks owner-scoped SQL reservation metadata and freshly owned
+evidence against the exact saved prompt, pinned encrypted references, original authorized dispatch
+time and result/model binding before shared grounding. It has only find/read capabilities and no
+model, write or dispatch port. Original results may be grounded after consent expiry without
+renewal; missing/pending results do not grant another call. Twenty-three offline cases are not
+deployed privacy or remote-quiescence evidence. The separate private recovery service now loads
+owned reservation metadata without creating work, reads original results under an active-candidate
+lease, and uses the shared PDF/DOCX parser checks before immutable completion. Completion reacquires
+the active-candidate lease; the service has no ModelGateway, Invoke or reservation port. Seventeen
+offline service cases and two new PostgreSQL cases verify finalization, immutable replay, owner
+scope and quarantine refusal. Runtime initialization/invocation, remote quiescence and retention
+remain uncomposed; all activation prerequisites above remain.
+
+Private invocation now has a source-only default-off SDK adapter pinned to an exact numeric Lambda
+version. Only document identifiers and encrypted object references enter its compact request;
+only bounded strict original status/reference responses leave it. It requires single-attempt SDK
+policy, requests no log tail and treats ambiguous remote responses as in progress. Sixty offline
+tests include the installed SDK with synthetic HTTP responses, not live network/provider evidence.
+Local timeout/cancellation is not remote quiescence. Authorization, retention and production
+composition remain required before activation.
+
+Candidate object cleanup now requires an injected private quiescence confirmation for every
+inventoried cover-letter reservation before object deletion, including pending rows with no S3
+versions. Observed generation slots/final drafts also trigger the gate in prefix cleanup. No
+production confirmation authority is composed; missing or unknown proof fails closed and retains
+the owner deletion/quarantine state. A ten-second read deadline causes refusal, not quiescence.
+Eight offline gate cases and six real PostgreSQL cases use synthetic confirmation, not live drain
+evidence. Ordinary resume-only cleanup is unchanged. Persisted authorization/drain remains open.
+
+Private initialization now has a source-only default-off factory. Owned evidence and original
+consent construct the immutable request; a committed SQL reservation precedes request/result/
+dispatch creation under the active-candidate lease. Dispatch is created last. Only the first
+reservation winner can create; replays read original pinned slots and never recreate missing
+ones, including after partial creation or deletion. The factory has no model or Invoke capability
+and returns only identifiers/references/statuses. Twenty-one offline cases and one real PostgreSQL
+case do not prove live S3/KMS or remote-write quiescence. An abandoned private PUT could still
+arrive after local abort; bounded authorization/drain/fencing and retention remain required before
+composition or activation. Never use missing-slot recreation to recover an expired authorization.
 
 ## Phase 0 preference flow
 
@@ -282,3 +427,15 @@ candidate/source/internal field. The web emits no sitemap entries while indexing
 uses only its configured canonical origin when enabled. Projection, edge, or pagination failures
 remain availability failures instead of false-empty deindexing signals; crawling and both public
 API routes remain default-dark behind the same activation gate.
+
+## Source-only cover-letter provider control
+
+The owner-approved private version-one RPC carries only document/grant IDs, request hashes,
+fixed provider purpose, original consent expiry and operational outcomes. Candidate owner selection,
+prompt/result text, object credentials and SQL diagnostics never enter its envelopes. The isolated
+provider has claim and positive settlement capabilities only; Documents resolves the stored owner
+and enforces original active-candidate admission. Exact numeric targets, single SDK attempts,
+bounded strict receipts and default-off gates are source controls, not deployed IAM evidence.
+Target-context matching does not authenticate a caller. Lost acknowledgements do not authorize
+re-dispatch or prove remote quiescence. Runtime/IAM, retention and trusted failed-call completion
+authority remain unfinished; no public API, frontend or live AWS/model behavior changes here.

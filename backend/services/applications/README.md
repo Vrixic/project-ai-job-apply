@@ -7,6 +7,41 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 
 ## Current D3 slice (source and local verification only)
 
+### Cover-letter preparation in progress (2026-10-02)
+
+The unshipped D3-017 slice adds an atomic base packet, short-lived disclosure-bound preparation,
+identifier-only event, audit and idempotency receipt. A write-ahead claim permits exactly one
+generation dispatch. The activity recovers only an already-persisted draft on retry, rechecks
+current evidence/job/application bindings, and finalizes a new packet requiring explicit review.
+Candidate edits cannot be silently superseded. Local Applications unit tests (98) and real
+PostgreSQL integration tests (43) pass; these are layer evidence, not a connected product.
+Documents generation now has local unit/database evidence, including pending-dispatch recovery.
+The durable/private activity factories now pass 18 SDK unit tests and four connected PostgreSQL
+tests with synthetic evidence and offline provider/object transports. Production owned outbox
+dispatch, terminal recovery, ADR-016 isolated provider composition, production Gateway ports, privacy
+artifact-content export and restore-boundary wiring remain unfinished. No live model call or AWS
+deployment is enabled or claimed. Existing clients that omit opt-in keep the synchronous contract.
+
+The Applications service and Gateway handlers now route explicit opt-in to `202` preparation,
+preserving the synchronous `201` path. Owner-scoped status returns an immutable packet/revision
+reference; later application edits cannot change that result. Receipt preflight checks ownership
+and canonical request identity before volatile context/base-packet reads, without renewing consent.
+Preview/file reads are exact packet-hash reads and never generate; approval resolves the current
+Documents binding and fails unavailable on transport errors rather than inventing a changed draft.
+Applications now passes 114 unit and 55 real PostgreSQL tests. Gateway scope/validation tests
+use test authentication and fake owner ports, not live managed OIDC. Production preparation stays
+default-off until its compatible migrations and dispatch/recovery runtime are composed.
+
+Migration `0005_preparation_dispatch.sql` adds identifier-only owned dispatch metadata with
+bounded nudge/dispatch leases, immutable original numeric workflow targets, start receipts and
+terminal settlement. Foreign preparation nudges cannot claim another event. Lost Invoke receipts
+retain the original binding for recovery; AWS success never promotes an active draft operation.
+This is local persistence evidence, not deployed scheduling or terminal-handler composition.
+Known execution polls now claim the existing scheduling timestamp under `SKIP LOCKED`, with
+a sixty-second lease and oldest-claim-first ordering. Published rows reuse this field only for
+status polling; unpublished nudge claims remain separate. Concurrent polls cannot claim the same
+row, and old running executions cannot starve later terminal ones. No applied migration changes.
+
 Implemented and locally verified against generated-synthetic data; **not deployed**. The OpenAPI contract and gateway
 routes exist but fail closed (503) until a store is wired, and it is not part of candidate export/deletion yet.
 

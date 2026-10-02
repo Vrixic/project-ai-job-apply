@@ -1,6 +1,9 @@
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 import * as addFormatsModule from "ajv-formats";
 import applicationAppliedSchema from "../schemas/application.applied.v1.json" with { type: "json" };
+import applicationPacketPreparationRequestedSchema from "../schemas/application.packet-preparation.requested.v1.json" with {
+  type: "json",
+};
 import applicationStatusChangedSchema from "../schemas/application.status-changed.v1.json" with {
   type: "json",
 };
@@ -36,6 +39,7 @@ import trustContributionDecisionChangedSchema from "../schemas/trust.contributio
 
 export const eventTypes = {
   applicationApplied: "application.applied.v1",
+  applicationPacketPreparationRequested: "application.packet-preparation.requested.v1",
   applicationStatusChanged: "application.status_changed.v1",
   jobContributed: "job.contributed.v1",
   jobExpired: "job.expired.v1",
@@ -228,6 +232,10 @@ const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) =>
 addFormats(ajv);
 
 const validators = new Map<string, ValidateFunction<unknown>>([
+  [
+    eventTypes.applicationPacketPreparationRequested,
+    ajv.compile(applicationPacketPreparationRequestedSchema),
+  ],
   [eventTypes.applicationApplied, ajv.compile(applicationAppliedSchema)],
   [eventTypes.applicationStatusChanged, ajv.compile(applicationStatusChangedSchema)],
   [eventTypes.jobContributed, ajv.compile(jobContributedSchema)],

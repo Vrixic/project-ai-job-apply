@@ -144,7 +144,7 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(profile.stdout.trim()).toBe(
-      "Database migrations through 0010_restricted_answer_vault applied and verified.",
+      "Database migrations through 0011_active_candidate_lease applied and verified.",
     );
     const first = await execFileAsync(process.execPath, [migrationExecutable], {
       env: { ...process.env, DATABASE_URL: databaseUrl },

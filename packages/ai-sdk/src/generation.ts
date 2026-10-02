@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { FactGraph, type GraphFact } from "@ai-job-apply/domain";
 import {
   type DataDisclosureApproval,
@@ -54,13 +55,26 @@ export interface GenerationDependencies {
   disclosure: DataDisclosureApproval | undefined;
 }
 
+/** Owner evidence required to prepare or ground a draft without provider access. */
+export type CoverLetterGroundingContext = Pick<GenerationDependencies, "facts" | "now" | "job">;
+
+/** Returns the exact disclosed prompt, or null when no confirmed career evidence is usable. */
+export function prepareCoverLetterPrompt(input: CoverLetterGroundingContext): {
+  system: string;
+  user: string;
+} | null {
+  const graph = FactGraph.build(input.facts, input.now);
+  const selected = selectPromptFacts(graph, input.facts);
+  return selected.length > 0 ? renderCoverLetterPrompt(selected, input.job) : null;
+}
+
 function selectPromptFacts(graph: FactGraph, facts: readonly GraphFact[]): PromptFact[] {
   const usable = facts
-    .filter((fact) => GENERATION_FACT_KINDS.includes(fact.kind))
     .map((fact) => graph.get(fact.id))
     .filter(
       (fact): fact is GraphFact => fact !== undefined && graph.usability(fact.id)?.usable === true,
     )
+    .filter((fact) => GENERATION_FACT_KINDS.includes(fact.kind))
     // Restricted facts are never sent to a model provider.
     .filter((fact) => fact.sensitivity !== "restricted");
   const byId = new Map(usable.map((fact) => [fact.id, fact]));
@@ -73,6 +87,35 @@ function selectPromptFacts(graph: FactGraph, facts: readonly GraphFact[]): Promp
       key: fact.key,
       value: Array.isArray(fact.value) ? fact.value.join(", ") : String(fact.value),
     }));
+}
+
+/** Internal bindings share generation's exact evidence selection and contain no raw values. */
+export function coverLetterContext(input: {
+  facts: readonly GraphFact[];
+  now: Date;
+  job: JobPromptFacts;
+}): { confirmedFactsHash: string; jobContextHash: string } {
+  const graph = FactGraph.build(input.facts, input.now);
+  const selected = selectPromptFacts(graph, input.facts);
+  const digest = (value: unknown) =>
+    createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  return {
+    confirmedFactsHash: digest({
+      schemaVersion: "cover-letter-evidence.v1",
+      promptVersion: PROMPT_VERSIONS.coverLetter,
+      facts: selected.map((fact) => {
+        const usability = graph.usability(fact.id);
+        return { ...fact, confidence: usability?.usable ? usability.confidence : 0 };
+      }),
+    }),
+    // Hash the entire posting, including text beyond the prompt's truncation limit.
+    jobContextHash: digest({
+      schemaVersion: "cover-letter-job.v1",
+      title: input.job.title,
+      company: input.job.company,
+      description: input.job.description,
+    }),
+  };
 }
 
 async function run(
@@ -116,12 +159,42 @@ async function run(
     }
     throw error;
   }
+  return groundOutput(base, dependencies, graph, promptFacts, output);
+}
+
+function groundOutput(
+  base: Pick<GenerationResult, "purpose" | "promptVersion" | "reviewRequired">,
+  context: CoverLetterGroundingContext,
+  graph: FactGraph,
+  promptFacts: readonly PromptFact[],
+  output: { value: unknown; model: ModelIdentity },
+): GenerationResult {
+  if (promptFacts.length === 0) {
+    return {
+      ...base,
+      status: "refused",
+      reason: "no_confirmed_evidence",
+      paragraphs: [],
+      findings: [],
+      sourceFactIds: [],
+      confidence: 0,
+    };
+  }
   const parsed = parseParagraphs(output.value, DEFAULT_LIMITS);
+  const selectedIds = new Set(promptFacts.map((fact) => fact.id));
+  const excludedCitations: GroundingFinding[] = parsed.paragraphs.flatMap((paragraph, index) =>
+    paragraph.factIds.some((id) => !selectedIds.has(id) && graph.usability(id)?.usable === true)
+      ? [{ code: "unknown_fact", paragraph: index }]
+      : [],
+  );
   const findings = [
     ...parsed.findings,
     ...checkParagraphs(parsed.paragraphs, graph, {
-      jobTerms: [dependencies.job.company, dependencies.job.title],
+      jobTerms: [context.job.company, context.job.title],
     }),
+    // A known usable fact still cannot be cited unless this exact request disclosed it.
+    // Keep the existing unknown/unusable diagnostics for truly unknown or unusable evidence.
+    ...excludedCitations,
   ];
   const cited = [...new Set(parsed.paragraphs.flatMap((paragraph) => paragraph.factIds))].sort();
   const confidence = cited.reduce((minimum, id) => {
@@ -138,6 +211,29 @@ async function run(
     sourceFactIds: findings.length === 0 ? cited : [],
     confidence: findings.length === 0 ? confidence : 0,
   };
+}
+
+/**
+ * Grounds an already obtained result without a gateway, disclosure renewal, or provider call.
+ * The caller must independently verify saved request identity, original dispatch authorization,
+ * model identity, and encrypted result integrity before passing output to this pure evaluator.
+ */
+export function groundCoverLetterOutput(
+  context: CoverLetterGroundingContext,
+  output: { value: unknown; model: ModelIdentity },
+): GenerationResult {
+  const graph = FactGraph.build(context.facts, context.now);
+  return groundOutput(
+    {
+      purpose: "cover_letter",
+      promptVersion: PROMPT_VERSIONS.coverLetter,
+      reviewRequired: true,
+    },
+    context,
+    graph,
+    selectPromptFacts(graph, context.facts),
+    output,
+  );
 }
 
 export function generateCoverLetter(

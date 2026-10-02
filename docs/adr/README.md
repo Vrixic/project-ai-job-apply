@@ -44,6 +44,8 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-034: Resume byte purge runs in the candidate-rights maintenance runtime](034-resume-byte-purge-runs-in-the-candidate-rights-maintenance-runtime.md) (accepted 2026-09-21)
 - [ADR-036: Structured Education and Work Experience entries](036-structured-education-and-work-experience-entries.md) (input to [D3.1-001](../product/delivery/phase-3-1-structured-profile.md); not independently accepted)
 
+- [ADR-037: Precreated cover-letter provider slots](037-precreated-cover-letter-provider-slots.md) (proposed; conditional transport only, privacy/runtime prerequisites unfinished)
+
 Use `000-template.md` for future decisions.
 
 ADRs are immutable historical records after acceptance. A new ADR supersedes an old one instead of rewriting history.

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/events/application.packet-preparation.requested.v1.json",
+  "title": "application.packet-preparation.requested.v1",
+  "type": "object",
+  "required": ["preparationId"],
+  "properties": {
+    "preparationId": { "type": "string", "format": "uuid" }
+  },
+  "additionalProperties": false
+}

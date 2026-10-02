@@ -10,6 +10,8 @@ const migrationVersions = [
   "0001_applications_foundation",
   "0002_candidate_rights",
   "0003_manual_submission",
+  "0004_packet_preparation",
+  "0005_preparation_dispatch",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -68,6 +70,9 @@ try {
          (to_regclass('applications.history') IS NOT NULL)::int +
          (to_regclass('applications.command_receipts') IS NOT NULL)::int +
          (to_regclass('applications.outbox') IS NOT NULL)::int +
+         (to_regclass('applications.packet_preparations') IS NOT NULL)::int +
+         (to_regclass('applications.preparation_outbox') IS NOT NULL)::int +
+         (to_regclass('applications.preparation_audit') IS NOT NULL)::int +
          (to_regclass('applications.schema_migrations') IS NOT NULL)::int)::int AS "relationCount",
         (SELECT count(*)::int FROM pg_trigger
           WHERE tgname IN (
@@ -77,12 +82,16 @@ try {
             'packets_candidate_delete_guard', 'approvals_candidate_delete_guard',
             'attempts_candidate_delete_guard', 'history_candidate_delete_guard',
             'command_receipts_candidate_delete_guard', 'outbox_candidate_delete_guard'
+            , 'packet_preparations_update_guard', 'packet_preparations_candidate_delete_guard',
+            'preparation_outbox_candidate_delete_guard', 'preparation_audit_candidate_delete_guard',
+            'preparation_audit_immutable', 'preparation_outbox_update_guard'
           ) AND NOT tgisinternal) AS "guardTriggerCount",
         (SELECT count(*)::int FROM pg_indexes
           WHERE schemaname = 'applications' AND indexname IN (
             'applications_owner_job_live_uq', 'applications_owner_updated_idx',
             'approvals_application_live_uq', 'attempts_scope_holding_uq', 'attempts_application_idx',
-            'history_owner_application_idx', 'outbox_pending_idx', 'outbox_processing_lease_idx'
+            'history_owner_application_idx', 'outbox_pending_idx', 'outbox_processing_lease_idx',
+            'preparation_outbox_dispatch_due_idx'
           )) AS "supportingIndexCount",
         (SELECT count(*)::int FROM applications.schema_migrations
           WHERE version = ANY(${migrationVersions as unknown as string[]})) AS "migrationCount",
@@ -115,9 +124,9 @@ try {
         ) AS "candidateDeletionGuardBodyCount"
     `;
     if (
-      verification?.relationCount !== 8 ||
-      verification.guardTriggerCount !== 14 ||
-      verification.supportingIndexCount !== 8 ||
+      verification?.relationCount !== 11 ||
+      verification.guardTriggerCount !== 20 ||
+      verification.supportingIndexCount !== 9 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.candidateRightsFunctionCount !== 3 ||
       verification.candidateRightsSecurityDefinerCount !== 2 ||

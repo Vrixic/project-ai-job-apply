@@ -11,6 +11,14 @@
     "./resume-tailoring": {
       "types": "./dist/src/resume-tailoring.d.ts",
       "default": "./dist/src/resume-tailoring.js"
+    },
+    "./cover-letter-provider": {
+      "types": "./dist/src/cover-letter-provider.d.ts",
+      "default": "./dist/src/cover-letter-provider.js"
+    },
+    "./cover-letter-runtime": {
+      "types": "./dist/src/cover-letter-runtime.d.ts",
+      "default": "./dist/src/cover-letter-runtime.js"
     }
   },
   "scripts": {
@@ -23,7 +31,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ai-job-apply/ai-sdk": "workspace:*",
     "@ai-job-apply/api-contracts": "workspace:*",
+    "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
     "@aws-sdk/client-lambda": "3.1133.0",

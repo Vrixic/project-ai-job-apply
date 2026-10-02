@@ -9,6 +9,7 @@ import {
   ApplicationsUnavailableError,
   ApprovalRefusedError,
   AttemptRefusedError,
+  PreparationNotFoundError,
 } from "@ai-job-apply/applications-service";
 import "reflect-metadata";
 import { createHash } from "node:crypto";
@@ -3738,6 +3739,34 @@ describe("Applications routes", () => {
     get: record("get", application),
     history: record("history", { entries: [], hasMore: false }),
     preparePacket: record("preparePacket", application),
+    prepareCoverLetter: record("prepareCoverLetter", {
+      id: attemptId,
+      applicationId,
+      state: "queued",
+      createdAt: now,
+      updatedAt: now,
+    } as const),
+    preparation: record("preparation", {
+      id: attemptId,
+      applicationId,
+      state: "succeeded",
+      result: { packetId: jobId, revision: 3 },
+      createdAt: now,
+      updatedAt: now,
+    } as const),
+    coverLetterPreview: record("coverLetterPreview", {
+      status: "no_cover_letter",
+      matchesPacket: false,
+    } as const),
+    coverLetterFile: record("coverLetterFile", {
+      format: "pdf",
+      mediaType: "application/pdf",
+      fileName: "cover-letter.pdf",
+      sha256: hash,
+      sizeBytes: 4,
+      contentSha256: hash,
+      contentBase64: "dGVzdA==",
+    } as const),
     approve: record("approve", application),
     reopen: record("reopen", application),
     cancel: record("cancel", application),
@@ -3775,6 +3804,240 @@ describe("Applications routes", () => {
 
   const token = (scope: string) => issuer.issue(owner, { scope });
   const key = "applications-route-key-0001";
+
+  it("accepts opted-in Prepare as 202 without falling through to synchronous packet creation", async () => {
+    const request = {
+      expectedRevision: 2,
+      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+    };
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/packets`,
+      headers: {
+        authorization: `Bearer ${await token("applications:write")}`,
+        "idempotency-key": key,
+      },
+      payload: request,
+    });
+    expect(response.statusCode).toBe(202);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({ id: attemptId, state: "queued" });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      method: "prepareCoverLetter",
+      args: [expect.any(String), applicationId, request, key],
+    });
+    calls.length = 0;
+    const synchronous = await app.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/packets`,
+      headers: {
+        authorization: `Bearer ${await token("applications:write")}`,
+        "idempotency-key": key,
+      },
+      payload: { expectedRevision: 2 },
+    });
+    expect(synchronous.statusCode).toBe(201);
+    expect(synchronous.json().id).toBe(applicationId);
+    expect(calls[0]?.method).toBe("preparePacket");
+  });
+
+  it("serves owner-scoped preparation status, preview and selected file with no-store", async () => {
+    const headers = { authorization: `Bearer ${await token("applications:read")}` };
+    for (const [suffix, method, result] of [
+      [
+        `packet-preparations/${attemptId}`,
+        "preparation",
+        { state: "succeeded", result: { packetId: jobId, revision: 3 } },
+      ],
+      ["cover-letter", "coverLetterPreview", { status: "no_cover_letter", matchesPacket: false }],
+      ["cover-letter/file?format=pdf", "coverLetterFile", { format: "pdf", contentSha256: hash }],
+    ] as const) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/applications/${applicationId}/${suffix}`,
+        headers,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.json()).toMatchObject(result);
+      expect(calls.at(-1)).toMatchObject({
+        method,
+        args: [
+          expect.any(String),
+          applicationId,
+          ...(method === "preparation" ? [attemptId] : method === "coverLetterFile" ? ["pdf"] : []),
+        ],
+      });
+    }
+  });
+
+  it("rejects unknown, repeated and missing cover-letter read inputs before service access", async () => {
+    const headers = { authorization: `Bearer ${await token("applications:read")}` };
+    for (const suffix of [
+      "cover-letter?owner=other",
+      "cover-letter/file",
+      "cover-letter/file?format=txt",
+      "cover-letter/file?format=pdf&format=docx",
+      "cover-letter/file?format=pdf&owner=other",
+      `packet-preparations/${attemptId}?debug=1`,
+      "packet-preparations/not-a-uuid",
+    ]) {
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/v1/applications/${applicationId}/${suffix}`,
+            headers,
+          })
+        ).statusCode,
+      ).toBe(400);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("requires applications read for cover-letter/status reads and write for opted-in Prepare", async () => {
+    for (const suffix of [
+      "cover-letter",
+      "cover-letter/file?format=pdf",
+      `packet-preparations/${attemptId}`,
+    ]) {
+      const url = `/v1/applications/${applicationId}/${suffix}`;
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url,
+            headers: { authorization: `Bearer ${await token("profile:read applications:write")}` },
+          })
+        ).statusCode,
+      ).toBe(403);
+    }
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/v1/applications/${applicationId}/packets`,
+          headers: {
+            authorization: `Bearer ${await token("applications:read")}`,
+            "idempotency-key": key,
+          },
+          payload: {
+            expectedRevision: 2,
+            coverLetter: {
+              disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            },
+          },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("rejects missing keys and non-affirmative or overridden disclosure before acceptance", async () => {
+    const headers = {
+      authorization: `Bearer ${await token("applications:write")}`,
+      "idempotency-key": key,
+    };
+    for (const coverLetter of [
+      {},
+      { disclosure: { noticeVersion: "old", acknowledged: true } },
+      { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: false } },
+      {
+        disclosure: {
+          noticeVersion: "openai-cover-letter.v1",
+          acknowledged: true,
+          approvedAt: now,
+        },
+      },
+      {
+        disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+        model: "other",
+      },
+    ]) {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/v1/applications/${applicationId}/packets`,
+            headers,
+            payload: { expectedRevision: 2, coverLetter },
+          })
+        ).statusCode,
+      ).toBe(400);
+    }
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/v1/applications/${applicationId}/packets`,
+          headers: { authorization: headers.authorization },
+          payload: {
+            expectedRevision: 2,
+            coverLetter: {
+              disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            },
+          },
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("maps a foreign or missing preparation to the same non-reflecting owner failure", async () => {
+    failure = new PreparationNotFoundError();
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/applications/${applicationId}/packet-preparations/${attemptId}`,
+      headers: { authorization: `Bearer ${await token("applications:read")}` },
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: "application_not_found" });
+    expect(response.body).not.toContain(attemptId);
+  });
+
+  it("fails all new endpoints closed when Applications is unavailable", async () => {
+    const setup = await createApp();
+    try {
+      const read = {
+        authorization: `Bearer ${await setup.issuer.issue(owner, { scope: "applications:read" })}`,
+      };
+      for (const suffix of [
+        "cover-letter",
+        "cover-letter/file?format=pdf",
+        `packet-preparations/${attemptId}`,
+      ]) {
+        expect(
+          (
+            await setup.app.inject({
+              method: "GET",
+              url: `/v1/applications/${applicationId}/${suffix}`,
+              headers: read,
+            })
+          ).statusCode,
+        ).toBe(503);
+      }
+      const response = await setup.app.inject({
+        method: "POST",
+        url: `/v1/applications/${applicationId}/packets`,
+        headers: {
+          authorization: `Bearer ${await setup.issuer.issue(owner, { scope: "applications:write" })}`,
+          "idempotency-key": key,
+        },
+        payload: {
+          expectedRevision: 2,
+          coverLetter: {
+            disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+          },
+        },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({ code: "applications_unavailable" });
+    } finally {
+      await setup.app.close();
+    }
+  });
 
   it("requires the exact applications scope and rejects a profile or jobs scope", async () => {
     for (const wrong of ["profile:read profile:write", "jobs:read jobs:write"]) {

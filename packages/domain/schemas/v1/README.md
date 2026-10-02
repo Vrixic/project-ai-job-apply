@@ -20,6 +20,12 @@ hiring outcomes or internal identifiers), but deliberately
 excludes OIDC subjects, access/refresh tokens, database-only ownership identifiers, object-store
 keys/versions, raw resume bytes, provider credentials, and unrestricted audit metadata.
 
+The optional `documents.coverLetters` section adds Documents-owned pending/ready draft metadata:
+public document/application identities, version, job/evidence content hashes, model/prompt
+identity and creation time. Pending rows cannot carry readiness-only fields. It excludes raw
+text, prompts and object capabilities. Artifact-content export assembly remains in progress
+with D3-017; metadata validation alone is not full draft portability or runtime activation.
+
 The optional `profile.restrictedAnswers` section accepts the latest-version metadata projection
 from Profile migration `0010_restricted_answer_vault`, including active entries and deletion
 tombstones. It does not accept plaintext values, ciphertext, KMS identifiers, or provenance

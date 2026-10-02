@@ -111,8 +111,8 @@ if (
   [int]$boundary.OwnerCount -ne 7 -or
   (@($boundary.OwnerNames) -join ",") -cne "applications,billing,documents,jobs,matching,profile,trust" -or
   [int]$boundary.SchemaCount -ne 11 -or
-  [int]$boundary.RelationCount -ne 78 -or
-  [int]$boundary.MigrationCount -ne 52 -or
+  [int]$boundary.RelationCount -ne 83 -or
+  [int]$boundary.MigrationCount -ne 57 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."
@@ -156,12 +156,12 @@ Assert-Throws { Assert-D1RestoreContextBoundary (New-TestContext $d1Boundary) $b
   "Historical D1 restore context"
 
 # Prior release evidence remains valid only against its own exact source boundary.
-foreach ($priorMigrationCount in @(41, 42)) {
+foreach ($priorMigrationCount in @(41, 42, 52)) {
   $priorD2Boundary = [pscustomobject]@{
     ManifestId = [string]$boundary.ManifestId
     ManifestSha256 = if ($priorMigrationCount -eq 41) { ("3" * 64) -join "" } else { ("5" * 64) -join "" }
-    OwnerCount = 6
-    RelationCount = 68
+    OwnerCount = if ($priorMigrationCount -eq 52) { 7 } else { 6 }
+    RelationCount = if ($priorMigrationCount -eq 52) { 78 } else { 68 }
     MigrationCount = $priorMigrationCount
   }
   $priorD2Event = [ordered]@{
@@ -178,9 +178,9 @@ foreach ($priorMigrationCount in @(41, 42)) {
   $null = ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $priorD2Boundary "historical"
   Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $priorD2Boundary
   Assert-Throws { ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $boundary "current" } `
-    "Prior $priorMigrationCount-migration D2 aggregate used as current 52-migration evidence"
+    "Prior $priorMigrationCount-migration D2 aggregate used as current 57-migration evidence"
   Assert-Throws { Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $boundary } `
-    "Prior $priorMigrationCount-migration D2 restore context used as current 52-migration evidence"
+    "Prior $priorMigrationCount-migration D2 restore context used as current 57-migration evidence"
 }
 
 foreach ($mutation in @(

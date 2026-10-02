@@ -1,5 +1,6 @@
 import type { ProfileFact } from "@ai-job-apply/api-contracts";
 import {
+  type ApplicationCoverLetters,
   type ApplicationJobGate,
   type ApplicationRecord,
   type ApplicationsApi,
@@ -23,6 +24,7 @@ import {
 } from "@ai-job-apply/documents-service";
 import type { GraphFact } from "@ai-job-apply/domain";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
+import { profileFactToGraphFact } from "@ai-job-apply/profile-service";
 import type postgres from "postgres";
 import type { ResumeTailoringClient } from "./resume-tailoring-client.js";
 
@@ -32,6 +34,10 @@ export interface ApplicationsRuntimeOptions {
   profile: { listProfileFacts(userId: string): Promise<{ facts: ProfileFact[] }> };
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
   tailoring?: ResumeTailoringClient;
+  /** Owned Documents context/read port only; no live provider is composed inside the Gateway. */
+  coverLetters?: ApplicationCoverLetters;
+  /** Default false. Enable only with compatible migrations and the owned dispatch/recovery runtime. */
+  coverLetterPreparationEnabled?: boolean;
   catalog: Pick<JobCatalogReader, "resolveActiveJobSummaries" | "getActiveJob">;
   definitions: ReadonlyMap<string, FieldDefinition>;
   clock?: () => Date;
@@ -39,20 +45,7 @@ export interface ApplicationsRuntimeOptions {
 }
 
 export function toGraphFact(fact: ProfileFact): GraphFact {
-  return {
-    id: fact.id,
-    kind: fact.kind,
-    key: fact.key,
-    value: fact.value,
-    verification: fact.verification,
-    sensitivity: fact.sensitivity,
-    source: { type: fact.source.type, reference: fact.source.reference },
-    ...(fact.evidence ? { evidence: { supportingSpans: fact.evidence.supportingSpans } } : {}),
-    ...(fact.availability ? { availability: fact.availability } : {}),
-    ...(fact.effectiveFrom ? { effectiveFrom: fact.effectiveFrom } : {}),
-    ...(fact.effectiveTo ? { effectiveTo: fact.effectiveTo } : {}),
-    version: fact.version,
-  } as GraphFact;
+  return profileFactToGraphFact(fact);
 }
 
 /** Field definitions from `data/taxonomies/application-fields.v1.json`. */
@@ -71,6 +64,9 @@ export function loadFieldDefinitions(taxonomy: {
  */
 export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): ApplicationsApi {
   const clock = options.clock ?? (() => new Date());
+  const store = new PostgresApplicationStore(options.client, clock, {
+    definitions: options.definitions,
+  });
 
   async function jobRevision(jobId: string, at: Date): Promise<string> {
     const resolved = await options.catalog.resolveActiveJobSummaries([jobId], at);
@@ -187,11 +183,28 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
 
   const bindings: LiveBindingsSource = {
     async resolve({ ownerUserId, application, formHash }): Promise<CurrentBindings> {
+      const view = await store.getApplication(ownerUserId, application.id);
+      const packetLetterHash = view.currentPacket?.artifactHashes.coverLetter;
+      let coverLetterHash: string | undefined;
+      if (packetLetterHash) {
+        if (!options.coverLetters) throw new ApplicationsUnavailableError();
+        try {
+          coverLetterHash = await options.coverLetters.binding(
+            ownerUserId,
+            application.id,
+            packetLetterHash,
+          );
+        } catch {
+          // An unreachable Documents/evidence owner is not proof the artifact changed.
+          throw new ApplicationsUnavailableError();
+        }
+      }
       const resume = (await artifacts(ownerUserId, application.canonicalJobId)).resume;
       return {
         jobRevision: await jobRevision(application.canonicalJobId, clock()),
         formHash,
         ...(resume ? { resumeHash: resume } : {}),
+        ...(coverLetterHash ? { coverLetterHash } : {}),
       };
     },
   };
@@ -206,13 +219,13 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
   });
 
   return new ApplicationsService({
-    store: new PostgresApplicationStore(options.client, clock, {
-      definitions: options.definitions,
-    }),
+    store,
+    ...(options.coverLetterPreparationEnabled === true ? { preparations: store } : {}),
     packets,
     bindings,
     jobs,
     resumes,
+    ...(options.coverLetters ? { coverLetters: options.coverLetters } : {}),
     ...(options.metrics ? { metrics: options.metrics } : {}),
     clock,
   });

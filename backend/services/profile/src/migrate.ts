@@ -19,6 +19,7 @@ const migrationVersions = [
   "0008_ugc_contribution_consents",
   "0009_ugc_contribution_consent_candidate_rights",
   "0010_restricted_answer_vault",
+  "0011_active_candidate_lease",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {

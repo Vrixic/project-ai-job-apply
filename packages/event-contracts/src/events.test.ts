@@ -10,6 +10,21 @@ import {
 } from "./index.js";
 
 describe("event schemas", () => {
+  it("accepts only an opaque preparation identifier for generation dispatch", () => {
+    const preparationId = "019b4e12-7ea3-7c36-9357-aea35ab542ca";
+    expect(
+      validateEventData(eventTypes.applicationPacketPreparationRequested, { preparationId }),
+    ).toBe(true);
+    for (const field of ["ownerUserId", "paragraphs", "prompt", "userEntries", "disclosure"]) {
+      expect(
+        validateEventData(eventTypes.applicationPacketPreparationRequested, {
+          preparationId,
+          [field]: "synthetic candidate data",
+        }),
+      ).toBe(false);
+    }
+    expect(validateEventData(eventTypes.applicationPacketPreparationRequested, {})).toBe(false);
+  });
   it("accepts only an identifier-only queued job contribution event", () => {
     const contributionId = "019b4e12-7ea3-7c36-9357-aea35ab542ca";
     expect(validateEventData(eventTypes.jobContributed, { contributionId })).toBe(true);

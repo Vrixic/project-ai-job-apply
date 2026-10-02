@@ -182,9 +182,15 @@ importers:
 
   backend/services/documents:
     dependencies:
+      '@ai-job-apply/ai-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/ai-sdk
       '@ai-job-apply/api-contracts':
         specifier: workspace:*
         version: link:../../../packages/api-contracts
+      '@ai-job-apply/domain':
+        specifier: workspace:*
+        version: link:../../../packages/domain
       '@ai-job-apply/event-contracts':
         specifier: workspace:*
         version: link:../../../packages/event-contracts
@@ -325,12 +331,18 @@ importers:
 
   backend/workflows:
     dependencies:
+      '@ai-job-apply/ai-sdk':
+        specifier: workspace:*
+        version: link:../../packages/ai-sdk
       '@ai-job-apply/applications-service':
         specifier: workspace:*
         version: link:../services/applications
       '@ai-job-apply/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@ai-job-apply/documents-service':
+        specifier: workspace:*
+        version: link:../services/documents
       '@ai-job-apply/domain':
         specifier: workspace:*
         version: link:../../packages/domain

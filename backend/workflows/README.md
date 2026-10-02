@@ -72,7 +72,82 @@ I/O, produces no catalog rows, and has no EventBridge, SQS, API, or resource-bas
 reachable only through an explicitly authorized direct IAM invocation of an exact numeric durable
 version while the guarded acceptance operator proves every normal/provider gate remains off.
 
+## D3 requested cover-letter preparation (local implementation)
+
+`application-preparation-evidence.ts` supplies a default-off private owner-read composition:
+active-candidate lease, owned application binding, active Jobs posting and Profile facts. Restricted
+facts are excluded; Profile's shared graph projection snapshots values/provenance without audit
+timestamps. The full posting is snapshotted for context hashing, while AI SDK bounds the prompt.
+It rechecks the kill switch and posting expiry before returning, and failures reveal no private
+owner diagnostics. Twenty-one offline cases and three real PostgreSQL cases verify ownership,
+quarantine, freshness and minimization. The integration uses each owner's supported database client
+and a separate lease pool, all capped at one connection, avoiding codec mismatch and nested-pool
+deadlock. Authentication is simulated; no S3/provider or deployed read evidence is claimed.
+The source factory is not composed into a production handler yet; privacy/runtime gates remain.
+
+Candidate document cleanup now refuses inventoried cover-letter reservations without an injected
+private writer/provider quiescence authority, including pending SQL rows with empty S3 prefixes.
+Observed generation slots/final draft keys also require positive proof before prefix cleanup.
+Missing/false/malformed/failed/stalled proof returns a fixed error, never inferred success from
+local cancellation or elapsed time. The source runtime supplies no proof port yet, so generation
+cleanup is default-denied; ordinary resume-only cleanup is unchanged. Eight new offline gate tests
+and six connected synthetic PostgreSQL cases pass with an explicit test-only confirmation port.
+The persisted authority/drain, retention and reviewed IAM/runtime remain required before activation.
+
+`application-preparation-durable.ts` supplies an identifier-only durable factory, an exact
+numeric private activity target, named five-attempt retries and bounded failure compensation.
+The private activity projects fixed outcomes; it never returns candidate text. A completed
+workflow means processing finished, not that generation succeeded: the Applications-owned
+preparation operation is authoritative. Failed compensation still needs independently bound
+terminal reconciliation.
+
+The 18 SDK unit tests cover replay, bounded retries, compensation and strict payload contracts.
+Six real PostgreSQL integration tests connect atomic acceptance, the Documents generator,
+grounding, verified PDF/DOCX, immutable draft recovery and mandatory-review packet finalization.
+They use synthetic owner evidence, an offline model and in-memory object transport, not live
+Profile/Jobs APIs, S3 or OpenAI. Connected tests retain native timers because SDK skipped time
+also replaces PostgreSQL pool deadlines. Fixture cleanup uses the owner privacy boundaries,
+including when fixture preparation fails.
+
+`application-preparation-dispatch.ts` adds the source-only owned starter; its injected AWS
+adapter invokes the stored numeric version with canonical identifier-only bytes and a ten-second
+abort signal. Twelve offline tests verify strict inputs, owner-event identity, version pinning,
+ambiguous-start retries, exact receipts and fixed errors. Real Applications PostgreSQL tests
+verify the underlying leased claims and terminal settlement. No SDK client is bootstrapped here.
+
+`application-preparation-recovery.ts` supplies bounded reconciliation and terminal handlers.
+New dispatch defaults off while accepted-work recovery continues. Fair sixty-second PostgreSQL
+claims prevent duplicate/oldest-row starvation. Status reads explicitly disable execution data;
+strict terminal envelopes are nudges, independently confirmed by AWS metadata before settlement.
+The injected SDK/SQS ports use ten-second abort signals; reconciliation stops issuing additional
+AWS reads or queue sends after fifty seconds. Thirty-one recovery/SQS/SDK tests are offline. Two additional connected
+PostgreSQL cases verify lost-ACK recovery without another model execution and duplicate terminal
+settlement with one audit. No SDK clients or environment handlers are bootstrapped here.
+
+These factories are not a deployed or complete runtime. Cloud bootstrap/artifacts, dispatch
+scheduling/SQS mappings, terminal composition and production provider/read ports remain unfinished. Under
+[ADR-016](../../docs/adr/016-scale-to-zero-application-runtime.md), the private database activity
+must use an isolated provider port: no direct internet model call or provider credential in the
+database runtime. Provider activity must receive minimum owned object references outside the VPC
+and have no database credentials. All activation and accountable review gates remain separate.
+
 ## D2 isolated deletion recovery
+
+The source-only D3 cover-letter extension of `candidate-rights-aws.ts` fences observed fixed
+generation request/dispatch/result slots with current delete markers before permanent historical
+deletion. The fence identity must be current, older versions/markers must be proven gone, then
+the fences can be removed and full prefix absence checked. Exact account inventory cleanup
+cannot bypass this ordering. Errors leave current fences for a safe retry; ordinary resume
+keys keep their existing path. Eleven offline versioned-S3 tests probe conditional late writes
+after every permanent removal, multi-page/multi-batch history, failed acknowledgements, missing
+fences, surviving history, retries, foreign-owner preservation and forbidden late creation.
+Six connected synthetic PostgreSQL deletion/restore cases pass, including row/quarantine retention
+on incomplete fenced cleanup and successful retry, using offline object transport.
+
+This is not deployed. [Proposed ADR-037](../../docs/adr/037-precreated-cover-letter-provider-slots.md)
+requires separately reviewed marker-creation IAM (`s3:DeleteObject`, absent from the current
+documents maintenance grant), provider creation prohibition, remote-dispatch quiescence and
+transient retention. No Terraform or guard edit, permission apply or provider activation is included.
 
 Account deletion's document-object activity removes recorded exact keys and every version and
 delete marker under the owned document IDs' `quarantine/<id>/` and `normalized/<id>/` prefixes.

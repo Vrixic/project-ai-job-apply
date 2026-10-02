@@ -4,7 +4,7 @@
 - Start: 2026-08-11
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-08-31
+- Last updated: 2026-10-02
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d1--useful-web-product-and-canonical-job-catalog)
 
 ## Objective
@@ -732,7 +732,19 @@ crawler policy only after those gates pass.
 | 2026-08-11 | Started D1 with a synthetic-only canonical catalog slice. Corrected the pre-release lifecycle contract, implemented deterministic identity precedence and non-automatic fuzzy review, created the job-owned PostgreSQL schema/checksum migration and fail-fast multi-owner migration image, default-denied unapproved provenance, and locally proved exact/concurrent replay, probable separation, repeated-failure transitions, terminal blocking, expiry, and raw-content tombstoning. | D1-004 | [Canonical catalog foundation](evidence/d1-canonical-job-foundation-2026-08-11.md) |
 | 2026-07-28 | Assigned source-specific and real-candidate-data approval to D1 without starting implementation. | D1-011 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 
+| 2026-10-02 | Hosted dependency audit on main and backend draft #506 fails on the newly published, unpatched high-severity mobile `node-forge` advisory. No exception or frontend change is authorized by this backend checkpoint. Inherited Semgrep findings remain. Owner-approved strict restore inventory/cache correction passes 40 uncached migration cases and the local 57-migration/83-relation logical backup/restore drill. Current-source hosted checks, dependency remediation/disposition and existing accountable gates remain required; D1 stays In progress. | D1-010A | [Registry advisory](https://github.com/advisories/GHSA-86w9-cpqp-85rv), [strict restore tests](../../../backend/services/database-migrations/src/restore-verifier.test.ts), [recovery harness](../../../scripts/tests/d2-recovery/run.mjs) |
+
 ## Decisions and scope changes
+
+2026-10-02 current hosted CI remains a completion gate. Main `1f376b6` quality passes, but its
+dependency audit fails on the new high-severity, unpatched mobile `node-forge`
+[advisory](https://github.com/advisories/GHSA-86w9-cpqp-85rv); inherited Semgrep findings also remain.
+Backend draft #506 additionally exposed stale 52-migration/78-relation restore assumptions,
+missed locally by a cached test. Owner approved exact 57/83 inventory/strict guard/cache-input
+updates; uncached tests and logical backup/restore now verify that source boundary. No audit/scan
+exceptions, frontend edits, Terraform or deployment. Production exploitability is not established
+by the development dependency audit; remediation and accountable disposition still need evidence.
+D1 remains In progress and no prior private acceptance or manual Apply test is reopened.
 
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
