@@ -68,6 +68,18 @@ with offline versioned S3 and a fake model. Private result grounding/rendering r
 authorization/quiescence, retention and production runtime/IAM remain unfinished; do not compose
 or activate this factory yet.
 
+`src/cover-letter-provider-recovery.ts` is a private read-only recovery primitive. It accepts
+SQL-owned reservation metadata and current owned evidence, reconstructs and compares the exact
+prompt, verifies version/digest/size and document/request bindings, and requires matching original
+authorized dispatch time and model provenance before pure grounding. An original ready result can
+be grounded after disclosure expiry without renewing consent or calling a provider. Missing or
+pending results return no draft; changed bindings, corruption and malformed transport fail with a
+fixed content-free error, while unsupported model claims are withheld by the shared evaluator.
+Twenty-three offline cases pass. The primitive has no object creation, transition, database,
+model or rendering capability. Invocation initialization and service-level partial-result
+finalization/rendering are still unfinished; the existing generation service is not wired to this
+reader. Documents now passes 295 unit cases; historical PostgreSQL evidence is unchanged.
+
 `src/cover-letter.ts` validates a grounded, review-required draft, binds its text/provenance and
 job/evidence context to an immutable content hash, and renders packet-bound PDF/DOCX with
 production-parser verification. `src/cover-letter-store.ts` reserves an exact object key before

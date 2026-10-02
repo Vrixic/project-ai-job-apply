@@ -56,8 +56,13 @@ so the private caller can retry recovery without prematurely recording terminal 
 Duplicates can recover an original ready result after consent expiry, but must verify the original
 dispatch time, request binding and provenance. A claimed pending slot never grants another call.
 Twenty-five handler tests compose real object transport with offline S3 and a fake model.
-The private caller's partial-result grounding/rendering recovery and production handler bootstrap
-remain unfinished. The local handling deadline is not a privacy-quiescence protocol.
+The private read-only recovery primitive now verifies SQL-owned reservation identity, encrypted
+request/result bindings, the freshly reconstructed prompt and original authorized dispatch time
+before shared pure grounding. Twenty-three offline cases cover expired-original recovery,
+missing/pending slots, changed evidence/ownership, corruption and unsupported claims. It has no
+provider or write capability. Service-level partial-result finalization/rendering and production
+handler bootstrap remain unfinished. The local handling deadline is not a privacy-quiescence
+protocol.
 
 The maintenance role currently declares document `s3:DeleteObjectVersion`, not the
 `s3:DeleteObject` authority required to create a delete marker. A narrowly scoped IAM/boundary

@@ -30,6 +30,14 @@ are preserved. Three offline regressions cover this request-specific citation bo
 
 ## OpenAI development adapter
 
+`prepareCoverLetterPrompt` reconstructs the exact selected-evidence prompt without a gateway.
+`groundCoverLetterOutput` evaluates an already obtained structured value using the same evaluator
+as ordinary cover-letter and narrative generation. It requires no provider or renewed disclosure,
+but is not dispatch authorization: private callers must verify saved request/result integrity,
+original consent and model provenance separately. Fourteen offline cases prove parity with the
+existing generation path, withheld unsupported output, selection bounds and unusable evidence.
+The AI SDK now passes 81 unit tests. These helpers alone do not finalize a recovered draft.
+
 `OpenAiLunaProvider` implements the existing provider port with native fetch and the fixed
 OpenAI Responses endpoint/model `gpt-6-luna`. Compose it through `ModelGateway` and the grounded
 generation functions, never directly from a client or service. Both the provider and gateway

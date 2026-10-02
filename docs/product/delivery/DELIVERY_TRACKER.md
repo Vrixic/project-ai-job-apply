@@ -9,6 +9,17 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 follow-up separates pure prompt construction/grounding from provider access and adds
+a private read-only encrypted-result recovery primitive. The AI SDK passes 81 cases, including
+14 parity/boundary cases; 23 Documents recovery cases verify original dispatch authorization,
+exact owned prompt/context, integrity and withholding of unsupported claims. The reader is
+not yet wired into service-level partial-result rendering/finalization. Checkpoint `0a9cd29`
+preserves preceding backend work locally; no PR or deployment is implied. D1/D3 remain In progress.
+The current full verifier stops at the D2 runtime migration boundary: it reads committed HEAD
+and accepts 48/49 migrations, whereas checkpoint HEAD includes 51. No guard edit or bypass is
+included. Independent repo typecheck, formatting (931 files) and baseline lint
+(15 warnings/58 infos) pass; complete test/build results are recorded in the phase work log.
+
 October 2 D3-017 adds a source-only isolated provider handler with a frozen transition-only
 object capability and no creation method. A positive conditional dispatch receipt precedes one
 ModelGateway call; original consent and approved model identity are rechecked before disclosure.

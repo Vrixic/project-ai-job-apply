@@ -55,6 +55,19 @@ export interface GenerationDependencies {
   disclosure: DataDisclosureApproval | undefined;
 }
 
+/** Owner evidence required to prepare or ground a draft without provider access. */
+export type CoverLetterGroundingContext = Pick<GenerationDependencies, "facts" | "now" | "job">;
+
+/** Returns the exact disclosed prompt, or null when no confirmed career evidence is usable. */
+export function prepareCoverLetterPrompt(input: CoverLetterGroundingContext): {
+  system: string;
+  user: string;
+} | null {
+  const graph = FactGraph.build(input.facts, input.now);
+  const selected = selectPromptFacts(graph, input.facts);
+  return selected.length > 0 ? renderCoverLetterPrompt(selected, input.job) : null;
+}
+
 function selectPromptFacts(graph: FactGraph, facts: readonly GraphFact[]): PromptFact[] {
   const usable = facts
     .map((fact) => graph.get(fact.id))
@@ -146,6 +159,27 @@ async function run(
     }
     throw error;
   }
+  return groundOutput(base, dependencies, graph, promptFacts, output);
+}
+
+function groundOutput(
+  base: Pick<GenerationResult, "purpose" | "promptVersion" | "reviewRequired">,
+  context: CoverLetterGroundingContext,
+  graph: FactGraph,
+  promptFacts: readonly PromptFact[],
+  output: { value: unknown; model: ModelIdentity },
+): GenerationResult {
+  if (promptFacts.length === 0) {
+    return {
+      ...base,
+      status: "refused",
+      reason: "no_confirmed_evidence",
+      paragraphs: [],
+      findings: [],
+      sourceFactIds: [],
+      confidence: 0,
+    };
+  }
   const parsed = parseParagraphs(output.value, DEFAULT_LIMITS);
   const selectedIds = new Set(promptFacts.map((fact) => fact.id));
   const excludedCitations: GroundingFinding[] = parsed.paragraphs.flatMap((paragraph, index) =>
@@ -156,7 +190,7 @@ async function run(
   const findings = [
     ...parsed.findings,
     ...checkParagraphs(parsed.paragraphs, graph, {
-      jobTerms: [dependencies.job.company, dependencies.job.title],
+      jobTerms: [context.job.company, context.job.title],
     }),
     // A known usable fact still cannot be cited unless this exact request disclosed it.
     // Keep the existing unknown/unusable diagnostics for truly unknown or unusable evidence.
@@ -177,6 +211,29 @@ async function run(
     sourceFactIds: findings.length === 0 ? cited : [],
     confidence: findings.length === 0 ? confidence : 0,
   };
+}
+
+/**
+ * Grounds an already obtained result without a gateway, disclosure renewal, or provider call.
+ * The caller must independently verify saved request identity, original dispatch authorization,
+ * model identity, and encrypted result integrity before passing output to this pure evaluator.
+ */
+export function groundCoverLetterOutput(
+  context: CoverLetterGroundingContext,
+  output: { value: unknown; model: ModelIdentity },
+): GenerationResult {
+  const graph = FactGraph.build(context.facts, context.now);
+  return groundOutput(
+    {
+      purpose: "cover_letter",
+      promptVersion: PROMPT_VERSIONS.coverLetter,
+      reviewRequired: true,
+    },
+    context,
+    graph,
+    selectPromptFacts(graph, context.facts),
+    output,
+  );
 }
 
 export function generateCoverLetter(

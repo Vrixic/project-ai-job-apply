@@ -110,6 +110,14 @@ late completion after a local deadline. Private partial-result grounding/renderi
 authorization/quiescence/retention composition are unfinished; these tests are not live-provider
 or deployed privacy proof. Neither factory flags nor caller cancellation authorize activation.
 
+The private recovery reader now checks owner-scoped SQL reservation metadata and freshly owned
+evidence against the exact saved prompt, pinned encrypted references, original authorized dispatch
+time and result/model binding before shared grounding. It has only find/read capabilities and no
+model, write or dispatch port. Original results may be grounded after consent expiry without
+renewal; missing/pending results do not grant another call. Twenty-three offline cases are not
+service-level parser/finalization, quarantine/quiescence or deployed privacy evidence. The existing
+generation service is not yet wired to this reader; all activation prerequisites above remain.
+
 ## Phase 0 preference flow
 
 - JWT subject and issuer resolve to an internal UUID; provider subjects never become public IDs.
