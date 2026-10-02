@@ -81,6 +81,16 @@ export class PostgresCoverLetterWorkStore {
       consentExpiresAt: Date;
     },
   ): Promise<{ kind: "issued" | "already_issued"; authorization: CoverLetterWorkAuthorization }> {
+    return this.issueBound(input);
+  }
+
+  private async issueBound(
+    input: Omit<CoverLetterWorkReference, "id"> & {
+      ownerUserId: string;
+      consentExpiresAt: Date;
+    },
+    requireSettledSlots = false,
+  ): Promise<{ kind: "issued" | "already_issued"; authorization: CoverLetterWorkAuthorization }> {
     return this.guarded(async () => {
       const binding = structuredClone(input);
       if (
@@ -94,6 +104,16 @@ export class PostgresCoverLetterWorkStore {
         const owned = await sql`SELECT id FROM documents.cover_letters
           WHERE id = ${binding.documentId} AND user_id = ${binding.ownerUserId} FOR UPDATE`;
         if (!owned[0] || !this.enabled()) throw Error();
+        if (requireSettledSlots) {
+          const slots = await find(sql, binding.documentId, "private_slots");
+          if (
+            slots?.state !== "settled" ||
+            slots.ownerUserId !== binding.ownerUserId ||
+            slots.requestSha256 !== binding.requestSha256 ||
+            slots.consentExpiresAt.getTime() !== binding.consentExpiresAt.getTime()
+          )
+            throw Error();
+        }
         const prior = await find(sql, binding.documentId, binding.purpose);
         if (prior) {
           if (
@@ -129,6 +149,28 @@ export class PostgresCoverLetterWorkStore {
           authorization: row,
         };
       });
+    });
+  }
+
+  /** Only a fresh committed grant permits one private Invoke. Replay grants nothing. */
+  async issueProviderDispatch(input: {
+    ownerUserId: string;
+    documentId: string;
+    requestSha256: string;
+    consentExpiresAt: Date;
+  }): Promise<{ kind: "issued"; reference: CoverLetterWorkReference } | { kind: "unavailable" }> {
+    return this.guarded(async () => {
+      const issued = await this.issueBound({ ...input, purpose: "provider_dispatch" }, true);
+      if (issued.kind !== "issued") return { kind: "unavailable" } as const;
+      return {
+        kind: "issued" as const,
+        reference: {
+          id: issued.authorization.id,
+          documentId: issued.authorization.documentId,
+          purpose: "provider_dispatch",
+          requestSha256: issued.authorization.requestSha256,
+        },
+      };
     });
   }
 

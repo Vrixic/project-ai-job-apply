@@ -123,6 +123,83 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
 
   const providerBinding = () => ({ documentId, requestSha256, consentExpiresAt });
 
+  const privateProviderBinding = () => ({ ownerUserId, ...providerBinding() });
+  async function settledSlots() {
+    const slots = (await issue("private_slots")).authorization;
+    expect((await work.claim(slots)).kind).toBe("claimed");
+    await work.recordSettled(slots);
+    return slots;
+  }
+
+  it.each(["missing", "issued", "running", "revoked"])(
+    "refuses private provider issuance while original slots are %s",
+    async (state) => {
+      if (state !== "missing") {
+        const slots = (await issue()).authorization;
+        if (state === "running") await work.claim(slots);
+        if (state === "revoked") await work.revokeUnclaimed(ownerUserId, documentId);
+      }
+      await expect(work.issueProviderDispatch(privateProviderBinding())).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
+      const rows = await sql`SELECT state FROM documents.cover_letter_work_authorizations
+        WHERE document_id = ${documentId} AND purpose = 'provider_dispatch'`;
+      expect(rows).toEqual(state === "revoked" ? [{ state: "revoked" }] : []);
+    },
+  );
+  it("allows one private Invoke grant across concurrent issuance, preserving original binding and timestamps", async () => {
+    await settledSlots();
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () => work.issueProviderDispatch(privateProviderBinding())),
+    );
+    expect(results.filter((result) => result.kind === "issued")).toHaveLength(1);
+    const original = (await issue("provider_dispatch")).authorization;
+    expect(results.find((result) => result.kind === "issued")).toEqual({
+      kind: "issued",
+      reference: {
+        id: original.id,
+        documentId,
+        purpose: "provider_dispatch",
+        requestSha256,
+      },
+    });
+    expect(await work.issueProviderDispatch(privateProviderBinding())).toEqual({
+      kind: "unavailable",
+    });
+    expect((await issue("provider_dispatch")).authorization).toEqual(original);
+    expect((await work.claimProviderDispatch(providerBinding())).kind).toBe("claimed");
+    expect(await work.issueProviderDispatch(privateProviderBinding())).toEqual({
+      kind: "unavailable",
+    });
+    await work.settleProviderDispatch(original);
+    expect(await work.issueProviderDispatch(privateProviderBinding())).toEqual({
+      kind: "unavailable",
+    });
+  });
+  it.each(["owner", "document", "hash", "consent", "quarantine", "cancel"])(
+    "refuses private provider issuance with %s mismatch/fence",
+    async (kind) => {
+      await settledSlots();
+      const binding = privateProviderBinding();
+      if (kind === "owner") binding.ownerUserId = uuidv7();
+      if (kind === "document") binding.documentId = uuidv7();
+      if (kind === "hash") binding.requestSha256 = "f".repeat(64);
+      if (kind === "consent") binding.consentExpiresAt = new Date(consentExpiresAt.getTime() + 1);
+      if (kind === "quarantine")
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
+      if (kind === "cancel") await work.revokeUnclaimed(ownerUserId, documentId);
+      if (kind === "cancel")
+        expect(await work.issueProviderDispatch(binding)).toEqual({ kind: "unavailable" });
+      else
+        await expect(work.issueProviderDispatch(binding)).rejects.toThrow(
+          /^CoverLetterWorkUnavailable$/u,
+        );
+      const rows = await sql`SELECT state FROM documents.cover_letter_work_authorizations
+        WHERE document_id = ${documentId} AND purpose = 'provider_dispatch'`;
+      expect(rows).toEqual(kind === "cancel" ? [{ state: "revoked" }] : []);
+    },
+  );
+
   async function settledProvider() {
     const provider = (await issue("provider_dispatch")).authorization;
     expect((await work.claim(provider)).kind).toBe("claimed");

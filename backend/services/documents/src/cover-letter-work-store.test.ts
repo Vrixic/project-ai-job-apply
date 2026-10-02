@@ -15,6 +15,7 @@ const consentExpiresAt = new Date("2026-10-02T12:00:00Z");
 describe("private generation work control fails closed before database access", () => {
   it.each([
     "issue",
+    "issueProviderDispatch",
     "claim",
     "claimProviderDispatch",
     "claimFinalDocument",
@@ -26,8 +27,8 @@ describe("private generation work control fails closed before database access", 
     const sql = vi.fn();
     const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql);
     const result =
-      method === "issue"
-        ? store.issue({ ...ref, ownerUserId: owner, consentExpiresAt })
+      method === "issue" || method === "issueProviderDispatch"
+        ? store[method]({ ...ref, ownerUserId: owner, consentExpiresAt })
         : method === "claim"
           ? store.claim(ref)
           : method === "claimProviderDispatch"
@@ -101,6 +102,27 @@ describe("private generation work control fails closed before database access", 
         input.purpose = "synthetic-private-diagnostic" as typeof input.purpose;
       if (kind === "time") input.consentExpiresAt = new Date("invalid");
       await expect(store.issue(input)).rejects.toThrow(/^CoverLetterWorkUnavailable$/u);
+      expect(sql).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["owner", "document", "hash", "time"])(
+    "rejects malformed private provider issuance %s before SQL",
+    async (kind) => {
+      const sql = vi.fn();
+      const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql, () => true);
+      const input = {
+        ownerUserId: owner,
+        documentId,
+        requestSha256: ref.requestSha256,
+        consentExpiresAt,
+      };
+      if (kind === "owner") input.ownerUserId = "invalid";
+      if (kind === "document") input.documentId = "invalid";
+      if (kind === "hash") input.requestSha256 = "invalid";
+      if (kind === "time") input.consentExpiresAt = new Date("invalid");
+      await expect(store.issueProviderDispatch(input)).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
       expect(sql).not.toHaveBeenCalled();
     },
   );

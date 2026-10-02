@@ -9,6 +9,22 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 private cover-letter preparation now connects initialization, one original provider grant,
+one Invoke and owned recovery/finalization. Fixed-purpose issuance requires settled original slot
+work with exact owner/request/consent binding under lock. Replay, ambiguous acknowledgements,
+cancellation and kill switches cannot renew grants or settle unresolved work. Original ready
+recovery remains possible after consent expiry. Documents passes 521 unit and 110 real PostgreSQL
+cases, including five connected initializer/control/isolated-provider/final-writer cases without
+seeded provider settlement. Model/object/Lambda ports are synthetic, not deployed RPC/IAM or
+remote-stopped evidence. The full maintained verifier passes: regenerated contracts with no diff,
+synthetic operator/receipt guards, formatting (948 files), baseline lint (15 warnings/58 infos),
+all 38 typecheck tasks, dependency security, repo tests, all 23 builds (20 cached), Compose and scope.
+Six new evidence links and whitespace checks pass. The exact disposable database and
+container are removed; Docker Desktop and WSL stopped, shared volumes retained. No frontend/public
+API, migration, guard/Terraform, live cloud/model call, deployment or activation. Runtime/RPC/IAM,
+trusted failed-call settlement, retention/read/export/restore and external acceptance remain open;
+D1/D3 remain In progress.
+
 October 2 final-document completion now requires the original ledger claim before any new PUT.
 Admission derives immutable request/consent from the settled provider phase and cannot renew or
 steal existing authority. Exact pinned readback plus positive original creation may settle; missing

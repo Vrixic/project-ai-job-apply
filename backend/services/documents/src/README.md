@@ -18,6 +18,16 @@ Ledger settlement is not a production quiescence proof: every writer/provider mu
 and a trusted actor must positively prove all original effects stopped before recording settlement.
 No production runtime, IAM enforcement or drain authority is composed here.
 
+`cover-letter-preparation.ts` connects private initialization to one original provider Invoke and
+owned read-only recovery/finalization. Fixed-purpose issuance requires settled original slot work
+and exact owner/request/consent binding under the parent lock. Only a fresh committed grant winner
+may Invoke; already-issued, running, settled or cancelled grants permit recovery only. Lost control
+or Invoke acknowledgements, local cancellation and kill-switch changes cannot renew authority or
+settle unresolved work. Original result recovery remains available after consent expiry. Five
+connected SQL cases use the real initializer, control store, isolated handler and final writer,
+with offline model/object/Lambda transports and no seeded provider settlement. Authenticated private
+RPC, IAM, runtime bootstrap, failed-call settlement and retention remain prerequisites for activation.
+
 The private slot initializer now requires this ledger before any creation: only a fresh exact-bound
 `private_slots` grant and its one committed claim can create request/result/dispatch, with dispatch
 last. Only the original actor's three positively acknowledged and pinned writes can settle that

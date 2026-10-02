@@ -122,6 +122,18 @@ accepted deletion requirements nor represents accountable security/privacy appro
 
 ## Consequences
 
+The private source-only preparation service now connects initialization, fixed-purpose original
+provider issuance, one numeric-version Invoke and owned read-only recovery/finalization. Issuance
+requires positively settled original slot work with matching owner, request digest and consent
+under the same parent-row lock as issuance/cancellation. Only a fresh committed grant winner can
+Invoke. Prior grants never authorize replay; ambiguous control/Invoke acknowledgements, cancellation
+or a late response cannot renew authority or settle work. Recovery does not trust Invoke outcomes
+as draft or settlement proof and permits original ready-result finalization after consent expiry.
+Five connected PostgreSQL cases exercise actual source components with synthetic object/model/Lambda
+ports, without seeding provider settlement. This is not authenticated production RPC, live provider
+evidence or remote-quiescence proof. Runtime/IAM, failed-call settlement, transient retention,
+read/export/restore and accountable acceptance remain unfinished; default-off posture is unchanged.
+
 The final-document S3 transport now enforces explicit single-attempt policy per PUT and separates
 positive original creation receipts from conditional-conflict recovery. A missing/ambiguous receipt
 never becomes acknowledged from HEAD. Exact HEAD/GET versions, bounded content/digest, detached

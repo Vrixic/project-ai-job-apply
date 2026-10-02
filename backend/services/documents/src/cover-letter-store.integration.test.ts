@@ -14,13 +14,17 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CoverLetterIntegrityError, createCoverLetterDocument } from "./cover-letter.js";
 import { CoverLetterDraftRecoveryService } from "./cover-letter-draft-recovery.js";
 import { CoverLetterGenerationService } from "./cover-letter-generation.js";
+import { CoverLetterPreparationService } from "./cover-letter-preparation.js";
 import {
   COVER_LETTER_PROVIDER_MODEL,
   type CoverLetterProviderSlot,
   coverLetterProviderSha256,
   encodeCoverLetterProviderObject,
 } from "./cover-letter-provider-contract.js";
+import { createCoverLetterIsolatedProviderHandler } from "./cover-letter-provider-handler.js";
 import { CoverLetterProviderInitializer } from "./cover-letter-provider-initialize.js";
+import { CoverLetterProviderInvoker } from "./cover-letter-provider-invoke.js";
+import type { CoverLetterProviderTransitionObjects } from "./cover-letter-provider-objects.js";
 import { CoverLetterProviderRecovery } from "./cover-letter-provider-recovery.js";
 import { type CoverLetterObjectStore, PostgresCoverLetterStore } from "./cover-letter-store.js";
 import {
@@ -580,6 +584,187 @@ const generation = {
             requestSha256: authorization.requestSha256,
           });
           expect(await work.readDrainState(owner, identity.id)).toBe("settled");
+        }
+      });
+    },
+  );
+
+  it.each(["none", "initializer_ack", "grant_ack", "invoke_ack", "result_ack"])(
+    "connects private preparation through real SQL grants, isolated provider and final writer with %s",
+    async (fault) => {
+      await withOwner(async (owner) => {
+        let now = new Date();
+        const evidence = {
+          facts: [
+            {
+              id: factId,
+              kind: "skill",
+              key: "skill",
+              value: "TypeScript",
+              verification: "confirmed",
+              sensitivity: "standard",
+              source: { type: "user", reference: "synthetic" },
+              version: 1,
+            } satisfies GraphFact,
+          ],
+          job: { title: "Engineer", company: "Synthetic", description: "Build reliable systems." },
+        };
+        const identity = {
+          id: randomUUID(),
+          ownerUserId: owner,
+          applicationId: randomUUID(),
+          ...coverLetterContext({ ...evidence, now }),
+          noticeVersion: "openai-cover-letter.v1",
+          approvedAt: now,
+          expiresAt: new Date(now.getTime() + 15 * 60_000),
+        };
+        // Unlike legacy offline-model cases, this pipeline never seeds provider settlement.
+        const realStore = new PostgresCoverLetterStore(
+          client,
+          { putIfAbsent, read, find: findObject },
+          work,
+        );
+        const source = { load: async () => evidence };
+        const slots = new Map<CoverLetterProviderSlot, Uint8Array>();
+        const reference = (bytes: Uint8Array) => ({
+          objectVersion: "synthetic-v1",
+          etag: `"${coverLetterProviderSha256(bytes)}"`,
+          sha256: coverLetterProviderSha256(bytes),
+          sizeBytes: bytes.length,
+        });
+        const readers = {
+          find: async (_id: string, slot: CoverLetterProviderSlot) => {
+            const bytes = slots.get(slot);
+            return bytes ? reference(bytes) : undefined;
+          },
+          read: async (_id: string, slot: CoverLetterProviderSlot) => {
+            const bytes = slots.get(slot);
+            if (!bytes) throw new CoverLetterIntegrityError();
+            return Uint8Array.from(bytes);
+          },
+        };
+        const phaseState = async (purpose: CoverLetterWorkPurpose) => {
+          const [row] =
+            await workClient`SELECT state FROM documents.cover_letter_work_authorizations
+            WHERE document_id = ${identity.id} AND purpose = ${purpose}`;
+          return row?.state;
+        };
+        const create = vi.fn(
+          async (_id: string, slot: CoverLetterProviderSlot, bytes: Uint8Array) => {
+            expect(await phaseState("private_slots")).toBe("running");
+            const prior = slots.get(slot);
+            if (prior) return { created: false, reference: reference(prior) };
+            slots.set(slot, Uint8Array.from(bytes));
+            if (fault === "initializer_ack" && slot === "dispatch")
+              throw Error("SyntheticLostInitializerAck");
+            return { created: true, reference: reference(bytes) };
+          },
+        );
+        const transition = vi.fn<CoverLetterProviderTransitionObjects["transitionIfMatch"]>(
+          async (_id, slot, prior, bytes) => {
+            expect(await phaseState("provider_dispatch")).toBe("running");
+            const current = slots.get(slot);
+            if (!current || reference(current).etag !== prior.etag) return { changed: false };
+            slots.set(slot, Uint8Array.from(bytes));
+            if (fault === "result_ack" && slot === "result") throw Error("SyntheticLostResultAck");
+            return { changed: true, reference: reference(bytes) };
+          },
+        );
+        const complete = vi.fn(async () => {
+          expect(await phaseState("private_slots")).toBe("settled");
+          expect(await phaseState("provider_dispatch")).toBe("running");
+          return {
+            text: JSON.stringify({
+              paragraphs: [{ text: "I have experience with TypeScript.", factIds: [factId] }],
+            }),
+          };
+        });
+        const handler = createCoverLetterIsolatedProviderHandler({
+          enabled: () => true,
+          clock: () => now,
+          objects: { ...readers, transitionIfMatch: transition },
+          work,
+          gateway: new ModelGateway(
+            { identity: COVER_LETTER_PROVIDER_MODEL, complete },
+            { enabled: () => true },
+          ),
+        });
+        const send = vi.fn(async (command: import("@aws-sdk/client-lambda").InvokeCommand) => {
+          expect(await phaseState("provider_dispatch")).toBe("issued");
+          expect(command.input.FunctionName).toBe(
+            "arn:aws:lambda:us-east-2:123456789012:function:synthetic-provider:7",
+          );
+          if (!(command.input.Payload instanceof Uint8Array))
+            throw Error("SyntheticUnexpectedInvokePayload");
+          const raw = JSON.parse(new TextDecoder().decode(command.input.Payload));
+          expect(Object.keys(raw)).toEqual(["schemaVersion", "documentId", "request"]);
+          const result = await handler(raw);
+          if (fault === "invoke_ack") throw Error("SyntheticLostInvokeAck");
+          return {
+            StatusCode: 200,
+            ExecutedVersion: "7",
+            Payload: new TextEncoder().encode(JSON.stringify(result)),
+          };
+        });
+        const issueProviderDispatch = vi.fn(
+          async (binding: Parameters<typeof work.issueProviderDispatch>[0]) => {
+            const result = await work.issueProviderDispatch(binding);
+            if (fault === "grant_ack") throw Error("SyntheticLostGrantAck");
+            return result;
+          },
+        );
+        const service = new CoverLetterPreparationService(
+          realStore,
+          new CoverLetterProviderInitializer(
+            realStore,
+            source,
+            { ...readers, putIfAbsent: create },
+            () => true,
+            () => now,
+            undefined,
+            work,
+          ),
+          { issueProviderDispatch },
+          new CoverLetterProviderInvoker(
+            "arn:aws:lambda:us-east-2:123456789012:function:synthetic-provider:7",
+            { config: { maxAttempts: async () => 1 }, send },
+            () => true,
+          ),
+          new CoverLetterDraftRecoveryService(
+            realStore,
+            source,
+            new CoverLetterProviderRecovery(readers),
+            () => now,
+          ),
+          () => true,
+          () => now,
+        );
+        const before = putIfAbsent.mock.calls.length;
+        const results = await Promise.all(
+          Array.from({ length: fault === "none" ? 8 : 1 }, () => service.generate(identity)),
+        );
+        const replay = await service.generate(identity);
+        const succeeds = ["none", "invoke_ack"].includes(fault);
+        expect(replay.kind).toBe(succeeds ? "ready" : "in_progress");
+        if (fault === "none") expect(results.some((result) => result.kind === "ready")).toBe(true);
+        expect(create.mock.calls.map((call) => call[1])).toEqual(["request", "result", "dispatch"]);
+        const dispatched = !["initializer_ack", "grant_ack"].includes(fault);
+        expect(send).toHaveBeenCalledTimes(dispatched ? 1 : 0);
+        expect(complete).toHaveBeenCalledTimes(dispatched ? 1 : 0);
+        expect(transition).toHaveBeenCalledTimes(dispatched ? 2 : 0);
+        expect(putIfAbsent.mock.calls.length - before).toBe(succeeds ? 1 : 0);
+        if (succeeds) {
+          expect(await phaseState("private_slots")).toBe("settled");
+          expect(await phaseState("provider_dispatch")).toBe("settled");
+          expect(await phaseState("final_document")).toBe("settled");
+          now = new Date(identity.expiresAt.getTime() + 1);
+          expect(await service.generate(identity)).toEqual(replay);
+          expect(send).toHaveBeenCalledOnce();
+        } else {
+          expect(await phaseState("final_document")).toBeUndefined();
+          await expect(
+            client`DELETE FROM documents.cover_letters WHERE id = ${identity.id}`,
+          ).rejects.toMatchObject({ code: "55000" });
         }
       });
     },

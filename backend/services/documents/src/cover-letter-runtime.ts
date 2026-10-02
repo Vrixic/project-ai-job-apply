@@ -3,6 +3,7 @@
 export * from "./cover-letter-draft-recovery.js";
 export * from "./cover-letter-generation.js";
 export * from "./cover-letter-objects.js";
+export * from "./cover-letter-preparation.js";
 export * from "./cover-letter-provider-initialize.js";
 export * from "./cover-letter-provider-invoke.js";
 export * from "./cover-letter-provider-recovery.js";
