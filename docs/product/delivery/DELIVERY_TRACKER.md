@@ -19,9 +19,11 @@ cases. The existing SQL initializer test now uses a separate control pool to avo
 exhaustion. Synthetic fixture settlement is not a production drain authority. Provider/final-document
 actors, IAM, retention, read/export/restore and external acceptance remain unfinished. No public API,
 frontend, migration, Terraform, cloud/provider call, deployment or activation change. D1/D3 remain
-In progress. Repo typecheck/tests/all builds, formatting and baseline-only lint pass. The maintained
-committed-source verifier follows this checkpoint. The disposable synthetic database/container is
-removed, Docker Desktop/WSL stopped, and retained Compose volumes untouched.
+In progress. Repo typecheck/tests/all builds, formatting and baseline-only lint pass. Committed source
+`2e93065` passes the full maintained repository verifier without exemptions, including synthetic
+operator guards, 142 dependency-security cases, all builds, Compose and product-scope checks.
+The six added local evidence links and whitespace checks pass. The disposable synthetic database/
+container is removed, Docker Desktop/WSL stopped, and retained Compose volumes untouched.
 
 October 2 private generation work authorization now has a Documents-owned forward-only `0007`
 ledger: immutable request/consent binding, one claim per fixed phase, non-renewable server-timed
