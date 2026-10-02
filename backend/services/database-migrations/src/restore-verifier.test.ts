@@ -94,16 +94,16 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(78);
+    expect(expectedRelations(source)).toHaveLength(83);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(52);
+    ).toBe(57);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
-    // The exact six-owner assertion above bounds I/O concurrency. Each owner still enumerates
+    // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
     // every SQL file and checks every checksum sequentially, including under full-workspace load.
     await Promise.all(
       source.manifest.contributors.map(async (contributor) => {
@@ -252,8 +252,8 @@ describe("read-only aggregate restore verification", () => {
         "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
       ownerCount: 7,
-      relationCount: 78,
-      migrationCount: 52,
+      relationCount: 83,
+      migrationCount: 57,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -397,6 +397,10 @@ describe("read-only aggregate restore verification", () => {
       ],
     },
     {
+      migrationCount: 52,
+      omittedVersions: ["0004_packet_preparation", "0005_preparation_dispatch"],
+    },
+    {
       migrationCount: 42,
       omittedVersions: [
         "0024_contribution_appeal_restoration",
@@ -413,12 +417,35 @@ describe("read-only aggregate restore verification", () => {
       const current = loadCurrentRestoreManifest();
       const historicalManifest = parseRestoreManifest({
         ...current.manifest,
-        contributors: current.manifest.contributors.map((contributor) => ({
-          ...contributor,
-          migrations: contributor.migrations.filter(
-            (migration) => !omittedVersions.includes(migration.version),
-          ),
-        })),
+        contributors: current.manifest.contributors
+          .filter((contributor) => migrationCount === 52 || contributor.owner !== "applications")
+          .map((contributor) => ({
+            ...contributor,
+            relations: contributor.relations.filter(
+              (relation) =>
+                ![
+                  "documents.cover_letters",
+                  "documents.cover_letter_work_authorizations",
+                  ...(migrationCount === 52
+                    ? [
+                        "applications.packet_preparations",
+                        "applications.preparation_audit",
+                        "applications.preparation_outbox",
+                      ]
+                    : ["profile.restricted_answers", "profile.restricted_answer_versions"]),
+                ].includes(relation),
+            ),
+            migrations: contributor.migrations.filter(
+              (migration) =>
+                ![
+                  ...omittedVersions,
+                  "0006_cover_letters",
+                  "0007_cover_letter_work_authorizations",
+                  ...(migrationCount === 52 ? [] : ["0010_restricted_answer_vault"]),
+                  "0011_active_candidate_lease",
+                ].includes(migration.version),
+            ),
+          })),
       });
       const historical: RestoreManifestSource = {
         manifest: historicalManifest,
@@ -434,15 +461,13 @@ describe("read-only aggregate restore verification", () => {
       expect(historical.sha256).not.toBe(current.sha256);
       await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
         manifestSha256: historical.sha256,
-        ownerCount: 7,
-        relationCount: 78,
-        // Applications' three migrations and Profile 0010 are part of both derived boundaries;
-        // Jobs, Documents 0004, and Trust differ.
-        migrationCount: migrationCount + 4,
+        ownerCount: migrationCount === 52 ? 7 : 6,
+        relationCount: migrationCount === 52 ? 78 : 68,
+        migrationCount,
       });
-      // Documents (0004), Jobs, and Trust all differ; the first owner checked is the one reported.
+      // Historical evidence cannot verify the expanded current Applications/Documents/Profile boundary.
       await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
-        /migration boundary mismatch for (documents|jobs)/,
+        /Restore (relation|schema) boundary mismatch/,
       );
     },
   );

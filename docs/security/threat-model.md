@@ -252,6 +252,17 @@ control failure. Capability-specific deltas are recorded in the
 | Employer text injects markup or structured-data claims | React text rendering, strict response schema/size, no dangerous HTML, and server-generated `JobPosting` JSON-LD only when the canonical record has every required truthful field; otherwise structured data is suppressed | Source-quality acceptance and the eventual public-host rendering remain release gates; employer text never supplies arbitrary markup or schema fields |
 | Reversible alias is cached as permanent | Temporary redirect with current canonical metadata | Alias lifecycle acceptance must be rerun against deployed current data |
 
+## Source-only cover-letter provider-control delta
+
+Strict identifier/reference-only RPC envelopes and fixed provider-phase capabilities prevent
+owner selection, work renewal, cross-phase settlement and content-bearing diagnostics at this
+source boundary. Exact numeric Lambda versions, one SDK attempt and full original-reference ACK
+validation reject alias drift, retries and mismatched receipts. Lost claim ACKs withhold model
+dispatch; lost positive settlement ACKs allow only original-result recovery. Neither a local
+timeout nor a target ARN proves caller authorization or remote-stopped effects. Reviewed sender
+IAM, private runtime composition, trusted failed-call settlement, retention and deployed adversarial
+acceptance remain release gates. The source remains default-off, not a production security approval.
+
 ## D1-007 reporting/moderation source delta
 
 | Threat | Source control | Residual / release gate |

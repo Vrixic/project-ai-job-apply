@@ -9,6 +9,20 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 owner-approved private provider-control RPC is implemented locally, still source-only
+and default-off in draft [PR #506](https://github.com/Vrixic/project-ai-job-apply/pull/506).
+Documents passes 574 unit and 112 real PostgreSQL tests with offline Lambda/model/object transport.
+The separately approved restore update binds exactly 57 migrations and 83 relations; the logical
+backup/restore drill matches all 83 full-row sets, with 18 nonempty generated D2 relations.
+The prior local full-verifier pass reused a cached restore test and missed new owner migrations.
+Explicit seven-owner migration inputs now invalidate that test cache; direct uncached restore tests
+pass, including historical 41/42/52 boundaries valid only against their own manifests.
+Hosted checks at `8996974` failed: quality found the inventory mismatch, Semgrep reported 68 inherited
+plus five branch findings, and dependency audit reported the new unpatched mobile `node-forge`
+[advisory](https://github.com/advisories/GHSA-86w9-cpqp-85rv). The five branch scanner patterns have
+source fixes awaiting hosted rescan; no scanner/audit exception or gate weakening is introduced.
+No frontend/public API, Terraform, deployment or live provider call. D1/D3 remain In progress.
+
 October 2 backend source checkpoint `defc769` is published in draft
 [PR #506](https://github.com/Vrixic/project-ai-job-apply/pull/506), the only authored open PR at
 publication. It remains default-dark and not ready for production activation: runtime/RPC/IAM,

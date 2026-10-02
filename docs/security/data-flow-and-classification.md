@@ -427,3 +427,15 @@ candidate/source/internal field. The web emits no sitemap entries while indexing
 uses only its configured canonical origin when enabled. Projection, edge, or pagination failures
 remain availability failures instead of false-empty deindexing signals; crawling and both public
 API routes remain default-dark behind the same activation gate.
+
+## Source-only cover-letter provider control
+
+The owner-approved private version-one RPC carries only document/grant IDs, request hashes,
+fixed provider purpose, original consent expiry and operational outcomes. Candidate owner selection,
+prompt/result text, object credentials and SQL diagnostics never enter its envelopes. The isolated
+provider has claim and positive settlement capabilities only; Documents resolves the stored owner
+and enforces original active-candidate admission. Exact numeric targets, single SDK attempts,
+bounded strict receipts and default-off gates are source controls, not deployed IAM evidence.
+Target-context matching does not authenticate a caller. Lost acknowledgements do not authorize
+re-dispatch or prove remote quiescence. Runtime/IAM, retention and trusted failed-call completion
+authority remain unfinished; no public API, frontend or live AWS/model behavior changes here.

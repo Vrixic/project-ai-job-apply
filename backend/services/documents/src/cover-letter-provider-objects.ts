@@ -360,7 +360,8 @@ export class S3CoverLetterProviderObjects implements CoverLetterProviderObjects 
         ),
         timeout,
       );
-      bodyToClose = result.Body;
+      const body = result.Body;
+      bodyToClose = body;
       if (result.VersionId !== pinned.objectVersion) throw new CoverLetterProviderTransportError();
       const chunks: Uint8Array[] = [];
       let length = 0;
@@ -372,13 +373,12 @@ export class S3CoverLetterProviderObjects implements CoverLetterProviderObjects 
           throw new CoverLetterProviderTransportError();
         chunks.push(Uint8Array.from(chunk));
       };
-      if (result.Body instanceof Uint8Array) add(result.Body);
-      else if (
-        result.Body &&
-        typeof result.Body === "object" &&
-        Symbol.asyncIterator in result.Body
-      ) {
-        const iterator = (result.Body as AsyncIterable<unknown>)[Symbol.asyncIterator]();
+      if (body instanceof Uint8Array) add(body);
+      else if (body && typeof body === "object" && Symbol.asyncIterator in body) {
+        // Retain the original SDK body and its fixed stream protocol across async reads.
+        const stream = (body as AsyncIterable<unknown>)[Symbol.asyncIterator];
+        if (typeof stream !== "function") throw new CoverLetterProviderTransportError();
+        const iterator = stream.call(body);
         try {
           for (;;) {
             const chunk = await bounded(iterator.next(), timeout);

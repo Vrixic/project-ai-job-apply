@@ -192,6 +192,19 @@ The proposed protocol remains incomplete until every prerequisite above is prove
 
 ## Alternatives
 
+The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim
+and positive provider settlement only, with strict identifier/reference-only version-one envelopes,
+fixed-purpose references and original grant/hash-bound acknowledgements. The isolated client pins
+an exact numeric Lambda target, permits one SDK attempt and rejects ambiguous or malformed responses.
+The private handler awaits original committed controls without a local deadline race. Neither port
+issues or renews work, selects an owner, or settles private-slot/final-document phases. Invoked-target
+matching is not caller authentication; production IAM and bootstrap are not implemented here.
+Seven connected PostgreSQL pipeline cases use these ports with offline Lambda/model/object transport.
+Lost claim ACKs leave running work without model dispatch. A lost positive settlement ACK permits
+read-only recovery of an original already-settled result, not manufactured settlement or another call.
+This is not deployment, live-provider or trusted failed-call quiescence evidence. The proposal remains
+incomplete and default-dark.
+
 - Conditional creation by the provider: rejected because deletion markers allow recreation.
 - Caller cancellation as remote cancellation: rejected because it does not prove remote quiescence.
 - Unconditional replacement or retry on conflict: rejected because it can restore deleted bytes

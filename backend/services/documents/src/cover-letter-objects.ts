@@ -226,7 +226,10 @@ export class S3CoverLetterObjectStore implements CoverLetterObjectStore {
         chunks.push(body);
         length = body.byteLength;
       } else if (body && typeof body === "object" && Symbol.asyncIterator in body) {
-        iterator = (body as AsyncIterable<unknown>)[Symbol.asyncIterator]();
+        // Snapshot the fixed SDK stream protocol, never a caller-selected method name.
+        const stream = (body as AsyncIterable<unknown>)[Symbol.asyncIterator];
+        if (typeof stream !== "function") throw new CoverLetterIntegrityError();
+        iterator = stream.call(body);
         while (true) {
           deadline.throwIfAborted();
           const next = await bounded(iterator.next(), deadline);

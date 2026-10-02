@@ -27,25 +27,27 @@ describe("private generation work control fails closed before database access", 
     const sql = vi.fn();
     const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql);
     const result =
-      method === "issue" || method === "issueProviderDispatch"
-        ? store[method]({ ...ref, ownerUserId: owner, consentExpiresAt })
-        : method === "claim"
-          ? store.claim(ref)
-          : method === "claimProviderDispatch"
-            ? store.claimProviderDispatch({
-                documentId,
-                requestSha256: ref.requestSha256,
-                consentExpiresAt,
-              })
-            : method === "claimFinalDocument"
-              ? store.claimFinalDocument({ ownerUserId: owner, documentId })
-              : method === "settleProviderDispatch"
-                ? store.settleProviderDispatch({ ...ref, purpose: "provider_dispatch" })
-                : method === "recordSettled"
-                  ? store.recordSettled(ref)
-                  : method === "revokeUnclaimed"
-                    ? store.revokeUnclaimed(owner, documentId)
-                    : store.readDrainState(owner, documentId);
+      method === "issue"
+        ? store.issue({ ...ref, ownerUserId: owner, consentExpiresAt })
+        : method === "issueProviderDispatch"
+          ? store.issueProviderDispatch({ ...ref, ownerUserId: owner, consentExpiresAt })
+          : method === "claim"
+            ? store.claim(ref)
+            : method === "claimProviderDispatch"
+              ? store.claimProviderDispatch({
+                  documentId,
+                  requestSha256: ref.requestSha256,
+                  consentExpiresAt,
+                })
+              : method === "claimFinalDocument"
+                ? store.claimFinalDocument({ ownerUserId: owner, documentId })
+                : method === "settleProviderDispatch"
+                  ? store.settleProviderDispatch({ ...ref, purpose: "provider_dispatch" })
+                  : method === "recordSettled"
+                    ? store.recordSettled(ref)
+                    : method === "revokeUnclaimed"
+                      ? store.revokeUnclaimed(owner, documentId)
+                      : store.readDrainState(owner, documentId);
     await expect(result).rejects.toThrow("CoverLetterWorkUnavailable");
     expect(sql).not.toHaveBeenCalled();
   });
@@ -131,9 +133,11 @@ describe("private generation work control fails closed before database access", 
     async (method) => {
       const sql = vi.fn();
       const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql, () => true);
-      await expect(store[method]({ ...ref, id: "invalid" })).rejects.toThrow(
-        "CoverLetterWorkUnavailable",
-      );
+      const result =
+        method === "claim"
+          ? store.claim({ ...ref, id: "invalid" })
+          : store.recordSettled({ ...ref, id: "invalid" });
+      await expect(result).rejects.toThrow("CoverLetterWorkUnavailable");
       expect(sql).not.toHaveBeenCalled();
     },
   );
@@ -142,9 +146,11 @@ describe("private generation work control fails closed before database access", 
     async (method) => {
       const sql = vi.fn();
       const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql, () => true);
-      await expect(store[method]("invalid", documentId)).rejects.toThrow(
-        "CoverLetterWorkUnavailable",
-      );
+      const result =
+        method === "revokeUnclaimed"
+          ? store.revokeUnclaimed("invalid", documentId)
+          : store.readDrainState("invalid", documentId);
+      await expect(result).rejects.toThrow("CoverLetterWorkUnavailable");
       expect(sql).not.toHaveBeenCalled();
     },
   );

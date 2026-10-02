@@ -28,6 +28,29 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "@ai-job-apply/database-migrations#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/backend/services/applications/migrations/**",
+        "$TURBO_ROOT$/backend/services/billing/migrations/**",
+        "$TURBO_ROOT$/backend/services/documents/migrations/**",
+        "$TURBO_ROOT$/backend/services/jobs/migrations/**",
+        "$TURBO_ROOT$/backend/services/matching/migrations/**",
+        "$TURBO_ROOT$/backend/services/profile/migrations/**",
+        "$TURBO_ROOT$/backend/services/trust/migrations/**"
+      ],
+      "outputs": []
+    },
+    "@ai-job-apply/workflows#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/backend/services/database-migrations/restore-manifest.v1.json",
+        "$TURBO_ROOT$/scripts/tests/fixtures/candidate-deletion-restore-contract.v1.json"
+      ],
+      "outputs": []
+    },
     "test:integration": {
       "dependsOn": ["build", "^build"],
       "cache": false,

@@ -18,6 +18,14 @@
         {
           "version": "0003_manual_submission",
           "checksum": "9d37818dfbca9affb276912c41359b7ec67c5e2a191be64997e6478748bb7180"
+        },
+        {
+          "version": "0004_packet_preparation",
+          "checksum": "613069f2177dc832052d82a312943c6a93554c0fb0749e61136363a51d593d8e"
+        },
+        {
+          "version": "0005_preparation_dispatch",
+          "checksum": "a3dab88e3dc5ce170678444d5202085593786851d14d11a2ffd0320ae3fd0f29"
         }
       ],
       "relations": [
@@ -27,7 +35,10 @@
         "applications.command_receipts",
         "applications.history",
         "applications.outbox",
+        "applications.packet_preparations",
         "applications.packets",
+        "applications.preparation_audit",
+        "applications.preparation_outbox",
         "applications.schema_migrations"
       ]
     },
@@ -77,10 +88,20 @@
         {
           "version": "0005_resume_purge",
           "checksum": "49d224c5716b10f689a41ced5d324ea2c0e416948b5066bd0c500fd9a35e171b"
+        },
+        {
+          "version": "0006_cover_letters",
+          "checksum": "b0e4e347fcb3ffdefbfee5199f8e04893eed7fe1db375d7c6432c2a1014a0d4d"
+        },
+        {
+          "version": "0007_cover_letter_work_authorizations",
+          "checksum": "a49c2507b71b2e89bc1ec5290506211cc35995c91f01e918c39fde74c0c84fdc"
         }
       ],
       "relations": [
         "documents.audit_events",
+        "documents.cover_letter_work_authorizations",
+        "documents.cover_letters",
         "documents.idempotency_keys",
         "documents.processing_dispositions",
         "documents.processing_receipts",
@@ -293,6 +314,10 @@
         {
           "version": "0010_restricted_answer_vault",
           "checksum": "eb0805694c4830e2bb4f081c75318eb2f0d0280d3a77f62d322beb7ed27478c0"
+        },
+        {
+          "version": "0011_active_candidate_lease",
+          "checksum": "e8d9df19b5a96e56adced2c7540cab3bc8afa8015f648047690f3fb96e7530ea"
         }
       ],
       "relations": [

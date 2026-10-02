@@ -1,6 +1,20 @@
 # Documents Source
 
 The API/persistence surface contains only candidate-owned metadata and opaque object references.
+
+The private provider-control RPC is source-only and default-off. Its strict version-one envelopes
+carry document IDs, request hashes, original consent expiry and fixed-purpose references only.
+The isolated client can claim existing provider work and acknowledge positive original provider
+completion, not issue/renew work, select an owner or settle another phase. Both endpoints pin an
+exact numeric Lambda version; the client enforces one SDK attempt and bounded strict receipts.
+Positive settlement acknowledgements bind the original grant ID and request digest. Lost claim
+ACKs cannot dispatch a model; lost settlement ACKs can recover the original already-settled result
+without another model call. Local RPC timeout does not prove remote SQL/effects stopped.
+The invoked-function ARN binds the target, not its caller: reviewed least-privilege IAM,
+runtime composition and trusted failed-call settlement remain mandatory before deployment.
+Current evidence: 574 Documents unit tests and 112 real PostgreSQL cases using synthetic model,
+object and Lambda transport, including seven connected original-work pipeline cases.
+
 `upload-signer.ts` is the sole direct-upload capability issuer. Processing code must verify the
 managed malware tag and the declared checksum before parsing and must never log filenames, bytes,
 text blocks, profile proposals, or storage credentials.

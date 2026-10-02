@@ -11,8 +11,8 @@ import {
   verifyRestoreDatabase,
 } from "../../../backend/services/database-migrations/dist/src/restore-verifier.js";
 import { createRestoreClient } from "../../../backend/services/database-migrations/dist/src/restore-verifier-runtime.js";
-import { createDatabase } from "../../../backend/services/profile/dist/src/index.js";
 import { createJobCatalogDatabase } from "../../../backend/services/jobs/dist/src/persistence/catalog.js";
+import { createDatabase } from "../../../backend/services/profile/dist/src/index.js";
 import { assertOwnedContainer, image, label, ownedDatabasePort } from "./container-boundary.mjs";
 import {
   exerciseRestoredD2,
@@ -183,8 +183,8 @@ try {
   const source = loadCurrentRestoreManifest();
   assert.equal(source.manifest.contributors.length, 7);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 11);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 78);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 52);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 83);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 57);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
@@ -284,10 +284,10 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 46,
-    ownerCount: 6,
-    schemaCount: 10,
-    exactRelationRowSetsMatched: 68,
+    migrationCount: 57,
+    ownerCount: 7,
+    schemaCount: 11,
+    exactRelationRowSetsMatched: 83,
     nonemptyD2RelationsMatched: requiredNonemptyD2Relations.length,
     aggregateVerifierMatched: true,
     sourceUnchanged: true,

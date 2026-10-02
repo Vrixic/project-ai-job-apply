@@ -21,6 +21,8 @@ import {
   coverLetterProviderSha256,
   encodeCoverLetterProviderObject,
 } from "./cover-letter-provider-contract.js";
+import { CoverLetterProviderControlClient } from "./cover-letter-provider-control-client.js";
+import { createCoverLetterProviderControlHandler } from "./cover-letter-provider-control-handler.js";
 import { createCoverLetterIsolatedProviderHandler } from "./cover-letter-provider-handler.js";
 import { CoverLetterProviderInitializer } from "./cover-letter-provider-initialize.js";
 import { CoverLetterProviderInvoker } from "./cover-letter-provider-invoke.js";
@@ -589,7 +591,15 @@ const generation = {
     },
   );
 
-  it.each(["none", "initializer_ack", "grant_ack", "invoke_ack", "result_ack"])(
+  it.each([
+    "none",
+    "initializer_ack",
+    "grant_ack",
+    "invoke_ack",
+    "result_ack",
+    "control_claim_ack",
+    "control_settle_ack",
+  ])(
     "connects private preparation through real SQL grants, isolated provider and final writer with %s",
     async (fault) => {
       await withOwner(async (owner) => {
@@ -679,11 +689,40 @@ const generation = {
             }),
           };
         });
+        const controlArn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-control:3";
+        const controlHandler = createCoverLetterProviderControlHandler({
+          functionArn: controlArn,
+          work,
+          enabled: () => true,
+        });
+        const controlSend = vi.fn<
+          import("./cover-letter-provider-invoke.js").CoverLetterProviderLambdaClient["send"]
+        >(async (command) => {
+          expect(command.input.FunctionName).toBe(controlArn);
+          if (!(command.input.Payload instanceof Uint8Array))
+            throw Error("SyntheticUnexpectedControlPayload");
+          const text = new TextDecoder().decode(command.input.Payload);
+          expect(text).not.toContain(owner);
+          expect(text).not.toContain("TypeScript");
+          const raw = JSON.parse(text);
+          const response = await controlHandler(raw, { invokedFunctionArn: controlArn });
+          if (fault === `control_${raw.action}_ack`) throw Error("SyntheticLostControlRpcAck");
+          return {
+            StatusCode: 200,
+            ExecutedVersion: "3",
+            Payload: new TextEncoder().encode(JSON.stringify(response)),
+          };
+        });
+        const providerControl = new CoverLetterProviderControlClient(
+          controlArn,
+          { config: { maxAttempts: async () => 1 }, send: controlSend },
+          () => true,
+        );
         const handler = createCoverLetterIsolatedProviderHandler({
           enabled: () => true,
           clock: () => now,
           objects: { ...readers, transitionIfMatch: transition },
-          work,
+          work: providerControl,
           gateway: new ModelGateway(
             { identity: COVER_LETTER_PROVIDER_MODEL, complete },
             { enabled: () => true },
@@ -744,14 +783,18 @@ const generation = {
           Array.from({ length: fault === "none" ? 8 : 1 }, () => service.generate(identity)),
         );
         const replay = await service.generate(identity);
-        const succeeds = ["none", "invoke_ack"].includes(fault);
+        const succeeds = ["none", "invoke_ack", "control_settle_ack"].includes(fault);
         expect(replay.kind).toBe(succeeds ? "ready" : "in_progress");
         if (fault === "none") expect(results.some((result) => result.kind === "ready")).toBe(true);
         expect(create.mock.calls.map((call) => call[1])).toEqual(["request", "result", "dispatch"]);
         const dispatched = !["initializer_ack", "grant_ack"].includes(fault);
+        const effects = dispatched && fault !== "control_claim_ack";
         expect(send).toHaveBeenCalledTimes(dispatched ? 1 : 0);
-        expect(complete).toHaveBeenCalledTimes(dispatched ? 1 : 0);
-        expect(transition).toHaveBeenCalledTimes(dispatched ? 2 : 0);
+        expect(complete).toHaveBeenCalledTimes(effects ? 1 : 0);
+        expect(transition).toHaveBeenCalledTimes(effects ? 2 : 0);
+        expect(controlSend).toHaveBeenCalledTimes(
+          !dispatched ? 0 : ["control_claim_ack", "result_ack"].includes(fault) ? 1 : 2,
+        );
         expect(putIfAbsent.mock.calls.length - before).toBe(succeeds ? 1 : 0);
         if (succeeds) {
           expect(await phaseState("private_slots")).toBe("settled");
