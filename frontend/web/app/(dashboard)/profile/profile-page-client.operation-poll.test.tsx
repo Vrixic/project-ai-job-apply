@@ -11,6 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProfilePageClient } from "./profile-page-client";
 
 vi.mock("../../profile-facts-form", () => ({ ProfileFactsForm: () => null }));
+vi.mock("../../profile-personal-card", () => ({ ProfilePersonalCard: () => null }));
+vi.mock("../../profile-skills-card", () => ({ ProfileSkillsCard: () => null }));
 
 const operationId = "019c0000-0000-7000-8000-000000000301";
 const privateProblemCanary = "synthetic-private-operation-problem-never-render";

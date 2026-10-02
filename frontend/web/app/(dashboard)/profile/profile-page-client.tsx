@@ -21,6 +21,8 @@ import {
   type WorkMode,
 } from "../../preference-form-state";
 import { ProfileFactsForm } from "../../profile-facts-form";
+import { ProfilePersonalCard } from "../../profile-personal-card";
+import { ProfileSkillsCard } from "../../profile-skills-card";
 import { RestrictedAnswersForm } from "../../restricted-answers-form";
 
 const workModeOptions: ReadonlyArray<{ value: WorkMode; label: string }> = [
@@ -161,9 +163,13 @@ async function apiRequest<T>(
 export function ProfilePageClient({
   authenticated,
   restrictedAnswerVaultUiEnabled = false,
+  name,
+  email,
 }: {
   authenticated: boolean;
   restrictedAnswerVaultUiEnabled?: boolean;
+  name?: string | undefined;
+  email?: string | undefined;
 }) {
   const [preferenceFields, setPreferenceFields] = useState<JobPreferenceFields>(() =>
     emptyJobPreferenceFields(),
@@ -575,6 +581,8 @@ export function ProfilePageClient({
 
   return (
     <section aria-label="Profile">
+      <ProfilePersonalCard authenticated={authenticated} name={name} email={email} />
+      <ProfileSkillsCard authenticated={authenticated} />
       {message && <output aria-live="polite">{message}</output>}
       {operation && (
         <section className="result" aria-live="polite">
