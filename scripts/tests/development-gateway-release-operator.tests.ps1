@@ -184,7 +184,7 @@ function Assert-Rejected {
 
 foreach ($functionName in @(
     "Get-OptionalProperty", "Get-GatewayKeyHistoryMatches", "Get-TextSha256",
-    "Get-DocumentOperatorDeltaSha256",
+    "Get-DocumentOperatorDeltaSha256", "Assert-GatewayVerifySourceDelta",
     "Get-StateDocumentProcessorParserQualifiedArn", "Assert-RetainedGatewayParserBinding"
   )) {
   $functions = @($ast.FindAll({
@@ -259,6 +259,47 @@ try {
   Remove-Variable -Name documentDeltaCatFileCalls -Scope Script -ErrorAction SilentlyContinue
 }
 
+$script:verifyDeltaPath = "docs/product/delivery/DELIVERY_TRACKER.md"
+$script:verifyDeltaMode = "valid"
+function git {
+  $arguments = @($args)
+  $global:LASTEXITCODE = 0
+  if ($arguments -contains "merge-base") { if ($script:verifyDeltaMode -ceq "nonancestor") { $global:LASTEXITCODE = 1 }; return }
+  if ($arguments -contains "--name-status") {
+    switch ($script:verifyDeltaMode) {
+      "add" { return "A`t$script:verifyDeltaPath" }
+      "delete" { return "D`t$script:verifyDeltaPath" }
+      "rename" { return "R100`t$script:verifyDeltaPath`tother.md" }
+      "empty" { return }
+      default { return "M`t$script:verifyDeltaPath" }
+    }
+  }
+  if ($arguments -contains "--numstat") {
+    if ($script:verifyDeltaMode -ceq "binary") { return "-`t-`t$script:verifyDeltaPath" }
+    return "1`t1`t$script:verifyDeltaPath"
+  }
+  if ($arguments -contains "cat-file") { if ($script:verifyDeltaMode -ceq "gitlink") { return "commit" }; return "blob" }
+  throw "Unexpected verification delta Git call."
+}
+try {
+  foreach ($path in @("docs/product/delivery/DELIVERY_TRACKER.md", "scripts/operate-development-gateway-release.ps1", "scripts/lib/development-gateway-release-guards.ps1", "scripts/tests/development-gateway-release-guards.tests.ps1", "scripts/tests/development-gateway-release-operator.tests.ps1", "infrastructure/runbooks/deployments/development-gateway-release.md", "docs/product/delivery/phase-3-application-preparation.md")) {
+    $script:verifyDeltaPath = $path
+    Assert-GatewayVerifySourceDelta -ReleaseSha ("1" * 40) -OperatorSha ("2" * 40)
+  }
+  $script:verifyDeltaPath = "docs/product/delivery/DELIVERY_TRACKER.md"
+  foreach ($mode in @("add", "delete", "rename", "empty", "binary", "gitlink", "nonancestor")) {
+    $script:verifyDeltaMode = $mode
+    Assert-Rejected { Assert-GatewayVerifySourceDelta -ReleaseSha ("1" * 40) -OperatorSha ("2" * 40) } "Verification accepted a $mode source delta."
+  }
+  $script:verifyDeltaMode = "valid"
+  foreach ($path in @("backend/workflows/src/candidate-rights-aws.ts", "backend/gateway/src/app.module.ts", "infrastructure/terraform/modules/platform/main.tf", "docs/product/delivery/unapproved.md")) {
+    $script:verifyDeltaPath = $path
+    Assert-Rejected { Assert-GatewayVerifySourceDelta -ReleaseSha ("1" * 40) -OperatorSha ("2" * 40) } "Verification accepted unrelated source changes."
+  }
+} finally {
+  Remove-Item -LiteralPath Function:\git -Force
+  Remove-Variable -Name verifyDeltaPath, verifyDeltaMode -Scope Script -ErrorAction SilentlyContinue
+}
 $exactKey = "lambda/gateway/source/artifact/gateway-lambda.zip"
 foreach ($emptyHistory in @(
     [pscustomobject]@{},
@@ -970,13 +1011,56 @@ foreach ($flag in @("RefreshCandidateRightsActivity", "EnableRestrictedAnswerExp
 }
 if ($script:exactRecoveryChecks -ne 1) { throw "A non-verification path reached the historical recovery guard." }
 
+$activitySnapshotGate = [regex]::Match($operator, 'if \(\$Action -ceq "Verify" -and \$RefreshCandidateRightsActivity -and -not \$EnableRestrictedAnswerExport -and\s+\[long\]\$state.Serial -eq \(\[long\]\$metadata.StateSerial \+ 3\)\) \{(?<body>[\s\S]*?)\n  \}')
+if (-not $activitySnapshotGate.Success) { throw "Activity history recovery is not isolated to non-activation Verify." }
+foreach ($required in @('Assert-ExactActivityRefreshThreeSnapshotVerification', '$script:PlanPath', '-SourceSha $SourceSha', '-ReceiptSha256 $ReviewedWorkflowReceiptSha256', '-BaselineSha256 $ReviewedBaselineSha256', '-BaselineMetadataSha256 $ReviewedBaselineMetadataSha256', '-PlanSha256 $ReviewedPlanSha256', '-PlanMetadataSha256 (Get-FileSha256 $activityMetadataPath)', '-Metadata $metadata -CurrentState $state -StateHistory $stateHistory', '"--max-items", "2000"', '"--prefix", "platform.tfstate"')) {
+  if (-not $activitySnapshotGate.Value.Contains($required)) { throw "Activity recovery omits $required." }
+}
+$script:activityRecoveryBranch = [scriptblock]::Create($activitySnapshotGate.Value)
+$script:activityRecoveryChecks = 0
+function Assert-ExactActivityRefreshThreeSnapshotVerification {
+  param([string]$SourceSha, [string]$ReceiptSha256, [string]$BaselineSha256, [string]$BaselineMetadataSha256,
+    [string]$PlanSha256, [string]$PlanMetadataSha256, [object]$Metadata, [object]$CurrentState, [object]$StateHistory)
+  if ($PlanMetadataSha256 -cne "d50a7362e06a2fe0c1ba5eae5906ad9e16896cb90558979a24a59cfb155758b9" -or
+      $Metadata.StateSerial -ne 401 -or $CurrentState.Serial -ne 404 -or
+      $SourceSha -cne $script:SourceSha -or $ReceiptSha256 -cne $script:ReviewedWorkflowReceiptSha256 -or
+      $BaselineSha256 -cne $script:ReviewedBaselineSha256 -or $BaselineMetadataSha256 -cne $script:ReviewedBaselineMetadataSha256 -or
+      $PlanSha256 -cne $script:ReviewedPlanSha256) { throw "Wrong activity recovery inputs." }
+  $script:activityRecoveryChecks++
+  return $true
+}
+function Invoke-ShadowedActivityRecoveryBranch {
+  $planPath = "generated-baseline.tfplan"
+  $metadata = [pscustomobject]@{ StateSerial = 401 }
+  $state = [pscustomobject]@{ Serial = 404 }
+  $allowThreeSerialAdvances = $false
+  $allowActivityThreeSerialAdvances = $false
+  . $script:activityRecoveryBranch
+  if ($allowThreeSerialAdvances -ne $allowActivityThreeSerialAdvances) { throw "Activity baseline readers disagree on history evidence." }
+  return $allowActivityThreeSerialAdvances
+}
+$EnableRestrictedAnswerExport = $false
+if (-not (Invoke-ShadowedActivityRecoveryBranch) -or $script:activityRecoveryChecks -ne 1) { throw "Activity recovery resolved a shadowed baseline path." }
+foreach ($mode in @("Apply", "Plan", "Status")) {
+  $Action = $mode
+  if (Invoke-ShadowedActivityRecoveryBranch) { throw "Activity recovery ran outside Verify." }
+}
+$Action = "Verify"
+$EnableRestrictedAnswerExport = $true
+if (Invoke-ShadowedActivityRecoveryBranch) { throw "Activity recovery ran during export activation." }
+$EnableRestrictedAnswerExport = $false
+$RefreshCandidateRightsActivity = $false
+if (Invoke-ShadowedActivityRecoveryBranch) { throw "Activity recovery ran for another operation." }
+$RefreshCandidateRightsActivity = $true
+$EnableRestrictedAnswerExport = $true
+if ($script:activityRecoveryChecks -ne 1) { throw "Unrelated modes reached activity history validation." }
 $postStateFunction = @($ast.FindAll({ param($node)
       $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
       $node.Name -ceq "Assert-CandidateRightsActivityPostApplyState"
     }, $true))
 if ($postStateFunction.Count -ne 1 -or
     -not $operator.Contains('Assert-CandidateRightsActivityPostApplyState -Baseline $baseline -Metadata $metadata -State $state') -or
-    -not $operator.Contains('RestrictedExportRecoveryState = $(if ($allowThreeSerialAdvances)')) {
+    -not $operator.Contains('RestrictedExportRecoveryState = $(if ($allowThreeSerialAdvances -and -not $allowActivityThreeSerialAdvances)')) {
   throw "The final activity check must consume only the exact baseline recovery result."
 }
 Invoke-Expression $postStateFunction[0].Extent.Text
@@ -1068,6 +1152,46 @@ $script:commandBaseline.RestrictedExportRecoveryState = $null
 $script:commandState = [pscustomobject]@{ Serial = 396; Lineage = $recoveryLineage }
 $ordinary = & $script:activityCommand | ConvertFrom-Json
 if ($ordinary.Outcome -cne "verified") { throw "Ordinary one-advance activity verification regressed." }
+$SourceSha = "7aec47235e7de0ad5708a72aebe06a55ee8fc71a"
+$EnableRestrictedAnswerExport = $false
+$activityRecoveryMetadata = [pscustomobject]@{ StateSerial = 401; StateLineage = $recoveryLineage }
+$activityRecoveryState = [pscustomobject]@{ Serial = 404; Lineage = $recoveryLineage }
+$activityRecoveryBaseline = [pscustomobject]@{ ActivityRefreshRecoveryState = $activityRecoveryState }
+Assert-CandidateRightsActivityPostApplyState $activityRecoveryBaseline $activityRecoveryMetadata $activityRecoveryState
+Assert-CandidateRightsActivityPostApplyState ([pscustomobject]@{}) $activityRecoveryMetadata ([pscustomobject]@{ Serial = 402; Lineage = $recoveryLineage })
+foreach ($serial in @(401, 403, 405)) {
+  Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $activityRecoveryBaseline $activityRecoveryMetadata ([pscustomobject]@{ Serial = $serial; Lineage = $recoveryLineage }) } "Activity recovery accepted another serial."
+}
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState ([pscustomobject]@{}) $activityRecoveryMetadata $activityRecoveryState } "Activity recovery accepted missing history evidence."
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState ([pscustomobject]@{ ActivityRefreshRecoveryState = $true }) $activityRecoveryMetadata $activityRecoveryState } "Activity recovery accepted malformed evidence."
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $activityRecoveryBaseline $activityRecoveryMetadata ([pscustomobject]@{ Serial = 404; Lineage = "87654321-4321-4321-4321-cba987654321" }) } "Activity recovery accepted another lineage."
+$EnableRestrictedAnswerExport = $true
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $activityRecoveryBaseline $activityRecoveryMetadata $activityRecoveryState } "Activity recovery accepted activation mode."
+$EnableRestrictedAnswerExport = $false
+$RefreshCandidateRightsActivity = $false
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $activityRecoveryBaseline $activityRecoveryMetadata $activityRecoveryState } "Activity recovery accepted another command."
+$RefreshCandidateRightsActivity = $true
+$SourceSha = "0" * 40
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $activityRecoveryBaseline $activityRecoveryMetadata $activityRecoveryState } "Activity recovery accepted another source."
+$SourceSha = "7aec47235e7de0ad5708a72aebe06a55ee8fc71a"
+$Action = "Apply"
+Assert-Rejected { Assert-CandidateRightsActivityPostApplyState $activityRecoveryBaseline $activityRecoveryMetadata $activityRecoveryState } "Activity recovery weakened Apply."
+$Action = "Verify"
+$recoveryMetadata = $activityRecoveryMetadata
+$script:commandBaseline = [pscustomobject]@{ MetadataSchemaVersion = "7"; ActivityRefreshRecoveryState = $activityRecoveryState; Plan = [pscustomobject]@{ variables = [pscustomobject]@{} } }
+$script:commandState = $activityRecoveryState
+$script:activityCalls.Clear()
+$activityResult = & $script:activityCommand | ConvertFrom-Json
+if ($activityResult.Outcome -cne "verified" -or ($script:activityCalls -join "|") -cne "baseline|artifact|metadata|fresh-state|variables|plan|live|zero-drift") { throw "Activity recovery skipped live/drift verification." }
+$script:commandBaseline.ActivityRefreshRecoveryState = $null
+$script:activityCalls.Clear()
+Assert-Rejected { & $script:activityCommand } "Activity command accepted missing history validation."
+if ($script:activityCalls.Contains("live")) { throw "Activity command continued after missing recovery evidence." }
+$script:commandBaseline.ActivityRefreshRecoveryState = $activityRecoveryState
+$script:commandState = [pscustomobject]@{ Serial = 405; Lineage = $recoveryLineage }
+$script:activityCalls.Clear()
+Assert-Rejected { & $script:activityCommand } "Activity command accepted state movement after history validation."
+if ($script:activityCalls.Contains("live")) { throw "Activity command continued after stale recovery evidence." }
 $corsBranches = @($ast.FindAll({ param($node)
       $node -is [Management.Automation.Language.IfStatementAst] -and
       $node.Clauses[0].Item1.Extent.Text -ceq '$DocumentUploadCorsOrigin -cne ""'

@@ -405,6 +405,30 @@ the change is wider than one function. The owner approved this exact set on 2026
 
 Rollback is a fresh baseline and a plan that restores the previous receipt's archive through a separately reviewed release.
 
+### Exact October 1 three-snapshot verification recovery (D3-034)
+
+The owner-approved activity-only release from `7aec47235e7de0ad5708a72aebe06a55ee8fc71a`
+applied successfully with live-chain readback and zero drift. Terraform committed state snapshots
+at `2026-10-01T21:35:52Z`, `21:36:16Z` and `21:36:29Z`, advancing serial 401 to 404 in that
+one apply. Do not apply again. After the verifier repair merges, run ordinary activity
+`-Action Verify -RefreshCandidateRightsActivity` with the original saved inputs, without
+`-EnableRestrictedAnswerExport`. Verification alone admits this non-reusable exception:
+
+- Workflow receipt: `08c40cfa18ced077c755a58b6a7c1f6afab364cd5295a8a5d71f233482f5a5cb`.
+- Baseline: `e7c8bcff3179bff2ff67002f4746dd64be09980c9b3a3a6fa2773dba17afbf3d`.
+- Baseline metadata: `220fdf94f0b00505038a04a930f00b9605b90cd6b9e992662f88cd63e64a5198`.
+- Saved plan: `fb1472c3ee986122dd17bb6af8a850805a005a7b9a6f3321521e8525df0e13c9`.
+- Plan metadata: `1eec3aa342f54ac68022fd967142aabf6d594ae330de8a0174d395cd5a3f954e`.
+
+The history must be complete, contain exactly those three distinct nonempty versioned snapshots
+after the baseline, no deletion or later write, and only the last may be latest. Both baseline
+readers receive the validated result; the final fresh state must match it before live-chain and
+zero-drift checks. Other releases, sources, evidence, serials or modes refuse. Plan and Apply retain
+unchanged-state checks, and the earlier restricted-export recovery is separately bound. Old plans,
+receipts and sidecars remain untouched; local generated-boundary tests are not standalone deployed
+verification. The ancestor-source allowlist permits only named modified verifier/test/runbook and
+delivery-record blobs, never runtime or Terraform source changes.
+
 ## Activating D3 platform capabilities (D3-001 and D3-005)
 
 ### Restricted-answer export activation

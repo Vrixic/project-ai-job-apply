@@ -9,6 +9,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 1 D3-031's activity-only release from `7aec472` is applied in development after
+#494 merged. D3-033's publication-blocker fix is Complete. Immutable publication and independent
+exact-version readback pass; Apply's live-chain
+checks and zero-drift verification pass. Standalone Verify refuses because the one apply committed
+three state snapshots (401 to 404), not one. D3-034 implements an exact-evidence, verification-only
+recovery for that release; merge and standalone verification remain. No reapply, API/Gateway change,
+candidate acceptance or historical-object cleanup is claimed. D1/D3 remain In progress. See the
+[Phase 3 task and evidence](phase-3-application-preparation.md#task-register).
+
 October 1 D3-032 is Complete: #491 merged and the fresh maintained baseline capture passes at
 state 401 with zero drift. D3-033 enters In progress after the publication audit refuses newly
 reported CVE-2026-92081 in Fastify. The minimal 5.12.5 dependency patch passes targeted real-loopback

@@ -239,6 +239,7 @@ function Assert-GatewayVerifySourceDelta {
     "scripts/tests/development-gateway-release-guards.tests.ps1",
     "scripts/validate-serverless-workflow-infrastructure.mjs",
     "infrastructure/runbooks/deployments/development-gateway-release.md",
+    "docs/product/delivery/DELIVERY_TRACKER.md",
     "docs/product/delivery/phase-3-application-preparation.md"
   )
   & git -C $repositoryRoot merge-base --is-ancestor $ReleaseSha $OperatorSha 2>$null
@@ -700,6 +701,7 @@ function Read-Baseline {
   $state = Get-StateIdentity
   $allowTwoSerialAdvances = $false
   $allowThreeSerialAdvances = $false
+  $allowActivityThreeSerialAdvances = $false
   if ($Action -ceq "Verify" -and $RefreshCandidateRightsActivity -and $EnableRestrictedAnswerExport -and
       [long]$state.Serial -eq ([long]$metadata.StateSerial + 3)) {
     $stateHistory = Invoke-AwsJson @(
@@ -717,6 +719,23 @@ function Read-Baseline {
       -BaselineSha256 $ReviewedBaselineSha256 -BaselineMetadataSha256 $ReviewedBaselineMetadataSha256 `
       -PlanSha256 $ReviewedPlanSha256 -PlanMetadataSha256 (Get-FileSha256 $activityMetadataPath) `
       -Metadata $metadata -CurrentState $state -StateHistory $stateHistory
+  }
+  if ($Action -ceq "Verify" -and $RefreshCandidateRightsActivity -and -not $EnableRestrictedAnswerExport -and
+      [long]$state.Serial -eq ([long]$metadata.StateSerial + 3)) {
+    $stateHistory = Invoke-AwsJson @(
+      "s3api", "list-object-versions", "--bucket", $StateBucket, "--prefix", "platform.tfstate",
+      "--page-size", "1000", "--max-items", "2000", "--query",
+      "{NextToken:NextToken,Versions:Versions[?Key=='platform.tfstate'].{Key:Key,VersionId:VersionId,IsLatest:IsLatest,LastModified:LastModified,Size:Size},DeleteMarkers:DeleteMarkers[?Key=='platform.tfstate'].{Key:Key,VersionId:VersionId,IsLatest:IsLatest,LastModified:LastModified}}",
+      "--output", "json"
+    ) "Exact activity refresh state history validation"
+    $activityPlanPath = Resolve-GatewayOperatorPath $script:PlanPath -MustExist
+    $activityMetadataPath = Resolve-GatewayOperatorPath "$activityPlanPath$candidateRightsActivityMetadataSuffix" -MustExist
+    $allowActivityThreeSerialAdvances = Assert-ExactActivityRefreshThreeSnapshotVerification `
+      -SourceSha $SourceSha -ReceiptSha256 $ReviewedWorkflowReceiptSha256 `
+      -BaselineSha256 $ReviewedBaselineSha256 -BaselineMetadataSha256 $ReviewedBaselineMetadataSha256 `
+      -PlanSha256 $ReviewedPlanSha256 -PlanMetadataSha256 (Get-FileSha256 $activityMetadataPath) `
+      -Metadata $metadata -CurrentState $state -StateHistory $stateHistory
+    $allowThreeSerialAdvances = $allowActivityThreeSerialAdvances
   }
   if ($Action -ceq "Verify" -and $D3PlatformActivation -ceq "ApplicationsAttemptRecovery" -and
       [long]$state.Serial -eq ([long]$metadata.StateSerial + 2)) {
@@ -805,7 +824,10 @@ function Read-Baseline {
   }
   return [pscustomobject]@{
     Path = $planPath; MetadataPath = $metadataPath; Metadata = $metadata; Plan = $plan
-    RestrictedExportRecoveryState = $(if ($allowThreeSerialAdvances) {
+    RestrictedExportRecoveryState = $(if ($allowThreeSerialAdvances -and -not $allowActivityThreeSerialAdvances) {
+        [pscustomobject]@{ Lineage = [string]$state.Lineage; Serial = [long]$state.Serial }
+      } else { $null })
+    ActivityRefreshRecoveryState = $(if ($allowActivityThreeSerialAdvances) {
         [pscustomobject]@{ Lineage = [string]$state.Lineage; Serial = [long]$state.Serial }
       } else { $null })
     DocumentReceiptSha256 = [string]$metadata.ReceiptSha256
@@ -1150,7 +1172,13 @@ function Assert-CandidateRightsActivityPostApplyState {
       [long]$Metadata.StateSerial -eq 395 -and [long]$State.Serial -eq 398 -and
       $null -ne $recoveryState -and [string]$recoveryState.Lineage -ceq [string]$State.Lineage -and
       [long]$recoveryState.Serial -eq [long]$State.Serial) { return }
-  throw "Post-change verification requires one state advance or the exact validated export recovery state."
+  $activityRecoveryState = Get-OptionalProperty $Baseline "ActivityRefreshRecoveryState"
+  if ($RefreshCandidateRightsActivity -and -not $EnableRestrictedAnswerExport -and
+      $SourceSha -ceq "7aec47235e7de0ad5708a72aebe06a55ee8fc71a" -and
+      [long]$Metadata.StateSerial -eq 401 -and [long]$State.Serial -eq 404 -and
+      $null -ne $activityRecoveryState -and [string]$activityRecoveryState.Lineage -ceq [string]$State.Lineage -and
+      [long]$activityRecoveryState.Serial -eq [long]$State.Serial) { return }
+  throw "Post-change verification requires one state advance or the exact validated historical recovery state."
 }
 
 function Invoke-CandidateRightsActivityZeroDrift {

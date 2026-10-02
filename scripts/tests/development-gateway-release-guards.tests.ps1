@@ -419,6 +419,72 @@ foreach ($timestampType in @("datetime", "datetimeoffset", "offset-string")) {
   }
   $null = Assert-ExactRestrictedExportThreeSnapshotVerification @typed; $passed++
 }
+$activityVerification = Copy-VerificationParameters $exportVerification
+$activityVerification.SourceSha = "7aec47235e7de0ad5708a72aebe06a55ee8fc71a"
+$activityVerification.ReceiptSha256 = "08c40cfa18ced077c755a58b6a7c1f6afab364cd5295a8a5d71f233482f5a5cb"
+$activityVerification.BaselineSha256 = "e7c8bcff3179bff2ff67002f4746dd64be09980c9b3a3a6fa2773dba17afbf3d"
+$activityVerification.BaselineMetadataSha256 = "220fdf94f0b00505038a04a930f00b9605b90cd6b9e992662f88cd63e64a5198"
+$activityVerification.PlanSha256 = "fb1472c3ee986122dd17bb6af8a850805a005a7b9a6f3321521e8525df0e13c9"
+$activityVerification.PlanMetadataSha256 = "1eec3aa342f54ac68022fd967142aabf6d594ae330de8a0174d395cd5a3f954e"
+$activityVerification.Metadata.SourceSha = $activityVerification.SourceSha
+$activityVerification.Metadata.StateSerial = 401
+$activityVerification.Metadata.CreatedAt = "2026-10-01T21:19:13Z"
+$activityVerification.CurrentState.Serial = 404
+for ($index = 0; $index -lt 3; $index++) {
+  $activityVerification.StateHistory.Versions[$index].LastModified = @("2026-10-01T21:35:52Z", "2026-10-01T21:36:16Z", "2026-10-01T21:36:29Z")[$index]
+}
+$null = Assert-ExactActivityRefreshThreeSnapshotVerification @activityVerification; $passed++
+Assert-Rejected { Assert-ExactRestrictedExportThreeSnapshotVerification @activityVerification } "Export activation accepted activity evidence."
+Assert-Rejected { Assert-ExactActivityRefreshThreeSnapshotVerification @exportVerification } "Activity refresh accepted export activation evidence."
+foreach ($pin in @("SourceSha", "ReceiptSha256", "BaselineSha256", "BaselineMetadataSha256", "PlanSha256", "PlanMetadataSha256")) {
+  $bad = Copy-VerificationParameters $activityVerification
+  $bad[$pin] = if ($pin -ceq "SourceSha") { "0" * 40 } else { "0" * 64 }
+  Assert-Rejected { Assert-ExactActivityRefreshThreeSnapshotVerification @bad } "Activity recovery accepted a different $pin."
+}
+foreach ($case in @(
+    { param($v) $v.Metadata.SchemaVersion = "6" },
+    { param($v) $v.Metadata.SourceSha = "0" * 40 },
+    { param($v) $v.Metadata.StateSerial = 400 },
+    { param($v) $v.CurrentState.Serial = 405 },
+    { param($v) $v.CurrentState.Lineage = "87654321-4321-4321-4321-cba987654321" },
+    { param($v) $v.Metadata.CreatedAt = "invalid" },
+    { param($v) $v.Metadata.CreatedAt = "2026-10-01T21:35:52Z" },
+    { param($v) $v.StateHistory.NextToken = "more" },
+    { param($v) $v.StateHistory.Versions = @($v.StateHistory.Versions | Select-Object -Skip 1) },
+    { param($v) $copy = Copy-Fixture $v.StateHistory.Versions[2]; $copy.VersionId = "later"; $copy.LastModified = "2026-10-01T21:36:30Z"; $v.StateHistory.Versions += $copy },
+    { param($v) $v.StateHistory.DeleteMarkers = @([pscustomobject]@{ Key = "platform.tfstate"; LastModified = "2026-10-01T21:36:29Z" }) },
+    { param($v) $v.StateHistory.Versions[0].Key = "other.tfstate" },
+    { param($v) $v.StateHistory.Versions[0].LastModified = "2026-10-01T21:35:53Z" },
+    { param($v) $v.StateHistory.Versions[1].LastModified = "2026-10-01T21:36:17Z" },
+    { param($v) $v.StateHistory.Versions[2].LastModified = "2026-10-01T21:36:30Z" },
+    { param($v) $v.StateHistory.Versions[0].LastModified = "2026-10-01T21:35:52" },
+    { param($v) $v.StateHistory.Versions[0].IsLatest = $true },
+    { param($v) $v.StateHistory.Versions[2].IsLatest = $false },
+    { param($v) $v.StateHistory.Versions[2].IsLatest = "true" },
+    { param($v) $v.StateHistory.Versions[0].VersionId = "" },
+    { param($v) $v.StateHistory.Versions[1].VersionId = $v.StateHistory.Versions[2].VersionId },
+    { param($v) $v.StateHistory.Versions[2].Size = [long]0 },
+    { param($v) $v.StateHistory.Versions[2].Size = "120000" },
+    { param($v) $v.StateHistory.Versions[2].Size = [double]120000.5 }
+  )) {
+  $bad = Copy-VerificationParameters $activityVerification
+  & $case $bad
+  Assert-Rejected { Assert-ExactActivityRefreshThreeSnapshotVerification @bad } "Activity recovery accepted tampered snapshot evidence."
+}
+foreach ($timestampType in @("datetime", "datetimeoffset", "offset-string")) {
+  $typed = Copy-VerificationParameters $activityVerification
+  if ($timestampType -ceq "datetime") {
+    $typed.Metadata.CreatedAt = [datetime]$typed.Metadata.CreatedAt
+    foreach ($version in $typed.StateHistory.Versions) { $version.LastModified = [datetime]$version.LastModified }
+  } elseif ($timestampType -ceq "datetimeoffset") {
+    $typed.Metadata.CreatedAt = [datetimeoffset]$typed.Metadata.CreatedAt
+    foreach ($version in $typed.StateHistory.Versions) { $version.LastModified = [datetimeoffset]$version.LastModified }
+  } else {
+    $typed.Metadata.CreatedAt = ([datetimeoffset]$typed.Metadata.CreatedAt).ToOffset([timespan]::FromHours(-4)).ToString('o')
+    foreach ($version in $typed.StateHistory.Versions) { $version.LastModified = ([datetimeoffset]$version.LastModified).ToOffset([timespan]::FromHours(-4)).ToString('o') }
+  }
+  $null = Assert-ExactActivityRefreshThreeSnapshotVerification @typed; $passed++
+}
 $threeAdvanceState = [pscustomobject]@{ Lineage = $currentState.Lineage; Serial = $currentState.Serial + 3 }
 $null = Assert-RetainedGatewayBaselineMetadata $baselineMetadata $metadataPlan $baselinePath $baselineSha `
   $sourceSha $account "us-east-2" $repositoryUrl $threeAdvanceState -AllowThreeSerialAdvances; $passed++
