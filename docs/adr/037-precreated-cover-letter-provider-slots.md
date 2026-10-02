@@ -122,6 +122,14 @@ accepted deletion requirements nor represents accountable security/privacy appro
 
 ## Consequences
 
+The final-document S3 transport now enforces explicit single-attempt policy per PUT and separates
+positive original creation receipts from conditional-conflict recovery. A missing/ambiguous receipt
+never becomes acknowledged from HEAD. Exact HEAD/GET versions, bounded content/digest, detached
+input and locally bounded I/O are verified offline, including installed-SDK success/server-error
+responses. Local abort does not prove remote work stopped. The PostgreSQL final writer still needs
+its original ledger claim, receipt-based settlement and read-only recovery composition; this
+transport checkpoint does not complete that prerequisite or authorize activation.
+
 The isolated handler now requires a fixed-purpose private control claim before any external effect.
 It consumes an existing `provider_dispatch` authorization, never issues/renews work or selects a
 candidate owner. Documents resolves the stored owner and reuses its atomic active-candidate,

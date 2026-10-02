@@ -9,6 +9,16 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 final-document S3 transport hardening passes 50 focused cases and all 482 Documents
+unit tests. Each PUT requires explicit single-attempt SDK policy; only original one-attempt HTTP
+200 plus exact pinned metadata returns a positive creation receipt. Conflicts remain distinct,
+ambiguous receipts never recover through HEAD, and exact HEAD/GET versions, input detachment,
+bounded streams and late-body disposal are covered. Installed-SDK offline responses prove one
+HTTP PUT on success/server error. The PostgreSQL final writer still needs ledger enforcement and
+receipt-based settlement/read-only recovery; local abort is not remote-quiescence proof. No public
+API/frontend, migration, guard/Terraform, cloud/model call, deployment or activation change.
+Repository-wide verification follows; D1/D3 remain In progress.
+
 October 2 isolated provider effects now require one original Documents `provider_dispatch` claim
 before dispatch replacement, model access or result replacement. The fixed-purpose control methods
 consume existing authority only and cannot renew consent, choose an owner or settle another phase.
