@@ -14,6 +14,10 @@ Provides the approved interface for model use, structured output, prompt/version
 
 Clients and services must use this package rather than invoking model providers directly.
 
+Disclosure freshness fails closed on invalid approval or clock timestamps and non-finite or
+negative lifetime configuration. The default remains 15 minutes, including its exact boundary.
+Rejection uses the existing `DISCLOSURE_STALE` code and happens before provider access.
+
 ## OpenAI development adapter
 
 `OpenAiLunaProvider` implements the existing provider port with native fetch and the fixed

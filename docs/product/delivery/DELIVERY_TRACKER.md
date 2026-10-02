@@ -9,6 +9,16 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 D3-037's default-off OpenAI adapter merged in #504 (`1ffe675`); the selected model
+is not composed or activated. D3-038 corrects a reproduced AI-disclosure freshness bypass:
+invalid approval/clock times and NaN/infinite lifetimes previously allowed provider access.
+The backend-only guard keeps the existing 15-minute default and error contract, with 58 AI
+tests passing. Full repository verification passes (baseline lint: 15 warnings/58 infos);
+review remains. Merged #504's hosted quality, catalog, integration and both container jobs pass,
+with dependency audit and independent static analysis still failing. The proposed Prepare/cover-letter
+API scope still needs owner approval. No frontend, API, provider activation or deployment changes.
+D1/D3 remain In progress. See the [Phase 3 tasks](phase-3-application-preparation.md#task-register).
+
 October 2 owner selected OpenAI `gpt-6-luna` and accepted limited development data handling.
 D3-037 implements a default-off Responses provider port with offline transport/grounding tests;
 AI package 50 tests and full Phase 0 repository verification pass (baseline-only lint).
