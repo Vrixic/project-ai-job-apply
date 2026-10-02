@@ -356,6 +356,20 @@ A box is ticked only when its whole wording has linked, inspected evidence. Loca
 
 ## Decisions and scope changes
 
+2026-10-02 final-writer verification: committed source `385da94` passes the full
+[maintained repository verifier](../../../scripts/verify-phase0.ps1) without exemptions: regenerated
+contracts with no generated diff, infrastructure/toolchain and synthetic operator regressions,
+current/historical migration receipt cases, formatting (946 files), baseline-only lint (15 warnings/
+58 infos), all 38 typecheck tasks (34 cached), dependency security, repository tests, all 23 builds
+(20 cached), Compose and product scope. Independent Documents runs pass 496 unit and 94 PostgreSQL
+cases; six connected preparation-workflow cases pass. Seven added local evidence links and whitespace
+checks pass. Docker Desktop/WSL are stopped and the exact disposable test database/container removed,
+with shared Compose volumes retained. Only this evidence update follows verification on the same
+feature branch as code. No push/PR, frontend/public API, migration, guard/Terraform implementation
+edit, live cloud/model call, deployment or activation. Production RPC/IAM, trusted failed-call
+settlement, retention/drain, read/export/restore and external acceptance remain open; D1/D3 remain
+In progress.
+
 2026-10-02 final-document source enforcement is implemented: every new PUT needs the original
 fresh final grant derived from the settled provider binding. Positive creation/pinned readback
 alone can settle. Read-only artifact recovery cannot recreate missing bytes or certify unresolved
