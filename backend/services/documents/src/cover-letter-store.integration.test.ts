@@ -23,7 +23,10 @@ import {
 import { CoverLetterProviderInitializer } from "./cover-letter-provider-initialize.js";
 import { CoverLetterProviderRecovery } from "./cover-letter-provider-recovery.js";
 import { type CoverLetterObjectStore, PostgresCoverLetterStore } from "./cover-letter-store.js";
-import { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
+import {
+  type CoverLetterWorkPurpose,
+  PostgresCoverLetterWorkStore,
+} from "./cover-letter-work-store.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const execFileAsync = promisify(execFile);
@@ -58,14 +61,40 @@ const generation = {
     if (existing && !Buffer.from(existing).equals(Buffer.from(input.bytes)))
       throw new CoverLetterIntegrityError();
     objects.set(input.objectKey, Uint8Array.from(input.bytes));
-    return { objectVersion: "synthetic-object-v1" };
+    return { objectVersion: "synthetic-object-v1", created: !existing };
   });
   const read = vi.fn<CoverLetterObjectStore["read"]>(async (input) => {
     const bytes = objects.get(input.objectKey);
     if (!bytes) throw new CoverLetterIntegrityError();
     return Uint8Array.from(bytes);
   });
-  const store = new PostgresCoverLetterStore(client, { putIfAbsent, read });
+  const findObject: NonNullable<CoverLetterObjectStore["find"]> = async (input) =>
+    objects.has(input.objectKey) ? { objectVersion: "synthetic-object-v1" } : null;
+  // Legacy offline-model cases have no isolated provider actor. Explicitly synthesize its
+  // completed phase in this fixture ONLY, then exercise the real final admission/settlement.
+  const syntheticProviderWork = {
+    async claimFinalDocument(binding: { ownerUserId: string; documentId: string }) {
+      const prior = await workClient`SELECT id FROM documents.cover_letter_work_authorizations
+        WHERE document_id = ${binding.documentId} AND purpose = 'provider_dispatch'`;
+      if (!prior[0]) {
+        const { authorization } = await work.issue({
+          ...binding,
+          purpose: "provider_dispatch",
+          requestSha256: "f".repeat(64),
+          consentExpiresAt: new Date(Date.now() + 60_000),
+        });
+        expect((await work.claim(authorization)).kind).toBe("claimed");
+        await work.recordSettled(authorization);
+      }
+      return work.claimFinalDocument(binding);
+    },
+    recordSettled: work.recordSettled.bind(work),
+  };
+  const store = new PostgresCoverLetterStore(
+    client,
+    { putIfAbsent, read, find: findObject },
+    syntheticProviderWork,
+  );
 
   beforeAll(async () => {
     const env = { ...process.env, DATABASE_URL: databaseUrl };
@@ -87,6 +116,18 @@ const generation = {
     try {
       await run(owner);
     } finally {
+      // All in-memory fixture calls have stopped. Cleanup settlement is synthetic only.
+      const running = await workClient<
+        Array<{
+          id: string;
+          documentId: string;
+          purpose: CoverLetterWorkPurpose;
+          requestSha256: string;
+        }>
+      >`
+        SELECT id, document_id AS "documentId", purpose, request_sha256 AS "requestSha256"
+        FROM documents.cover_letter_work_authorizations WHERE user_id = ${owner} AND state = 'running'`;
+      for (const reference of running) await work.recordSettled(reference);
       const letters = await client<
         Array<{ id: string }>
       >`SELECT id FROM documents.cover_letters WHERE user_id = ${owner}`;
@@ -604,13 +645,18 @@ const generation = {
     await withOwner(async (owner) => {
       const reserved = await store.reserve(input(owner));
       const document = createCoverLetterDocument(reserved, generation, reserved.createdAt);
-      const uncertain = new PostgresCoverLetterStore(client, {
-        read,
-        async putIfAbsent(value) {
-          await putIfAbsent(value);
-          throw new Error("Synthetic lost response");
+      const uncertain = new PostgresCoverLetterStore(
+        client,
+        {
+          read,
+          find: findObject,
+          async putIfAbsent(value) {
+            await putIfAbsent(value);
+            throw new Error("Synthetic lost response");
+          },
         },
-      });
+        syntheticProviderWork,
+      );
       await expect(uncertain.complete(document)).rejects.toThrow("Synthetic lost response");
       const rows =
         await client`SELECT status FROM documents.cover_letters WHERE id = ${document.id}`;
@@ -636,14 +682,19 @@ const generation = {
       const writing = new Promise<void>((resolve) => {
         entered = resolve;
       });
-      const leased = new PostgresCoverLetterStore(client, {
-        read,
-        async putIfAbsent(value) {
-          entered();
-          await gate;
-          return putIfAbsent(value);
+      const leased = new PostgresCoverLetterStore(
+        client,
+        {
+          read,
+          find: findObject,
+          async putIfAbsent(value) {
+            entered();
+            await gate;
+            return putIfAbsent(value);
+          },
         },
-      });
+        syntheticProviderWork,
+      );
       const completion = leased.complete(document);
       await writing;
       try {

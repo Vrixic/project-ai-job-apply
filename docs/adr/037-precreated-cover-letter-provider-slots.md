@@ -126,9 +126,17 @@ The final-document S3 transport now enforces explicit single-attempt policy per 
 positive original creation receipts from conditional-conflict recovery. A missing/ambiguous receipt
 never becomes acknowledged from HEAD. Exact HEAD/GET versions, bounded content/digest, detached
 input and locally bounded I/O are verified offline, including installed-SDK success/server-error
-responses. Local abort does not prove remote work stopped. The PostgreSQL final writer still needs
-its original ledger claim, receipt-based settlement and read-only recovery composition; this
-transport checkpoint does not complete that prerequisite or authorize activation.
+responses. Local abort does not prove remote work stopped. The PostgreSQL final writer now requires
+an original final-document claim before every PUT; a settled provider row supplies immutable request
+and consent binding. It cannot steal an earlier unclaimed grant or renew expired/revoked work.
+Completion is serialized before independent issuance without holding the parent row, then locks
+and revalidates metadata. Original positive creation plus exact pinned read may settle; conditional
+conflict, missing receipt, failed read, lost ACK and read-only replay never manufacture settlement.
+SQL rollback after original settlement can recover existing bytes without another PUT. Missing or
+deleted objects cannot be recreated by replay. Inputs/control references/version receipts are
+detached across asynchronous work. Connected tests use synthetic objects and in-process SQL controls,
+not authenticated production RPC or remote-stopped proof. Activation remains forbidden pending the
+remaining runtime, IAM, retention, trusted remote settlement and accountable acceptance prerequisites.
 
 The isolated handler now requires a fixed-purpose private control claim before any external effect.
 It consumes an existing `provider_dispatch` authorization, never issues/renews work or selects a
@@ -137,7 +145,7 @@ immutable-binding and server-time claim. The settlement capability is provider-p
 the original positive dispatch/completed-model/result acknowledgements settle that phase; replay,
 object presence, lost acknowledgements or a local timeout do not. The compiled isolated handler
 imports no database runtime. Connected SQL/offline object/model evidence is not authenticated
-remote RPC or live provider/IAM evidence. Final-document enforcement, failed-call remote settlement,
+remote RPC or live provider/IAM evidence. Failed-call remote settlement,
 retention and full runtime/drain composition remain unfinished, so the proposal stays incomplete.
 
 The private initializer now enforces the Documents ledger: a fresh exact-bound `private_slots`

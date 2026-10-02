@@ -201,6 +201,38 @@ export class PostgresCoverLetterWorkStore {
     });
   }
 
+  /** Private finalization uses the original settled provider binding, never caller consent. */
+  async claimFinalDocument(input: {
+    ownerUserId: string;
+    documentId: string;
+  }): Promise<{ kind: "claimed"; reference: CoverLetterWorkReference } | { kind: "unavailable" }> {
+    return this.guarded(async () => {
+      const binding = structuredClone(input);
+      if (!UUID.test(binding.ownerUserId) || !UUID.test(binding.documentId)) throw Error();
+      const provider = await find(this.client, binding.documentId, "provider_dispatch");
+      if (provider?.state !== "settled" || provider.ownerUserId !== binding.ownerUserId)
+        return { kind: "unavailable" } as const;
+      const issued = await this.issue({
+        ...binding,
+        purpose: "final_document",
+        requestSha256: provider.requestSha256,
+        consentExpiresAt: provider.consentExpiresAt,
+      });
+      // Even an unclaimed earlier grant cannot be stolen or renewed by replay.
+      if (issued.kind !== "issued") return { kind: "unavailable" } as const;
+      const reference: CoverLetterWorkReference = {
+        id: issued.authorization.id,
+        documentId: binding.documentId,
+        purpose: "final_document",
+        requestSha256: provider.requestSha256,
+      };
+      const claimed = await this.claim(reference);
+      return claimed.kind === "claimed"
+        ? { kind: "claimed" as const, reference }
+        : { kind: "unavailable" as const };
+    });
+  }
+
   /** Trusted positive settlement ONLY. No catch/finally/timeout-based automatic settlement. */
   async recordSettled(reference: CoverLetterWorkReference): Promise<void> {
     return this.guarded(async () => {

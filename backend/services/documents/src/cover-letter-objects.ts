@@ -262,4 +262,24 @@ export class S3CoverLetterObjectStore implements CoverLetterObjectStore {
       }
     }
   }
+
+  async find(
+    request: Parameters<NonNullable<CoverLetterObjectStore["find"]>>[0],
+  ): Promise<{ objectVersion: string } | null> {
+    const input = { ...request };
+    assertIdentity(input);
+    if (
+      !Number.isInteger(input.sizeBytes) ||
+      input.sizeBytes < 1 ||
+      input.sizeBytes > MAXIMUM_BYTES
+    )
+      throw new CoverLetterIntegrityError();
+    try {
+      return { objectVersion: await this.head(input, AbortSignal.timeout(10_000)) };
+    } catch (error) {
+      const failure = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } } | null;
+      if (failure?.name === "NotFound" || failure?.$metadata?.httpStatusCode === 404) return null;
+      throw new CoverLetterIntegrityError();
+    }
+  }
 }

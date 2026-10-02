@@ -17,6 +17,7 @@ describe("private generation work control fails closed before database access", 
     "issue",
     "claim",
     "claimProviderDispatch",
+    "claimFinalDocument",
     "settleProviderDispatch",
     "recordSettled",
     "revokeUnclaimed",
@@ -35,16 +36,32 @@ describe("private generation work control fails closed before database access", 
                 requestSha256: ref.requestSha256,
                 consentExpiresAt,
               })
-            : method === "settleProviderDispatch"
-              ? store.settleProviderDispatch({ ...ref, purpose: "provider_dispatch" })
-              : method === "recordSettled"
-                ? store.recordSettled(ref)
-                : method === "revokeUnclaimed"
-                  ? store.revokeUnclaimed(owner, documentId)
-                  : store.readDrainState(owner, documentId);
+            : method === "claimFinalDocument"
+              ? store.claimFinalDocument({ ownerUserId: owner, documentId })
+              : method === "settleProviderDispatch"
+                ? store.settleProviderDispatch({ ...ref, purpose: "provider_dispatch" })
+                : method === "recordSettled"
+                  ? store.recordSettled(ref)
+                  : method === "revokeUnclaimed"
+                    ? store.revokeUnclaimed(owner, documentId)
+                    : store.readDrainState(owner, documentId);
     await expect(result).rejects.toThrow("CoverLetterWorkUnavailable");
     expect(sql).not.toHaveBeenCalled();
   });
+  it.each(["owner", "document"])(
+    "rejects malformed final admission %s before SQL",
+    async (kind) => {
+      const sql = vi.fn();
+      const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql, () => true);
+      const binding = { ownerUserId: owner, documentId };
+      if (kind === "owner") binding.ownerUserId = "invalid";
+      else binding.documentId = "invalid";
+      await expect(store.claimFinalDocument(binding)).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
+      expect(sql).not.toHaveBeenCalled();
+    },
+  );
   it.each(["private_slots", "final_document"] as const)(
     "provider settlement cannot mutate %s authority",
     async (purpose) => {

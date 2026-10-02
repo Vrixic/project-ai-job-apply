@@ -37,7 +37,7 @@ original positive dispatch/model/result path can settle. Read-only ready-result 
 control/write responses and local timeout/late model completion never settle running work.
 The isolated compiled handler imports no SQL runtime. The connected SQL tests use an in-process
 control port and offline model/objects, not a deployed authenticated RPC. Remote control/IAM,
-final-document enforcement, retention and production drain composition remain unfinished.
+retention and production drain composition remain unfinished.
 
 The final-document S3 transport now checks single-attempt SDK policy before each PUT and returns
 `created: true` only after an original one-attempt HTTP 200 receipt and pinned metadata verification.
@@ -45,5 +45,15 @@ Conditional conflicts return `created: false`; missing/ambiguous receipts never 
 HEAD. Inputs are detached before asynchronous I/O, versions cannot be null/unsafe, and reads verify
 both HEAD and GET versions plus bounded bytes/digest. Local deadlines bound stalled policy, I/O
 and streams; late GET bodies are disposed without reading. Abort is not remote-quiescence proof.
-The PostgreSQL completion path does not yet consume this receipt or enforce a final-document claim.
-These offline transport controls are a prerequisite, not completed final-writer or deployed evidence.
+The PostgreSQL completion path now requires a private final-document control port for every new
+write. Admission derives the original request/consent from its settled provider ledger row, never
+from the caller, and consumes one fresh final grant. Completion uses a separate advisory lock before
+independent control transactions to avoid a parent-row lock cycle. It snapshots inputs/references,
+verifies exact pinned bytes and settles only an original positively acknowledged creation.
+Read-only current-version recovery can complete metadata after a lost ACK or SQL rollback without
+another PUT; it never settles running work, and a missing/deleted object cannot be recreated.
+Missing/default-off control refuses writes. Existing ready metadata remains non-mutating.
+The 94 connected Documents SQL cases and six preparation-workflow cases use synthetic objects/models
+and in-process controls. Legacy offline-model fixtures explicitly seed synthetic provider settlement;
+that fixture setup is not production permission or remote-stopped proof. Production control/RPC/IAM,
+trusted failed-call settlement, retention, read/export/restore and drain composition remain open.

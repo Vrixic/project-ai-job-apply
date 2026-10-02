@@ -25,6 +25,7 @@ const readInput = {
   sha256,
   sizeBytes: bytes.length,
 };
+const findInput = { documentId, objectKey: input.objectKey, sha256, sizeBytes: bytes.length };
 const metadata = () => ({
   VersionId: "synthetic-v1",
   ContentLength: bytes.length,
@@ -45,6 +46,51 @@ const service = (
   });
 
 describe("encrypted immutable cover-letter objects", () => {
+  it("recovers only an existing exact-bound current version using HEAD, never PUT", async () => {
+    const send = vi.fn(async (command: unknown) => {
+      expect(command).toBeInstanceOf(HeadObjectCommand);
+      expect((command as HeadObjectCommand).input.VersionId).toBeUndefined();
+      return metadata();
+    });
+    expect(await service(send).find(findInput)).toEqual({ objectVersion: "synthetic-v1" });
+    expect(send).toHaveBeenCalledOnce();
+  });
+  it.each([{ name: "NotFound" }, { $metadata: { httpStatusCode: 404 } }])(
+    "read-only absence returns null without creation",
+    async (error) => {
+      const send = vi.fn(async () => {
+        throw error;
+      });
+      expect(await service(send).find(findInput)).toBeNull();
+      expect(send).toHaveBeenCalledOnce();
+    },
+  );
+  it.each([
+    { name: "AccessDenied" },
+    { $metadata: { httpStatusCode: 500 } },
+    new Error("synthetic private diagnostic"),
+  ])("read-only failure is never treated as absence", async (error) => {
+    await expect(
+      service(async () => {
+        throw error;
+      }).find(findInput),
+    ).rejects.toThrow(CoverLetterIntegrityError);
+  });
+  it.each([0, -1, 32_769, 1.5])(
+    "refuses invalid recovery size %s without I/O",
+    async (sizeBytes) => {
+      const send = vi.fn();
+      await expect(service(send).find({ ...findInput, sizeBytes })).rejects.toThrow(
+        CoverLetterIntegrityError,
+      );
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+  it("cannot recover a version with a different immutable digest", async () => {
+    await expect(
+      service(async () => metadata()).find({ ...findInput, sha256: "0".repeat(64) }),
+    ).rejects.toThrow(CoverLetterIntegrityError);
+  });
   it("pins the key, KMS key, conditional write, checksum and exact returned version", async () => {
     const send = vi.fn(async (command: unknown, options?: { abortSignal: AbortSignal }) => {
       expect(options?.abortSignal).toBeInstanceOf(AbortSignal);

@@ -12,6 +12,7 @@ import {
   CoverLetterGenerationService,
   type CoverLetterObjectStore,
   PostgresCoverLetterStore,
+  PostgresCoverLetterWorkStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
 import type { GraphFact } from "@ai-job-apply/domain";
 import { ExecutionStatus, LocalDurableTestRunner } from "@aws/durable-execution-sdk-js-testing";
@@ -56,6 +57,10 @@ const START = new Date("2026-10-02T12:00:00Z");
       ],
     ]);
     const applications = new PostgresApplicationStore(client, () => now, { definitions });
+    const controlClient = createApplicationsDatabase(databaseUrl ?? "postgres://invalid", {
+      maxConnections: 1,
+    });
+    const work = new PostgresCoverLetterWorkStore(controlClient, () => true);
     const objects = new Map<string, Uint8Array>();
     const objectStore: CoverLetterObjectStore = {
       async putIfAbsent(input) {
@@ -63,15 +68,37 @@ const START = new Date("2026-10-02T12:00:00Z");
         if (prior && !Buffer.from(prior).equals(Buffer.from(input.bytes)))
           throw new Error("Synthetic conflicting bytes");
         objects.set(input.objectKey, Uint8Array.from(input.bytes));
-        return { objectVersion: "synthetic-version-v1" };
+        return { objectVersion: "synthetic-version-v1", created: !prior };
       },
       async read(input) {
         const bytes = objects.get(input.objectKey);
         if (!bytes) throw new Error("Synthetic missing bytes");
         return Uint8Array.from(bytes);
       },
+      async find(input) {
+        return objects.has(input.objectKey) ? { objectVersion: "synthetic-version-v1" } : null;
+      },
     };
-    const documents = new PostgresCoverLetterStore(client, objectStore);
+    const documents = new PostgresCoverLetterStore(client, objectStore, {
+      // Fixture-only preceding provider settlement for the offline legacy generator. This
+      // neither composes isolated production dispatch nor certifies remote model quiescence.
+      async claimFinalDocument(binding) {
+        const prior = await controlClient`SELECT id FROM documents.cover_letter_work_authorizations
+          WHERE document_id = ${binding.documentId} AND purpose = 'provider_dispatch'`;
+        if (!prior[0]) {
+          const { authorization } = await work.issue({
+            ...binding,
+            purpose: "provider_dispatch",
+            requestSha256: HASH,
+            consentExpiresAt: new Date(Date.now() + 60_000),
+          });
+          expect((await work.claim(authorization)).kind).toBe("claimed");
+          await work.recordSettled(authorization);
+        }
+        return work.claimFinalDocument(binding);
+      },
+      recordSettled: work.recordSettled.bind(work),
+    });
 
     beforeAll(async () => {
       for (const service of ["profile", "applications", "documents"]) {
@@ -89,6 +116,7 @@ const START = new Date("2026-10-02T12:00:00Z");
     afterAll(async () => {
       await LocalDurableTestRunner.teardownTestEnvironment();
       await client.end();
+      await controlClient.end();
     });
 
     async function withFixture(
@@ -109,6 +137,7 @@ const START = new Date("2026-10-02T12:00:00Z");
           SELECT id FROM documents.cover_letters WHERE user_id = ${owner}
         `;
         for (const document of ownedDocuments) {
+          await work.revokeUnclaimed(owner, document.id);
           objects.delete(`normalized/${document.id}/cover-letter.v1.json`);
         }
         await client`SELECT applications.delete_candidate_data(${owner}::uuid, ${requestId}::uuid)`;

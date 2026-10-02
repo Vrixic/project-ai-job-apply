@@ -6,6 +6,11 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CoverLetterIntegrityError,
+  createCoverLetterDocument,
+  encodeCoverLetterDocument,
+} from "./cover-letter.js";
+import {
   COVER_LETTER_PROVIDER_MODEL,
   type CoverLetterProviderSlot,
   coverLetterProviderSha256,
@@ -13,7 +18,7 @@ import {
 } from "./cover-letter-provider-contract.js";
 import { createCoverLetterIsolatedProviderHandler } from "./cover-letter-provider-handler.js";
 import type { CoverLetterProviderTransitionObjects } from "./cover-letter-provider-objects.js";
-import { PostgresCoverLetterStore } from "./cover-letter-store.js";
+import { type CoverLetterMetadata, PostgresCoverLetterStore } from "./cover-letter-store.js";
 import {
   type CoverLetterWorkAuthorization,
   type CoverLetterWorkPurpose,
@@ -46,6 +51,13 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
     },
   });
   const work = new PostgresCoverLetterWorkStore(sql, () => true);
+  // Independently committed controls must not wait on a connection held by completion leases.
+  const finalControl = postgres(databaseUrl ?? "postgres://invalid", {
+    max: 2,
+    onnotice: () => undefined,
+  });
+  const finalWork = new PostgresCoverLetterWorkStore(finalControl, () => true);
+  let reserved: CoverLetterMetadata;
   let ownerUserId: string;
   let documentId: string;
   let consentExpiresAt: Date;
@@ -71,7 +83,7 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
     documentId = uuidv7();
     consentExpiresAt = new Date(Date.now() + 15 * 60_000);
     await sql`INSERT INTO identity.users (id) VALUES (${ownerUserId})`;
-    await documents.reserve({
+    reserved = await documents.reserve({
       id: documentId,
       ownerUserId,
       applicationId: uuidv7(),
@@ -93,6 +105,7 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
   });
   afterAll(async () => {
     await sql.end();
+    await finalControl.end();
   });
 
   async function issue(purpose: CoverLetterWorkPurpose = "private_slots") {
@@ -109,6 +122,395 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
   }
 
   const providerBinding = () => ({ documentId, requestSha256, consentExpiresAt });
+
+  async function settledProvider() {
+    const provider = (await issue("provider_dispatch")).authorization;
+    expect((await work.claim(provider)).kind).toBe("claimed");
+    await work.recordSettled(provider);
+    return provider;
+  }
+  function finalFixture(
+    fault?:
+      | "put_ack"
+      | "read"
+      | "conflict"
+      | "claim_ack"
+      | "settle_ack"
+      | "settle_failure"
+      | "sql_rollback",
+  ) {
+    const factId = uuidv7();
+    const document = createCoverLetterDocument(
+      reserved,
+      {
+        status: "needs_review",
+        purpose: "cover_letter",
+        reviewRequired: true,
+        paragraphs: [{ text: "I build reliable synthetic systems.", factIds: [factId] }],
+        sourceFactIds: [factId],
+        findings: [],
+        confidence: 0.9,
+        promptVersion: "cover_letter.v1",
+        model: COVER_LETTER_PROVIDER_MODEL,
+      },
+      reserved.createdAt,
+    );
+    let bytes: Uint8Array | undefined =
+      fault === "conflict" ? encodeCoverLetterDocument(document) : undefined;
+    let firstRead = true;
+    const state = async () => {
+      const rows = await finalControl<
+        Array<{ state: string }>
+      >`SELECT state FROM documents.cover_letter_work_authorizations
+        WHERE document_id = ${documentId} AND purpose = 'final_document'`;
+      return rows[0]?.state;
+    };
+    const put = vi.fn(async (input: { bytes: Uint8Array }) => {
+      expect(await state()).toBe("running");
+      bytes = Uint8Array.from(input.bytes);
+      if (fault === "put_ack") throw Error("SyntheticLostPutAck");
+      return { objectVersion: "synthetic-final-v1", created: fault !== "conflict" };
+    });
+    const find = vi.fn(async () => (bytes ? { objectVersion: "synthetic-final-v1" } : null));
+    const read = vi.fn(async (input: { objectVersion: string }) => {
+      expect(input.objectVersion).toBe("synthetic-final-v1");
+      if (!bytes) throw new CoverLetterIntegrityError();
+      if (fault === "read" && firstRead) {
+        firstRead = false;
+        return new Uint8Array(bytes.length);
+      }
+      return Uint8Array.from(bytes);
+    });
+    const claim = vi.fn(async (binding: { ownerUserId: string; documentId: string }) => {
+      const result = await finalWork.claimFinalDocument(binding);
+      if (fault === "claim_ack") throw Error("SyntheticLostClaimAck");
+      return result;
+    });
+    const settle = vi.fn(async (reference: Parameters<typeof finalWork.recordSettled>[0]) => {
+      expect(put).toHaveBeenCalledOnce();
+      expect(read).toHaveBeenCalledOnce();
+      if (fault === "settle_failure") throw Error("SyntheticSettlementUnavailable");
+      await finalWork.recordSettled(reference);
+      if (fault === "settle_ack") throw Error("SyntheticLostSettlementAck");
+    });
+    const rollbackClient = {
+      begin: (run: (transaction: postgres.TransactionSql) => Promise<unknown>) =>
+        sql.begin(async (transaction) => {
+          await run(transaction);
+          throw Error("SyntheticCompletionRollback");
+        }),
+    } as unknown as postgres.Sql;
+    const port = { putIfAbsent: put, find, read };
+    const control = { claimFinalDocument: claim, recordSettled: settle };
+    const store = new PostgresCoverLetterStore(
+      fault === "sql_rollback" ? rollbackClient : sql,
+      port,
+      control,
+    );
+    const replay = new PostgresCoverLetterStore(sql, port, finalWork);
+    return {
+      document,
+      store,
+      replay,
+      port,
+      put,
+      find,
+      read,
+      claim,
+      settle,
+      state,
+      remove: () => {
+        bytes = undefined;
+      },
+    };
+  }
+
+  it("final admission resolves original binding and has one non-renewable concurrent winner", async () => {
+    const provider = await settledProvider();
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () => finalWork.claimFinalDocument({ ownerUserId, documentId })),
+    );
+    expect(results.filter((result) => result.kind === "claimed")).toHaveLength(1);
+    const final = (await issue("final_document")).authorization;
+    expect(final).toMatchObject({
+      state: "running",
+      requestSha256: provider.requestSha256,
+      consentExpiresAt: provider.consentExpiresAt,
+    });
+    expect(await finalWork.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+      kind: "unavailable",
+    });
+  });
+  it.each(["missing", "issued", "running", "revoked"])(
+    "final admission refuses %s provider settlement",
+    async (state) => {
+      if (state !== "missing") {
+        const provider = (await issue("provider_dispatch")).authorization;
+        if (state === "running") await work.claim(provider);
+        if (state === "revoked") await work.revokeUnclaimed(ownerUserId, documentId);
+      }
+      expect(await finalWork.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+        kind: "unavailable",
+      });
+      const fixture = finalFixture();
+      await expect(fixture.store.complete(fixture.document)).rejects.toThrow(
+        CoverLetterIntegrityError,
+      );
+      expect(fixture.put).not.toHaveBeenCalled();
+    },
+  );
+  it("final admission refuses foreign ownership and cannot steal an existing unclaimed grant", async () => {
+    await settledProvider();
+    expect(await finalWork.claimFinalDocument({ ownerUserId: uuidv7(), documentId })).toEqual({
+      kind: "unavailable",
+    });
+    const existing = (await issue("final_document")).authorization;
+    expect(await finalWork.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+      kind: "unavailable",
+    });
+    expect((await issue("final_document")).authorization).toEqual(existing);
+  });
+  it("final admission cannot bypass quarantine or cancellation", async () => {
+    await settledProvider();
+    await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
+    await expect(finalWork.claimFinalDocument({ ownerUserId, documentId })).rejects.toThrow(
+      "CoverLetterWorkUnavailable",
+    );
+    await work.revokeUnclaimed(ownerUserId, documentId);
+    await expect(finalWork.claimFinalDocument({ ownerUserId, documentId })).rejects.toThrow(
+      "CoverLetterWorkUnavailable",
+    );
+  });
+  it("final admission cannot reopen cancellation for an otherwise active candidate", async () => {
+    await settledProvider();
+    await work.revokeUnclaimed(ownerUserId, documentId);
+    expect(await finalWork.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+      kind: "unavailable",
+    });
+    const fixture = finalFixture();
+    await expect(fixture.store.complete(fixture.document)).rejects.toThrow(
+      CoverLetterIntegrityError,
+    );
+    expect(fixture.put).not.toHaveBeenCalled();
+    expect((await issue("final_document")).authorization.state).toBe("revoked");
+  });
+  it("final admission cannot renew an expired original final grant", async () => {
+    await settledProvider();
+    const expired = await seedExpired("final_document");
+    expect(await finalWork.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+      kind: "unavailable",
+    });
+    expect((await issue("final_document")).authorization).toMatchObject({
+      id: expired.id,
+      state: "issued",
+    });
+    const fixture = finalFixture();
+    await expect(fixture.store.complete(fixture.document)).rejects.toThrow(
+      CoverLetterIntegrityError,
+    );
+    expect(fixture.put).not.toHaveBeenCalled();
+  });
+  it("a version without an explicit positive creation receipt cannot settle work", async () => {
+    await settledProvider();
+    const fixture = finalFixture();
+    const store = new PostgresCoverLetterStore(
+      sql,
+      {
+        ...fixture.port,
+        async putIfAbsent(input) {
+          await fixture.put(input);
+          return { objectVersion: "synthetic-final-v1" };
+        },
+      },
+      finalWork,
+    );
+    expect((await store.complete(fixture.document)).status).toBe("ready");
+    expect(await fixture.state()).toBe("running");
+  });
+  it("completion requires a work control port and an enabled ledger before object I/O", async () => {
+    await settledProvider();
+    const fixture = finalFixture();
+    const missing = new PostgresCoverLetterStore(sql, fixture.port);
+    const off = new PostgresCoverLetterStore(
+      sql,
+      fixture.port,
+      new PostgresCoverLetterWorkStore(finalControl),
+    );
+    await expect(missing.complete(fixture.document)).rejects.toThrow(CoverLetterIntegrityError);
+    await expect(off.complete(fixture.document)).rejects.toThrow("CoverLetterWorkUnavailable");
+    expect(fixture.put).not.toHaveBeenCalled();
+    expect(fixture.find).not.toHaveBeenCalled();
+    expect(fixture.read).not.toHaveBeenCalled();
+  });
+  it("concurrent completion writes and positively settles once, with one ready audit", async () => {
+    await settledProvider();
+    const fixture = finalFixture();
+    const ready = await Promise.all(
+      Array.from({ length: 8 }, () => fixture.store.complete(fixture.document)),
+    );
+    expect(
+      ready.every((row) => row.status === "ready" && row.objectVersion === "synthetic-final-v1"),
+    ).toBe(true);
+    expect(fixture.put).toHaveBeenCalledOnce();
+    expect(fixture.settle).toHaveBeenCalledOnce();
+    expect(await fixture.state()).toBe("settled");
+    const audits =
+      await sql`SELECT id FROM documents.audit_events WHERE document_id = ${documentId} AND action = 'cover_letter.ready'`;
+    expect(audits).toHaveLength(1);
+    fixture.remove();
+    expect((await fixture.replay.complete(fixture.document)).status).toBe("ready");
+    await expect(fixture.replay.recover({ ...reserved })).rejects.toThrow(
+      CoverLetterIntegrityError,
+    );
+    expect(fixture.put).toHaveBeenCalledOnce();
+  });
+  it("finalizes the original result after real consent expiry without another provider claim", async () => {
+    consentExpiresAt = new Date(Date.now() + 1_000);
+    const provider = await settledProvider();
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.max(0, consentExpiresAt.getTime() - Date.now()) + 30),
+    );
+    const fixture = finalFixture();
+    expect((await fixture.store.complete(fixture.document)).status).toBe("ready");
+    expect(await finalWork.claim(provider)).toEqual({ kind: "unavailable" });
+    const final = (await issue("final_document")).authorization;
+    expect(final.consentExpiresAt).toEqual(provider.consentExpiresAt);
+    expect(final.expiresAt.getTime()).toBeGreaterThan(consentExpiresAt.getTime());
+    expect(final.state).toBe("settled");
+  });
+  it.each(["put_ack", "read", "settle_failure"] as const)(
+    "%s leaves running work; replay only reads and never settles",
+    async (fault) => {
+      await settledProvider();
+      const fixture = finalFixture(fault);
+      await expect(fixture.store.complete(fixture.document)).rejects.toThrow();
+      expect(await fixture.state()).toBe("running");
+      const [pending] =
+        await sql`SELECT status FROM documents.cover_letters WHERE id = ${documentId}`;
+      expect(pending?.status).toBe("pending");
+      const settlements = fixture.settle.mock.calls.length;
+      expect((await fixture.replay.complete(fixture.document)).status).toBe("ready");
+      expect(fixture.put).toHaveBeenCalledOnce();
+      expect(fixture.settle).toHaveBeenCalledTimes(settlements);
+      expect(await fixture.state()).toBe("running");
+      await work.revokeUnclaimed(ownerUserId, documentId);
+      expect(await work.readDrainState(ownerUserId, documentId)).toBe("pending");
+      await expect(
+        sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+      ).rejects.toMatchObject({ code: "55000" });
+    },
+  );
+  it("lost PUT acknowledgement followed by object removal never permits recreation", async () => {
+    await settledProvider();
+    const fixture = finalFixture("put_ack");
+    await expect(fixture.store.complete(fixture.document)).rejects.toThrow();
+    fixture.remove();
+    await expect(fixture.replay.complete(fixture.document)).rejects.toThrow(
+      CoverLetterIntegrityError,
+    );
+    expect(fixture.put).toHaveBeenCalledOnce();
+    expect(fixture.settle).not.toHaveBeenCalled();
+    expect(await fixture.state()).toBe("running");
+  });
+  it("conditional conflict can recover matching bytes but cannot settle the original actor", async () => {
+    await settledProvider();
+    const fixture = finalFixture("conflict");
+    expect((await fixture.store.complete(fixture.document)).status).toBe("ready");
+    expect(fixture.settle).not.toHaveBeenCalled();
+    expect(await fixture.state()).toBe("running");
+  });
+  it.each(["settle_ack", "sql_rollback"] as const)(
+    "%s preserves original settlement and recovers SQL without another PUT",
+    async (fault) => {
+      await settledProvider();
+      const fixture = finalFixture(fault);
+      await expect(fixture.store.complete(fixture.document)).rejects.toThrow();
+      expect(await fixture.state()).toBe("settled");
+      expect((await fixture.replay.complete(fixture.document)).status).toBe("ready");
+      expect(fixture.put).toHaveBeenCalledOnce();
+      expect(fixture.settle).toHaveBeenCalledOnce();
+    },
+  );
+  it("ambiguous claim acknowledgement never dispatches or steals original authority", async () => {
+    await settledProvider();
+    const fixture = finalFixture("claim_ack");
+    await expect(fixture.store.complete(fixture.document)).rejects.toThrow();
+    expect(await fixture.state()).toBe("running");
+    await expect(fixture.replay.complete(fixture.document)).rejects.toThrow(
+      CoverLetterIntegrityError,
+    );
+    expect(fixture.put).not.toHaveBeenCalled();
+    expect(fixture.settle).not.toHaveBeenCalled();
+  });
+  it.each(["purpose", "document", "identity", "hash"])(
+    "rejects mismatched final %s control before all object I/O",
+    async (kind) => {
+      await settledProvider();
+      const fixture = finalFixture();
+      const store = new PostgresCoverLetterStore(sql, fixture.port, {
+        async claimFinalDocument(binding) {
+          const result = await finalWork.claimFinalDocument(binding);
+          if (result.kind !== "claimed") throw Error("SyntheticMissingClaim");
+          if (kind === "purpose") result.reference.purpose = "provider_dispatch";
+          if (kind === "document") result.reference.documentId = uuidv7();
+          if (kind === "identity") result.reference.id = "invalid";
+          if (kind === "hash") result.reference.requestSha256 = "invalid";
+          return result;
+        },
+        recordSettled: finalWork.recordSettled.bind(finalWork),
+      });
+      await expect(store.complete(fixture.document)).rejects.toThrow(CoverLetterIntegrityError);
+      expect(fixture.put).not.toHaveBeenCalled();
+      expect(fixture.find).not.toHaveBeenCalled();
+      expect(fixture.read).not.toHaveBeenCalled();
+    },
+  );
+  it("detaches candidate input, claim reference and acknowledgement version across asynchronous work", async () => {
+    await settledProvider();
+    const fixture = finalFixture();
+    const input = structuredClone(fixture.document);
+    let returnedClaim: Awaited<ReturnType<typeof finalWork.claimFinalDocument>> | undefined;
+    const receipt = { objectVersion: "synthetic-final-v1", created: true };
+    const store = new PostgresCoverLetterStore(
+      sql,
+      {
+        ...fixture.port,
+        async putIfAbsent(value) {
+          if (returnedClaim?.kind === "claimed")
+            returnedClaim.reference.purpose = "provider_dispatch";
+          await fixture.put(value);
+          return receipt;
+        },
+        async read(value) {
+          receipt.objectVersion = "synthetic-foreign-v1";
+          receipt.created = false;
+          return fixture.read(value);
+        },
+      },
+      {
+        async claimFinalDocument(binding) {
+          input.ownerUserId = uuidv7();
+          const paragraph = input.paragraphs[0];
+          if (!paragraph) throw Error("SyntheticParagraphMissing");
+          paragraph.text = "Synthetic caller mutation";
+          returnedClaim = await finalWork.claimFinalDocument(binding);
+          return returnedClaim;
+        },
+        recordSettled: finalWork.recordSettled.bind(finalWork),
+      },
+    );
+    const ready = await store.complete(input);
+    expect(ready.objectVersion).toBe("synthetic-final-v1");
+    expect(ready.ownerUserId).toBe(ownerUserId);
+    expect(await fixture.state()).toBe("settled");
+    expect(
+      await fixture.replay.read(
+        ownerUserId,
+        reserved.applicationId,
+        fixture.document.contentSha256,
+      ),
+    ).toEqual(fixture.document);
+  });
   it("provider admission never creates authority or consumes a private-slot grant", async () => {
     expect(await work.claimProviderDispatch(providerBinding())).toEqual({ kind: "unavailable" });
     await issue("private_slots");

@@ -7,6 +7,7 @@ import {
   decodeCoverLetterDocument,
   encodeCoverLetterDocument,
 } from "./cover-letter.js";
+import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 
 export interface CoverLetterMetadata {
   id: string;
@@ -32,7 +33,14 @@ export interface CoverLetterObjectStore {
     objectKey: string;
     bytes: Uint8Array;
     sha256: string;
-  }): Promise<{ objectVersion: string }>;
+  }): Promise<{ objectVersion: string; created?: boolean }>;
+  /** Read-only recovery of the current exact-bound version. Never creates a missing object. */
+  find?(input: {
+    documentId: string;
+    objectKey: string;
+    sha256: string;
+    sizeBytes: number;
+  }): Promise<{ objectVersion: string } | null>;
   read(input: {
     documentId: string;
     objectKey: string;
@@ -64,6 +72,10 @@ export class PostgresCoverLetterStore {
   constructor(
     private readonly client: postgres.Sql,
     private readonly objects: CoverLetterObjectStore,
+    private readonly work?: Pick<
+      PostgresCoverLetterWorkStore,
+      "claimFinalDocument" | "recordSettled"
+    >,
   ) {}
 
   /** Internal operation identity deduplicates reservation before any model or object I/O. */
@@ -127,14 +139,18 @@ export class PostgresCoverLetterStore {
     }) as Promise<T>;
   }
 
-  async complete(document: CoverLetterDocument): Promise<CoverLetterMetadata> {
+  async complete(input: CoverLetterDocument): Promise<CoverLetterMetadata> {
+    const document = structuredClone(input);
     const bytes = encodeCoverLetterDocument(document);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     return this.client.begin(async (transaction) => {
       // The Identity-owned lease prevents a bounded write racing privacy quarantine/deletion.
       // The row was reserved in an earlier transaction, so an ambiguous write remains inventoried.
       await transaction`SELECT identity.require_active_candidate(${document.ownerUserId}::uuid)`;
-      const row = await find(transaction, document.ownerUserId, document.id, true);
+      // Serialize completion without locking the parent document before the independently
+      // committed work issue transaction. That transaction also locks the parent document.
+      await transaction`SELECT pg_advisory_xact_lock(hashtext(${`${document.ownerUserId}:${document.id}:cover-letter-completion`}))`;
+      const row = await find(transaction, document.ownerUserId, document.id);
       if (
         !row ||
         row.applicationId !== document.applicationId ||
@@ -149,16 +165,69 @@ export class PostgresCoverLetterStore {
           throw new CoverLetterIntegrityError();
         return row;
       }
-      const stored = await this.objects.putIfAbsent({
+      if (!this.work) throw new CoverLetterIntegrityError();
+      // Await original committed control results. A local race/abort is not settlement proof.
+      const claim = structuredClone(
+        await this.work.claimFinalDocument({
+          ownerUserId: document.ownerUserId,
+          documentId: document.id,
+        }),
+      );
+      if (
+        claim.kind === "claimed" &&
+        (claim.reference.purpose !== "final_document" ||
+          claim.reference.documentId !== document.id ||
+          !/^[a-f0-9]{64}$/u.test(claim.reference.requestSha256) ||
+          !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
+            claim.reference.id,
+          ))
+      )
+        throw new CoverLetterIntegrityError();
+      const locked = await find(transaction, document.ownerUserId, document.id, true);
+      if (
+        locked?.status !== "pending" ||
+        locked.applicationId !== document.applicationId ||
+        locked.version !== document.version ||
+        locked.jobRevision !== document.jobRevision ||
+        locked.confirmedFactsHash !== document.confirmedFactsHash ||
+        locked.createdAt.toISOString() !== document.createdAt
+      )
+        throw new CoverLetterIntegrityError();
+      const objectInput = {
         documentId: row.id,
         objectKey: row.objectKey,
-        bytes,
         sha256,
-      });
-      if (!stored.objectVersion || stored.objectVersion.length > 1024)
+        sizeBytes: bytes.byteLength,
+      };
+      const stored =
+        claim.kind === "claimed"
+          ? await this.objects.putIfAbsent({ ...objectInput, bytes })
+          : await this.objects.find?.(objectInput);
+      if (
+        !stored?.objectVersion ||
+        stored.objectVersion === "null" ||
+        stored.objectVersion.length > 1024 ||
+        [...stored.objectVersion].some(
+          (character) => character.charCodeAt(0) <= 32 || character.charCodeAt(0) === 127,
+        )
+      )
         throw new CoverLetterIntegrityError();
+      const objectVersion = stored.objectVersion;
+      const created = "created" in stored && stored.created === true;
+      const verified = await this.objects.read({
+        ...objectInput,
+        objectVersion,
+      });
+      if (
+        verified.byteLength !== bytes.byteLength ||
+        createHash("sha256").update(verified).digest("hex") !== sha256
+      )
+        throw new CoverLetterIntegrityError();
+      // Only the original positive creation + exact pinned read may settle. A conflict or
+      // read-only replay can complete metadata but cannot manufacture remote-stopped evidence.
+      if (claim.kind === "claimed" && created) await this.work.recordSettled(claim.reference);
       await transaction`
-        UPDATE documents.cover_letters SET status = 'ready', object_version = ${stored.objectVersion},
+        UPDATE documents.cover_letters SET status = 'ready', object_version = ${objectVersion},
           object_sha256 = ${sha256}, content_sha256 = ${document.contentSha256},
           size_bytes = ${bytes.byteLength}, prompt_version = ${document.promptVersion}
         WHERE id = ${document.id} AND user_id = ${document.ownerUserId}

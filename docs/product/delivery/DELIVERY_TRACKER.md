@@ -9,6 +9,20 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 final-document completion now requires the original ledger claim before any new PUT.
+Admission derives immutable request/consent from the settled provider phase and cannot renew or
+steal existing authority. Exact pinned readback plus positive original creation may settle; missing
+receipts, conflicts, lost acknowledgements and read-only recovery never settle running work.
+SQL rollback can recover the existing artifact without another PUT, and missing/deleted artifacts
+are not recreated. Documents passes 496 unit and 94 real PostgreSQL cases, including 26 new final
+admission/writer cases. Six connected preparation/grounding/rendering/packet workflow cases pass.
+Controls/objects/models are synthetic and in-process, not production RPC/IAM or remote-stopped proof.
+Legacy offline-model fixtures explicitly seed preceding synthetic provider settlement. The exact
+disposable test database/container is removed; Docker Desktop/WSL stopped, shared volumes untouched.
+Repository-wide verification follows. No frontend/public API, migration, guard/Terraform, cloud/model
+call, deployment or activation. Runtime/RPC/IAM, trusted failed-call settlement, retention/read/export/
+restore and external acceptance remain unfinished; D1/D3 remain In progress.
+
 October 2 final-document S3 transport hardening passes 50 focused cases and all 482 Documents
 unit tests. Each PUT requires explicit single-attempt SDK policy; only original one-attempt HTTP
 200 plus exact pinned metadata returns a positive creation receipt. Conflicts remain distinct,
