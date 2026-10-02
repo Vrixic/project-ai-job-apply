@@ -68,6 +68,19 @@ with offline versioned S3 and a fake model. Private result grounding/rendering r
 authorization/quiescence, retention and production runtime/IAM remain unfinished; do not compose
 or activate this factory yet.
 
+`src/cover-letter-provider-initialize.ts` is a default-off private initializer with no model or
+Invoke capability. It reconstructs the owned prompt and original consent, commits the Documents
+reservation before object I/O, then creates request, pending result and issued dispatch in that
+order under an active-candidate lease. Only the first reservation winner can create slots.
+Replays pin/read existing objects and never recreate missing slots; partial or ambiguous creation
+cannot be resumed into fresh dispatch authorization. They remain inventoried for bounded workflow
+compensation and separately approved fresh operations. Outputs contain only references/statuses.
+Twenty-one offline cases and one new real PostgreSQL case cover ordering, concurrency, lost ACKs,
+removed-slot replay, consent/kill switches and quarantine. Documents passes 333 unit and 36
+PostgreSQL cases. Object ports in the new initializer tests are offline; this is not live S3/KMS
+or provider evidence. Late private S3 creation after a local abort still needs the unfinished
+authorization/quiescence protocol. Do not compose or activate this initializer yet.
+
 `src/cover-letter-provider-recovery.ts` is a private read-only recovery primitive. It accepts
 SQL-owned reservation metadata and current owned evidence, reconstructs and compares the exact
 prompt, verifies version/digest/size and document/request bindings, and requires matching original
@@ -83,9 +96,9 @@ never create work; missing/pending provider results stay in progress. Existing i
 drafts are read directly without another provider-result read. Original authorized results can
 finish after consent expiry; each immutable completion independently checks the candidate lease.
 Seventeen new service cases cover both parser checks, immutable retry/lost completion responses,
-context changes and quarantine. Documents passes 312 unit and 35 real PostgreSQL cases, including
+context changes and quarantine. Documents passes 333 unit and 36 real PostgreSQL cases, including
 two new owned metadata/finalization cases with offline object ports, not live S3/KMS/provider.
-The private initializer/Invoke and live activity composition remain unfinished and default-dark.
+Private Invoke and live activity composition remain unfinished and default-dark.
 
 `src/cover-letter.ts` validates a grounded, review-required draft, binds its text/provenance and
 job/evidence context to an immutable content hash, and renders packet-bound PDF/DOCX with
@@ -107,8 +120,8 @@ the shared full-job/evidence binding, withholds grounding failures and verifies 
 before marking a draft ready. A repeated internal request recovers the saved draft or reports
 in-progress; it cannot generate again. The bounded model call holds the active-candidate lease
 without nesting store transactions, so quarantine cannot race provider dispatch. Binding and
-file reads invalidate on current context changes and never call a model. Local evidence: 312
-Documents unit and 35 real PostgreSQL tests (offline provider/object transport).
+file reads invalidate on current context changes and never call a model. Local evidence: 333
+Documents unit and 36 real PostgreSQL tests (offline provider/object transport).
 The heavy AI/rendering boundary has a private `cover-letter-runtime` package entrypoint for
 activity composition; it is deliberately not exported from the Gateway's lightweight root.
 

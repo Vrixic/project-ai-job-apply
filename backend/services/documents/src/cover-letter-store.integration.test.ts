@@ -20,6 +20,7 @@ import {
   coverLetterProviderSha256,
   encodeCoverLetterProviderObject,
 } from "./cover-letter-provider-contract.js";
+import { CoverLetterProviderInitializer } from "./cover-letter-provider-initialize.js";
 import { CoverLetterProviderRecovery } from "./cover-letter-provider-recovery.js";
 import { type CoverLetterObjectStore, PostgresCoverLetterStore } from "./cover-letter-store.js";
 
@@ -386,6 +387,96 @@ const generation = {
       await expect(service.recover(identity)).rejects.toMatchObject({ code: "42501" });
       expect(readResult).toHaveBeenCalledTimes(3);
       expect(putIfAbsent.mock.calls.length - before).toBe(1);
+    });
+  });
+
+  it("only the committed first reservation initializes slots and replay cannot recreate a removed slot", async () => {
+    await withOwner(async (owner) => {
+      const now = new Date("2026-10-02T12:00:00.000Z");
+      const fact: GraphFact = {
+        id: factId,
+        kind: "skill",
+        key: "skill",
+        value: "TypeScript",
+        verification: "confirmed",
+        sensitivity: "standard",
+        source: { type: "user", reference: "synthetic" },
+        version: 1,
+      };
+      const evidence = {
+        facts: [fact],
+        job: { title: "Engineer", company: "Synthetic", description: "Build reliable systems." },
+      };
+      const identity = {
+        id: randomUUID(),
+        ownerUserId: owner,
+        applicationId: randomUUID(),
+        ...coverLetterContext({ ...evidence, now }),
+        noticeVersion: "openai-cover-letter.v1",
+        approvedAt: now,
+        expiresAt: new Date(now.getTime() + 15 * 60_000),
+      };
+      const slots = new Map<CoverLetterProviderSlot, Uint8Array>();
+      const reference = (bytes: Uint8Array) => ({
+        objectVersion: "synthetic-version",
+        etag: '"synthetic-etag"',
+        sha256: coverLetterProviderSha256(bytes),
+        sizeBytes: bytes.length,
+      });
+      const put = vi.fn(async (id: string, slot: CoverLetterProviderSlot, bytes: Uint8Array) => {
+        expect(id).toBe(identity.id);
+        const prior = slots.get(slot);
+        if (prior) return { created: false, reference: reference(prior) };
+        slots.set(slot, Uint8Array.from(bytes));
+        return { created: true, reference: reference(bytes) };
+      });
+      const initializer = new CoverLetterProviderInitializer(
+        store,
+        { load: async () => evidence },
+        {
+          putIfAbsent: put,
+          find: async (_id, slot) => {
+            const bytes = slots.get(slot);
+            return bytes ? reference(bytes) : undefined;
+          },
+          read: async (_id, slot) => {
+            const bytes = slots.get(slot);
+            if (!bytes) throw new CoverLetterIntegrityError();
+            return bytes;
+          },
+        },
+        () => true,
+        () => now,
+      );
+      const results = await Promise.all([
+        initializer.initialize(identity),
+        initializer.initialize(identity),
+        initializer.initialize(identity),
+      ]);
+      expect(results.some((result) => result.kind === "initialized")).toBe(true);
+      expect(put.mock.calls.map((call) => call[1])).toEqual(["request", "result", "dispatch"]);
+      const [count] = await client<
+        Array<{ count: number }>
+      >`SELECT count(*)::int AS count FROM documents.cover_letters WHERE user_id = ${owner}`;
+      expect(count?.count).toBe(1);
+      const [inventory] = await client<
+        Array<{ data: Array<{ documentId: string; sourceObjectKey: string }> }>
+      >`SELECT documents.candidate_object_inventory(${owner}::uuid) AS data`;
+      expect(inventory?.data).toEqual(
+        expect.arrayContaining([
+          {
+            documentId: identity.id,
+            sourceObjectKey: `normalized/${identity.id}/cover-letter.v1.json`,
+          },
+        ]),
+      );
+      slots.delete("dispatch");
+      expect(await initializer.initialize(identity)).toEqual({ kind: "in_progress" });
+      expect(put).toHaveBeenCalledTimes(3);
+      expect(slots.has("dispatch")).toBe(false);
+      await client`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+      expect(await initializer.initialize(identity)).toEqual({ kind: "in_progress" });
+      expect(put).toHaveBeenCalledTimes(3);
     });
   });
 

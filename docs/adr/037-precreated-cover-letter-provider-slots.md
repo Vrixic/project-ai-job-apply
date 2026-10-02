@@ -69,6 +69,16 @@ no model, Invoke or reservation capability in this service. The private initiali
 production activity/handler bootstrap remain unfinished. The local handling deadline is not a
 privacy-quiescence protocol.
 
+The source-only private initializer now defaults off, reserves the owned SQL document identity
+before object writes, and creates request/result/dispatch placeholders in that order under the
+active-candidate lease. Only the first committed reservation winner can create them. Replays only
+read/pin existing slots; no missing-slot recreation or partial-create continuation grants fresh
+dispatch. Twenty-one offline cases and one real PostgreSQL case prove ordering, first-writer
+concurrency, lost-ACK/removed-slot replay and consent/kill-switch/quarantine checks. Partial
+initialization may need bounded operation compensation and a new explicitly approved operation,
+not creation on replay. This initializer does not invoke a provider. Late private S3 creation after
+a local abort is still an unresolved quiescence risk; no runtime composition/activation is added.
+
 The maintenance role currently declares document `s3:DeleteObjectVersion`, not the
 `s3:DeleteObject` authority required to create a delete marker. A narrowly scoped IAM/boundary
 change and its guarded plan need separate owner review before deploying generation-slot cleanup;

@@ -9,6 +9,20 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 private generation-slot initialization now has a default-off source factory with no
+model or Invoke capability. Only the committed first SQL reservation winner can create the
+request/pending-result/issued-dispatch slots, in that order under the active-candidate lease.
+Replays never recreate missing slots; partial/ambiguous initialization remains inventoried for
+bounded compensation. Documents passes 333 unit and 36 PostgreSQL cases, including 21 new
+initializer unit cases and one new real SQL case. This is not live S3/KMS/provider evidence and
+does not solve late private-write or remote-provider quiescence. Private Invoke, retention and
+runtime/read/export/restore composition remain unfinished. No frontend/public API, migration,
+Terraform/guard change, AWS activation or deployment is included; D1/D3 remain In progress.
+Independent repo typecheck/tests, all 23 builds, formatting (936 files) and baseline lint
+(15 warnings/58 infos) pass with unchanged tasks cached. Full-verifier migration-boundary
+review remains pending. The disposable synthetic PostgreSQL database/container is removed;
+Docker Desktop/WSL are stopped and retained Compose volumes are untouched.
+
 October 2 service-level recovery now completes a saved original provider result through shared
 grounding, PDF/DOCX production-parser checks and immutable Documents finalization, including after
 original consent expiry. The separate private recovery service has no model, Invoke or reservation

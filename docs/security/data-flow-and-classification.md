@@ -123,6 +123,16 @@ offline service cases and two new PostgreSQL cases verify finalization, immutabl
 scope and quarantine refusal. Runtime initialization/invocation, remote quiescence and retention
 remain uncomposed; all activation prerequisites above remain.
 
+Private initialization now has a source-only default-off factory. Owned evidence and original
+consent construct the immutable request; a committed SQL reservation precedes request/result/
+dispatch creation under the active-candidate lease. Dispatch is created last. Only the first
+reservation winner can create; replays read original pinned slots and never recreate missing
+ones, including after partial creation or deletion. The factory has no model or Invoke capability
+and returns only identifiers/references/statuses. Twenty-one offline cases and one real PostgreSQL
+case do not prove live S3/KMS or remote-write quiescence. An abandoned private PUT could still
+arrive after local abort; bounded authorization/drain/fencing and retention remain required before
+composition or activation. Never use missing-slot recreation to recover an expired authorization.
+
 ## Phase 0 preference flow
 
 - JWT subject and issuer resolve to an internal UUID; provider subjects never become public IDs.

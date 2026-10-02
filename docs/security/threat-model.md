@@ -6,6 +6,15 @@
 
 ## D3 cover-letter delta (2026-10-02, engineering evidence only)
 
+Private slot initialization now has a source-only default-off factory: the committed first
+Documents reservation winner creates request/result/dispatch placeholders under the candidate
+lease, with dispatch last. Replays only read pinned original slots and never recreate missing
+ones. Twenty-one offline cases and one real PostgreSQL case cover concurrency, lost writes,
+removed-slot replay and quarantine. This factory cannot invoke a model. A late private S3 PUT
+after local abort remains a distinct deletion/quiescence risk even though replay is noncreating;
+bounded private-writer authorization/drain/fencing, remote-provider quiescence and retention must
+precede composition/activation. These tests do not prove live KMS/IAM or accountable acceptance.
+
 The source-only, default-off generation service now has offline model/transport tests and real
 local PostgreSQL evidence. Concrete controls cover versioned 15-minute disclosure, atomic
 Applications acceptance, a write-ahead Documents dispatch reservation, active-candidate leases
