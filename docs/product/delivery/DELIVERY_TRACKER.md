@@ -9,6 +9,17 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+Backend checkpoint `9593500` passes the complete maintained local verifier after the exact replay
+pin/fixture correction: regenerated contracts with no diff, operator/toolchain/policy guards,
+formatting (952 files), baseline lint (15 warnings/58 infos), all 38 typecheck tasks (37 cached),
+dependency-security regressions, repository tests, all 23 builds (19 cached), Compose and scope.
+Independent Documents evidence is 574 unit/112 PostgreSQL; workflow unit evidence is 1412 passed
+with 20 integration cases explicitly skipped, not claimed as tested. The logical restore drill and
+strict guards pass. Hosted [rescan](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37061975136)
+confirms all five introduced findings removed and no new RPC finding; 68 inherited findings still
+fail Semgrep. Hosted catalog passes; quality is running and dependency audit fails at this checkpoint.
+This local verifier does not include a passing live registry audit or deployed acceptance.
+
 October 2 owner-approved private provider-control RPC is implemented locally, still source-only
 and default-off in draft [PR #506](https://github.com/Vrixic/project-ai-job-apply/pull/506).
 Documents passes 574 unit and 112 real PostgreSQL tests with offline Lambda/model/object transport.
@@ -20,7 +31,7 @@ pass, including historical 41/42/52 boundaries valid only against their own mani
 Hosted checks at `8996974` failed: quality found the inventory mismatch, Semgrep reported 68 inherited
 plus five branch findings, and dependency audit reported the new unpatched mobile `node-forge`
 [advisory](https://github.com/advisories/GHSA-86w9-cpqp-85rv). The five branch scanner patterns have
-source fixes awaiting hosted rescan; no scanner/audit exception or gate weakening is introduced.
+source fixes confirmed by hosted rescan; no scanner/audit exception or gate weakening is introduced.
 No frontend/public API, Terraform, deployment or live provider call. D1/D3 remain In progress.
 
 October 2 backend source checkpoint `defc769` is published in draft
