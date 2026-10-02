@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -8,6 +8,18 @@ Program completion: Not completed
 This is the master record for the delivery phases defined in the [product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#20-delivery-roadmap). It intentionally tracks actual start and completion dates rather than predicted schedules.
 
 ## Summary
+
+October 2 owner selected OpenAI `gpt-6-luna` and accepted limited development data handling.
+D3-037 implements a default-off Responses provider port with offline transport/grounding tests;
+AI package 50 tests and full Phase 0 repository verification pass (baseline-only lint).
+No public API, frontend, model activation, Terraform or deployment changes. Remaining provider
+contract/region/activation conditions, exact candidate notice/consent wiring, real-model evaluation
+and packet integration remain open. Owner-reported manual Apply acceptance passed: submitted
+status/history persisted after reload and a separate not-submitted case could be retried.
+This closes D3-018's manual-flow human gate, not the full D3-019 journey or extension handoff.
+D3-036 merged in #501; main hosted quality/integration/container checks pass, with dependency
+audit still blocking and separate static analysis baseline failures unchanged. D1/D3 remain
+In progress. See the [Phase 3 tasks](phase-3-application-preparation.md#task-register).
 
 October 1 backend-only scope: PR #498's Expo toolchain remediation is withdrawn and its tested
 branch preserved for frontend ownership. The release audit stays blocking; no bypass, API change
