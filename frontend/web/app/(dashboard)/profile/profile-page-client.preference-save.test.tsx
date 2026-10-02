@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProfilePageClient } from "./profile-page-client";
 
 vi.mock("../../profile-facts-form", () => ({ ProfileFactsForm: () => null }));
+vi.mock("../../profile-personal-card", () => ({ ProfilePersonalCard: () => null }));
+vi.mock("../../profile-skills-card", () => ({ ProfileSkillsCard: () => null }));
 
 const privateProblemCanary = "synthetic-private-preference-problem-never-render";
 

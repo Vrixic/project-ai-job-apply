@@ -42,6 +42,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-032: Billing-owned plan limits, enforced atomically by the owning context](032-billing-owned-plan-limits-enforced-by-owning-contexts.md)
 - [ADR-033: Resume deletion is a tombstone, with a separate byte purge](033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md)
 - [ADR-034: Resume byte purge runs in the candidate-rights maintenance runtime](034-resume-byte-purge-runs-in-the-candidate-rights-maintenance-runtime.md) (accepted 2026-09-21)
+- [ADR-036: Structured Education and Work Experience entries](036-structured-education-and-work-experience-entries.md)
 
 Use `000-template.md` for future decisions.
 
