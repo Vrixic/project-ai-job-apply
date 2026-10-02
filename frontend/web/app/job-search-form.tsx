@@ -526,6 +526,26 @@ export function JobSearchForm({
     return (
       <>
         <div className="jobs-toolbar">
+          <div className="dashboard-subtabs" role="tablist" aria-label="Jobs view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={jobsView === "search"}
+              className="dashboard-subtab"
+              onClick={() => setJobsView("search")}
+            >
+              Search
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={jobsView === "saved"}
+              className="dashboard-subtab"
+              onClick={() => setJobsView("saved")}
+            >
+              Saved
+            </button>
+          </div>
           <form
             id={filterFormId}
             className="job-filter-bar"
@@ -536,26 +556,6 @@ export function JobSearchForm({
             {primaryFilters}
           </form>
           <div className="jobs-toolbar-row2">
-            <div className="dashboard-subtabs" role="tablist" aria-label="Jobs view">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={jobsView === "search"}
-                className="dashboard-subtab"
-                onClick={() => setJobsView("search")}
-              >
-                Search
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={jobsView === "saved"}
-                className="dashboard-subtab"
-                onClick={() => setJobsView("saved")}
-              >
-                Saved
-              </button>
-            </div>
             <div className="job-filter-secondary" hidden={jobsView !== "search"}>
               {sortAndSubmit(filterFormId)}
             </div>
