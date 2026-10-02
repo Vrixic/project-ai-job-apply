@@ -21,6 +21,39 @@ async function exportDefinition(name: string) {
 }
 
 describe("domain schema registry", () => {
+  it("exports cover-letter metadata without candidate text or object capabilities", async () => {
+    const validate = await exportDefinition("coverLetter");
+    const pending = {
+      id: "019d04cf-1f80-7000-8000-000000000070",
+      applicationId: "019d04cf-1f80-7000-8000-000000000071",
+      version: 1,
+      status: "pending",
+      jobRevision: "a".repeat(64),
+      confirmedFactsHash: "b".repeat(64),
+      createdAt: "2026-10-02T12:00:00.000Z",
+    };
+    const ready = {
+      ...pending,
+      status: "ready",
+      contentSha256: "c".repeat(64),
+      model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+      promptVersion: "cover_letter.v1",
+    };
+    expect(validate(pending)).toBe(true);
+    expect(validate(ready)).toBe(true);
+    expect(validate({ ...pending, status: "ready" })).toBe(false);
+    expect(validate({ ...ready, status: "pending" })).toBe(false);
+    for (const field of [
+      "paragraphs",
+      "prompt",
+      "ownerUserId",
+      "objectKey",
+      "objectVersion",
+      "kmsKeyArn",
+    ]) {
+      expect(validate({ ...ready, [field]: "synthetic-private-value" })).toBe(false);
+    }
+  });
   it("allowlists vault export metadata and optional active values without encryption material", async () => {
     const validate = await exportDefinition("restrictedAnswerMetadata");
     const metadata = {

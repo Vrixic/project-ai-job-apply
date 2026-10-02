@@ -67,6 +67,46 @@ function dependencies(
 const paragraphOutput = (text: string, factIds: string[] = ["f1"]) =>
   JSON.stringify({ paragraphs: [{ text, factIds }] });
 
+describe("generation citation selection boundary", () => {
+  it.each([
+    fact("hidden", { sensitivity: "restricted", value: "SecretRestrictedSkill" }),
+    fact("hidden", { kind: "contact", value: "Some contact detail" }),
+  ])("withholds citations to an excluded $kind/$sensitivity fact", async (excluded) => {
+    const provider = new ScriptedProvider(
+      paragraphOutput("I have relevant experience.", [excluded.id]),
+    );
+    const result = await generateCoverLetter(
+      dependencies(provider, { facts: [fact("f1"), excluded] }),
+    );
+    expect(result).toMatchObject({
+      status: "rejected",
+      paragraphs: [],
+      sourceFactIds: [],
+      findings: [{ code: "unknown_fact", paragraph: 0 }],
+    });
+    expect(provider.calls[0]?.user).not.toContain(excluded.value);
+  });
+
+  it("cannot ground against a fact excluded by the prompt selection limit", async () => {
+    const selected = Array.from({ length: 40 }, (_, index) =>
+      fact(`fact-${String(index).padStart(2, "0")}`),
+    );
+    const excluded = fact("zzz-excluded");
+    const provider = new ScriptedProvider(
+      paragraphOutput("I have relevant experience.", [excluded.id]),
+    );
+    expect(
+      await generateCoverLetter(dependencies(provider, { facts: [...selected, excluded] })),
+    ).toMatchObject({
+      status: "rejected",
+      paragraphs: [],
+      sourceFactIds: [],
+      findings: [{ code: "unknown_fact", paragraph: 0 }],
+    });
+    expect(provider.calls[0]?.user).not.toContain(excluded.id);
+  });
+});
+
 describe("ModelGateway", () => {
   const request = {
     promptId: "cover_letter",

@@ -3,7 +3,10 @@ import type {
   AccountDeletionRequest,
   Application,
   ApplicationAttempt,
+  ApplicationCoverLetterFile,
+  ApplicationCoverLetterPreview,
   ApplicationHistoryPage,
+  ApplicationPacketPreparation,
   ApplicationPage,
   ApplicationResumeFile,
   ApplicationResumePreview,
@@ -192,6 +195,7 @@ import {
   Post,
   Put,
   Req,
+  Res,
   UseFilters,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -2736,6 +2740,46 @@ class ApplicationsController {
     return this.applications.resumeFile(user.id, applicationId, format);
   }
 
+  @Get("/:applicationId/cover-letter")
+  @Header("cache-control", "no-store")
+  async coverLetterPreview(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationCoverLetterPreview> {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationsRead(request);
+    requireApplicationPath(applicationId);
+    return this.applications.coverLetterPreview(user.id, applicationId);
+  }
+
+  @Get("/:applicationId/cover-letter/file")
+  @Header("cache-control", "no-store")
+  async coverLetterFile(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationCoverLetterFile> {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationPath(applicationId);
+    const format = parseResumeFormatQuery(request.query);
+    if (request.body !== undefined || format === null)
+      throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
+    return this.applications.coverLetterFile(user.id, applicationId, format);
+  }
+
+  @Get("/:applicationId/packet-preparations/:preparationId")
+  @Header("cache-control", "no-store")
+  async preparation(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+    @Param("preparationId") preparationId: string,
+  ): Promise<ApplicationPacketPreparation> {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationsRead(request);
+    requireApplicationPath(applicationId);
+    requireApplicationPath(preparationId);
+    return this.applications.preparation(user.id, applicationId, preparationId);
+  }
+
   @Post("/:applicationId/packets")
   @HttpCode(HttpStatus.CREATED)
   @Header("cache-control", "no-store")
@@ -2743,7 +2787,8 @@ class ApplicationsController {
     @Req() request: AuthenticatedRequest,
     @Param("applicationId") applicationId: string,
     @Headers("idempotency-key") idempotencyKey: string | undefined,
-  ): Promise<Application> {
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<Application | ApplicationPacketPreparation> {
     const user = await this.identity.resolve(request, "applications:write");
     const commandKey = requireIdempotencyKey(idempotencyKey);
     requireApplicationPath(applicationId);
@@ -2751,6 +2796,16 @@ class ApplicationsController {
       request,
       validatePrepareApplicationPacket,
     );
+    if (body.coverLetter) {
+      const operation = await this.applications.prepareCoverLetter(
+        user.id,
+        applicationId,
+        { ...body, coverLetter: body.coverLetter },
+        commandKey,
+      );
+      reply.status(HttpStatus.ACCEPTED);
+      return operation;
+    }
     return this.applications.preparePacket(
       user.id,
       applicationId,

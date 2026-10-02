@@ -34,6 +34,82 @@ The Phase 0 slice does not call ATS, AI, email, calendar, billing, or browser-au
 | Confidential PII | Email, resume, history, preferences | TLS, KMS, owner-scoped access, redacted telemetry | Events, fixtures, analytics, logs |
 | Restricted | OAuth/session tokens, sensitive answers | Separate secrets/keys, just-in-time access, mandatory audit | Logs, analytics, fixtures, general events |
 
+## D3 requested cover-letter path (source and local evidence only)
+
+The approved backend scope adds an optional versioned disclosure acknowledgement to Prepare.
+Applications commits the base packet, short-lived preparation, identifier-only event, audit and
+idempotency receipt atomically. A durable factory and private activity now have connected local
+PostgreSQL tests. Gateway handlers now connect owner-scoped acceptance/status/preview/file ports;
+production dispatch/recovery and isolated Documents/provider runtime composition remain unfinished.
+Preparation acceptance/status stay explicitly default-off in the production runtime factory.
+The owned outbox now stores only dispatch identifiers, exact numeric workflow targets, bounded
+leases and execution/terminal metadata. The source-only starter matches event/preparation before
+claiming and emits canonical identifier-only Invoke bytes; no prompt, result or trace is included.
+Local PostgreSQL and offline SDK tests verify this boundary, not deployed delivery or recovery.
+Source-only terminal handlers independently confirm EventBridge nudges through metadata-only
+AWS reads, excluding input/result/error payloads. Exact stored execution identity and fixed
+terminal status/times bind settlement; recovery may continue while new dispatch stays off.
+SQS and scheduled reconciliation emit only identifiers, batch failures or aggregate counts.
+Production clients, IAM, artifacts and trigger composition remain unfinished and unactivated.
+The activity passes only server-owned identity/context/disclosure metadata to Documents, which
+reloads candidate facts and the job through their owner APIs. Confirmed non-restricted career
+facts alone enter the prompt; the job is untrusted data. The model remains default-off and is
+called only through the AI SDK. Neither consent nor the dispatch claim is renewed on retry.
+
+Documents reserves the exact normalized object key before any model call. A repeated internal
+delivery can recover a ready draft or wait, never generate a second time. The bounded model call
+holds Identity's active-candidate lease; quarantine prevents later dispatches. Grounding withholds
+all text on findings, including citations excluded from this request's fact selection. Both PDF
+and DOCX are verified with production parsers before immutable ready metadata is committed.
+Draft text is confined to the encrypted Documents object boundary and owner responses, never
+SQL, event payloads, durable checkpoints, audit values or telemetry. Pending and ready keys enter
+exact candidate deletion inventory. Export content assembly and restore wiring remain unfinished.
+
+Packet finalization binds the saved content hash and requires explicit review. Current evidence,
+job and application changes prevent supersession/approval carryover; preview/file reads never
+regenerate. Local tests use synthetic candidate facts and offline provider/object transports.
+No AWS write, live model call, activation, deployment or accountable privacy/security approval is
+claimed by this implementation. Provider activation/procurement/region/evaluation gates remain.
+
+Production composition must preserve [ADR-016](../adr/016-scale-to-zero-application-runtime.md):
+database activities use private access only; internet-facing provider activities run outside the
+VPC with minimum identifier/object references, approved managed secrets and no database credentials.
+The tested generation library's AI gateway port is not authority to compose the live provider
+inside the private database activity. Owned encrypted transport and isolated runtime composition
+remain unfinished; raw prompts/results must not enter durable invocation payloads or checkpoints.
+
+A private isolated-provider transport foundation now defines reference-only invocation/output
+envelopes and canonical encrypted request/dispatch/result slots under the already-reserved
+normalized document ID. Request objects bind original consent/context; plaintext remains
+Confidential PII, including in failed or abandoned generation. Slot references bind exact version,
+hash, size, KMS key and document identity. Conditional-write conflicts return existing references
+and never independently grant another model dispatch. Offline tests prove transport validation,
+not provider execution or complete deletion safety. The existing owner inventory/prefix purge
+must include every slot/version. Before composition/activation, implement one-dispatch recovery,
+transient retention and bounded privacy quiescence for ambiguous Invoke: private cancellation
+does not prove an isolated function stopped, so deletion protection cannot be released while
+late provider/object writes remain possible. No provider credential enters this transport.
+
+[Proposed ADR-037](../adr/037-precreated-cover-letter-provider-slots.md) defines owner-precreated
+issued/pending slots and ETag-pinned claimed/ready replacement. Offline tests refuse duplicate,
+missing or conflicting writes without creating a slot. Provider creation authority must be
+excluded at composition. The source-only Workflows purge now preserves verified current delete
+markers until historical versions are gone, then removes the fences and rechecks absence.
+Offline tests probe late conditional writes inside delete batches; connected synthetic PostgreSQL
+tests prove row retention on incomplete cleanup and successful retry. Required marker-creation
+IAM is not configured, and conditional replacement does not establish remote dispatch quiescence
+after quarantine. These production prerequisites remain blocking before activation.
+
+The source-only isolated handler now takes a frozen transition-only object capability and calls
+only ModelGateway, after a positively acknowledged dispatch claim and original consent/model
+checks. Ambiguous claim/result writes report `in_progress` for original-result recovery rather
+than prematurely asserting terminal product failure. Saved JSON includes strict approved model
+provenance and original output size, never invocation text. Twenty-five offline handler cases
+cover duplicate/lost-ACK recovery, expiry, missing slots, deletion during model execution and
+late completion after a local deadline. Private partial-result grounding/rendering and
+authorization/quiescence/retention composition are unfinished; these tests are not live-provider
+or deployed privacy proof. Neither factory flags nor caller cancellation authorize activation.
+
 ## Phase 0 preference flow
 
 - JWT subject and issuer resolve to an internal UUID; provider subjects never become public IDs.

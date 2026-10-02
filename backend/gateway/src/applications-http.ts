@@ -13,6 +13,7 @@ import {
   IllegalTransitionError,
   InvalidApplicationCursorError,
   PacketInvariantError,
+  PreparationNotFoundError,
   StalePacketError,
 } from "@ai-job-apply/applications-service";
 import { HttpStatus } from "@nestjs/common";
@@ -29,7 +30,11 @@ export interface ApplicationsFailure {
  * failure can never echo a candidate value, packet field, or provider response.
  */
 export function projectApplicationsFailure(exception: unknown): ApplicationsFailure | null {
-  if (exception instanceof ApplicationNotFoundError || exception instanceof AttemptNotFoundError) {
+  if (
+    exception instanceof ApplicationNotFoundError ||
+    exception instanceof AttemptNotFoundError ||
+    exception instanceof PreparationNotFoundError
+  ) {
     return {
       status: HttpStatus.NOT_FOUND,
       code: "application_not_found",

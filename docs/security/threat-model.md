@@ -4,6 +4,74 @@
 - Method: STRIDE with explicit trust boundaries
 - Last updated: 2026-08-11
 
+## D3 cover-letter delta (2026-10-02, engineering evidence only)
+
+The source-only, default-off generation service now has offline model/transport tests and real
+local PostgreSQL evidence. Concrete controls cover versioned 15-minute disclosure, atomic
+Applications acceptance, a write-ahead Documents dispatch reservation, active-candidate leases
+against quarantine races, request-specific evidence selection/citations, complete job/evidence
+bindings, parser-verified PDF/DOCX, immutable encrypted drafts and mandatory packet review.
+Retries recover or poll the original draft and cannot generate again. Context changes refuse
+file access and invalidate the artifact binding. Candidate text never enters events or logs.
+
+This does not prove live-provider factuality/injection resistance, connected authorization/UI,
+durable terminal recovery, export artifact completeness, restore/deployment permission fidelity
+or accountable security/privacy approval. Those remain blocking before relevant activation.
+
+Local durable tests now cover exact numeric activity targets, identifier-only contracts, bounded
+retries and compensation; four real PostgreSQL tests connect generation and packet finalization
+using synthetic evidence and offline provider/object transports. They do not prove production
+dispatch or independently bound terminal recovery. ADR-016 additionally requires the live provider
+outside the database VPC with no database credentials, using minimum owned object references.
+That isolated transport/runtime is unfinished; private generation composition must not silently
+introduce provider credentials or direct internet calls into the database activity.
+
+Owned dispatch persistence now rejects foreign preparation/event bindings, pins the first numeric
+workflow version and execution name, and prevents early lease replacement or receipt mutation.
+Atomic terminal settlement preserves successful drafts and cannot promote an active operation
+based on AWS success alone. Source-only starter/SDK tests cover canonical identifier-only retries,
+exact ARN receipts and fixed errors. PostgreSQL tests cover lost start receipts and concurrent
+claims. Scheduled recovery and independent EventBridge/status-reader handlers are still unfinished;
+these local controls do not prove cloud delivery, IAM/source authenticity or production recovery.
+
+Source-only reconciliation and terminal factories now use independently bound metadata-only AWS
+reads. A terminal EventBridge event is only a nudge: exact stored function/version/name/ARN and
+independent status/start/end must match before owned settlement. SDK reads reject returned
+input/result/error data even when execution-data inclusion is false. Fair leased status claims,
+bounded batches/time budget, fixed errors and exact-queue SQS handling have local synthetic/unit
+and connected PostgreSQL evidence. Live IAM/source authenticity, deployed delivery and provider
+runtime isolation remain unproven; no activation or accountable review follows from these tests.
+
+The source-only isolated cover-letter transport now has strict owned/versioned/hash-bound,
+KMS-encrypted request/dispatch/result slots and reference-only wire envelopes, verified with
+offline tests. It is not composed with a live provider. An ambiguous/aborted private Invoke is a
+specific unresolved privacy risk: the remote function could continue after the SQL identity lease
+is released and recreate objects during deletion. Provider dispatch/recovery must bind a bounded
+quiescence/deletion protocol and transient retention before activation; transport validation and
+the current in-process model lease do not close that risk. Preserve minimum object references,
+no database credentials outside the VPC, and no provider secrets inside the private activity.
+
+The conditional-transition primitive now verifies precreated issued/pending slots, original
+request identity and pinned ETags, and refuses missing/conflicting writes without creation.
+[Proposed ADR-037](../adr/037-precreated-cover-letter-provider-slots.md) records the remaining
+controls: provider creation must be forbidden and remote dispatch requires bounded privacy
+quiescence. Source-only generation-slot purge now verifies current delete-marker fences and keeps
+them until historical versions are gone, preventing old authorization resurfacing in offline
+tests, including per-removal probes and failed-cleanup retries. Six synthetic PostgreSQL cases
+include retention of quarantine and owner rows on incomplete fenced cleanup. Marker-creation
+IAM is not configured. This is not a deployed purge, remote-runtime or complete deletion-safety
+claim; creation restrictions, quiescence and transient retention still block activation.
+
+The source-only provider handler now restricts object capabilities to reads and conditional
+transitions, requires a positive dispatch-claim acknowledgement before one ModelGateway call,
+and rechecks original consent and approved model identity. Ambiguous writes remain `in_progress`;
+duplicate delivery cannot grant a second model call. Encrypted result recovery checks original
+request/dispatch/provenance bindings and exposes references only, even after original consent
+expires. Offline tests also refuse persistence after a local deadline and after slot deletion.
+They do not prove remote/provider termination, legal retention, live permissions or private
+grounding/rendering recovery. Do not activate the factory before the remaining quiescence,
+creation prohibition, transient retention and runtime gates pass.
+
 ## Protected assets
 
 - Candidate identity, sessions, resume/profile facts, preferences, application artifacts, answers,

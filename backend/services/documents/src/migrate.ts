@@ -14,6 +14,7 @@ const migrationVersions = [
   "0003_candidate_rights",
   "0004_resume_deletion",
   "0005_resume_purge",
+  "0006_cover_letters",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -62,6 +63,7 @@ try {
           (to_regclass('documents.processing_receipts') IS NOT NULL)::int +
           (to_regclass('documents.audit_events') IS NOT NULL)::int +
           (to_regclass('documents.processing_dispositions') IS NOT NULL)::int +
+          (to_regclass('documents.cover_letters') IS NOT NULL)::int +
           (to_regclass('documents.schema_migrations') IS NOT NULL)::int
         )::int AS "tableCount",
         (
@@ -76,7 +78,7 @@ try {
         ) AS "triggerCount"
     `;
     if (
-      verification?.tableCount !== 6 ||
+      verification?.tableCount !== 7 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.triggerCount !== 2
     ) {

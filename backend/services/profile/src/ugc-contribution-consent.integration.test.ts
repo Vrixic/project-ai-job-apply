@@ -58,7 +58,7 @@ describeWithDatabase("PostgresUgcContributionConsentStore", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(migration.stdout.trim()).toBe(
-      "Database migrations through 0010_restricted_answer_vault applied and verified.",
+      "Database migrations through 0011_active_candidate_lease applied and verified.",
     );
     await database.client`
       INSERT INTO identity.users (id, account_state) VALUES

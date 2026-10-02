@@ -9,6 +9,154 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 D3-017 adds a source-only isolated provider handler with a frozen transition-only
+object capability and no creation method. A positive conditional dispatch receipt precedes one
+ModelGateway call; original consent and approved model identity are rechecked before disclosure.
+Ambiguous claim/result writes remain `in_progress` for original-result recovery. Encrypted
+results retain strict provenance and output size; invocation responses remain reference-only.
+All 272 Documents unit cases pass, including 85 provider contract/transport/handler cases with
+25 new handler cases. Documents typecheck passes. The factory is default-off and uncomposed;
+private partial-result grounding/rendering, bounded privacy quiescence, retention, IAM and
+runtime/read/export/restore composition remain unfinished. Full Phase 0 verifier passes:
+repo-wide typecheck/tests, all 23 builds, 928 formatted files and baseline-only lint
+(15 warnings/58 infos), offline guards, Compose and scope checks. No frontend or public API
+change this turn, SQL migration, Docker startup, live AWS/model call or activation;
+D1/D3 remain In progress.
+
+October 2 D3-017 generation-slot purge now preserves verified current delete-marker fences while
+removing historical versions, then removes fences only after history is proven absent. Exact-key
+cleanup defers fixed generation slots to this sweep. All 100 focused purge/activity cases pass,
+including 11 new adversarial versioned-S3 tests, and six connected synthetic PostgreSQL
+deletion/restore cases pass with offline S3. The first shared-cluster setup was correctly refused
+for a cross-database public-reader grant; a disposable isolated cluster passes without changing
+existing grants. Marker-creation IAM, provider creation restrictions and remote-dispatch
+quiescence remain unfinished, so this is not deployed privacy proof. Full Phase 0 verifier passes:
+repo-wide typecheck/tests, 23 production builds, 926 formatted files, baseline-only lint
+(15 warnings/58 infos), offline guards, Compose and scope checks. Added local evidence links and
+diff whitespace checks pass. The disposable test container is removed; Docker Desktop/WSL are
+stopped and retained Compose volumes are preserved. No frontend, SQL migration change,
+Terraform, AWS/model call, deployment or activation. D1/D3 stay In progress.
+
+October 2 D3-017 conditional-transition transport now pins ETags and precreated issued/pending
+states. Sixteen additional offline tests pass (59 transport cases, 246 Documents unit cases),
+including duplicate claims and missing/conflicting writes with no creation fallback. Documents
+typecheck passes. [Proposed ADR-037](../../adr/037-precreated-cover-letter-provider-slots.md)
+records the unimplemented deletion fence, remote-dispatch quiescence and isolated creation/IAM
+boundary. The existing purge is unchanged and these tests do not establish complete deletion
+safety. Full Phase 0 verifier passes: repo-wide typecheck/tests, all 23 production builds,
+925 formatted files and baseline-only lint (15 warnings/58 infos). All 76 added local evidence
+links resolve and diff whitespace checks pass. No frontend, SQL migration, Docker startup, provider
+call, AWS mutation or activation; D1/D3 remain In progress.
+
+October 2 D3-017 adds a private isolated-provider transport foundation: reference-only invocation
+and output envelopes plus immutable encrypted request/dispatch/result slots beneath the reserved
+document prefix. Forty-three new offline contract/S3 tests pass, including strict consent/context,
+canonical JSON, exact versions/KMS/checksums, conflict semantics, bounded/stalled streams and owner
+isolation. Documents has 230 unit cases and passing typecheck. Full Phase 0 verifier passes:
+repo-wide typecheck/tests, all 23 builds, 925 formatted files, baseline-only lint (15 warnings/58
+infos), offline guards, Compose and scope checks. No SQL migration, Docker startup, AWS/model call,
+frontend or activation. Provider
+handlers, one-dispatch/ambiguous-Invoke privacy quiescence, transient retention, owner read ports,
+export and restore wiring remain unfinished. D1/D3 stay In progress with no deployment or PR handoff.
+
+October 2 D3-017 adds source-only bounded reconciliation, exact-queue SQS handling and
+independently verified terminal events. Fair leased status claims pass in real local PostgreSQL;
+Applications now has 55 integration cases. Six connected workflow cases cover lost-ACK recovery
+without another model run and duplicate terminal settlement without another audit. Thirty-one new
+offline recovery/SDK tests pass, with sixty-one preparation workflow/starter/recovery unit cases in
+total. Terminal events are nudges only; metadata-only AWS reads must independently confirm exact
+execution identity/status/times. Default-off dispatch does not stop recovery of accepted work.
+Full Phase 0 verifier passes: repo-wide typecheck/tests, all 23 builds, 920 formatted files,
+baseline-only lint (15 warnings/58 infos), offline operational guards, Compose and scope checks.
+Opaque EventBridge GUID compatibility does not weaken domain UUID binding.
+No AWS call, frontend, deployment or activation. Docker Desktop/WSL
+are stopped with volumes retained. Production composition, export content, restore and accountable
+connected acceptance remain unfinished; D1/D3 stay In progress.
+
+October 2 D3-017 adds owned dispatch persistence with original numeric-version pinning,
+bounded leases, immutable execution receipts and atomic terminal settlement. All 53 Applications
+PostgreSQL cases pass locally; 114 Applications unit tests and 12 offline starter/SDK cases pass.
+The source-only starter verifies the preparation nudge before claiming and retries canonical
+identifier-only inputs. No AWS call or activation is included. Scheduling/SQS and terminal
+handlers, isolated provider/read composition, export contents and restore wiring remain
+unfinished. Full Phase 0 verifier passes, including 916 formatted files, repo-wide typecheck/tests,
+all 23 production builds, offline guards, Compose and scope checks. Docker Desktop/WSL are stopped
+with volumes retained. D1/D3 remain In progress; no PR handoff, deployment or live-provider evidence.
+
+October 2 D3-017 connects Applications/Gateway handlers: opt-in returns a durable 202, omission
+preserves 201, and owner-scoped status/preview/file reads enforce scopes and no-store. The unshipped
+success shape is an immutable packet/revision reference, not mutable current application state.
+Receipt replay precedes volatile evidence/rendering and never renews consent. Approval checks the
+current Documents binding and fails unavailable on transport errors. Applications 111 unit and
+45 real PostgreSQL tests pass, plus Gateway route/binding tests, two database-client checks,
+three existing synthetic HTTP lifecycle checks and four connected workflow cases. Production
+preparation remains explicitly default-off; isolated provider/read ports, owned dispatch/terminal
+recovery, export content, restore wiring and connected product acceptance remain unfinished.
+The updated full Phase 0 verifier passes: 38 typecheck tasks, 39 test tasks, 23 production builds,
+910 formatted files, baseline-only lint (15 warnings/58 infos), offline operational guards,
+Compose configuration and product-scope checks. Gateway has 294 passing unit tests; its 12 database
+skips in the repository run are separate from the targeted PostgreSQL evidence above. Repeat API
+generation is byte-identical. Docker Desktop/WSL are stopped with volumes retained. The separate
+live dependency audit and accountable acceptance remain open. No frontend change, deployment,
+PR handoff or live model call; D1/D3 remain In progress.
+
+October 2 D3-017 adds the identifier-only durable preparation factory and private activity.
+Workflow build/typecheck, 18 SDK unit tests and four connected real PostgreSQL tests pass:
+hash-bound review, saved-draft recovery without another generation, default-off failure and
+consent expiry. Provider/evidence/object transports are synthetic and offline. Production
+dispatch/terminal recovery, ADR-016 isolated provider composition, Gateway, export contents and
+restore wiring remain unfinished. Full Phase 0 verifier passes: 38 typecheck tasks, 39 test
+tasks, 23 production builds, formatting and baseline-only lint (15 warnings/58 infos), plus
+offline operational guards, Compose configuration and product-scope checks. Workflow suite
+passes 1329 tests with 15 integration skips; the four new database cases passed separately.
+Docker Desktop/WSL stopped with volumes retained. D1/D3 remain In progress; the separate live
+dependency audit and accountable acceptance gates are not closed by this verifier. No frontend,
+live model call, deployment or PR handoff is claimed.
+
+October 2 D3-017's private Documents generation service now composes owned evidence, shared
+context binding, fixed disclosure expiry, one model dispatch, grounding, verified PDF/DOCX and
+immutable storage/recovery. Documents unit 187 and real PostgreSQL integration 33 tests pass;
+Applications unit 98 and AI unit 67 tests pass. Three new AI cases reject citations excluded
+from this request's prompt. Repo-wide typecheck passes (38 tasks), format passes; generator
+runtime, durable orchestration/dispatch, Gateway, export contents and restore wiring remain
+unfinished. Docker Desktop/WSL stopped after database testing. No live provider/S3 call, PR,
+frontend change or deployment. Repo-wide test (39 tasks) and build (23 tasks) reruns pass; two
+additional consent clock/boundary tests then pass in the Documents suite. D1/D3 remain In progress;
+final full-verifier rerun remains open.
+
+October 2 D3-017 adds the atomic Applications preparation store and I/O activity: Applications
+97 unit and 43 real PostgreSQL integration tests pass, plus 20 event and 23 domain tests.
+Consent expiry, one dispatch claim, concurrent idempotency and hash-bound mandatory review are
+verified locally. Documents recovery now reads the original operation's exact draft/context,
+not a newer draft; Documents 168 unit and 31 database tests pass. Repo-wide typecheck (37 tasks),
+format and baseline-only lint (15 warnings/58 infos) pass. Connected generation, durable workflow,
+outbox dispatch, Gateway, export contents and restore wiring remain unfinished. No PR, real
+model call or deployment; D1/D3 remain In progress. Shared evidence/job bindings now use the
+generation selector and full posting text; six new binding tests pass within 64 AI unit tests.
+The full Phase 0 verifier exposed missing Lambda read-route patterns; those now pass all 105
+boundary tests and Gateway typecheck. Endpoint handlers remain unfinished, and a full verifier
+rerun is still required before handoff.
+After the route fix, repo-wide tests and all 23 production builds pass. This does not complete
+the connected feature or replace the required final full-verifier rerun.
+
+October 2 D3-017 storage now has real local PostgreSQL evidence: Documents integration 31 tests
+(six new), Profile integration 28 tests, Documents unit 168 and domain 23 tests pass. Immutable
+metadata, exact object inventory/delete coverage and active-candidate write leases are implemented;
+S3 encryption/version/digest/stream tests are offline. Repo-wide typecheck passes (37 tasks).
+Durable operation/outbox, export artifact-content assembly, workflow/Gateway and restore-manifest
+wiring remain in progress. No AWS/model call, deployment or PR handoff; D1/D3 remain In progress.
+Docker Desktop and WSL are stopped after database verification.
+
+October 2 owner approved the backend Prepare/cover-letter API scope; D3-017 is now In progress
+on a feature branch from merged #505 (`1f376b6`). Contract-first opt-in, versioned disclosure,
+durable preparation and owner preview/download shapes pass 83 contract tests. Documents draft
+integrity, mandatory review and PDF/DOCX parser round trips pass within 145 unit tests.
+Repo-wide typecheck (37 tasks), format and baseline-only lint (15 warnings/58 infos) pass.
+Persistence/privacy, workflow and Gateway wiring remain unfinished; no PR or deployment is
+claimed for this work. D3-038 is Complete after owner merge #505. Provider activation,
+procurement/region conditions and real-model evaluation remain separate gates. Backend only;
+D1/D3 remain In progress. The older approval-pending summary below is superseded by this entry.
+
 October 2 D3-037's default-off OpenAI adapter merged in #504 (`1ffe675`); the selected model
 is not composed or activated. D3-038 corrects a reproduced AI-disclosure freshness bypass:
 invalid approval/clock times and NaN/infinite lifetimes previously allowed provider access.

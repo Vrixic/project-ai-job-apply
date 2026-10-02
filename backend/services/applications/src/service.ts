@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import type {
   ApplicationAttempt as ApiApplicationAttempt,
   Application,
+  ApplicationCoverLetterFile,
+  ApplicationCoverLetterPreview,
   ApplicationHistoryPage,
+  ApplicationPacketPreparation,
   ApplicationPage,
   ApplicationResumeFile,
   ApplicationResumePreview,
@@ -24,6 +27,7 @@ import {
   versionToken,
 } from "./metrics.js";
 import type { ArtifactHashes, CurrentBindings, FormBinding } from "./packet.js";
+import type { PreparationContext, PreparationRecord, PreparationRequest } from "./preparation.js";
 import { type ResumePreviewSource, tailoredFileName, withPacketMatch } from "./resume-preview.js";
 import type {
   ApplicationRecord,
@@ -33,7 +37,7 @@ import type {
   PostgresApplicationStore,
   StartAttemptResult,
 } from "./store.js";
-import { StalePacketError } from "./store.js";
+import { ApplicationIntegrityError, StalePacketError } from "./store.js";
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -80,6 +84,31 @@ export interface PacketPreparationSource {
   }): Promise<PacketPreparation>;
 }
 
+/** Documents-owned read/context API. Generation is never performed by an HTTP read. */
+export interface ApplicationCoverLetters {
+  context(identity: { ownerUserId: string; applicationId: string }): Promise<PreparationContext>;
+  preview(
+    ownerUserId: string,
+    applicationId: string,
+    packetHash: string | undefined,
+  ): Promise<ApplicationCoverLetterPreview>;
+  file(
+    ownerUserId: string,
+    applicationId: string,
+    packetHash: string,
+    format: "pdf" | "docx",
+  ): Promise<ApplicationCoverLetterFile>;
+  binding(
+    ownerUserId: string,
+    applicationId: string,
+    packetHash: string | undefined,
+  ): Promise<string | undefined>;
+}
+export type ApplicationPreparations = Pick<
+  PostgresApplicationStore,
+  "queuePreparation" | "getPreparation" | "replayPreparation"
+>;
+
 /** Live job and artifact hashes that an approval must still match. */
 export interface LiveBindingsSource {
   resolve(input: {
@@ -123,6 +152,26 @@ export interface ApplicationsApi {
     request: { limit?: number; cursor?: string; jobId?: string },
   ): Promise<ApplicationPage>;
   get(ownerUserId: string, applicationId: string): Promise<Application>;
+  prepareCoverLetter(
+    ownerUserId: string,
+    applicationId: string,
+    request: PreparationRequest,
+    idempotencyKey: string,
+  ): Promise<ApplicationPacketPreparation>;
+  preparation(
+    ownerUserId: string,
+    applicationId: string,
+    preparationId: string,
+  ): Promise<ApplicationPacketPreparation>;
+  coverLetterPreview(
+    ownerUserId: string,
+    applicationId: string,
+  ): Promise<ApplicationCoverLetterPreview>;
+  coverLetterFile(
+    ownerUserId: string,
+    applicationId: string,
+    format: "pdf" | "docx",
+  ): Promise<ApplicationCoverLetterFile>;
   /** The resume tailored for this application's job and whether the packet already carries it. */
   resumePreview(ownerUserId: string, applicationId: string): Promise<ApplicationResumePreview>;
   /** The tailored resume file the current packet carries; refused if it no longer matches. */
@@ -214,6 +263,9 @@ export interface ApplicationsServiceDependencies {
   jobs: ApplicationJobGate;
   /** Tailored-resume preview; when absent the preview reports the service as unavailable. */
   resumes?: ResumePreviewSource;
+  /** Absent until preparation persistence and owned Documents context/read boundaries are wired. */
+  preparations?: ApplicationPreparations;
+  coverLetters?: ApplicationCoverLetters;
   /** Optional privacy-safe measurement sink. Failures never affect a request. */
   metrics?: MetricSink;
   clock?: () => Date;
@@ -282,6 +334,98 @@ export class ApplicationsService implements ApplicationsApi {
       throw new ApplicationsUnavailableError();
     }
     return withPacketMatch(body, view.currentPacket?.artifactHashes.resume);
+  }
+
+  async prepareCoverLetter(
+    ownerUserId: string,
+    applicationId: string,
+    request: PreparationRequest,
+    idempotencyKey: string,
+  ): Promise<ApplicationPacketPreparation> {
+    const preparations = this.dependencies.preparations;
+    if (!preparations) throw new ApplicationsUnavailableError();
+    const command = {
+      ownerUserId,
+      applicationId,
+      request: structuredClone(request),
+      idempotencyKey,
+    };
+    // Owner and request identity are checked before volatile dependencies. A retry neither
+    // renews disclosure nor assembles another packet, even after the application has changed.
+    const prior = await preparations.replayPreparation(command);
+    if (prior) return toApiPreparation(prior);
+    const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const letters = this.dependencies.coverLetters;
+    if (!letters) throw new ApplicationsUnavailableError();
+    let context: PreparationContext;
+    try {
+      context = await letters.context({ ownerUserId, applicationId });
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    const packet = await this.dependencies.packets.prepare({
+      ownerUserId,
+      application: current.application,
+      userEntries: command.request.userEntries ?? [],
+      form: command.request.form ?? null,
+    });
+    const accepted = await preparations.queuePreparation({ ...command, context, packet });
+    if (!accepted.replayed) this.funnel("packet_preparation_queued");
+    return toApiPreparation(accepted.preparation);
+  }
+
+  async preparation(
+    ownerUserId: string,
+    applicationId: string,
+    preparationId: string,
+  ): Promise<ApplicationPacketPreparation> {
+    const preparations = this.dependencies.preparations;
+    if (!preparations) throw new ApplicationsUnavailableError();
+    return toApiPreparation(
+      await preparations.getPreparation(ownerUserId, applicationId, preparationId),
+    );
+  }
+
+  async coverLetterPreview(
+    ownerUserId: string,
+    applicationId: string,
+  ): Promise<ApplicationCoverLetterPreview> {
+    const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const hash = view.currentPacket?.artifactHashes.coverLetter;
+    if (!hash) return { status: "no_cover_letter", matchesPacket: false };
+    const letters = this.dependencies.coverLetters;
+    if (!letters) throw new ApplicationsUnavailableError();
+    try {
+      const result = await letters.preview(ownerUserId, applicationId, hash);
+      if (result.status === "ready" && result.contentSha256 !== hash)
+        throw new ApplicationsUnavailableError();
+      return result;
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+  }
+
+  async coverLetterFile(
+    ownerUserId: string,
+    applicationId: string,
+    format: "pdf" | "docx",
+  ): Promise<ApplicationCoverLetterFile> {
+    const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const hash = view.currentPacket?.artifactHashes.coverLetter;
+    if (!hash) throw new StalePacketError(["cover_letter_changed"]);
+    const letters = this.dependencies.coverLetters;
+    if (!letters) throw new ApplicationsUnavailableError();
+    try {
+      if ((await letters.binding(ownerUserId, applicationId, hash)) !== hash)
+        throw new StalePacketError(["cover_letter_changed"]);
+      const file = await letters.file(ownerUserId, applicationId, hash, format);
+      if (file.contentSha256 !== hash || file.format !== format)
+        throw new StalePacketError(["cover_letter_changed"]);
+      return file;
+    } catch (error) {
+      if (error instanceof StalePacketError) throw error;
+      throw new ApplicationsUnavailableError();
+    }
   }
 
   async resumeFile(
@@ -725,6 +869,26 @@ export function toApiApplication(view: ApplicationView): Application {
     attempts: view.attempts.map(toApiAttempt),
     createdAt: view.application.createdAt.toISOString(),
     updatedAt: view.application.updatedAt.toISOString(),
+  };
+}
+
+/** Stable operation output: never substitute the application's newer mutable state. */
+export function toApiPreparation(row: PreparationRecord): ApplicationPacketPreparation {
+  if (
+    (row.state === "succeeded" && !row.resultPacketId) ||
+    (row.state === "failed" && !row.errorCode)
+  )
+    throw new ApplicationIntegrityError("preparation result");
+  return {
+    id: row.id,
+    applicationId: row.applicationId,
+    state: row.state,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    ...(row.state === "succeeded" && row.resultPacketId
+      ? { result: { packetId: row.resultPacketId, revision: row.expectedRevision + 1 } }
+      : {}),
+    ...(row.state === "failed" && row.errorCode ? { errorCode: row.errorCode } : {}),
   };
 }
 

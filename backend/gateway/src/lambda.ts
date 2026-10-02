@@ -249,6 +249,18 @@ const APPLICATION_RESUME_FILE_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/resume/file$`,
   "u",
 );
+const APPLICATION_COVER_LETTER_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/cover-letter$`,
+  "u",
+);
+const APPLICATION_COVER_LETTER_FILE_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/cover-letter/file$`,
+  "u",
+);
+const APPLICATION_PREPARATION_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/packet-preparations/${APPLICATION_ID}$`,
+  "u",
+);
 const APPLICATION_COMMAND_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/(?:packets|approval|reopen|cancel|submissions|manual-submissions)$`,
   "u",
@@ -317,10 +329,19 @@ function allowedRoute(
   if (method === "GET" && APPLICATION_HISTORY_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true, acceptsApplicationHistoryQuery: true };
   }
-  if (method === "GET" && APPLICATION_RESUME_PATH_PATTERN.test(path)) {
+  if (
+    method === "GET" &&
+    (APPLICATION_RESUME_PATH_PATTERN.test(path) ||
+      APPLICATION_COVER_LETTER_PATH_PATTERN.test(path) ||
+      APPLICATION_PREPARATION_PATH_PATTERN.test(path))
+  ) {
     return { acceptsBody: false, protected: true };
   }
-  if (method === "GET" && APPLICATION_RESUME_FILE_PATH_PATTERN.test(path)) {
+  if (
+    method === "GET" &&
+    (APPLICATION_RESUME_FILE_PATH_PATTERN.test(path) ||
+      APPLICATION_COVER_LETTER_FILE_PATH_PATTERN.test(path))
+  ) {
     return { acceptsBody: false, protected: true, acceptsApplicationResumeFormatQuery: true };
   }
   if (method === "PATCH" && PROFILE_FACT_PATH_PATTERN.test(path)) {

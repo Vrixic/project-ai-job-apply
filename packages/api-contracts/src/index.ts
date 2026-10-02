@@ -3,6 +3,11 @@ import * as addFormatsModule from "ajv-formats";
 import type { components, paths } from "../generated/platform.js";
 import contract from "../openapi/platform.v1.json" with { type: "json" };
 
+export {
+  COVER_LETTER_DISCLOSURE_TEXT,
+  COVER_LETTER_DISCLOSURE_VERSION,
+} from "./cover-letter-disclosure.js";
+
 export type ApiComponents = components;
 export type ApiPaths = paths;
 export type PutJobPreferencesRequest = components["schemas"]["PutJobPreferencesRequest"];
@@ -19,6 +24,13 @@ export type ConfirmAccountDeletionRequest = components["schemas"]["ConfirmAccoun
 export type AccountDeletionRequest = components["schemas"]["AccountDeletionRequest"];
 export type ProfileReadiness = components["schemas"]["ProfileReadiness"];
 export type Operation = components["schemas"]["Operation"];
+export type CoverLetterDisclosureAcknowledgement =
+  components["schemas"]["CoverLetterDisclosureAcknowledgement"];
+export type RequestedApplicationCoverLetter =
+  components["schemas"]["RequestedApplicationCoverLetter"];
+export type ApplicationPacketPreparation = components["schemas"]["ApplicationPacketPreparation"];
+export type ApplicationCoverLetterPreview = components["schemas"]["ApplicationCoverLetterPreview"];
+export type ApplicationCoverLetterFile = components["schemas"]["ApplicationCoverLetterFile"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
 export type ProfileFact = components["schemas"]["ProfileFact"];
 export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];

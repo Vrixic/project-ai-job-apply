@@ -846,6 +846,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/applications/{applicationId}/cover-letter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Owner-scoped immutable cover-letter preview. Reading never regenerates text or calls a model. Grounded text still requires review. */
+        get: operations["getApplicationCoverLetterPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/cover-letter/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Verified PDF or DOCX from the packet-bound immutable draft, without regeneration. Refuses absent or stale bindings. */
+        get: operations["getApplicationCoverLetterFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/packet-preparations/{preparationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Polls an owner-scoped durable packet preparation. No prompts, candidate facts or provider response bodies. Success still requires packet review and approval. */
+        get: operations["getApplicationPacketPreparation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications/{applicationId}/packets": {
         parameters: {
             query?: never;
@@ -855,7 +906,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Builds a new immutable packet version from confirmed profile evidence and the candidate's explicit entries. Any prior approval is superseded. */
+        /** @description Builds a new immutable packet version from confirmed profile evidence and the candidate's explicit entries. Any prior approval is superseded. Explicit coverLetter opt-in returns 202 and an owner-scoped durable operation instead. Replay does not initiate another model call. Live generation is separately default-off. */
         post: operations["prepareApplicationPacket"];
         delete?: never;
         options?: never;
@@ -2274,6 +2325,79 @@ export interface components {
              */
             jobId?: string;
         };
+        CoverLetterDisclosureAcknowledgement: {
+            /** @constant */
+            noticeVersion: "openai-cover-letter.v1";
+            /** @constant */
+            acknowledged: true;
+        };
+        RequestedApplicationCoverLetter: {
+            disclosure: components["schemas"]["CoverLetterDisclosureAcknowledgement"];
+        };
+        ApplicationPacketPreparation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            applicationId: string;
+            /** @enum {string} */
+            state: "queued" | "running" | "succeeded" | "failed";
+            /** @description Immutable prepared-packet reference. Read the application separately for current state, which may change after preparation completes. */
+            result?: {
+                /** Format: uuid */
+                packetId: string;
+                /** @description Application revision when this packet was committed; later changes do not alter it. */
+                revision: number;
+            };
+            /** @enum {string} */
+            errorCode?: "disclosure_expired" | "generation_unavailable" | "no_confirmed_evidence" | "grounding_failed" | "render_failed" | "bindings_changed" | "application_changed";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        } & (unknown & unknown);
+        ApplicationCoverLetterPreview: {
+            /** @constant */
+            status: "no_cover_letter";
+            /** @constant */
+            matchesPacket: false;
+        } | {
+            /** @constant */
+            status: "ready";
+            /** Format: uuid */
+            documentId: string;
+            version: number;
+            contentSha256: string;
+            matchesPacket: boolean;
+            /** @constant */
+            reviewRequired: true;
+            paragraphs: {
+                text: string;
+                factIds: string[];
+            }[];
+            model: {
+                /** @constant */
+                provider: "openai";
+                /** @constant */
+                model: "gpt-6-luna";
+                /** @constant */
+                version: "gpt-6-luna";
+            };
+            promptVersion: string;
+        };
+        ApplicationCoverLetterFile: {
+            /** @enum {string} */
+            format: "docx" | "pdf";
+            /** @enum {string} */
+            mediaType: "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            fileName: string;
+            /** @description SHA-256 of the file bytes. */
+            sha256: string;
+            sizeBytes: number;
+            /** @description Format-independent immutable cover-letter content hash bound to the packet. */
+            contentSha256: string;
+            contentBase64: string;
+        };
+        /** @description Omit coverLetter for existing synchronous preparation. Explicit opt-in acknowledges the current OpenAI cover-letter notice; acknowledgement time is server-recorded. Clients cannot supply timestamps or provider/model overrides. Generated text always requires candidate review. */
         PrepareApplicationPacketRequest: {
             expectedRevision: number;
             form?: components["schemas"]["ApplicationFormBinding"];
@@ -2281,6 +2405,7 @@ export interface components {
                 fieldKey: string;
                 value: string | number | boolean | (string | number | boolean)[] | null;
             }[];
+            coverLetter?: components["schemas"]["RequestedApplicationCoverLetter"];
         };
         ApproveApplicationPacketRequest: {
             expectedRevision: number;
@@ -4375,6 +4500,94 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    getApplicationCoverLetterPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped cover-letter preview */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationCoverLetterPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplicationCoverLetterFile: {
+        parameters: {
+            query: {
+                format: "docx" | "pdf";
+            };
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped cover-letter file */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationCoverLetterFile"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplicationPacketPreparation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: string;
+                preparationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped packet preparation */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationPacketPreparation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     prepareApplicationPacket: {
         parameters: {
             query?: never;
@@ -4400,6 +4613,16 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Application"];
+                };
+            };
+            /** @description Durable cover-letter preparation accepted */
+            202: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationPacketPreparation"];
                 };
             };
             400: components["responses"]["BadRequest"];

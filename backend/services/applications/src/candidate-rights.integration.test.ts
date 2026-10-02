@@ -78,7 +78,8 @@ describeWithDatabase("D3-014 Applications candidate rights ownership", () => {
     const executable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
     const first = await execFileAsync(process.execPath, [executable], { env });
     const replay = await execFileAsync(process.execPath, [executable], { env });
-    const expected = "Applications migrations through 0003_manual_submission applied and verified.";
+    const expected =
+      "Applications migrations through 0005_preparation_dispatch applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
   });

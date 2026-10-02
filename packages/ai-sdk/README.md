@@ -18,6 +18,16 @@ Disclosure freshness fails closed on invalid approval or clock timestamps and no
 negative lifetime configuration. The default remains 15 minutes, including its exact boundary.
 Rejection uses the existing `DISCLOSURE_STALE` code and happens before provider access.
 
+`coverLetterContext` returns internal evidence/job hashes using generation's same bounded,
+latest-version, confirmed non-restricted career-fact selection. It binds evidence confidence and
+the complete posting, not just the truncated prompt. Six offline cases cover deterministic
+ordering, version/eligibility changes, expiry/security holds and selection bounds. Applications
+and Documents still need to compose this helper into the preparation and approval paths.
+
+Grounding also refuses citations to otherwise usable facts excluded from this request's prompt
+(restricted, non-career or beyond the selection limit). Existing unknown/unusable-fact reasons
+are preserved. Three offline regressions cover this request-specific citation boundary.
+
 ## OpenAI development adapter
 
 `OpenAiLunaProvider` implements the existing provider port with native fetch and the fixed

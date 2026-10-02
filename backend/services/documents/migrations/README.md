@@ -4,6 +4,14 @@ Migrations are applied transactionally by the documents-owned runner after profi
 They store only metadata and object references; source bytes and normalized text stay in the
 candidate-document bucket.
 
+`0006_cover_letters` adds immutable cover-letter metadata and an exact key reserved before
+encrypted object writes. It adds value-free reservation/readiness audit actions, portable
+metadata export and candidate inventory/deletion coverage, including abandoned pending writes.
+No generated text, model prompt or raw provider response is stored in SQL. Deploy compatible
+strict export consumers before migrating; workflow/Gateway composition and restore-manifest
+synchronization are still in progress. Rollback code must not remove inventory coverage for
+already-reserved keys.
+
 `0002_resume_processing` adds immutable source-version dispositions, value-free delivery receipts,
 legal status transitions, normalized-object references, parser metadata, and security holds.
 At-least-once events deduplicate by both event ID and `(document_id, source_object_version)`.

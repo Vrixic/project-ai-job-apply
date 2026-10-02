@@ -24,7 +24,7 @@ describe("Applications OpenAPI contract", () => {
     const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
       path.startsWith("/applications"),
     );
-    expect(applicationPaths.length).toBe(15);
+    expect(applicationPaths.length).toBe(18);
     for (const [, item] of applicationPaths) {
       for (const operation of Object.values(item) as Array<{
         security: Array<{ oidc: string[] }>;
@@ -55,7 +55,10 @@ describe("Applications OpenAPI contract", () => {
     // Reads and the once-only write-ahead dispatch (which the store makes exactly-once itself).
     expect(withoutKey).toEqual([
       "GET /applications/{applicationId}",
+      "GET /applications/{applicationId}/cover-letter",
+      "GET /applications/{applicationId}/cover-letter/file",
       "GET /applications/{applicationId}/history",
+      "GET /applications/{applicationId}/packet-preparations/{preparationId}",
       "GET /applications/{applicationId}/resume",
       "GET /applications/{applicationId}/resume/file",
       "POST /applications/search",

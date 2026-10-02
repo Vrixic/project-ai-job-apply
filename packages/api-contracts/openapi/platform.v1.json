@@ -2655,6 +2655,201 @@
         }
       }
     },
+    "/applications/{applicationId}/cover-letter": {
+      "get": {
+        "operationId": "getApplicationCoverLetterPreview",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "description": "Owner-scoped immutable cover-letter preview. Reading never regenerates text or calls a model. Grounded text still requires review.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-scoped cover-letter preview",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationCoverLetterPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/applications/{applicationId}/cover-letter/file": {
+      "get": {
+        "operationId": "getApplicationCoverLetterFile",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "description": "Verified PDF or DOCX from the packet-bound immutable draft, without regeneration. Refuses absent or stale bindings.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["docx", "pdf"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-scoped cover-letter file",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationCoverLetterFile"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/applications/{applicationId}/packet-preparations/{preparationId}": {
+      "get": {
+        "operationId": "getApplicationPacketPreparation",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "description": "Polls an owner-scoped durable packet preparation. No prompts, candidate facts or provider response bodies. Success still requires packet review and approval.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "preparationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-scoped packet preparation",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationPacketPreparation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/applications/{applicationId}/packets": {
       "post": {
         "operationId": "prepareApplicationPacket",
@@ -2663,7 +2858,7 @@
             "oidc": ["applications:write"]
           }
         ],
-        "description": "Builds a new immutable packet version from confirmed profile evidence and the candidate's explicit entries. Any prior approval is superseded.",
+        "description": "Builds a new immutable packet version from confirmed profile evidence and the candidate's explicit entries. Any prior approval is superseded. Explicit coverLetter opt-in returns 202 and an owner-scoped durable operation instead. Replay does not initiate another model call. Live generation is separately default-off.",
         "parameters": [
           {
             "in": "header",
@@ -2711,6 +2906,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Application"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Durable cover-letter preparation accepted",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationPacketPreparation"
                 }
               }
             }
@@ -6818,6 +7032,293 @@
         },
         "additionalProperties": false
       },
+      "CoverLetterDisclosureAcknowledgement": {
+        "type": "object",
+        "required": ["noticeVersion", "acknowledged"],
+        "properties": {
+          "noticeVersion": {
+            "type": "string",
+            "const": "openai-cover-letter.v1"
+          },
+          "acknowledged": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RequestedApplicationCoverLetter": {
+        "type": "object",
+        "required": ["disclosure"],
+        "properties": {
+          "disclosure": {
+            "$ref": "#/components/schemas/CoverLetterDisclosureAcknowledgement"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationPacketPreparation": {
+        "type": "object",
+        "required": ["id", "applicationId", "state", "createdAt", "updatedAt"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["queued", "running", "succeeded", "failed"]
+          },
+          "result": {
+            "type": "object",
+            "description": "Immutable prepared-packet reference. Read the application separately for current state, which may change after preparation completes.",
+            "required": ["packetId", "revision"],
+            "properties": {
+              "packetId": { "type": "string", "format": "uuid" },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Application revision when this packet was committed; later changes do not alter it."
+              }
+            },
+            "additionalProperties": false
+          },
+          "errorCode": {
+            "type": "string",
+            "enum": [
+              "disclosure_expired",
+              "generation_unavailable",
+              "no_confirmed_evidence",
+              "grounding_failed",
+              "render_failed",
+              "bindings_changed",
+              "application_changed"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "required": ["result"],
+              "properties": {
+                "result": {
+                  "type": "object"
+                },
+                "errorCode": false
+              }
+            },
+            "else": {
+              "properties": {
+                "result": false
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "failed"
+                }
+              }
+            },
+            "then": {
+              "required": ["errorCode"],
+              "properties": {
+                "errorCode": {
+                  "type": "string"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "errorCode": false
+              }
+            }
+          }
+        ]
+      },
+      "ApplicationCoverLetterPreview": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["status", "matchesPacket"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "no_cover_letter"
+              },
+              "matchesPacket": {
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "status",
+              "documentId",
+              "version",
+              "contentSha256",
+              "matchesPacket",
+              "reviewRequired",
+              "paragraphs",
+              "model",
+              "promptVersion"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "ready"
+              },
+              "documentId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "contentSha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "matchesPacket": {
+                "type": "boolean"
+              },
+              "reviewRequired": {
+                "type": "boolean",
+                "const": true
+              },
+              "paragraphs": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "items": {
+                  "type": "object",
+                  "required": ["text", "factIds"],
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8000
+                    },
+                    "factIds": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 40,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "model": {
+                "type": "object",
+                "required": ["provider", "model", "version"],
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "const": "openai"
+                  },
+                  "model": {
+                    "type": "string",
+                    "const": "gpt-6-luna"
+                  },
+                  "version": {
+                    "type": "string",
+                    "const": "gpt-6-luna"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "promptVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ApplicationCoverLetterFile": {
+        "type": "object",
+        "required": [
+          "format",
+          "mediaType",
+          "fileName",
+          "sha256",
+          "sizeBytes",
+          "contentSha256",
+          "contentBase64"
+        ],
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": ["docx", "pdf"]
+          },
+          "mediaType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ]
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 of the file bytes."
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300000
+          },
+          "contentSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Format-independent immutable cover-letter content hash bound to the packet."
+          },
+          "contentBase64": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 400000
+          }
+        },
+        "additionalProperties": false
+      },
       "PrepareApplicationPacketRequest": {
         "type": "object",
         "required": ["expectedRevision"],
@@ -6879,9 +7380,13 @@
               },
               "additionalProperties": false
             }
+          },
+          "coverLetter": {
+            "$ref": "#/components/schemas/RequestedApplicationCoverLetter"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Omit coverLetter for existing synchronous preparation. Explicit opt-in acknowledges the current OpenAI cover-letter notice; acknowledgement time is server-recorded. Clients cannot supply timestamps or provider/model overrides. Generated text always requires candidate review."
       },
       "ApproveApplicationPacketRequest": {
         "type": "object",

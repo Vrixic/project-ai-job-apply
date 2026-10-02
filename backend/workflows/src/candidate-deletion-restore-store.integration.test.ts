@@ -11,7 +11,11 @@ import {
   PostgresProfileStore,
 } from "@ai-job-apply/profile-service";
 import type { CandidateRightsPolicy } from "@ai-job-apply/profile-service/candidate-rights";
-import { DeleteObjectsCommand, ListObjectVersionsCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectVersionsCommand,
+} from "@aws-sdk/client-s3";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -310,6 +314,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
       const normalizedKey = `normalized/${documentId}/current-parser/resume.json`;
       const olderKey = `normalized/${documentId}/older-parser/resume.json`;
       const neighborKey = `normalized/${uuidv7()}/older-parser/resume.json`;
+      const generationKey = `normalized/${documentId}/generation/result.v1.json`;
       await database.client`
         INSERT INTO documents.resume_documents (id, user_id, file_name, media_type, size_bytes, sha256, source_object_key, status)
         VALUES (${documentId}, ${userId}, 'generated.pdf', 'application/pdf', 1, ${"1".repeat(64)}, ${sourceKey}, 'awaiting_upload')
@@ -320,20 +325,34 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         { Key: normalizedKey, VersionId: "current" },
         { Key: olderKey, VersionId: "older" },
         { Key: olderKey, VersionId: "marker-older" },
+        { Key: generationKey, VersionId: "generation-pending" },
+        { Key: generationKey, VersionId: "generation-ready" },
         { Key: neighborKey, VersionId: "neighbor" },
       ];
       let reappear = true;
+      let fenceSequence = 0;
       const documentObjectStore = new AwsCandidateDocumentObjectStore("generated-only-bucket", {
         send: async (command: unknown) => {
           if (command instanceof ListObjectVersionsCommand) {
             const prefix = command.input.Prefix;
             if (!prefix) throw new Error("SyntheticPrefixMissing");
             const matching = versions.filter((entry) => entry.Key.startsWith(prefix));
+            const listed = matching.map((entry) => ({
+              ...entry,
+              IsLatest: versions.filter((item) => item.Key === entry.Key).at(-1) === entry,
+            }));
             return {
               IsTruncated: false,
-              Versions: matching.filter((entry) => !entry.VersionId.startsWith("marker")),
-              DeleteMarkers: matching.filter((entry) => entry.VersionId.startsWith("marker")),
+              Versions: listed.filter((entry) => !entry.VersionId.startsWith("marker")),
+              DeleteMarkers: listed.filter((entry) => entry.VersionId.startsWith("marker")),
             };
+          }
+          if (command instanceof DeleteObjectCommand) {
+            expect(command.input.Key).toBe(generationKey);
+            expect(command.input.VersionId).toBeUndefined();
+            const version = `marker-fence-${++fenceSequence}`;
+            versions.push({ Key: generationKey, VersionId: version });
+            return { $metadata: { httpStatusCode: 204 }, DeleteMarker: true, VersionId: version };
           }
           if (command instanceof DeleteObjectsCommand) {
             const objects = command.input.Delete?.Objects ?? [];
@@ -386,7 +405,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         policyVersion: policy.version,
       };
       await expect(activities.deleteActiveSystems(input)).rejects.toThrow(
-        "CandidateDocumentObjectsRemain",
+        "ResumePurgeObjectDeletionIncomplete",
       );
       const [held] = await database.client<Record<string, unknown>[]>`
         SELECT request.state, candidate.account_state,
@@ -399,9 +418,13 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         accountState: "quarantined",
         documentCount: 1,
       });
+      expect(versions.filter((entry) => entry.Key === generationKey)).toEqual([
+        { Key: generationKey, VersionId: "marker-fence-1" },
+      ]);
       reappear = false;
       await activities.deleteActiveSystems(input);
       expect(versions).toEqual([{ Key: neighborKey, VersionId: "neighbor" }]);
+      expect(fenceSequence).toBe(2);
       const [purged] = await database.client<Record<string, unknown>[]>`
         SELECT count(*)::int AS count FROM documents.resume_documents WHERE user_id = ${userId}
       `;

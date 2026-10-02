@@ -13,6 +13,19 @@ Defines versioned API schemas and generates type-safe clients for web, mobile, e
 
 Contracts contain transport shapes, not backend implementation or persistence models.
 
+The in-progress D3-017 contract adds explicit cover-letter opt-in to Prepare. Omitted opt-in
+retains the synchronous `201 Application`; opt-in defines a `202 ApplicationPacketPreparation`
+with an owner-scoped poll route, plus immutable cover-letter preview and PDF/DOCX file reads.
+Successful preparation returns an immutable `{packetId, revision}` reference, not a snapshot
+of the application's mutable current state. Read the application separately for its current
+packet/action. This in-progress shape has no deployed consumers.
+Acknowledgement requires the exact `openai-cover-letter.v1` notice and `true`, without
+caller-supplied approval time or provider/model selection. The notice text/version are exported
+for consumers; generation remains separately default-off and every draft requires review.
+These contracts are not deployment evidence: local persistence, durable factories and Gateway
+handlers have tests, but production dispatch/recovery and isolated provider/read composition
+remain unfinished. Do not activate clients against the new routes yet.
+
 The owner-only `GET /profile/restricted-answers` metadata includes database-generated `createdAt`,
 preserving the timestamp representation and precision used by candidate exports. Creation time
 belongs to the answer identity and does not change when a version is corrected or deleted. It is

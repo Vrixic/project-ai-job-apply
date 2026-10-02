@@ -3,6 +3,12 @@
 Reviewed forward PostgreSQL migrations for identity, profile, operations, outbox, idempotency, and
 audit state. Migrations must preserve ownership and be tested against representative data.
 
+`0011_active_candidate_lease` adds the Identity-owned `require_active_candidate(uuid)` function.
+It takes a shared row lock and refuses absent/quarantined candidates. Documents invokes it
+inside a bounded object-write transaction so account quarantine cannot race the write, without
+cross-owner table access. Public execution is revoked; runtime grants remain a separately
+reviewed deployment prerequisite. This adds no external API or new account state.
+
 Provider retirement migrations must fail before mutation when undispatched work remains.
 Historical published routing values may be normalized only to a provider-neutral retired label;
 operation, audit, idempotency, and user-owned data remain unchanged.
