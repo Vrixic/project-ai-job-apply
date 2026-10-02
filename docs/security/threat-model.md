@@ -6,6 +6,15 @@
 
 ## D3 cover-letter delta (2026-10-02, engineering evidence only)
 
+The private Documents work ledger prevents renewable/replayed authority and accidental deletion of
+unresolved work. Each phase can claim once within its immutable server-time admission window; SQL
+enforces owner/request/consent binding, quarantine refusal and irreversible terminal states.
+Cancellation tombstones also fence phases that had not started before quarantine. Neither expiry
+nor RPC/SDK cancellation settles a running actor. Late finalization requires original provider
+settlement and grants no new model permission. Ledger-only state is not production quiescence:
+uncomposed actors, ambiguous remote effects, trusted settlement, IAM and restore replay remain
+blocking gaps. The source primitive stays default-off with no public API or activation change.
+
 Private owned-evidence composition now checks candidate activity and application ownership before
 Profile values, reads the bound active posting through Jobs, removes restricted facts and snapshots
 the graph/posting. End-of-read expiry/kill-switch checks and fixed failures prevent silent stale

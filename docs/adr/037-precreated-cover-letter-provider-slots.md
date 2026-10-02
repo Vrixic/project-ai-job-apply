@@ -122,6 +122,20 @@ accepted deletion requirements nor represents accountable security/privacy appro
 
 ## Consequences
 
+The proposed private Documents control ledger now has a forward-only `0007` migration. Three
+fixed purposes (`private_slots`, `provider_dispatch`, `final_document`) bind the same original
+request digest/consent per document. Each purpose can be issued and claimed once, using server time
+and a non-renewable admission window of at most 90 seconds. Slot/model authority also expires at
+original consent expiry; finalization requires original provider settlement and may occur later
+without new model authority. Replay never renews identity, deadline or terminal state. Cancellation
+can permanently fence not-yet-issued phases during quarantine, but cannot close running work.
+Expired issued records remain unresolved until explicit cancellation, and running records require
+trusted positive settlement regardless of deadline. SQL triggers enforce binding, admission,
+irreversible transitions and unresolved-deletion refusal. Terminal records can only disappear with
+their owning document, preventing delete-and-reissue. The ledger is private/default-off and not
+composed into production: all actors, positive remote settlement, IAM and restore enforcement
+remain prerequisites. A settled ledger alone does not satisfy the existing quiescence port.
+
 The primitive fails closed on missing or conflicting objects and admits at most one replacement
 of a specific placeholder while that placeholder remains current. Historical version reads never
 independently grant dispatch. Private initialization and isolated replacement require distinct

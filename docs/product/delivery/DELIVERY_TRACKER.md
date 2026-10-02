@@ -9,6 +9,22 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+October 2 private generation work authorization now has a Documents-owned forward-only `0007`
+ledger: immutable request/consent binding, one claim per fixed phase, non-renewable server-timed
+admission and irreversible explicit settlement/cancellation. Quarantine can permanently fence
+phases not yet issued; claimed work never closes from expiry or local abort. Finalization of the
+original settled-provider result remains possible after consent expiry without new model authority.
+Fifteen offline cases and all 53 real PostgreSQL cases pass (17 new ledger cases plus 36 existing
+Documents cases), including migration replay. SQL protects unresolved deletion and terminal
+delete-and-reissue. The primitive is private/default-off, not a composed quiescence authority.
+The owner approved the exact 52-migration guard/fixture update, retaining the exact 48/49/51
+inventories and strict event validation. Repo typecheck/tests/all builds, formatting and
+baseline-only lint pass; committed-source guard verification is running. No API/frontend,
+Terraform, deployment or activation change.
+The disposable synthetic database/container is removed and Docker Desktop/WSL stopped. All actors,
+trusted external settlement, IAM, retention, read/export/restore and external acceptance remain
+unfinished; D1/D3 stay In progress.
+
 October 2 private evidence composition now uses the existing owned Applications, Profile and Jobs
 read modules under an active-candidate lease. It checks the application before candidate reads,
 excludes restricted facts, snapshots the complete posting/graph and rechecks expiry/kill switches.

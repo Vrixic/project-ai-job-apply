@@ -15,6 +15,7 @@ const migrationVersions = [
   "0004_resume_deletion",
   "0005_resume_purge",
   "0006_cover_letters",
+  "0007_cover_letter_work_authorizations",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -54,7 +55,12 @@ try {
     }
 
     const [verification] = await transaction<
-      Array<{ tableCount: number; migrationCount: number; triggerCount: number }>
+      Array<{
+        tableCount: number;
+        migrationCount: number;
+        triggerCount: number;
+        workTriggerCount: number;
+      }>
     >`
       SELECT
         (
@@ -64,6 +70,7 @@ try {
           (to_regclass('documents.audit_events') IS NOT NULL)::int +
           (to_regclass('documents.processing_dispositions') IS NOT NULL)::int +
           (to_regclass('documents.cover_letters') IS NOT NULL)::int +
+          (to_regclass('documents.cover_letter_work_authorizations') IS NOT NULL)::int +
           (to_regclass('documents.schema_migrations') IS NOT NULL)::int
         )::int AS "tableCount",
         (
@@ -75,12 +82,18 @@ try {
           WHERE tgrelid = 'documents.resume_documents'::regclass
             AND tgname IN ('resume_documents_protect_identity', 'resume_documents_enforce_transition')
             AND NOT tgisinternal
-        ) AS "triggerCount"
+        ) AS "triggerCount",
+        (
+          SELECT count(*)::int FROM pg_trigger
+          WHERE tgrelid = 'documents.cover_letter_work_authorizations'::regclass
+            AND tgname = 'cover_letter_work_authorizations_protect' AND NOT tgisinternal
+        ) AS "workTriggerCount"
     `;
     if (
-      verification?.tableCount !== 7 ||
+      verification?.tableCount !== 8 ||
       verification.migrationCount !== migrationVersions.length ||
-      verification.triggerCount !== 2
+      verification.triggerCount !== 2 ||
+      verification.workTriggerCount !== 1
     ) {
       throw new Error("Documents migration verification failed");
     }

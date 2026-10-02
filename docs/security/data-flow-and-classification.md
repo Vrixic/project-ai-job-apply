@@ -1,5 +1,12 @@
 # Data Flow and Classification
 
+The private Documents generation work ledger stores owner/document UUIDs, original request digest,
+consent expiry, fixed phase, admission/settlement times and state only. It stores no candidate fact,
+prompt/output, credential or provider body; references never include candidate text. These are
+owned confidential operational metadata, not product analytics or public API responses. Unresolved
+work prevents ledger/document deletion; terminal metadata disappears with the owning document.
+Production actor/settlement, IAM, retention and restore enforcement remain uncomposed/default-off.
+
 - Status: Engineering baseline; accountable security/privacy approval pending
 - Last updated: 2026-08-08
 
