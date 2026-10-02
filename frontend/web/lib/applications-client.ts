@@ -179,6 +179,54 @@ export async function findLiveApplication(
   }
 }
 
+const appliedApplicationsMaxPages = 20;
+const appliedApplicationsPageSize = 50;
+
+/**
+ * Every one of the candidate's applications with a confirmed `applied` status, newest first. The
+ * search contract has no status filter, so this pages through everything (bounded) and keeps only
+ * the confirmed ones. `ok: false` means the lookup itself failed and the caller must not assume
+ * there are none.
+ */
+export async function listAppliedApplications(
+  options: ApplicationsCallOptions = {},
+): Promise<{ ok: true; applications: Application[] } | { ok: false }> {
+  const send = options.fetch ?? fetch;
+  const applications: Application[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < appliedApplicationsMaxPages; page += 1) {
+    let value: unknown;
+    try {
+      const response = await send("/api/platform/applications/search", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        ...(options.signal ? { signal: options.signal } : {}),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          limit: appliedApplicationsPageSize,
+          ...(cursor ? { cursor } : {}),
+        }),
+      });
+      if (!response.ok) return { ok: false };
+      value = await response.json().catch(() => undefined);
+    } catch {
+      return { ok: false };
+    }
+    const items = (value as { items?: unknown } | undefined)?.items;
+    if (!Array.isArray(items)) return { ok: false };
+    for (const item of items) {
+      if (item && typeof item === "object" && (item as { status?: unknown }).status === "applied") {
+        applications.push(item as Application);
+      }
+    }
+    const nextCursor = (value as { nextCursor?: unknown } | undefined)?.nextCursor;
+    if (typeof nextCursor !== "string" || nextCursor.length === 0) break;
+    cursor = nextCursor;
+  }
+  return { ok: true, applications };
+}
+
 /**
  * Reads the tailored-resume preview for one application. Returns nothing on any failure so the
  * caller shows fixed copy; the preview is display-only and never feeds a command.

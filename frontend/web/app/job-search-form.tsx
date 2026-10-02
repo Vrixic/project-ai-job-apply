@@ -2,6 +2,7 @@
 
 import type { CanonicalJobSummary, JobSearchPage } from "@ai-job-apply/api-contracts";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { listAppliedApplications } from "../lib/applications-client";
 import { JobDetailPanel } from "./job-detail-panel";
 import { JobReportControl } from "./job-report-control";
 import {
@@ -12,6 +13,10 @@ import {
 } from "./job-search-state";
 import { MatchAssessmentPanel } from "./match-assessment-panel";
 import { SAVED_JOBS_CHANGED_EVENT } from "./saved-jobs-panel";
+
+// Applications is shown only when the deployment turns the surface on at build time; the platform
+// still refuses callers whose token lacks the Applications permissions.
+const applicationsUiEnabled = process.env.NEXT_PUBLIC_APPLICATIONS_UI === "enabled";
 
 const initialFields: JobSearchFields = {
   query: "",
@@ -78,16 +83,20 @@ async function readProblem(response: Response): Promise<{ code?: string; message
 export function JobSearchForm({
   authenticated,
   savedPanel,
+  appliedPanel,
 }: {
   authenticated: boolean;
   /** When provided, renders a Search/Saved toggle alongside the filter bar and shows this in the "Saved" view. */
   savedPanel?: ReactNode;
+  /** When provided alongside savedPanel, adds an Applied tab and shows this in it. */
+  appliedPanel?: ReactNode;
 }) {
-  const [jobsView, setJobsView] = useState<"search" | "saved">("search");
+  const [jobsView, setJobsView] = useState<"search" | "saved" | "applied">("search");
   const filterFormId = useId();
   const [fields, setFields] = useState(initialFields);
   const [submittedFields, setSubmittedFields] = useState<JobSearchFields>();
   const [items, setItems] = useState<CanonicalJobSummary[]>([]);
+  const [appliedJobIds, setAppliedJobIds] = useState<ReadonlySet<string>>(() => new Set());
   const [cursor, setCursor] = useState<string>();
   const [searching, setSearching] = useState(false);
   const [savingJobId, setSavingJobId] = useState<string>();
@@ -157,6 +166,22 @@ export function JobSearchForm({
       if (authenticatedRef.current) keywordsRef.current?.focus();
     }
   }, [searching]);
+
+  // Confirmed-submitted jobs are excluded from search results; see the filter in `results` below.
+  useEffect(() => {
+    if (!authenticated || !applicationsUiEnabled) {
+      setAppliedJobIds(new Set());
+      return;
+    }
+    const controller = new AbortController();
+    void listAppliedApplications({ signal: controller.signal }).then((result) => {
+      if (controller.signal.aborted || !result.ok) return;
+      setAppliedJobIds(
+        new Set(result.applications.map((application) => application.canonicalJobId)),
+      );
+    });
+    return () => controller.abort();
+  }, [authenticated]);
 
   function update<Key extends keyof JobSearchFields>(key: Key, value: JobSearchFields[Key]) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -478,12 +503,15 @@ export function JobSearchForm({
     </>
   );
 
+  const visibleItems =
+    appliedJobIds.size > 0 ? items.filter((job) => !appliedJobIds.has(job.id)) : items;
+
   const results = (
     <>
       {message && <output aria-live="polite">{message}</output>}
-      {items.length > 0 && (
+      {visibleItems.length > 0 && (
         <ol className="job-results" aria-label="Job search results">
-          {items.map((job) => (
+          {visibleItems.map((job) => (
             <li key={job.id}>
               <article>
                 <h3>{job.title}</h3>
@@ -545,6 +573,17 @@ export function JobSearchForm({
             >
               Saved
             </button>
+            {appliedPanel && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={jobsView === "applied"}
+                className="dashboard-subtab"
+                onClick={() => setJobsView("applied")}
+              >
+                Applied
+              </button>
+            )}
           </div>
           <form
             id={filterFormId}
@@ -563,6 +602,7 @@ export function JobSearchForm({
         </div>
         <div hidden={jobsView !== "search"}>{results}</div>
         <div hidden={jobsView !== "saved"}>{savedPanel}</div>
+        {appliedPanel && <div hidden={jobsView !== "applied"}>{appliedPanel}</div>}
       </>
     );
   }
