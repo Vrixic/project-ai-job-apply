@@ -9,6 +9,24 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-049 failed/abandoned original-response disposal reconciliation started, source
+only. Permanent owned admission fencing precedes inventory read and provider cleanup. Only
+positive original terminal/deletion acknowledgement may reach disposal persistence; original
+writers remain running and no quiescence, finalization or purge permission is returned. Initial
+25 offline cases and all 748 Documents unit cases pass with typecheck/build. All 197 real-SQL
+integration cases pass, including six new reconciliation cases. Full maintained verification
+passes, including formatting, baseline lint, typecheck, tests and all 23 builds. Docker/WSL are
+stopped and the exact owned tmpfs fixture removed; shared volumes retained. Runtime/IAM,
+scheduling, unknown-identity reconciliation, successful
+generation disposal and private-writer drain remain unfinished/default-off. No public API,
+frontend, migration, guard/Terraform, cloud/model call, deployment or activation is included.
+
+PR #520 merged into the feature base as `aeea2b4`, then PR #519 merged to main as `4c49e6b`.
+Main's complete tree matches the tested `b168594` child tree and includes both D3-047/D3-048
+source layers. PR #519's hosted quality, catalog, integration and both container jobs pass;
+audit/scanner fail without waiver. PR #520's original hosted run is terminal: quality, catalog,
+integration and both containers pass; audit/scanner fail without waiver. No restart or deployment.
+
 2026-10-03 D3-048 separate private original-response capture RPC started, source only.
 All 38 offline boundary cases and 723 Documents unit cases pass with typecheck/build. Repeated
 final-source real PostgreSQL runs pass 191 integration cases, including five new RPC cases.

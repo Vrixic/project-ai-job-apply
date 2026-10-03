@@ -1,5 +1,16 @@
 # Data Flow and Classification
 
+## Source-only failed/abandoned response reconciliation (2026-10-03)
+
+Trusted maintenance caller -> Documents-owned permanent admission fence -> exact original
+response inventory -> isolated stop/delete capability -> positive original acknowledgement ->
+Documents disposal persistence and readback. This source factory defaults off and is not an
+authenticated runtime or scheduler. It carries identifiers only and cannot dispatch generation,
+settle private writers, admit finalization or purge platform objects/rows. Unknown creation
+identities, missing responses, lost deletion ACKs and local deadlines remain unresolved.
+Positive response disposal does not prove writer quiescence or deletion of other provider copies.
+No live model/cloud call, public API/frontend change, deployment or activation occurs.
+
 ## Source-only private original-response capture RPC (2026-10-03)
 
 Trusted original provider actor -> separate exact-version single-attempt private RPC ->

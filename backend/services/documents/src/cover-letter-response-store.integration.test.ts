@@ -1,12 +1,13 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { ModelGateway, OpenAiLunaProvider } from "@ai-job-apply/ai-sdk";
+import { ModelGateway, OpenAiLunaProvider, OpenAiLunaResponseCleanup } from "@ai-job-apply/ai-sdk";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CoverLetterResponseCaptureClient } from "./cover-letter-response-capture-client.js";
 import { createCoverLetterResponseCaptureHandler } from "./cover-letter-response-capture-handler.js";
+import { createCoverLetterResponseReconciler } from "./cover-letter-response-reconciliation.js";
 import { PostgresCoverLetterResponseStore } from "./cover-letter-response-store.js";
 import { PostgresCoverLetterStore } from "./cover-letter-store.js";
 import {
@@ -118,6 +119,184 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await work.claim(ref);
     return store.reserve(ref);
   }
+
+  function disposalTransport(original: ReturnType<typeof response>, loseDeleteAck = false) {
+    const methods: string[] = [];
+    let deleted = false;
+    const cleanup = new OpenAiLunaResponseCleanup({
+      enabled: () => true,
+      apiKey: () => "synthetic",
+      fetch: async (url, init) => {
+        const method = init?.method ?? "GET";
+        methods.push(method);
+        expect(String(url)).toBe(
+          `https://api.openai.com/v1/responses/${original.responseId}${method === "POST" ? "/cancel" : ""}`,
+        );
+        expect(await work.readDrainState(owner, documentId)).toBe("pending");
+        if (deleted) return new Response("", { status: 404 });
+        if (method === "DELETE") {
+          deleted = true;
+          if (loseDeleteAck) throw Error("SyntheticProviderDeletionLostACK");
+          return new Response(
+            JSON.stringify({ object: "response.deleted", id: original.responseId, deleted: true }),
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            object: "response",
+            id: original.responseId,
+            created_at: original.createdAt,
+            model: "gpt-6-luna",
+            background: true,
+            store: false,
+            previous_response_id: null,
+            tools: [],
+            status: method === "POST" ? "cancelled" : "in_progress",
+          }),
+        );
+      },
+    });
+    return { cleanup, methods };
+  }
+  it("abandoned response disposal follows the permanent fence without settling writers or granting purge", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    const transport = disposalTransport(original);
+    const reconcile = createCoverLetterResponseReconciler({
+      work,
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({
+      kind: "response_disposed",
+      reference: ref,
+    });
+    expect(transport.methods).toEqual(["GET", "POST", "DELETE"]);
+    expect((await store.read(ref))?.state).toBe("disposed");
+    expect(await work.readDrainState(owner, documentId)).toBe("pending");
+    await expect(
+      work.issue({
+        ownerUserId: owner,
+        documentId,
+        purpose: "final_document",
+        requestSha256: ref.requestSha256,
+        consentExpiresAt: new Date(Date.now() + 900_000),
+      }),
+    ).rejects.toThrow();
+    await expect(
+      sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+    ).rejects.toThrow();
+    const before =
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`;
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({
+      kind: "response_disposed",
+      reference: ref,
+    });
+    expect(transport.methods).toHaveLength(3);
+    expect(
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`,
+    ).toEqual(before);
+  });
+  it("maintained disposal recovers committed-but-lost SQL ACK without repeating provider deletion", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    const transport = disposalTransport(original);
+    const lost = createCoverLetterResponseReconciler({
+      work,
+      responses: {
+        read: store.read.bind(store),
+        recordDisposal: async (binding, positive) => {
+          await store.recordDisposal(binding, positive);
+          throw Error("SyntheticCommittedSqlDisposalLostACK");
+        },
+      },
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await lost(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect((await store.read(ref))?.state).toBe("disposed");
+    expect(await lost(ref, new AbortController().signal)).toEqual({
+      kind: "response_disposed",
+      reference: ref,
+    });
+    expect(transport.methods).toHaveLength(3);
+    expect(await work.readDrainState(owner, documentId)).toBe("pending");
+  });
+  it("unknown creation identity is permanently fenced but cannot be guessed or disposed", async () => {
+    await reserve();
+    const transport = disposalTransport(response());
+    const reconcile = createCoverLetterResponseReconciler({
+      work,
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect(transport.methods).toEqual([]);
+    expect(await store.read(ref)).toEqual({ reference: ref, state: "reserved", response: null });
+    expect(await work.readDrainState(owner, documentId)).toBe("pending");
+  });
+  it("lost remote deletion ACK and later 404 never substitute for positive durable disposal", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    const transport = disposalTransport(original, true);
+    const reconcile = createCoverLetterResponseReconciler({
+      work,
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect(transport.methods).toEqual(["GET", "POST", "DELETE", "GET"]);
+    expect((await store.read(ref))?.state).toBe("acknowledged");
+    await expect(
+      sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+    ).rejects.toThrow();
+  });
+  it("captured original response may drain after quarantine without new admission", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+    const transport = disposalTransport(original);
+    const reconcile = createCoverLetterResponseReconciler({
+      work,
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({
+      kind: "response_disposed",
+      reference: ref,
+    });
+    expect(await work.readDrainState(owner, documentId)).toBe("pending");
+  });
+  it("lost committed cleanup-fence ACK admits no provider reconciliation", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    const transport = disposalTransport(original);
+    const reconcile = createCoverLetterResponseReconciler({
+      work: {
+        fenceForCleanup: async (binding) => {
+          await work.fenceForCleanup(binding);
+          throw Error("SyntheticCommittedFenceLostACK");
+        },
+      },
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect(transport.methods).toEqual([]);
+    expect((await store.read(ref))?.state).toBe("acknowledged");
+    expect(await work.readDrainState(owner, documentId)).toBe("pending");
+  });
 
   function privateCapture(loseAck?: "reserve" | "record_creation") {
     const arn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-capture:7";
