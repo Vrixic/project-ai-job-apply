@@ -245,6 +245,16 @@ failing without waiver. The synthetic database was removed; Docker Desktop/WSL a
 
 ## Durable original provider response inventory
 
+The opt-in isolated actor `responseCapture` port now connects the original grant to the
+gateway's separate background path. It requires strict reserve/capture capabilities before
+claiming; after the acknowledged dispatch-slot replacement it supplies exact original-reference
+closures. Consent/deadline and activation are rechecked after reservation before creation.
+Creation capture precedes result writes and original settlement; ambiguous capture cannot write,
+settle or redispatch. Existing foreground and original local non-dispatch closure behavior stay
+unchanged. The isolated actor still has no database bootstrap: authenticated private capture RPC
+and reviewed caller IAM are not yet composed. Response disposal and writer-drain/quiescence
+proof remain separate requirements, even after successful background generation.
+
 `0008_cover_letter_provider_responses` and the private-runtime-only
 `PostgresCoverLetterResponseStore` reserve identifier-only inventory against a running original
 provider grant before external creation. Only a committed first reservation returns `reserved`;

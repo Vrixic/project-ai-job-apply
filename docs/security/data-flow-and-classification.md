@@ -1,5 +1,18 @@
 # Data Flow and Classification
 
+## Source-only original background capture checkpoint (2026-10-03)
+
+The opt-in isolated actor supplies its original provider-grant reserve/capture capability to the
+AI gateway. Gateway disclosure checks and one committed inventory reservation precede external
+creation; exact immutable id/time capture precedes polling or output acceptance. Request settings
+remain the selected model, no tools/linkage, strict grounded output and `store:false`, with
+background execution explicitly selected. Candidate text remains confined to the existing private
+request/result boundaries and provider processing, never capture envelopes or diagnostics.
+Unknown creation/capture ACKs retain unresolved inventory. No failed or timed-out call proves
+provider stopping. Temporary polling state is not Zero Data Retention or platform-quiescence
+evidence. Private capture RPC/IAM, maintained disposal, writer drain and deployed/accountable
+acceptance remain pending; no live provider/cloud call or activation occurs in this source change.
+
 ## Source-only private cover-letter cleanup control
 
 Owner-approved non-dispatch lifecycle receipts contain only original model/prompt identity and

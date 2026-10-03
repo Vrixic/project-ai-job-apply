@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { ModelGateway, OpenAiLunaProvider } from "@ai-job-apply/ai-sdk";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -115,6 +116,136 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await work.claim(ref);
     return store.reserve(ref);
   }
+
+  async function backgroundRun(
+    settings: {
+      loseCaptureAck?: boolean;
+      loseCreateAck?: boolean;
+      alreadyReserved?: boolean;
+      quarantine?: boolean;
+    } = {},
+  ) {
+    await work.claim(ref);
+    if (settings.alreadyReserved) await store.reserve(ref);
+    let calls = 0;
+    const original = response();
+    const provider = new OpenAiLunaProvider({
+      enabled: () => true,
+      backgroundEnabled: () => true,
+      apiKey: () => "synthetic-test-key",
+      fetch: async () => {
+        calls++;
+        expect(await store.read(ref)).toEqual({
+          reference: ref,
+          state: "reserved",
+          response: null,
+        });
+        if (settings.loseCreateAck) throw Error("SyntheticLostCreateACK");
+        return new Response(
+          JSON.stringify({
+            object: "response",
+            id: original.responseId,
+            created_at: original.createdAt,
+            model: "gpt-6-luna",
+            background: true,
+            store: false,
+            previous_response_id: null,
+            conversation: null,
+            tools: [],
+            status: "completed",
+            output: [
+              {
+                type: "message",
+                role: "assistant",
+                status: "completed",
+                content: [{ type: "output_text", text: '{"paragraphs":[]}' }],
+              },
+            ],
+          }),
+        );
+      },
+    });
+    const gateway = new ModelGateway(provider, { enabled: () => true });
+    const run = () =>
+      gateway.generateWithBackgroundCapture(
+        {
+          promptId: "cover_letter",
+          promptVersion: "1.0.0",
+          purpose: "cover_letter",
+          categories: ["profile_facts", "job_posting"],
+          system: "Synthetic rules",
+          user: "Synthetic facts",
+        },
+        {
+          purpose: "cover_letter",
+          categories: ["profile_facts", "job_posting"],
+          approvedAt: new Date(),
+        },
+        {
+          reserve: async () => (await store.reserve(ref)).kind,
+          recordCreation: async (ack) => {
+            if (settings.quarantine)
+              await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+            await store.recordCreation(ref, ack);
+            if (settings.loseCaptureAck) throw Error("SyntheticCommittedCaptureLostACK");
+          },
+        },
+      );
+    return { run, original, calls: () => calls };
+  }
+
+  it("actual background gateway reserves SQL before creation and persists identity before completion", async () => {
+    const f = await backgroundRun();
+    expect(await f.run()).toMatchObject({ kind: "completed" });
+    expect(await store.read(ref)).toEqual({
+      reference: ref,
+      state: "acknowledged",
+      response: f.original,
+    });
+    expect(f.calls()).toBe(1);
+    expect(
+      (
+        await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`
+      )[0]?.state,
+    ).toBe("running");
+  });
+  it("committed capture with lost ACK cannot complete or redispatch and retains original SQL identity", async () => {
+    const f = await backgroundRun({ loseCaptureAck: true });
+    await expect(f.run()).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    await expect(f.run()).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    expect(f.calls()).toBe(1);
+    expect(await store.read(ref)).toEqual({
+      reference: ref,
+      state: "acknowledged",
+      response: f.original,
+    });
+  });
+  it("lost external create ACK leaves identity-less SQL inventory and prevents redispatch", async () => {
+    const f = await backgroundRun({ loseCreateAck: true });
+    await expect(f.run()).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    await expect(f.run()).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    expect(f.calls()).toBe(1);
+    expect(await store.read(ref)).toEqual({ reference: ref, state: "reserved", response: null });
+  });
+  it("existing SQL reservation cannot issue a model creation", async () => {
+    const f = await backgroundRun({ alreadyReserved: true });
+    await expect(f.run()).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    expect(f.calls()).toBe(0);
+  });
+  it("original capture drains after quarantine without renewing provider authority", async () => {
+    const f = await backgroundRun({ quarantine: true });
+    const [before] =
+      await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+    expect(await f.run()).toMatchObject({ kind: "completed" });
+    expect(await store.read(ref)).toEqual({
+      reference: ref,
+      state: "acknowledged",
+      response: f.original,
+    });
+    expect(
+      (await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`)[0],
+    ).toEqual(before);
+  });
 
   it("commits identity-less inventory before I/O and never renews on replay", async () => {
     expect(await reserve()).toEqual({ kind: "reserved" });

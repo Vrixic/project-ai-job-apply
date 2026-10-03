@@ -316,6 +316,24 @@ erases unfinished inventory. Gateway integration, maintained reconciliation, pri
 drain, runtime/IAM, live/provider/accountable proof and deployed acceptance remain unfinished.
 No public API/frontend, Terraform, cloud/model call, activation or deployment is included.
 
+## Source-only original background capture (2026-10-03)
+
+The owner directed engineering to proceed with recommendations. The private original actor now
+has an opt-in reserve/capture capability, selecting a separate model-gateway/provider port without
+foreground fallback. Existing foreground behavior stays unchanged. Gateway disclosure/input
+checks precede reservation; the actor rechecks original consent and its handling deadline after
+the committed reserve. One background create follows only its first winner. Exact response
+id/time capture must commit before polling or output acceptance, including immediate completion.
+GETs preserve the original id/time/model/background/no-store/no-tools/no-linkage binding and are
+paced, byte-bounded and capped. Character/JSON rejection still follows original completion.
+
+Unknown create/capture acknowledgements remain unresolved and never authorize redispatch,
+settlement or purge. This does not compose private capture RPC, caller IAM, maintained disposal,
+writer drain or platform quiescence. The protocol remains Proposed and default-off, with no live
+provider, public API/frontend, migration, Terraform, deployment or activation. Official background
+documentation and the selected GPT-6 Luna model page were inspected; offline tests do not prove
+account/model availability or exact retention behavior.
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim

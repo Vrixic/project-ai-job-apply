@@ -9,6 +9,23 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-047 source-only original background-capture integration started on a feature
+branch. The opt-in isolated actor selects one gateway background port with no foreground
+fallback. Original inventory reservation precedes creation, immutable id/time capture precedes
+polling and output acceptance, and ambiguous creation/capture remains unresolved. AI SDK passes
+218 offline cases and Documents passes 685 unit cases. Repeated real-SQL composition passes
+186 integration cases. Full maintained repository verification passes, including formatting,
+lint, typecheck, tests and all 23 builds; review remains pending. Docker and WSL are stopped.
+Private capture RPC/IAM, maintained disposal, writer
+drain, deployment and accountable acceptance remain unfinished; no cloud/model call, public
+API/frontend, migration, guard/Terraform or activation is included.
+
+PR #518 merged as `b8bd4b0`. Exact-head hosted quality, catalog, integration and both container jobs pass;
+dependency audit and scanner remain failed without waiver. The scanner reports 65 findings,
+140 rules and 1,064 targets, with the same 30 reported paths as prior merged-main scanning.
+[CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37151653907),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37151654003).
+
 PR #517 merged as `2ab5bae` before its committed-source guard correction landed. Its first
 quality run failed on the stale Documents `0007` success marker; catalog checks passed, while
 integration/container jobs were skipped. A backend-only follow-up updates that exact marker to

@@ -187,3 +187,12 @@ Cascade deletion requires acknowledged response disposal and the existing privat
 deletion conditions. This does not choose a new public retention period, certify removal of other
 provider copies or release platform purge. Actor capture, reconciliation, runtime/IAM and deployed
 acceptance remain unfinished/default-off; no model/cloud call or activation occurs.
+
+Source-only D3-047 connects original background creation to that inventory. Committed reservation
+precedes creation, and exact original id/time capture precedes polling or output acceptance.
+There is no foreground fallback. Gateway activation/disclosure and actor consent/deadline checks
+are repeated after reservation. Lost creation or capture acknowledgements remain unresolved;
+expiry and local deadlines do not grant another dispatch, positive disposal or quiescence.
+The existing positive-disposal purge guard remains unchanged. Private capture RPC/IAM,
+maintained reconciliation and writer drain remain unfinished/default-off. This source checkpoint
+does not change public retention policy or deployed settings; no model/cloud call occurs.
