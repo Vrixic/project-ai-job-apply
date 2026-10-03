@@ -145,6 +145,13 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
   describe.each(["settleRejectedProviderDispatch", "settleUndispatchedProviderDispatch"] as const)(
     "%s permanent cleanup fence",
     (method) => {
+      const settle = (
+        store: PostgresCoverLetterWorkStore,
+        reference: Parameters<PostgresCoverLetterWorkStore["settleRejectedProviderDispatch"]>[0],
+      ) =>
+        method === "settleRejectedProviderDispatch"
+          ? store.settleRejectedProviderDispatch(reference)
+          : store.settleUndispatchedProviderDispatch(reference);
       it.each(["active", "quarantined"])(
         "original rejected completion drains %s provider work only after permanently fencing phases",
         async (state) => {
@@ -153,10 +160,10 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
           await work.claim(original);
           if (state === "quarantined")
             await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
-          await work[method](cleanupReference(original));
+          await settle(work, cleanupReference(original));
           const rows =
             await sql`SELECT id, purpose, state, terminal_at FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
-          await work[method](cleanupReference(original));
+          await settle(work, cleanupReference(original));
           expect(
             await sql`SELECT id, purpose, state, terminal_at FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
           ).toEqual(rows);
@@ -188,7 +195,7 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
           if (state === "revoked") await work.revokeUnclaimed(ownerUserId, documentId);
           const before =
             await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
-          await expect(work[method](cleanupReference(original))).rejects.toThrow(
+          await expect(settle(work, cleanupReference(original))).rejects.toThrow(
             /^CoverLetterWorkUnavailable$/u,
           );
           expect(
@@ -206,7 +213,7 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
           if (kind === "document") reference.documentId = uuidv7();
           if (kind === "hash") reference.requestSha256 = "f".repeat(64);
           if (kind === "purpose") reference.purpose = "private_slots";
-          await expect(work[method](reference)).rejects.toThrow(/^CoverLetterWorkUnavailable$/u);
+          await expect(settle(work, reference)).rejects.toThrow(/^CoverLetterWorkUnavailable$/u);
           expect(
             await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId}`,
           ).toEqual([{ state: "running" }]);
@@ -219,7 +226,7 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
         vi.spyOn(broken, "settleProviderDispatch").mockRejectedValue(
           Error("SyntheticSettlementUnavailable"),
         );
-        await expect(broken[method](cleanupReference(original))).rejects.toThrow(
+        await expect(settle(broken, cleanupReference(original))).rejects.toThrow(
           /^CoverLetterWorkUnavailable$/u,
         );
         expect(await work.readDrainState(ownerUserId, documentId)).toBe("pending");

@@ -9,6 +9,18 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+PR #515 initial source `e5d4055` reports 70 blocking static findings, including five new
+dynamic-method test invocations in the fixed two-operation SQL matrix. The correction replaces
+those lookups with explicit operation calls while retaining every case, without suppression or
+scanner-policy changes. All 106 corrected-source PostgreSQL cases and the full maintained verifier
+pass: 38 typecheck tasks, 39 test/build dependency tasks, all 23 builds, unchanged contracts,
+formatting (960 files), baseline lint (15 warnings/58 infos), operational/dependency-security
+regressions, Compose and scope. Corrected-source hosted static confirmation remains pending;
+the earlier 70 findings are not waived. The owned fixture/anonymous volume is removed and
+Docker Desktop/WSL stopped, shared volumes preserved. Initial-source catalog passed, quality
+remains live and dependency audit failed. No API,
+frontend, migration, guard/Terraform, cloud/model call or deployment changes in this correction.
+
 2026-10-03 D3-044: owner-approved source-only internal non-dispatch receipts distinguish
 known gateway refusals before provider invocation from provider-thrown identical error codes.
 Private `settle_undispatched` permanently fences future phases before settling the original
