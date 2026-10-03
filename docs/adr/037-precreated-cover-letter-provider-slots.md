@@ -251,6 +251,25 @@ review. [Background mode](https://developers.openai.com/api/docs/guides/backgrou
 [cancel endpoint](https://developers.openai.com/api/reference/go/resources/beta/subresources/responses/methods/cancel),
 [data controls](https://developers.openai.com/api/docs/guides/your-data).
 
+## Original gateway non-dispatch (2026-10-03 source checkpoint)
+
+The owner approved source-only internal non-dispatch receipts and matching private cleanup.
+Only the gateway's known pre-provider refusal branches return `not_dispatched`, with original
+model/prompt provenance and a fixed refusal code, not candidate text. Ordinary `generate`
+preserves its refusal contract. Caught exceptions, including provider-thrown identical codes,
+never become receipts; aborts, lost responses and timeouts remain unresolved.
+
+After its original dispatch-slot replacement acknowledgement, the isolated actor can consume
+that original receipt and call private v1 `settle_undispatched` with the exact provider grant.
+Documents permanently fences future phases before settling that original running phase, using
+the same fail-closed fence protocol as rejected completion. No result write follows; replay
+cannot dispatch again. Wrong bindings, missing older capabilities, lost closure acknowledgements
+and expired local handling deadlines refuse closure. No object/row purge or production-quiescence
+certificate is produced. Matching control must precede actor rollout, with older handlers refusing
+the additive operation. Runtime/IAM, transient retention, trusted failed-call stopping evidence
+and accountable production acceptance remain blocking. No migration, public API/frontend,
+guard/Terraform, cloud/model call, deployment or activation is included.
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim

@@ -159,10 +159,11 @@ describe("internal original-provider completion receipts", () => {
       expect(complete).toHaveBeenCalledOnce();
     },
   );
-  it("a local refusal does not produce an original response receipt", async () => {
+  it("a local refusal produces non-dispatch, never an original response receipt", async () => {
     const complete = vi.fn(async () => ({ text: "{}" }));
     const gateway = new ModelGateway({ identity, complete }, { enabled: () => false });
-    await expect(gateway.generateWithCompletion(request, disclosure)).rejects.toMatchObject({
+    await expect(gateway.generateWithCompletion(request, disclosure)).resolves.toMatchObject({
+      kind: "not_dispatched",
       code: "MODEL_DISABLED",
     });
     expect(complete).not.toHaveBeenCalled();

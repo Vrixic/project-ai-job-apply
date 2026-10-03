@@ -14,6 +14,25 @@ const consentExpiresAt = new Date("2026-10-02T12:00:00Z");
 
 describe("private generation work control fails closed before database access", () => {
   it.each(["private_slots", "final_document"] as const)(
+    "non-dispatch cleanup refuses %s before SQL",
+    async (purpose) => {
+      const sql = vi.fn();
+      const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql, () => true);
+      await expect(store.settleUndispatchedProviderDispatch({ ...ref, purpose })).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
+      expect(sql).not.toHaveBeenCalled();
+    },
+  );
+  it("non-dispatch cleanup defaults off", async () => {
+    const sql = vi.fn();
+    const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql);
+    await expect(
+      store.settleUndispatchedProviderDispatch({ ...ref, purpose: "provider_dispatch" }),
+    ).rejects.toThrow(/^CoverLetterWorkUnavailable$/u);
+    expect(sql).not.toHaveBeenCalled();
+  });
+  it.each(["private_slots", "final_document"] as const)(
     "rejected provider cleanup cannot mutate %s before SQL",
     async (purpose) => {
       const sql = vi.fn();

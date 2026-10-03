@@ -9,6 +9,39 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+PR #515 initial source `e5d4055` reports 70 blocking static findings, including five new
+dynamic-method test invocations in the fixed two-operation SQL matrix. The correction replaces
+those lookups with explicit operation calls while retaining every case, without suppression or
+scanner-policy changes. All 106 corrected-source PostgreSQL cases and the full maintained verifier
+pass: 38 typecheck tasks, 39 test/build dependency tasks, all 23 builds, unchanged contracts,
+formatting (960 files), baseline lint (15 warnings/58 infos), operational/dependency-security
+regressions, Compose and scope. Corrected-source hosted static confirmation remains pending;
+the earlier 70 findings are not waived. The owned fixture/anonymous volume is removed and
+Docker Desktop/WSL stopped, shared volumes preserved. Initial-source catalog passed, quality
+remains live and dependency audit failed. No API,
+frontend, migration, guard/Terraform, cloud/model call or deployment changes in this correction.
+
+2026-10-03 D3-044: owner-approved source-only internal non-dispatch receipts distinguish
+known gateway refusals before provider invocation from provider-thrown identical error codes.
+Private `settle_undispatched` permanently fences future phases before settling the original
+provider grant, only after original acknowledged dispatch-slot replacement. No model/result write
+or finalization follows. Lost acknowledgements, provider errors, aborts and timeouts stay unresolved;
+older compositions fail closed. All 111 AI SDK and 660 Documents unit tests plus 106 opt-in real
+PostgreSQL ledger cases pass locally with synthetic object/model/Lambda ports. Full maintained
+repository verification passes: 38 typecheck tasks, workspace tests and 23 builds, unchanged
+generated contracts, formatting (960 files), baseline lint (15 warnings/58 infos), operator and
+dependency-security regressions, Compose and scope. Separate fresh live dependency audit remains
+failing without waiver. Docker Desktop/WSL stopped, owned fixtures removed, shared volumes preserved.
+No public API/frontend, migration, guard/Terraform,
+cloud/model call, activation or deployment. D1/D3 remain In progress behind runtime/IAM, retention,
+trusted failed-call stopping evidence, independent security and deployed/accountable acceptance.
+
+PR #514 merged as `ef91e4f`. Exact merged-main quality, catalog, all 33 integration tasks and
+both containers pass; dependency audit and static analysis fail without waiver. Hosted Documents
+passes 50 cases and skips 95 opt-in ledger cases, distinct from local executed SQL evidence.
+[Merged-main CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37135520804),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37135520836).
+
 2026-10-03 D3-043: owner-approved source-only internal provider completion receipts distinguish
 acknowledged original completion from later JSON/output rejection. Private rejected-phase control
 permanently fences future phases before settling that original provider phase, without writing a

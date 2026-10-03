@@ -2,6 +2,13 @@
 
 ## Source-only private cover-letter cleanup control
 
+Owner-approved non-dispatch lifecycle receipts contain only original model/prompt identity and
+fixed local refusal code. They are produced before gateway provider invocation, never reconstructed
+from caught errors. The private `settle_undispatched` envelope contains only the exact existing
+grant/document/purpose/request digest. Documents fences future phases before original settlement;
+there is no candidate text, new provider authority, result write, deletion or quiescence certificate.
+Runtime authentication/IAM, retention and production acceptance remain unimplemented/default-dark.
+
 The separate maintenance boundary carries only the original grant/document UUIDs, fixed purpose,
 request digest and fixed ledger outcome. Documents derives the owner from the exact persisted
 binding; no caller owner, candidate values, diagnostics, credentials or stopping assertions enter

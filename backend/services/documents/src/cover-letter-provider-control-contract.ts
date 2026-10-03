@@ -16,7 +16,7 @@ export type CoverLetterProviderControlInput =
     }
   | {
       schemaVersion: 1;
-      action: "settle" | "settle_rejected";
+      action: "settle" | "settle_rejected" | "settle_undispatched";
       documentId: string;
       reference: CoverLetterWorkReference;
     };
@@ -30,13 +30,13 @@ export type CoverLetterProviderControlOutput =
     }
   | {
       schemaVersion: 1;
-      action: "claim" | "settle" | "settle_rejected";
+      action: "claim" | "settle" | "settle_rejected" | "settle_undispatched";
       documentId: string;
       outcome: "unavailable";
     }
   | {
       schemaVersion: 1;
-      action: "settle" | "settle_rejected";
+      action: "settle" | "settle_rejected" | "settle_undispatched";
       documentId: string;
       outcome: "settled";
       reference: CoverLetterWorkReference;
@@ -89,7 +89,9 @@ export function validateProviderControlInput(
   return (
     record(value, ["schemaVersion", "action", "documentId", "reference"]) &&
     value.schemaVersion === 1 &&
-    (value.action === "settle" || value.action === "settle_rejected") &&
+    (value.action === "settle" ||
+      value.action === "settle_rejected" ||
+      value.action === "settle_undispatched") &&
     id(value.documentId) &&
     validateProviderControlReference(value.reference) &&
     value.reference.documentId === value.documentId
@@ -102,7 +104,9 @@ export function validateProviderControlOutput(
     return (
       value.schemaVersion === 1 &&
       ((value.action === "claim" && value.outcome === "claimed") ||
-        ((value.action === "settle" || value.action === "settle_rejected") &&
+        ((value.action === "settle" ||
+          value.action === "settle_rejected" ||
+          value.action === "settle_undispatched") &&
           value.outcome === "settled")) &&
       id(value.documentId) &&
       validateProviderControlReference(value.reference) &&
@@ -112,7 +116,10 @@ export function validateProviderControlOutput(
     record(value, ["schemaVersion", "action", "documentId", "outcome"]) &&
     value.schemaVersion === 1 &&
     id(value.documentId) &&
-    (value.action === "claim" || value.action === "settle" || value.action === "settle_rejected") &&
+    (value.action === "claim" ||
+      value.action === "settle" ||
+      value.action === "settle_rejected" ||
+      value.action === "settle_undispatched") &&
     value.outcome === "unavailable"
   );
 }

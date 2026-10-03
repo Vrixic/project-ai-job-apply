@@ -248,6 +248,17 @@ export class PostgresCoverLetterWorkStore {
    * A thrown/aborted/timed-out provider request is NEVER authority to call this operation.
    */
   async settleRejectedProviderDispatch(reference: CoverLetterWorkReference): Promise<void> {
+    return this.settleFencedProviderDispatch(reference);
+  }
+
+  /** Original gateway non-dispatch receipt ONLY. The actor must have acknowledged its
+   * dispatch-slot write and must issue no further effects. Error codes are not receipts.
+   */
+  async settleUndispatchedProviderDispatch(reference: CoverLetterWorkReference): Promise<void> {
+    return this.settleFencedProviderDispatch(reference);
+  }
+
+  private async settleFencedProviderDispatch(reference: CoverLetterWorkReference): Promise<void> {
     return this.guarded(async () => {
       const ref = structuredClone(reference);
       if (ref.purpose !== "provider_dispatch" || !UUID.test(ref.id) || !validBinding(ref))

@@ -88,12 +88,25 @@ export interface GatewayResult {
   outputCharacters: number;
 }
 
-/** Internal receipt from the original fulfilled provider port, not from an error code or
- * local deadline. Provider implementations must acknowledge a completed original response
- * before fulfilling `complete`. This is not candidate approval or remote-quiescence proof.
+/** Internal original lifecycle receipts, never inferred from caught errors or deadlines.
+ * `not_dispatched` comes only from gateway-local pre-provider refusal; completed receipts
+ * require original provider fulfillment. Neither is candidate approval or quiescence proof.
  */
 export type ModelGatewayCompletion =
   | { kind: "completed"; result: GatewayResult }
+  | {
+      kind: "not_dispatched";
+      code:
+        | "MODEL_DISABLED"
+        | "DISCLOSURE_MISSING"
+        | "DISCLOSURE_PURPOSE_MISMATCH"
+        | "DISCLOSURE_CATEGORY_MISSING"
+        | "DISCLOSURE_STALE"
+        | "INPUT_TOO_LARGE";
+      model: ModelIdentity;
+      promptId: string;
+      promptVersion: string;
+    }
   | {
       kind: "completed_rejected";
       code: "OUTPUT_TOO_LARGE" | "OUTPUT_NOT_JSON";
@@ -129,26 +142,49 @@ export class ModelGateway {
     request: GatewayRequest,
     disclosure: DataDisclosureApproval | undefined,
   ): Promise<GatewayResult> {
-    const completion = await this.generateWithCompletion(request, disclosure);
-    if (completion.kind === "completed_rejected") throw new ModelGatewayError(completion.code);
+    const completion = await this.generateLifecycle(request, disclosure, false);
+    if (completion.kind !== "completed") throw new ModelGatewayError(completion.code);
     return completion.result;
   }
 
-  /** Private lifecycle consumer only. Rejections/aborts/lost responses still throw, even if
-   * the provider throws one of our own error classes. Only original fulfillment enters this
-   * receipt path; a later output/JSON rejection contains metadata, never rejected text.
+  /** Private lifecycle consumer only. Known local refusals return non-dispatch metadata.
+   * Provider rejections/aborts/lost responses still throw, including our own error classes.
+   * Completed rejection requires original fulfillment and never carries rejected text.
    */
   async generateWithCompletion(
     request: GatewayRequest,
     disclosure: DataDisclosureApproval | undefined,
   ): Promise<ModelGatewayCompletion> {
-    if (!this.options.enabled()) throw new ModelGatewayError("MODEL_DISABLED");
-    if (!disclosure) throw new ModelGatewayError("DISCLOSURE_MISSING");
+    return this.generateLifecycle(request, disclosure, true);
+  }
+
+  private async generateLifecycle(
+    request: GatewayRequest,
+    disclosure: DataDisclosureApproval | undefined,
+    nonDispatchReceipts: boolean,
+  ): Promise<ModelGatewayCompletion> {
+    const capture = () => ({
+      model: structuredClone(this.provider.identity),
+      promptId: request.promptId,
+      promptVersion: request.promptVersion,
+    });
+    // Ordinary refusal must not consult provider identity or evaluate validation twice.
+    const earlyProvenance = nonDispatchReceipts ? capture() : undefined;
+    // Only these locally known branches prove no provider port was invoked. Never infer
+    // non-dispatch from an exception, including a provider-thrown ModelGatewayError.
+    const refused = (
+      code: Extract<ModelGatewayCompletion, { kind: "not_dispatched" }>["code"],
+    ): ModelGatewayCompletion => {
+      if (!earlyProvenance) throw new ModelGatewayError(code);
+      return { kind: "not_dispatched", code, ...earlyProvenance };
+    };
+    if (!this.options.enabled()) return refused("MODEL_DISABLED");
+    if (!disclosure) return refused("DISCLOSURE_MISSING");
     if (disclosure.purpose !== request.purpose) {
-      throw new ModelGatewayError("DISCLOSURE_PURPOSE_MISMATCH");
+      return refused("DISCLOSURE_PURPOSE_MISMATCH");
     }
     if (!request.categories.every((category) => disclosure.categories.includes(category))) {
-      throw new ModelGatewayError("DISCLOSURE_CATEGORY_MISSING");
+      return refused("DISCLOSURE_CATEGORY_MISSING");
     }
     const age = this.clock().getTime() - disclosure.approvedAt.getTime();
     if (
@@ -158,18 +194,12 @@ export class ModelGateway {
       age < 0 ||
       age > this.disclosureMaxAgeMs
     ) {
-      throw new ModelGatewayError("DISCLOSURE_STALE");
+      return refused("DISCLOSURE_STALE");
     }
     if (request.system.length + request.user.length > this.maxInputChars) {
-      throw new ModelGatewayError("INPUT_TOO_LARGE");
+      return refused("INPUT_TOO_LARGE");
     }
-    // Capture provenance before dispatch; later mutation cannot rebind an original response.
-    const provenance = {
-      model: structuredClone(this.provider.identity),
-      promptId: request.promptId,
-      promptVersion: request.promptVersion,
-    };
-
+    const provenance = earlyProvenance ?? capture();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let text: string;

@@ -141,4 +141,16 @@ export class CoverLetterProviderControlClient {
     });
     if (result.outcome !== "settled") throw new CoverLetterProviderControlError();
   }
+
+  async settleUndispatchedProviderDispatch(
+    reference: Parameters<PostgresCoverLetterWorkStore["settleUndispatchedProviderDispatch"]>[0],
+  ): Promise<void> {
+    const result = await this.call({
+      schemaVersion: 1,
+      action: "settle_undispatched",
+      documentId: reference.documentId,
+      reference,
+    });
+    if (result.outcome !== "settled") throw new CoverLetterProviderControlError();
+  }
 }
