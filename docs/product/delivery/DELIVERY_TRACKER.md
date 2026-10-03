@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-02
+Last updated: 2026-10-03
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -8,6 +8,27 @@ Program completion: Not completed
 This is the master record for the delivery phases defined in the [product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#20-delivery-roadmap). It intentionally tracks actual start and completion dates rather than predicted schedules.
 
 ## Summary
+
+On 2026-10-03 the owner approved the scoped migration-runtime SSL pin and affected strict
+guard-fixture update, tracked as D3-040. Both Alpine packages are pinned to `3.5.9-r0` with
+independently checked SHA-256 hashes and signatures verified against the unchanged digest-pinned
+base image's trusted keys. The infrastructure validator and publisher fixtures pass on both
+PowerShell hosts. The cold full linux/amd64 image build and hardened networkless runtime smoke
+pass, including all 57 SQL filenames/checksums, 83 relations and seven owners. Full maintained
+verification passes: formatting, baseline lint, typecheck, tests, all 23 builds, offline operator
+and dependency-security regressions, Compose and product scope. Generated contracts are unchanged.
+Docker Desktop/WSL are stopped and shared volumes preserved. Review/merge remains; no reproducible
+publisher receipt, registry scan, database migration, API/frontend/Terraform change, publication,
+deployment or apply is claimed. D3-041 records the separately discovered stale exact SQL-name
+arrays in the publisher smoke, which must remain fail-closed pending scoped guard direction.
+D1/D3 remain In progress behind deployed and external exit gates and existing security failures.
+
+PR #510 merged as `5ce66ea`. Exact merged-main quality, catalog, PostgreSQL integration and both
+container jobs pass, including all 29 Profile PostgreSQL cases. Dependency audit still fails;
+static analysis reports 65 blocking findings across 140 rules and 1,053 files, with no changed
+Profile-file findings. No waiver or deployed fact-update acceptance is claimed.
+[CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37094620616),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37094620601).
 
 On 2026-10-02 the owner approved the scoped Profile fact-update concurrency correction, tracked
 as D3-039 with D1-002/D3-001. A deterministic PostgreSQL test holds the parent row until both
