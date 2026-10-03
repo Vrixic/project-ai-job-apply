@@ -4,7 +4,7 @@
 - Start: 2026-08-11
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-10-02
+- Last updated: 2026-10-03
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d1--useful-web-product-and-canonical-job-catalog)
 
 ## Objective
@@ -735,6 +735,12 @@ crawler policy only after those gates pass.
 | 2026-07-28 | Assigned source-specific and real-candidate-data approval to D1 without starting implementation. | D1-011 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 
 | 2026-10-02 | Hosted dependency audit on main and backend draft #506 fails on the newly published, unpatched high-severity mobile `node-forge` advisory. No exception or frontend change is authorized by this backend checkpoint. Inherited Semgrep findings remain. Owner-approved strict restore inventory/cache correction passes 40 uncached migration cases and the local 57-migration/83-relation logical backup/restore drill. Current-source hosted checks, dependency remediation/disposition and existing accountable gates remain required; D1 stays In progress. | D1-010A | [Registry advisory](https://github.com/advisories/GHSA-86w9-cpqp-85rv), [strict restore tests](../../../backend/services/database-migrations/src/restore-verifier.test.ts), [recovery harness](../../../scripts/tests/d2-recovery/run.mjs) |
+
+| 2026-10-03 | PR #510 merged as `5ce66ea`; merged-main quality, catalog, all 29 Profile PostgreSQL cases and both container builds pass. Dependency audit and 65 scanner findings remain blocking. The owner approved D3-040's source-only migration-runtime SSL pin and affected strict guard fixtures: exact `3.5.9-r0` APK hashes and trusted signatures verified, infrastructure guard and both-host publisher fixtures pass. Cold full image build and maintained verification pending. No API, frontend, Terraform, publication, deployment or apply; D1 remains In progress behind its deployed and external exit gates. | D1-002; D3-039; D3-040 | [Runtime image](../../../Dockerfile.migration), [publisher fixtures](../../../scripts/tests/development-migration-image-publisher.tests.ps1), [merged-main CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37094620616), [scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37094620601) |
+
+| 2026-10-03 | D3-040's scoped runtime SSL pins pass cold full image build and a hardened networkless numeric-user runtime smoke, including all 57 SQL filenames/checksums. Full maintained repository verification passes formatting, baseline lint, typechecks, tests, all 23 builds, offline operator/security regressions, Compose and scope; contracts unchanged. Docker Desktop/WSL stopped and shared volumes preserved. D3-041 separately tracks the stale exact publisher SQL arrays. Review/merge, publication and deployed acceptance remain; no API/frontend/Terraform, cloud publication, database migration or apply. D1 remains In progress with existing live security and external exit gates unwaived. | D1-002; D3-040; D3-041 | [Maintained verifier](../../../scripts/verify-phase0.ps1), [runtime image](../../../Dockerfile.migration), [publisher inventory](../../../scripts/publish-development-migration-image.ps1) |
+
+| 2026-10-03 | PR #511 security checkpoint: centralized dependency audit fails locally and hosted; fresh registry output reports mobile-only unpatched high node-forge plus newly recorded braces `GHSA-vfj7-8cjw-p6xm`. Existing exact image-size remediation remains, without policy waiver. Pinned static analysis remains 65 blocking findings/140 rules/1,053 files and no changed pin/fixture-file findings. Catalog invariants and preview pass; other hosted jobs pending. No frontend dependency/scanner policy edits or deployment. D1's security exit gate remains open. | D1-011; D3-012; D3-040 | [CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37096988784), [scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37096988789), [braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) |
 
 ## Decisions and scope changes
 
