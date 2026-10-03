@@ -703,6 +703,101 @@ describeWithDatabase("PostgresProfileStore", () => {
     }
   });
 
+  it("refreshes the latest fact version after competing updates wait for the parent lock", async () => {
+    const runId = crypto.randomUUID();
+    const owner = await store.resolveUser(
+      { ...principal, subject: `fact-lock-owner-${runId}` },
+      "integration-trace",
+    );
+    const fact = await store.createProfileFact(
+      owner.id,
+      { kind: "skill", key: "programming_language", value: "TypeScript", sensitivity: "standard" },
+      `fact-lock-create-${runId}`,
+      "integration-trace",
+    );
+    let releaseLock = () => {};
+    const release = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    let signalLocked = () => {};
+    const locked = new Promise<void>((resolve) => {
+      signalLocked = resolve;
+    });
+    const holder = database.client.begin(async (transaction) => {
+      await transaction`
+        SELECT id FROM profile.profile_facts
+        WHERE id = ${fact.id} AND user_id = ${owner.id}
+        FOR UPDATE
+      `;
+      signalLocked();
+      await release;
+    });
+    let updates:
+      | Promise<PromiseSettledResult<Awaited<ReturnType<typeof store.updateProfileFact>>>[]>
+      | undefined;
+    try {
+      await locked;
+      const firstInput = { expectedVersion: 1, value: "TypeScript and SQL" };
+      const secondInput = { expectedVersion: 1, value: "TypeScript and Python" };
+      const firstKey = `fact-lock-update-a-${runId}`;
+      const secondKey = `fact-lock-update-b-${runId}`;
+      updates = Promise.allSettled([
+        store.updateProfileFact(owner.id, fact.id, firstInput, firstKey, "integration-trace"),
+        store.updateProfileFact(owner.id, fact.id, secondInput, secondKey, "integration-trace"),
+      ]);
+      await expect
+        .poll(
+          async () => {
+            const [waiting] = await database.client<Array<{ count: number }>>`
+          SELECT count(*)::integer AS count FROM pg_stat_activity
+          WHERE datname = current_database() AND pid <> pg_backend_pid()
+            AND state = 'active' AND wait_event_type = 'Lock'
+            AND query LIKE '%profile.profile_facts%'
+        `;
+            return waiting?.count;
+          },
+          { timeout: 5_000 },
+        )
+        .toBe(2);
+      releaseLock();
+      await holder;
+      const outcomes = await updates;
+      const succeeded = outcomes.filter((outcome) => outcome.status === "fulfilled");
+      const failed = outcomes.filter((outcome) => outcome.status === "rejected");
+      expect(succeeded).toHaveLength(1);
+      expect(failed).toHaveLength(1);
+      expect(failed[0]?.reason).toBeInstanceOf(ProfileFactVersionConflictError);
+      const firstWon = outcomes[0]?.status === "fulfilled";
+      const replay = await store.updateProfileFact(
+        owner.id,
+        fact.id,
+        firstWon ? firstInput : secondInput,
+        firstWon ? firstKey : secondKey,
+        "integration-trace",
+      );
+      expect(replay).toEqual(succeeded[0]?.value);
+      const versions = await database.client<Array<{ version: number; value: string }>>`
+        SELECT version, fact_value AS value FROM profile.profile_fact_versions
+        WHERE fact_id = ${fact.id} ORDER BY version
+      `;
+      expect(versions).toEqual([
+        { version: 1, value: "TypeScript" },
+        { version: 2, value: firstWon ? firstInput.value : secondInput.value },
+      ]);
+      const receipts = await database.client<Array<{ key: string }>>`
+        SELECT key FROM platform.idempotency_keys
+        WHERE user_id = ${owner.id} AND scope = ${`profile.fact.update.v1:${fact.id}`}
+      `;
+      expect(receipts).toEqual([{ key: firstWon ? firstKey : secondKey }]);
+    } finally {
+      releaseLock();
+      await holder;
+      await updates;
+      await database.client`DELETE FROM platform.audit_events WHERE resource_id = ${fact.id}`;
+      await database.client`DELETE FROM identity.users WHERE id = ${owner.id}`;
+    }
+  });
+
   it("keeps committed work recoverable when the post-commit SQS nudge fails", async () => {
     const runId = crypto.randomUUID();
     let operationId: string | undefined;

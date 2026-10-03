@@ -1116,6 +1116,17 @@ export class PostgresProfileStore implements ProfileStore {
         return prior[0].response;
       }
 
+      // Acquire the stable parent lock before taking the latest-version snapshot.
+      // A lock-taking SELECT can retain a pre-wait READ COMMITTED snapshot.
+      const owned = await transaction<Array<{ id: string }>>`
+        SELECT id FROM profile.profile_facts
+        WHERE id = ${factId} AND user_id = ${userId}
+        FOR UPDATE
+      `;
+      if (!owned[0]) {
+        return null;
+      }
+
       const rows = await transaction<ProfileFactRow[]>`
         SELECT
           fact.id,
@@ -1143,7 +1154,6 @@ export class PostgresProfileStore implements ProfileStore {
           LIMIT 1
         ) AS version ON true
         WHERE fact.id = ${factId} AND fact.user_id = ${userId}
-        FOR UPDATE OF fact
       `;
       const current = rows[0];
       if (!current) {

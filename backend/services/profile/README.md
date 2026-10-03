@@ -35,6 +35,11 @@ return only the authenticated candidate's latest versions, and audit metadata ex
 values. Resume binaries, parsing, supporting spans, and proposed-fact confirmation remain the
 next D1-002 slice and must not be added to events or logs.
 
+Fact corrections lock the candidate-owned stable parent in a separate SQL statement before
+reading the latest append-only version. Competing idempotency keys therefore see a fresh version
+after waiting and return the existing version-conflict error, not a duplicate-key database error.
+The lock, version insert, idempotency receipt and value-free audit remain one transaction.
+
 ## Phase 2 default-dark implementation
 
 Profile owns immutable `ugc_contribution` consent grants for the extension plus append-only
