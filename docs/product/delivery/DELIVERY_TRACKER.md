@@ -9,6 +9,22 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-043: owner-approved source-only internal provider completion receipts distinguish
+acknowledged original completion from later JSON/output rejection. Private rejected-phase control
+permanently fences future phases before settling that original provider phase, without writing a
+result or granting finalization. Errors, aborts, lost acknowledgements and timeouts remain unresolved.
+All 94 AI SDK and 640 Documents unit cases and 95 opt-in real PostgreSQL ledger cases pass locally;
+full maintained verification passes (38 typecheck tasks, workspace tests and 23 builds).
+Public APIs, frontend, migrations, guard/Terraform, cloud/model
+calls, activation and deployment are excluded. D1/D3 remain In progress behind independent security,
+runtime/IAM, retention, provider fixture, deployed and accountable acceptance gates.
+
+PR #513 merged as `5d9efa1`. Exact merged-main quality, catalog, integration and both container
+jobs pass; dependency audit and static analysis fail without waiver. Current live audit still
+reports existing mobile-only node-forge/braces blockers; no frontend dependency or scanner-policy
+changes are included. [Merged-main CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37105583708),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37105583753).
+
 2026-10-03 D3-042: owner-approved source-only private cleanup control now permanently fences
 unclaimed/not-yet-issued cover-letter phases using exact original references and Documents-owned
 binding. The separate default-off maintenance handler exposes only fixed ledger outcomes; provider

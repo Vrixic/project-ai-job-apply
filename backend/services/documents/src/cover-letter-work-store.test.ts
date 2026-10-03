@@ -13,6 +13,17 @@ const ref = {
 const consentExpiresAt = new Date("2026-10-02T12:00:00Z");
 
 describe("private generation work control fails closed before database access", () => {
+  it.each(["private_slots", "final_document"] as const)(
+    "rejected provider cleanup cannot mutate %s before SQL",
+    async (purpose) => {
+      const sql = vi.fn();
+      const store = new PostgresCoverLetterWorkStore(sql as unknown as postgres.Sql, () => true);
+      await expect(store.settleRejectedProviderDispatch({ ...ref, purpose })).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
+      expect(sql).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     "issue",
     "issueProviderDispatch",
@@ -20,6 +31,7 @@ describe("private generation work control fails closed before database access", 
     "claimProviderDispatch",
     "claimFinalDocument",
     "settleProviderDispatch",
+    "settleRejectedProviderDispatch",
     "recordSettled",
     "fenceForCleanup",
     "revokeUnclaimed",
@@ -44,13 +56,15 @@ describe("private generation work control fails closed before database access", 
                 ? store.claimFinalDocument({ ownerUserId: owner, documentId })
                 : method === "settleProviderDispatch"
                   ? store.settleProviderDispatch({ ...ref, purpose: "provider_dispatch" })
-                  : method === "recordSettled"
-                    ? store.recordSettled(ref)
-                    : method === "fenceForCleanup"
-                      ? store.fenceForCleanup(ref)
-                      : method === "revokeUnclaimed"
-                        ? store.revokeUnclaimed(owner, documentId)
-                        : store.readDrainState(owner, documentId);
+                  : method === "settleRejectedProviderDispatch"
+                    ? store.settleRejectedProviderDispatch({ ...ref, purpose: "provider_dispatch" })
+                    : method === "recordSettled"
+                      ? store.recordSettled(ref)
+                      : method === "fenceForCleanup"
+                        ? store.fenceForCleanup(ref)
+                        : method === "revokeUnclaimed"
+                          ? store.revokeUnclaimed(owner, documentId)
+                          : store.readDrainState(owner, documentId);
     await expect(result).rejects.toThrow("CoverLetterWorkUnavailable");
     expect(sql).not.toHaveBeenCalled();
   });

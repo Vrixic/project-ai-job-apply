@@ -158,3 +158,11 @@ admission expires or no object is visible. A `ledger_terminal` receipt is not tr
 proof. Production failed-call stopping evidence, transient-retention enforcement, authenticated
 maintenance composition and marker-creation IAM still require implementation and reviewed rollout.
 The source boundary stays default-off; existing account-deletion/public behavior is unchanged.
+
+Source-only D3-043 now distinguishes original fulfilled provider completion followed by JSON/output
+rejection from a failed or ambiguous provider port. The trusted original actor can request permanent
+phase fencing before settling that completed provider phase, without writing rejected text or
+granting finalization. Quarantine may drain this original completed work; errors, aborts, timeouts
+and lost acknowledgements cannot certify completion. SQL terminal state still does not authorize
+artifact purge or satisfy production privacy quiescence. Retention durations, deletion behavior,
+public policy and deployment are unchanged; runtime/IAM and transient-retention proof remain open.

@@ -28,6 +28,17 @@ Grounding also refuses citations to otherwise usable facts excluded from this re
 (restricted, non-career or beyond the selection limit). Existing unknown/unusable-fact reasons
 are preserved. Three offline regressions cover this request-specific citation boundary.
 
+## Internal lifecycle completion receipts
+
+`ModelGateway.generateWithCompletion` is an internal lifecycle interface. Only an original
+fulfilled provider response yields `completed` or a content-free `completed_rejected` receipt
+for oversized/non-JSON output. Model and prompt provenance are captured before dispatch.
+Provider-thrown gateway errors, failed ports, aborts and late responses after timeout still throw;
+error codes cannot certify completion. Ordinary `generate` preserves its result/error contract.
+Provider-port fulfillment must acknowledge original completion, not enqueue background work.
+These receipts are not approval or remote-quiescence certificates. All 94 AI SDK offline tests
+pass, including original/late completion, provenance mutation and ordinary API compatibility.
+
 ## OpenAI development adapter
 
 `prepareCoverLetterPrompt` reconstructs the exact selected-evidence prompt without a gateway.

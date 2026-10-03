@@ -197,6 +197,32 @@ The full maintained repository verifier passes, including 38 typecheck tasks, wo
 dependency-security regressions, Compose and scope. The separate fresh live dependency audit
 still fails on existing mobile-only node-forge/braces advisories; no waiver or dependency edit.
 
+## Internal rejected-provider completion control
+
+The source-only private provider-control v1 adds `settle_rejected` to existing claim/settle
+operations. Only the trusted original isolated actor, after original provider fulfillment and
+validated gateway provenance, may invoke it for JSON/output rejection. Its envelope contains
+only the existing grant/document/fixed-purpose/request-digest reference. Documents resolves
+the owner, permanently fences unclaimed and not-yet-issued phases, then settles the original
+running provider phase. Quarantine does not prevent draining that original completed work.
+Replay preserves original IDs/deadlines/terminal timestamps; wrong or unclaimed references fail
+without cancellation. A settlement failure after the committed fence leaves pending work and
+prevents finalization. No rejected result, final document or object/row purge is produced.
+
+Missing older capabilities, unavailable/lost acknowledgements, provider errors and timeouts
+never grant settlement or repeat dispatch. Exact-version single-attempt transport stays default
+off; invoke-target matching is not authentication. Rollout must compose matching reviewed private
+control before the actor, separately from this source change. Trusted failed-call stop evidence,
+production runtime/IAM, retention and privacy quiescence remain open. No public API/frontend,
+migration, guard/Terraform, cloud/model call or deployment is included. Local synthetic evidence:
+640 Documents unit tests and 95 opt-in PostgreSQL ledger cases pass; object/model/Lambda ports
+are offline, not deployed or live-provider proof.
+
+The full maintained repository verifier passes (38 typecheck tasks, workspace tests and 23
+builds), including unchanged generated contracts, formatting, baseline lint, operator and
+dependency-security regressions, Compose and scope. Separate live dependency audit remains
+failing without waiver. The synthetic database was removed; Docker Desktop/WSL are stopped.
+
 ## Planned expansion
 
 - `tailoring/` — Evidence-grounded selection and rewriting.
