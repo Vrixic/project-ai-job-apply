@@ -1,0 +1,335 @@
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import postgres from "postgres";
+import { v7 as uuidv7 } from "uuid";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { PostgresCoverLetterResponseStore } from "./cover-letter-response-store.js";
+import { PostgresCoverLetterStore } from "./cover-letter-store.js";
+import {
+  type CoverLetterWorkReference,
+  PostgresCoverLetterWorkStore,
+} from "./cover-letter-work-store.js";
+
+const requested = process.env.COVER_LETTER_WORK_INTEGRATION === "1";
+const databaseUrl = process.env.COVER_LETTER_WORK_TEST_DATABASE_URL;
+if (requested) {
+  const target = new URL(databaseUrl ?? "postgres://invalid");
+  if (
+    !["postgres:", "postgresql:"].includes(target.protocol) ||
+    target.hostname !== "127.0.0.1" ||
+    !/^\/work_ledger_[a-z0-9_]{1,40}$/u.test(target.pathname) ||
+    target.search ||
+    target.hash
+  )
+    throw Error("CoverLetterResponseIntegrationTargetRejected");
+}
+const execute = promisify(execFile);
+
+describe.skipIf(!requested)("original provider response inventory with real PostgreSQL", () => {
+  const sql = postgres(databaseUrl ?? "postgres://invalid", { max: 4, onnotice: () => undefined });
+  const store = new PostgresCoverLetterResponseStore(sql, () => true);
+  const work = new PostgresCoverLetterWorkStore(sql, () => true);
+  const documents = new PostgresCoverLetterStore(sql, {
+    putIfAbsent: async () => {
+      throw Error("SyntheticUnexpectedObjectWrite");
+    },
+    read: async () => {
+      throw Error("SyntheticUnexpectedObjectRead");
+    },
+  });
+  let owner: string;
+  let documentId: string;
+  let ref: CoverLetterWorkReference;
+  const response = () => ({
+    schemaVersion: 1 as const,
+    responseId: `resp_${ref.id.replaceAll("-", "")}`,
+    createdAt: Math.floor(Date.now() / 1000),
+  });
+  const receipt = (original: ReturnType<typeof response>) => ({
+    kind: "response_deleted" as const,
+    reference: original,
+    terminalStatus: "cancelled" as const,
+  });
+
+  beforeAll(async () => {
+    const inherited = Object.fromEntries(
+      Object.entries(process.env).filter(([key]) =>
+        /^(?:path|systemroot|windir|temp|tmp|pathext|comspec|userprofile)$/iu.test(key),
+      ),
+    );
+    for (const path of ["../../profile/dist/src/migrate.js", "../dist/src/migrate.js"]) {
+      const args = [fileURLToPath(new URL(path, import.meta.url))];
+      const options = { env: { ...inherited, NODE_ENV: "test", DATABASE_URL: databaseUrl } };
+      const first = await execute(process.execPath, args, options);
+      expect((await execute(process.execPath, args, options)).stdout).toBe(first.stdout);
+    }
+  }, 90_000);
+  beforeEach(async () => {
+    owner = uuidv7();
+    documentId = uuidv7();
+    await sql`INSERT INTO identity.users (id) VALUES (${owner})`;
+    await documents.reserve({
+      id: documentId,
+      ownerUserId: owner,
+      applicationId: uuidv7(),
+      jobRevision: "b".repeat(64),
+      confirmedFactsHash: "c".repeat(64),
+    });
+    ref = (
+      await work.issue({
+        ownerUserId: owner,
+        documentId,
+        purpose: "provider_dispatch",
+        requestSha256: "a".repeat(64),
+        consentExpiresAt: new Date(Date.now() + 900_000),
+      })
+    ).authorization;
+    // Never pass owner/state/deadline fields to the private strict reference API.
+    ref = {
+      id: ref.id,
+      documentId: ref.documentId,
+      purpose: ref.purpose,
+      requestSha256: ref.requestSha256,
+    };
+  });
+  afterEach(async () => {
+    // Explicit synthetic terminal ACKs only for test fixture cleanup: no real provider exists.
+    const row = await store.read(ref);
+    if (row?.state === "reserved") await store.recordCreation(ref, response());
+    const acknowledged = await store.read(ref);
+    if (acknowledged?.state === "acknowledged" && acknowledged.response)
+      await store.recordDisposal(ref, receipt(acknowledged.response));
+    const [original] =
+      await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+    if (original?.state === "running") await work.recordSettled(ref);
+    await work.revokeUnclaimed(owner, documentId);
+    await sql`DELETE FROM documents.audit_events WHERE user_id = ${owner}`;
+    await sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`;
+    await sql`DELETE FROM identity.users WHERE id = ${owner}`;
+  });
+  afterAll(async () => {
+    await sql.end();
+  });
+  async function reserve() {
+    await work.claim(ref);
+    return store.reserve(ref);
+  }
+
+  it("commits identity-less inventory before I/O and never renews on replay", async () => {
+    expect(await reserve()).toEqual({ kind: "reserved" });
+    const before =
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`;
+    expect(await store.reserve(ref)).toEqual({ kind: "already_reserved" });
+    expect(await store.read(ref)).toEqual({ reference: ref, state: "reserved", response: null });
+    expect(
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`,
+    ).toEqual(before);
+  });
+  it("allows exactly one concurrent reservation winner", async () => {
+    await work.claim(ref);
+    const results = await Promise.all(Array.from({ length: 8 }, () => store.reserve(ref)));
+    expect(results.filter((x) => x.kind === "reserved")).toHaveLength(1);
+    expect(results.filter((x) => x.kind === "already_reserved")).toHaveLength(7);
+  });
+  it("original creation and disposal replay preserves all identities/timestamps and does not settle work", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    const before =
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`;
+    await store.recordCreation(ref, original);
+    expect(
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`,
+    ).toEqual(before);
+    await store.recordDisposal(ref, receipt(original));
+    const disposed =
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`;
+    await store.recordDisposal(ref, receipt(original));
+    await store.recordCreation(ref, original);
+    expect(
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`,
+    ).toEqual(disposed);
+    expect(
+      (
+        await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`
+      )[0]?.state,
+    ).toBe("running");
+  });
+  it.each(["issued", "revoked", "settled"])("cannot reserve %s original work", async (state) => {
+    if (state === "revoked") await work.revokeUnclaimed(owner, documentId);
+    if (state === "settled") {
+      await work.claim(ref);
+      await work.recordSettled(ref);
+    }
+    await expect(store.reserve(ref)).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+    expect(await store.read(ref)).toBeNull();
+  });
+  it("cannot reserve after quarantine, but original acknowledged work can drain after quarantine", async () => {
+    await reserve();
+    await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+    await expect(store.reserve(ref)).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+    const original = response();
+    await store.recordCreation(ref, original);
+    await store.recordDisposal(ref, receipt(original));
+    expect((await store.read(ref))?.state).toBe("disposed");
+  });
+  it.each(["id", "documentId", "requestSha256"] as const)(
+    "refuses wrong original %s binding",
+    async (key) => {
+      await reserve();
+      const wrong = { ...ref, [key]: key === "requestSha256" ? "f".repeat(64) : uuidv7() };
+      expect(await store.read(wrong)).toBeNull();
+      await expect(store.recordCreation(wrong, response())).rejects.toThrow(
+        /^CoverLetterResponseUnavailable$/u,
+      );
+      await expect(store.reserve(wrong)).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+    },
+  );
+  it("refuses identity replacement, conflicting disposal and disposal before original creation ACK", async () => {
+    await reserve();
+    const original = response();
+    await expect(store.recordDisposal(ref, receipt(original))).rejects.toThrow(
+      /^CoverLetterResponseUnavailable$/u,
+    );
+    await store.recordCreation(ref, original);
+    await expect(
+      store.recordCreation(ref, { ...original, responseId: "resp_substituted" }),
+    ).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+    await expect(
+      store.recordCreation(ref, { ...original, createdAt: original.createdAt + 1 }),
+    ).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+    await expect(
+      store.recordDisposal(ref, receipt({ ...original, responseId: "resp_substituted" })),
+    ).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+    await store.recordDisposal(ref, receipt(original));
+    await expect(
+      store.recordDisposal(ref, { ...receipt(original), terminalStatus: "completed" }),
+    ).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+  });
+  it.each(["reserved", "acknowledged"])(
+    "positive work settlement cannot erase %s remote inventory",
+    async (state) => {
+      await reserve();
+      if (state === "acknowledged") await store.recordCreation(ref, response());
+      await work.recordSettled(ref);
+      await expect(
+        sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+      ).rejects.toThrow();
+      expect((await store.read(ref))?.state).toBe(state);
+    },
+  );
+  it.each(["work_id", "document_id", "user_id", "request_sha256", "reserved_at", "state"])(
+    "direct SQL cannot rewrite %s",
+    async (column) => {
+      await reserve();
+      const value =
+        column === "request_sha256"
+          ? "f".repeat(64)
+          : column === "reserved_at"
+            ? new Date(Date.now() - 1000).toISOString()
+            : column === "state"
+              ? "disposed"
+              : uuidv7();
+      await expect(
+        sql`UPDATE documents.cover_letter_provider_responses SET ${sql(column)} = ${value} WHERE work_id = ${ref.id}`,
+      ).rejects.toThrow();
+      expect((await store.read(ref))?.state).toBe("reserved");
+    },
+  );
+  it("lost creation ACK cannot become disposed via local timeout, null ACK or direct deletion", async () => {
+    await reserve();
+    await expect(store.recordDisposal(ref, { kind: "unresolved" })).rejects.toThrow(
+      /^CoverLetterResponseUnavailable$/u,
+    );
+    await expect(
+      sql`DELETE FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`,
+    ).rejects.toThrow();
+    await expect(
+      sql`UPDATE documents.cover_letter_provider_responses SET state = 'acknowledged' WHERE work_id = ${ref.id}`,
+    ).rejects.toThrow();
+    const original = response();
+    await expect(sql`UPDATE documents.cover_letter_provider_responses
+      SET state = 'acknowledged', response_id = ${original.responseId}, response_created_at = ${original.createdAt}
+      WHERE work_id = ${ref.id}`).rejects.toThrow();
+    expect(await store.read(ref)).toEqual({ reference: ref, state: "reserved", response: null });
+  });
+
+  it.each(["reserve", "creation", "disposal"] as const)(
+    "committed but lost %s acknowledgement replays without new authority",
+    async (phase) => {
+      await work.claim(ref);
+      const original = response();
+      if (phase !== "reserve") await store.reserve(ref);
+      if (phase === "disposal") await store.recordCreation(ref, original);
+      const lost = new PostgresCoverLetterResponseStore(
+        {
+          begin: async (run: (transaction: postgres.TransactionSql) => Promise<unknown>) => {
+            await sql.begin(run);
+            throw Error("SyntheticLostAcknowledgement");
+          },
+        } as unknown as postgres.Sql,
+        () => true,
+      );
+      const result =
+        phase === "reserve"
+          ? lost.reserve(ref)
+          : phase === "creation"
+            ? lost.recordCreation(ref, original)
+            : lost.recordDisposal(ref, receipt(original));
+      await expect(result).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+      const before =
+        await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`;
+      expect(await store.reserve(ref)).toEqual({ kind: "already_reserved" });
+      if (phase === "creation") await store.recordCreation(ref, original);
+      if (phase === "disposal") await store.recordDisposal(ref, receipt(original));
+      expect(
+        await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`,
+      ).toEqual(before);
+    },
+  );
+
+  it.each(["reserve", "acknowledge"] as const)(
+    "expired original authority refuses new reservation but permits existing %s drain",
+    async (phase) => {
+      await work.revokeUnclaimed(owner, documentId);
+      await sql`DELETE FROM documents.audit_events WHERE user_id = ${owner}`;
+      await sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`;
+      documentId = uuidv7();
+      await documents.reserve({
+        id: documentId,
+        ownerUserId: owner,
+        applicationId: uuidv7(),
+        jobRevision: "b".repeat(64),
+        confirmedFactsHash: "c".repeat(64),
+      });
+      ref = {
+        id: uuidv7(),
+        documentId,
+        purpose: "provider_dispatch",
+        requestSha256: "a".repeat(64),
+      };
+      const issuedAt = new Date();
+      const consentExpiresAt = new Date(issuedAt.getTime() + 900_000);
+      const expiresAt = new Date(issuedAt.getTime() + 2_000);
+      await sql`INSERT INTO documents.cover_letter_work_authorizations
+      (id, document_id, user_id, purpose, request_sha256, consent_expires_at, issued_at, expires_at)
+      VALUES (${ref.id}, ${documentId}, ${owner}, 'provider_dispatch', ${ref.requestSha256},
+        ${consentExpiresAt.toISOString()}::timestamptz, ${issuedAt.toISOString()}::timestamptz,
+        ${expiresAt.toISOString()}::timestamptz)`;
+      await work.claim(ref);
+      if (phase === "acknowledge") await store.reserve(ref);
+      await sql`SELECT pg_sleep(2.1)`;
+      if (phase === "reserve") {
+        await expect(store.reserve(ref)).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+        expect(await store.read(ref)).toBeNull();
+      } else {
+        const original = response();
+        await store.recordCreation(ref, original);
+        await store.recordDisposal(ref, receipt(original));
+        expect((await store.read(ref))?.state).toBe("disposed");
+        expect(await store.reserve(ref)).toEqual({ kind: "already_reserved" });
+      }
+    },
+  );
+});

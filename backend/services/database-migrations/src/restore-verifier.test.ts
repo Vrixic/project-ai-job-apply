@@ -94,13 +94,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(83);
+    expect(expectedRelations(source)).toHaveLength(84);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(57);
+    ).toBe(58);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -252,8 +252,8 @@ describe("read-only aggregate restore verification", () => {
         "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
       ownerCount: 7,
-      relationCount: 83,
-      migrationCount: 57,
+      relationCount: 84,
+      migrationCount: 58,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -426,6 +426,7 @@ describe("read-only aggregate restore verification", () => {
                 ![
                   "documents.cover_letters",
                   "documents.cover_letter_work_authorizations",
+                  "documents.cover_letter_provider_responses",
                   ...(migrationCount === 52
                     ? [
                         "applications.packet_preparations",
@@ -441,6 +442,7 @@ describe("read-only aggregate restore verification", () => {
                   ...omittedVersions,
                   "0006_cover_letters",
                   "0007_cover_letter_work_authorizations",
+                  "0008_cover_letter_provider_responses",
                   ...(migrationCount === 52 ? [] : ["0010_restricted_answer_vault"]),
                   "0011_active_candidate_lease",
                 ].includes(migration.version),
@@ -471,6 +473,40 @@ describe("read-only aggregate restore verification", () => {
       );
     },
   );
+
+  it("retains the prior 57-migration boundary only as historical evidence", async () => {
+    const current = loadCurrentRestoreManifest();
+    const manifest = parseRestoreManifest({
+      ...current.manifest,
+      contributors: current.manifest.contributors.map((contributor) => ({
+        ...contributor,
+        migrations: contributor.migrations.filter(
+          (migration) => migration.version !== "0008_cover_letter_provider_responses",
+        ),
+        relations: contributor.relations.filter(
+          (relation) => relation !== "documents.cover_letter_provider_responses",
+        ),
+      })),
+    });
+    const historical = {
+      manifest,
+      sha256: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
+    };
+    const executor = successfulExecutor(historical);
+    const client: RestoreSqlClient = {
+      async begin(_options, work) {
+        return work(executor);
+      },
+    };
+    await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
+      ownerCount: 7,
+      relationCount: 83,
+      migrationCount: 57,
+    });
+    await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
+      /Restore (relation|schema) boundary mismatch/,
+    );
+  });
 
   it("rejects a missing owned schema even when that schema contains no relations", async () => {
     const source = loadCurrentRestoreManifest();

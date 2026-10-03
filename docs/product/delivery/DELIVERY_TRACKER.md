@@ -9,6 +9,24 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-046 source-only durable response inventory started on merged PR #516 (`3bf6b5b`).
+The owner directed engineering to proceed with the recommended Documents migration, private
+ledger API and strict guard updates. Identifier-only reservations precede original creation;
+immutable creation/disposal acknowledgements never renew dispatch or settle private work.
+Unknown response identities remain unresolved and prevent inventory deletion. The current
+source boundary is 58 checksum-bound migrations and 84 relations, with historical boundaries
+retained separately. Full maintained repository verification and the local production migration-image
+smoke pass. Synthetic logical restore preserves three populated response states, refuses three
+reservation replays and blocks two unresolved-inventory deletions. Fresh dependency audit fails
+without waiver. Gateway/actor composition, private drain, reconciliation, runtime/IAM and deployed
+acceptance remain pending. No cloud/model
+call, public API/frontend, Terraform, deployment or activation. D1/D3 remain In progress.
+
+PR #516 merged-main quality, catalog, all 33 integration tasks and both container builds pass.
+Dependency audit and static analysis fail without waiver (65 findings, 140 rules, 1,060 targets).
+[Merged-main CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37146748646),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37146748735).
+
 2026-10-03 D3-045 source-only work has started after PR #515 merged as `804dc45`. The owner
 approved provider-stop/retention work and background temporary-response retention. The initial
 default-off known-response cleanup transport has 59 offline cases; all 170 AI SDK tests and

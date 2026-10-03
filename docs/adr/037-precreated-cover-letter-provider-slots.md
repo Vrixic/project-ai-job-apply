@@ -298,6 +298,24 @@ References: [background mode](https://developers.openai.com/api/docs/guides/back
 [cancel response](https://developers.openai.com/api/reference/typescript/resources/responses/methods/cancel),
 [delete response](https://developers.openai.com/api/reference/resources/responses/methods/delete).
 
+## Durable response inventory (2026-10-03 source work)
+
+The owner directed engineering to proceed with the recommended source-only Documents migration,
+private ledger API and strict inventory/guard updates. `0008` reserves metadata-only response
+inventory against the exact original running provider grant, before background creation. Only
+the first committed reservation may continue that original dispatch; replay cannot renew it.
+Creation id/time and positive terminal deletion acknowledgements are immutable and replayable,
+including after original consent expiry or quarantine. Unknown original ids remain unresolved.
+Neither capture nor disposal settles work; unresolved inventory prevents cascaded row deletion.
+
+The source manifest advances to 58 checksum-bound migrations and 84 relations across seven
+existing owners. Historical inventories remain verified only against their own source, with
+current-source rejection tests retained. Migration/consumer rollout must precede compatible
+actor composition, all while default-dark; no guessed response-id backfill or downgrade that
+erases unfinished inventory. Gateway integration, maintained reconciliation, private writer
+drain, runtime/IAM, live/provider/accountable proof and deployed acceptance remain unfinished.
+No public API/frontend, Terraform, cloud/model call, activation or deployment is included.
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim

@@ -96,10 +96,15 @@
         {
           "version": "0007_cover_letter_work_authorizations",
           "checksum": "a49c2507b71b2e89bc1ec5290506211cc35995c91f01e918c39fde74c0c84fdc"
+        },
+        {
+          "version": "0008_cover_letter_provider_responses",
+          "checksum": "54511777975b6806c84824f3aaa4301fe436a3763391d7c4527b70ebbbb2d73f"
         }
       ],
       "relations": [
         "documents.audit_events",
+        "documents.cover_letter_provider_responses",
         "documents.cover_letter_work_authorizations",
         "documents.cover_letters",
         "documents.idempotency_keys",

@@ -8,9 +8,9 @@ another service's tables.
 
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
-  after Trust): eleven owned schemas (including the empty-table `jobs_public` projection schema), 83
-  regular relations, and 57 checksum-bound migrations (Profile through `0011`; Applications through
-  `0005`; Documents through `0007`). The
+  after Trust): eleven owned schemas (including the empty-table `jobs_public` projection schema), 84
+  regular relations, and 58 checksum-bound migrations (Profile through `0011`; Applications through
+  `0005`; Documents through `0008`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
   purges Applications data (run 2026-09-18 against an isolated local cluster).
 
@@ -37,12 +37,12 @@ orchestrator, checks the disposable-container ownership guards, and uses a uniqu
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.
 
-The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 57-migration
+The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 58-migration
 seven-owner boundary while retaining its D2-focused generated-data and behavior assertions,
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through
 the existing stores. A real custom-format `pg_dump` and `pg_restore` run inside tmpfs only.
-The source/target aggregate verifier results and exact sorted full-row JSON for all 83 relations
+The source/target aggregate verifier results and exact sorted full-row JSON for all 84 relations
 must match; 18 Phase 2 relations must contain generated data. Restored behavioral checks cover
 owner isolation, current/revoked/cancelled consent, lease immutability and concurrent renewal,
 stale-lease refusal, and idempotent publication. No rows or dump files are retained on the host.
