@@ -163,6 +163,40 @@ unchanged generated contracts, operator guards, formatting, lint, typechecks, te
 dependency-security regressions, Compose and scope. This does not clear the separate scanner or
 live dependency audit, and does not approve runtime activation.
 
+## Private failed/abandoned-work cleanup control
+
+The source-only `cover-letter-cleanup-contract.ts` and `cover-letter-cleanup-handler.ts`
+define a separate version-one maintenance boundary, exported only from the private runtime.
+Path: trusted private maintenance caller -> strict reference envelope -> Documents-owned
+work ledger -> permanent admission fence -> reference-only operational receipt.
+The isolated provider's claim/positive-settlement contract and capabilities are unchanged.
+
+An exact existing grant/document/purpose/request digest resolves the persisted owner; the caller
+cannot select an owner or certify stopped work. `fenceForCleanup` revokes unclaimed authority and
+inserts permanent revoked tombstones for phases not yet issued using the existing `0007` protocol.
+Replay preserves original identities and admission deadlines, including after quarantine or a
+lost response. Unknown/conflicting references cannot create or cancel work. A concurrent claim
+either loses to revocation or remains running; cleanup never settles it. Late positive provider
+settlement cannot grant finalization once the final phase is fenced.
+
+Outcomes are `pending`, `ledger_terminal` or `unavailable`. **None proves remote quiescence or
+authorizes object/row purge.** This boundary receives no settlement, model, Invoke, object-I/O or
+deletion capability. Running/ambiguous work and its reservation inventory remain until independent
+trusted positive completion. Failed-call stopping evidence, transient retention enforcement and
+production maintenance authentication/IAM/bootstrap remain unfinished. Numeric invoked-target
+matching is not caller authentication. Both handler and ledger default off; no public API,
+frontend, migration, guard, Terraform, AWS/model call or deployment is included.
+
+Local synthetic evidence: 31 cleanup contract/handler cases, one additional default-off ledger
+case, all 610 Documents unit tests and 82 opt-in real PostgreSQL ledger cases (16 new cleanup
+cases) pass. Object/model/Lambda transports in the connected suite are offline, not deployed
+authentication or remote-stopped evidence.
+
+The full maintained repository verifier passes, including 38 typecheck tasks, workspace tests,
+23 builds, unchanged generated contracts, formatting, baseline-only lint, operational and
+dependency-security regressions, Compose and scope. The separate fresh live dependency audit
+still fails on existing mobile-only node-forge/braces advisories; no waiver or dependency edit.
+
 ## Planned expansion
 
 - `tailoring/` — Evidence-grounded selection and rewriting.

@@ -340,6 +340,27 @@ export class PostgresCoverLetterWorkStore {
     });
   }
 
+  /** Cleanup consumes an existing exact reference, derives its owner and permanently fences
+   * future admission. It never settles running work, deletes inventory, or proves quiescence.
+   * Repeated/lost acknowledgements are safe to replay: revoked phases cannot be renewed.
+   */
+  async fenceForCleanup(
+    reference: CoverLetterWorkReference,
+  ): Promise<"pending" | "ledger_terminal"> {
+    return this.guarded(async () => {
+      const ref = structuredClone(reference);
+      if (!UUID.test(ref.id) || !validBinding(ref)) throw Error();
+      const original = await find(this.client, ref.documentId, ref.purpose);
+      if (!original || !referenceMatches(original, ref)) throw Error();
+      // Ownership is persisted, not caller-selected. This operation remains available during
+      // candidate quarantine, but does not create external effects or grant active access.
+      await this.revokeUnclaimed(original.ownerUserId, ref.documentId);
+      const drain = await this.readDrainState(original.ownerUserId, ref.documentId);
+      if (drain === "untracked") throw Error();
+      return drain === "settled" ? "ledger_terminal" : "pending";
+    });
+  }
+
   /** Ledger-only state. Missing phases or expired/running authority remain pending/untracked. */
   async readDrainState(
     ownerUserId: string,

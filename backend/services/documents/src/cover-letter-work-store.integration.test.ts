@@ -10,6 +10,7 @@ import {
   createCoverLetterDocument,
   encodeCoverLetterDocument,
 } from "./cover-letter.js";
+import { createCoverLetterCleanupHandler } from "./cover-letter-cleanup-handler.js";
 import {
   COVER_LETTER_PROVIDER_MODEL,
   type CoverLetterProviderSlot,
@@ -120,6 +121,172 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
         clock_timestamp() - interval '1 minute')`;
     return { id, documentId, purpose, requestSha256 };
   }
+
+  const cleanupArn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-cleanup:7";
+  const cleanup = createCoverLetterCleanupHandler({
+    functionArn: cleanupArn,
+    work,
+    enabled: () => true,
+  });
+  const cleanupReference = (authorization: CoverLetterWorkAuthorization) => ({
+    id: authorization.id,
+    documentId: authorization.documentId,
+    purpose: authorization.purpose,
+    requestSha256: authorization.requestSha256,
+  });
+  async function cleanupRequest(reference: ReturnType<typeof cleanupReference>) {
+    return cleanup(
+      { schemaVersion: 1, action: "fence", documentId: reference.documentId, reference },
+      { invokedFunctionArn: cleanupArn },
+    );
+  }
+  it.each(["private_slots", "provider_dispatch", "final_document"] as const)(
+    "private cleanup permanently fences abandoned unclaimed %s authority",
+    async (purpose) => {
+      if (purpose === "final_document") await settledProvider();
+      const original = (await issue(purpose)).authorization;
+      const reference = cleanupReference(original);
+      expect((await cleanupRequest(reference)).outcome).toBe("ledger_terminal");
+      expect((await cleanupRequest(reference)).outcome).toBe("ledger_terminal");
+      for (const phase of ["private_slots", "provider_dispatch", "final_document"] as const) {
+        const replay = (await issue(phase)).authorization;
+        expect(replay.state === "revoked" || replay.state === "settled").toBe(true);
+        expect(await work.claim(replay)).toEqual({ kind: "unavailable" });
+      }
+      const replay = (await issue(purpose)).authorization;
+      expect(replay.id).toBe(original.id);
+      expect(replay.expiresAt).toEqual(original.expiresAt);
+      expect(
+        await sql`SELECT id FROM documents.cover_letters WHERE id = ${documentId}`,
+      ).toHaveLength(1);
+    },
+  );
+  it.each(["private_slots", "provider_dispatch", "final_document"] as const)(
+    "private cleanup retains running %s work and reservation inventory",
+    async (purpose) => {
+      if (purpose === "final_document") await settledProvider();
+      const original = (await issue(purpose)).authorization;
+      await work.claim(original);
+      const reference = cleanupReference(original);
+      expect((await cleanupRequest(reference)).outcome).toBe("pending");
+      expect((await cleanupRequest(reference)).outcome).toBe("pending");
+      const replay = (await issue(purpose)).authorization;
+      expect(replay.state).toBe("running");
+      expect(replay.terminalAt).toBeNull();
+      expect(replay.id).toBe(original.id);
+      await expect(
+        sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+      ).rejects.toThrow();
+      expect(
+        await sql`SELECT id FROM documents.cover_letters WHERE id = ${documentId}`,
+      ).toHaveLength(1);
+    },
+  );
+  it.each(["active", "quarantined"])(
+    "cleanup with an %s candidate never grants finalization after late provider settlement",
+    async (state) => {
+      await settledSlots();
+      const provider = (await issue("provider_dispatch")).authorization;
+      await work.claim(provider);
+      if (state === "quarantined")
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
+      const reference = cleanupReference(provider);
+      expect((await cleanupRequest(reference)).outcome).toBe("pending");
+      // Synthetic positive completion of original work, not timeout/cleanup settlement.
+      await work.settleProviderDispatch(reference);
+      expect((await cleanupRequest(reference)).outcome).toBe("ledger_terminal");
+      if (state === "quarantined")
+        await expect(work.claimFinalDocument({ ownerUserId, documentId })).rejects.toThrow(
+          /^CoverLetterWorkUnavailable$/u,
+        );
+      else
+        expect(await work.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+          kind: "unavailable",
+        });
+      const rows = await sql`SELECT state FROM documents.cover_letter_work_authorizations
+      WHERE document_id = ${documentId} AND purpose = 'final_document'`;
+      expect(rows).toEqual([{ state: "revoked" }]);
+    },
+  );
+  it("cleanup revokes expired unclaimed admission without renewing it", async () => {
+    const expired = await seedExpired("private_slots");
+    expect((await cleanupRequest(expired)).outcome).toBe("ledger_terminal");
+    const replay = (await issue()).authorization;
+    expect(replay.id).toBe(expired.id);
+    expect(replay.state).toBe("revoked");
+    expect(replay.expiresAt.getTime()).toBeLessThan(Date.now());
+  });
+  it.each(["id", "documentId", "purpose", "requestSha256"] as const)(
+    "cleanup refuses a changed %s without modifying the original grant",
+    async (field) => {
+      const original = (await issue()).authorization;
+      const reference = cleanupReference(original);
+      if (field === "purpose") reference.purpose = "provider_dispatch";
+      else if (field === "requestSha256") reference.requestSha256 = "f".repeat(64);
+      else reference[field] = uuidv7();
+      expect((await cleanupRequest(reference)).outcome).toBe("unavailable");
+      expect((await issue()).authorization).toEqual(original);
+      expect(
+        await sql`SELECT id FROM documents.cover_letter_work_authorizations
+        WHERE document_id = ${documentId}`,
+      ).toHaveLength(1);
+    },
+  );
+  it("cleanup never retroactively tracks an unknown reservation", async () => {
+    const reference = {
+      id: uuidv7(),
+      documentId,
+      purpose: "private_slots" as const,
+      requestSha256,
+    };
+    expect((await cleanupRequest(reference)).outcome).toBe("unavailable");
+    expect(await work.readDrainState(ownerUserId, documentId)).toBe("untracked");
+    expect(
+      await sql`SELECT id FROM documents.cover_letter_work_authorizations
+      WHERE document_id = ${documentId}`,
+    ).toHaveLength(0);
+  });
+  it("lost cleanup acknowledgement replays the committed fence without renewing authority", async () => {
+    const original = (await issue()).authorization;
+    const reference = cleanupReference(original);
+    const lostAck = createCoverLetterCleanupHandler({
+      functionArn: cleanupArn,
+      enabled: () => true,
+      work: {
+        fenceForCleanup: async (ref) => {
+          await work.fenceForCleanup(ref);
+          throw Error("SyntheticLostCleanupAcknowledgement");
+        },
+      },
+    });
+    expect(
+      (
+        await lostAck(
+          { schemaVersion: 1, action: "fence", documentId, reference },
+          { invokedFunctionArn: cleanupArn },
+        )
+      ).outcome,
+    ).toBe("unavailable");
+    const fenced = (await issue()).authorization;
+    expect(fenced.state).toBe("revoked");
+    expect(fenced.id).toBe(original.id);
+    expect(fenced.expiresAt).toEqual(original.expiresAt);
+    expect((await cleanupRequest(reference)).outcome).toBe("ledger_terminal");
+    expect((await issue()).authorization).toEqual(fenced);
+  });
+  it("concurrent cleanup and original claim leave either revoked or unresolved running work, never fresh authority", async () => {
+    const original = (await issue()).authorization;
+    const reference = cleanupReference(original);
+    const [fenced, claimed] = await Promise.all([cleanupRequest(reference), work.claim(reference)]);
+    const replay = (await issue()).authorization;
+    expect(replay.id).toBe(original.id);
+    expect(replay.state).toBe(claimed.kind === "claimed" ? "running" : "revoked");
+    expect(fenced.outcome).toBe(claimed.kind === "claimed" ? "pending" : "ledger_terminal");
+    expect(await work.claim(reference)).toEqual({ kind: "unavailable" });
+    const rows = await sql`SELECT state FROM documents.cover_letter_work_authorizations
+      WHERE document_id = ${documentId} AND purpose <> 'private_slots'`;
+    expect(rows).toEqual([{ state: "revoked" }, { state: "revoked" }]);
+  });
 
   const providerBinding = () => ({ documentId, requestSha256, consentExpiresAt });
 

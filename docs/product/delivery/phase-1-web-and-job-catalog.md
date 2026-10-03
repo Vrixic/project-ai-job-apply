@@ -21,6 +21,21 @@ release/recovery requirement. Keep staging dormant between bounded acceptance wi
 
 ## Current implementation checkpoint
 
+2026-10-03 cross-phase privacy checkpoint: owner-approved [D3-042 private cleanup control](phase-3-application-preparation.md)
+permanently fences unclaimed cover-letter authority without changing public APIs or frontend.
+The default-off source boundary passes 31 offline cleanup cases and 16 new connected PostgreSQL
+cases within 610 Documents unit/82 opt-in ledger cases. Running actors and reservation inventory
+remain unresolved until trusted positive evidence; a terminal ledger result is not remote
+quiescence or candidate-rights purge authority. Production retention/drain, authentication/IAM,
+deployment and accountable acceptance remain open. D1 stays In progress; its prior accepted
+candidate-rights evidence and public behavior are unchanged.
+
+The full maintained repository verifier passes for this checkpoint, including 38 typecheck
+tasks, workspace tests and all 23 builds; lint remains at 15 baseline warnings/58 infos.
+Fresh live dependency audit still fails on the existing mobile-only node-forge/braces advisories,
+with no waiver or frontend dependency edit. Previously recorded static-analysis findings remain
+open; this local verifier does not run the hosted scanner.
+
 Candidate-rights deployed acceptance is complete at development state serial `245`. The original
 fresh-MFA fixed-sequence execution reached confirmed quarantine after its export, replay, exact
 download, expiry, cleanup, request, cancel, and MFA gates, then failed downstream. Recovery exposed

@@ -21,6 +21,7 @@ describe("private generation work control fails closed before database access", 
     "claimFinalDocument",
     "settleProviderDispatch",
     "recordSettled",
+    "fenceForCleanup",
     "revokeUnclaimed",
     "readDrainState",
   ] as const)("defaults off for %s", async (method) => {
@@ -45,9 +46,11 @@ describe("private generation work control fails closed before database access", 
                   ? store.settleProviderDispatch({ ...ref, purpose: "provider_dispatch" })
                   : method === "recordSettled"
                     ? store.recordSettled(ref)
-                    : method === "revokeUnclaimed"
-                      ? store.revokeUnclaimed(owner, documentId)
-                      : store.readDrainState(owner, documentId);
+                    : method === "fenceForCleanup"
+                      ? store.fenceForCleanup(ref)
+                      : method === "revokeUnclaimed"
+                        ? store.revokeUnclaimed(owner, documentId)
+                        : store.readDrainState(owner, documentId);
     await expect(result).rejects.toThrow("CoverLetterWorkUnavailable");
     expect(sql).not.toHaveBeenCalled();
   });
