@@ -9,6 +9,40 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+PR #506 merged as `84c8c88` on 2026-10-02. The independent test-only static-dispatch follow-up
+and its verification records now use a new backend branch based on that exact merged main.
+This merge does not approve the pending API/guard changes or activate the cover-letter runtime.
+
+Backend test-only static-dispatch cleanup is locally verified: Trust proof tests explicitly choose
+their two existing owned reads, and the candidate-restore AWS mock selects only its four existing
+allowed read commands while preserving the override receiver. All cases/assertions are retained.
+Trust passes 63 unit cases; the focused restore suite passes 115, both workspace typechecks and
+scoped Biome pass. The fresh maintained full verifier passes: unchanged regenerated contracts,
+operator guards, formatting, lint, 38 typecheck tasks (34 cached), 39 test tasks (36 cached),
+23 builds (20 cached), dependency-security regressions, Compose and scope. Workflow unit evidence
+is 1412 passed/20 integration skipped. Hosted source `76e4c0f` passes quality, catalog,
+integration (33 tasks) and both container builds. Documents' 66 work-ledger cases remain skipped
+in hosted integration, separate from the earlier local PostgreSQL evidence. The same pinned
+scanner removes all three targeted findings (68 to 65); neither changed test file has a finding.
+The remaining 65 findings and dependency audit still fail, with no gate waiver.
+[Exact CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37071491872),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37071491879). No production
+API/runtime, frontend, operational guard, Terraform or deployment change.
+The separate Profile, runtime-pin/guard and private read-boundary approvals remain pending.
+
+Hosted backend checkpoint `749d95d` is terminal: quality, catalog invariants, PostgreSQL integration
+and both migration/web container builds pass. Integration runs 33 successful tasks, but Documents
+reports 46 passed and 66 work-ledger tests skipped; the earlier local 112-test PostgreSQL pass
+remains separate evidence. The previous Profile race did not reproduce in this run and is not
+repaired. Migration runtime package installation executed successfully on the hosted runner,
+while a fresh local probe still receives HTTP 404 for the old SSL package URL. This is divergent
+download evidence, not a universal outage or a passing local full-runtime rebuild. Source pins
+are unchanged. Static analysis still reports 68 blocking findings and the dependency audit fails;
+the fresh registry report retains the unpatched mobile `node-forge` advisory. Pending scoped
+Profile, runtime-pin/guard and private read-boundary approvals remain open. No deployment/apply,
+frontend changes, gate waiver or D1/D3 completion. [CI result](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37066655153),
+[static analysis](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37066654973).
+
 Hosted CI at `c92aeb9` completed: quality and catalog pass, but integration fails on a Profile
 fact-update concurrency race and the cold migration image cannot resolve the new Documents AI SDK
 dependency. The backend build-order correction uses Documents' recursive dependency build; local
@@ -19,7 +53,7 @@ the fresh maintained verifier passes with regenerated contracts unchanged, synth
 guards, formatting (952 files), lint, all 38 typecheck tasks (cached), dependency-security
 regressions, repository tests, all 23 builds (22 cached), Compose and product-scope checks.
 Docker Desktop and WSL are stopped; shared volumes and the local build-stage image are retained.
-The full runtime image separately fails because its pinned `libssl3-3.5.8-r0.apk` URL returns 404.
+The earlier local full runtime build separately failed at the pinned `libssl3-3.5.8-r0.apk` URL (404).
 Scoped Profile concurrency and runtime-pin/guard updates await separate owner approval. Hosted
 Semgrep and dependency audit still fail; no exception, frontend change, deployment or apply.
 D1/D3 remain In progress. [Exact hosted run](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37062920778).
