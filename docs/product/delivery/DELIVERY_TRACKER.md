@@ -9,6 +9,25 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+On 2026-10-03 the owner approved D3-041's source-only publisher inventory correction and
+fail-closed regressions. The embedded runtime smoke now names all 57 current SQL migrations,
+cross-checks each owner's exact names against the validated restore manifest, and verifies every
+SQL SHA-256 checksum. Before the fix the executable current-inventory fixture failed on Profile's
+stale list. Both PowerShell host guard suites now pass all 149 executable smoke cases, including
+every missing or byte-modified SQL file, extra files and checksum/version substitutions across all
+seven owners. The unchanged retained local image passes the exact updated smoke with network,
+writes, capabilities and privilege escalation disabled. Complete maintained verification
+passes (including cached workspace tasks); this is not a new image build, publisher receipt, registry scan or database migration.
+Source/guard changes and these records ride together; no API/frontend/Terraform, publication,
+deployment or apply. D1/D3 remain In progress behind deployed/external and security exit gates.
+
+PR #511 merged as `3f142c1`. Exact merged-main quality, catalog, all 33 integration tasks and both
+container jobs pass. Profile passes 29 PostgreSQL cases; Documents passes 50 with 66 opt-in ledger
+cases skipped, separate from earlier local opt-in evidence. Dependency audit and 65 scanner
+findings remain failing, with no waiver.
+[CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479546),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479543).
+
 On 2026-10-03 the owner approved the scoped migration-runtime SSL pin and affected strict
 guard-fixture update, tracked as D3-040. Both Alpine packages are pinned to `3.5.9-r0` with
 independently checked SHA-256 hashes and signatures verified against the unchanged digest-pinned
