@@ -196,3 +196,12 @@ expiry and local deadlines do not grant another dispatch, positive disposal or q
 The existing positive-disposal purge guard remains unchanged. Private capture RPC/IAM,
 maintained reconciliation and writer drain remain unfinished/default-off. This source checkpoint
 does not change public retention policy or deployed settings; no model/cloud call occurs.
+
+Source-only D3-049 connects failed/abandoned original-response cleanup to disposal persistence,
+after permanent future-admission fencing. Unknown response identities, lost deletion ACKs, 404
+and local deadlines remain inventoried/unresolved. Only a positively acknowledged original
+terminal/deletion receipt and durable disposed readback produce `response_disposed`, not a
+quiescence or purge certificate. Running writers remain pending even after response disposal.
+No new TTL, cleanup of other provider copies, retention-policy approval or deployed behavior is
+claimed. Maintenance scheduling/runtime/IAM, successful-generation disposal and writer drain
+remain unfinished/default-off; no model/cloud call or activation occurs.

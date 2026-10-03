@@ -141,6 +141,16 @@ before it appears, and new runtime function/object permissions need deployment r
 
 ## Private original-response capture RPC
 
+`cover-letter-response-reconciliation.ts` adds source-only private maintenance for FAILED or
+ABANDONED work, not successful/active generation. The default-off reconciler first commits the
+existing owner-scoped permanent admission fence, then reads exact original response inventory.
+Only a positively bound terminal/deletion acknowledgement reaches disposal persistence, followed
+by durable-state convergence. Replay of committed disposal skips provider I/O. Missing identities,
+lost deletion ACKs, 404 and local deadlines remain unresolved. Neither the fence nor response
+disposal settles running writers, certifies platform quiescence or authorizes object/row purge.
+Reviewed maintenance IAM/runtime, scheduling, successful-generation cleanup and writer drain are
+not composed or activated. Provider/model/cloud ports in tests are synthetic only.
+
 The source-only private original-response capture RPC is separate from work control and
 maintenance. `cover-letter-response-capture-contract.ts` defines closed metadata-only v1
 reserve/record-creation envelopes; the provider-only client pins a numeric Lambda version,

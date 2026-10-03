@@ -345,6 +345,17 @@ No read, disposal, settlement, renewal, generation or purge capability is suppli
 is not caller authentication. Reviewed provider-role IAM, runtime composition, maintained disposal,
 writer drain and deployed acceptance remain prerequisites; this ADR remains Proposed.
 
+## Source-only abandoned response disposal reconciliation (2026-10-03)
+
+Source-only D3-049 adds FAILED/ABANDONED work response reconciliation, not disposal during ordinary
+generation. The private caller must commit the existing permanent admission fence before exact
+inventory read and provider cleanup. Only a positive original terminal/deletion receipt may reach
+Documents disposal persistence and durable readback. Unknown identities, lost ACKs, 404 and local
+deadlines remain unresolved; committed disposal replay skips provider I/O. This does not settle
+running private writers, certify quiescence, admit finalization or grant platform purge. Maintained
+scheduling, authenticated runtime/IAM, successful-generation disposal and writer drain remain
+unfinished/default-off. The proposed protocol and deployment posture are unchanged.
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim
