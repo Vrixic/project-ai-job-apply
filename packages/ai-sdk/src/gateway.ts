@@ -34,6 +34,11 @@ export interface ProviderRequest {
 export interface ModelProvider {
   readonly identity: ModelIdentity;
   complete(request: ProviderRequest): Promise<{ text: string }>;
+  /** Internal lifecycle path: acknowledge original completed response before character/JSON
+   * rejection. The gateway must still enforce output bounds before using this text. Failure
+   * never falls back to another dispatch. Existing providers need not implement this port.
+   */
+  completeForLifecycle?(request: ProviderRequest): Promise<{ text: string }>;
 }
 
 export class ModelGatewayError extends Error {
@@ -83,6 +88,21 @@ export interface GatewayResult {
   outputCharacters: number;
 }
 
+/** Internal receipt from the original fulfilled provider port, not from an error code or
+ * local deadline. Provider implementations must acknowledge a completed original response
+ * before fulfilling `complete`. This is not candidate approval or remote-quiescence proof.
+ */
+export type ModelGatewayCompletion =
+  | { kind: "completed"; result: GatewayResult }
+  | {
+      kind: "completed_rejected";
+      code: "OUTPUT_TOO_LARGE" | "OUTPUT_NOT_JSON";
+      model: ModelIdentity;
+      promptId: string;
+      promptVersion: string;
+      outputCharacters: number;
+    };
+
 export class ModelGateway {
   private readonly clock: () => Date;
   private readonly timeoutMs: number;
@@ -109,6 +129,19 @@ export class ModelGateway {
     request: GatewayRequest,
     disclosure: DataDisclosureApproval | undefined,
   ): Promise<GatewayResult> {
+    const completion = await this.generateWithCompletion(request, disclosure);
+    if (completion.kind === "completed_rejected") throw new ModelGatewayError(completion.code);
+    return completion.result;
+  }
+
+  /** Private lifecycle consumer only. Rejections/aborts/lost responses still throw, even if
+   * the provider throws one of our own error classes. Only original fulfillment enters this
+   * receipt path; a later output/JSON rejection contains metadata, never rejected text.
+   */
+  async generateWithCompletion(
+    request: GatewayRequest,
+    disclosure: DataDisclosureApproval | undefined,
+  ): Promise<ModelGatewayCompletion> {
     if (!this.options.enabled()) throw new ModelGatewayError("MODEL_DISABLED");
     if (!disclosure) throw new ModelGatewayError("DISCLOSURE_MISSING");
     if (disclosure.purpose !== request.purpose) {
@@ -130,18 +163,27 @@ export class ModelGateway {
     if (request.system.length + request.user.length > this.maxInputChars) {
       throw new ModelGatewayError("INPUT_TOO_LARGE");
     }
+    // Capture provenance before dispatch; later mutation cannot rebind an original response.
+    const provenance = {
+      model: structuredClone(this.provider.identity),
+      promptId: request.promptId,
+      promptVersion: request.promptVersion,
+    };
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let text: string;
     try {
+      const providerRequest = {
+        system: request.system,
+        user: request.user,
+        maxOutputChars: this.maxOutputChars,
+        signal: controller.signal,
+      };
       const result = await Promise.race([
-        this.provider.complete({
-          system: request.system,
-          user: request.user,
-          maxOutputChars: this.maxOutputChars,
-          signal: controller.signal,
-        }),
+        this.provider.completeForLifecycle !== undefined
+          ? this.provider.completeForLifecycle(providerRequest)
+          : this.provider.complete(providerRequest),
         new Promise<never>((_, reject) => {
           controller.signal.addEventListener("abort", () =>
             reject(new ModelGatewayError("PROVIDER_TIMEOUT")),
@@ -155,19 +197,22 @@ export class ModelGateway {
     } finally {
       clearTimeout(timer);
     }
-    if (text.length > this.maxOutputChars) throw new ModelGatewayError("OUTPUT_TOO_LARGE");
+    if (typeof text !== "string") throw new ModelGatewayError("PROVIDER_FAILED");
+    const metadata = {
+      ...provenance,
+      outputCharacters: text.length,
+    };
+    if (text.length > this.maxOutputChars)
+      return { kind: "completed_rejected", code: "OUTPUT_TOO_LARGE", ...metadata };
     let value: unknown;
     try {
       value = JSON.parse(text);
     } catch {
-      throw new ModelGatewayError("OUTPUT_NOT_JSON");
+      return { kind: "completed_rejected", code: "OUTPUT_NOT_JSON", ...metadata };
     }
     return {
-      value,
-      model: this.provider.identity,
-      promptId: request.promptId,
-      promptVersion: request.promptVersion,
-      outputCharacters: text.length,
+      kind: "completed",
+      result: { value, ...metadata },
     };
   }
 }

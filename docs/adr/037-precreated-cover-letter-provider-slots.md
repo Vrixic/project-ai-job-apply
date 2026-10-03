@@ -212,6 +212,45 @@ No new persisted state or migration is needed for this admission-fence step. Thi
 boundary cases and 16 new real PostgreSQL cases pass, including quarantine, late settlement,
 lost acknowledgement and claim/cancellation races. This proposal remains incomplete/default-dark.
 
+## Original completed response rejected by output validation (2026-10-03 source checkpoint)
+
+The owner approved source-only internal gateway completion receipts and private provider-phase
+cleanup. An error code cannot distinguish a local refusal from a provider that already received
+the request. Only original provider-port fulfillment can yield a completion receipt; thrown errors,
+lost acknowledgements, aborts and timeouts remain unresolved even if a late response arrives.
+The receipt captures original model/prompt provenance and contains no rejected candidate text.
+
+After validating that receipt and before any result write, the isolated actor may send the new
+strict private v1 `settle_rejected` operation with its exact original provider reference. Documents
+permanently fences unclaimed/not-yet-issued phases before settling the original provider phase.
+Thus rejected completion cannot create finalization authority. Quarantine may drain original
+completed work but grants no new effects. Replay never renews authority; issued/revoked or unbound
+references are refused. A lost closure response stays unresolved to the caller; failure between
+fence and settlement retains running work and reservation inventory with finalization fenced.
+Older compositions refuse the operation; separately reviewed rollout must compose matching
+private control first. The default-off source remains unactivated. Ninety-five real PostgreSQL
+ledger cases and offline gateway/control/actor tests pass, not live-provider or remote-quiescence
+evidence. No migration, public API, frontend, guard/Terraform, cloud/model call or deployment is
+included. This proposed ADR still requires trusted failed-call stop evidence, runtime/IAM,
+retention and accountable privacy/production proof before activation.
+
+The actual adapter audit then reproduced a completed oversized response throwing at the adapter's
+character check before reaching the gateway receipt path. An optional internal lifecycle port now
+preserves original byte-bounded completed response fulfillment until gateway character/JSON
+validation; ordinary adapter `complete` retains its previous character refusal. Exactly one port
+is dispatched, with no fallback after error. Actual-adapter offline HTTP is included in isolated
+and connected PostgreSQL rejection tests. Incomplete, malformed and lost responses remain pending;
+no endpoint/model/request setting or live-provider behavior is activated.
+
+Current official documentation limits the response-cancel endpoint to background responses and
+describes synchronous cancellation through connection termination. It does not establish that a
+local aborted fetch supplies an independently acknowledged terminal receipt for this protocol.
+Background execution also temporarily retains data for polling, even with `store=false`; it is
+not enabled by this approval. A different provider lifecycle/retention design still needs separate
+review. [Background mode](https://developers.openai.com/api/docs/guides/background),
+[cancel endpoint](https://developers.openai.com/api/reference/go/resources/beta/subresources/responses/methods/cancel),
+[data controls](https://developers.openai.com/api/docs/guides/your-data).
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim

@@ -57,6 +57,7 @@ function fixture() {
   const work = {
     claimProviderDispatch: vi.fn(async () => ({ kind: "claimed" as const, reference })),
     settleProviderDispatch: vi.fn(async () => undefined),
+    settleRejectedProviderDispatch: vi.fn(async () => undefined),
   };
   const handler = createCoverLetterProviderControlHandler({
     functionArn: arn,
@@ -91,6 +92,115 @@ function fixture() {
 }
 
 describe("approved private provider-control contract and source-only transport", () => {
+  it("a timed-out rejected cleanup RPC never acknowledges its later response or retries", async () => {
+    const f = fixture();
+    let finish: (value: {
+      StatusCode: number;
+      ExecutedVersion: string;
+      Payload: Uint8Array;
+    }) => void = () => undefined;
+    f.send.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const client = new CoverLetterProviderControlClient(
+      arn,
+      { send: f.send, config: { maxAttempts: f.maxAttempts } },
+      () => true,
+      20,
+    );
+    const attempt = client.settleRejectedProviderDispatch(reference);
+    await expect(attempt).rejects.toThrow(/^CoverLetterProviderControlUnavailable$/u);
+    finish({
+      StatusCode: 200,
+      ExecutedVersion: "7",
+      Payload: wire({ ...settled, action: "settle_rejected" }),
+    });
+    await expect(attempt).rejects.toThrow(/^CoverLetterProviderControlUnavailable$/u);
+    expect(f.send).toHaveBeenCalledOnce();
+  });
+  it("routes rejected completion to phase fencing, never ordinary settlement", async () => {
+    const f = fixture();
+    await f.client.settleRejectedProviderDispatch(reference);
+    expect(f.work.settleRejectedProviderDispatch).toHaveBeenCalledWith(reference);
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+    expect(f.send).toHaveBeenCalledOnce();
+    expect(f.send.mock.calls[0]?.[0].input.Payload).toEqual(
+      wire({ ...settle, action: "settle_rejected" }),
+    );
+  });
+  it("older control composition cannot acknowledge rejected-phase cleanup", async () => {
+    const f = fixture();
+    const handler = createCoverLetterProviderControlHandler({
+      functionArn: arn,
+      work: {
+        claimProviderDispatch: f.work.claimProviderDispatch,
+        settleProviderDispatch: f.work.settleProviderDispatch,
+      },
+      enabled: () => true,
+    });
+    expect(
+      await handler({ ...settle, action: "settle_rejected" }, { invokedFunctionArn: arn }),
+    ).toEqual({
+      schemaVersion: 1,
+      action: "settle_rejected",
+      documentId,
+      outcome: "unavailable",
+    });
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+  });
+  it("rejected-phase closure defaults off without SDK or control I/O", async () => {
+    const f = fixture();
+    f.disable();
+    await expect(f.client.settleRejectedProviderDispatch(reference)).rejects.toThrow(
+      /^CoverLetterProviderControlUnavailable$/u,
+    );
+    expect(
+      (await f.handler({ ...settle, action: "settle_rejected" }, { invokedFunctionArn: arn }))
+        .outcome,
+    ).toBe("unavailable");
+    expect(f.send).not.toHaveBeenCalled();
+    expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+  });
+  it.each(["action", "id", "hash", "extra", "lost"])(
+    "rejects %s rejected-phase acknowledgements without retry",
+    async (kind) => {
+      const f = fixture();
+      const response = { ...settled, action: "settle_rejected", reference: { ...reference } };
+      if (kind === "action") response.action = "settle";
+      if (kind === "id") response.reference.id = documentId;
+      if (kind === "hash") response.reference.requestSha256 = "f".repeat(64);
+      if (kind === "lost") f.send.mockRejectedValue(Error("SyntheticLostClosureACK"));
+      else
+        f.send.mockResolvedValue({
+          StatusCode: 200,
+          ExecutedVersion: "7",
+          Payload: wire(kind === "extra" ? { ...response, stopConfirmed: true } : response),
+        });
+      await expect(f.client.settleRejectedProviderDispatch(reference)).rejects.toThrow(
+        /^CoverLetterProviderControlUnavailable$/u,
+      );
+      expect(f.send).toHaveBeenCalledOnce();
+    },
+  );
+  it.each(["private_slots", "final_document"] as const)(
+    "refuses rejected %s authority before dispatch",
+    async (purpose) => {
+      const f = fixture();
+      const raw = { ...settle, action: "settle_rejected", reference: { ...reference, purpose } };
+      expect(validateProviderControlInput(raw)).toBe(false);
+      await expect(f.handler(raw, { invokedFunctionArn: arn })).rejects.toThrow(
+        /^CoverLetterProviderControlUnavailable$/u,
+      );
+      await expect(f.client.settleRejectedProviderDispatch(raw.reference)).rejects.toThrow(
+        /^CoverLetterProviderControlUnavailable$/u,
+      );
+      expect(f.send).not.toHaveBeenCalled();
+      expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+    },
+  );
   it.each([":live", ":$LATEST", ":0", ":007", "", ":1000000000"])(
     "refuses non-numeric or unsafe target suffix %s",
     (suffix) => {

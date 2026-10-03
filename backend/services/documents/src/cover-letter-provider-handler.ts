@@ -45,7 +45,8 @@ export function createCoverLetterIsolatedProviderHandler(options: {
   /** Total local handling bound; cancellation is NOT proof of remote/provider quiescence. */
   timeoutMs?: number;
   /** Private control RPC capability only. Never compose database access in this isolated actor. */
-  work?: Pick<PostgresCoverLetterWorkStore, "claimProviderDispatch" | "settleProviderDispatch">;
+  work?: Pick<PostgresCoverLetterWorkStore, "claimProviderDispatch" | "settleProviderDispatch"> &
+    Partial<Pick<PostgresCoverLetterWorkStore, "settleRejectedProviderDispatch">>;
 }): (input: unknown) => Promise<CoverLetterProviderOutput> {
   const timeoutMs = options.timeoutMs ?? 60_000;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000)
@@ -221,10 +222,10 @@ export function createCoverLetterIsolatedProviderHandler(options: {
       if (!enabled() || !fresh() || !validateCoverLetterProviderModel(options.gateway.identity))
         return failed;
       deadline.throwIfAborted();
-      let output: Awaited<ReturnType<ModelGateway["generate"]>>;
+      let completion: Awaited<ReturnType<ModelGateway["generateWithCompletion"]>>;
       try {
-        output = await bounded(
-          options.gateway.generate(
+        completion = await bounded(
+          options.gateway.generateWithCompletion(
             {
               promptId: "cover_letter",
               promptVersion: request.promptVersion,
@@ -246,16 +247,42 @@ export function createCoverLetterIsolatedProviderHandler(options: {
         // refusal may fail the preparation, but it still never grants another dispatch.
         return deadline.aborted ? inProgress : failed;
       }
+      const closeRejectedCompletion = async () => {
+        if (!work.settleRejectedProviderDispatch || !enabled()) return inProgress;
+        deadline.throwIfAborted();
+        await work.settleRejectedProviderDispatch(reference);
+        return failed;
+      };
+      if (completion.kind === "completed_rejected") {
+        // This branch follows original positive model completion, not a caught error. The
+        // original dispatch write was acknowledged and no result write has been attempted.
+        if (
+          !validateCoverLetterProviderModel(completion.model) ||
+          completion.promptId !== "cover_letter" ||
+          completion.promptVersion !== request.promptVersion ||
+          !Number.isSafeInteger(completion.outputCharacters) ||
+          completion.outputCharacters < 0 ||
+          !["OUTPUT_TOO_LARGE", "OUTPUT_NOT_JSON"].includes(completion.code)
+        )
+          return inProgress;
+        return await closeRejectedCompletion();
+      }
+      const output = completion.result;
       const text = JSON.stringify(output.value);
       if (
         !validateCoverLetterProviderModel(output.model) ||
         output.promptId !== "cover_letter" ||
         output.promptVersion !== request.promptVersion ||
+        !Number.isSafeInteger(output.outputCharacters) ||
+        output.outputCharacters < 0
+      )
+        return inProgress;
+      if (
         typeof text !== "string" ||
         output.outputCharacters > request.maxOutputChars ||
         text.length > request.maxOutputChars
       )
-        return failed;
+        return await closeRejectedCompletion();
       const resultBytes = encodeCoverLetterProviderObject("result", {
         schemaVersion: 1,
         documentId: input.documentId,

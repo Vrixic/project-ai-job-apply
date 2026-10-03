@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { ModelGateway } from "@ai-job-apply/ai-sdk";
+import { ModelGateway, OpenAiLunaProvider } from "@ai-job-apply/ai-sdk";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +17,8 @@ import {
   coverLetterProviderSha256,
   encodeCoverLetterProviderObject,
 } from "./cover-letter-provider-contract.js";
+import { CoverLetterProviderControlClient } from "./cover-letter-provider-control-client.js";
+import { createCoverLetterProviderControlHandler } from "./cover-letter-provider-control-handler.js";
 import { createCoverLetterIsolatedProviderHandler } from "./cover-letter-provider-handler.js";
 import type { CoverLetterProviderTransitionObjects } from "./cover-letter-provider-objects.js";
 import { type CoverLetterMetadata, PostgresCoverLetterStore } from "./cover-letter-store.js";
@@ -140,6 +142,93 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
       { invokedFunctionArn: cleanupArn },
     );
   }
+  it.each(["active", "quarantined"])(
+    "original rejected completion drains %s provider work only after permanently fencing phases",
+    async (state) => {
+      await settledSlots();
+      const original = (await issue("provider_dispatch")).authorization;
+      await work.claim(original);
+      if (state === "quarantined")
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
+      await work.settleRejectedProviderDispatch(cleanupReference(original));
+      const rows =
+        await sql`SELECT id, purpose, state, terminal_at FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
+      await work.settleRejectedProviderDispatch(cleanupReference(original));
+      expect(
+        await sql`SELECT id, purpose, state, terminal_at FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
+      ).toEqual(rows);
+      expect(rows.find((row) => row.purpose === "provider_dispatch")).toMatchObject({
+        id: original.id,
+        state: "settled",
+      });
+      expect(rows.find((row) => row.purpose === "final_document")).toMatchObject({
+        state: "revoked",
+      });
+      expect(await work.readDrainState(ownerUserId, documentId)).toBe("settled");
+      if (state === "active")
+        expect(await work.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+          kind: "unavailable",
+        });
+      else
+        await expect(work.claimFinalDocument({ ownerUserId, documentId })).rejects.toThrow(
+          /^CoverLetterWorkUnavailable$/u,
+        );
+      expect(
+        await sql`SELECT id FROM documents.cover_letters WHERE id = ${documentId}`,
+      ).toHaveLength(1);
+    },
+  );
+  it.each(["issued", "revoked"])(
+    "rejected completion cannot cancel original %s authority",
+    async (state) => {
+      const original = (await issue("provider_dispatch")).authorization;
+      if (state === "revoked") await work.revokeUnclaimed(ownerUserId, documentId);
+      const before =
+        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
+      await expect(work.settleRejectedProviderDispatch(cleanupReference(original))).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
+      expect(
+        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
+      ).toEqual(before);
+    },
+  );
+  it.each(["id", "document", "hash", "purpose"])(
+    "rejected completion refuses an unbound %s without fencing",
+    async (kind) => {
+      const original = (await issue("provider_dispatch")).authorization;
+      await work.claim(original);
+      const reference = cleanupReference(original);
+      if (kind === "id") reference.id = uuidv7();
+      if (kind === "document") reference.documentId = uuidv7();
+      if (kind === "hash") reference.requestSha256 = "f".repeat(64);
+      if (kind === "purpose") reference.purpose = "private_slots";
+      await expect(work.settleRejectedProviderDispatch(reference)).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
+      expect(
+        await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId}`,
+      ).toEqual([{ state: "running" }]);
+    },
+  );
+  it("settlement failure after the committed rejection fence leaves running work and no final authority", async () => {
+    const original = (await issue("provider_dispatch")).authorization;
+    await work.claim(original);
+    const broken = new PostgresCoverLetterWorkStore(sql, () => true);
+    vi.spyOn(broken, "settleProviderDispatch").mockRejectedValue(
+      Error("SyntheticSettlementUnavailable"),
+    );
+    await expect(broken.settleRejectedProviderDispatch(cleanupReference(original))).rejects.toThrow(
+      /^CoverLetterWorkUnavailable$/u,
+    );
+    expect(await work.readDrainState(ownerUserId, documentId)).toBe("pending");
+    expect(
+      await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose = 'final_document'`,
+    ).toEqual([{ state: "revoked" }]);
+    await expect(
+      sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+    ).rejects.toThrow();
+  });
   it.each(["private_slots", "provider_dispatch", "final_document"] as const)(
     "private cleanup permanently fences abandoned unclaimed %s authority",
     async (purpose) => {
@@ -821,7 +910,18 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
     },
   );
 
-  it.each(["none", "control_ack", "dispatch_ack", "result_ack", "settlement_ack", "model_timeout"])(
+  it.each([
+    "none",
+    "control_ack",
+    "dispatch_ack",
+    "result_ack",
+    "settlement_ack",
+    "model_timeout",
+    "rejected_json",
+    "rejected_large",
+    "rejected_ack",
+    "provider_error",
+  ])(
     "connects isolated provider effects to SQL authority, retaining ambiguous %s work",
     async (failure) => {
       // Real control transactions, but all object/model transports are in-memory synthetic fakes.
@@ -876,7 +976,17 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
       });
       const complete = vi.fn(async () => {
         expect(await phaseState()).toBe("running");
-        return failure === "model_timeout" ? pendingModel : { text };
+        if (failure === "provider_error") throw Error("SyntheticProviderFailure");
+        return failure === "model_timeout"
+          ? pendingModel
+          : {
+              text:
+                failure === "rejected_large"
+                  ? "x".repeat(8_001)
+                  : failure.startsWith("rejected_")
+                    ? "not json"
+                    : text,
+            };
       });
       const claim = vi.fn(
         async (input: Parameters<PostgresCoverLetterWorkStore["claimProviderDispatch"]>[0]) => {
@@ -892,14 +1002,69 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
             throw Error("Synthetic lost settlement acknowledgement");
         },
       );
+      const controlArn =
+        "arn:aws:lambda:us-east-2:123456789012:function:synthetic-provider-control:7";
+      const control = createCoverLetterProviderControlHandler({
+        functionArn: controlArn,
+        work,
+        enabled: () => true,
+      });
+      const rpc = new CoverLetterProviderControlClient(
+        controlArn,
+        {
+          config: { maxAttempts: async () => 1 },
+          send: async (command) => {
+            if (!(command.input.Payload instanceof Uint8Array))
+              throw Error("SyntheticMissingPayload");
+            const raw: unknown = JSON.parse(new TextDecoder().decode(command.input.Payload));
+            const output = await control(raw, { invokedFunctionArn: controlArn });
+            if (failure === "rejected_ack") throw Error("SyntheticLostClosureACK");
+            return {
+              StatusCode: 200,
+              ExecutedVersion: "7",
+              Payload: new TextEncoder().encode(JSON.stringify(output)),
+            };
+          },
+        },
+        () => true,
+      );
+      const settleRejected = vi.fn(
+        (ref: Parameters<PostgresCoverLetterWorkStore["settleRejectedProviderDispatch"]>[0]) =>
+          rpc.settleRejectedProviderDispatch(ref),
+      );
       const handler = createCoverLetterIsolatedProviderHandler({
         enabled: () => true,
         timeoutMs: failure === "model_timeout" ? 200 : 60_000,
         gateway: new ModelGateway(
-          { identity: COVER_LETTER_PROVIDER_MODEL, complete },
+          failure.startsWith("rejected_")
+            ? new OpenAiLunaProvider({
+                enabled: () => true,
+                apiKey: () => "synthetic",
+                fetch: async () => {
+                  const result = await complete();
+                  return new Response(
+                    JSON.stringify({
+                      status: "completed",
+                      output: [
+                        {
+                          type: "message",
+                          role: "assistant",
+                          status: "completed",
+                          content: [{ type: "output_text", text: result.text }],
+                        },
+                      ],
+                    }),
+                  );
+                },
+              })
+            : { identity: COVER_LETTER_PROVIDER_MODEL, complete },
           { enabled: () => true, timeoutMs: 1_000 },
         ),
-        work: { claimProviderDispatch: claim, settleProviderDispatch: settle },
+        work: {
+          claimProviderDispatch: claim,
+          settleProviderDispatch: settle,
+          settleRejectedProviderDispatch: settleRejected,
+        },
         objects: {
           transitionIfMatch: transition,
           find: async (_id, slot) => {
@@ -914,7 +1079,13 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
         },
       });
       const input = { schemaVersion: 1 as const, documentId, request: reference(request) };
-      expect((await handler(input)).outcome).toBe(failure === "none" ? "ready" : "in_progress");
+      expect((await handler(input)).outcome).toBe(
+        failure === "none"
+          ? "ready"
+          : ["rejected_json", "rejected_large", "provider_error"].includes(failure)
+            ? "failed"
+            : "in_progress",
+      );
       if (failure === "model_timeout") {
         releaseModel({ text });
         await pendingModel;
@@ -925,10 +1096,28 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
         ["control_ack", "dispatch_ack"].includes(failure) ? 0 : 1,
       );
       expect(transition).toHaveBeenCalledTimes(
-        failure === "control_ack" ? 0 : ["dispatch_ack", "model_timeout"].includes(failure) ? 1 : 2,
+        failure === "control_ack"
+          ? 0
+          : [
+                "dispatch_ack",
+                "model_timeout",
+                "rejected_json",
+                "rejected_large",
+                "rejected_ack",
+                "provider_error",
+              ].includes(failure)
+            ? 1
+            : 2,
       );
       expect(settle).toHaveBeenCalledTimes(["none", "settlement_ack"].includes(failure) ? 1 : 0);
-      const settled = ["none", "settlement_ack"].includes(failure);
+      expect(settleRejected).toHaveBeenCalledTimes(failure.startsWith("rejected_") ? 1 : 0);
+      const settled = [
+        "none",
+        "settlement_ack",
+        "rejected_json",
+        "rejected_large",
+        "rejected_ack",
+      ].includes(failure);
       expect(await phaseState()).toBe(settled ? "settled" : "running");
       await work.revokeUnclaimed(ownerUserId, documentId);
       expect(await work.readDrainState(ownerUserId, documentId)).toBe(

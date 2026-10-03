@@ -14,7 +14,12 @@ export type CoverLetterProviderControlInput =
       requestSha256: string;
       consentExpiresAt: string;
     }
-  | { schemaVersion: 1; action: "settle"; documentId: string; reference: CoverLetterWorkReference };
+  | {
+      schemaVersion: 1;
+      action: "settle" | "settle_rejected";
+      documentId: string;
+      reference: CoverLetterWorkReference;
+    };
 export type CoverLetterProviderControlOutput =
   | {
       schemaVersion: 1;
@@ -23,10 +28,15 @@ export type CoverLetterProviderControlOutput =
       outcome: "claimed";
       reference: CoverLetterWorkReference;
     }
-  | { schemaVersion: 1; action: "claim" | "settle"; documentId: string; outcome: "unavailable" }
   | {
       schemaVersion: 1;
-      action: "settle";
+      action: "claim" | "settle" | "settle_rejected";
+      documentId: string;
+      outcome: "unavailable";
+    }
+  | {
+      schemaVersion: 1;
+      action: "settle" | "settle_rejected";
       documentId: string;
       outcome: "settled";
       reference: CoverLetterWorkReference;
@@ -79,7 +89,7 @@ export function validateProviderControlInput(
   return (
     record(value, ["schemaVersion", "action", "documentId", "reference"]) &&
     value.schemaVersion === 1 &&
-    value.action === "settle" &&
+    (value.action === "settle" || value.action === "settle_rejected") &&
     id(value.documentId) &&
     validateProviderControlReference(value.reference) &&
     value.reference.documentId === value.documentId
@@ -92,7 +102,8 @@ export function validateProviderControlOutput(
     return (
       value.schemaVersion === 1 &&
       ((value.action === "claim" && value.outcome === "claimed") ||
-        (value.action === "settle" && value.outcome === "settled")) &&
+        ((value.action === "settle" || value.action === "settle_rejected") &&
+          value.outcome === "settled")) &&
       id(value.documentId) &&
       validateProviderControlReference(value.reference) &&
       value.reference.documentId === value.documentId
@@ -101,7 +112,7 @@ export function validateProviderControlOutput(
     record(value, ["schemaVersion", "action", "documentId", "outcome"]) &&
     value.schemaVersion === 1 &&
     id(value.documentId) &&
-    (value.action === "claim" || value.action === "settle") &&
+    (value.action === "claim" || value.action === "settle" || value.action === "settle_rejected") &&
     value.outcome === "unavailable"
   );
 }

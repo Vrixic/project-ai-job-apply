@@ -243,6 +243,29 @@ export class PostgresCoverLetterWorkStore {
     });
   }
 
+  /** Trusted original provider completion rejected by output validation ONLY. Fence every
+   * future phase before settlement so rejection cannot become final-document authority.
+   * A thrown/aborted/timed-out provider request is NEVER authority to call this operation.
+   */
+  async settleRejectedProviderDispatch(reference: CoverLetterWorkReference): Promise<void> {
+    return this.guarded(async () => {
+      const ref = structuredClone(reference);
+      if (ref.purpose !== "provider_dispatch" || !UUID.test(ref.id) || !validBinding(ref))
+        throw Error();
+      const original = await find(this.client, ref.documentId, ref.purpose);
+      if (
+        !original ||
+        !referenceMatches(original, ref) ||
+        (original.state !== "running" && original.state !== "settled")
+      )
+        throw Error();
+      // Original committed fence is awaited first. A lost settlement ACK may leave running
+      // work, but never opens finalization; repeat consumes the same immutable identity.
+      await this.fenceForCleanup(ref);
+      await this.settleProviderDispatch(ref);
+    });
+  }
+
   /** Private finalization uses the original settled provider binding, never caller consent. */
   async claimFinalDocument(input: {
     ownerUserId: string;

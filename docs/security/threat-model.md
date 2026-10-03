@@ -273,6 +273,19 @@ timeout nor a target ARN proves caller authorization or remote-stopped effects. 
 IAM, private runtime composition, trusted failed-call settlement, retention and deployed adversarial
 acceptance remain release gates. The source remains default-off, not a production security approval.
 
+## Source-only rejected-provider completion delta
+
+An error named `OUTPUT_NOT_JSON`, `OUTPUT_TOO_LARGE` or `MODEL_DISABLED` may be thrown by an
+already dispatched provider and must not certify stopped work. Internal completion receipts arise
+only from the original fulfilled provider response, with prompt/model provenance captured before
+dispatch. The trusted isolated actor verifies that provenance before invoking fixed-purpose
+`settle_rejected`; no rejected result write occurs. Documents permanently fences future phases
+before original provider settlement, so output rejection cannot grant finalization. Lost closure
+ACKs and failure after fencing retain ambiguity/pending work; older capabilities fail closed.
+This is default-off source control, not caller authentication or trusted production quiescence.
+Errors, aborts, late responses and timeouts remain outside completion authority. Runtime/IAM,
+retention and deployed independent security/privacy evidence remain release gates.
+
 ## D1-007 reporting/moderation source delta
 
 | Threat | Source control | Residual / release gate |

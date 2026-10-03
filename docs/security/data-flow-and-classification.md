@@ -464,3 +464,14 @@ bounded strict receipts and default-off gates are source controls, not deployed 
 Target-context matching does not authenticate a caller. Lost acknowledgements do not authorize
 re-dispatch or prove remote quiescence. Runtime/IAM, retention and trusted failed-call completion
 authority remain unfinished; no public API, frontend or live AWS/model behavior changes here.
+
+The approved source-only completion extension adds fixed `settle_rejected` to this private v1
+boundary. Internal gateway receipts distinguish original fulfilled responses from later JSON/output
+rejection and contain only original model/prompt/version/count metadata, never rejected text.
+The trusted isolated actor validates provenance and performs no result write before requesting
+closure. Documents consumes the exact existing provider reference, permanently fences future
+phases, then settles original completed provider work. Errors, aborts, lost responses and timeouts
+cannot invoke this path, and a receipt is not caller authentication or production quiescence proof.
+Running/ambiguous work and retained reservation inventory remain protected; no purge occurs.
+All flags remain dark. Matching control must precede the actor during any separately reviewed
+rollout; public APIs, frontend, migrations, guard/Terraform and deployment are unchanged.

@@ -89,7 +89,7 @@ export class CoverLetterProviderControlClient {
         (input.action === "claim" &&
           output.outcome === "claimed" &&
           output.reference.requestSha256 !== input.requestSha256) ||
-        (input.action === "settle" &&
+        (input.action !== "claim" &&
           output.outcome === "settled" &&
           (output.reference.id !== input.reference.id ||
             output.reference.requestSha256 !== input.reference.requestSha256))
@@ -125,6 +125,17 @@ export class CoverLetterProviderControlClient {
     const result = await this.call({
       schemaVersion: 1,
       action: "settle",
+      documentId: reference.documentId,
+      reference,
+    });
+    if (result.outcome !== "settled") throw new CoverLetterProviderControlError();
+  }
+  async settleRejectedProviderDispatch(
+    reference: Parameters<PostgresCoverLetterWorkStore["settleRejectedProviderDispatch"]>[0],
+  ): Promise<void> {
+    const result = await this.call({
+      schemaVersion: 1,
+      action: "settle_rejected",
       documentId: reference.documentId,
       reference,
     });
