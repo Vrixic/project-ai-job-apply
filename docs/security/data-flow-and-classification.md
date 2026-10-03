@@ -1,5 +1,29 @@
 # Data Flow and Classification
 
+## Source-only private original-response capture RPC (2026-10-03)
+
+Trusted original provider actor -> separate exact-version single-attempt private RPC ->
+Documents-owned reserve/creation-capture transaction -> original identity-only acknowledgement.
+Envelopes contain the existing work UUID, document UUID, purpose and digest, plus response id/time
+for capture; no candidate text, credentials or provider content. The client cannot read/dispose
+inventory, settle work, renew authorization, generate or purge. Lost RPC ACKs remain unresolved
+even after original commit. Capture draining after quarantine does not admit new dispatch.
+Target matching is not caller authentication; reviewed IAM/runtime composition remains required.
+The source is default-off with synthetic tests only, no live cloud/model call or activation.
+
+## Source-only original background capture checkpoint (2026-10-03)
+
+The opt-in isolated actor supplies its original provider-grant reserve/capture capability to the
+AI gateway. Gateway disclosure checks and one committed inventory reservation precede external
+creation; exact immutable id/time capture precedes polling or output acceptance. Request settings
+remain the selected model, no tools/linkage, strict grounded output and `store:false`, with
+background execution explicitly selected. Candidate text remains confined to the existing private
+request/result boundaries and provider processing, never capture envelopes or diagnostics.
+Unknown creation/capture ACKs retain unresolved inventory. No failed or timed-out call proves
+provider stopping. Temporary polling state is not Zero Data Retention or platform-quiescence
+evidence. Private capture RPC/IAM, maintained disposal, writer drain and deployed/accountable
+acceptance remain pending; no live provider/cloud call or activation occurs in this source change.
+
 ## Source-only private cover-letter cleanup control
 
 Owner-approved non-dispatch lifecycle receipts contain only original model/prompt identity and

@@ -56,6 +56,24 @@ unchanged. Real adapter composition uses offline HTTP responses in tests, never 
 
 ## OpenAI development adapter
 
+### Source-only original background capture
+
+The opt-in `generateWithBackgroundCapture` path uses a separate provider port, never a
+foreground fallback. Gateway kill-switch, disclosure, freshness and input checks precede
+reservation. `OpenAiLunaProvider` also requires `backgroundEnabled`; ordinary foreground calls
+retain their request/result behavior. The original actor supplies a private metadata-only
+capture capability, not SQL or a candidate-selected response id.
+
+Exactly one committed reservation may create one background response. Original id/time capture
+must commit before the first poll or accepting even immediate completed output. Same-identity
+GET polling is paced, byte-bounded, capped at 30 and constrained by the gateway deadline.
+Lost create/capture ACKs, changed metadata, failed/cancelled/incomplete status and local timeout
+never retry creation or certify completion. Character/JSON rejection occurs only after original
+completed response acknowledgement and durable identity capture. No settlement/disposal or
+quiescence authority exists in this transport. Temporary polling state still exists with
+`store:false`; no account-level retention or real-provider capability is inferred from offline
+tests. Private capture RPC/IAM, disposal reconciliation and deployed acceptance remain pending.
+
 `OpenAiLunaResponseCleanup` is a separate default-off source-only lifecycle capability for an
 already-owned, durably captured background response identity. It cannot create or generate a
 response. One bounded GET verifies the exact response id, original creation time, selected model,

@@ -16,6 +16,7 @@ import {
   coverLetterProviderTransitionPort,
   S3CoverLetterProviderObjects,
 } from "./cover-letter-provider-objects.js";
+import type { PostgresCoverLetterResponseStore } from "./cover-letter-response-store.js";
 import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 
 const documentId = "019d04cf-1f80-7000-8000-000000000001";
@@ -36,6 +37,164 @@ const request = {
 };
 const modelText = JSON.stringify({
   paragraphs: [{ text: "Synthetic TypeScript experience", factIds: [documentId] }],
+});
+
+async function backgroundFixture() {
+  const f = await fixture();
+  const transport = vi.fn<typeof fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({
+          object: "response",
+          id: "resp_originalActor1",
+          created_at: 1790942460,
+          model: "gpt-6-luna",
+          background: true,
+          store: false,
+          previous_response_id: null,
+          conversation: null,
+          tools: [],
+          status: "completed",
+          output: [
+            {
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [{ type: "output_text", text: modelText }],
+            },
+          ],
+        }),
+      ),
+  );
+  const provider = new OpenAiLunaProvider({
+    enabled: () => true,
+    backgroundEnabled: () => true,
+    apiKey: () => "synthetic-key",
+    fetch: transport,
+  });
+  const foreground = vi.spyOn(provider, "completeForLifecycle");
+  let now = new Date("2026-10-02T12:01:00.000Z");
+  const gateway = new ModelGateway(provider, {
+    enabled: () => true,
+    clock: () => now,
+    timeoutMs: 100,
+  });
+  const capture = {
+    reserve: vi.fn<PostgresCoverLetterResponseStore["reserve"]>(async (ref) => {
+      expect(ref).toMatchObject({
+        id: otherId,
+        documentId,
+        purpose: "provider_dispatch",
+        requestSha256: f.input.request.sha256,
+      });
+      expect(f.current("dispatch")).toMatchObject({ state: "claimed" });
+      return { kind: "reserved" };
+    }),
+    recordCreation: vi.fn<PostgresCoverLetterResponseStore["recordCreation"]>(async (ref, ack) => {
+      expect(ref).toMatchObject({
+        id: otherId,
+        documentId,
+        purpose: "provider_dispatch",
+        requestSha256: f.input.request.sha256,
+      });
+      expect(ack).toEqual({
+        schemaVersion: 1,
+        responseId: "resp_originalActor1",
+        createdAt: 1790942460,
+      });
+      expect(f.current("result")).toMatchObject({ state: "pending" });
+      expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+    }),
+  };
+  const make = (responseCapture: typeof capture = capture) =>
+    createCoverLetterIsolatedProviderHandler({
+      objects: f.port,
+      work: f.work,
+      gateway,
+      enabled: () => true,
+      clock: () => now,
+      responseCapture,
+    });
+  return {
+    ...f,
+    transport,
+    provider,
+    foreground,
+    gateway,
+    capture,
+    make,
+    setNow: (next: Date) => {
+      now = next;
+    },
+  };
+}
+
+describe("isolated original background capture", () => {
+  it("acknowledges original capture before result write and settlement, with no duplicate dispatch", async () => {
+    const f = await backgroundFixture();
+    const handler = f.make();
+    await expect(handler(f.input)).resolves.toMatchObject({ outcome: "ready" });
+    await expect(handler(f.input)).resolves.toMatchObject({ outcome: "ready" });
+    expect(f.capture.reserve).toHaveBeenCalledTimes(1);
+    expect(f.capture.recordCreation).toHaveBeenCalledTimes(1);
+    expect(f.transport).toHaveBeenCalledTimes(1);
+    expect(f.foreground).not.toHaveBeenCalled();
+    expect(f.work.settleProviderDispatch).toHaveBeenCalledTimes(1);
+  });
+  it("an already reserved response cannot create, write or settle", async () => {
+    const f = await backgroundFixture();
+    f.capture.reserve.mockResolvedValue({ kind: "already_reserved" });
+    await expect(f.make()(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+    expect(f.transport).not.toHaveBeenCalled();
+    expect(f.capture.recordCreation).not.toHaveBeenCalled();
+    expect(f.current("result")).toMatchObject({ state: "pending" });
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+  });
+  it("lost creation-capture acknowledgement cannot write, settle or redispatch", async () => {
+    const f = await backgroundFixture();
+    f.capture.recordCreation.mockRejectedValue(Error("SyntheticLostOriginalCaptureACK"));
+    const handler = f.make();
+    await expect(handler(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+    await expect(handler(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+    expect(f.transport).toHaveBeenCalledTimes(1);
+    expect(f.current("result")).toMatchObject({ state: "pending" });
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+    expect(f.foreground).not.toHaveBeenCalled();
+  });
+  it("original local gateway refusal creates no inventory and uses existing non-dispatch closure", async () => {
+    const f = await backgroundFixture();
+    const disabled = new ModelGateway(f.provider, { enabled: () => false });
+    const handler = createCoverLetterIsolatedProviderHandler({
+      objects: f.port,
+      work: f.work,
+      gateway: disabled,
+      enabled: () => true,
+      clock: () => new Date("2026-10-02T12:01:00.000Z"),
+      responseCapture: f.capture,
+    });
+    await expect(handler(f.input)).resolves.toMatchObject({ outcome: "failed" });
+    expect(f.capture.reserve).not.toHaveBeenCalled();
+    expect(f.transport).not.toHaveBeenCalled();
+    expect(f.work.settleUndispatchedProviderDispatch).toHaveBeenCalledTimes(1);
+  });
+  it("consent expiry while reserving prevents model creation without settling work", async () => {
+    const f = await backgroundFixture();
+    f.capture.reserve.mockImplementation(async () => {
+      f.setNow(new Date("2026-10-02T12:15:00.001Z"));
+      return { kind: "reserved" };
+    });
+    await expect(f.make()(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+    expect(f.transport).not.toHaveBeenCalled();
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+  });
+  it("missing capture capability refuses before work claim", async () => {
+    const f = await backgroundFixture();
+    await expect(
+      f.make({ reserve: f.capture.reserve } as typeof f.capture)(f.input),
+    ).resolves.toMatchObject({ outcome: "failed" });
+    expect(f.work.claimProviderDispatch).not.toHaveBeenCalled();
+    expect(f.transport).not.toHaveBeenCalled();
+  });
 });
 interface Version {
   bytes: Uint8Array;

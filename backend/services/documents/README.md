@@ -139,6 +139,17 @@ no exposed cover-letter service or live model activation. Do not deploy these mi
 strict export consumers must support the additive `documents.coverLetters` metadata projection
 before it appears, and new runtime function/object permissions need deployment review.
 
+## Private original-response capture RPC
+
+The source-only private original-response capture RPC is separate from work control and
+maintenance. `cover-letter-response-capture-contract.ts` defines closed metadata-only v1
+reserve/record-creation envelopes; the provider-only client pins a numeric Lambda version,
+requires one SDK attempt, validates bounded canonical original receipts and defaults off.
+The Documents-only handler awaits owner transactions; lost acknowledgements remain unresolved.
+It exposes no content, inventory read, disposal, work settlement, renewal, generation or purge.
+Exact invoked-target matching is not caller authentication. Reviewed caller IAM, private runtime
+composition, maintained disposal/writer drain and deployed acceptance remain unfinished.
+
 ## Private saved cover-letter reads
 
 `src/cover-letter-read.ts` separates existing context, binding, preview and file behavior from
@@ -244,6 +255,16 @@ dependency-security regressions, Compose and scope. Separate live dependency aud
 failing without waiver. The synthetic database was removed; Docker Desktop/WSL are stopped.
 
 ## Durable original provider response inventory
+
+The opt-in isolated actor `responseCapture` port now connects the original grant to the
+gateway's separate background path. It requires strict reserve/capture capabilities before
+claiming; after the acknowledged dispatch-slot replacement it supplies exact original-reference
+closures. Consent/deadline and activation are rechecked after reservation before creation.
+Creation capture precedes result writes and original settlement; ambiguous capture cannot write,
+settle or redispatch. Existing foreground and original local non-dispatch closure behavior stay
+unchanged. The isolated actor still has no database bootstrap: authenticated private capture RPC
+and reviewed caller IAM are not yet composed. Response disposal and writer-drain/quiescence
+proof remain separate requirements, even after successful background generation.
 
 `0008_cover_letter_provider_responses` and the private-runtime-only
 `PostgresCoverLetterResponseStore` reserve identifier-only inventory against a running original

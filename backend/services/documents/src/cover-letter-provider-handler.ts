@@ -14,6 +14,7 @@ import {
   validateCoverLetterProviderReference,
 } from "./cover-letter-provider-contract.js";
 import type { CoverLetterProviderTransitionObjects } from "./cover-letter-provider-objects.js";
+import type { PostgresCoverLetterResponseStore } from "./cover-letter-response-store.js";
 import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 
 async function bounded<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -44,6 +45,8 @@ export function createCoverLetterIsolatedProviderHandler(options: {
   clock?: () => Date;
   /** Total local handling bound; cancellation is NOT proof of remote/provider quiescence. */
   timeoutMs?: number;
+  /** Explicit private background capture capability. No SQL/bootstrap in the isolated actor. */
+  responseCapture?: Pick<PostgresCoverLetterResponseStore, "reserve" | "recordCreation">;
   /** Private control RPC capability only. Never compose database access in this isolated actor. */
   work?: Pick<PostgresCoverLetterWorkStore, "claimProviderDispatch" | "settleProviderDispatch"> &
     Partial<
@@ -78,6 +81,9 @@ export function createCoverLetterIsolatedProviderHandler(options: {
       if (
         !enabled() ||
         !options.work ||
+        (options.responseCapture &&
+          (typeof options.responseCapture.reserve !== "function" ||
+            typeof options.responseCapture.recordCreation !== "function")) ||
         !validateCoverLetterProviderModel(options.gateway.identity)
       )
         return failed;
@@ -229,8 +235,26 @@ export function createCoverLetterIsolatedProviderHandler(options: {
       deadline.throwIfAborted();
       let completion: Awaited<ReturnType<ModelGateway["generateWithCompletion"]>>;
       try {
+        const responseCapture = options.responseCapture;
+        const generate = responseCapture
+          ? (
+              request: Parameters<ModelGateway["generateWithCompletion"]>[0],
+              disclosure: Parameters<ModelGateway["generateWithCompletion"]>[1],
+            ) =>
+              options.gateway.generateWithBackgroundCapture(request, disclosure, {
+                reserve: async () => {
+                  if (!enabled() || !fresh() || deadline.aborted)
+                    throw new CoverLetterProviderTransportError();
+                  const result = await responseCapture.reserve(reference);
+                  if (!enabled() || !fresh() || deadline.aborted)
+                    throw new CoverLetterProviderTransportError();
+                  return result.kind;
+                },
+                recordCreation: (response) => responseCapture.recordCreation(reference, response),
+              })
+          : options.gateway.generateWithCompletion.bind(options.gateway);
         completion = await bounded(
-          options.gateway.generateWithCompletion(
+          generate(
             {
               promptId: "cover_letter",
               promptVersion: request.promptVersion,
@@ -250,7 +274,7 @@ export function createCoverLetterIsolatedProviderHandler(options: {
       } catch {
         // A local deadline does not establish remote quiescence. A definitive gateway
         // refusal may fail the preparation, but it still never grants another dispatch.
-        return deadline.aborted ? inProgress : failed;
+        return options.responseCapture || deadline.aborted ? inProgress : failed;
       }
       const closeRejectedCompletion = async () => {
         if (!work.settleRejectedProviderDispatch || !enabled()) return inProgress;

@@ -1,3 +1,8 @@
+import {
+  type OpenAiBackgroundResponseReference,
+  validateOpenAiBackgroundResponseReference,
+} from "./openai-response-cleanup.js";
+
 /**
  * The only approved path to a model provider. It enforces, before any candidate data leaves the
  * platform: an explicit kill switch (default off), a just-in-time candidate disclosure approval for
@@ -39,6 +44,16 @@ export interface ModelProvider {
    * never falls back to another dispatch. Existing providers need not implement this port.
    */
   completeForLifecycle?(request: ProviderRequest): Promise<{ text: string }>;
+  /** Private original background execution only. Capture must commit before polling/content use. */
+  completeBackgroundForLifecycle?(
+    request: ProviderRequest,
+    capture: BackgroundResponseCapture,
+  ): Promise<{ text: string }>;
+}
+
+export interface BackgroundResponseCapture {
+  reserve(): Promise<"reserved" | "already_reserved">;
+  recordCreation(reference: OpenAiBackgroundResponseReference): Promise<void>;
 }
 
 export class ModelGatewayError extends Error {
@@ -158,10 +173,51 @@ export class ModelGateway {
     return this.generateLifecycle(request, disclosure, true);
   }
 
+  /** Opt-in private actor path. Never falls back to foreground generation. */
+  async generateWithBackgroundCapture(
+    request: GatewayRequest,
+    disclosure: DataDisclosureApproval | undefined,
+    capture: BackgroundResponseCapture,
+  ): Promise<ModelGatewayCompletion> {
+    let originalCapture: BackgroundResponseCapture;
+    try {
+      if (
+        !capture ||
+        typeof capture !== "object" ||
+        Array.isArray(capture) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(capture))
+      )
+        throw new ModelGatewayError("PROVIDER_FAILED");
+      const keys = Reflect.ownKeys(capture);
+      if (
+        keys.length !== 2 ||
+        !keys.every((key) => {
+          const descriptor = Object.getOwnPropertyDescriptor(capture, key);
+          return (
+            typeof key === "string" &&
+            ["reserve", "recordCreation"].includes(key) &&
+            descriptor?.enumerable === true &&
+            Object.hasOwn(descriptor, "value") &&
+            typeof descriptor.value === "function"
+          );
+        })
+      )
+        throw new ModelGatewayError("PROVIDER_FAILED");
+      originalCapture = {
+        reserve: capture.reserve.bind(capture),
+        recordCreation: capture.recordCreation.bind(capture),
+      };
+    } catch {
+      throw new ModelGatewayError("PROVIDER_FAILED");
+    }
+    return this.generateLifecycle(request, disclosure, true, originalCapture);
+  }
+
   private async generateLifecycle(
     request: GatewayRequest,
     disclosure: DataDisclosureApproval | undefined,
     nonDispatchReceipts: boolean,
+    backgroundCapture?: BackgroundResponseCapture,
   ): Promise<ModelGatewayCompletion> {
     const capture = () => ({
       model: structuredClone(this.provider.identity),
@@ -199,9 +255,18 @@ export class ModelGateway {
     if (request.system.length + request.user.length > this.maxInputChars) {
       return refused("INPUT_TOO_LARGE");
     }
+    const backgroundPort = backgroundCapture
+      ? this.provider.completeBackgroundForLifecycle
+      : undefined;
+    if (backgroundCapture && !backgroundPort) return refused("MODEL_DISABLED");
+    const admittedApprovalTime = backgroundCapture ? disclosure.approvedAt.getTime() : undefined;
     const provenance = earlyProvenance ?? capture();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let reservationAttempted = false;
+    let reservationAcknowledged = false;
+    let captureAttempted = false;
+    let captureAcknowledged = false;
     let text: string;
     try {
       const providerRequest = {
@@ -210,16 +275,52 @@ export class ModelGateway {
         maxOutputChars: this.maxOutputChars,
         signal: controller.signal,
       };
-      const result = await Promise.race([
-        this.provider.completeForLifecycle !== undefined
+      const dispatch = () => {
+        if (backgroundCapture) {
+          if (!backgroundPort || admittedApprovalTime === undefined)
+            throw new ModelGatewayError("PROVIDER_FAILED");
+          return backgroundPort.call(this.provider, providerRequest, {
+            reserve: async () => {
+              if (reservationAttempted) throw new ModelGatewayError("PROVIDER_FAILED");
+              reservationAttempted = true;
+              const kind = await backgroundCapture.reserve();
+              const currentAge = this.clock().getTime() - admittedApprovalTime;
+              if (!this.options.enabled()) throw new ModelGatewayError("MODEL_DISABLED");
+              if (
+                !Number.isFinite(currentAge) ||
+                currentAge < 0 ||
+                currentAge > this.disclosureMaxAgeMs
+              )
+                throw new ModelGatewayError("DISCLOSURE_STALE");
+              reservationAcknowledged = kind === "reserved";
+              return kind;
+            },
+            recordCreation: async (reference) => {
+              if (
+                !reservationAcknowledged ||
+                captureAttempted ||
+                !validateOpenAiBackgroundResponseReference(reference)
+              )
+                throw new ModelGatewayError("PROVIDER_FAILED");
+              captureAttempted = true;
+              await backgroundCapture.recordCreation(structuredClone(reference));
+              captureAcknowledged = true;
+            },
+          });
+        }
+        return this.provider.completeForLifecycle !== undefined
           ? this.provider.completeForLifecycle(providerRequest)
-          : this.provider.complete(providerRequest),
+          : this.provider.complete(providerRequest);
+      };
+      const result = await Promise.race([
+        dispatch(),
         new Promise<never>((_, reject) => {
           controller.signal.addEventListener("abort", () =>
             reject(new ModelGatewayError("PROVIDER_TIMEOUT")),
           );
         }),
       ]);
+      if (backgroundCapture && !captureAcknowledged) throw new ModelGatewayError("PROVIDER_FAILED");
       text = result.text;
     } catch (error) {
       if (error instanceof ModelGatewayError) throw error;

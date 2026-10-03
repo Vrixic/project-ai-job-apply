@@ -316,6 +316,35 @@ erases unfinished inventory. Gateway integration, maintained reconciliation, pri
 drain, runtime/IAM, live/provider/accountable proof and deployed acceptance remain unfinished.
 No public API/frontend, Terraform, cloud/model call, activation or deployment is included.
 
+## Source-only original background capture (2026-10-03)
+
+The owner directed engineering to proceed with recommendations. The private original actor now
+has an opt-in reserve/capture capability, selecting a separate model-gateway/provider port without
+foreground fallback. Existing foreground behavior stays unchanged. Gateway disclosure/input
+checks precede reservation; the actor rechecks original consent and its handling deadline after
+the committed reserve. One background create follows only its first winner. Exact response
+id/time capture must commit before polling or output acceptance, including immediate completion.
+GETs preserve the original id/time/model/background/no-store/no-tools/no-linkage binding and are
+paced, byte-bounded and capped. Character/JSON rejection still follows original completion.
+
+Unknown create/capture acknowledgements remain unresolved and never authorize redispatch,
+settlement or purge. This does not compose private capture RPC, caller IAM, maintained disposal,
+writer drain or platform quiescence. The protocol remains Proposed and default-off, with no live
+provider, public API/frontend, migration, Terraform, deployment or activation. Official background
+documentation and the selected GPT-6 Luna model page were inspected; offline tests do not prove
+account/model availability or exact retention behavior.
+
+## Source-only private original-response capture RPC (2026-10-03)
+
+Source-only D3-048 adds a separate private original-response capture v1 boundary: the isolated
+actor's exact-version single-attempt client invokes Documents-owned reserve/record-creation
+transactions with closed original work and response metadata only. Default-off client/handler
+tests cover bounded canonical acknowledgements, strict binding, SDK retry refusal and lost ACKs;
+connected SQL tests prove committed inventory, immutable replay and original quarantine drain.
+No read, disposal, settlement, renewal, generation or purge capability is supplied. Target matching
+is not caller authentication. Reviewed provider-role IAM, runtime composition, maintained disposal,
+writer drain and deployed acceptance remain prerequisites; this ADR remains Proposed.
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim
