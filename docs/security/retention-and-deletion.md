@@ -205,3 +205,11 @@ quiescence or purge certificate. Running writers remain pending even after respo
 No new TTL, cleanup of other provider copies, retention-policy approval or deployed behavior is
 claimed. Maintenance scheduling/runtime/IAM, successful-generation disposal and writer drain
 remain unfinished/default-off; no model/cloud call or activation occurs.
+
+Source-only D3-050 binds recovered-draft completion to the original request digest in the existing
+one-shot final-document admission boundary. It does not add a second claim/settlement authority.
+Malformed or late grants cannot start physical writes. Lost object-write acknowledgements may
+permit exact read-only metadata recovery, but leave original work running; deletion remains blocked
+until trusted original positive drain evidence exists. Lost settlement acknowledgements cannot
+be repaired by manufacturing settlement on replay. No TTL, purge guard, retention policy or
+deployed settings are changed; pending recovery defaults off.
