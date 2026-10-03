@@ -462,6 +462,18 @@ privacy approval, remote-provider quiescence or retention/export acceptance.
 
 ## Source-only cover-letter provider control
 
+D3-045 adds a separate default-off AI SDK response cleanup transport. An isolated future
+maintenance actor may pass only the original owned background response reference (id and creation
+time), never a candidate-supplied response id. The transport retrieves/cancels at the fixed OpenAI
+endpoint, validates terminal id/time/model/background/no-store/tool/linkage metadata, then requires
+an exact positive response deletion acknowledgement. Byte-bounded provider output/error bodies
+are not returned as content or diagnostics; receipts contain reference/status metadata only.
+The owner approved source-only temporary background polling-state retention, not live processing
+or a Zero Data Retention claim. This receipt cannot certify deletion of other provider copies,
+settle private writers or satisfy platform generation-quiescence. Durable immutable capture,
+authenticated runtime, disposal reconciliation and full private drain remain unfinished.
+
+
 The owner-approved private version-one RPC carries only document/grant IDs, request hashes,
 fixed provider purpose, original consent expiry and operational outcomes. Candidate owner selection,
 prompt/result text, object credentials and SQL diagnostics never enter its envelopes. The isolated

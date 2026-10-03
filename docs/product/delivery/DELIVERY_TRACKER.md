@@ -9,6 +9,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-045 source-only work has started after PR #515 merged as `804dc45`. The owner
+approved provider-stop/retention work and background temporary-response retention. The initial
+default-off known-response cleanup transport has 59 offline cases; all 170 AI SDK tests and
+package typecheck pass. Full maintained verification passes with 38 typecheck tasks, workspace
+tests, 23 builds and baseline-only lint; the separate live dependency audit still fails without
+waiver. Original gateway/durable-identity/private-drain composition remains pending. No
+activation, cloud/model call or deployment, and no phase exit
+is closed by a response deletion receipt. D1 and D3 remain In progress.
+
 PR #515 initial source `e5d4055` reports 70 blocking static findings, including five new
 dynamic-method test invocations in the fixed two-operation SQL matrix. The correction replaces
 those lookups with explicit operation calls while retaining every case, without suppression or

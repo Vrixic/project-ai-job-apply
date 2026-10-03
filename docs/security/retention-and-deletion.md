@@ -166,3 +166,14 @@ granting finalization. Quarantine may drain this original completed work; errors
 and lost acknowledgements cannot certify completion. SQL terminal state still does not authorize
 artifact purge or satisfy production privacy quiescence. Retention durations, deletion behavior,
 public policy and deployment are unchanged; runtime/IAM and transient-retention proof remain open.
+
+Source-only D3-045 adds known-reference background response stopping/disposal transport after
+the owner separately approved the temporary provider-state tradeoff. OpenAI documents roughly
+ten minutes of polling state even with `store:false`; this is not an exact retention deadline.
+Only positive original-id/time/model-bound terminal acknowledgement permits response DELETE,
+and only its exact positive deletion acknowledgement yields a metadata-only receipt. Missing
+ids, provider 404, malformed/lost/late acknowledgements and local deadlines remain unresolved.
+This port cannot create responses, settle private writers or release platform object/row purge.
+Durable original response/work capture and maintained disposal reconciliation remain unfinished;
+the source is uncomposed/default-off. Provider response deletion is not deletion of abuse-monitoring,
+legal/safety or caching copies. Public policy, real-data scope and deployed settings are unchanged.
