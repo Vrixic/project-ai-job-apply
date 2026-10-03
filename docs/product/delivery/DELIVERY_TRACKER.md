@@ -9,6 +9,25 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-042: owner-approved source-only private cleanup control now permanently fences
+unclaimed/not-yet-issued cover-letter phases using exact original references and Documents-owned
+binding. The separate default-off maintenance handler exposes only fixed ledger outcomes; provider
+control is unchanged. All 610 Documents unit tests and 82 opt-in real PostgreSQL ledger cases
+pass locally, including 16 new cleanup cases. Running work and reservation inventory remain pending;
+`ledger_terminal` never authorizes object purge or certifies remote quiescence. Full maintained
+verification passes: 38 typecheck tasks, workspace tests and 23 builds, unchanged generated
+contracts, formatting, baseline lint (15 warnings/58 infos), operational/security regressions,
+Compose and scope. Review remains; trusted failed-call stop evidence, retention and production
+maintenance authentication/IAM/bootstrap are still open. No public API/frontend, migration,
+operational guard/Terraform, AWS/model call, activation or deployment is included. D1/D3 remain
+In progress, including existing independent security/deployed/external exit gates.
+
+PR #512 merged as `e9c883a`. Exact merged-main quality, catalog, all 33 integration tasks and both
+container jobs pass; dependency audit and static analysis remain failing (65 findings, no waiver).
+Hosted Documents passes 50 cases and skips 66 opt-in ledger cases, distinct from local opt-in
+evidence. [Merged-main CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37102569354),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37102569313).
+
 On 2026-10-03 the owner approved D3-041's source-only publisher inventory correction and
 fail-closed regressions. The embedded runtime smoke now names all 57 current SQL migrations,
 cross-checks each owner's exact names against the validated restore manifest, and verifies every

@@ -190,6 +190,28 @@ independently grant dispatch. Private initialization and isolated replacement re
 capabilities. Broader deletion/runtime changes need their own tests and guarded rollout before use.
 The proposed protocol remains incomplete until every prerequisite above is proven.
 
+## Private cleanup admission fence (2026-10-03 source checkpoint)
+
+The owner approved source-only private cleanup control, with public APIs, frontend, Terraform
+and deployment excluded. A separate maintenance-only version-one handler consumes an exact
+existing work reference, resolves its owner in Documents and permanently fences unclaimed and
+not-yet-issued phases using the existing ledger. It defaults off, pins the numeric invoked target
+and does not expand the isolated provider's claim/positive-settlement capability. Production
+caller authentication, maintenance-only IAM and runtime composition are not implemented here.
+
+Cleanup never changes running work to settled and cannot create finalization authority. Concurrent
+claim/cancellation leaves either revoked admission or unresolved running work. Original positive
+settlement may drain old work after quarantine, but the final-phase fence still prevents new writes.
+Lost acknowledgements can replay the same non-renewable fence without extending consent/deadlines.
+Unknown or conflicting references fail closed without retroactively tracking the reservation.
+The receipt deliberately says `ledger_terminal`, not quiescent or deleted: ledger-only terminal
+state cannot satisfy the Workflows generation-quiescence port. SQL reservation/object inventory
+is retained; no object or row deletion is performed. Ambiguous running actors still need trusted
+positive stopping/completion evidence, and transient-retention enforcement remains unfinished.
+No new persisted state or migration is needed for this admission-fence step. Thirty-one offline
+boundary cases and 16 new real PostgreSQL cases pass, including quarantine, late settlement,
+lost acknowledgement and claim/cancellation races. This proposal remains incomplete/default-dark.
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim

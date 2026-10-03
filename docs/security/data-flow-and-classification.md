@@ -1,5 +1,18 @@
 # Data Flow and Classification
 
+## Source-only private cover-letter cleanup control
+
+The separate maintenance boundary carries only the original grant/document UUIDs, fixed purpose,
+request digest and fixed ledger outcome. Documents derives the owner from the exact persisted
+binding; no caller owner, candidate values, diagnostics, credentials or stopping assertions enter
+the envelope. Cleanup revokes unclaimed grants and permanently fences future phases, but cannot
+settle running work or access/delete objects. `ledger_terminal` is operational metadata, never
+remote-quiescence evidence for the candidate-rights purge gate. Reservation and object inventory
+remain retained. Unknown bindings and ambiguous work fail closed. The isolated provider's existing
+capabilities are unchanged. The source handler defaults off and requires exact numeric invoked
+target matching; reviewed maintenance-only IAM/authentication and production composition remain
+required. Offline boundary/real PostgreSQL synthetic evidence is not deployed privacy acceptance.
+
 The private Documents generation work ledger stores owner/document UUIDs, original request digest,
 consent expiry, fixed phase, admission/settlement times and state only. It stores no candidate fact,
 prompt/output, credential or provider body; references never include candidate text. These are

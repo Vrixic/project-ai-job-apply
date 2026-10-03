@@ -147,3 +147,14 @@ later restore replay fails closed on such orphaned rows until they are purged.
 
 Approval and tested evidence are recorded in the
 [Phase 0 security/privacy approval plan](security-privacy-approval-plan.md).
+
+## Source-only cover-letter cleanup checkpoint (2026-10-03)
+
+The approved private cleanup handler fences unclaimed and not-yet-issued generation authority
+using the existing non-renewable Documents ledger. It does not delete candidate artifacts, set
+a new retention duration, settle running effects or release the Workflows quiescence gate.
+Pending or ambiguous writers/provider work retain SQL reservation and object inventory even when
+admission expires or no object is visible. A `ledger_terminal` receipt is not trusted remote-stop
+proof. Production failed-call stopping evidence, transient-retention enforcement, authenticated
+maintenance composition and marker-creation IAM still require implementation and reviewed rollout.
+The source boundary stays default-off; existing account-deletion/public behavior is unchanged.
