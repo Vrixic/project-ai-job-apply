@@ -56,6 +56,35 @@ unchanged. Real adapter composition uses offline HTTP responses in tests, never 
 
 ## OpenAI development adapter
 
+`OpenAiLunaResponseCleanup` is a separate default-off source-only lifecycle capability for an
+already-owned, durably captured background response identity. It cannot create or generate a
+response. One bounded GET verifies the exact response id, original creation time, selected model,
+background execution, `store:false`, no tools and no previous-response linkage. Queued/running
+work gets at most one cancel request. Only an exact terminal response permits one DELETE, and
+only its exact `response.deleted` acknowledgement yields a metadata-only `response_deleted`
+receipt. HTTP 404, expired state, local abort, lost/late acknowledgements and malformed responses
+remain unresolved, without retry or a new model call. Response bodies are byte-bounded and never
+returned as draft content, logs or diagnostics. The local deadline is not provider stop proof.
+
+The owner approved the source-only background temporary-retention tradeoff on 2026-10-03.
+Official documentation describes roughly ten minutes of temporary polling state even with
+`store:false`; this is not a maximum retention guarantee or Zero Data Retention approval.
+Response deletion does not certify removal of abuse-monitoring or other provider copies.
+The existing foreground adapter remains unchanged. Original background creation through the
+gateway, durable immutable response-to-work binding, lost-creation-ACK handling, private-writer
+drain, maintained disposal reconciliation, authenticated runtime/IAM and accountable acceptance
+remain unfinished. Never compose this reference-only port from a candidate-supplied response id,
+or connect its receipt directly to platform deletion/quiescence. No activation/live calls occur.
+
+Offline evidence: 59 cleanup cases and all 170 AI SDK tests pass, with package typecheck.
+The complete repository verifier passes: 38 typecheck tasks, workspace tests, 23 builds,
+formatting and baseline-only lint (15 warnings/58 infos), operational/dependency-security
+regressions, Compose and scope. The separate live dependency audit still fails without waiver.
+No database, cloud or live provider behavior is claimed for this stateless transport layer.
+Documentation: [background lifecycle](https://developers.openai.com/api/docs/guides/background),
+[cancel](https://developers.openai.com/api/reference/typescript/resources/responses/methods/cancel),
+[delete](https://developers.openai.com/api/reference/resources/responses/methods/delete).
+
 `prepareCoverLetterPrompt` reconstructs the exact selected-evidence prompt without a gateway.
 `groundCoverLetterOutput` evaluates an already obtained structured value using the same evaluator
 as ordinary cover-letter and narrative generation. It requires no provider or renewed disclosure,

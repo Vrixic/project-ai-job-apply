@@ -73,6 +73,19 @@ evaluation/activation needs the remaining provider conditions and reviewed conse
 No restricted, never-infer, attestation, signature, CAPTCHA or MFA data is permitted in prompts.
 No other real candidate, staging, production, employer submission, or backend API change is approved.
 
+## Source-only background lifecycle scope (2026-10-03)
+
+The owner approved source-only provider-stop/retention work and then the temporary background
+response retention tradeoff. OpenAI's [background documentation](https://developers.openai.com/api/docs/guides/background)
+describes roughly ten minutes of temporary polling state even with `store:false`. This is not
+an exact maximum or Zero Data Retention. The initial known-reference stopping/disposal transport
+is default-off and cannot create a model response. The foreground adapter is unchanged.
+Immutable durable identity capture, gateway-controlled original dispatch, private-writer drain,
+disposal reconciliation, reviewed notice/consent, runtime/IAM and accountable activation evidence
+remain required. No real model call, new candidate scope, production, deployment or provider-wide
+deletion assurance is approved. Response deletion does not remove the previously recorded
+abuse-monitoring/legal/safety exceptions.
+
 ## Revalidation triggers
 
 Revisit this record when any of these change: an AI provider or model is chosen or replaced; a new ATS adapter

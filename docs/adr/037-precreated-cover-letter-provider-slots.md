@@ -270,6 +270,34 @@ the additive operation. Runtime/IAM, transient retention, trusted failed-call st
 and accountable production acceptance remain blocking. No migration, public API/frontend,
 guard/Terraform, cloud/model call, deployment or activation is included.
 
+## Background response stopping and disposal (2026-10-03 source work)
+
+The owner separately approved source-only background response lifecycle/retention work and its
+temporary provider-state tradeoff. OpenAI's current documentation describes cancellation only
+for background responses and roughly ten minutes of temporary polling state even with
+`store:false`. This does not establish a maximum retention period or Zero Data Retention.
+The initial known-reference cleanup transport verifies original response id/time/model and
+the background/no-store/no-tools/no-linked-response boundary before cancellation. Positive
+terminal status permits an exact response deletion request; a positive id-bound deletion
+acknowledgement produces a content-free receipt. This is not deletion of abuse-monitoring copies.
+Lost acknowledgements, missing/expired identities, HTTP errors and local deadlines remain
+unresolved. The adapter never creates or generates a response, retries, settles SQL work or
+authorizes platform purge. Its 59 new offline cases and all 170 AI SDK cases pass, as does the
+full maintained repository verifier. Complete private runtime composition remains pending;
+the separate live dependency audit still fails without waiver. Existing foreground generation
+remains unchanged.
+
+Original background creation through the gateway, immutable durable response/work capture,
+private-writer drain, disposal reconciliation and authenticated runtime/IAM remain required.
+In particular, an unacknowledged creation with no response identity cannot be cancelled by id,
+and cannot be treated as stopped merely because temporary polling state later expires.
+The existing generation-quiescence port must remain uncomposed until the full proof is available.
+No migration, guard/Terraform, cloud/model call, deployment or activation is included.
+
+References: [background mode](https://developers.openai.com/api/docs/guides/background),
+[cancel response](https://developers.openai.com/api/reference/typescript/resources/responses/methods/cancel),
+[delete response](https://developers.openai.com/api/reference/resources/responses/methods/delete).
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim
