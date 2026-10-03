@@ -19,6 +19,7 @@ import {
 } from "./cover-letter-provider-contract.js";
 import { CoverLetterProviderControlClient } from "./cover-letter-provider-control-client.js";
 import { createCoverLetterProviderControlHandler } from "./cover-letter-provider-control-handler.js";
+import { createCoverLetterProviderControlLambda } from "./cover-letter-provider-control-lambda.js";
 import { createCoverLetterIsolatedProviderHandler } from "./cover-letter-provider-handler.js";
 import type { CoverLetterProviderTransitionObjects } from "./cover-letter-provider-objects.js";
 import { type CoverLetterMetadata, PostgresCoverLetterStore } from "./cover-letter-store.js";
@@ -114,6 +115,104 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
   async function issue(purpose: CoverLetterWorkPurpose = "private_slots") {
     return work.issue({ ownerUserId, documentId, purpose, requestSha256, consentExpiresAt });
   }
+  it.each(["none", "concurrent", "claim_ack", "settle_ack", "disabled", "quarantined"] as const)(
+    "connects private Lambda bootstrap to original real-SQL controls: %s",
+    async (fault) => {
+      await issue("provider_dispatch");
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-control:3";
+      const env: Record<string, string | undefined> = {
+        COVER_LETTER_PROVIDER_CONTROL_ENABLED: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: "synthetic-control",
+        AWS_LAMBDA_FUNCTION_VERSION: "3",
+        AWS_SESSION_TOKEN: "synthetic-session-token",
+        DATABASE_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+      };
+      const resolve = vi.fn(async () => {
+        if (fault === "disabled") env.COVER_LETTER_PROVIDER_CONTROL_ENABLED = "false";
+        if (fault === "quarantined")
+          await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
+        return databaseUrl as string;
+      });
+      const claim = vi.fn<PostgresCoverLetterWorkStore["claimProviderDispatch"]>();
+      const settle = vi.fn<PostgresCoverLetterWorkStore["settleProviderDispatch"]>();
+      const createWork = vi.fn((_url: string, enabled: () => boolean) => {
+        const original = new PostgresCoverLetterWorkStore(sql, enabled);
+        claim.mockImplementation(async (binding) => {
+          const result = await original.claimProviderDispatch(binding);
+          if (fault === "claim_ack") throw Error("SyntheticLostOriginalClaimAck");
+          return result;
+        });
+        settle.mockImplementation(async (reference) => {
+          await original.settleProviderDispatch(reference);
+          if (fault === "settle_ack") throw Error("SyntheticLostOriginalSettlementAck");
+        });
+        return {
+          claimProviderDispatch: claim,
+          settleProviderDispatch: settle,
+          settleRejectedProviderDispatch: original.settleRejectedProviderDispatch.bind(original),
+          settleUndispatchedProviderDispatch:
+            original.settleUndispatchedProviderDispatch.bind(original),
+        };
+      });
+      const bootstrap = createCoverLetterProviderControlLambda({
+        environment: () => env,
+        resolveDatabaseUrl: resolve,
+        createWork,
+      });
+      const input = {
+        schemaVersion: 1,
+        action: "claim",
+        documentId,
+        requestSha256,
+        consentExpiresAt: consentExpiresAt.toISOString(),
+      };
+      const outputs = await Promise.all(
+        Array.from({ length: fault === "concurrent" ? 8 : 1 }, () =>
+          bootstrap(input, { invokedFunctionArn: target }),
+        ),
+      );
+      expect(resolve).toHaveBeenCalledOnce();
+      expect(createWork).toHaveBeenCalledTimes(fault === "disabled" ? 0 : 1);
+      const [phase] =
+        await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose = 'provider_dispatch'`;
+      if (fault === "disabled" || fault === "quarantined") {
+        expect(outputs.every((output) => output.outcome === "unavailable")).toBe(true);
+        expect(phase?.state).toBe("issued");
+        expect(settle).not.toHaveBeenCalled();
+        return;
+      }
+      expect(phase?.state).toBe("running");
+      await expect(
+        sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+      ).rejects.toMatchObject({ code: "55000" });
+      if (fault === "claim_ack") {
+        expect(outputs[0]?.outcome).toBe("unavailable");
+        expect((await bootstrap(input, { invokedFunctionArn: target })).outcome).toBe(
+          "unavailable",
+        );
+        expect(settle).not.toHaveBeenCalled();
+        return;
+      }
+      expect(outputs.filter((output) => output.outcome === "claimed")).toHaveLength(1);
+      const positive = outputs.find((output) => output.outcome === "claimed");
+      if (positive?.outcome !== "claimed") throw Error("SyntheticClaimMissing");
+      const finished = await bootstrap(
+        { schemaVersion: 1, action: "settle", documentId, reference: positive.reference },
+        { invokedFunctionArn: target },
+      );
+      expect(finished.outcome).toBe(fault === "settle_ack" ? "unavailable" : "settled");
+      const [terminal] =
+        await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose = 'provider_dispatch'`;
+      expect(terminal?.state).toBe("settled");
+      expect(settle).toHaveBeenCalledOnce();
+      expect((await bootstrap(input, { invokedFunctionArn: target })).outcome).toBe("unavailable");
+      expect(resolve).toHaveBeenCalledOnce();
+      expect(createWork).toHaveBeenCalledOnce();
+    },
+  );
   async function seedExpired(purpose: CoverLetterWorkPurpose) {
     const id = uuidv7();
     await sql`INSERT INTO documents.cover_letter_work_authorizations
@@ -123,6 +222,64 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
         clock_timestamp() - interval '1 minute')`;
     return { id, documentId, purpose, requestSha256 };
   }
+
+  it("executes default bootstrap composition through its real one-connection SQL pool", async () => {
+    await issue("provider_dispatch");
+    const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-control:3";
+    let database: postgres.Sql | undefined;
+    const create = vi.fn(
+      (url: string, options: { max: 1; idle_timeout: 20; connect_timeout: 10 }) => {
+        database = postgres(url, options);
+        return database;
+      },
+    );
+    try {
+      const control = createCoverLetterProviderControlLambda({
+        environment: () => ({
+          COVER_LETTER_PROVIDER_CONTROL_ENABLED: "true",
+          AWS_REGION: "us-east-2",
+          PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+          AWS_LAMBDA_FUNCTION_NAME: "synthetic-control",
+          AWS_LAMBDA_FUNCTION_VERSION: "3",
+          AWS_SESSION_TOKEN: "synthetic-session-token",
+          DATABASE_SECRET_ID:
+            "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+        }),
+        resolveDatabaseUrl: async () => databaseUrl as string,
+        createPool: create,
+      });
+      const input = {
+        schemaVersion: 1,
+        action: "claim",
+        documentId,
+        requestSha256,
+        consentExpiresAt: consentExpiresAt.toISOString(),
+      };
+      const claimed = await control(input, { invokedFunctionArn: target });
+      expect(claimed.outcome).toBe("claimed");
+      if (claimed.outcome !== "claimed") throw Error("SyntheticClaimMissing");
+      expect((await control(input, { invokedFunctionArn: target })).outcome).toBe("unavailable");
+      const settled = await control(
+        { schemaVersion: 1, action: "settle", documentId, reference: claimed.reference },
+        { invokedFunctionArn: target },
+      );
+      expect(settled.outcome).toBe("settled");
+      expect(create).toHaveBeenCalledOnce();
+      expect(create).toHaveBeenCalledWith(databaseUrl, {
+        max: 1,
+        idle_timeout: 20,
+        connect_timeout: 10,
+      });
+      if (!database) throw Error("SyntheticPoolMissing");
+      const [clock] = await database`SELECT clock_timestamp() AS at`;
+      expect(clock?.at).toBeInstanceOf(Date);
+      const [phase] =
+        await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose = 'provider_dispatch'`;
+      expect(phase?.state).toBe("settled");
+    } finally {
+      await database?.end();
+    }
+  });
 
   const cleanupArn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-cleanup:7";
   const cleanup = createCoverLetterCleanupHandler({

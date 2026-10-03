@@ -1,5 +1,16 @@
 # Data Flow and Classification
 
+## Source-only private work-control Lambda bootstrap (2026-10-03)
+
+Existing identifier-only provider RPC -> default-off gate and exact trusted numeric target ->
+qualified same-account managed-secret extension -> single-flight one-connection private SQL
+pool -> original Documents provider claim/settlement. Input validation precedes I/O; warm
+configuration cannot rebind target/secret identity. Secret values, session credentials and SQL
+diagnostics never enter RPC outputs or logs. Original effects are not locally raced or retried.
+No model/object/render/Invoke, issue/renewal, maintenance or purge port is supplied. Target
+matching is not caller authentication; reviewed IAM, artifact/build guards, deployment and
+activation remain unfinished. No live cloud/provider/model call is part of this source work.
+
 ## Source-only private recovered-draft admission (2026-10-03)
 
 Owned metadata and current evidence -> verified original provider-result read -> production

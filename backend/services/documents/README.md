@@ -151,6 +151,28 @@ before it appears, and new runtime function/object permissions need deployment r
 
 ## Private original-response capture RPC
 
+### Source-only provider-work control Lambda bootstrap
+
+`src/cover-letter-provider-control-lambda.ts` is a lazy private entrypoint for the existing
+provider-work RPC, not a public API or deployed artifact. The only enable spelling is
+`COVER_LETTER_PROVIDER_CONTROL_ENABLED=true`; missing/other values refuse before I/O. Trusted
+runtime region/account/function metadata must form an exact positive numeric-version ARN matching
+the invoked target. A qualified same-account `DATABASE_SECRET_ID` and runtime session context are
+required; embedded `DATABASE_URL` is refused. The existing Parameters/Secrets extension helper
+resolves the managed secret with one bounded read attempt. Single-flight setup creates one
+one-connection native PostgreSQL pool and supplies only the existing provider claim/settlement controls.
+The raw ledger retains native Date timestamp parsing; the ORM database helper must not be used
+because its driver replaces timestamp parsers with string passthrough.
+Warm target/secret rebinding, withdrawn activation and failed bootstrap refuse without ledger
+effects. Failed read-only initialization may retry later; original effect calls are never raced
+or retried here. Input and output retain the existing identifier-only RPC contracts.
+
+Exact target matching is not caller authentication. This source is not wired into the current
+parser/processor artifact builder. Reviewed exact-version caller IAM, private database/secret
+permissions, build/guard wiring, deployment and activation remain separate unfinished gates.
+There is no issue/renewal, maintenance, model, object, renderer, Invoke or purge capability, and
+no quiescence, provider deletion or phase-completion claim follows from bootstrap success.
+
 `cover-letter-response-reconciliation.ts` adds source-only private maintenance for FAILED or
 ABANDONED work, not successful/active generation. The default-off reconciler first commits the
 existing owner-scoped permanent admission fence, then reads exact original response inventory.

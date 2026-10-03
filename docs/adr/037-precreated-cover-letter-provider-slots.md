@@ -358,6 +358,20 @@ unfinished/default-off. The proposed protocol and deployment posture are unchang
 
 ## Alternatives
 
+### Source-only private provider-work Lambda bootstrap (2026-10-03)
+
+D3-051 adds a lazy default-off entrypoint for the existing provider-work RPC only. Exact trusted
+numeric-version target matching and same-account qualified secret/runtime-session validation
+precede secret/database I/O. Managed-secret resolution reuses the existing helper; a native
+one-connection PostgreSQL pool retains the ledger's Date timestamps instead of the ORM helper's
+string timestamp parsers. Single-flight initialization cannot rebind warm target/secret identity. Input
+snapshots and gate rechecks preserve the existing original control semantics. Read-only setup
+failure may retry, but original ledger effects are awaited without retry or timeout settlement.
+This is not caller authentication, quiescence proof, artifact publication or deployment.
+Reviewed exact-version caller IAM, database/secret permissions and build/guard wiring remain
+required and unimplemented here. Public APIs, provider/capture/maintenance contracts, retention
+policy and deployment posture are unchanged; no cloud/model call or activation occurs.
+
 ### Source-only recovered-draft admission hardening (2026-10-03)
 
 D3-050 retains `PostgresCoverLetterStore.complete` as the sole final-document claim and
