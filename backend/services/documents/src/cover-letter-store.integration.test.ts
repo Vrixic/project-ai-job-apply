@@ -439,120 +439,199 @@ const generation = {
     });
   });
 
-  it("finalizes an original provider result after expiry using real owned transactions and both production parsers", async () => {
-    await withOwner(async (owner) => {
-      const approved = new Date("2026-10-02T12:00:00.000Z");
-      const fact: GraphFact = {
-        id: factId,
-        kind: "skill",
-        key: "skill",
-        value: "TypeScript",
-        verification: "confirmed",
-        sensitivity: "standard",
-        source: { type: "user", reference: "synthetic" },
-        version: 1,
-      };
-      const evidence = {
-        facts: [fact],
-        job: { title: "Engineer", company: "Synthetic", description: "Build reliable systems." },
-      };
-      const bindings = coverLetterContext({ ...evidence, now: approved });
-      const identity = {
-        id: randomUUID(),
-        ownerUserId: owner,
-        applicationId: randomUUID(),
-        ...bindings,
-        noticeVersion: "openai-cover-letter.v1",
-        approvedAt: approved,
-        expiresAt: new Date(approved.getTime() + 15 * 60_000),
-      };
-      await store.reserve({ ...identity, jobRevision: bindings.jobContextHash });
-      const prompt = prepareCoverLetterPrompt({ ...evidence, now: approved });
-      if (!prompt) throw new Error("Synthetic prompt missing");
-      const request = encodeCoverLetterProviderObject("request", {
-        schemaVersion: 1,
-        documentId: identity.id,
-        noticeVersion: "openai-cover-letter.v1",
-        promptVersion: "1.0.0",
-        ...bindings,
-        approvedAt: approved.toISOString(),
-        expiresAt: identity.expiresAt.toISOString(),
-        ...prompt,
-        maxOutputChars: 8_000,
-      });
-      const hash = coverLetterProviderSha256(request);
-      const text = JSON.stringify({
-        paragraphs: [{ text: "I have experience with TypeScript.", factIds: [factId] }],
-      });
-      const slots = new Map<CoverLetterProviderSlot, Uint8Array>([
-        ["request", request],
-        [
-          "dispatch",
-          encodeCoverLetterProviderObject("dispatch", {
-            schemaVersion: 1,
-            documentId: identity.id,
-            requestSha256: hash,
-            state: "claimed",
-            dispatchedAt: approved.toISOString(),
-          }),
-        ],
-        [
-          "result",
-          encodeCoverLetterProviderObject("result", {
-            schemaVersion: 1,
-            documentId: identity.id,
-            requestSha256: hash,
-            state: "ready",
-            dispatchedAt: approved.toISOString(),
-            text,
-            model: COVER_LETTER_PROVIDER_MODEL,
-            outputCharacters: text.length,
-          }),
-        ],
-      ]);
-      const readResult = vi.fn(async (id: string, slot: CoverLetterProviderSlot) => {
-        expect(id).toBe(identity.id);
-        const bytes = slots.get(slot);
-        if (!bytes) throw new CoverLetterIntegrityError();
-        return bytes;
-      });
-      const reader = new CoverLetterProviderRecovery({
-        find: async (_id, slot) => {
+  it.each([
+    "none",
+    "claim_ack",
+    "hash",
+    "accessor",
+    "extra",
+    "late_claim",
+    "write_ack",
+    "settle_ack",
+  ] as const)(
+    "recovers saved output with real final admission and positive settlement: %s",
+    async (fault) => {
+      await withOwner(async (owner) => {
+        const approved = new Date();
+        const fact: GraphFact = {
+          id: factId,
+          kind: "skill",
+          key: "skill",
+          value: "TypeScript",
+          verification: "confirmed",
+          sensitivity: "standard",
+          source: { type: "user", reference: "synthetic" },
+          version: 1,
+        };
+        const evidence = {
+          facts: [fact],
+          job: { title: "Engineer", company: "Synthetic", description: "Build reliable systems." },
+        };
+        const bindings = coverLetterContext({ ...evidence, now: approved });
+        const identity = {
+          id: randomUUID(),
+          ownerUserId: owner,
+          applicationId: randomUUID(),
+          ...bindings,
+          noticeVersion: "openai-cover-letter.v1",
+          approvedAt: approved,
+          expiresAt: new Date(approved.getTime() + 15 * 60_000),
+        };
+        await store.reserve({ ...identity, jobRevision: bindings.jobContextHash });
+        const prompt = prepareCoverLetterPrompt({ ...evidence, now: approved });
+        if (!prompt) throw new Error("Synthetic prompt missing");
+        const request = encodeCoverLetterProviderObject("request", {
+          schemaVersion: 1,
+          documentId: identity.id,
+          noticeVersion: "openai-cover-letter.v1",
+          promptVersion: "1.0.0",
+          ...bindings,
+          approvedAt: approved.toISOString(),
+          expiresAt: identity.expiresAt.toISOString(),
+          ...prompt,
+          maxOutputChars: 8_000,
+        });
+        const hash = coverLetterProviderSha256(request);
+        // Offline fixture positively completes its original provider phase; no model call.
+        const providerWork = await work.issue({
+          documentId: identity.id,
+          ownerUserId: owner,
+          purpose: "provider_dispatch",
+          requestSha256: fault === "hash" ? "0".repeat(64) : hash,
+          consentExpiresAt: identity.expiresAt,
+        });
+        expect((await work.claim(providerWork.authorization)).kind).toBe("claimed");
+        await work.recordSettled(providerWork.authorization);
+        const settle = vi.fn(async (ref: Parameters<typeof work.recordSettled>[0]) => {
+          await work.recordSettled(ref);
+          if (fault === "settle_ack") throw Error("SyntheticLostSettlementAck");
+        });
+        const claim = vi.fn(async (binding: Parameters<typeof work.claimFinalDocument>[0]) => {
+          const result = await work.claimFinalDocument(binding);
+          if (fault === "claim_ack") throw Error("SyntheticLostFinalClaimAck");
+          if (result.kind === "claimed" && fault === "accessor")
+            Object.defineProperty(result.reference, "id", {
+              enumerable: true,
+              get: () => {
+                throw Error("SyntheticAccessorMustNotRun");
+              },
+            });
+          if (result.kind === "claimed" && fault === "extra")
+            Object.defineProperty(result.reference, "extra", { enumerable: true, value: true });
+          return result;
+        });
+        const physicalWrite = vi.fn<CoverLetterObjectStore["putIfAbsent"]>(async (value) => {
+          const result = await putIfAbsent(value);
+          if (fault === "write_ack") throw Error("SyntheticLostFinalObjectAck");
+          return result;
+        });
+        const recoveryStore = new PostgresCoverLetterStore(
+          client,
+          { putIfAbsent: physicalWrite, read, find: findObject },
+          { claimFinalDocument: claim, recordSettled: settle },
+        );
+        const text = JSON.stringify({
+          paragraphs: [{ text: "I have experience with TypeScript.", factIds: [factId] }],
+        });
+        const slots = new Map<CoverLetterProviderSlot, Uint8Array>([
+          ["request", request],
+          [
+            "dispatch",
+            encodeCoverLetterProviderObject("dispatch", {
+              schemaVersion: 1,
+              documentId: identity.id,
+              requestSha256: hash,
+              state: "claimed",
+              dispatchedAt: approved.toISOString(),
+            }),
+          ],
+          [
+            "result",
+            encodeCoverLetterProviderObject("result", {
+              schemaVersion: 1,
+              documentId: identity.id,
+              requestSha256: hash,
+              state: "ready",
+              dispatchedAt: approved.toISOString(),
+              text,
+              model: COVER_LETTER_PROVIDER_MODEL,
+              outputCharacters: text.length,
+            }),
+          ],
+        ]);
+        const readResult = vi.fn(async (id: string, slot: CoverLetterProviderSlot) => {
+          expect(id).toBe(identity.id);
           const bytes = slots.get(slot);
-          return bytes
-            ? {
-                objectVersion: "synthetic-provider-version",
-                etag: '"synthetic-etag"',
-                sha256: coverLetterProviderSha256(bytes),
-                sizeBytes: bytes.byteLength,
-              }
+          if (!bytes) throw new CoverLetterIntegrityError();
+          return bytes;
+        });
+        const reader = new CoverLetterProviderRecovery({
+          find: async (_id, slot) => {
+            const bytes = slots.get(slot);
+            return bytes
+              ? {
+                  objectVersion: "synthetic-provider-version",
+                  etag: '"synthetic-etag"',
+                  sha256: coverLetterProviderSha256(bytes),
+                  sizeBytes: bytes.byteLength,
+                }
+              : undefined;
+          },
+          read: readResult,
+        });
+        const service = new CoverLetterDraftRecoveryService(
+          recoveryStore,
+          { load: async () => evidence },
+          reader,
+          () => new Date(approved.getTime() + 60 * 60_000),
+          () => true,
+        );
+        const before = putIfAbsent.mock.calls.length;
+        const deadline =
+          fault === "late_claim"
+            ? vi.spyOn(AbortSignal, "timeout").mockImplementationOnce(() => AbortSignal.abort())
             : undefined;
-        },
-        read: readResult,
+        let result: Awaited<ReturnType<typeof service.recover>>;
+        try {
+          result = await service.recover(identity);
+        } finally {
+          deadline?.mockRestore();
+        }
+        if (fault !== "none") {
+          expect(result.kind).toBe("in_progress");
+          const noObject = ["claim_ack", "hash", "accessor", "extra", "late_claim"].includes(fault);
+          const replay = await service.recover(identity);
+          expect(replay.kind).toBe(noObject ? "in_progress" : "ready");
+          expect(physicalWrite).toHaveBeenCalledTimes(noObject ? 0 : 1);
+          expect(settle).toHaveBeenCalledTimes(fault === "settle_ack" ? 1 : 0);
+          const [phase] =
+            await workClient`SELECT state FROM documents.cover_letter_work_authorizations
+          WHERE document_id = ${identity.id} AND purpose = 'final_document'`;
+          expect(phase?.state).toBe(fault === "settle_ack" ? "settled" : "running");
+          if (fault !== "settle_ack")
+            await expect(
+              client`DELETE FROM documents.cover_letters WHERE id = ${identity.id}`,
+            ).rejects.toMatchObject({ code: "55000" });
+          return;
+        }
+        expect(result.kind).toBe("ready");
+        if (result.kind !== "ready") throw new Error("Synthetic recovery did not complete");
+        expect(await service.recover(identity)).toEqual(result);
+        expect(readResult).toHaveBeenCalledTimes(3);
+        expect(putIfAbsent.mock.calls.length - before).toBe(1);
+        expect(claim).toHaveBeenCalledOnce();
+        expect(settle).toHaveBeenCalledOnce();
+        const saved = await store.read(owner, identity.applicationId, result.letter.contentSha256);
+        expect(saved?.paragraphs).toEqual([
+          { text: "I have experience with TypeScript.", factIds: [factId] },
+        ]);
+        await client`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+        await expect(service.recover(identity)).rejects.toMatchObject({ code: "42501" });
+        expect(readResult).toHaveBeenCalledTimes(3);
+        expect(putIfAbsent.mock.calls.length - before).toBe(1);
       });
-      const service = new CoverLetterDraftRecoveryService(
-        store,
-        { load: async () => evidence },
-        reader,
-        () => new Date(approved.getTime() + 60 * 60_000),
-      );
-      const before = putIfAbsent.mock.calls.length;
-      const result = await service.recover(identity);
-      expect(result.kind).toBe("ready");
-      if (result.kind !== "ready") throw new Error("Synthetic recovery did not complete");
-      expect(await service.recover(identity)).toEqual(result);
-      expect(readResult).toHaveBeenCalledTimes(3);
-      expect(putIfAbsent.mock.calls.length - before).toBe(1);
-      const saved = await store.read(owner, identity.applicationId, result.letter.contentSha256);
-      expect(saved?.paragraphs).toEqual([
-        { text: "I have experience with TypeScript.", factIds: [factId] },
-      ]);
-      await client`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
-      await expect(service.recover(identity)).rejects.toMatchObject({ code: "42501" });
-      expect(readResult).toHaveBeenCalledTimes(3);
-      expect(putIfAbsent.mock.calls.length - before).toBe(1);
-    });
-  });
+    },
+  );
 
   it.each([undefined, "request", "result", "dispatch"] as const)(
     "first reservation alone claims slot authority; lost %s acknowledgement stays unresolved",
@@ -877,6 +956,7 @@ const generation = {
             source,
             new CoverLetterProviderRecovery(readers),
             () => now,
+            () => true,
           ),
           () => true,
           () => now,

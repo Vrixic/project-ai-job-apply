@@ -64,6 +64,8 @@ function setup(output = text) {
   let heldObject: CoverLetterDocument | null = null;
   let quarantine = false;
   let loseAck = false;
+  let claimed = false;
+  const physicalWrite = vi.fn();
   const store: CoverLetterDraftRecoveryStore = {
     generationMetadata: async (input) => {
       if (quarantine) throw new Error("Synthetic quarantine");
@@ -81,6 +83,9 @@ function setup(output = text) {
     complete: async (document) => {
       if (quarantine) throw new Error("Synthetic quarantine");
       if (!metadata) throw new CoverLetterIntegrityError();
+      if (claimed) throw new CoverLetterIntegrityError();
+      claimed = true;
+      physicalWrite();
       if (heldObject && JSON.stringify(heldObject) !== JSON.stringify(document))
         throw new CoverLetterIntegrityError();
       heldObject = structuredClone(document);
@@ -157,20 +162,34 @@ function setup(output = text) {
   const recover = vi.spyOn(provider, "recover");
   const source = { load: vi.fn(async () => evidence) };
   let clock = new Date(now.getTime() + 60 * 60_000);
-  const service = new CoverLetterDraftRecoveryService(store, source, provider, () => clock);
+  let enabled = true;
+  const service = new CoverLetterDraftRecoveryService(
+    store,
+    source,
+    provider,
+    () => clock,
+    () => enabled,
+  );
   return {
     run: () => service.recover(identity),
+    runDefaultOff: () =>
+      new CoverLetterDraftRecoveryService(store, source, provider, () => clock).recover(identity),
     identity,
     evidence,
     slots,
     find,
     read,
     complete,
+    physicalWrite,
     lookup,
     recover,
     originalRecover,
     source,
     store,
+    requestSha256: hash,
+    disable: () => {
+      enabled = false;
+    },
     saved: () => saved,
     missing: () => {
       metadata = null;
@@ -188,6 +207,12 @@ function setup(output = text) {
 }
 
 describe("private cover-letter partial-result finalization", () => {
+  it("cannot finalize a pending draft with recovery disabled by default", async () => {
+    const f = setup();
+    await expect(f.runDefaultOff()).resolves.toEqual({ kind: "in_progress" });
+    expect(f.complete).not.toHaveBeenCalled();
+    expect(f.recover).not.toHaveBeenCalled();
+  });
   it("grounds and parser-verifies both formats after expiry, then recovers the immutable final draft", async () => {
     const f = setup();
     const result = await f.run();
@@ -198,12 +223,40 @@ describe("private cover-letter partial-result finalization", () => {
     expect(JSON.stringify(result)).not.toContain(text);
     expect(f.saved()?.paragraphs).toEqual([{ text, factIds: [fact.id] }]);
     expect(f.complete).toHaveBeenCalledTimes(1);
+    expect(f.complete).toHaveBeenCalledWith(expect.any(Object), { requestSha256: f.requestSha256 });
     expect(f.lookup.mock.invocationCallOrder[0]).toBeLessThan(
       f.find.mock.invocationCallOrder[0] ?? 0,
     );
     expect(await f.run()).toEqual(result);
     expect(f.complete).toHaveBeenCalledTimes(1);
     expect(f.recover).toHaveBeenCalledTimes(1);
+    await expect(f.runDefaultOff()).resolves.toEqual(result);
+    expect(f.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses activation withdrawn after the original saved result is read", async () => {
+    const f = setup();
+    f.recover.mockImplementation(async (...args) => {
+      const result = await f.originalRecover(...args);
+      f.disable();
+      return result;
+    });
+    expect(await f.run()).toEqual({ kind: "in_progress" });
+    expect(f.complete).not.toHaveBeenCalled();
+  });
+
+  it("binds final persistence to the original snapshot despite input mutation during recovery", async () => {
+    const f = setup();
+    f.recover.mockImplementation(async (...args) => {
+      const result = await f.originalRecover(...args);
+      f.identity.id = "019a4000-0000-7000-8000-000000000004";
+      f.evidence.job.description = "Synthetic changed job";
+      return result;
+    });
+    expect((await f.run()).kind).toBe("ready");
+    expect(f.complete).toHaveBeenCalledWith(expect.objectContaining({ id }), {
+      requestSha256: f.requestSha256,
+    });
   });
 
   it("never reserves a new identity when the owned reservation is missing", async () => {
@@ -272,17 +325,19 @@ describe("private cover-letter partial-result finalization", () => {
       f.quarantine();
       return result;
     });
-    await expect(f.run()).rejects.toThrow("Synthetic quarantine");
+    expect(await f.run()).toEqual({ kind: "in_progress" });
     expect(f.saved()).toBeNull();
   });
 
-  it("reuses the same original saved result and immutable bytes after a lost final-write response", async () => {
+  it("retains the same original saved result without repeating writes after a lost final-write response", async () => {
     const f = setup();
     f.loseAck();
-    await expect(f.run()).rejects.toThrow("Synthetic lost completion acknowledgement");
+    expect(await f.run()).toEqual({ kind: "in_progress" });
     expect(f.saved()).toBeNull();
-    expect((await f.run()).kind).toBe("ready");
+    expect((await f.run()).kind).toBe("in_progress");
+    // Completion may perform a read-only replay; physical writes must remain one-shot.
     expect(f.complete).toHaveBeenCalledTimes(2);
+    expect(f.physicalWrite).toHaveBeenCalledTimes(1);
     expect(f.recover).toHaveBeenCalledTimes(2);
   });
 

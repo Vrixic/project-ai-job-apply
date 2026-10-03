@@ -98,6 +98,16 @@ finish after consent expiry; each immutable completion independently checks the 
 Seventeen new service cases cover both parser checks, immutable retry/lost completion responses,
 context changes and quarantine. Documents passes 333 unit and 36 real PostgreSQL cases, including
 two new owned metadata/finalization cases with offline object ports, not live S3/KMS/provider.
+
+Private pending-draft recovery defaults off. Its explicit private enablement does not enable any
+public route, provider dispatch or deployment. It reconstructs the original request digest and
+passes it to final persistence. `PostgresCoverLetterStore.complete` remains the sole final-write
+admission and settlement owner: no second service-level claim is made. Claimed references must
+be exact descriptor-data objects bound to this document, final purpose and original digest.
+A local 60-second admission deadline prevents starting a new object write after a late claim
+acknowledgement; it never settles or cancels running work. Original positive creation plus exact
+pinned read are required for settlement. Lost acknowledgements remain unresolved; read-only
+immutable recovery may repair ready metadata but cannot repeat writes or settle uncertain work.
 `src/cover-letter-provider-invoke.ts` now supplies a default-off private SDK adapter pinned to an
 exact numeric Lambda version. It snapshots strict identifier/reference inputs, requires the SDK's
 single-attempt policy, invokes synchronously without logs, and admits only bounded strict original

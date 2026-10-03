@@ -1,5 +1,16 @@
 # Data Flow and Classification
 
+## Source-only private recovered-draft admission (2026-10-03)
+
+Owned metadata and current evidence -> verified original provider-result read -> production
+grounding/render checks -> Documents completion with reconstructed original request digest ->
+existing one-shot final-document claim -> immutable object write and exact pinned read -> original
+positive settlement. Recovery cannot issue a second grant or independently settle work. Pending
+recovery defaults off; ready replay remains read-only. Exact descriptor-data references, document,
+purpose and digest matching, and a local pre-write admission deadline fail closed. Lost ACKs,
+late claims and read-only repair do not manufacture settlement or writer quiescence. This changes
+private source only, not public routes, cloud composition, retention approval or activation.
+
 ## Source-only failed/abandoned response reconciliation (2026-10-03)
 
 Trusted maintenance caller -> Documents-owned permanent admission fence -> exact original

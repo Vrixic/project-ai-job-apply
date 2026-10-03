@@ -358,6 +358,18 @@ unfinished/default-off. The proposed protocol and deployment posture are unchang
 
 ## Alternatives
 
+### Source-only recovered-draft admission hardening (2026-10-03)
+
+D3-050 retains `PostgresCoverLetterStore.complete` as the sole final-document claim and
+positive original settlement owner. The private recovery service passes the reconstructed
+original request digest, rather than claiming twice. Pending recovery is explicitly default-off;
+ready replay remains read-only. Exact data-only grant references must match the document, purpose
+and request digest. A local admission deadline cannot permit a new object write after a late
+claim acknowledgement and cannot certify settlement. Only original positive object creation
+plus exact pinned read can settle. Read-only recovery after lost object/settlement ACK may
+complete metadata without retrying writes or settling uncertain work. This is private source
+hardening, not activation, runtime/IAM enforcement or provider-wide quiescence evidence.
+
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim
 and positive provider settlement only, with strict identifier/reference-only version-one envelopes,
 fixed-purpose references and original grant/hash-bound acknowledgements. The isolated client pins
