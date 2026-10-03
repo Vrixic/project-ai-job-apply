@@ -354,8 +354,11 @@ foreach ($required in @(
     'profile,jobs,documents,matching,billing,trust,applications',
     'matching:["0001_saved_jobs.sql","0002_candidate_rights.sql","0003_private_saved_page_captures.sql"]',
     'billing:["0001_entitlement_projection.sql","0002_candidate_rights.sql"]',
-    'profile:["0001_foundation.sql","0002_serverless_outbox.sql","0003_retire_legacy_dispatch.sql","0004_profile_fact_versions.sql","0005_resume_fact_proposals.sql","0006_candidate_rights.sql","0007_candidate_rights_export_null_omission.sql","0008_ugc_contribution_consents.sql","0009_ugc_contribution_consent_candidate_rights.sql","0010_restricted_answer_vault.sql"]',
-    'trust:["0001_ugc_trust_foundation.sql","0002_candidate_rights.sql","0003_decision_signals.sql","0004_accepted_independent_evidence.sql","0005_development_test_removal.sql"],applications:["0001_applications_foundation.sql","0002_candidate_rights.sql","0003_manual_submission.sql"]',
+    'profile:["0001_foundation.sql","0002_serverless_outbox.sql","0003_retire_legacy_dispatch.sql","0004_profile_fact_versions.sql","0005_resume_fact_proposals.sql","0006_candidate_rights.sql","0007_candidate_rights_export_null_omission.sql","0008_ugc_contribution_consents.sql","0009_ugc_contribution_consent_candidate_rights.sql","0010_restricted_answer_vault.sql","0011_active_candidate_lease.sql"]',
+    'documents:["0001_resume_intake.sql","0002_resume_processing.sql","0003_candidate_rights.sql","0004_resume_deletion.sql","0005_resume_purge.sql","0006_cover_letters.sql","0007_cover_letter_work_authorizations.sql"]',
+    'trust:["0001_ugc_trust_foundation.sql","0002_candidate_rights.sql","0003_decision_signals.sql","0004_accepted_independent_evidence.sql","0005_development_test_removal.sql"],applications:["0001_applications_foundation.sql","0002_candidate_rights.sql","0003_manual_submission.sql","0004_packet_preparation.sql","0005_preparation_dispatch.sql"]',
+    'contributor.migrations.map(x=>`${x.version}.sql`).sort().join(",")!==names.join(",")',
+    'createHash("sha256").update(bytes).digest("hex")!==migration.checksum',
     'manifest.manifestId!=="d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1"',
     'manifest.contributors.length!==7',
     'manifest.contributors.flatMap(x=>x.schemas).length!==11',
@@ -465,4 +468,6 @@ if ($dockerfile.Contains('gcr.io/distroless') -or $dockerfile.Contains('FROM scr
 if ($dockerfile.Contains('apk upgrade')) {
   throw "The migration runtime must use checksum-pinned security packages instead of a moving upgrade."
 }
+& node --test (Join-Path $PSScriptRoot "development-migration-runtime-smoke.test.mjs")
+if ($LASTEXITCODE -ne 0) { throw "The exact production migration runtime smoke regressions failed." }
 Write-Host "Development migration image publisher OCI guard tests passed."
