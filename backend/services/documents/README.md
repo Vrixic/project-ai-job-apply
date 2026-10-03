@@ -199,6 +199,21 @@ still fails on existing mobile-only node-forge/braces advisories; no waiver or d
 
 ## Internal rejected-provider completion control
 
+The private v1 control also accepts additive `settle_undispatched`, only for the original
+gateway-local non-dispatch receipt after acknowledged dispatch-slot replacement. The isolated
+actor validates original prompt/model provenance and local refusal code, then sends only its
+exact existing grant reference. Documents fences future phases before settlement; no model,
+result write or finalization follows. Older capability compositions fail closed; control must
+be upgraded before the actor. Provider-thrown errors, lost acknowledgements, aborts and timeouts
+remain unresolved. This reuses existing persisted states without migrations or public changes,
+and never certifies production quiescence or authorizes object/row purge.
+The current non-dispatch checkpoint passes 660 Documents unit cases and 106 real PostgreSQL
+ledger cases. Final-source SQL rerun includes private control round-trip, quarantine, exact
+binding/refused-state checks, immutable replay and committed-but-lost closure acknowledgement.
+Object/model/Lambda ports are synthetic. Full maintained verification passes, including all
+38 typecheck tasks and 23 builds; the separate live dependency audit remains failing without
+waiver. Disposable fixtures are removed and Docker Desktop/WSL stopped; shared volumes retained.
+
 The source-only private provider-control v1 adds `settle_rejected` to existing claim/settle
 operations. Only the trusted original isolated actor, after original provider fulfillment and
 validated gateway provenance, may invoke it for JSON/output rejection. Its envelope contains

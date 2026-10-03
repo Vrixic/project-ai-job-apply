@@ -58,6 +58,7 @@ function fixture() {
     claimProviderDispatch: vi.fn(async () => ({ kind: "claimed" as const, reference })),
     settleProviderDispatch: vi.fn(async () => undefined),
     settleRejectedProviderDispatch: vi.fn(async () => undefined),
+    settleUndispatchedProviderDispatch: vi.fn(async () => undefined),
   };
   const handler = createCoverLetterProviderControlHandler({
     functionArn: arn,
@@ -92,6 +93,55 @@ function fixture() {
 }
 
 describe("approved private provider-control contract and source-only transport", () => {
+  it("routes exact original non-dispatch cleanup without ordinary settlement", async () => {
+    const f = fixture();
+    await f.client.settleUndispatchedProviderDispatch(reference);
+    expect(f.work.settleUndispatchedProviderDispatch).toHaveBeenCalledWith(reference);
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+    expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+    expect(f.send).toHaveBeenCalledOnce();
+    expect(validateProviderControlInput({ ...settle, action: "settle_undispatched" })).toBe(true);
+    expect(validateProviderControlOutput({ ...settled, action: "settle_undispatched" })).toBe(true);
+  });
+  it("older handlers refuse non-dispatch without touching any existing settlement port", async () => {
+    const f = fixture();
+    const handler = createCoverLetterProviderControlHandler({
+      functionArn: arn,
+      enabled: () => true,
+      work: {
+        claimProviderDispatch: f.work.claimProviderDispatch,
+        settleProviderDispatch: f.work.settleProviderDispatch,
+      },
+    });
+    expect(
+      await handler({ ...settle, action: "settle_undispatched" }, { invokedFunctionArn: arn }),
+    ).toMatchObject({ outcome: "unavailable", action: "settle_undispatched" });
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+  });
+  it.each(["action", "id", "hash", "payload"])(
+    "refuses mismatched %s non-dispatch acknowledgements",
+    async (kind) => {
+      const f = fixture();
+      const output = { ...settled, action: "settle_undispatched", reference: { ...reference } };
+      if (kind === "action") output.action = "settle_rejected";
+      if (kind === "id") output.reference.id = documentId;
+      if (kind === "hash") output.reference.requestSha256 = "f".repeat(64);
+      if (kind === "payload") Object.assign(output, { text: "synthetic" });
+      f.send.mockResolvedValue({ StatusCode: 200, ExecutedVersion: "7", Payload: wire(output) });
+      await expect(f.client.settleUndispatchedProviderDispatch(reference)).rejects.toThrow(
+        /^CoverLetterProviderControlUnavailable$/u,
+      );
+      expect(f.send).toHaveBeenCalledOnce();
+    },
+  );
+  it("never retries a lost original non-dispatch acknowledgement", async () => {
+    const f = fixture();
+    f.send.mockRejectedValue(Error("SyntheticLostACK"));
+    await expect(f.client.settleUndispatchedProviderDispatch(reference)).rejects.toThrow(
+      /^CoverLetterProviderControlUnavailable$/u,
+    );
+    expect(f.send).toHaveBeenCalledOnce();
+  });
   it("a timed-out rejected cleanup RPC never acknowledges its later response or retries", async () => {
     const f = fixture();
     let finish: (value: {

@@ -142,93 +142,96 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
       { invokedFunctionArn: cleanupArn },
     );
   }
-  it.each(["active", "quarantined"])(
-    "original rejected completion drains %s provider work only after permanently fencing phases",
-    async (state) => {
-      await settledSlots();
-      const original = (await issue("provider_dispatch")).authorization;
-      await work.claim(original);
-      if (state === "quarantined")
-        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
-      await work.settleRejectedProviderDispatch(cleanupReference(original));
-      const rows =
-        await sql`SELECT id, purpose, state, terminal_at FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
-      await work.settleRejectedProviderDispatch(cleanupReference(original));
-      expect(
-        await sql`SELECT id, purpose, state, terminal_at FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
-      ).toEqual(rows);
-      expect(rows.find((row) => row.purpose === "provider_dispatch")).toMatchObject({
-        id: original.id,
-        state: "settled",
-      });
-      expect(rows.find((row) => row.purpose === "final_document")).toMatchObject({
-        state: "revoked",
-      });
-      expect(await work.readDrainState(ownerUserId, documentId)).toBe("settled");
-      if (state === "active")
-        expect(await work.claimFinalDocument({ ownerUserId, documentId })).toEqual({
-          kind: "unavailable",
-        });
-      else
-        await expect(work.claimFinalDocument({ ownerUserId, documentId })).rejects.toThrow(
+  describe.each(["settleRejectedProviderDispatch", "settleUndispatchedProviderDispatch"] as const)(
+    "%s permanent cleanup fence",
+    (method) => {
+      it.each(["active", "quarantined"])(
+        "original rejected completion drains %s provider work only after permanently fencing phases",
+        async (state) => {
+          await settledSlots();
+          const original = (await issue("provider_dispatch")).authorization;
+          await work.claim(original);
+          if (state === "quarantined")
+            await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
+          await work[method](cleanupReference(original));
+          const rows =
+            await sql`SELECT id, purpose, state, terminal_at FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
+          await work[method](cleanupReference(original));
+          expect(
+            await sql`SELECT id, purpose, state, terminal_at FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
+          ).toEqual(rows);
+          expect(rows.find((row) => row.purpose === "provider_dispatch")).toMatchObject({
+            id: original.id,
+            state: "settled",
+          });
+          expect(rows.find((row) => row.purpose === "final_document")).toMatchObject({
+            state: "revoked",
+          });
+          expect(await work.readDrainState(ownerUserId, documentId)).toBe("settled");
+          if (state === "active")
+            expect(await work.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+              kind: "unavailable",
+            });
+          else
+            await expect(work.claimFinalDocument({ ownerUserId, documentId })).rejects.toThrow(
+              /^CoverLetterWorkUnavailable$/u,
+            );
+          expect(
+            await sql`SELECT id FROM documents.cover_letters WHERE id = ${documentId}`,
+          ).toHaveLength(1);
+        },
+      );
+      it.each(["issued", "revoked"])(
+        "rejected completion cannot cancel original %s authority",
+        async (state) => {
+          const original = (await issue("provider_dispatch")).authorization;
+          if (state === "revoked") await work.revokeUnclaimed(ownerUserId, documentId);
+          const before =
+            await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
+          await expect(work[method](cleanupReference(original))).rejects.toThrow(
+            /^CoverLetterWorkUnavailable$/u,
+          );
+          expect(
+            await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
+          ).toEqual(before);
+        },
+      );
+      it.each(["id", "document", "hash", "purpose"])(
+        "rejected completion refuses an unbound %s without fencing",
+        async (kind) => {
+          const original = (await issue("provider_dispatch")).authorization;
+          await work.claim(original);
+          const reference = cleanupReference(original);
+          if (kind === "id") reference.id = uuidv7();
+          if (kind === "document") reference.documentId = uuidv7();
+          if (kind === "hash") reference.requestSha256 = "f".repeat(64);
+          if (kind === "purpose") reference.purpose = "private_slots";
+          await expect(work[method](reference)).rejects.toThrow(/^CoverLetterWorkUnavailable$/u);
+          expect(
+            await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId}`,
+          ).toEqual([{ state: "running" }]);
+        },
+      );
+      it("settlement failure after the committed rejection fence leaves running work and no final authority", async () => {
+        const original = (await issue("provider_dispatch")).authorization;
+        await work.claim(original);
+        const broken = new PostgresCoverLetterWorkStore(sql, () => true);
+        vi.spyOn(broken, "settleProviderDispatch").mockRejectedValue(
+          Error("SyntheticSettlementUnavailable"),
+        );
+        await expect(broken[method](cleanupReference(original))).rejects.toThrow(
           /^CoverLetterWorkUnavailable$/u,
         );
-      expect(
-        await sql`SELECT id FROM documents.cover_letters WHERE id = ${documentId}`,
-      ).toHaveLength(1);
+        expect(await work.readDrainState(ownerUserId, documentId)).toBe("pending");
+        expect(
+          await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose = 'final_document'`,
+        ).toEqual([{ state: "revoked" }]);
+        await expect(
+          sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+        ).rejects.toThrow();
+      });
     },
   );
-  it.each(["issued", "revoked"])(
-    "rejected completion cannot cancel original %s authority",
-    async (state) => {
-      const original = (await issue("provider_dispatch")).authorization;
-      if (state === "revoked") await work.revokeUnclaimed(ownerUserId, documentId);
-      const before =
-        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
-      await expect(work.settleRejectedProviderDispatch(cleanupReference(original))).rejects.toThrow(
-        /^CoverLetterWorkUnavailable$/u,
-      );
-      expect(
-        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
-      ).toEqual(before);
-    },
-  );
-  it.each(["id", "document", "hash", "purpose"])(
-    "rejected completion refuses an unbound %s without fencing",
-    async (kind) => {
-      const original = (await issue("provider_dispatch")).authorization;
-      await work.claim(original);
-      const reference = cleanupReference(original);
-      if (kind === "id") reference.id = uuidv7();
-      if (kind === "document") reference.documentId = uuidv7();
-      if (kind === "hash") reference.requestSha256 = "f".repeat(64);
-      if (kind === "purpose") reference.purpose = "private_slots";
-      await expect(work.settleRejectedProviderDispatch(reference)).rejects.toThrow(
-        /^CoverLetterWorkUnavailable$/u,
-      );
-      expect(
-        await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId}`,
-      ).toEqual([{ state: "running" }]);
-    },
-  );
-  it("settlement failure after the committed rejection fence leaves running work and no final authority", async () => {
-    const original = (await issue("provider_dispatch")).authorization;
-    await work.claim(original);
-    const broken = new PostgresCoverLetterWorkStore(sql, () => true);
-    vi.spyOn(broken, "settleProviderDispatch").mockRejectedValue(
-      Error("SyntheticSettlementUnavailable"),
-    );
-    await expect(broken.settleRejectedProviderDispatch(cleanupReference(original))).rejects.toThrow(
-      /^CoverLetterWorkUnavailable$/u,
-    );
-    expect(await work.readDrainState(ownerUserId, documentId)).toBe("pending");
-    expect(
-      await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose = 'final_document'`,
-    ).toEqual([{ state: "revoked" }]);
-    await expect(
-      sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
-    ).rejects.toThrow();
-  });
   it.each(["private_slots", "provider_dispatch", "final_document"] as const)(
     "private cleanup permanently fences abandoned unclaimed %s authority",
     async (purpose) => {
@@ -921,6 +924,8 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
     "rejected_large",
     "rejected_ack",
     "provider_error",
+    "not_dispatched",
+    "not_dispatched_ack",
   ])(
     "connects isolated provider effects to SQL authority, retaining ambiguous %s work",
     async (failure) => {
@@ -1018,7 +1023,8 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
               throw Error("SyntheticMissingPayload");
             const raw: unknown = JSON.parse(new TextDecoder().decode(command.input.Payload));
             const output = await control(raw, { invokedFunctionArn: controlArn });
-            if (failure === "rejected_ack") throw Error("SyntheticLostClosureACK");
+            if (failure === "rejected_ack" || failure === "not_dispatched_ack")
+              throw Error("SyntheticLostClosureACK");
             return {
               StatusCode: 200,
               ExecutedVersion: "7",
@@ -1058,12 +1064,13 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
                 },
               })
             : { identity: COVER_LETTER_PROVIDER_MODEL, complete },
-          { enabled: () => true, timeoutMs: 1_000 },
+          { enabled: () => !failure.startsWith("not_dispatched"), timeoutMs: 1_000 },
         ),
         work: {
           claimProviderDispatch: claim,
           settleProviderDispatch: settle,
           settleRejectedProviderDispatch: settleRejected,
+          settleUndispatchedProviderDispatch: (ref) => rpc.settleUndispatchedProviderDispatch(ref),
         },
         objects: {
           transitionIfMatch: transition,
@@ -1082,7 +1089,9 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
       expect((await handler(input)).outcome).toBe(
         failure === "none"
           ? "ready"
-          : ["rejected_json", "rejected_large", "provider_error"].includes(failure)
+          : ["rejected_json", "rejected_large", "provider_error", "not_dispatched"].includes(
+                failure,
+              )
             ? "failed"
             : "in_progress",
       );
@@ -1093,7 +1102,9 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
       const readyReplay = ["none", "result_ack", "settlement_ack"].includes(failure);
       expect((await handler(input)).outcome).toBe(readyReplay ? "ready" : "in_progress");
       expect(complete).toHaveBeenCalledTimes(
-        ["control_ack", "dispatch_ack"].includes(failure) ? 0 : 1,
+        ["control_ack", "dispatch_ack", "not_dispatched", "not_dispatched_ack"].includes(failure)
+          ? 0
+          : 1,
       );
       expect(transition).toHaveBeenCalledTimes(
         failure === "control_ack"
@@ -1105,6 +1116,8 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
                 "rejected_large",
                 "rejected_ack",
                 "provider_error",
+                "not_dispatched",
+                "not_dispatched_ack",
               ].includes(failure)
             ? 1
             : 2,
@@ -1117,6 +1130,8 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
         "rejected_json",
         "rejected_large",
         "rejected_ack",
+        "not_dispatched",
+        "not_dispatched_ack",
       ].includes(failure);
       expect(await phaseState()).toBe(settled ? "settled" : "running");
       await work.revokeUnclaimed(ownerUserId, documentId);

@@ -46,7 +46,12 @@ export function createCoverLetterIsolatedProviderHandler(options: {
   timeoutMs?: number;
   /** Private control RPC capability only. Never compose database access in this isolated actor. */
   work?: Pick<PostgresCoverLetterWorkStore, "claimProviderDispatch" | "settleProviderDispatch"> &
-    Partial<Pick<PostgresCoverLetterWorkStore, "settleRejectedProviderDispatch">>;
+    Partial<
+      Pick<
+        PostgresCoverLetterWorkStore,
+        "settleRejectedProviderDispatch" | "settleUndispatchedProviderDispatch"
+      >
+    >;
 }): (input: unknown) => Promise<CoverLetterProviderOutput> {
   const timeoutMs = options.timeoutMs ?? 60_000;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000)
@@ -253,6 +258,29 @@ export function createCoverLetterIsolatedProviderHandler(options: {
         await work.settleRejectedProviderDispatch(reference);
         return failed;
       };
+      if (completion.kind === "not_dispatched") {
+        // Original gateway-local receipt, not a provider-thrown error or replay. The
+        // dispatch-slot replacement was positively acknowledged; no result write follows.
+        if (
+          !validateCoverLetterProviderModel(completion.model) ||
+          completion.promptId !== "cover_letter" ||
+          completion.promptVersion !== request.promptVersion ||
+          ![
+            "MODEL_DISABLED",
+            "DISCLOSURE_MISSING",
+            "DISCLOSURE_PURPOSE_MISMATCH",
+            "DISCLOSURE_CATEGORY_MISSING",
+            "DISCLOSURE_STALE",
+            "INPUT_TOO_LARGE",
+          ].includes(completion.code) ||
+          !work.settleUndispatchedProviderDispatch ||
+          !enabled()
+        )
+          return inProgress;
+        deadline.throwIfAborted();
+        await work.settleUndispatchedProviderDispatch(reference);
+        return failed;
+      }
       if (completion.kind === "completed_rejected") {
         // This branch follows original positive model completion, not a caught error. The
         // original dispatch write was acknowledged and no result write has been attempted.

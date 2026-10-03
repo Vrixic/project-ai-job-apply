@@ -14,7 +14,12 @@ import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js"
 export function createCoverLetterProviderControlHandler(options: {
   functionArn: string;
   work: Pick<PostgresCoverLetterWorkStore, "claimProviderDispatch" | "settleProviderDispatch"> &
-    Partial<Pick<PostgresCoverLetterWorkStore, "settleRejectedProviderDispatch">>;
+    Partial<
+      Pick<
+        PostgresCoverLetterWorkStore,
+        "settleRejectedProviderDispatch" | "settleUndispatchedProviderDispatch"
+      >
+    >;
   enabled?: () => boolean;
 }) {
   providerControlVersion(options.functionArn);
@@ -60,6 +65,9 @@ export function createCoverLetterProviderControlHandler(options: {
       if (input.action === "settle_rejected") {
         if (!work.settleRejectedProviderDispatch) return unavailable;
         await work.settleRejectedProviderDispatch(input.reference);
+      } else if (input.action === "settle_undispatched") {
+        if (!work.settleUndispatchedProviderDispatch) return unavailable;
+        await work.settleUndispatchedProviderDispatch(input.reference);
       } else await work.settleProviderDispatch(input.reference);
       return {
         schemaVersion: 1,

@@ -30,6 +30,14 @@ are preserved. Three offline regressions cover this request-specific citation bo
 
 ## Internal lifecycle completion receipts
 
+The internal union also carries metadata-only `not_dispatched` receipts for the gateway's
+known local kill-switch/disclosure/input refusals before invoking either provider port.
+Provider-thrown identical error codes and thrown local callbacks cannot produce this receipt.
+Ordinary `generate` still throws the original fixed refusal code. This is original local
+non-dispatch evidence, not a completed response, candidate approval or purge certificate.
+The current non-dispatch checkpoint passes 111 offline AI SDK tests, including ordinary refusal
+before provider identity access, every local reason and identical provider-thrown codes.
+
 `ModelGateway.generateWithCompletion` is an internal lifecycle interface. Only an original
 fulfilled provider response yields `completed` or a content-free `completed_rejected` receipt
 for oversized/non-JSON output. Model and prompt provenance are captured before dispatch.

@@ -160,6 +160,9 @@ async function fixture(
   const port = coverLetterProviderTransitionPort(objects);
   let workClaimed = false;
   const work = {
+    settleUndispatchedProviderDispatch: vi.fn<
+      PostgresCoverLetterWorkStore["settleUndispatchedProviderDispatch"]
+    >(async () => undefined),
     claimProviderDispatch: vi.fn<PostgresCoverLetterWorkStore["claimProviderDispatch"]>(
       async (binding) => {
         expect(binding).toEqual({
@@ -251,6 +254,73 @@ async function fixture(
 
 afterEach(() => vi.restoreAllMocks());
 describe("isolated cover-letter provider handler (offline model and S3)", () => {
+  it("closes original gateway non-dispatch only after the dispatch write acknowledgement", async () => {
+    const test = await fixture({ modelEnabled: false });
+    expect((await test.handler(test.input)).outcome).toBe("failed");
+    expect(test.complete).not.toHaveBeenCalled();
+    expect(test.work.settleUndispatchedProviderDispatch).toHaveBeenCalledOnce();
+    expect(test.work.settleUndispatchedProviderDispatch).toHaveBeenCalledWith({
+      id: otherId,
+      documentId,
+      purpose: "provider_dispatch",
+      requestSha256: test.input.request.sha256,
+    });
+    expect(test.current("dispatch")).toMatchObject({ state: "claimed" });
+    expect(test.current("result")).toMatchObject({ state: "pending" });
+    expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
+    expect(test.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+    expect((await test.handler(test.input)).outcome).toBe("in_progress");
+    expect(test.work.settleUndispatchedProviderDispatch).toHaveBeenCalledOnce();
+  });
+  it("keeps a lost non-dispatch closure acknowledgement unresolved without retry", async () => {
+    const test = await fixture({ modelEnabled: false });
+    test.work.settleUndispatchedProviderDispatch.mockRejectedValue(Error("SyntheticLostACK"));
+    expect((await test.handler(test.input)).outcome).toBe("in_progress");
+    expect((await test.handler(test.input)).outcome).toBe("in_progress");
+    expect(test.complete).not.toHaveBeenCalled();
+    expect(test.work.settleUndispatchedProviderDispatch).toHaveBeenCalledOnce();
+  });
+  it("older control compositions refuse non-dispatch closure", async () => {
+    const test = await fixture({ modelEnabled: false });
+    const handler = createCoverLetterIsolatedProviderHandler({
+      objects: test.port,
+      gateway: test.gateway,
+      work: {
+        claimProviderDispatch: test.work.claimProviderDispatch,
+        settleProviderDispatch: test.work.settleProviderDispatch,
+      },
+      enabled: () => true,
+      clock: () => new Date("2026-10-02T12:01:00.000Z"),
+    });
+    expect((await handler(test.input)).outcome).toBe("in_progress");
+    expect(test.complete).not.toHaveBeenCalled();
+    expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
+  });
+  it.each(["model", "prompt", "version", "code"])(
+    "refuses an unbound %s non-dispatch receipt",
+    async (kind) => {
+      const test = await fixture();
+      const receipt = {
+        kind: "not_dispatched" as const,
+        code: "MODEL_DISABLED" as const,
+        model: { ...COVER_LETTER_PROVIDER_MODEL } as {
+          provider: string;
+          model: string;
+          version: string;
+        },
+        promptId: "cover_letter",
+        promptVersion: request.promptVersion,
+      };
+      if (kind === "model") receipt.model.model = "unapproved";
+      if (kind === "prompt") receipt.promptId = "other";
+      if (kind === "version") receipt.promptVersion = "other";
+      if (kind === "code") Object.assign(receipt, { code: "PROVIDER_TIMEOUT" });
+      vi.spyOn(test.gateway, "generateWithCompletion").mockResolvedValue(receipt);
+      expect((await test.handler(test.input)).outcome).toBe("in_progress");
+      expect(test.work.settleUndispatchedProviderDispatch).not.toHaveBeenCalled();
+      expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     { kind: "invalid_json", text: "not json", status: "completed", closes: true },
     { kind: "oversized", text: "x".repeat(8_001), status: "completed", closes: true },
@@ -364,6 +434,7 @@ describe("isolated cover-letter provider handler (offline model and S3)", () => 
       const test = await fixture();
       test.complete.mockRejectedValue(new ModelGatewayError(code));
       expect((await test.handler(test.input)).outcome).toBe("failed");
+      expect(test.work.settleUndispatchedProviderDispatch).not.toHaveBeenCalled();
       expect(test.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
       expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
       expect(test.current("result")).toMatchObject({ state: "pending" });
