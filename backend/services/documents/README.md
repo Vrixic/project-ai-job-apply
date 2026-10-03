@@ -243,6 +243,28 @@ builds), including unchanged generated contracts, formatting, baseline lint, ope
 dependency-security regressions, Compose and scope. Separate live dependency audit remains
 failing without waiver. The synthetic database was removed; Docker Desktop/WSL are stopped.
 
+## Durable original provider response inventory
+
+`0008_cover_letter_provider_responses` and the private-runtime-only
+`PostgresCoverLetterResponseStore` reserve identifier-only inventory against a running original
+provider grant before external creation. Only a committed first reservation returns `reserved`;
+replay returns `already_reserved`, never another dispatch authority. Active-candidate admission,
+the original non-renewable deadline and consent are checked before reservation. A missing creation
+ACK leaves the reserved row with no response id; it cannot become stopped through time or 404.
+
+Original id/time capture is immutable and unique across work grants. Positive disposal binds to
+that exact stored reference and fixed terminal status. ACK draining is permitted after quarantine
+or expiry without generating, renewing consent or settling work. Replays preserve timestamps;
+conflicting references/statuses fail with a content-free error. Direct SQL guards enforce binding,
+state transitions and inventory retention. Even settled work cannot cascade-delete an unresolved
+response, and disposal does not bypass the original private-work deletion guard.
+
+This is a default-off private ledger API, not a public endpoint or authenticated cloud composition.
+Original gateway/actor capture, lost-create-ACK reconciliation, private writer drain and maintained
+disposal reconciliation remain pending. Neither a stored response nor a disposal receipt proves
+platform quiescence or provider-wide deletion. Apply the forward migration with compatible restore
+and maintenance consumers before any separately reviewed activation. No guessed-identity backfill.
+
 ## Planned expansion
 
 - `tailoring/` — Evidence-grounded selection and rewriting.

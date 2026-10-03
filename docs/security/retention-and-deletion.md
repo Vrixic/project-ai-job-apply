@@ -177,3 +177,13 @@ This port cannot create responses, settle private writers or release platform ob
 Durable original response/work capture and maintained disposal reconciliation remain unfinished;
 the source is uncomposed/default-off. Provider response deletion is not deletion of abuse-monitoring,
 legal/safety or caching copies. Public policy, real-data scope and deployed settings are unchanged.
+
+Source-only D3-046 adds Documents-owned original response inventory, not provider content.
+One row is reserved before original creation and cannot grant another dispatch on replay.
+Unknown creation identities and absent disposal ACKs remain inventoried indefinitely until
+trusted positive resolution; they cannot be removed through TTL, local timeout or provider 404.
+Positive exact-reference response disposal is recorded separately from private-work settlement.
+Cascade deletion requires acknowledged response disposal and the existing private-work/document
+deletion conditions. This does not choose a new public retention period, certify removal of other
+provider copies or release platform purge. Actor capture, reconciliation, runtime/IAM and deployed
+acceptance remain unfinished/default-off; no model/cloud call or activation occurs.

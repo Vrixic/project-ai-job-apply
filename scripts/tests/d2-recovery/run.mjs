@@ -19,6 +19,7 @@ import {
   requiredNonemptyD2Relations,
   seedD2RecoveryFixtures,
 } from "./fixtures.mjs";
+import { exerciseRestoredResponseInventory, seedResponseInventory } from "./response-inventory.mjs";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 const execute = promisify(execFile);
@@ -183,8 +184,8 @@ try {
   const source = loadCurrentRestoreManifest();
   assert.equal(source.manifest.contributors.length, 7);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 11);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 83);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 57);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 84);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 58);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
@@ -223,6 +224,8 @@ try {
   const fixtures = await seedD2RecoveryFixtures(sourceStore, sourceProfile, (value) => {
     stage = value;
   });
+  stage = "seed-generated-response-inventory";
+  const responseFixtures = await seedResponseInventory(sourceStore, fixtures.ownerUserId);
   stage = "source-aggregate-and-row-snapshot";
   const sourceAggregate = await verifyRestoreDatabase(sourceReader, source);
   const sourceRows = await exactRows(sourceReader, source.manifest);
@@ -276,6 +279,8 @@ try {
   assert.deepEqual(await verifyRestoreDatabase(targetReader, source), sourceAggregate);
   assert.deepEqual(await exactRows(targetReader, source.manifest), sourceRows);
   await rejectReadOnlyWrite(targetReader);
+  stage = "restored-response-inventory-behavior";
+  const responseBehavior = await exerciseRestoredResponseInventory(targetStore, responseFixtures);
   stage = "restored-d2-behavior";
   const behavior = await exerciseRestoredD2(targetStore, targetProfile, fixtures, (value) => {
     stage = value;
@@ -284,14 +289,15 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 57,
+    migrationCount: 58,
     ownerCount: 7,
     schemaCount: 11,
-    exactRelationRowSetsMatched: 83,
+    exactRelationRowSetsMatched: 84,
     nonemptyD2RelationsMatched: requiredNonemptyD2Relations.length,
     aggregateVerifierMatched: true,
     sourceUnchanged: true,
     readOnlyWritesRejected: 2,
+    ...responseBehavior,
     ...behavior,
   };
 } catch (error) {
@@ -303,7 +309,7 @@ try {
       : "FAILED";
   const location =
     typeof error?.stack === "string"
-      ? /((?:fixtures|run)\.mjs:[0-9]+:[0-9]+)/u.exec(error.stack)?.[1]
+      ? /((?:fixtures|response-inventory|run)\.mjs:[0-9]+:[0-9]+)/u.exec(error.stack)?.[1]
       : undefined;
   failure = { stage, code, ...(location ? { testLocation: location } : {}) };
 } finally {

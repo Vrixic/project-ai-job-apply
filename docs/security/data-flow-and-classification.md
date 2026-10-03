@@ -462,6 +462,17 @@ privacy approval, remote-provider quiescence or retention/export acceptance.
 
 ## Source-only cover-letter provider control
 
+D3-046's Documents ledger holds only original work/document/owner UUIDs, request digest,
+reservation/acknowledgement timestamps, provider response id/creation time and fixed disposal
+status. No prompt, response body, candidate value or credential is persisted. Original admission
+uses the Identity-owned active-candidate lease and exact running grant; later ACK draining may
+continue after quarantine without renewing authority. A duplicate reservation is readback only.
+The default-off ledger is exported only by the private runtime, not a public candidate API.
+Original-ACK provenance and caller authentication must be composed before activation; possession
+of a response id is not ownership. Disposal records cannot settle private actors or certify
+generation quiescence. Unknown identities stay inventoried. Strict source restore inventory is
+58 migrations/84 relations; deployed inventories and acceptance are unchanged.
+
 D3-045 adds a separate default-off AI SDK response cleanup transport. An isolated future
 maintenance actor may pass only the original owned background response reference (id and creation
 time), never a candidate-supplied response id. The transport retrieves/cancels at the fixed OpenAI
