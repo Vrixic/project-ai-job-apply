@@ -5,26 +5,17 @@ import {
   type JobPromptFacts,
   type ModelGateway,
 } from "@ai-job-apply/ai-sdk";
-import type {
-  ApplicationCoverLetterFile,
-  ApplicationCoverLetterPreview,
-  ApplicationPacketPreparation,
-} from "@ai-job-apply/api-contracts";
+import type { ApplicationPacketPreparation } from "@ai-job-apply/api-contracts";
 import { COVER_LETTER_DISCLOSURE_VERSION } from "@ai-job-apply/api-contracts";
 import type { GraphFact } from "@ai-job-apply/domain";
-import {
-  type CoverLetterDocument,
-  CoverLetterIntegrityError,
-  coverLetterFile,
-  coverLetterPreview,
-} from "./cover-letter.js";
+import type { CoverLetterDocument } from "./cover-letter.js";
 import { coverLetterReadyBinding, finalizeCoverLetterDraft } from "./cover-letter-finalize.js";
 import type { PostgresCoverLetterStore } from "./cover-letter-store.js";
 
 type FailureCode = NonNullable<ApplicationPacketPreparation["errorCode"]>;
 export type CoverLetterGenerationStore = Pick<
   PostgresCoverLetterStore,
-  "reserveGeneration" | "complete" | "recover" | "read"
+  "reserveGeneration" | "complete" | "recover"
 > & {
   withGenerationLease(
     ownerUserId: string,
@@ -66,11 +57,6 @@ export class CoverLetterGenerationService {
     private readonly gateway: ModelGateway,
     private readonly clock: () => Date = () => new Date(),
   ) {}
-
-  async context(identity: { ownerUserId: string; applicationId: string }) {
-    const evidence = await this.source.load(identity.ownerUserId, identity.applicationId);
-    return coverLetterContext({ ...evidence, now: this.clock() });
-  }
 
   async generate(input: CoverLetterPreparationIdentity): Promise<CoverLetterGenerationOutcome> {
     // Snapshot server-owned consent so asynchronous work cannot renew or mutate it.
@@ -120,55 +106,6 @@ export class CoverLetterGenerationService {
     return this.ready(document, evidence.facts);
   }
 
-  async binding(
-    ownerUserId: string,
-    applicationId: string,
-    packetHash: string | undefined,
-  ): Promise<string | undefined> {
-    if (!packetHash) return undefined;
-    const document = await this.store.read(ownerUserId, applicationId, packetHash);
-    if (!document) return undefined;
-    return this.matchesDocument(document, await this.context({ ownerUserId, applicationId }))
-      ? document.contentSha256
-      : undefined;
-  }
-
-  async preview(
-    ownerUserId: string,
-    applicationId: string,
-    packetHash: string | undefined,
-  ): Promise<ApplicationCoverLetterPreview> {
-    const document = packetHash
-      ? await this.store.read(ownerUserId, applicationId, packetHash)
-      : null;
-    if (!document) return { status: "no_cover_letter", matchesPacket: false };
-    const current = this.matchesDocument(
-      document,
-      await this.context({ ownerUserId, applicationId }),
-    );
-    return coverLetterPreview(
-      document,
-      ownerUserId,
-      applicationId,
-      current ? packetHash : undefined,
-    );
-  }
-
-  async file(
-    ownerUserId: string,
-    applicationId: string,
-    packetHash: string,
-    format: "pdf" | "docx",
-  ): Promise<ApplicationCoverLetterFile> {
-    const document = await this.store.read(ownerUserId, applicationId, packetHash);
-    if (
-      !document ||
-      !this.matchesDocument(document, await this.context({ ownerUserId, applicationId }))
-    )
-      throw new CoverLetterIntegrityError();
-    return coverLetterFile(document, ownerUserId, applicationId, packetHash, format);
-  }
-
   private fresh(identity: CoverLetterPreparationIdentity): boolean {
     const approved = identity.approvedAt.getTime();
     const expires = identity.expiresAt.getTime();
@@ -199,15 +136,6 @@ export class CoverLetterGenerationService {
     return (
       identity.jobContextHash === context.jobContextHash &&
       identity.confirmedFactsHash === context.confirmedFactsHash
-    );
-  }
-  private matchesDocument(
-    document: CoverLetterDocument,
-    context: { jobContextHash: string; confirmedFactsHash: string },
-  ): boolean {
-    return this.matches(
-      { jobContextHash: document.jobRevision, confirmedFactsHash: document.confirmedFactsHash },
-      context,
     );
   }
   private ready(

@@ -8,5 +8,6 @@ export * from "./cover-letter-provider-control-handler.js";
 export * from "./cover-letter-provider-initialize.js";
 export * from "./cover-letter-provider-invoke.js";
 export * from "./cover-letter-provider-recovery.js";
+export * from "./cover-letter-read.js";
 export * from "./cover-letter-store.js";
 export * from "./cover-letter-work-store.js";

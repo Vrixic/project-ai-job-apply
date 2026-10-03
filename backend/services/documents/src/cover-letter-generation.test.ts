@@ -7,6 +7,7 @@ import {
   type CoverLetterGenerationStore,
   type CoverLetterPreparationIdentity,
 } from "./cover-letter-generation.js";
+import { CoverLetterReadService } from "./cover-letter-read.js";
 import type { CoverLetterMetadata, PostgresCoverLetterStore } from "./cover-letter-store.js";
 
 const NOW = new Date("2026-10-02T12:00:00Z");
@@ -92,8 +93,17 @@ function setup(options: { enabled?: boolean; output?: string; facts?: GraphFact[
     clock: () => now,
   });
   const service = new CoverLetterGenerationService(store, source, gateway, () => now);
+  const readService = new CoverLetterReadService(
+    {
+      withReadLease: async (owner, run) =>
+        run({ read: (app, hash) => store.read(owner, app, hash) }),
+    },
+    source,
+    () => now,
+  );
   return {
     service,
+    readService,
     store,
     source,
     complete,
@@ -137,14 +147,14 @@ describe("private grounded cover-letter generation service", () => {
     expect(document?.paragraphs).toEqual([{ text, factIds: [fact.id] }]);
     if (!document) throw new Error("Synthetic missing draft");
     expect(
-      await fixture.service.binding(
+      await fixture.readService.binding(
         document.ownerUserId,
         document.applicationId,
         document.contentSha256,
       ),
     ).toBe(document.contentSha256);
     expect(
-      await fixture.service.preview(
+      await fixture.readService.preview(
         document.ownerUserId,
         document.applicationId,
         document.contentSha256,
@@ -152,7 +162,7 @@ describe("private grounded cover-letter generation service", () => {
     ).toMatchObject({ status: "ready", matchesPacket: true, reviewRequired: true });
     for (const format of ["pdf", "docx"] as const) {
       expect(
-        await fixture.service.file(
+        await fixture.readService.file(
           document.ownerUserId,
           document.applicationId,
           document.contentSha256,
@@ -313,21 +323,21 @@ describe("private grounded cover-letter generation service", () => {
       job: { ...job, description: `${job.description} Changed.` },
     });
     expect(
-      await fixture.service.binding(
+      await fixture.readService.binding(
         document.ownerUserId,
         document.applicationId,
         document.contentSha256,
       ),
     ).toBeUndefined();
     expect(
-      await fixture.service.preview(
+      await fixture.readService.preview(
         document.ownerUserId,
         document.applicationId,
         document.contentSha256,
       ),
     ).toMatchObject({ status: "ready", matchesPacket: false });
     await expect(
-      fixture.service.file(
+      fixture.readService.file(
         document.ownerUserId,
         document.applicationId,
         document.contentSha256,
@@ -335,7 +345,7 @@ describe("private grounded cover-letter generation service", () => {
       ),
     ).rejects.toThrow(CoverLetterIntegrityError);
     expect(
-      await fixture.service.preview(fact.id, document.applicationId, document.contentSha256),
+      await fixture.readService.preview(fact.id, document.applicationId, document.contentSha256),
     ).toEqual({ status: "no_cover_letter", matchesPacket: false });
     expect(fixture.complete).toHaveBeenCalledTimes(1);
   });

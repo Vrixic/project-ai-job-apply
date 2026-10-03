@@ -139,6 +139,30 @@ no exposed cover-letter service or live model activation. Do not deploy these mi
 strict export consumers must support the additive `documents.coverLetters` metadata projection
 before it appears, and new runtime function/object permissions need deployment review.
 
+## Private saved cover-letter reads
+
+`src/cover-letter-read.ts` separates existing context, binding, preview and file behavior from
+generation. Its constructor accepts only a read-store lease and owned evidence; no ModelGateway,
+Invoke, reservation, recovery, work-ledger or mutation capability is supplied. The private runtime
+entrypoint exports it, not the Gateway's lightweight root. Public routes and schemas are unchanged;
+production runtime composition remains unfinished and default-dark.
+
+`PostgresCoverLetterReadStore` accepts only exact-version object reads. One Identity-owned
+active-candidate transaction covers owned metadata lookup, pinned object verification, current
+evidence comparison and rendering. Its callback receives an owner-fixed transaction reader, so
+saved-document reads do not start nested pool transactions. Evidence must still come from owning
+service APIs; their independent pools must not borrow this reserved Documents connection.
+Missing/foreign/stale packet behavior is preserved; inactive or missing candidates are refused
+before evidence or object access. Reads do not renew consent or generate missing content.
+
+Local synthetic evidence: 578 unit tests, 116 Documents PostgreSQL cases (including all 66 opt-in
+work-store cases) and six connected preparation-workflow cases pass. Four new quarantine races
+exercise context/binding/preview/file with a single-connection read pool. Model/object ports are
+offline, not live AWS/model or deployed acceptance. The full maintained repository verifier passes:
+unchanged generated contracts, operator guards, formatting, lint, typechecks, tests, builds,
+dependency-security regressions, Compose and scope. This does not clear the separate scanner or
+live dependency audit, and does not approve runtime activation.
+
 ## Planned expansion
 
 - `tailoring/` — Evidence-grounded selection and rewriting.

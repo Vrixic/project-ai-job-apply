@@ -7,6 +7,7 @@ import {
   decodeCoverLetterDocument,
   encodeCoverLetterDocument,
 } from "./cover-letter.js";
+import type { CoverLetterOwnedReader, CoverLetterReadStore } from "./cover-letter-read.js";
 import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 
 export interface CoverLetterMetadata {
@@ -66,6 +67,38 @@ async function find(
     ${lock ? transaction`FOR UPDATE` : transaction``}
   `;
   return rows[0] ?? null;
+}
+
+/** Read-only composition accepts only exact-version object reads and one SQL transaction. */
+export class PostgresCoverLetterReadStore implements CoverLetterReadStore {
+  constructor(
+    private readonly client: postgres.Sql,
+    private readonly objects: Pick<CoverLetterObjectStore, "read">,
+  ) {}
+
+  async withReadLease<T>(
+    ownerUserId: string,
+    run: (reader: CoverLetterOwnedReader) => Promise<T>,
+  ): Promise<T> {
+    return this.client.begin(async (transaction) => {
+      await transaction`SELECT identity.require_active_candidate(${ownerUserId}::uuid)`;
+      const reader: CoverLetterOwnedReader = Object.freeze({
+        read: async (applicationId: string, contentSha256: string) => {
+          const ids = await transaction<Array<{ id: string }>>`
+            SELECT id FROM documents.cover_letters WHERE user_id = ${ownerUserId}
+              AND application_id = ${applicationId} AND content_sha256 = ${contentSha256}
+              AND status = 'ready' ORDER BY version DESC LIMIT 1
+          `;
+          if (!ids[0]) return null;
+          const row = await find(transaction, ownerUserId, ids[0].id);
+          if (!row || row.applicationId !== applicationId || row.contentSha256 !== contentSha256)
+            throw new CoverLetterIntegrityError();
+          return readReady(this.objects, row);
+        },
+      });
+      return run(reader);
+    }) as Promise<T>;
+  }
 }
 
 export class PostgresCoverLetterStore {
@@ -248,16 +281,10 @@ export class PostgresCoverLetterStore {
     applicationId: string,
     contentSha256: string,
   ): Promise<CoverLetterDocument | null> {
-    const ids = await this.client<Array<{ id: string }>>`
-      SELECT id FROM documents.cover_letters WHERE user_id = ${ownerUserId}
-        AND application_id = ${applicationId} AND content_sha256 = ${contentSha256}
-        AND status = 'ready' ORDER BY version DESC LIMIT 1
-    `;
-    if (!ids[0]) return null;
-    const row = await find(this.client, ownerUserId, ids[0].id);
-    if (!row || row.applicationId !== applicationId || row.contentSha256 !== contentSha256)
-      throw new CoverLetterIntegrityError();
-    return this.readReady(row);
+    return new PostgresCoverLetterReadStore(this.client, this.objects).withReadLease(
+      ownerUserId,
+      (reader) => reader.read(applicationId, contentSha256),
+    );
   }
 
   /** Active-candidate, owner-scoped metadata lookup; never creates a reservation or reads objects. */
@@ -297,37 +324,40 @@ export class PostgresCoverLetterStore {
     )
       throw new CoverLetterIntegrityError();
     if (row.status === "pending") return null;
-    return this.readReady(row);
+    return readReady(this.objects, row);
   }
+}
 
-  private async readReady(row: CoverLetterMetadata): Promise<CoverLetterDocument> {
-    if (row?.status !== "ready" || !row.objectVersion || !row.objectSha256 || !row.sizeBytes)
-      throw new CoverLetterIntegrityError();
-    const bytes = await this.objects.read({
-      documentId: row.id,
-      objectKey: row.objectKey,
-      objectVersion: row.objectVersion,
-      sha256: row.objectSha256,
-      sizeBytes: row.sizeBytes,
-    });
-    if (
-      bytes.byteLength !== row.sizeBytes ||
-      createHash("sha256").update(bytes).digest("hex") !== row.objectSha256
-    )
-      throw new CoverLetterIntegrityError();
-    const document = decodeCoverLetterDocument(bytes);
-    if (
-      document.id !== row.id ||
-      document.ownerUserId !== row.ownerUserId ||
-      document.applicationId !== row.applicationId ||
-      document.contentSha256 !== row.contentSha256 ||
-      document.version !== row.version ||
-      document.jobRevision !== row.jobRevision ||
-      document.confirmedFactsHash !== row.confirmedFactsHash ||
-      document.createdAt !== row.createdAt.toISOString() ||
-      document.promptVersion !== row.promptVersion
-    )
-      throw new CoverLetterIntegrityError();
-    return document;
-  }
+async function readReady(
+  objects: Pick<CoverLetterObjectStore, "read">,
+  row: CoverLetterMetadata,
+): Promise<CoverLetterDocument> {
+  if (row?.status !== "ready" || !row.objectVersion || !row.objectSha256 || !row.sizeBytes)
+    throw new CoverLetterIntegrityError();
+  const bytes = await objects.read({
+    documentId: row.id,
+    objectKey: row.objectKey,
+    objectVersion: row.objectVersion,
+    sha256: row.objectSha256,
+    sizeBytes: row.sizeBytes,
+  });
+  if (
+    bytes.byteLength !== row.sizeBytes ||
+    createHash("sha256").update(bytes).digest("hex") !== row.objectSha256
+  )
+    throw new CoverLetterIntegrityError();
+  const document = decodeCoverLetterDocument(bytes);
+  if (
+    document.id !== row.id ||
+    document.ownerUserId !== row.ownerUserId ||
+    document.applicationId !== row.applicationId ||
+    document.contentSha256 !== row.contentSha256 ||
+    document.version !== row.version ||
+    document.jobRevision !== row.jobRevision ||
+    document.confirmedFactsHash !== row.confirmedFactsHash ||
+    document.createdAt !== row.createdAt.toISOString() ||
+    document.promptVersion !== row.promptVersion
+  )
+    throw new CoverLetterIntegrityError();
+  return document;
 }

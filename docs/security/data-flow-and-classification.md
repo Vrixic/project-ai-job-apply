@@ -428,6 +428,18 @@ uses only its configured canonical origin when enabled. Projection, edge, or pag
 remain availability failures instead of false-empty deindexing signals; crawling and both public
 API routes remain default-dark behind the same activation gate.
 
+## Source-only private saved cover-letter reads
+
+Owned context, packet binding, preview and PDF/DOCX reads use a separate read service with no
+model, Invoke, reservation, recovery or mutation port. Only current owned evidence and an exact
+saved-document reader enter this boundary. One Identity-owned active-candidate transaction holds
+through metadata selection, pinned object bytes/digest verification, context comparison and
+rendering. The transaction reader fixes the owner and reuses the reserved Documents connection;
+owning-service evidence APIs retain independent pools. Inactive/missing candidates are refused
+before evidence/object access. No new public schema, candidate data class, cloud call or deployment
+is introduced. Source tests and real PostgreSQL synthetic races are layer evidence, not deployed
+privacy approval, remote-provider quiescence or retention/export acceptance.
+
 ## Source-only cover-letter provider control
 
 The owner-approved private version-one RPC carries only document/grant IDs, request hashes,
