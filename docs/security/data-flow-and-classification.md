@@ -1,5 +1,16 @@
 # Data Flow and Classification
 
+## Source-only private original-response capture RPC (2026-10-03)
+
+Trusted original provider actor -> separate exact-version single-attempt private RPC ->
+Documents-owned reserve/creation-capture transaction -> original identity-only acknowledgement.
+Envelopes contain the existing work UUID, document UUID, purpose and digest, plus response id/time
+for capture; no candidate text, credentials or provider content. The client cannot read/dispose
+inventory, settle work, renew authorization, generate or purge. Lost RPC ACKs remain unresolved
+even after original commit. Capture draining after quarantine does not admit new dispatch.
+Target matching is not caller authentication; reviewed IAM/runtime composition remains required.
+The source is default-off with synthetic tests only, no live cloud/model call or activation.
+
 ## Source-only original background capture checkpoint (2026-10-03)
 
 The opt-in isolated actor supplies its original provider-grant reserve/capture capability to the

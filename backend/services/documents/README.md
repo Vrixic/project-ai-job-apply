@@ -139,6 +139,17 @@ no exposed cover-letter service or live model activation. Do not deploy these mi
 strict export consumers must support the additive `documents.coverLetters` metadata projection
 before it appears, and new runtime function/object permissions need deployment review.
 
+## Private original-response capture RPC
+
+The source-only private original-response capture RPC is separate from work control and
+maintenance. `cover-letter-response-capture-contract.ts` defines closed metadata-only v1
+reserve/record-creation envelopes; the provider-only client pins a numeric Lambda version,
+requires one SDK attempt, validates bounded canonical original receipts and defaults off.
+The Documents-only handler awaits owner transactions; lost acknowledgements remain unresolved.
+It exposes no content, inventory read, disposal, work settlement, renewal, generation or purge.
+Exact invoked-target matching is not caller authentication. Reviewed caller IAM, private runtime
+composition, maintained disposal/writer drain and deployed acceptance remain unfinished.
+
 ## Private saved cover-letter reads
 
 `src/cover-letter-read.ts` separates existing context, binding, preview and file behavior from
