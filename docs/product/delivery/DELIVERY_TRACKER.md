@@ -14,7 +14,10 @@ quality run failed on the stale Documents `0007` success marker; catalog checks 
 integration/container jobs were skipped. A backend-only follow-up updates that exact marker to
 `0008` and extends the existing D2 runtime guard with the exact new Documents inventory,
 retaining historical boundaries and adding mixed/unknown rejection cases. The committed-source
-migration-operator test and 248 D2 guard assertions pass; broader verification is being repeated.
+migration-operator test and 248 D2 guard assertions pass. Corrected committed-source full
+repository verification and the complete `pnpm infrastructure:validate` command both pass,
+without waivers; all 23 builds pass. Hosted catalog checks pass, quality has passed infrastructure
+validation and remains running, and audit/scanner checks remain failed.
 No provider/cloud action, deployment, activation, public API or frontend change is included.
 
 2026-10-03 D3-046 source-only durable response inventory started on merged PR #516 (`3bf6b5b`).
