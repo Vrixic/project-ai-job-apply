@@ -23,6 +23,14 @@ deployment or apply is claimed. D3-041 records the separately discovered stale e
 arrays in the publisher smoke, which must remain fail-closed pending scoped guard direction.
 D1/D3 remain In progress behind deployed and external exit gates and existing security failures.
 
+2026-10-03 security checkpoint on PR #511 source `5f4347d`: fresh `pnpm audit --json` reports
+mobile-only unpatched high advisories for node-forge and braces; the latter is newly reported
+here as [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm). The two raw
+image-size advisory records remain covered by the existing exact local remediation, not a waiver.
+The centralized audit fails locally and in hosted CI. Pinned static analysis remains 65 blocking
+findings/140 rules/1,053 files, with no changed pin/fixture-file findings. Frontend dependencies,
+audit policy and scanner rules remain untouched; these gates cannot be closed by runtime SSL pins.
+
 PR #510 merged as `5ce66ea`. Exact merged-main quality, catalog, PostgreSQL integration and both
 container jobs pass, including all 29 Profile PostgreSQL cases. Dependency audit still fails;
 static analysis reports 65 blocking findings across 140 rules and 1,053 files, with no changed
