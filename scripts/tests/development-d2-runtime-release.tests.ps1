@@ -292,16 +292,20 @@ foreach ($owner in @('profile','jobs','documents','matching','billing','trust'))
 Assert-D2RuntimeMigrationInventory $inventory; $passed++
 $modern51 = [ordered]@{}
 foreach ($owner in $inventory.Keys) { $modern51[$owner] = @($inventory[$owner]) }
-$modern51.documents = @($inventory.documents | Where-Object { $_ -cne '0007_cover_letter_work_authorizations' })
+$modern51.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses') })
 Assert-D2RuntimeMigrationInventory $modern51; $passed++
 $modern52 = [ordered]@{}
 foreach ($owner in $modern51.Keys) { $modern52[$owner] = @($modern51[$owner]) }
 $modern52.documents += '0007_cover_letter_work_authorizations'
 Assert-D2RuntimeMigrationInventory $modern52; $passed++
+$modern53 = [ordered]@{}
+foreach ($owner in $modern52.Keys) { $modern53[$owner] = @($modern52[$owner]) }
+$modern53.documents += '0008_cover_letter_provider_responses'
+Assert-D2RuntimeMigrationInventory $modern53; $passed++
 $legacy49 = [ordered]@{}
 foreach ($owner in $inventory.Keys) { $legacy49[$owner] = @($inventory[$owner]) }
 $legacy49.profile = @($inventory.profile | Where-Object { $_ -cne '0011_active_candidate_lease' })
-$legacy49.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0006_cover_letters', '0007_cover_letter_work_authorizations') })
+$legacy49.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0006_cover_letters', '0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses') })
 Assert-D2RuntimeMigrationInventory $legacy49; $passed++
 $legacy48 = [ordered]@{}
 foreach ($owner in $legacy49.Keys) { $legacy48[$owner] = @($legacy49[$owner]) }
@@ -331,6 +335,16 @@ foreach ($mutation in @(
   foreach ($owner in $modern52.Keys) { $badInventory[$owner] = @($modern52[$owner] | ForEach-Object { $_ }) }
   & $mutation $badInventory
   Assert-Rejected { Assert-D2RuntimeMigrationInventory $badInventory } 'Unknown or mixed work-authorization inventory accepted.'
+}
+foreach ($mutation in @(
+    { param($x) $x.documents = @($x.documents | Where-Object { $_ -cne '0007_cover_letter_work_authorizations' }) },
+    { param($x) $x.documents[-1] = '0008_unknown_response_inventory' },
+    { param($x) $x.documents += '0009_unknown_extension' }
+  )) {
+  $badInventory = [ordered]@{}
+  foreach ($owner in $modern53.Keys) { $badInventory[$owner] = @($modern53[$owner] | ForEach-Object { $_ }) }
+  & $mutation $badInventory
+  Assert-Rejected { Assert-D2RuntimeMigrationInventory $badInventory } 'Unknown or mixed response inventory accepted.'
 }
 # Full actual readback function, with a closed synthetic AWS port. No account, body, log or
 # credential fixture is read from disk; all objects below are generated identifiers only.
