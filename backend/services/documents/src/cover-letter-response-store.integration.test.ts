@@ -5,6 +5,8 @@ import { ModelGateway, OpenAiLunaProvider } from "@ai-job-apply/ai-sdk";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { CoverLetterResponseCaptureClient } from "./cover-letter-response-capture-client.js";
+import { createCoverLetterResponseCaptureHandler } from "./cover-letter-response-capture-handler.js";
 import { PostgresCoverLetterResponseStore } from "./cover-letter-response-store.js";
 import { PostgresCoverLetterStore } from "./cover-letter-store.js";
 import {
@@ -116,6 +118,113 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await work.claim(ref);
     return store.reserve(ref);
   }
+
+  function privateCapture(loseAck?: "reserve" | "record_creation") {
+    const arn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-capture:7";
+    const handler = createCoverLetterResponseCaptureHandler({
+      functionArn: arn,
+      capture: store,
+      enabled: () => true,
+    });
+    let calls = 0;
+    return {
+      calls: () => calls,
+      client: new CoverLetterResponseCaptureClient(
+        arn,
+        {
+          config: { maxAttempts: async () => 1 },
+          send: async (command) => {
+            calls++;
+            const input = JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array));
+            const output = await handler(input, { invokedFunctionArn: arn });
+            if (input.action === loseAck) throw Error("SyntheticCommittedLostRpcACK");
+            return {
+              StatusCode: 200,
+              ExecutedVersion: "7",
+              Payload: new TextEncoder().encode(JSON.stringify(output)),
+            };
+          },
+        },
+        () => true,
+      ),
+    };
+  }
+
+  it("private capture RPC commits exact original inventory and preserves replay timestamps", async () => {
+    await work.claim(ref);
+    const rpc = privateCapture();
+    expect(await rpc.client.reserve(ref)).toEqual({ kind: "reserved" });
+    const original = response();
+    await rpc.client.recordCreation(ref, original);
+    const before =
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`;
+    expect(await rpc.client.reserve(ref)).toEqual({ kind: "already_reserved" });
+    await rpc.client.recordCreation(ref, original);
+    expect(
+      await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`,
+    ).toEqual(before);
+    expect(await store.read(ref)).toEqual({
+      reference: ref,
+      state: "acknowledged",
+      response: original,
+    });
+    expect(rpc.calls()).toBe(4);
+  });
+
+  it.each(["reserve", "record_creation"] as const)(
+    "private RPC lost %s ACK retains committed inventory without retry",
+    async (phase) => {
+      await work.claim(ref);
+      const original = response();
+      if (phase === "record_creation") await store.reserve(ref);
+      const rpc = privateCapture(phase);
+      await expect(
+        phase === "reserve" ? rpc.client.reserve(ref) : rpc.client.recordCreation(ref, original),
+      ).rejects.toThrow("CoverLetterResponseCaptureUnavailable");
+      expect(rpc.calls()).toBe(1);
+      expect(await store.read(ref)).toEqual({
+        reference: ref,
+        state: phase === "reserve" ? "reserved" : "acknowledged",
+        response: phase === "reserve" ? null : original,
+      });
+      expect(await privateCapture().client.reserve(ref)).toEqual({ kind: "already_reserved" });
+      expect(
+        (
+          await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`
+        )[0]?.state,
+      ).toBe("running");
+    },
+  );
+
+  it("private capture RPC drains original ACK after quarantine without renewing work", async () => {
+    await work.claim(ref);
+    const rpc = privateCapture();
+    await rpc.client.reserve(ref);
+    const before =
+      await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+    await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+    const original = response();
+    await rpc.client.recordCreation(ref, original);
+    expect(await store.read(ref)).toEqual({
+      reference: ref,
+      state: "acknowledged",
+      response: original,
+    });
+    expect(
+      await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`,
+    ).toEqual(before);
+    await expect(rpc.client.reserve(ref)).rejects.toThrow("CoverLetterResponseCaptureUnavailable");
+  });
+
+  it("private capture RPC refuses mismatched original binding before creating inventory", async () => {
+    await work.claim(ref);
+    const rpc = privateCapture();
+    await expect(rpc.client.reserve({ ...ref, requestSha256: "f".repeat(64) })).rejects.toThrow(
+      "CoverLetterResponseCaptureUnavailable",
+    );
+    expect(await store.read(ref)).toBeNull();
+    expect(rpc.calls()).toBe(1);
+  });
 
   async function backgroundRun(
     settings: {

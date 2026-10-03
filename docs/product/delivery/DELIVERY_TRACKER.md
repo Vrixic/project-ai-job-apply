@@ -9,6 +9,16 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-048 separate private original-response capture RPC started, source only.
+All 38 offline boundary cases and 723 Documents unit cases pass with typecheck/build. Repeated
+final-source real PostgreSQL runs pass 191 integration cases, including five new RPC cases.
+Full maintained verification passes, including formatting, baseline lint, typecheck, tests and
+all 23 builds. Docker/WSL are stopped. Closed envelopes carry only original identities;
+the default-off exact-version single-attempt capability cannot read/dispose responses, settle
+work, renew authorization, generate or purge. Reviewed IAM/runtime composition, maintained
+disposal/writer drain and deployed/accountable acceptance remain unfinished. Public APIs,
+frontend, migrations, guards/Terraform and deployed configuration are unchanged.
+
 2026-10-03 D3-047 source-only original background-capture integration started on a feature
 branch. The opt-in isolated actor selects one gateway background port with no foreground
 fallback. Original inventory reservation precedes creation, immutable id/time capture precedes

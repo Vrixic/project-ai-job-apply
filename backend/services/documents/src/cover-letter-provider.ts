@@ -4,3 +4,5 @@ export * from "./cover-letter-provider-control-client.js";
 export * from "./cover-letter-provider-control-contract.js";
 export * from "./cover-letter-provider-handler.js";
 export * from "./cover-letter-provider-objects.js";
+export * from "./cover-letter-response-capture-client.js";
+export * from "./cover-letter-response-capture-contract.js";

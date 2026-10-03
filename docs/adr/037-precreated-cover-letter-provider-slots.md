@@ -334,6 +334,17 @@ provider, public API/frontend, migration, Terraform, deployment or activation. O
 documentation and the selected GPT-6 Luna model page were inspected; offline tests do not prove
 account/model availability or exact retention behavior.
 
+## Source-only private original-response capture RPC (2026-10-03)
+
+Source-only D3-048 adds a separate private original-response capture v1 boundary: the isolated
+actor's exact-version single-attempt client invokes Documents-owned reserve/record-creation
+transactions with closed original work and response metadata only. Default-off client/handler
+tests cover bounded canonical acknowledgements, strict binding, SDK retry refusal and lost ACKs;
+connected SQL tests prove committed inventory, immutable replay and original quarantine drain.
+No read, disposal, settlement, renewal, generation or purge capability is supplied. Target matching
+is not caller authentication. Reviewed provider-role IAM, runtime composition, maintained disposal,
+writer drain and deployed acceptance remain prerequisites; this ADR remains Proposed.
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim
