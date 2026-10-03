@@ -9,6 +9,31 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-052 source-only private original-response capture bootstrap has started on
+`feat/d3-private-capture-bootstrap`, locally based on the tested D3-051 source. It keeps the
+existing reserve/record-creation RPC and Documents-owned controls unchanged. Shared lazy
+bootstrap policy prevents divergence in default-off numeric-target/managed-secret checks,
+single-flight setup and warm binding; each entrypoint supplies only its fixed capabilities.
+Initial type inference/optional-property errors and a synthetic response fixture missing its
+required schema version and a nonconforming response identifier were corrected without relaxing
+validators. All 30 new capture cases, 39 unchanged work-control cases and 820 Documents unit cases,
+typecheck/build and scoped Biome pass. All 217 real PostgreSQL cases pass, including six new
+bootstrap cases and actual native-pool composition. The exact owned tmpfs fixture is removed;
+Docker Desktop/WSL shutdown completed and shared volumes are retained. Full maintained verification
+passes terminally: repo-wide typecheck, all 39 test tasks and 23 production builds, unchanged
+generated contracts, formatting (979 files), baseline lint (0 errors/15 warnings/58 infos),
+operational/dependency-security regressions, Compose and product scope. No third PR is opened while
+#523/#524 are open. No public API/frontend, dependency, migration, guard/Terraform,
+cloud/model call, deployment or activation change.
+
+Parent PR #524's exact-head hosted run is terminal: quality, catalog, integration and both
+container jobs pass; dependency audit fails with only a generic terminal refusal, not an exact
+cause attribution. Static analysis fails with 65 findings, 140 rules and 1,074 targets. Its 30
+reported paths match #523 with zero path delta; this is not full finding equivalence or approval.
+Both PRs still target main directly and are open; no merge, waiver or deployment is performed.
+[CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37161750989),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37161750985).
+
 2026-10-03 D3-051 source-only private provider-work control Lambda bootstrap has started.
 It reuses the existing closed RPC and original Documents controls, with default-off activation,
 numeric-version target matching and same-account managed-secret validation before any I/O.

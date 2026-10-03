@@ -153,6 +153,18 @@ before it appears, and new runtime function/object permissions need deployment r
 
 ### Source-only provider-work control Lambda bootstrap
 
+The separate `src/cover-letter-response-capture-lambda.ts` entrypoint supplies only existing
+`reserve` and `recordCreation` controls, with its independent default-off
+`COVER_LETTER_RESPONSE_CAPTURE_ENABLED=true` gate. Both private entrypoints use the shared
+`src/private-documents-lambda.ts` lazy managed-secret/target policy, preserving validation before
+I/O, input snapshots, numeric invoked-target binding, bounded read-only setup and no warm rebind.
+Capture uses a native one-connection pool without ORM timestamp parser mutation. Its original
+transactions are awaited, never raced/retried or inferred from an ACK timeout. Quarantined or
+expired original work may drain a creation ACK only under the existing store rules; reservation
+replay is not a new dispatch grant. Capture cannot read/dispose responses or settle work.
+Neither source is artifact-wired, caller-authenticated, activated or deployed. Reviewed IAM,
+private writer drain and complete quiescence remain mandatory separate gates.
+
 `src/cover-letter-provider-control-lambda.ts` is a lazy private entrypoint for the existing
 provider-work RPC, not a public API or deployed artifact. The only enable spelling is
 `COVER_LETTER_PROVIDER_CONTROL_ENABLED=true`; missing/other values refuse before I/O. Trusted

@@ -358,6 +358,19 @@ unfinished/default-off. The proposed protocol and deployment posture are unchang
 
 ## Alternatives
 
+### Source-only private response-capture Lambda bootstrap (2026-10-03)
+
+D3-052 composes the unchanged capture RPC with only original Documents reservation and
+creation-acknowledgement controls. An independent default-off gate and the shared D3-051 lazy
+bootstrap enforce numeric invoked-target binding, qualified same-account managed-secret input,
+bounded read-only initialization and warm identity pinning. A native one-connection pool keeps
+ledger timestamp semantics unchanged. Capture never grants read/disposal, work settlement,
+renewal, generation, object, renderer, Invoke or purge capabilities. Original transactions are
+awaited without retries or local timeout settlement. Target matching is not caller authentication;
+runtime/IAM, artifact/build guards, deployment/activation and complete writer/provider quiescence
+remain unfinished. No public API, provider/capture contract, migration, guard/Terraform or live
+cloud/model change is included; the protocol remains Proposed.
+
 ### Source-only private provider-work Lambda bootstrap (2026-10-03)
 
 D3-051 adds a lazy default-off entrypoint for the existing provider-work RPC only. Exact trusted
