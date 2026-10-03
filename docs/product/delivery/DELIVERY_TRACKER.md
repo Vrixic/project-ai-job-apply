@@ -9,6 +9,27 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+On 2026-10-02 the owner approved the scoped Profile fact-update concurrency correction, tracked
+as D3-039 with D1-002/D3-001. A deterministic PostgreSQL test holds the parent row until both
+competing updates are waiting and reproduces the raw duplicate-key error before the fix. The
+owned parent lock now precedes the latest-version read in a separate statement; one update wins,
+the other returns the existing version-conflict error, history is append-only and the winning
+receipt replays. Profile passes 87 unit and 29 real PostgreSQL cases, plus five additional focused
+race runs, build, typecheck and scoped Biome. Full maintained verification passes: unchanged
+generated contracts, synthetic operator guards, formatting (954 files), baseline lint, 38 typecheck
+tasks (32 cached), 39 test tasks (35 cached), 23 builds (20 cached), dependency-security regressions,
+Compose and product scope. Workflow unit evidence is 1412 passed/20 integration skipped. Docker
+Desktop/WSL are stopped; the disposable synthetic container is removed, shared volumes preserved.
+Review/merge and deployed acceptance remain. No new
+route/field/schema, migration, frontend, Terraform/guard, deployment or apply change. The separate
+runtime-pin/guard approval remains pending; D1/D3 remain In progress.
+
+PR #509 merged as `68a0c26`. Exact merged-main CI passes quality, catalog, PostgreSQL integration
+and both container builds; dependency audit fails and static analysis reports 65 blocking findings
+across 140 rules and 1,053 files. No security waiver or deployed private-read acceptance is claimed.
+[CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37089542128),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37089542143).
+
 PR #507 merged as `0b95ce5`. On 2026-10-02 the owner approved source-only private cover-letter
 read separation and active-candidate deletion safety, without public schema/frontend/migration/
 Terraform/deployment changes. The new private read service has no model, Invoke, reservation or
