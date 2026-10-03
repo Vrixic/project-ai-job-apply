@@ -215,8 +215,13 @@ off; invoke-target matching is not authentication. Rollout must compose matching
 control before the actor, separately from this source change. Trusted failed-call stop evidence,
 production runtime/IAM, retention and privacy quiescence remain open. No public API/frontend,
 migration, guard/Terraform, cloud/model call or deployment is included. Local synthetic evidence:
-640 Documents unit tests and 95 opt-in PostgreSQL ledger cases pass; object/model/Lambda ports
+643 Documents unit tests and 95 opt-in PostgreSQL ledger cases pass; object/model/Lambda ports
 are offline, not deployed or live-provider proof.
+
+The connected rejected-output pipeline now uses the actual OpenAI adapter with an offline HTTP
+transport, including oversized completed responses and lost control ACKs. This catches an earlier
+adapter-level character rejection that bypassed original-completion receipts. Incomplete provider
+responses remain unresolved; ordinary adapter/generation errors and request settings are unchanged.
 
 The full maintained repository verifier passes (38 typecheck tasks, workspace tests and 23
 builds), including unchanged generated contracts, formatting, baseline lint, operator and

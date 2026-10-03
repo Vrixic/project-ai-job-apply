@@ -72,6 +72,17 @@ export class OpenAiLunaProvider implements ModelProvider {
   ) {}
 
   async complete(request: ProviderRequest): Promise<{ text: string }> {
+    const result = await this.completeForLifecycle(request);
+    if (result.text.length > request.maxOutputChars)
+      throw new ModelGatewayError("OUTPUT_TOO_LARGE");
+    return result;
+  }
+
+  /** Internal gateway lifecycle only. Original bounded response, completed status and strict
+   * message shape are verified here; the gateway applies character/JSON rejection afterwards.
+   * Does not relax transport byte bounds, enable background work or provide abort stop proof.
+   */
+  async completeForLifecycle(request: ProviderRequest): Promise<{ text: string }> {
     try {
       if (this.options.enabled?.() !== true) throw new ModelGatewayError("MODEL_DISABLED");
       request.signal.throwIfAborted();
@@ -144,8 +155,6 @@ export class OpenAiLunaProvider implements ModelProvider {
       ) {
         throw new ModelGatewayError("PROVIDER_FAILED");
       }
-      if (content.text.length > request.maxOutputChars)
-        throw new ModelGatewayError("OUTPUT_TOO_LARGE");
       return { text: content.text };
     } catch (error) {
       // Never expose provider bodies, prompts, credentials or transport exception messages.

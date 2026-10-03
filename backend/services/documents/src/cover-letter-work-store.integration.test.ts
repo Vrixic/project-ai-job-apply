@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { ModelGateway } from "@ai-job-apply/ai-sdk";
+import { ModelGateway, OpenAiLunaProvider } from "@ai-job-apply/ai-sdk";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1036,7 +1036,28 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
         enabled: () => true,
         timeoutMs: failure === "model_timeout" ? 200 : 60_000,
         gateway: new ModelGateway(
-          { identity: COVER_LETTER_PROVIDER_MODEL, complete },
+          failure.startsWith("rejected_")
+            ? new OpenAiLunaProvider({
+                enabled: () => true,
+                apiKey: () => "synthetic",
+                fetch: async () => {
+                  const result = await complete();
+                  return new Response(
+                    JSON.stringify({
+                      status: "completed",
+                      output: [
+                        {
+                          type: "message",
+                          role: "assistant",
+                          status: "completed",
+                          content: [{ type: "output_text", text: result.text }],
+                        },
+                      ],
+                    }),
+                  );
+                },
+              })
+            : { identity: COVER_LETTER_PROVIDER_MODEL, complete },
           { enabled: () => true, timeoutMs: 1_000 },
         ),
         work: {

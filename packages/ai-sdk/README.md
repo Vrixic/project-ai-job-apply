@@ -36,8 +36,15 @@ for oversized/non-JSON output. Model and prompt provenance are captured before d
 Provider-thrown gateway errors, failed ports, aborts and late responses after timeout still throw;
 error codes cannot certify completion. Ordinary `generate` preserves its result/error contract.
 Provider-port fulfillment must acknowledge original completion, not enqueue background work.
-These receipts are not approval or remote-quiescence certificates. All 94 AI SDK offline tests
+These receipts are not approval or remote-quiescence certificates. All 97 AI SDK offline tests
 pass, including original/late completion, provenance mutation and ordinary API compatibility.
+
+The optional internal `ModelProvider.completeForLifecycle` path allows the approved adapter to
+acknowledge its original, byte-bounded completed response before downstream character/JSON
+rejection. `OpenAiLunaProvider.complete` still applies its original character bound and error
+contract. The gateway selects exactly one path; a lifecycle-port rejection never triggers an
+ordinary fallback dispatch. Request settings, model, endpoint, byte limits and activation remain
+unchanged. Real adapter composition uses offline HTTP responses in tests, never live calls.
 
 ## OpenAI development adapter
 
@@ -47,7 +54,8 @@ as ordinary cover-letter and narrative generation. It requires no provider or re
 but is not dispatch authorization: private callers must verify saved request/result integrity,
 original consent and model provenance separately. Fourteen offline cases prove parity with the
 existing generation path, withheld unsupported output, selection bounds and unusable evidence.
-The AI SDK now passes 81 unit tests. These helpers alone do not finalize a recovered draft.
+At that helper checkpoint, the AI SDK passed 81 unit tests. These helpers alone do not finalize
+a recovered draft; the current completion-receipt checkpoint above has additional coverage.
 
 `OpenAiLunaProvider` implements the existing provider port with native fetch and the fixed
 OpenAI Responses endpoint/model `gpt-6-luna`. Compose it through `ModelGateway` and the grounded

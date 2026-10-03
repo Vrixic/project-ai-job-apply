@@ -1,4 +1,4 @@
-import { ModelGateway, ModelGatewayError } from "@ai-job-apply/ai-sdk";
+import { ModelGateway, ModelGatewayError, OpenAiLunaProvider } from "@ai-job-apply/ai-sdk";
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -251,6 +251,54 @@ async function fixture(
 
 afterEach(() => vi.restoreAllMocks());
 describe("isolated cover-letter provider handler (offline model and S3)", () => {
+  it.each([
+    { kind: "invalid_json", text: "not json", status: "completed", closes: true },
+    { kind: "oversized", text: "x".repeat(8_001), status: "completed", closes: true },
+    { kind: "incomplete", text: "not json", status: "incomplete", closes: false },
+  ])(
+    "actual offline adapter $kind reaches only the appropriate original-phase closure",
+    async ({ text, status, closes }) => {
+      const test = await fixture();
+      const transport = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            status,
+            output: [
+              {
+                type: "message",
+                role: "assistant",
+                status: "completed",
+                content: [{ type: "output_text", text }],
+              },
+            ],
+          }),
+        ),
+      );
+      const clock = () => new Date("2026-10-02T12:01:00.000Z");
+      const gateway = new ModelGateway(
+        new OpenAiLunaProvider({
+          enabled: () => true,
+          apiKey: () => "synthetic",
+          fetch: transport,
+        }),
+        { enabled: () => true, clock },
+      );
+      const handler = createCoverLetterIsolatedProviderHandler({
+        objects: test.port,
+        gateway,
+        work: test.work,
+        enabled: () => true,
+        clock,
+      });
+      expect((await handler(test.input)).outcome).toBe("failed");
+      expect(transport).toHaveBeenCalledOnce();
+      expect(test.work.settleRejectedProviderDispatch).toHaveBeenCalledTimes(closes ? 1 : 0);
+      expect(test.work.settleProviderDispatch).not.toHaveBeenCalled();
+      expect(test.current("result")).toMatchObject({ state: "pending" });
+      expect((await handler(test.input)).outcome).toBe("in_progress");
+      expect(transport).toHaveBeenCalledOnce();
+    },
+  );
   it.each(["model", "prompt", "version", "negative", "fractional", "code"])(
     "refuses an unbound %s completion receipt without closing work",
     async (kind) => {

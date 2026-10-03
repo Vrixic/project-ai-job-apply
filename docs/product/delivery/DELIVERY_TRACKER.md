@@ -13,11 +13,19 @@ This is the master record for the delivery phases defined in the [product and sy
 acknowledged original completion from later JSON/output rejection. Private rejected-phase control
 permanently fences future phases before settling that original provider phase, without writing a
 result or granting finalization. Errors, aborts, lost acknowledgements and timeouts remain unresolved.
-All 94 AI SDK and 640 Documents unit cases and 95 opt-in real PostgreSQL ledger cases pass locally;
+All 97 AI SDK and 643 Documents unit cases and 95 opt-in real PostgreSQL ledger cases pass locally;
 full maintained verification passes (38 typecheck tasks, workspace tests and 23 builds).
 Public APIs, frontend, migrations, guard/Terraform, cloud/model
 calls, activation and deployment are excluded. D1/D3 remain In progress behind independent security,
 runtime/IAM, retention, provider fixture, deployed and accountable acceptance gates.
+
+The follow-up actual-adapter audit reproduced a completed oversized response throwing before
+gateway receipt creation. The optional internal lifecycle port now carries that original
+completed, byte-bounded response to gateway validation without a second dispatch; ordinary
+adapter errors and all request settings remain unchanged. The 95-case PostgreSQL rerun uses
+the actual adapter with offline HTTP for rejected completion/control-ACK cases. The amended
+source's full maintained verifier passes again: 38 typecheck tasks, 39 test/build dependency
+tasks and 23 builds, unchanged contracts/formatting and the 15-warning/58-info lint baseline.
 
 PR #513 merged as `5d9efa1`. Exact merged-main quality, catalog, integration and both container
 jobs pass; dependency audit and static analysis fail without waiver. Current live audit still

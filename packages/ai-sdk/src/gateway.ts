@@ -34,6 +34,11 @@ export interface ProviderRequest {
 export interface ModelProvider {
   readonly identity: ModelIdentity;
   complete(request: ProviderRequest): Promise<{ text: string }>;
+  /** Internal lifecycle path: acknowledge original completed response before character/JSON
+   * rejection. The gateway must still enforce output bounds before using this text. Failure
+   * never falls back to another dispatch. Existing providers need not implement this port.
+   */
+  completeForLifecycle?(request: ProviderRequest): Promise<{ text: string }>;
 }
 
 export class ModelGatewayError extends Error {
@@ -169,13 +174,16 @@ export class ModelGateway {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let text: string;
     try {
+      const providerRequest = {
+        system: request.system,
+        user: request.user,
+        maxOutputChars: this.maxOutputChars,
+        signal: controller.signal,
+      };
       const result = await Promise.race([
-        this.provider.complete({
-          system: request.system,
-          user: request.user,
-          maxOutputChars: this.maxOutputChars,
-          signal: controller.signal,
-        }),
+        this.provider.completeForLifecycle !== undefined
+          ? this.provider.completeForLifecycle(providerRequest)
+          : this.provider.complete(providerRequest),
         new Promise<never>((_, reject) => {
           controller.signal.addEventListener("abort", () =>
             reject(new ModelGatewayError("PROVIDER_TIMEOUT")),

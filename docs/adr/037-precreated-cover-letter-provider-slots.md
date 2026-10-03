@@ -234,6 +234,23 @@ evidence. No migration, public API, frontend, guard/Terraform, cloud/model call 
 included. This proposed ADR still requires trusted failed-call stop evidence, runtime/IAM,
 retention and accountable privacy/production proof before activation.
 
+The actual adapter audit then reproduced a completed oversized response throwing at the adapter's
+character check before reaching the gateway receipt path. An optional internal lifecycle port now
+preserves original byte-bounded completed response fulfillment until gateway character/JSON
+validation; ordinary adapter `complete` retains its previous character refusal. Exactly one port
+is dispatched, with no fallback after error. Actual-adapter offline HTTP is included in isolated
+and connected PostgreSQL rejection tests. Incomplete, malformed and lost responses remain pending;
+no endpoint/model/request setting or live-provider behavior is activated.
+
+Current official documentation limits the response-cancel endpoint to background responses and
+describes synchronous cancellation through connection termination. It does not establish that a
+local aborted fetch supplies an independently acknowledged terminal receipt for this protocol.
+Background execution also temporarily retains data for polling, even with `store=false`; it is
+not enabled by this approval. A different provider lifecycle/retention design still needs separate
+review. [Background mode](https://developers.openai.com/api/docs/guides/background),
+[cancel endpoint](https://developers.openai.com/api/reference/go/resources/beta/subresources/responses/methods/cancel),
+[data controls](https://developers.openai.com/api/docs/guides/your-data).
+
 ## Alternatives
 
 The owner approved the source-only private provider-control RPC on 2026-10-02. It exposes claim

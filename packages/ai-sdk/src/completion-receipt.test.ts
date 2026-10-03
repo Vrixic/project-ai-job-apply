@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ModelGateway, ModelGatewayError } from "./gateway.js";
+import { OpenAiLunaProvider } from "./openai.js";
 
 const identity = { provider: "offline-fake", model: "synthetic", version: "v1" };
 const request = {
@@ -17,6 +18,64 @@ const disclosure = {
 };
 
 describe("internal original-provider completion receipts", () => {
+  it.each([
+    { text: "not json", code: "OUTPUT_NOT_JSON" },
+    { text: "x".repeat(8_001), code: "OUTPUT_TOO_LARGE" },
+  ] as const)(
+    "actual offline adapter preserves original completion before $code rejection",
+    async ({ text, code }) => {
+      const transport = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            status: "completed",
+            output: [
+              {
+                type: "message",
+                role: "assistant",
+                status: "completed",
+                content: [{ type: "output_text", text }],
+              },
+            ],
+          }),
+        ),
+      );
+      const provider = new OpenAiLunaProvider({
+        enabled: () => true,
+        apiKey: () => "synthetic",
+        fetch: transport,
+      });
+      const gateway = new ModelGateway(provider, { enabled: () => true });
+      expect(await gateway.generateWithCompletion(request, disclosure)).toEqual({
+        kind: "completed_rejected",
+        code,
+        model: provider.identity,
+        promptId: request.promptId,
+        promptVersion: request.promptVersion,
+        outputCharacters: text.length,
+      });
+      expect(transport).toHaveBeenCalledOnce();
+      expect(JSON.parse(transport.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+        store: false,
+        stream: false,
+        background: false,
+      });
+    },
+  );
+  it("a rejected lifecycle port never falls back to a second ordinary dispatch", async () => {
+    const complete = vi.fn(async () => ({ text: "{}" }));
+    const completeForLifecycle = vi.fn(async () => {
+      throw new ModelGatewayError("OUTPUT_TOO_LARGE");
+    });
+    const gateway = new ModelGateway(
+      { identity, complete, completeForLifecycle },
+      { enabled: () => true },
+    );
+    await expect(gateway.generateWithCompletion(request, disclosure)).rejects.toMatchObject({
+      code: "OUTPUT_TOO_LARGE",
+    });
+    expect(completeForLifecycle).toHaveBeenCalledOnce();
+    expect(complete).not.toHaveBeenCalled();
+  });
   it("pins original prompt and model provenance before asynchronous dispatch", async () => {
     const originalRequest = { ...request };
     const originalIdentity = { ...identity };
