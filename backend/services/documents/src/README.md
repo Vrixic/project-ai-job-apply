@@ -2,6 +2,14 @@
 
 The API/persistence surface contains only candidate-owned metadata and opaque object references.
 
+`cover-letter-read.ts` is the owner-approved source-only read separation. Context/binding/preview/
+file behavior no longer requires the generation service or its model/mutation capabilities.
+`PostgresCoverLetterReadStore` admits an active candidate before handing a fixed-owner reader to
+the service; SQL lookup, exact pinned object read, context comparison and rendering use that same
+lease. No nested Documents transaction or object-write port is needed. Public routes and schemas
+are unchanged. Local single-connection quarantine races pass; deployed composition and broader
+provider quiescence, retention and export acceptance remain separate gates.
+
 The private provider-control RPC is source-only and default-off. Its strict version-one envelopes
 carry document IDs, request hashes, original consent expiry and fixed-purpose references only.
 The isolated client can claim existing provider work and acknowledge positive original provider

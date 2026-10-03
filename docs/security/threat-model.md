@@ -252,6 +252,16 @@ control failure. Capability-specific deltas are recorded in the
 | Employer text injects markup or structured-data claims | React text rendering, strict response schema/size, no dangerous HTML, and server-generated `JobPosting` JSON-LD only when the canonical record has every required truthful field; otherwise structured data is suppressed | Source-quality acceptance and the eventual public-host rendering remain release gates; employer text never supplies arbitrary markup or schema fields |
 | Reversible alias is cached as permanent | Temporary redirect with current canonical metadata | Alias lifecycle acceptance must be rerun against deployed current data |
 
+## Source-only private cover-letter read delta
+
+Saved-document reads no longer require ModelGateway, Invoke, reservation or mutation capabilities.
+The reader fixes owner identity, verifies exact packet/object bindings and holds the Identity-owned
+active-candidate lease through evidence comparison and rendering. Quarantine waits for an admitted
+bounded read and refuses later reads before evidence or object I/O. Single-connection PostgreSQL
+tests reject nested-transaction deadlocks and verify this race for context, binding, preview and
+file. This source-only change does not prove deployed IAM, privacy approval or remote-provider
+quiescence; provider retention/drain/export and runtime composition remain separate release gates.
+
 ## Source-only cover-letter provider-control delta
 
 Strict identifier/reference-only RPC envelopes and fixed provider-phase capabilities prevent

@@ -28,7 +28,12 @@ import { CoverLetterProviderInitializer } from "./cover-letter-provider-initiali
 import { CoverLetterProviderInvoker } from "./cover-letter-provider-invoke.js";
 import type { CoverLetterProviderTransitionObjects } from "./cover-letter-provider-objects.js";
 import { CoverLetterProviderRecovery } from "./cover-letter-provider-recovery.js";
-import { type CoverLetterObjectStore, PostgresCoverLetterStore } from "./cover-letter-store.js";
+import { CoverLetterReadService } from "./cover-letter-read.js";
+import {
+  type CoverLetterObjectStore,
+  PostgresCoverLetterReadStore,
+  PostgresCoverLetterStore,
+} from "./cover-letter-store.js";
 import {
   type CoverLetterWorkPurpose,
   PostgresCoverLetterWorkStore,
@@ -193,6 +198,11 @@ const generation = {
         gateway,
         () => now,
       );
+      const readService = new CoverLetterReadService(
+        new PostgresCoverLetterReadStore(client, { read }),
+        { load: async () => ({ facts: [fact], job }) },
+        () => now,
+      );
       const request = {
         id: randomUUID(),
         ownerUserId: owner,
@@ -216,15 +226,15 @@ const generation = {
       expect(await service.generate(request)).toEqual(result);
       expect(await service.recover(request)).toEqual(result.letter);
       expect(complete).toHaveBeenCalledTimes(1);
-      expect(await service.binding(owner, request.applicationId, result.letter.contentSha256)).toBe(
-        result.letter.contentSha256,
-      );
       expect(
-        await service.preview(owner, request.applicationId, result.letter.contentSha256),
+        await readService.binding(owner, request.applicationId, result.letter.contentSha256),
+      ).toBe(result.letter.contentSha256);
+      expect(
+        await readService.preview(owner, request.applicationId, result.letter.contentSha256),
       ).toMatchObject({ matchesPacket: true, reviewRequired: true });
       for (const format of ["pdf", "docx"] as const) {
         expect(
-          await service.file(owner, request.applicationId, result.letter.contentSha256, format),
+          await readService.file(owner, request.applicationId, result.letter.contentSha256, format),
         ).toMatchObject({ format, contentSha256: result.letter.contentSha256 });
       }
       const rows =
@@ -232,13 +242,13 @@ const generation = {
       expect(rows).toEqual([{ status: "ready" }]);
       job = { ...job, description: `${job.description} Changed.` };
       expect(
-        await service.binding(owner, request.applicationId, result.letter.contentSha256),
+        await readService.binding(owner, request.applicationId, result.letter.contentSha256),
       ).toBeUndefined();
       expect(
-        await service.preview(owner, request.applicationId, result.letter.contentSha256),
+        await readService.preview(owner, request.applicationId, result.letter.contentSha256),
       ).toMatchObject({ matchesPacket: false });
       await expect(
-        service.file(owner, request.applicationId, result.letter.contentSha256, "pdf"),
+        readService.file(owner, request.applicationId, result.letter.contentSha256, "pdf"),
       ).rejects.toThrow(CoverLetterIntegrityError);
       expect(complete).toHaveBeenCalledTimes(1);
     });
@@ -280,6 +290,99 @@ const generation = {
       expect(refused).not.toHaveBeenCalled();
     });
   });
+
+  it.each(["context", "binding", "preview", "file"] as const)(
+    "holds %s reads through evidence/rendering and blocks quarantine using a single-connection pool",
+    async (method) => {
+      await withOwner(async (owner) => {
+        const pool = postgres(databaseUrl ?? "postgres://invalid", {
+          max: 1,
+          onnotice: () => undefined,
+        });
+        let release: () => void = () => undefined;
+        let entered: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const reading = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const evidence = {
+          facts: [
+            {
+              id: factId,
+              kind: "skill" as const,
+              key: "skill",
+              value: "TypeScript",
+              verification: "confirmed" as const,
+              sensitivity: "standard" as const,
+              source: { type: "user" as const, reference: "synthetic" },
+              version: 1,
+            },
+          ],
+          job: { title: "Engineer", company: "Synthetic", description: "Build systems." },
+        };
+        const context = coverLetterContext({ ...evidence, now: new Date() });
+        const reservation = await store.reserve({
+          ...input(owner),
+          jobRevision: context.jobContextHash,
+          confirmedFactsHash: context.confirmedFactsHash,
+        });
+        const document = createCoverLetterDocument(reservation, generation, reservation.createdAt);
+        await store.complete(document);
+        const objectRead = vi.fn<CoverLetterObjectStore["read"]>(async (reference) => {
+          entered();
+          await gate;
+          return read(reference);
+        });
+        const load = vi.fn(async () => {
+          if (method === "context") {
+            entered();
+            await gate;
+          }
+          return evidence;
+        });
+        const service = new CoverLetterReadService(
+          new PostgresCoverLetterReadStore(pool, { read: objectRead }),
+          { load },
+        );
+        const run = () => {
+          if (method === "context")
+            return service.context({
+              ownerUserId: owner,
+              applicationId: reservation.applicationId,
+            });
+          if (method === "binding")
+            return service.binding(owner, reservation.applicationId, document.contentSha256);
+          if (method === "preview")
+            return service.preview(owner, reservation.applicationId, document.contentSha256);
+          return service.file(owner, reservation.applicationId, document.contentSha256, "pdf");
+        };
+        const pending = run();
+        try {
+          await reading;
+          await expect(
+            client.begin(async (transaction) => {
+              await transaction`SET LOCAL lock_timeout = '25ms'`;
+              await transaction`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+            }),
+          ).rejects.toMatchObject({ code: "55P03" });
+          release();
+          expect(await pending).toBeDefined();
+          await client`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+          const readsBefore = objectRead.mock.calls.length;
+          const loadsBefore = load.mock.calls.length;
+          await expect(run()).rejects.toMatchObject({ code: "42501" });
+          expect(objectRead.mock.calls.length).toBe(readsBefore);
+          expect(load.mock.calls.length).toBe(loadsBefore);
+        } finally {
+          release();
+          await pending.catch(() => undefined);
+          await pool.end();
+        }
+      });
+    },
+  );
 
   it("reserves before object I/O, deduplicates concurrent delivery and binds conflicts", async () => {
     await withOwner(async (owner) => {
@@ -848,9 +951,12 @@ const generation = {
       await expect(
         store.recover({ ...recovery, confirmedFactsHash: "c".repeat(64) }),
       ).rejects.toThrow(CoverLetterIntegrityError);
-      expect(
-        await store.read(randomUUID(), reserved.applicationId, document.contentSha256),
-      ).toBeNull();
+      await withOwner(async (other) => {
+        expect(await store.read(other, reserved.applicationId, document.contentSha256)).toBeNull();
+      });
+      await expect(
+        store.read(randomUUID(), reserved.applicationId, document.contentSha256),
+      ).rejects.toMatchObject({ code: "42501" });
       expect(await store.read(owner, randomUUID(), document.contentSha256)).toBeNull();
       expect(await store.read(owner, reserved.applicationId, "c".repeat(64))).toBeNull();
       expect(read.mock.calls.length).toBe(readBefore);

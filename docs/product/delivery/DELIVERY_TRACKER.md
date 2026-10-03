@@ -9,6 +9,23 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+PR #507 merged as `0b95ce5`. On 2026-10-02 the owner approved source-only private cover-letter
+read separation and active-candidate deletion safety, without public schema/frontend/migration/
+Terraform/deployment changes. The new private read service has no model, Invoke, reservation or
+mutation port; its owner-fixed transaction reader covers pinned object reads, current evidence
+and rendering in one Identity lease. Documents passes 578 unit and 116 PostgreSQL cases, with
+all 66 opt-in work-store cases executed; six connected preparation-workflow cases and typecheck
+pass. Four new single-connection quarantine races cover all four reads. Offline model/object
+transport is not live/deployed acceptance. Full maintained verification passes: unchanged generated
+contracts, synthetic operator guards, formatting (954 files), baseline lint, 38 typecheck tasks
+(34 cached), repository tests, 23 builds (20 cached), dependency-security regressions, Compose and
+scope. Workflow unit evidence is 1412 passed/20 integration skipped, separate from the six real
+PostgreSQL workflow cases. Added local evidence links and whitespace checks pass. The disposable
+synthetic database container is removed; Docker Desktop/WSL are stopped and shared volumes retained.
+Merged-main `0b95ce5` CI also passes quality, catalog, integration and both container builds; its
+audit fails and scanner reports 65 findings. No gate exception or deployment. D1/D3 remain
+In progress; runtime/IAM, quiescence, retention/export, external acceptance and security gates remain.
+
 PR #506 merged as `84c8c88` on 2026-10-02. The independent test-only static-dispatch follow-up
 and its verification records now use a new backend branch based on that exact merged main.
 This merge does not approve the pending API/guard changes or activate the cover-letter runtime.
@@ -28,7 +45,8 @@ The remaining 65 findings and dependency audit still fail, with no gate waiver.
 [Exact CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37071491872),
 [scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37071491879). No production
 API/runtime, frontend, operational guard, Terraform or deployment change.
-The separate Profile, runtime-pin/guard and private read-boundary approvals remain pending.
+The separate Profile and runtime-pin/guard approvals remain pending; the private read scope is
+now approved and implemented locally as described above, not deployed.
 
 Hosted backend checkpoint `749d95d` is terminal: quality, catalog invariants, PostgreSQL integration
 and both migration/web container builds pass. Integration runs 33 successful tasks, but Documents

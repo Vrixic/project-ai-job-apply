@@ -11,6 +11,8 @@ import {
 import {
   CoverLetterGenerationService,
   type CoverLetterObjectStore,
+  CoverLetterReadService,
+  PostgresCoverLetterReadStore,
   PostgresCoverLetterStore,
   PostgresCoverLetterWorkStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
@@ -186,6 +188,11 @@ const START = new Date("2026-10-02T12:00:00Z");
         { enabled: () => enabled, clock: () => now },
       );
       const service = new CoverLetterGenerationService(documents, source, gateway, () => now);
+      const readService = new CoverLetterReadService(
+        new PostgresCoverLetterReadStore(client, objectStore),
+        source,
+        () => now,
+      );
       const context = coverLetterContext({ facts: [fact], job, now });
       const queued = await applications.queuePreparation({
         ownerUserId: owner,
@@ -216,6 +223,12 @@ const START = new Date("2026-10-02T12:00:00Z");
         handlerFunction: createApplicationPreparationDurableHandler(activityArn),
       });
       return {
+        readService,
+        preparation: {
+          context: readService.context.bind(readService),
+          generate: service.generate.bind(service),
+          recover: service.recover.bind(service),
+        },
         owner,
         applicationId,
         preparationId,
@@ -230,7 +243,10 @@ const START = new Date("2026-10-02T12:00:00Z");
 
     it("runs the real owned transactions through durable replay to a hash-bound mandatory-review packet", async () => {
       await withFixture(async (fixture) => {
-        const handler = createApplicationPreparationActivityHandler(applications, fixture.service);
+        const handler = createApplicationPreparationActivityHandler(
+          applications,
+          fixture.preparation,
+        );
         fixture.runner.registerFunction(activityArn, handler);
         const result = await fixture.runner.run({ payload: fixture.input });
         expect(result.getStatus()).toBe(ExecutionStatus.SUCCEEDED);
@@ -257,17 +273,17 @@ const START = new Date("2026-10-02T12:00:00Z");
         const hash = view.currentPacket?.artifactHashes.coverLetter;
         expect(hash).toMatch(/^[a-f0-9]{64}$/u);
         if (!hash) throw new Error("Synthetic packet binding missing");
-        expect(await fixture.service.binding(fixture.owner, fixture.applicationId, hash)).toBe(
+        expect(await fixture.readService.binding(fixture.owner, fixture.applicationId, hash)).toBe(
           hash,
         );
         expect(
-          await fixture.service.preview(fixture.owner, fixture.applicationId, hash),
+          await fixture.readService.preview(fixture.owner, fixture.applicationId, hash),
         ).toMatchObject({ reviewRequired: true, matchesPacket: true });
         expect(
-          await fixture.service.file(fixture.owner, fixture.applicationId, hash, "pdf"),
+          await fixture.readService.file(fixture.owner, fixture.applicationId, hash, "pdf"),
         ).toMatchObject({ contentSha256: hash });
         expect(
-          await fixture.service.file(fixture.owner, fixture.applicationId, hash, "docx"),
+          await fixture.readService.file(fixture.owner, fixture.applicationId, hash, "docx"),
         ).toMatchObject({ contentSha256: hash });
         const repeat = {
           schemaVersion: 1,
@@ -301,7 +317,7 @@ const START = new Date("2026-10-02T12:00:00Z");
         const port: CoverLetterPreparationPort = {
           context: async (identity) => {
             if (++checks === 2) throw new Error("Synthetic context outage");
-            return fixture.service.context(identity);
+            return fixture.readService.context(identity);
           },
           recover: (identity) => fixture.service.recover(identity),
           generate: (identity) => fixture.service.generate(identity),
@@ -334,7 +350,7 @@ const START = new Date("2026-10-02T12:00:00Z");
       await withFixture(async (fixture) => {
         fixture.runner.registerFunction(
           activityArn,
-          createApplicationPreparationActivityHandler(applications, fixture.service),
+          createApplicationPreparationActivityHandler(applications, fixture.preparation),
         );
         expect((await fixture.runner.run({ payload: fixture.input })).getStatus()).toBe(
           ExecutionStatus.SUCCEEDED,
@@ -361,7 +377,7 @@ const START = new Date("2026-10-02T12:00:00Z");
         const executionArn = `${functionArn}/durable-execution/${name}/synthetic-id`;
         fixture.runner.registerFunction(
           activityArn,
-          createApplicationPreparationActivityHandler(applications, fixture.service),
+          createApplicationPreparationActivityHandler(applications, fixture.preparation),
         );
         let executed = false;
         const invoke = vi.fn(
@@ -492,7 +508,7 @@ const START = new Date("2026-10-02T12:00:00Z");
         now = new Date(START.getTime() + 15 * 60_000 + 1);
         fixture.runner.registerFunction(
           activityArn,
-          createApplicationPreparationActivityHandler(applications, fixture.service),
+          createApplicationPreparationActivityHandler(applications, fixture.preparation),
         );
         expect((await fixture.runner.run({ payload: fixture.input })).getStatus()).toBe(
           ExecutionStatus.SUCCEEDED,
