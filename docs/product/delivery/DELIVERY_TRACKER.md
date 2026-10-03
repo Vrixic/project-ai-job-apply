@@ -9,6 +9,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+PR #517 merged as `2ab5bae` before its committed-source guard correction landed. Its first
+quality run failed on the stale Documents `0007` success marker; catalog checks passed, while
+integration/container jobs were skipped. A backend-only follow-up updates that exact marker to
+`0008` and extends the existing D2 runtime guard with the exact new Documents inventory,
+retaining historical boundaries and adding mixed/unknown rejection cases. The committed-source
+migration-operator test and 248 D2 guard assertions pass; broader verification is being repeated.
+No provider/cloud action, deployment, activation, public API or frontend change is included.
+
 2026-10-03 D3-046 source-only durable response inventory started on merged PR #516 (`3bf6b5b`).
 The owner directed engineering to proceed with the recommended Documents migration, private
 ledger API and strict guard updates. Identifier-only reservations precede original creation;
