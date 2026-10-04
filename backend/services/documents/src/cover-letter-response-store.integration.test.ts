@@ -5,15 +5,18 @@ import { ModelGateway, OpenAiLunaProvider, OpenAiLunaResponseCleanup } from "@ai
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createCoverLetterDocument } from "./cover-letter.js";
+import { COVER_LETTER_PROVIDER_MODEL } from "./cover-letter-provider-contract.js";
 import { CoverLetterResponseCaptureClient } from "./cover-letter-response-capture-client.js";
 import { createCoverLetterResponseCaptureHandler } from "./cover-letter-response-capture-handler.js";
 import { createCoverLetterResponseCaptureLambda } from "./cover-letter-response-capture-lambda.js";
+import { CoverLetterResponseDisposalClient } from "./cover-letter-response-disposal-client.js";
+import { createCoverLetterResponseDisposalHandler } from "./cover-letter-response-disposal-handler.js";
+import { createCoverLetterResponseDisposalLambda } from "./cover-letter-response-disposal-lambda.js";
 import {
   createCoverLetterResponseReconciler,
   createCoverLetterSuccessfulResponseReconciler,
 } from "./cover-letter-response-reconciliation.js";
-import { createCoverLetterDocument } from "./cover-letter.js";
-import { COVER_LETTER_PROVIDER_MODEL } from "./cover-letter-provider-contract.js";
 import { PostgresCoverLetterResponseStore } from "./cover-letter-response-store.js";
 import { PostgresCoverLetterStore } from "./cover-letter-store.js";
 import {
@@ -383,6 +386,210 @@ describe.skipIf(!requested)("original provider response inventory with real Post
       const other = { ...ref, [key]: key === "requestSha256" ? "f".repeat(64) : uuidv7() };
       expect(await store.readCompleted(other)).toBeNull();
       expect((await store.readCompleted(ref))?.state).toBe("acknowledged");
+    },
+  );
+
+  it.each([
+    "none",
+    "quarantined",
+    "unknown",
+    "disabled",
+    "foreign_target",
+    "secret_withdrawal",
+    "record_ack",
+  ] as const)(
+    "connects private disposal bootstrap to a bounded native SQL pool: %s",
+    async (fault) => {
+      await reserve();
+      const original = response();
+      if (fault !== "unknown") await store.recordCreation(ref, original);
+      if (fault === "quarantined")
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-disposal:7";
+      const env: Record<string, string | undefined> = {
+        COVER_LETTER_RESPONSE_DISPOSAL_ENABLED: fault === "disabled" ? "false" : "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: "synthetic-disposal",
+        AWS_LAMBDA_FUNCTION_VERSION: "7",
+        DATABASE_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+        AWS_SESSION_TOKEN: "synthetic-session-token",
+      };
+      let pool: postgres.Sql | undefined;
+      const createPool = vi.fn(
+        (url: string, options: { max: 1; idle_timeout: 20; connect_timeout: 10 }) => {
+          pool = postgres(url, options);
+          return pool;
+        },
+      );
+      const resolve = vi.fn(async () => {
+        if (fault === "secret_withdrawal") env.COVER_LETTER_RESPONSE_DISPOSAL_ENABLED = "false";
+        return databaseUrl as string;
+      });
+      const recordOriginal = vi.fn<PostgresCoverLetterResponseStore["recordDisposal"]>();
+      const createResponses =
+        fault === "record_ack"
+          ? (url: string, enabled: () => boolean) => {
+              const responses = new PostgresCoverLetterResponseStore(
+                createPool(url, { max: 1, idle_timeout: 20, connect_timeout: 10 }),
+                enabled,
+              );
+              recordOriginal.mockImplementation(async (reference, cleanup) => {
+                await responses.recordDisposal(reference, cleanup);
+                throw Error("SyntheticCommittedDisposalLostAck");
+              });
+              return { read: responses.read.bind(responses), recordDisposal: recordOriginal };
+            }
+          : undefined;
+      const run = createCoverLetterResponseDisposalLambda({
+        environment: () => env,
+        resolveDatabaseUrl: resolve,
+        createPool,
+        ...(createResponses ? { createResponses } : {}),
+      });
+      const input = { schemaVersion: 1 as const, action: "read" as const, reference: ref };
+      const context = {
+        invokedFunctionArn: fault === "foreign_target" ? target.replace(":7", ":8") : target,
+      };
+      try {
+        const readback = await run(input, context);
+        if (["disabled", "foreign_target", "secret_withdrawal"].includes(fault)) {
+          expect(readback).toEqual({ ...input, outcome: "unavailable", inventory: null });
+          expect(createPool).not.toHaveBeenCalled();
+          expect(resolve).toHaveBeenCalledTimes(fault === "secret_withdrawal" ? 1 : 0);
+          return;
+        }
+        expect(readback).toEqual({
+          ...input,
+          outcome: "read",
+          inventory: {
+            reference: ref,
+            state: fault === "unknown" ? "reserved" : "acknowledged",
+            response: fault === "unknown" ? null : original,
+          },
+        });
+        const disposal = {
+          schemaVersion: 1 as const,
+          action: "record_disposal" as const,
+          reference: ref,
+          cleanup: receipt(original),
+        };
+        expect(await run(disposal, context)).toEqual({
+          ...disposal,
+          outcome: ["record_ack", "unknown"].includes(fault) ? "unavailable" : "recorded",
+        });
+        expect((await store.read(ref))?.state).toBe(fault === "unknown" ? "reserved" : "disposed");
+        expect((await run(input, context)).outcome).toBe("read");
+        const [grant] =
+          await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+        expect(grant?.state).toBe("running");
+        expect(resolve).toHaveBeenCalledOnce();
+        expect(createPool).toHaveBeenCalledExactlyOnceWith(databaseUrl, {
+          max: 1,
+          idle_timeout: 20,
+          connect_timeout: 10,
+        });
+        if (fault === "record_ack") expect(recordOriginal).toHaveBeenCalledOnce();
+      } finally {
+        if (pool) await pool.end();
+      }
+    },
+  );
+
+  it.each([
+    "none",
+    "record_ack",
+    "quarantined",
+    "unknown",
+    "wrong_receipt",
+    "disabled",
+    "read_ack",
+  ] as const)(
+    "connects maintenance-only disposal RPC to durable original inventory: %s",
+    async (fault) => {
+      await reserve();
+      const original = response();
+      if (fault !== "unknown") await store.recordCreation(ref, original);
+      if (fault === "quarantined")
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-disposal:7";
+      const readOriginal = vi.fn(store.read.bind(store));
+      const recordOriginal = vi.fn(
+        async (
+          reference: CoverLetterWorkReference,
+          cleanup: Parameters<typeof store.recordDisposal>[1],
+        ) => {
+          await store.recordDisposal(reference, cleanup);
+          if (fault === "record_ack") throw Error("SyntheticCommittedDisposalLostAck");
+        },
+      );
+      const handler = createCoverLetterResponseDisposalHandler({
+        functionArn: target,
+        responses: { read: readOriginal, recordDisposal: recordOriginal },
+        enabled: () => fault !== "disabled",
+      });
+      const send = vi.fn(async (command: import("@aws-sdk/client-lambda").InvokeCommand) => ({
+        StatusCode: 200,
+        ExecutedVersion: "7",
+        Payload: new TextEncoder().encode(
+          JSON.stringify(
+            await handler(
+              JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array)),
+              { invokedFunctionArn: target },
+            ),
+          ),
+        ),
+      }));
+      const client = new CoverLetterResponseDisposalClient(
+        target,
+        { send, config: { maxAttempts: async () => 1 } },
+        () => true,
+      );
+      const unavailable = /^CoverLetterResponseDisposalUnavailable$/u;
+      if (fault === "disabled") {
+        await expect(client.read(ref)).rejects.toThrow(unavailable);
+        await expect(client.recordDisposal(ref, receipt(original))).rejects.toThrow(unavailable);
+        expect(readOriginal).not.toHaveBeenCalled();
+        expect(recordOriginal).not.toHaveBeenCalled();
+        return;
+      }
+      if (fault === "read_ack") {
+        readOriginal.mockRejectedValueOnce(Error("SyntheticLostReadAck"));
+        await expect(client.read(ref)).rejects.toThrow(unavailable);
+      }
+      const inventory = await client.read(ref);
+      expect(inventory).toEqual({
+        reference: ref,
+        state: fault === "unknown" ? "reserved" : "acknowledged",
+        response: fault === "unknown" ? null : original,
+      });
+      if (fault === "unknown" || fault === "wrong_receipt") {
+        await expect(
+          client.recordDisposal(ref, receipt({ ...original, responseId: "resp_syntheticOther" })),
+        ).rejects.toThrow(unavailable);
+        expect(await store.read(ref)).toEqual(inventory);
+      } else {
+        if (fault === "record_ack")
+          await expect(client.recordDisposal(ref, receipt(original))).rejects.toThrow(unavailable);
+        else await client.recordDisposal(ref, receipt(original));
+        expect(await client.read(ref)).toEqual({
+          reference: ref,
+          state: "disposed",
+          response: original,
+        });
+        expect(recordOriginal).toHaveBeenCalledTimes(1);
+        if (fault !== "record_ack") await client.recordDisposal(ref, receipt(original));
+      }
+      const [grant] =
+        await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+      expect(grant?.state).toBe("running");
+      if (fault === "quarantined")
+        await expect(work.claim(ref)).rejects.toThrow(/^CoverLetterWorkUnavailable$/u);
+      else await expect(work.claim(ref)).resolves.toEqual({ kind: "unavailable" });
+      const foreign = { ...ref, requestSha256: "f".repeat(64) };
+      expect(await client.read(foreign)).toBeNull();
+      await expect(client.recordDisposal(foreign, receipt(original))).rejects.toThrow(unavailable);
     },
   );
 

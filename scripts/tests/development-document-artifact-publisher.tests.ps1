@@ -149,7 +149,7 @@ if ($source.Contains('@($receipt.artifacts).Count -ne 2')) {
 
 Write-Host "Development document artifact publisher pure guard tests passed."
 
-$privateNames = @("cover-letter-provider-control-lambda", "cover-letter-response-capture-lambda", "cover-letter-cleanup-lambda")
+$privateNames = @("cover-letter-provider-control-lambda", "cover-letter-response-capture-lambda", "cover-letter-cleanup-lambda", "cover-letter-response-disposal-lambda")
 $privateMatrix = @()
 foreach ($privateName in $privateNames) {
   foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
@@ -157,12 +157,13 @@ foreach ($privateName in $privateNames) {
   }
 }
 if (-not (Assert-CanonicalReceiptMatrix -Artifacts $privateMatrix -ExpectedArtifactNames $privateNames)) {
-  throw "The canonical twelve-object private receipt was refused."
+  throw "The canonical sixteen-object private receipt was refused."
 }
 foreach ($invalidPrivateMatrix in @(
     [pscustomobject]@{ Entries = $canonicalArtifacts },
-    [pscustomobject]@{ Entries = @($privateMatrix | Select-Object -First 11) },
-    [pscustomobject]@{ Entries = @($privateMatrix[0]) + @($privateMatrix | Select-Object -Skip 1 -First 10) + @($privateMatrix[0]) },
+    [pscustomobject]@{ Entries = @($privateMatrix | Select-Object -First 12) },
+    [pscustomobject]@{ Entries = @($privateMatrix | Select-Object -First 15) },
+    [pscustomobject]@{ Entries = @($privateMatrix[0]) + @($privateMatrix | Select-Object -Skip 1 -First 14) + @($privateMatrix[0]) },
     [pscustomobject]@{ Entries = @($privateMatrix) + @($canonicalArtifacts) }
   )) {
   $refused = $false
@@ -184,7 +185,7 @@ foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcon
   $ArtifactFamily = $family
   foreach ($assignment in $configurationAssignments) { Invoke-Expression $assignment.Extent.Text }
   if ($family -eq "PrivateDocumentControls") {
-    if (($artifactNames -join ',') -cne ($privateNames -join ',') -or $expectedObjectCount -ne 12 -or
+    if (($artifactNames -join ',') -cne ($privateNames -join ',') -or $expectedObjectCount -ne 16 -or
         $receiptKind -cne "development-private-document-controls-lambda-publication" -or
         $artifactKeyRoot -cne "lambda/documents/private-controls" -or
         $operatorDirectoryName -cne "development-private-document-control-artifacts" -or

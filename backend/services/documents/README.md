@@ -29,6 +29,20 @@ rendering state, version diffs, and artifact metadata.
 - `src/resume-tailoring.ts` serves the fixed `resume-tailoring-v1` request from the document processor ([ADR-031](../../../docs/adr/031-deterministic-resume-tailoring-in-documents-runtime.md)): an owner-scoped parsed-resume lookup, the verified normalized read, deterministic tailoring, and verified DOCX/PDF rendering. Nothing is persisted beyond the content hash the packet stores. The dependency-free wire contract is `src/resume-tailoring-contract.ts`, which the Gateway imports.
 
 Generative rewrites are not implemented. Cover-letter preparation (D3-017) is in progress.
+The separate source-only response-disposal v1 RPC exposes exact original inventory reads and
+positive terminal-deletion receipt persistence to private maintenance. It defaults off, pins
+one numeric Lambda target, permits one SDK attempt and carries metadata only. Unknown identity,
+lost acknowledgements and deadlines remain unresolved; disposed inventory does not settle work
+or authorize platform purge. Existing capture/work/fence contracts are unchanged. Its handler
+must be published and bound through reviewed maintenance-only IAM before its client is composed.
+
+The source-only `cover-letter-response-disposal-lambda` bootstrap uses the shared lazy
+target/managed-secret policy and a native one-connection pool supplying read/recordDisposal only.
+Its independent `COVER_LETTER_RESPONSE_DISPOSAL_ENABLED` flag defaults off. Reviewed runtime/IAM,
+successful-generation disposal, writer drain and deployment remain unfinished.
+Offline Lambda/provider transports and generated-synthetic PostgreSQL tests
+are layer evidence, not live provider or retention evidence.
+
 The private `./cover-letter-provider` entrypoint supplies transport contracts, injected S3
 ports and a source-only handler factory, with no database, renderer or credential bootstrap. Invocation/output
 envelopes contain document IDs and exact owned references; prompt/result text lives in canonical
@@ -152,10 +166,10 @@ before it appears, and new runtime function/object permissions need deployment r
 ## Private original-response capture RPC
 
 The separate local `build:lambda:private-controls` command now builds exactly the provider-control,
-response-capture and cleanup entrypoints into `dist/private-control-lambda`. Actual bundled handlers
+response-capture, cleanup and response-disposal entrypoints into `dist/private-control-lambda`. Actual bundled handlers
 must refuse valid work while their independent flags are off and reject additional content fields
 without secret fetches. The publisher's `PrivateDocumentControls` family has dedicated receipt,
-operator and immutable key roots and exactly twelve companion objects; legacy parser/processor
+operator and immutable key roots and exactly sixteen companion objects; legacy parser/processor
 receipts remain unchanged. This source wiring is not publication, deployment, IAM authentication
 or remote-quiescence proof. Runtime composition and activation remain unfinished and default-off.
 
