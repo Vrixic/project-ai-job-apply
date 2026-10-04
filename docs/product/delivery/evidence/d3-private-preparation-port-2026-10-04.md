@@ -91,3 +91,20 @@ draft/provider-result recovery, and rejects emitted legacy direct generation, Mo
 OpenAI/background/cleanup implementations, isolated actor, provider-key resolver and maintenance
 actor. Parsed barrel reexports with zero emitted bytes are not capabilities. The maintained
 verifier now includes this boundary check; this is not a native activity artifact or deployment.
+
+## Capability-facade review checkpoint
+
+The first full verifier passes at source `3861c69`: 38 typecheck tasks, 39 test tasks and
+23 builds; unchanged zero-error/15-warning/58-info lint baseline. Before review, the private
+constructor composition was tightened: owning reads, candidate lease, original-work controls,
+initialization and recovery now receive exact frozen method facades. Recovery's runtime
+store has no reservation method, its provider objects are read-only, and initialization has
+no provider-dispatch/finalization capabilities. This closes a broader-object gap despite the
+earlier narrow static types. No core SQL, shared contract or grant semantics are changed.
+
+Twenty new port cases plus 21 existing evidence cases pass (41 focused), including two tests
+inspecting the actual constructor capability sets. All seven real PostgreSQL cases pass again
+on the final facade source using a fresh owned tmpfs fixture. Workflow build, typecheck and
+the emitted-port model-isolation guard also pass. The first full-verifier result is historical;
+full verification for the final facade source remains pending. The owned fixture is removed
+and Docker Desktop/WSL are stopped again.

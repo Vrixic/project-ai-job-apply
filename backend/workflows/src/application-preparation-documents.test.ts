@@ -3,6 +3,7 @@ import type { PreparationRecord } from "@ai-job-apply/applications-service";
 import {
   CoverLetterDraftRecoveryService,
   CoverLetterPreparationService,
+  CoverLetterProviderInitializer,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createIsolatedCoverLetterPreparationPort } from "./application-preparation-documents.js";
@@ -148,6 +149,46 @@ function fixture(defaultOff = false) {
 
 afterEach(() => vi.restoreAllMocks());
 describe("private Applications to isolated Documents preparation composition", () => {
+  it("recovery receives frozen exact store and provider-read capabilities", async () => {
+    const f = fixture();
+    vi.spyOn(CoverLetterDraftRecoveryService.prototype, "recover").mockImplementationOnce(
+      async function (this: CoverLetterDraftRecoveryService) {
+        const store: unknown = Reflect.get(this, "store");
+        expect(Object.keys(store as object).sort()).toEqual([
+          "complete",
+          "generationMetadata",
+          "recover",
+          "withGenerationLease",
+        ]);
+        expect(Object.isFrozen(store)).toBe(true);
+        const reader: object = Reflect.get(this, "provider");
+        const objects: object = Reflect.get(reader, "objects");
+        expect(Object.keys(objects).sort()).toEqual(["find", "read"]);
+        expect(Object.isFrozen(objects)).toBe(true);
+        return { kind: "in_progress" };
+      },
+    );
+    expect(await f.port.recover(f.record)).toBeNull();
+  });
+  it("initialization receives only frozen reservation, lease, original work and creation capabilities", async () => {
+    const f = fixture();
+    vi.spyOn(CoverLetterProviderInitializer.prototype, "initialize").mockImplementationOnce(
+      async function (this: CoverLetterProviderInitializer) {
+        for (const [field, keys] of [
+          ["store", ["reserveGeneration", "withGenerationLease"]],
+          ["work", ["claim", "issue", "recordSettled"]],
+          ["objects", ["find", "putIfAbsent", "read"]],
+        ] as const) {
+          const capability: object = Reflect.get(this, field);
+          expect(Object.keys(capability).sort()).toEqual(keys);
+          expect(Object.isFrozen(capability)).toBe(true);
+        }
+        return { kind: "in_progress" };
+      },
+    );
+    expect(await f.port.generate(f.record)).toEqual({ kind: "in_progress" });
+    expect(f.invoke).not.toHaveBeenCalled();
+  });
   it("defaults off before any owner/storage/work/object/provider I/O", async () => {
     const f = fixture(true);
     await expect(f.port.context(f.record)).rejects.toThrow("CoverLetterPreparationUnavailable");

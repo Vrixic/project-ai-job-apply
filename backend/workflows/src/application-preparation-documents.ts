@@ -77,8 +77,16 @@ export function createIsolatedCoverLetterPreparationPort(options: {
     withGenerationLease: options.candidateLease.withGenerationLease.bind(options.candidateLease),
   };
   const source = createOwnedCoverLetterEvidenceSource({
-    ...options.owners,
-    candidateLease: options.candidateLease,
+    applications: Object.freeze({
+      getApplication: options.owners.applications.getApplication.bind(options.owners.applications),
+    }),
+    profile: Object.freeze({
+      listProfileFacts: options.owners.profile.listProfileFacts.bind(options.owners.profile),
+    }),
+    catalog: Object.freeze({
+      getActiveJob: options.owners.catalog.getActiveJob.bind(options.owners.catalog),
+    }),
+    candidateLease: Object.freeze({ withGenerationLease: documents.withGenerationLease }),
     enabled,
     clock,
   });
@@ -87,14 +95,22 @@ export function createIsolatedCoverLetterPreparationPort(options: {
     read: options.objects.read.bind(options.objects),
   });
   const recovery = new CoverLetterDraftRecoveryService(
-    documents,
+    Object.freeze({
+      generationMetadata: documents.generationMetadata,
+      complete: documents.complete,
+      recover: documents.recover,
+      withGenerationLease: documents.withGenerationLease,
+    }),
     source,
     new CoverLetterProviderRecovery(readObjects),
     clock,
     enabled,
   );
   const initializer = new CoverLetterProviderInitializer(
-    documents,
+    Object.freeze({
+      reserveGeneration: documents.reserveGeneration,
+      withGenerationLease: documents.withGenerationLease,
+    }),
     source,
     Object.freeze({
       ...readObjects,
@@ -103,13 +119,17 @@ export function createIsolatedCoverLetterPreparationPort(options: {
     enabled,
     clock,
     60_000,
-    options.work,
+    Object.freeze({
+      issue: options.work.issue.bind(options.work),
+      claim: options.work.claim.bind(options.work),
+      recordSettled: options.work.recordSettled.bind(options.work),
+    }),
   );
   const preparation = new CoverLetterPreparationService(
-    documents,
+    Object.freeze({ generationMetadata: documents.generationMetadata }),
     initializer,
-    { issueProviderDispatch: options.work.issueProviderDispatch.bind(options.work) },
-    { invoke: options.provider.invoke.bind(options.provider) },
+    Object.freeze({ issueProviderDispatch: options.work.issueProviderDispatch.bind(options.work) }),
+    Object.freeze({ invoke: options.provider.invoke.bind(options.provider) }),
     recovery,
     enabled,
     clock,
