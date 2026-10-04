@@ -9,6 +9,18 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-057 begins on a new backend-only branch from main `cf7a2df` while #528 remains open; its original hosted CI is now terminal:
+quality, catalog, integration and both images pass, while audit/scanner fail without waiver. The separate default-off private response-disposal v1 RPC
+supplies exact original inventory reads and positive terminal-deletion receipt persistence.
+One SDK attempt, exact numeric target, closed metadata-only validation and immutable receipt
+binding preserve unresolved outcomes. Disposal does not settle work or authorize platform purge.
+All 52 focused, 899 Documents unit and 230 real PostgreSQL cases pass. Full maintained
+verification passes terminally: 38 typecheck tasks, 39 test tasks and 23 builds, unchanged public
+contracts, formatting/baseline lint, operational/security regressions, Compose and scope.
+Owned tmpfs fixture removed; Docker Desktop and WSL stopped. Existing capture/control/fence contracts, public APIs, migrations, frontend and
+Terraform are unchanged. Bootstrap/artifacts, reviewed runtime/IAM, successful-generation cleanup,
+writer drain and deployed/accountable acceptance remain; D1 and D3 remain In progress.
+
 2026-10-03 D3-055 starts from merged main `1922dd9`, whose complete tree matches the
 verified #526 head. Hosted quality, catalog, integration and both container jobs pass;
 audit/scanner fail without waiver. Inspecting the existing private vault reuse read exposes

@@ -29,6 +29,16 @@ rendering state, version diffs, and artifact metadata.
 - `src/resume-tailoring.ts` serves the fixed `resume-tailoring-v1` request from the document processor ([ADR-031](../../../docs/adr/031-deterministic-resume-tailoring-in-documents-runtime.md)): an owner-scoped parsed-resume lookup, the verified normalized read, deterministic tailoring, and verified DOCX/PDF rendering. Nothing is persisted beyond the content hash the packet stores. The dependency-free wire contract is `src/resume-tailoring-contract.ts`, which the Gateway imports.
 
 Generative rewrites are not implemented. Cover-letter preparation (D3-017) is in progress.
+The separate source-only response-disposal v1 RPC exposes exact original inventory reads and
+positive terminal-deletion receipt persistence to private maintenance. It defaults off, pins
+one numeric Lambda target, permits one SDK attempt and carries metadata only. Unknown identity,
+lost acknowledgements and deadlines remain unresolved; disposed inventory does not settle work
+or authorize platform purge. Existing capture/work/fence contracts are unchanged. Its handler
+must be published and bound through reviewed maintenance-only IAM before its client is composed;
+bootstrap, artifacts, runtime/IAM, successful-generation disposal, writer drain and deployment
+remain unfinished. Offline Lambda/provider transports and generated-synthetic PostgreSQL tests
+are layer evidence, not live provider or retention evidence.
+
 The private `./cover-letter-provider` entrypoint supplies transport contracts, injected S3
 ports and a source-only handler factory, with no database, renderer or credential bootstrap. Invocation/output
 envelopes contain document IDs and exact owned references; prompt/result text lives in canonical

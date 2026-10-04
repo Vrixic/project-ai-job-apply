@@ -358,6 +358,22 @@ unfinished/default-off. The proposed protocol and deployment posture are unchang
 
 ## Alternatives
 
+### Source-only original-response disposal RPC (2026-10-03)
+
+D3-057 supplies a separate closed metadata-only v1 maintenance boundary for exact original
+inventory reads and positive terminal-deletion receipts. It has no reserve/creation capture,
+model, work settlement, renewal, finalization or purge port. Absent or reserved inventory is
+unresolved; a disposed response does not prove private-writer or platform quiescence. Client
+and handler default off, pin the exact numeric target and use one SDK attempt. Original receipt
+persistence is awaited without effect retry or local timeout settlement; durable inventory
+readback may recover a committed-but-lost acknowledgement. Quarantine permits draining original
+receipts without issuing new dispatch authority. Handler publication and reviewed maintenance-only
+IAM must precede client composition; older capture/control handlers refuse these commands.
+Bootstrap, maintained artifacts, production runtime/IAM, successful-generation cleanup, writer
+drain and deployed/accountable acceptance remain unfinished. Local tests use synthetic metadata,
+offline Lambda/provider transports and real PostgreSQL. No public API, schema migration,
+frontend, Terraform, model/cloud call, activation or deployment; this ADR remains Proposed.
+
 ### Source-only private maintenance-fence bootstrap (2026-10-03)
 
 D3-053 reuses the unchanged maintenance fence RPC and Documents admission-fence control through
