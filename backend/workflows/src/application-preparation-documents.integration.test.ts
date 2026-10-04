@@ -26,11 +26,22 @@ import {
 import { createJobCatalogDatabase, PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
 import { ExecutionStatus, LocalDurableTestRunner } from "@aws/durable-execution-sdk-js-testing";
+import { LambdaClient } from "@aws-sdk/client-lambda";
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { v7 as uuidv7 } from "uuid";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApplicationPreparationActivityHandler } from "./application-preparation-activity.js";
 import { createIsolatedCoverLetterPreparationPort } from "./application-preparation-documents.js";
 import { createApplicationPreparationDurableHandler } from "./application-preparation-durable.js";
+import {
+  createApplicationPreparationLambda,
+  createApplicationPreparationRuntime,
+} from "./application-preparation-lambda.js";
 
 const requested = process.env.PRIVATE_PREPARATION_INTEGRATION === "1";
 const databaseUrl = process.env.PRIVATE_PREPARATION_TEST_DATABASE_URL;
@@ -89,7 +100,10 @@ describe.skipIf(!requested)(
       }
       await LocalDurableTestRunner.setupTestEnvironment({ skipTime: false });
     }, 90_000);
+    const nativeRuntimes: Array<{ close: () => Promise<void> }> = [];
+    afterEach(() => vi.restoreAllMocks());
     afterAll(async () => {
+      await Promise.all(nativeRuntimes.map((runtime) => runtime.close()));
       await LocalDurableTestRunner.teardownTestEnvironment();
       await Promise.all([
         profileDb.client.end(),
@@ -102,6 +116,10 @@ describe.skipIf(!requested)(
     });
 
     it.each([
+      "native_none",
+      "native_durable_replay",
+      "native_invoke_ack",
+      "native_quarantine",
       "none",
       "durable_replay",
       "invoke_ack",
@@ -111,7 +129,9 @@ describe.skipIf(!requested)(
       "quarantine",
     ] as const)(
       "connects accepted preparation, isolated dispatch and packet finalization: %s",
-      async (fault) => {
+      async (variant) => {
+        const native = variant.startsWith("native_");
+        const fault = native ? variant.slice(7) : variant;
         let now = new Date();
         let revealResult = fault !== "delayed_result";
         const applications = new PostgresApplicationStore(applicationsDb, () => now, {
@@ -351,7 +371,124 @@ describe.skipIf(!requested)(
           preparationId: queued.preparation.id,
           action: "advance",
         };
-        const activity = createApplicationPreparationActivityHandler(applications, port);
+        let activity = createApplicationPreparationActivityHandler(applications, port);
+        if (native) {
+          const kms = "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-4000-8000-000000000001";
+          const bucket = "synthetic-preparation";
+          const s3 = new S3Client({
+            region: "us-east-2",
+            maxAttempts: 1,
+            ignoreConfiguredEndpointUrls: true,
+          });
+          const lambda = new LambdaClient({
+            region: "us-east-2",
+            maxAttempts: 1,
+            ignoreConfiguredEndpointUrls: true,
+          });
+          const finalHeaders = new Map<string, Record<string, unknown>>();
+          vi.spyOn(s3, "send").mockImplementation(async (command: unknown) => {
+            if (
+              !(
+                command instanceof HeadObjectCommand ||
+                command instanceof GetObjectCommand ||
+                command instanceof PutObjectCommand
+              )
+            )
+              throw Error("SyntheticUnsupportedS3Command");
+            const request = command.input;
+            expect(request.Bucket).toBe(bucket);
+            const key = request.Key ?? "";
+            const match =
+              /^normalized\/([a-f0-9-]{36})\/generation\/(request|result|dispatch)\.v1\.json$/u.exec(
+                key,
+              );
+            const slot = match?.[2] as CoverLetterProviderSlot | undefined;
+            if (command instanceof PutObjectCommand) {
+              expect(command.input.IfNoneMatch).toBe("*");
+              expect(command.input.ServerSideEncryption).toBe("aws:kms");
+              expect(command.input.SSEKMSKeyId).toBe(kms);
+              const bytes = command.input.Body;
+              if (!(bytes instanceof Uint8Array)) throw Error("SyntheticInvalidS3Body");
+              if (slot && match?.[1]) await create(match[1], slot, bytes);
+              else {
+                const documentId = command.input.Metadata?.["document-id"] ?? "";
+                const sha256 = command.input.Metadata?.["cover-letter-sha256"] ?? "";
+                await finalWrite({ documentId, objectKey: key, bytes, sha256 });
+                finalHeaders.set(key, { Metadata: command.input.Metadata });
+              }
+              return {
+                VersionId: slot ? "synthetic-slot-v1" : "synthetic-final-v1",
+                $metadata: { attempts: 1, httpStatusCode: 200 },
+              } as never;
+            }
+            const bytes = slot ? slots.get(slot) : finalBytes.get(key);
+            if (!bytes)
+              throw Object.assign(Error("SyntheticMissingObject"), {
+                name: "NotFound",
+                $metadata: { httpStatusCode: 404 },
+              });
+            const ref = reference(bytes);
+            const response = {
+              VersionId: slot ? ref.objectVersion : "synthetic-final-v1",
+              ETag: ref.etag,
+              ContentLength: bytes.length,
+              ContentType: "application/json",
+              ServerSideEncryption: "aws:kms",
+              SSEKMSKeyId: kms,
+              Metadata: slot
+                ? {
+                    "document-id": match?.[1],
+                    "generation-slot": slot,
+                    "generation-sha256": ref.sha256,
+                  }
+                : finalHeaders.get(key)?.Metadata,
+              ...(command instanceof GetObjectCommand ? { Body: Uint8Array.from(bytes) } : {}),
+            };
+            return response as never;
+          });
+          vi.spyOn(lambda, "send").mockImplementation(async (command: unknown) => {
+            if (!(command instanceof (await import("@aws-sdk/client-lambda")).InvokeCommand))
+              throw Error("SyntheticUnsupportedLambdaCommand");
+            return (await send(command)) as never;
+          });
+          const env = {
+            APPLICATION_PREPARATION_ACTIVITY_ENABLED: "true",
+            AWS_REGION: "us-east-2",
+            PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+            AWS_LAMBDA_FUNCTION_NAME: "synthetic-preparation-activity",
+            AWS_LAMBDA_FUNCTION_VERSION: "9",
+            AWS_SESSION_TOKEN: "synthetic-token",
+            DATABASE_SECRET_ID:
+              "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-db-123456",
+            COVER_LETTER_PROVIDER_FUNCTION_ARN: providerArn,
+            DOCUMENT_BUCKET_NAME: bucket,
+            DOCUMENT_KMS_KEY_ARN: kms,
+          };
+          const secret = vi.fn(async () => url);
+          const nativeHandler = createApplicationPreparationLambda({
+            environment: () => env,
+            resolveDatabaseUrl: secret,
+            createRuntime: (databaseUrl, config, enabled) => {
+              const runtime = createApplicationPreparationRuntime(databaseUrl, config, enabled, {
+                s3,
+                lambda,
+              });
+              nativeRuntimes.push({
+                close: async () => {
+                  await runtime.close();
+                  s3.destroy();
+                  lambda.destroy();
+                },
+              });
+              return runtime;
+            },
+          });
+          activity = (raw) =>
+            nativeHandler(raw, {
+              invokedFunctionArn:
+                "arn:aws:lambda:us-east-2:123456789012:function:synthetic-preparation-activity:9",
+            });
+        }
         const first =
           fault === "durable_replay"
             ? await (async () => {
@@ -394,7 +531,7 @@ describe.skipIf(!requested)(
         expect(complete).toHaveBeenCalledTimes(["grant_ack", "slot_ack"].includes(fault) ? 0 : 1);
         expect(send).toHaveBeenCalledTimes(["grant_ack", "slot_ack"].includes(fault) ? 0 : 1);
         expect(create.mock.calls.map((call) => call[1])).toEqual(["request", "result", "dispatch"]);
-        expect(issueProviderDispatch).toHaveBeenCalledTimes(fault === "slot_ack" ? 0 : 1);
+        expect(issueProviderDispatch).toHaveBeenCalledTimes(native || fault === "slot_ack" ? 0 : 1);
         expect(JSON.stringify(first)).not.toContain("TypeScript");
         expect(JSON.stringify(replay)).not.toContain(user.id);
         if (succeeds) {

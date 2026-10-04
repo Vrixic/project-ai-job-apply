@@ -154,3 +154,7 @@ retain their return types and error behavior; older providers may use the existi
 port once, without retry on failure. Thrown errors, HTTP 404, timeout, lost capture acknowledgement
 and late fulfillment cannot become terminal receipts. This proves the original response's
 terminal observation, not provider-wide deletion or platform writer quiescence.
+
+`provider-background-contract.ts` holds unchanged pure captured-response/original-terminal
+metadata validators. Existing gateway and response-cleanup exports remain compatible reexports.
+Private ledger composition can retain validation without emitting model or cleanup implementations.

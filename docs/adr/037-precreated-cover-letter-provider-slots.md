@@ -559,3 +559,10 @@ cases include durable SDK execution, original-result recovery after consent expi
 without new dispatch; external transports/authentication are simulated. Native bootstrap/artifacts,
 IAM/scheduling, retention/abandonment/drain and accountable/deployed acceptance remain open.
 Nothing is deployed or activated; this ADR remains Proposed.
+
+Source-only D3-068 adds a default-off native private preparation activity with qualified target
+and managed database-secret setup, independent owner/lease/work pools and fixed S3/Invoke
+clients. Unchanged background metadata validators move to a pure module so the actual private
+bundle excludes ModelGateway/provider/cleanup implementations. Eleven SQL cases include four
+native compositions with simulated cloud/model transports. Native release/IAM/scheduling,
+retention/abandonment/drain and accountable/deployed acceptance remain; the ADR stays Proposed.

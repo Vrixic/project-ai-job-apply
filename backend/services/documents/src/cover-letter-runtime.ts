@@ -5,6 +5,7 @@ export * from "./cover-letter-cleanup-handler.js";
 export * from "./cover-letter-draft-recovery.js";
 export * from "./cover-letter-generation.js";
 export * from "./cover-letter-objects.js";
+export * from "./cover-letter-persistence.js";
 export * from "./cover-letter-preparation.js";
 export * from "./cover-letter-provider-control-handler.js";
 export * from "./cover-letter-provider-initialize.js";

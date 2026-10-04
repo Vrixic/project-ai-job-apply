@@ -183,3 +183,12 @@ including durable SDK execution and consent-expired recovery without another dis
 [local evidence](../../docs/product/delivery/evidence/d3-private-preparation-port-2026-10-04.md).
 Native bootstrap/artifacts, IAM/scheduling, retention/drain and accountable/deployed gates remain;
 no production activity or provider is activated by this factory.
+
+Native `application-preparation-lambda.ts` lazily binds the existing strict metadata contract to
+managed database credentials, qualified numeric provider Invoke and native owner clients.
+It defaults off, refuses warm configuration drift and gives separate bounded pools to candidate
+leases, owner reads and Documents work. `build:lambda:preparation` emits a separate local
+private-activity artifact family; both emitted port/activity checks exclude provider implementations.
+See [source evidence](../../docs/product/delivery/evidence/d3-preparation-activity-bootstrap-2026-10-04.md).
+Nothing is deployed or activated; caller IAM, native durable/dispatcher/recovery bootstrap,
+retention/drain and accountable/deployed acceptance remain.

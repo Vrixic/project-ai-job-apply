@@ -511,3 +511,8 @@ checks its actual exported default-off handler. The emitted bundle guard exclude
 rendering and generation code. Reviewed IAM, maintained scheduling, retention/abandonment/drain
 and accountable/deployed acceptance remain open. Nothing is deployed or activated. See
 [local evidence](../../../docs/product/delivery/evidence/d3-response-maintenance-bootstrap-2026-10-04.md).
+
+`createCoverLetterPersistence` in the private runtime export owns three separate raw one-connection
+pools for document persistence, work and candidate leases. Final-document settlement refuses
+other purposes before SQL; the lease receives only its frozen lease method. Native codec and
+connected activity evidence is in [D3-068](../../../docs/product/delivery/evidence/d3-preparation-activity-bootstrap-2026-10-04.md).

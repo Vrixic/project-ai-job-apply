@@ -358,3 +358,8 @@ publication, deployment, role grant or activation is authorized by the builder.
   `tests/response-maintenance-bundle.test.mjs` verifies emitted capability isolation. Set exact
   clean `ARTIFACT_SOURCE_SHA` for committed provenance. No publisher or runtime activation is
   introduced. Reviewed IAM, scheduling, retention and original writer drain remain prerequisites.
+
+`build-application-preparation-lambda.mjs` builds the separate source-bound private preparation
+activity family under Workflow dist/preparation-lambda. It checks the actual bundled default-off
+refusal and strict extra-content rejection with zero fetches. No publisher, deployment or activation
+is added; see [D3-068 evidence](../docs/product/delivery/evidence/d3-preparation-activity-bootstrap-2026-10-04.md).

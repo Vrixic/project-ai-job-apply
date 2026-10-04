@@ -25,7 +25,8 @@
     "start": "node dist/src/start.js",
     "test": "vitest run --exclude=dist/** --passWithNoTests",
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:lambda:preparation": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-application-preparation-lambda.mjs"
   },
   "dependencies": {
     "@ai-job-apply/ai-sdk": "workspace:*",
