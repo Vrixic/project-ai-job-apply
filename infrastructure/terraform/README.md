@@ -10,6 +10,8 @@ controls.
 - `modules/platform/` — persistent data/network resources, API Gateway/Lambda runtime, durable
   workflows, and one-off migration capability.
 - `modules/cost-controls/` — AWS Budgets alerts and CUR 2.0 export storage.
+- `modules/cover-letter-provider-objects/` — Unattached source-only provider S3 identity policy;
+  no environment composition, IAM attachment or runtime activation.
 - `environments/` — isolated development and staging composition.
 
 State and secrets remain in managed backends. For every remote backend initialization, resolve the

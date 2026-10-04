@@ -9,6 +9,26 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+Combined source 8f37b1e integrates merged #531/main 7cf19d0, preserves all original D3-061/D3-062 history and has exactly the verified main application tree. Full maintained verification passes again: 38 typecheck tasks, 39 test tasks, 23 builds, unchanged contracts/formatting/baseline lint and operational/security/Compose/scope checks. The provider-free policy and test source are byte-unchanged from independently tested 257ae8c; no repeated SQL or UI check is claimed or needed for this policy-only change. Owner defers hosted CI/CD until production launch; no source security waiver, attachment, deployment or activation.
+
+2026-10-04 owner decision: defer hosted CI/CD until production launch; continue backend source work with local verification. This does not waive production dependency/security, deployment, privacy or acceptance gates. #531 merges source-only as 7cf19d0; complete tree 77c82be matches locally verified exact head 6c3a1ab. Hosted integration/containers were not started because of GitHub payment/spending limits and are not claimed verified. No deployment or activation.
+
+2026-10-04 D3-062 begins independently from fresh main `5dae0f6`: prepare an unattached,
+provider-free S3 identity policy for fixed generation slots and encrypted ETag replacement.
+Explicit denies refuse creation/deletion paths and extra S3 grants; no multipart exemption.
+Seven native Terraform cases and 46 actual-plan offline policy cases pass, including seven
+guard regressions. Full maintained verification passes for source 257ae8c: 38 typecheck tasks, 39 test tasks, 23 builds, unchanged contracts/formatting/baseline lint and operational/security/Compose/scope checks. Read-only AWS policy validation reports zero errors/security warnings and one intentional literal-star warning retained for review; all 61 AWS custom-policy simulator evaluations pass. [Source/policy evidence](evidence/d3-provider-object-policy-source-validation-2026-10-04.md). No environment calls the module, resource
+creation, IAM attachment, state write or activation. Independent AWS enforcement, runtime,
+retention, original writer drain and accountable acceptance remain. D1/D3 stay In progress.
+
+#531 exact head `6c3a1ab` remains open. Its local full verifier, 979 Documents unit cases,
+262 real PostgreSQL cases and private artifact checks pass. Hosted quality/catalog pass;
+audit/scanner fail without waiver. Integration and container jobs never started: GitHub reports
+account payment/spending-limit failure. Owner input requested; no hosted SQL/container success.
+[PR](https://github.com/Vrixic/project-ai-job-apply/pull/531),
+[CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37212070251),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37212070287).
+
 2026-10-04 D3-061 begins from fresh main `280953c`, integrating verified open #530 source
 `e091f50` as a dependency while its exact-head hosted jobs remain live. Successful maintenance
 needs the owning eligibility read across the private boundary. Add metadata-only v1
