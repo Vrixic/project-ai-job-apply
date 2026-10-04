@@ -1,5 +1,11 @@
 # Repository Scripts
 
+`node --test scripts/tests/cover-letter-provider-object-policy.test.mjs` renders the unattached
+provider object policy with approved Terraform 1.16.2 and evaluates its supported IAM operators
+offline, including extra broad grants and guard regressions. It creates no AWS resources or
+state writes. Also run the module's native Terraform tests; see its
+[README](../infrastructure/terraform/modules/cover-letter-provider-objects/README.md).
+
 Scripts provide guarded local setup, artifact construction, deployed verification, restore,
 observability, and policy validation. Historical cutover/provider operators were removed after
 both AWS environments accepted the steady-state serverless runtime.

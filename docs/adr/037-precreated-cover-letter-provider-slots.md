@@ -487,3 +487,15 @@ scheduling, writer drain and accountable activation prerequisites remain; the AD
 S3 behavior references: [conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)
 and [versioning workflows](https://docs.aws.amazon.com/AmazonS3/latest/userguide/versioning-workflows.html).
 Provider policy reference: [enforcing conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html).
+
+## Unattached provider object policy (2026-10-04)
+
+The provider-free `infrastructure/terraform/modules/cover-letter-provider-objects` module
+renders an identity policy but creates/attaches nothing; no environment calls it. Fixed-slot
+read and dispatch/result replacement grants are bounded by explicit S3 denies, exact
+customer-KMS headers and nonempty/nonwildcard If-Match, with no multipart exception.
+Seven Terraform and 46 actual-plan offline cases include broad additional grants and seven
+guard regressions. This is source policy evidence, not independent review or AWS enforcement.
+UUID/owner/request/version bindings remain handler responsibilities because IAM path wildcards
+can cross slashes. Complete role/bucket/KMS/private caller review, deployed S3 adversarial
+evidence, retention and original writer drain still precede composition or activation.
