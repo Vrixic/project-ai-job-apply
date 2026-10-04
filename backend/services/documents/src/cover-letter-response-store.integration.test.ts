@@ -4,9 +4,10 @@ import { promisify } from "node:util";
 import { ModelGateway, OpenAiLunaProvider, OpenAiLunaResponseCleanup } from "@ai-job-apply/ai-sdk";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoverLetterResponseCaptureClient } from "./cover-letter-response-capture-client.js";
 import { createCoverLetterResponseCaptureHandler } from "./cover-letter-response-capture-handler.js";
+import { createCoverLetterResponseCaptureLambda } from "./cover-letter-response-capture-lambda.js";
 import { createCoverLetterResponseReconciler } from "./cover-letter-response-reconciliation.js";
 import { PostgresCoverLetterResponseStore } from "./cover-letter-response-store.js";
 import { PostgresCoverLetterStore } from "./cover-letter-store.js";
@@ -119,6 +120,136 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await work.claim(ref);
     return store.reserve(ref);
   }
+
+  it.each([
+    "none",
+    "concurrent",
+    "reserve_ack",
+    "creation_ack",
+    "quarantined",
+    "disabled",
+  ] as const)(
+    "connects private capture bootstrap to original real-SQL inventory: %s",
+    async (fault) => {
+      await work.claim(ref);
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-capture:3";
+      const env: Record<string, string | undefined> = {
+        COVER_LETTER_RESPONSE_CAPTURE_ENABLED: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: "synthetic-capture",
+        AWS_LAMBDA_FUNCTION_VERSION: "3",
+        AWS_SESSION_TOKEN: "synthetic-session-token",
+        DATABASE_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+      };
+      let pool: postgres.Sql | undefined;
+      const createPool = vi.fn(
+        (url: string, options: { max: 1; idle_timeout: 20; connect_timeout: 10 }) => {
+          pool = postgres(url, options);
+          return pool;
+        },
+      );
+      const resolve = vi.fn(async () => {
+        if (fault === "disabled") env.COVER_LETTER_RESPONSE_CAPTURE_ENABLED = "false";
+        return databaseUrl as string;
+      });
+      const reserveOriginal = vi.fn<PostgresCoverLetterResponseStore["reserve"]>();
+      const captureOriginal = vi.fn<PostgresCoverLetterResponseStore["recordCreation"]>();
+      const createCapture = (url: string, enabled: () => boolean) => {
+        const original = new PostgresCoverLetterResponseStore(
+          createPool(url, { max: 1, idle_timeout: 20, connect_timeout: 10 }),
+          enabled,
+        );
+        reserveOriginal.mockImplementation(async (reference) => {
+          const result = await original.reserve(reference);
+          if (fault === "reserve_ack") throw Error("SyntheticLostOriginalReserveAck");
+          return result;
+        });
+        captureOriginal.mockImplementation(async (reference, response) => {
+          await original.recordCreation(reference, response);
+          if (fault === "creation_ack") throw Error("SyntheticLostOriginalCreationAck");
+        });
+        return { reserve: reserveOriginal, recordCreation: captureOriginal };
+      };
+      try {
+        const capture = createCoverLetterResponseCaptureLambda({
+          environment: () => env,
+          resolveDatabaseUrl: resolve,
+          createPool,
+          // The ordinary case must exercise the actual default factory, not injected controls.
+          ...(fault === "none" ? {} : { createCapture }),
+        });
+        const input = { schemaVersion: 1, action: "reserve", reference: ref };
+        const outputs = await Promise.all(
+          Array.from({ length: fault === "concurrent" ? 8 : 1 }, () =>
+            capture(input, { invokedFunctionArn: target }),
+          ),
+        );
+        expect(resolve).toHaveBeenCalledOnce();
+        if (fault === "disabled") {
+          expect(outputs[0]?.outcome).toBe("unavailable");
+          expect(createPool).not.toHaveBeenCalled();
+          expect(await store.read(ref)).toBeNull();
+          return;
+        }
+        expect(createPool).toHaveBeenCalledOnce();
+        expect(createPool).toHaveBeenCalledWith(databaseUrl, {
+          max: 1,
+          idle_timeout: 20,
+          connect_timeout: 10,
+        });
+        if (!pool) throw Error("SyntheticPoolMissing");
+        const [clock] = await pool`SELECT clock_timestamp() AS at`;
+        expect(clock?.at).toBeInstanceOf(Date);
+        expect((await store.read(ref))?.state).toBe("reserved");
+        if (fault === "reserve_ack") {
+          expect(outputs[0]?.outcome).toBe("unavailable");
+          expect(reserveOriginal).toHaveBeenCalledOnce();
+          expect(captureOriginal).not.toHaveBeenCalled();
+          // Independent read proves a committed reservation, not replay dispatch authority.
+          return;
+        }
+        expect(outputs.filter((output) => output.outcome === "reserved")).toHaveLength(1);
+        expect(outputs.filter((output) => output.outcome === "already_reserved")).toHaveLength(
+          fault === "concurrent" ? 7 : 0,
+        );
+        expect((await capture(input, { invokedFunctionArn: target })).outcome).toBe(
+          "already_reserved",
+        );
+        if (fault === "quarantined")
+          await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
+        const original = response();
+        const creation = {
+          schemaVersion: 1,
+          action: "record_creation",
+          reference: ref,
+          response: original,
+        };
+        const captured = await capture(creation, { invokedFunctionArn: target });
+        expect(captured.outcome).toBe(fault === "creation_ack" ? "unavailable" : "recorded");
+        expect(await store.read(ref)).toMatchObject({ state: "acknowledged", response: original });
+        if (fault === "creation_ack") expect(captureOriginal).toHaveBeenCalledOnce();
+        else {
+          expect(
+            (
+              await capture(
+                { ...creation, response: { ...original, responseId: "resp_syntheticOther" } },
+                { invokedFunctionArn: target },
+              )
+            ).outcome,
+          ).toBe("unavailable");
+          expect((await store.read(ref))?.response).toEqual(original);
+        }
+        const [phase] =
+          await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+        expect(phase?.state).toBe("running");
+        expect(resolve).toHaveBeenCalledOnce();
+      } finally {
+        await pool?.end();
+      }
+    },
+  );
 
   function disposalTransport(original: ReturnType<typeof response>, loseDeleteAck = false) {
     const methods: string[] = [];

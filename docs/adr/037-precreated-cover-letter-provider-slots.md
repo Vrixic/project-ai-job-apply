@@ -358,6 +358,31 @@ unfinished/default-off. The proposed protocol and deployment posture are unchang
 
 ## Alternatives
 
+### Source-only private maintenance-fence bootstrap (2026-10-03)
+
+D3-053 reuses the unchanged maintenance fence RPC and Documents admission-fence control through
+the shared lazy target/managed-secret policy and a native bounded SQL pool. Its independent gate
+defaults off. Only `fenceForCleanup` is supplied; unclaimed authority is permanently fenced while
+running work remains pending. Original effects are awaited without retries or local timeout
+settlement. Neither a positive ledger-terminal outcome nor a lost ACK certifies remote
+quiescence or authorizes object/row purge. No settlement, renewal, capture/read/disposal,
+generation, object, renderer or Invoke capability is supplied. Reviewed maintenance-only IAM,
+artifact/build guard wiring, deployed proof and activation remain unfinished. No public/private
+RPC shape, migration, guard/Terraform, frontend or live cloud/model change; still Proposed.
+
+### Source-only private response-capture Lambda bootstrap (2026-10-03)
+
+D3-052 composes the unchanged capture RPC with only original Documents reservation and
+creation-acknowledgement controls. An independent default-off gate and the shared D3-051 lazy
+bootstrap enforce numeric invoked-target binding, qualified same-account managed-secret input,
+bounded read-only initialization and warm identity pinning. A native one-connection pool keeps
+ledger timestamp semantics unchanged. Capture never grants read/disposal, work settlement,
+renewal, generation, object, renderer, Invoke or purge capabilities. Original transactions are
+awaited without retries or local timeout settlement. Target matching is not caller authentication;
+runtime/IAM, artifact/build guards, deployment/activation and complete writer/provider quiescence
+remain unfinished. No public API, provider/capture contract, migration, guard/Terraform or live
+cloud/model change is included; the protocol remains Proposed.
+
 ### Source-only private provider-work Lambda bootstrap (2026-10-03)
 
 D3-051 adds a lazy default-off entrypoint for the existing provider-work RPC only. Exact trusted

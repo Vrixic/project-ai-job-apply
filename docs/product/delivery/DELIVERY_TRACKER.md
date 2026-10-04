@@ -9,6 +9,64 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 merge-queue handoff: #523 and #524 now exist on main as `f4975ef` and `7101ea3`.
+Integrating main into the combined D3-052/D3-053 branch preserves byte-identical tested backend
+source from `55d540a`; only delivery records change. No authored PR remains open, so a combined
+main-targeted source-only PR can now be prepared. Full maintained verification passes terminally:
+38 typecheck tasks, 39 test tasks, 23 builds, formatting (981 files), baseline lint (0 errors,
+15 warnings/58 infos), operational/security regressions, Compose and product scope. No new SQL run;
+private IAM, guarded publication/deployment, writer drain and accountable acceptance remain open.
+
+2026-10-03 local artifact probe builds all three private control/capture/cleanup entrypoints
+from exact clean commit `839181b` using the unchanged artifact helper. Six bundled-handler
+default-off/malformed-input smoke cases pass with zero instrumented fetch calls. Independent
+checks confirm each archive has only `index.mjs`, matching bundle/archive/SBOM hashes and exact
+source/runtime/architecture/handler metadata. These are ignored local artifacts, not published
+or approved release inputs. The maintained builder/publisher still supports only parser/processor;
+guarded integration, caller IAM, deployment and activation remain unfinished. No guard/Terraform
+edit, cloud/model call, third PR or apply. Records ride with the queued source changes.
+
+2026-10-03 D3-053 source-only private cleanup-fence bootstrap has started on a new local
+feature branch from tested D3-052. The unchanged maintenance RPC supplies only Documents'
+existing admission fence through the shared default-off numeric-target/managed-secret policy.
+No settlement, renewal, capture/read/disposal, model/object/render/Invoke or purge capability is
+supplied. Ledger-terminal is not remote quiescence or deletion permission. All 27 new cleanup
+cases, 69 unchanged bootstrap cases and 847 Documents unit cases, typecheck/build and scoped
+Biome pass. All 223 real PostgreSQL cases pass, including six new bootstrap cases. The exact
+owned tmpfs fixture is removed and Docker/WSL shutdown completed; shared volumes retained.
+Full maintained verification passes terminally: all 38 typecheck tasks, 39 test tasks and
+23 builds, unchanged generated contracts, formatting (981 files), baseline lint (0 errors/
+15 warnings/58 infos), operational/dependency-security regressions, Compose and product scope.
+No third PR while #523/#524
+are open, and no public API/frontend, dependency, migration, guard/Terraform, cloud/model,
+deployment or activation change.
+
+2026-10-03 D3-052 source-only private original-response capture bootstrap has started on
+`feat/d3-private-capture-bootstrap`, locally based on the tested D3-051 source. It keeps the
+existing reserve/record-creation RPC and Documents-owned controls unchanged. Shared lazy
+bootstrap policy prevents divergence in default-off numeric-target/managed-secret checks,
+single-flight setup and warm binding; each entrypoint supplies only its fixed capabilities.
+Initial type inference/optional-property errors and a synthetic response fixture missing its
+required schema version and a nonconforming response identifier were corrected without relaxing
+validators. All 30 new capture cases, 39 unchanged work-control cases and 820 Documents unit cases,
+typecheck/build and scoped Biome pass. All 217 real PostgreSQL cases pass, including six new
+bootstrap cases and actual native-pool composition. The exact owned tmpfs fixture is removed;
+Docker Desktop/WSL shutdown completed and shared volumes are retained. Full maintained verification
+passes terminally: repo-wide typecheck, all 39 test tasks and 23 production builds, unchanged
+generated contracts, formatting (979 files), baseline lint (0 errors/15 warnings/58 infos),
+operational/dependency-security regressions, Compose and product scope. No third PR is opened while
+#523/#524 are open. No public API/frontend, dependency, migration, guard/Terraform,
+cloud/model call, deployment or activation change.
+
+Parent PR #524's exact-head hosted run is terminal: quality, catalog, integration and both
+container jobs pass; dependency audit fails with only a generic terminal refusal, not an exact
+cause attribution. Static analysis fails with 65 findings, 140 rules and 1,074 targets. Its 30
+reported paths match #523 with zero path delta; this is not full finding equivalence or approval.
+Those runs predate the subsequently verified mainline merges noted above; no waiver or deployment
+is inferred from the merge state.
+[CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37161750989),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37161750985).
+
 2026-10-03 D3-051 source-only private provider-work control Lambda bootstrap has started.
 It reuses the existing closed RPC and original Documents controls, with default-off activation,
 numeric-version target matching and same-account managed-secret validation before any I/O.

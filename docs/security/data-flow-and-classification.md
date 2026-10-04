@@ -1,5 +1,27 @@
 # Data Flow and Classification
 
+## Source-only private maintenance-fence bootstrap (2026-10-03)
+
+Original owned work references -> closed unchanged cleanup RPC -> independent default-off
+numeric-target/managed-secret checks -> shared lazy bootstrap -> native bounded SQL ->
+Documents' persisted-owner admission fence. No caller-selected owner, content or credentials
+enter the RPC. Only original fence outcomes are returned; SQL/secret diagnostics remain hidden.
+Running work remains pending, lost ACKs unavailable, and ledger-terminal never grants purge or
+certifies provider/private-writer quiescence. No settlement, renewal, capture/read/disposal,
+generation/model/object/render/Invoke port exists. Maintenance-only IAM, artifact/build guard
+wiring, deployment and activation remain unproved; exact target matching is not authentication.
+
+## Source-only private response-capture bootstrap (2026-10-03)
+
+Original work/response identifiers -> closed unchanged capture RPC -> independent default-off
+numeric-target and managed-secret checks -> shared lazy bootstrap -> native bounded SQL pool ->
+original reserve/recordCreation transactions. No content is accepted, and secret/session/SQL
+diagnostics are never projected into acknowledgements. Reservation replay cannot redispatch;
+original creation capture follows the existing immutable quarantine/expiry-drain rules. No read,
+disposal, settlement, renewal, model/object/render/Invoke or purge capability is supplied. Reviewed
+caller IAM, artifact/build guard wiring, deployment and activation remain unfinished; target
+matching alone does not authenticate a caller or prove provider/private-writer quiescence.
+
 ## Source-only private work-control Lambda bootstrap (2026-10-03)
 
 Existing identifier-only provider RPC -> default-off gate and exact trusted numeric target ->
