@@ -9,6 +9,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-055 starts from merged main `1922dd9`, whose complete tree matches the
+verified #526 head. Hosted quality, catalog, integration and both container jobs pass;
+audit/scanner fail without waiver. Inspecting the existing private vault reuse read exposes
+missing expiry and post-KMS snapshot checks. A new regression reproduces obsolete-value return
+before correction. Database wall-clock expiry and exact latest-version revalidation now withhold
+stale snapshots without a SQL lock across KMS. Expanded regressions, all 93 Profile unit cases,
+typecheck/build and all 33 PostgreSQL integration cases pass, including four new expiry/race cases.
+The owned tmpfs fixture is removed; Docker Desktop is stopped and WSL has no running distributions.
+Full maintained verification passes terminally: 38 typecheck tasks, 39 test tasks, 23 builds,
+formatting (984 files), baseline lint (0 errors/15 warnings/58 infos), operational/security
+regressions, Compose and product scope. All 24 focused vault cases pass; nine added local
+documentation links resolve. Source review/merge and deployed/accountable gates remain open. Records ride with
+the source change. Public APIs, schemas, export behavior, frontend, guards/Terraform and deployed
+settings remain unchanged. Applications reuse is not activated; D1 and D3 remain In progress.
+
 2026-10-03 D3-054 begins on `feat/d3-private-artifact-build` from merged main `7535bc5`.
 Committed-source follow-up: two builds from exact clean `f332086` pass all twelve companion
 hash comparisons and independent ZIP/bundle/archive/SBOM integrity checks. All three manifests

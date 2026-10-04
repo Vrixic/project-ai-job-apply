@@ -28,6 +28,124 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
   const cipher = new FakeRestrictedAnswerCipher();
   const store = new PostgresRestrictedAnswerVaultStore(database.client, cipher);
 
+  it("withholds expired reuse values without decrypting, but preserves export portability", async () => {
+    const userId = await createUser(database.client);
+    const saved = await store.save({
+      userId,
+      fieldKey: "authorization.us_authorized",
+      expectedVersion: 0,
+      valueType: "boolean",
+      value: "true",
+      sensitivity: "restricted",
+      sourceReference: "synthetic.reuse",
+      confirmedAt: new Date("2020-01-01T00:00:00Z"),
+      expiresAt: new Date("2020-01-02T00:00:00Z"),
+      idempotencyKey: `reuse-expired-${userId}`,
+      traceId: "synthetic.reuse",
+    });
+    let decryptCalls = 0;
+    const reader = new PostgresRestrictedAnswerVaultStore(database.client, {
+      encrypt: cipher.encrypt.bind(cipher),
+      decrypt: async (input) => {
+        decryptCalls++;
+        return cipher.decrypt(input);
+      },
+    });
+    expect(
+      await reader.readActiveValue({ userId, fieldKey: "authorization.us_authorized" }),
+    ).toBeUndefined();
+    expect(decryptCalls).toBe(0);
+    expect((await reader.list(userId))[0]).toMatchObject({ id: saved.id, state: "active" });
+    const exporter = new PostgresRestrictedAnswerExportReader(database.client, cipher);
+    expect(
+      await exporter.readValue(userId, { ...saved, fieldKey: "authorization.us_authorized" }),
+    ).toBe("true");
+  });
+
+  it.each(["correction", "deletion"] as const)(
+    "withholds reuse after concurrent %s during decryption without holding a SQL lock",
+    async (change) => {
+      const userId = await createUser(database.client);
+      const command = {
+        userId,
+        fieldKey: "authorization.us_authorized",
+        expectedVersion: 0,
+        valueType: "boolean" as const,
+        value: "true",
+        sensitivity: "restricted" as const,
+        sourceReference: "synthetic.reuse",
+        confirmedAt: new Date("2020-01-01T00:00:00Z"),
+        idempotencyKey: `reuse-race-${userId}`,
+        traceId: "synthetic.reuse",
+      };
+      const saved = await store.save(command);
+      const reader = new PostgresRestrictedAnswerVaultStore(database.client, {
+        encrypt: cipher.encrypt.bind(cipher),
+        decrypt: async (input) => {
+          const value = await cipher.decrypt(input);
+          if (change === "correction") {
+            await store.save({
+              ...command,
+              expectedVersion: 1,
+              value: "false",
+              idempotencyKey: `reuse-correct-${userId}`,
+            });
+          } else {
+            await store.remove({
+              userId,
+              id: saved.id,
+              expectedVersion: 1,
+              traceId: command.traceId,
+            });
+          }
+          return value;
+        },
+      });
+      expect(await reader.readActiveValue({ userId, fieldKey: command.fieldKey })).toBeUndefined();
+      expect(await store.readActiveValue({ userId, fieldKey: command.fieldKey })).toEqual(
+        change === "correction"
+          ? { id: saved.id, version: 2, valueType: "boolean", value: "false" }
+          : undefined,
+      );
+    },
+  );
+
+  it("withholds reuse when database expiry passes during decryption", async () => {
+    const userId = await createUser(database.client);
+    const [time] = await database.client<
+      Array<{ expires: string }>
+    >`SELECT (clock_timestamp() + interval '3 seconds')::text AS expires`;
+    if (!time) throw new Error("Synthetic database clock unavailable");
+    const expiresAt = new Date(time.expires);
+    await store.save({
+      userId,
+      fieldKey: "authorization.us_authorized",
+      expectedVersion: 0,
+      valueType: "boolean",
+      value: "true",
+      sensitivity: "restricted",
+      sourceReference: "synthetic.reuse",
+      confirmedAt: new Date("2020-01-01T00:00:00Z"),
+      expiresAt,
+      idempotencyKey: `reuse-expiry-race-${userId}`,
+      traceId: "synthetic.reuse",
+    });
+    let decryptCalls = 0;
+    const reader = new PostgresRestrictedAnswerVaultStore(database.client, {
+      encrypt: cipher.encrypt.bind(cipher),
+      decrypt: async (input) => {
+        decryptCalls++;
+        const value = await cipher.decrypt(input);
+        await database.client`SELECT pg_sleep(GREATEST(0, extract(epoch from (${expiresAt.toISOString()}::timestamptz - clock_timestamp())))::double precision + 0.01)`;
+        return value;
+      },
+    });
+    expect(
+      await reader.readActiveValue({ userId, fieldKey: "authorization.us_authorized" }),
+    ).toBeUndefined();
+    expect(decryptCalls).toBe(1);
+  });
+
   it("exports only the exact latest owner value, including expired answers, and refuses tombstones", async () => {
     const userId = await createUser(database.client);
     const otherUserId = await createUser(database.client);

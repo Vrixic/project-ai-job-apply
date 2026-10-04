@@ -1,9 +1,124 @@
 import { describe, expect, it } from "vitest";
 import {
+  PostgresRestrictedAnswerVaultStore,
   RestrictedAnswerVaultConfigurationError,
   RestrictedAnswerVaultInputError,
 } from "./restricted-answer-vault.js";
 import { FakeRestrictedAnswerCipher } from "./restricted-answer-vault-test-cipher.js";
+
+describe("restricted answer reuse read", () => {
+  it.each([false, undefined, 1, "true"])(
+    "withholds a value without an exact positive latest-snapshot receipt (%s)",
+    async (current) => {
+      const queries: string[] = [];
+      const query = async (parts: TemplateStringsArray) => {
+        queries.push(parts.join("?"));
+        return queries.length === 1
+          ? [
+              {
+                id: "synthetic-entry",
+                version: 1,
+                valueType: "boolean",
+                ciphertext: Buffer.from("opaque"),
+                kmsKeyId: "synthetic-key",
+                encryptionAlgorithm: "SYMMETRIC_DEFAULT",
+              },
+            ]
+          : [{ current }];
+      };
+      const store = new PostgresRestrictedAnswerVaultStore(
+        query as unknown as ConstructorParameters<typeof PostgresRestrictedAnswerVaultStore>[0],
+        {
+          encrypt: async () => {
+            throw new Error("not used");
+          },
+          decrypt: async () => "true",
+        },
+      );
+      await expect(
+        store.readActiveValue({
+          userId: "synthetic-owner",
+          fieldKey: "authorization.us_authorized",
+        }),
+      ).resolves.toBeUndefined();
+      expect(queries).toHaveLength(2);
+    },
+  );
+
+  it("returns nothing before KMS when no currently reusable snapshot exists", async () => {
+    const query = async () => [];
+    const store = new PostgresRestrictedAnswerVaultStore(
+      query as unknown as ConstructorParameters<typeof PostgresRestrictedAnswerVaultStore>[0],
+      undefined,
+    );
+    await expect(
+      store.readActiveValue({ userId: "synthetic-owner", fieldKey: "authorization.us_authorized" }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("pins owner, field and context across decryption and checks database expiry on both reads", async () => {
+    const input = {
+      userId: "synthetic-owner",
+      fieldKey: "authorization.us_authorized",
+      context: "us",
+    };
+    const queries: Array<{ text: string; values: unknown[] }> = [];
+    const query = async (parts: TemplateStringsArray, ...values: unknown[]) => {
+      queries.push({ text: parts.join("?"), values });
+      return queries.length === 1
+        ? [
+            {
+              id: "synthetic-entry",
+              version: 1,
+              valueType: "boolean",
+              ciphertext: Buffer.from("opaque"),
+              kmsKeyId: "synthetic-key",
+              encryptionAlgorithm: "SYMMETRIC_DEFAULT",
+            },
+          ]
+        : [{ current: true }];
+    };
+    const store = new PostgresRestrictedAnswerVaultStore(
+      query as unknown as ConstructorParameters<typeof PostgresRestrictedAnswerVaultStore>[0],
+      {
+        encrypt: async () => {
+          throw new Error("not used");
+        },
+        decrypt: async (snapshot) => {
+          expect(snapshot).toMatchObject({
+            userId: "synthetic-owner",
+            fieldKey: "authorization.us_authorized",
+            context: "us",
+          });
+          input.userId = "different-owner";
+          input.fieldKey = "demographic.veteran";
+          input.context = "eu";
+          return "synthetic-saved-value";
+        },
+      },
+    );
+    await expect(store.readActiveValue(input)).resolves.toEqual({
+      id: "synthetic-entry",
+      version: 1,
+      valueType: "boolean",
+      value: "synthetic-saved-value",
+    });
+    expect(queries).toHaveLength(2);
+    expect(queries[0]?.values).toEqual(["synthetic-owner", "authorization.us_authorized", "us"]);
+    expect(queries[1]?.values).toEqual([
+      "synthetic-owner",
+      "synthetic-entry",
+      "authorization.us_authorized",
+      "us",
+      1,
+    ]);
+    for (const query of queries) {
+      expect(query.text).toContain("version.expires_at > clock_timestamp()");
+      expect(query.text).toContain("ORDER BY version DESC LIMIT 1");
+      expect(query.values).not.toContain("synthetic-saved-value");
+    }
+  });
+});
 
 it("preserves the exact PostgreSQL creation timestamp instead of rounding to milliseconds", async () => {
   const { PostgresRestrictedAnswerVaultStore } = await import("./restricted-answer-vault.js");
