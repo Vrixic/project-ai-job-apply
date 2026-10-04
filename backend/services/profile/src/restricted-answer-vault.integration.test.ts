@@ -28,6 +28,61 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
   const cipher = new FakeRestrictedAnswerCipher();
   const store = new PostgresRestrictedAnswerVaultStore(database.client, cipher);
 
+  it.each(["before", "during"] as const)(
+    "withholds reuse when the owner is quarantined %s decryption",
+    async (timing) => {
+      const userId = await createUser(database.client);
+      const command = {
+        userId,
+        fieldKey: "authorization.us_authorized",
+        expectedVersion: 0,
+        valueType: "boolean" as const,
+        value: "true",
+        sensitivity: "restricted" as const,
+        sourceReference: "synthetic.quarantine-reuse",
+        confirmedAt: new Date("2020-01-01T00:00:00Z"),
+        idempotencyKey: `quarantine-reuse-${userId}`,
+        traceId: "synthetic.quarantine-reuse",
+      };
+      const saved = await store.save(command);
+      const quarantine = async () => {
+        await database.client`
+          UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp()
+          WHERE id = ${userId}::uuid
+        `;
+      };
+      if (timing === "before") await quarantine();
+      let decryptCalls = 0;
+      const reader = new PostgresRestrictedAnswerVaultStore(database.client, {
+        encrypt: cipher.encrypt.bind(cipher),
+        decrypt: async (input) => {
+          decryptCalls++;
+          const value = await cipher.decrypt(input);
+          // This update must commit without waiting for a lock held across KMS.
+          await quarantine();
+          return value;
+        },
+      });
+      expect(
+        await reader.readActiveValue({ userId, fieldKey: "authorization.us_authorized" }),
+      ).toBeUndefined();
+      expect(decryptCalls).toBe(timing === "before" ? 0 : 1);
+      const [retained] = await database.client<Array<{ version: number; state: string }>>`
+        SELECT version, state FROM profile.restricted_answer_versions
+        WHERE answer_id = ${saved.id}::uuid ORDER BY version DESC LIMIT 1
+      `;
+      expect(retained).toEqual({ version: 1, state: "active" });
+      const unaffectedOwner = await createUser(database.client);
+      const otherSaved = await store.save({ ...command, userId: unaffectedOwner });
+      expect(
+        await store.readActiveValue({
+          userId: unaffectedOwner,
+          fieldKey: "authorization.us_authorized",
+        }),
+      ).toEqual({ ...otherSaved, valueType: "boolean", value: "true" });
+    },
+  );
+
   it("withholds expired reuse values without decrypting, but preserves export portability", async () => {
     const userId = await createUser(database.client);
     const saved = await store.save({

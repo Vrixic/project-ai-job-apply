@@ -459,6 +459,10 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
         AND coalesce(answer.context, '') = ${context}
         AND version.state = 'active'
         AND (version.expires_at IS NULL OR version.expires_at > clock_timestamp())
+        AND EXISTS (
+          SELECT 1 FROM identity.users AS candidate
+          WHERE candidate.id = answer.user_id AND candidate.account_state = 'active'
+        )
     `;
     if (!row) return undefined;
     const value = await this.requireCipher().decrypt({
@@ -473,6 +477,7 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
     });
     // KMS runs without a SQL lock. A correction, tombstone or expiry committed while it
     // was pending must withhold this snapshot, never return an older saved answer.
+    // Account quarantine also ends ordinary reuse, even before privacy cleanup removes rows.
     const [current] = await this.client<Array<{ current: boolean }>>`
       SELECT EXISTS (
         SELECT 1 FROM profile.restricted_answers AS answer
@@ -485,6 +490,10 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
           AND coalesce(answer.context, '') = ${context}
           AND version.version = ${row.version} AND version.state = 'active'
           AND (version.expires_at IS NULL OR version.expires_at > clock_timestamp())
+          AND EXISTS (
+            SELECT 1 FROM identity.users AS candidate
+            WHERE candidate.id = answer.user_id AND candidate.account_state = 'active'
+          )
       ) AS current
     `;
     if (current?.current !== true) return undefined;
