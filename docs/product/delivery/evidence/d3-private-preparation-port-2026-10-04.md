@@ -138,3 +138,10 @@ requests. Docker Desktop and WSL are stopped; no owned SQL fixture remains. Nati
 bootstrap/artifacts, release/IAM/scheduling, retention/abandonment/original writer drain and
 accountable/deployed acceptance remain. D1/D3 stay In progress; hosted CI/CD stays deferred
 until production launch.
+
+## Review handoff
+
+[PR #537](https://github.com/Vrixic/project-ai-job-apply/pull/537) opens on exact #536 source dependency `2a69030`; no GitHub merge is performed.
+Only delivery documentation changes after verified source `869f0fc`. Native runtime wiring
+and release/accountable acceptance remain open, and the isolated path stays disabled.
+Hosted checks are not monitored under the owner's production-launch deferral.

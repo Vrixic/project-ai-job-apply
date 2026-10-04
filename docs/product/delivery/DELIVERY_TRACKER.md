@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-067 [PR #537](https://github.com/Vrixic/project-ai-job-apply/pull/537) opens on exact #536 dependency 2a69030. Verified source 869f0fc is unchanged; only delivery records follow. Review/merge, native bootstrap and release/accountable acceptance remain. No deployment/activation or phase completion; hosted CI/CD stays deferred.
+
 2026-10-04 D3-067 final clean source `869f0fc` passes full maintained verification: 38 typecheck tasks, 39 test tasks, 23 builds; 1,434 Workflow units and unchanged lint. 43 focused and seven real PostgreSQL cases cover frozen capabilities and a private_slots-only initializer ledger guard. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). Native runtime/release/accountable acceptance remain; D1/D3 stay In progress. Docker/WSL stopped. No deployment/activation; hosted CI/CD remains deferred until production launch.
 
 2026-10-04 D3-067 purpose guard: initializer ledger methods accept only private_slots and refuse provider/final-document work before SQL. 43 focused and seven fresh PostgreSQL cases plus build/typecheck/emitted isolation pass; clean-source full rerun pending. Docker/WSL stopped. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). No deployment/activation or phase completion.
