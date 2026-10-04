@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-072 clean 22a4568e passes full maintained verification: 38 typechecks, 39 test tasks, 23 builds; 1,174 Documents/1,588 Workflow units and unchanged lint. Seven real PostgreSQL cases and two unpublished existing core artifacts pass integrity and actual activity refusal probes. [Evidence](evidence/d3-cover-letter-export-content-2026-10-04.md). Docker/WSL stopped. Export activation stays off; read IAM/reader-first release/privacy/drain/restore/accountable gates remain. No publication/deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
 2026-10-04 D3-072 starts saved cover-letter content export from fresh main bde17d9 plus exact #541 9918aeec. Default-off exact owner/ID/version/object reads preserve old metadata exports and same-hash history. 79 Documents, 47 Workflow privacy, 24 Domain, 83 API, 20 event and seven real PostgreSQL cases pass; typecheck/build/formatting/read isolation pass. [Evidence](evidence/d3-cover-letter-export-content-2026-10-04.md). Full verifier/core artifacts pending; release/IAM/retention/drain/restore/accountable gates remain. No deployment/activation or D1/D3 completion; Docker/WSL stopped. Hosted CI/CD deferred until production launch.
 
 2026-10-04 D3-071 [PR #541](https://github.com/Vrixic/project-ai-job-apply/pull/541) opens on exact #540 14371d70. Verified source/artifact 38b3891f unchanged; delivery records only follow. Review/merge and release/accountable gates remain; no publication/deployment/activation or phase completion. Hosted CI/CD deferred until production launch.

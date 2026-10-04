@@ -1,7 +1,7 @@
 # D3-072: Saved cover-letter content in candidate export
 
 Date: 2026-10-04
-Status: Source/focused, real SQL and emitted read isolation passed; full verifier/artifact pending.
+Status: Source/focused/SQL, exact-source full verifier and core artifacts passed; review/release gates remain.
 
 The backend-only branch starts from fresh main bde17d9 and locally integrates exact open #541
 9918aeecc8b20b49080c32f036c952c389f0b577. No GitHub merge occurs.
@@ -79,3 +79,37 @@ Full maintained exact-source verifier and existing core Workflow artifact checks
 Release/IAM, provider privacy retention/original writer drain, restore and accountable/deployed
 acceptance remain. No phase exit changes; D1/D3 stay In progress. Hosted CI/CD remains deferred
 until production launch by owner instruction.
+
+## Final exact-source verification and artifacts
+
+Clean source `22a4568e7a66f3c17426063a8b2b95455d22dca0` passes the full maintained
+`scripts/verify-phase0.ps1` with terminal exit 0 and its completion marker: 38 typecheck tasks,
+39 test tasks and 23 builds. All 1,174 Documents and 1,588 Workflow cases pass; 57 opt-in Workflow
+cases remain skipped by the ordinary runner. The seven new SQL cases passed separately as recorded
+above. Formatting, unchanged generated contracts, operational/security/dependency guards,
+all emitted actor/read isolation checks and Compose configuration pass. Lint remains zero errors,
+15 warnings and 58 informational notes. Log: `.tmp/d3-072-full-verification-22a4568e.log`.
+
+The existing core Workflow builder creates two unpublished source-bound artifacts from that same
+clean source. Both manifest schema 2 entries specify Node24/x86_64. Independent Python checks verify
+archive SHA/bytes/base64 digest, sole index.mjs member, identical local bundle/hash/source marker and
+SBOM hash/component count. No model endpoint or ModelGateway appears in either bundle.
+
+- profile-readiness-durable-lambda: index.handler, SHA256
+  `47aab1627dc490ec91ff5314685bbec83f5aabd9a527d91e2221afe558e2c989`,
+  325,547 bytes, 27 SBOM components.
+- profile-readiness-activity-lambda: index.activity/index.terminal/index.maintenance, SHA256
+  `bb372331dc11ca97d340e99377a75295bf5f53314f6569c4d72914b3033b6d33`,
+  599,104 bytes, 105 SBOM components.
+
+The actual activity bundle returns the unchanged fixed ActivityInputRejected result for malformed
+input with content export off and on, before secret/setup access, with zero instrumented fetches.
+Logs: `.tmp/d3-072-artifact-22a4568e.log`, `.tmp/d3-072-bundle-probe.log`. These probes do not claim
+live AWS/IAM, managed OIDC, encrypted S3 read/write or browser acceptance. The seven connected SQL
+cases separately verify the qualified owning read/assembly path using synthetic object bytes and
+artifact receipts. No new publisher family or deployment is introduced.
+
+Only delivery documentation follows verified source. Nothing is published, deployed or activated.
+Read IAM, reader-before-producer rollout, provider retention/original writer drain, restore and
+accountable/deployed acceptance remain. Phase history and new evidence links are checked; D1/D3
+stay In progress, and hosted CI/CD stays deferred until production launch.
