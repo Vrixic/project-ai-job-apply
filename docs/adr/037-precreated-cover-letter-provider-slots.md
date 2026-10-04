@@ -478,6 +478,19 @@ These are source/real PostgreSQL checks with synthetic HTTP/object/model complet
 not a production eligibility RPC, deployment or trusted writer-drain authority. Runtime/IAM,
 scheduling, writer drain and accountable activation prerequisites remain; the ADR stays Proposed.
 
+### Source-only private completed-eligibility transport (2026-10-04)
+
+D3-061 adds closed metadata-only `read_completed` to private disposal v1 without changing
+ordinary `read`/`record_disposal` meanings or fields. Exact action/reference echoes and numeric
+function versions prevent ordinary inventory from becoming success eligibility. Older composed
+stores refuse the new action if the optional owning method is absent; no fallback/downgrade is
+supplied. The existing default-off lazy bootstrap binds readCompleted after qualified target and
+managed-secret checks, using the native one-connection pool. No new dispatch, cancellation,
+settlement, renewal, object or purge capability is supplied. Handler-first deployment and exact
+new version pinning precede client use under reviewed maintenance IAM; no migration/backfill.
+Local compatibility is not authenticated production IAM, scheduling, remote writer-drain or
+activation evidence. The proposal remains incomplete and default-dark.
+
 - Conditional creation by the provider: rejected because deletion markers allow recreation.
 - Caller cancellation as remote cancellation: rejected because it does not prove remote quiescence.
 - Unconditional replacement or retry on conflict: rejected because it can restore deleted bytes
