@@ -13,6 +13,16 @@ Owns the reusable candidate truth profile: verified facts, job preferences, answ
 
 Generated job-specific artifacts belong to the documents service. Protected-class data is isolated and never exposed to matching.
 
+## Restricted answer reuse reads
+
+The internal `readActiveValue` port returns only the exact owner's latest active field/context
+snapshot before database wall-clock expiry. KMS decryption holds no SQL lock; a second read
+withholds the value if its version, state or expiry changed while decryption was pending.
+Owner, field and context are detached before asynchronous work. This is a point-in-time read,
+not packet approval or an active-candidate lease; an eventual Applications consumer must preserve
+those separate controls and mandatory review. No public route exposes this plaintext port.
+The separate candidate-export reader intentionally permits expired saved values for portability.
+
 ## Phase 0 implementation
 
 The initial PostgreSQL module owns provider-neutral identities, job preferences, operations,

@@ -435,6 +435,7 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
   }): Promise<
     { id: string; version: number; valueType: RestrictedAnswerValueType; value: string } | undefined
   > {
+    const { userId, fieldKey } = input;
     const context = input.context ?? "";
     const [row] = await this.client<
       Array<{
@@ -453,15 +454,16 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
         SELECT * FROM profile.restricted_answer_versions
         WHERE answer_id = answer.id ORDER BY version DESC LIMIT 1
       ) AS version ON true
-      WHERE answer.user_id = ${input.userId}::uuid
-        AND answer.field_key = ${input.fieldKey}
+      WHERE answer.user_id = ${userId}::uuid
+        AND answer.field_key = ${fieldKey}
         AND coalesce(answer.context, '') = ${context}
         AND version.state = 'active'
+        AND (version.expires_at IS NULL OR version.expires_at > clock_timestamp())
     `;
     if (!row) return undefined;
     const value = await this.requireCipher().decrypt({
-      userId: input.userId,
-      fieldKey: input.fieldKey,
+      userId,
+      fieldKey,
       context,
       ciphertext: {
         ciphertext: new Uint8Array(row.ciphertext),
@@ -469,6 +471,23 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
         encryptionAlgorithm: row.encryptionAlgorithm,
       },
     });
+    // KMS runs without a SQL lock. A correction, tombstone or expiry committed while it
+    // was pending must withhold this snapshot, never return an older saved answer.
+    const [current] = await this.client<Array<{ current: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1 FROM profile.restricted_answers AS answer
+        JOIN LATERAL (
+          SELECT version, state, expires_at FROM profile.restricted_answer_versions
+          WHERE answer_id = answer.id ORDER BY version DESC LIMIT 1
+        ) AS version ON true
+        WHERE answer.user_id = ${userId}::uuid AND answer.id = ${row.id}::uuid
+          AND answer.field_key = ${fieldKey}
+          AND coalesce(answer.context, '') = ${context}
+          AND version.version = ${row.version} AND version.state = 'active'
+          AND (version.expires_at IS NULL OR version.expires_at > clock_timestamp())
+      ) AS current
+    `;
+    if (current?.current !== true) return undefined;
     return { id: row.id, version: row.version, valueType: row.valueType, value };
   }
 }
