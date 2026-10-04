@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-067 final clean source `869f0fc` passes full maintained verification: 38 typecheck tasks, 39 test tasks, 23 builds; 1,434 Workflow units and unchanged lint. 43 focused and seven real PostgreSQL cases cover frozen capabilities and a private_slots-only initializer ledger guard. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). Native runtime/release/accountable acceptance remain; D1/D3 stay In progress. Docker/WSL stopped. No deployment/activation; hosted CI/CD remains deferred until production launch.
+
 2026-10-04 D3-067 purpose guard: initializer ledger methods accept only private_slots and refuse provider/final-document work before SQL. 43 focused and seven fresh PostgreSQL cases plus build/typecheck/emitted isolation pass; clean-source full rerun pending. Docker/WSL stopped. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). No deployment/activation or phase completion.
 
 2026-10-04 D3-067 facade checkpoint: first full verifier passes at `3861c69` (38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint). Tighten constructor runtime capabilities with exact frozen owner/lease/work/initialization/recovery facades. 41 focused and seven fresh PostgreSQL cases plus build/typecheck/emitted isolation pass again; final full verifier pending. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). No publication/deployment/activation or phase completion.
