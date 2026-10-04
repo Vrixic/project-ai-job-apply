@@ -1,7 +1,7 @@
 # D3-066: Source-only native response maintenance
 
 Date: 2026-10-04
-Status: Source implementation and focused/connected checks; full verification pending.
+Status: Source/local verification complete at `a63233a`; review/merge and release gates remain.
 
 The backend-only branch starts from freshly fetched main `bde17d9` and locally integrates
 exact open #535 `0c91183` as an explicit dependency. This is not a GitHub merge.
@@ -76,3 +76,30 @@ owning functions. No new migration, OpenAPI, domain/event shape or frontend chan
 This does not classify ambiguous abandonment, settle other writers, prove privacy quiescence,
 authorize finalization/purge or supply accountable security/privacy approval. D1/D3 remain
 In progress; no phase-exit box changes and hosted CI/CD remains deferred until production launch.
+
+## Final exact-source verification
+
+The earlier pending full-verification/artifact checkpoints are superseded by these results
+for clean source `a63233a3989ae60f4829a5dd5671a829ca0793ae`:
+
+- Full `scripts/verify-phase0.ps1` passes: 38 typecheck tasks, 39 test tasks and 23 builds,
+  contract generation, formatting, operational/security/recovery guards, both bundle isolation
+  checks, Compose configuration and product-scope check. Lint is unchanged at zero errors,
+  15 warnings and 58 infos. All 1,155 Documents unit cases pass. External integration suites
+  skipped by the maintained unit runner are not claimed tested.
+- The new local artifact binds the exact clean source in its bundle/manifest. Independent
+  ZIP contents, bytes/hash, bundle/source banner, manifest, checksum companion and 26-component
+  SBOM checks pass. Artifact SHA-256:
+  `af2bc781ac248284bfbe5d1fd04def32d67b1113370946c16187ba4620c20361`.
+  Both actual bundled selectors refuse while disabled, reject injected provider identity and
+  perform zero transports. It remains unpublished; no runtime release receipt is claimed.
+- All original tracker and phase nonblank lines from dependency `0c91183` are retained in order;
+  new relative evidence links resolve. Follow-up changes record results/table placement only.
+
+Logs: `.tmp/d3-066-full-verification-a632.log`, `.tmp/d3-066-artifact-a632.log`.
+The 141 PostgreSQL cases above bind the same production source bytes (subsequent changes before
+commit were documentation, formatting and artifact/check composition). These checks were local
+Windows/Node 24/pnpm 10 with real PostgreSQL 16.14 and simulated external authentication, secrets,
+Lambda transport and provider responses. There was no user-facing change requiring a UI pass.
+Reviewed IAM, maintained caller/scheduling, retention/expiry, abandonment/writer drain and
+accountable/deployed acceptance remain. D1/D3 are not complete.

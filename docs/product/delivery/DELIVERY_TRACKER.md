@@ -9,6 +9,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-066 exact-source verification completes at `a63233a`: full maintained
+verifier passes 38 typecheck tasks, 39 test tasks and 23 builds, including all 1,155 Documents
+units, unchanged lint baseline and both emitted-bundle isolation checks. 141 real PostgreSQL
+response-inventory cases include nine new native maintenance/private SQL composition cases.
+The source-bound local maintenance artifact and independent integrity/default-off checks pass,
+unpublished. [Evidence](evidence/d3-response-maintenance-bootstrap-2026-10-04.md). Review/merge, IAM/scheduling, retention,
+abandonment/writer drain and accountable/deployed acceptance remain; no phase completion,
+deployment or activation. Hosted CI/CD remains deferred until production launch.
+
 2026-10-04 D3-066 starts from fresh main `bde17d9` with exact open #535 head
 `0c91183` as an explicit source dependency. A default-off internet maintenance Lambda now
 connects separate owned failed/completed reads to private fence/disposal controls and the
