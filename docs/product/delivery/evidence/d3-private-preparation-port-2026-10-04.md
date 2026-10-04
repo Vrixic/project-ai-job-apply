@@ -1,7 +1,7 @@
 # D3-067: Private preparation port into isolated Documents execution
 
 Date: 2026-10-04
-Status: Source and focused/connected verification; full maintained verifier pending.
+Status: Source, focused/connected and exact-source full maintained verification passed; review/release gates remain.
 
 The backend-only branch starts from freshly fetched main `bde17d9` and locally integrates
 exact open #536 head `2a69030` as an explicit dependency. No GitHub merge is performed.
@@ -77,7 +77,7 @@ shared volumes. Logs (ignored): `.tmp/d3-067-focused.log`, `.tmp/d3-067-typechec
 
 ## Remaining gates
 
-Full maintained verification remains pending. This is source composition, not a native Lambda
+Full maintained verification passes as recorded below. This is source composition, not a native Lambda
 bootstrap, published artifact, deployment, live-provider evaluation or user journey acceptance.
 Native activity/durable/dispatch/recovery bootstrap/artifacts, IAM/caller/secret/object policies,
 maintained scheduling, transient retention/expiry, ambiguous abandonment, original writer drain
@@ -119,3 +119,22 @@ Workflow build/typecheck and emitted model-isolation check pass again on this fi
 Docker fixture removed; Desktop and WSL stopped. The verifier started at 56f0b29 also passed,
 but source changed during execution, so it is superseded by a clean-source full rerun.
 No schema, SQL authorization, frontend or deployment change.
+
+## Final exact-source verification
+
+Clean source `869f0fca0f943c1f7ec39d277788762b464b0feb` passes the maintained
+`scripts/verify-phase0.ps1` with terminal exit 0 and its completion marker: 38 typecheck
+tasks, 39 test tasks and 23 builds. Workflow units: 1,434 passed and 27 explicitly skipped,
+including seven opt-in SQL cases separately executed above. Lint remains zero errors,
+15 warnings and 58 informational notes. Formatting, generated contracts, dependency-security
+regressions, operational/security guards, all three emitted capability checks and Compose
+configuration pass. Log: `.tmp/d3-067-full-verification-869f0fc.log` (ignored).
+
+43 focused cases, seven real PostgreSQL cases and emitted isolation/build/typecheck proof
+cover the final purpose-guard source. New evidence links resolve and the prior delivery history
+is retained. Documentation-only follow-ups do not change the tested source. Windows local
+verification uses simulated authentication/S3/Invoke/model responses and no live AWS/provider
+requests. Docker Desktop and WSL are stopped; no owned SQL fixture remains. Native runtime
+bootstrap/artifacts, release/IAM/scheduling, retention/abandonment/original writer drain and
+accountable/deployed acceptance remain. D1/D3 stay In progress; hosted CI/CD stays deferred
+until production launch.
