@@ -465,7 +465,8 @@ Required environment identifiers: `CANDIDATE_DOCUMENT_BUCKET`, `PLATFORM_KMS_KEY
 `COVER_LETTER_RESPONSE_CAPTURE_FUNCTION_ARN`, plus the established Lambda region/account/name/
 version/session context. Secret values are never configuration inputs. No environment/runtime
 resource is wired by this source change. Pair a reviewed actor with compatible numeric private
-handler versions; D3-063's separate original-terminal closure is a parallel source change.
+handler versions. The combined D3-063/D3-064 source routes original failed/cancelled/incomplete
+observations through the separate terminal settlement action; replay cannot redispatch.
 
 `pnpm --filter @ai-job-apply/documents-service build:lambda:isolated-provider` builds one artifact set
 (four local files) in its separate output directory. It smoke-tests the actual

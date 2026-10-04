@@ -14,6 +14,7 @@ export async function isolatedProviderFixture(
     documentId?: string;
     now?: Date;
     expiresAt?: Date;
+    terminalStatus?: "completed" | "failed" | "cancelled" | "incomplete";
     rpc?: (input: Record<string, unknown>, target: string) => Promise<unknown>;
   } = {},
 ) {
@@ -172,7 +173,7 @@ export async function isolatedProviderFixture(
       previous_response_id: null,
       conversation: null,
       tools: [],
-      status: "completed",
+      status: settings.terminalStatus ?? "completed",
       output: [
         {
           type: "message",

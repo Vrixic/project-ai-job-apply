@@ -7,7 +7,10 @@ import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCoverLetterDocument } from "./cover-letter.js";
 import { isolatedProviderFixture } from "./cover-letter-isolated-provider-test-support.js";
-import { COVER_LETTER_PROVIDER_MODEL } from "./cover-letter-provider-contract.js";
+import {
+  COVER_LETTER_PROVIDER_MODEL,
+  decodeCoverLetterProviderObject,
+} from "./cover-letter-provider-contract.js";
 import { CoverLetterProviderControlClient } from "./cover-letter-provider-control-client.js";
 import { createCoverLetterProviderControlLambda } from "./cover-letter-provider-control-lambda.js";
 import { CoverLetterResponseCaptureClient } from "./cover-letter-response-capture-client.js";
@@ -133,9 +136,27 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     return store.reserve(ref);
   }
 
-  it.each(["success", "lost_capture_ack", "quarantine", "lost_settle_ack"] as const)(
+  it.each([
+    "success",
+    "lost_capture_ack",
+    "quarantine",
+    "lost_settle_ack",
+    "failed",
+    "cancelled",
+    "incomplete",
+    "lost_terminal_ack",
+    "quarantine_failed",
+    "running_slots",
+  ] as const)(
     "connects isolated actor bootstrap to native control/capture PostgreSQL: %s",
     async (fault) => {
+      const terminalStatus =
+        fault === "cancelled" || fault === "incomplete"
+          ? fault
+          : ["failed", "lost_terminal_ack", "quarantine_failed", "running_slots"].includes(fault)
+            ? "failed"
+            : "completed";
+      const terminal = terminalStatus !== "completed";
       const extraId = uuidv7();
       await documents.reserve({
         id: extraId,
@@ -181,16 +202,21 @@ describe.skipIf(!requested)("original provider response inventory with real Post
       const f = await isolatedProviderFixture({
         documentId: extraId,
         now: new Date(),
+        terminalStatus,
         rpc: async (input, target) => {
           const output = target.endsWith("synthetic-control:3")
             ? await control(input, { invokedFunctionArn: target })
             : await capture(input, { invokedFunctionArn: target });
-          if (input.action === "record_creation" && fault === "quarantine")
+          if (
+            input.action === "record_creation" &&
+            (fault === "quarantine" || fault === "quarantine_failed")
+          )
             await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
           if (
             !lost &&
             ((fault === "lost_capture_ack" && input.action === "record_creation") ||
-              (fault === "lost_settle_ack" && input.action === "settle"))
+              (fault === "lost_settle_ack" && input.action === "settle") ||
+              (fault === "lost_terminal_ack" && input.action === "settle_terminal"))
           ) {
             lost = true;
             throw Error("SyntheticLostCommittedPrivateACK");
@@ -211,10 +237,29 @@ describe.skipIf(!requested)("original provider response inventory with real Post
         purpose: "provider_dispatch",
         requestSha256: f.input.request.sha256,
       };
+      let slotsReference: CoverLetterWorkReference | undefined;
+      if (fault === "running_slots") {
+        const slots = await work.issue({
+          ownerUserId: owner,
+          documentId: extraId,
+          purpose: "private_slots",
+          requestSha256: f.input.request.sha256,
+          consentExpiresAt: f.expiresAt,
+        });
+        slotsReference = {
+          id: slots.authorization.id,
+          documentId: extraId,
+          purpose: "private_slots",
+          requestSha256: f.input.request.sha256,
+        };
+        await work.claim(slotsReference);
+      }
       try {
-        expect((await f.call()).outcome).toBe(fault.startsWith("lost_") ? "in_progress" : "ready");
         expect((await f.call()).outcome).toBe(
-          fault === "lost_capture_ack" ? "in_progress" : "ready",
+          fault.startsWith("lost_") ? "in_progress" : terminal ? "failed" : "ready",
+        );
+        expect((await f.call()).outcome).toBe(
+          fault === "lost_capture_ack" || terminal ? "in_progress" : "ready",
         );
         const [row] =
           await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${extraRef.id}`;
@@ -222,11 +267,40 @@ describe.skipIf(!requested)("original provider response inventory with real Post
         const inventory = await store.read(extraRef);
         expect(inventory?.state).toBe("acknowledged");
         expect(inventory?.response?.responseId).toBe("resp_syntheticBootstrap1");
+        expect(lost).toBe(fault.startsWith("lost_"));
         expect(f.modelFetch).toHaveBeenCalledTimes(1);
         expect(f.createObjectClient).toHaveBeenCalledTimes(1);
         expect(f.createLambdaClient).toHaveBeenCalledTimes(1);
         expect(pools).toHaveLength(2);
-        if (fault === "quarantine")
+        if (terminal) {
+          const result = await f.objects.find(extraId, "result");
+          if (!result) throw Error("SyntheticMissingPendingResult");
+          expect(
+            decodeCoverLetterProviderObject(
+              "result",
+              await f.objects.read(extraId, "result", result),
+            ),
+          ).toMatchObject({ state: "pending" });
+          const phases = await sql<
+            Array<{ purpose: string; state: string }>
+          >`SELECT purpose, state FROM documents.cover_letter_work_authorizations WHERE document_id = ${extraId} ORDER BY purpose`;
+          expect(phases.filter((row) => row.purpose !== "provider_dispatch")).toEqual([
+            { purpose: "final_document", state: "revoked" },
+            { purpose: "private_slots", state: fault === "running_slots" ? "running" : "revoked" },
+          ]);
+          if (fault === "running_slots")
+            expect(await work.readDrainState(owner, extraId)).toBe("pending");
+          const actions = f.invoke.mock.calls.map(
+            ([command]) =>
+              JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array)).action,
+          );
+          expect(actions).toEqual(["claim", "reserve", "record_creation", "settle_terminal"]);
+          if (fault !== "quarantine_failed")
+            expect(
+              (await work.claimFinalDocument({ ownerUserId: owner, documentId: extraId })).kind,
+            ).toBe("unavailable");
+        }
+        if (fault === "quarantine" || fault === "quarantine_failed")
           await expect(
             work.claimFinalDocument({ ownerUserId: owner, documentId: extraId }),
           ).rejects.toThrow();
@@ -237,8 +311,9 @@ describe.skipIf(!requested)("original provider response inventory with real Post
           await store.recordDisposal(extraRef, {
             kind: "response_deleted",
             reference: inventory.response,
-            terminalStatus: "completed",
+            terminalStatus,
           });
+        if (slotsReference) await work.recordSettled(slotsReference); // Synthetic cleanup only.
         await work.recordSettled(extraRef); // Explicit synthetic fixture cleanup only.
         await work.revokeUnclaimed(owner, extraId);
         await sql`DELETE FROM documents.cover_letters WHERE id = ${extraId}`;

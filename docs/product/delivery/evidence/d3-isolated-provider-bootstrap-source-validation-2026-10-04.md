@@ -74,3 +74,32 @@ Reviewed role/bucket/KMS/secret/private-caller IAM, remote original writer drain
 and transient retention, real-provider evaluation, accountable approval and deployed acceptance
 remain open. Local timeout never proves remote quiescence. D1/D3 stay In progress. Hosted
 CI/CD remains deferred by owner until production launch, without a security/privacy/release waiver.
+
+## Combined original-terminal integration checkpoint
+
+2026-10-04: locally integrate exact open #533 head `1abc7e7` into #534 as `8aba600`.
+Both entire test additions are retained. An initial conflict-script error dropped delivery
+text; complete tracker/phase records are restored from both original heads, with an independent
+line-set audit proving every original line survives.
+No GitHub merge is claimed. Add six native-bootstrap PostgreSQL cases for failed, cancelled,
+incomplete, lost committed terminal ACK, quarantine after capture and another running private
+writer. All **285 PostgreSQL cases across seven files pass** on the combined source.
+
+The actual isolated actor routes the captured original terminal receipt through its real
+control client, native private bootstrap and owning transaction. It leaves result pending,
+fences unclaimed phases and settles only the original provider grant. Other running work stays
+pending; finalization cannot be reopened. Replay performs no second model POST or settlement
+call. A lost terminal SQL/Lambda ACK remains in_progress although committed work is settled.
+Provider HTTP/S3/Invoke/secret/authentication are simulated; SQL is real. The initializer/
+final-document workflow and authenticated deployed journey remain outside these fixtures.
+The initial combined run caught missing lost-ACK injection in the new fixture; the corrected
+full run adds an explicit assertion that every intended fault actually occurred. No guard
+was weakened. Exact tmpfs fixture removed; Docker Desktop/WSL stopped. Combined full maintained
+verification passes: 1,084 Documents units, 283 AI SDK units, 38 typecheck tasks, 39 test
+tasks and 23 builds plus compiled isolation, public contracts, formatting/baseline lint
+(0 errors, 15 warnings, 58 informational notes), operational/security regressions, Compose
+and scope. Rebuilt combined exact-source artifacts remain.
+
+Logs: `.tmp/d3-064-combined-integration-final.log`,
+`.tmp/d3-064-combined-full-verification.log`. IAM, original writer drain, maintained retention/
+disposal, production composition, accountable/deployed acceptance and D1/D3 exit gates remain.
