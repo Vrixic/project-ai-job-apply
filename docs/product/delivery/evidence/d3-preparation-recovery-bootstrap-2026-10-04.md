@@ -101,3 +101,10 @@ Only delivery documentation follows verified source. Nothing is published, deplo
 Release/caller/metadata/queue IAM, scheduling, retained versions, retention/original writer drain
 and accountable/deployed acceptance remain. Original phase/tracker history is preserved and new
 evidence links resolve. D1/D3 remain In progress, with hosted CI/CD deferred until production launch.
+
+## Review handoff
+
+[PR #541](https://github.com/Vrixic/project-ai-job-apply/pull/541) opens on exact #540 dependency 14371d70. Verified source/artifact
+38b3891f is unchanged; only delivery documentation follows. No GitHub merge, publication,
+deployment or activation occurs. Review/merge and release/accountable gates remain;
+D1/D3 stay In progress and hosted checks are not monitored.
