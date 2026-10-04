@@ -14,8 +14,9 @@ Successful-generation cleanup needs a completion-only provider port with no canc
 Exact original completed proof must precede deletion; queued/running and other terminal states
 remain unresolved. All 36 new/57 existing cleanup cases, all 252 AI SDK cases, typecheck/build
 and scoped Biome pass. Five regressions detect reuse of unrestricted cleanup. Full maintained
-verification, owned eligibility, runtime/IAM, scheduling, writer drain and deployed/accountable
-acceptance remain. HTTP is simulated; no model call or activation. D1/D3 stay In progress.
+verification passes terminally for `ff81ee6`: 38 typecheck tasks, 39 test tasks, 23 builds,
+unchanged public contracts, formatting, baseline lint and operational/security/Compose/scope checks.
+Owned eligibility, runtime/IAM, scheduling, writer drain and deployed/accountable acceptance remain. HTTP is simulated; no model call or activation. D1/D3 stay In progress.
 
 2026-10-03 D3-056 starts on a fresh backend-only branch from merged #527/main `cf7a2df`.
 Two real PostgreSQL regressions reproduce private vault reuse after owner quarantine, both
