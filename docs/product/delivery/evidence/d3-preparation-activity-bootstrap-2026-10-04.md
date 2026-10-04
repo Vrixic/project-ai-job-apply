@@ -91,7 +91,7 @@ a corrected exact-source build and full verifier will supersede it before handof
 
 Clean source `a7fb9ba3060711aaf84c086a4850f5e1b61a29af` passes the maintained
 `scripts/verify-phase0.ps1` with terminal exit 0 and its completion marker: 38 typecheck tasks,
-39 test tasks and 23 builds. All 1,472 Workflow units (31 opt-in cases skipped separately),
+39 test tasks and 23 builds. All 1,472 Workflow units (31 explicitly skipped; 11 SQL cases separately executed above),
 1,160 Documents units and 283 AI SDK units pass. Lint stays at zero errors, 15 warnings and
 58 informational notes. Formatting, contract generation, dependency-security regressions,
 operational/security guards, provider/maintenance/private-port/native activity emitted isolation
@@ -119,3 +119,10 @@ background metadata types/validators remain compatible reexports; source impleme
 unchanged. Native durable/dispatch/terminal-recovery/release wiring, IAM/scheduling, retention/
 abandonment/original writer drain and accountable/deployed acceptance remain. D1/D3 remain
 In progress. Hosted CI/CD stays deferred until production launch.
+
+## Review handoff
+
+[PR #538](https://github.com/Vrixic/project-ai-job-apply/pull/538) opens on exact #537 source dependency `b516611`. Verified source/artifact
+`a7fb9ba` is unchanged; only delivery documentation follows. No merge, publication, deployment
+or activation is performed. Native durable/dispatch/recovery/release and accountable acceptance
+remain; D1/D3 stay In progress and hosted checks are not monitored.
