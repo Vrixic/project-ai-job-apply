@@ -10,6 +10,11 @@ This is the master record for the delivery phases defined in the [product and sy
 ## Summary
 
 2026-10-03 D3-054 begins on `feat/d3-private-artifact-build` from merged main `7535bc5`.
+Committed-source follow-up: two builds from exact clean `f332086` pass all twelve companion
+hash comparisons and independent ZIP/bundle/archive/SBOM integrity checks. All three manifests
+bind that source SHA. A later records-only commit on this code branch does not change the
+artifact source; merged-main publication must independently rebuild its exact source and pass
+the unchanged audit/cloud guards. No artifact is published or approved as a release input.
 The owner's renewed recommendation direction permits the recommended source-only build/publisher
 integration, not cloud publication or deployment. A separate closed three-artifact private family
 preserves existing parser/processor builds and eight-object receipts. Eleven smoke-verifier
