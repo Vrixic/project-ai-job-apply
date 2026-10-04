@@ -29,6 +29,7 @@ Invoke-CheckedCommand "Development document dark operator validation" { & script
 Invoke-CheckedCommand "Development document migration operator path validation" { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/development-document-migration-operator.tests.ps1 }
 Invoke-CheckedCommand "Admin Auth0 authorization profile setup" { & scripts/tests/configure-auth0-admin-local.tests.ps1 }
 Invoke-CheckedCommand "Formatting" { pnpm format:check }
+Invoke-CheckedCommand "Private Documents artifact publication guards" { & scripts/tests/development-document-artifact-publisher.tests.ps1 }
 Invoke-CheckedCommand "Lint" { pnpm lint }
 Invoke-CheckedCommand "Type checking" { pnpm typecheck }
 Invoke-CheckedCommand "Dependency security regressions" { pnpm test:dependency-security }
