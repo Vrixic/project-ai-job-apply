@@ -55,6 +55,7 @@ const wire = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
 function fixture() {
   let enabled = true;
   const work = {
+    settleTerminalProviderDispatch: vi.fn(async () => undefined),
     claimProviderDispatch: vi.fn(async () => ({ kind: "claimed" as const, reference })),
     settleProviderDispatch: vi.fn(async () => undefined),
     settleRejectedProviderDispatch: vi.fn(async () => undefined),
@@ -93,6 +94,116 @@ function fixture() {
 }
 
 describe("approved private provider-control contract and source-only transport", () => {
+  const termination = {
+    kind: "terminal_no_content" as const,
+    reference: { schemaVersion: 1 as const, responseId: "resp_original1", createdAt: 1791028800 },
+    terminalStatus: "failed" as const,
+  };
+  const terminal = {
+    schemaVersion: 1 as const,
+    action: "settle_terminal" as const,
+    documentId,
+    reference,
+    termination,
+  };
+  it.each(["failed", "cancelled", "incomplete"] as const)(
+    "routes exact original %s termination without ordinary settlement",
+    async (terminalStatus) => {
+      const f = fixture();
+      const receipt = { ...termination, terminalStatus };
+      await f.client.settleTerminalProviderDispatch(reference, receipt);
+      expect(f.work.settleTerminalProviderDispatch).toHaveBeenCalledWith(reference, receipt);
+      expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+      expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+      expect(f.work.settleUndispatchedProviderDispatch).not.toHaveBeenCalled();
+      expect(f.send).toHaveBeenCalledTimes(1);
+      expect(validateProviderControlInput({ ...terminal, termination: receipt })).toBe(true);
+      expect(
+        validateProviderControlOutput({ ...terminal, termination: receipt, outcome: "settled" }),
+      ).toBe(true);
+    },
+  );
+  it("older composition refuses terminal action without any settlement fallback", async () => {
+    const f = fixture();
+    const handler = createCoverLetterProviderControlHandler({
+      functionArn: arn,
+      enabled: () => true,
+      work: {
+        claimProviderDispatch: f.work.claimProviderDispatch,
+        settleProviderDispatch: f.work.settleProviderDispatch,
+        settleRejectedProviderDispatch: f.work.settleRejectedProviderDispatch,
+      },
+    });
+    await expect(handler(terminal, { invokedFunctionArn: arn })).resolves.toEqual({
+      ...terminal,
+      outcome: "unavailable",
+    });
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+    expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+  });
+  it.each([
+    { termination: { ...termination, text: "SyntheticForbiddenContent" } },
+    { termination: { ...termination, terminalStatus: "completed" } },
+    { termination: { ...termination, terminalStatus: "queued" } },
+    { termination: { ...termination, terminalStatus: "in_progress" } },
+    { termination: { ...termination, reference: { ...termination.reference, responseId: "" } } },
+    { termination: { ...termination, reference: { ...termination.reference, createdAt: 0 } } },
+    { termination: null },
+    { response: termination },
+    { reference: { ...reference, purpose: "private_slots" } },
+    { reference: { ...reference, ownerUserId: "SyntheticNotCallerSelected" } },
+  ])("strict new action refuses invalid metadata before I/O: %j", async (patch) => {
+    const f = fixture();
+    const raw = { ...terminal, ...patch };
+    expect(validateProviderControlInput(raw)).toBe(false);
+    await expect(f.handler(raw, { invokedFunctionArn: arn })).rejects.toThrow(
+      "CoverLetterProviderControlUnavailable",
+    );
+    expect(f.work.settleTerminalProviderDispatch).not.toHaveBeenCalled();
+  });
+  it.each([
+    { termination: { ...termination, terminalStatus: "cancelled" } },
+    {
+      termination: {
+        ...termination,
+        reference: { ...termination.reference, responseId: "resp_other" },
+      },
+    },
+    {
+      termination: {
+        ...termination,
+        reference: { ...termination.reference, createdAt: 1791028801 },
+      },
+    },
+    { reference: { ...reference, id: "019a4000-0000-7000-8000-000000000003" } },
+    { reference: { ...reference, requestSha256: "b".repeat(64) } },
+    { action: "settle_rejected" },
+  ])("changed terminal receipt echo refuses: %j", async (patch) => {
+    const f = fixture();
+    f.send.mockResolvedValue({
+      StatusCode: 200,
+      ExecutedVersion: "7",
+      Payload: wire({ ...terminal, outcome: "settled", ...patch }),
+    });
+    await expect(f.client.settleTerminalProviderDispatch(reference, termination)).rejects.toThrow(
+      "CoverLetterProviderControlUnavailable",
+    );
+    expect(f.send).toHaveBeenCalledTimes(1);
+  });
+  it("withdrawn gate refuses new action before Invoke", async () => {
+    const f = fixture();
+    f.disable();
+    await expect(f.client.settleTerminalProviderDispatch(reference, termination)).rejects.toThrow();
+    expect(f.send).not.toHaveBeenCalled();
+  });
+  it("lost original terminal settlement acknowledgement remains unresolved with no retry", async () => {
+    const f = fixture();
+    f.work.settleTerminalProviderDispatch.mockRejectedValue(Error("SyntheticLostOriginalSQLACK"));
+    await expect(f.client.settleTerminalProviderDispatch(reference, termination)).rejects.toThrow();
+    expect(f.work.settleTerminalProviderDispatch).toHaveBeenCalledTimes(1);
+    expect(f.send).toHaveBeenCalledTimes(1);
+    expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+  });
   it("routes exact original non-dispatch cleanup without ordinary settlement", async () => {
     const f = fixture();
     await f.client.settleUndispatchedProviderDispatch(reference);

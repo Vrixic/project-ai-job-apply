@@ -1,5 +1,10 @@
+import {
+  type ProviderBackgroundTerminal,
+  validateProviderBackgroundTerminal,
+} from "@ai-job-apply/ai-sdk";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
+import { validateProviderControlReference } from "./cover-letter-provider-control-contract.js";
 
 export const coverLetterWorkPurposes = Object.freeze([
   "private_slots",
@@ -251,6 +256,58 @@ export class PostgresCoverLetterWorkStore {
     return this.settleFencedProviderDispatch(reference);
   }
 
+  /** Trusted original actor only, after fulfilled terminal observation and positive creation
+   * capture. Matching inventory does not independently prove provider termination. No disposal,
+   * new authority or quiescence certificate is issued. Separate from output-rejection closure.
+   */
+  async settleTerminalProviderDispatch(
+    reference: CoverLetterWorkReference,
+    termination: ProviderBackgroundTerminal,
+  ): Promise<void> {
+    return this.guarded(async () => {
+      if (
+        !validateProviderControlReference(reference) ||
+        !validateProviderBackgroundTerminal(termination)
+      )
+        throw Error();
+      const ref = structuredClone(reference);
+      const original = structuredClone(termination);
+      await this.client.begin(async (sql) => {
+        const seed = await find(sql, ref.documentId, ref.purpose);
+        if (!seed || !referenceMatches(seed, ref)) throw Error();
+        // Match the admission fence's document-first lock order.
+        const owned = await sql`SELECT id FROM documents.cover_letters
+          WHERE id = ${ref.documentId} AND user_id = ${seed.ownerUserId} FOR UPDATE`;
+        if (!owned[0] || !this.enabled()) throw Error();
+        const current = await find(sql, ref.documentId, ref.purpose, true);
+        if (
+          !current ||
+          !referenceMatches(current, ref) ||
+          (current.state !== "running" && current.state !== "settled")
+        )
+          throw Error();
+        const [inventory] = await sql<Array<{ state: string; terminalStatus: string | null }>>`
+          SELECT r.state, r.terminal_status AS "terminalStatus"
+          FROM documents.cover_letter_provider_responses r
+          WHERE r.work_id = ${ref.id} AND r.document_id = ${ref.documentId}
+            AND r.user_id = ${current.ownerUserId} AND r.request_sha256 = ${ref.requestSha256}
+            AND r.response_id = ${original.reference.responseId}
+            AND r.response_created_at = ${original.reference.createdAt}
+            AND r.state IN ('acknowledged', 'disposed') FOR UPDATE OF r`;
+        if (
+          !inventory ||
+          (inventory.state === "disposed" && inventory.terminalStatus !== original.terminalStatus)
+        )
+          throw Error();
+        await this.revokeUnclaimedInTransaction(sql, current.ownerUserId, ref.documentId);
+        if (!this.enabled()) throw Error();
+        if (current.state === "running")
+          await sql`UPDATE documents.cover_letter_work_authorizations
+            SET state = 'settled', terminal_at = clock_timestamp() WHERE id = ${ref.id}`;
+      });
+    });
+  }
+
   /** Original gateway non-dispatch receipt ONLY. The actor must have acknowledged its
    * dispatch-slot write and must issue no further effects. Error codes are not receipts.
    */
@@ -330,48 +387,56 @@ export class PostgresCoverLetterWorkStore {
   async revokeUnclaimed(ownerUserId: string, documentId: string): Promise<number> {
     return this.guarded(async () => {
       if (!UUID.test(ownerUserId) || !UUID.test(documentId)) throw Error();
-      return this.client.begin(async (sql) => {
-        const owned = await sql`SELECT id FROM documents.cover_letters
+      return this.client.begin((sql) =>
+        this.revokeUnclaimedInTransaction(sql, ownerUserId, documentId),
+      );
+    });
+  }
+
+  private async revokeUnclaimedInTransaction(
+    sql: postgres.TransactionSql,
+    ownerUserId: string,
+    documentId: string,
+  ): Promise<number> {
+    const owned = await sql`SELECT id FROM documents.cover_letters
           WHERE user_id = ${ownerUserId} AND id = ${documentId} FOR UPDATE`;
-        if (!this.enabled()) throw Error();
-        if (!owned[0]) return 0;
-        const known = await sql<
-          Array<{
-            purpose: CoverLetterWorkPurpose;
-            requestSha256: string;
-            consentExpiresAt: Date;
-            issuedAt: Date;
-            expiresAt: Date;
-          }>
-        >`
+    if (!this.enabled()) throw Error();
+    if (!owned[0]) return 0;
+    const known = await sql<
+      Array<{
+        purpose: CoverLetterWorkPurpose;
+        requestSha256: string;
+        consentExpiresAt: Date;
+        issuedAt: Date;
+        expiresAt: Date;
+      }>
+    >`
           SELECT purpose, request_sha256 AS "requestSha256", consent_expires_at AS "consentExpiresAt",
             issued_at AS "issuedAt", expires_at AS "expiresAt"
           FROM documents.cover_letter_work_authorizations
           WHERE user_id = ${ownerUserId} AND document_id = ${documentId} ORDER BY issued_at, id`;
-        // Absence of the entire protocol remains untracked, never retroactively certified.
-        const first = known[0];
-        if (!first) return 0;
-        let cancelled = 0;
-        // Persist no-authority tombstones for phases not yet issued. This is a permanent
-        // document-wide admission fence, including when quarantine preceded later phases.
-        for (const purpose of coverLetterWorkPurposes) {
-          if (known.some((row) => row.purpose === purpose)) continue;
-          await sql`INSERT INTO documents.cover_letter_work_authorizations
+    // Absence of the entire protocol remains untracked, never retroactively certified.
+    const first = known[0];
+    if (!first) return 0;
+    let cancelled = 0;
+    // Persist no-authority tombstones for phases not yet issued. This is a permanent
+    // document-wide admission fence, including when quarantine preceded later phases.
+    for (const purpose of coverLetterWorkPurposes) {
+      if (known.some((row) => row.purpose === purpose)) continue;
+      await sql`INSERT INTO documents.cover_letter_work_authorizations
             (id, document_id, user_id, purpose, request_sha256, consent_expires_at,
               issued_at, expires_at, state, terminal_at)
             VALUES (${uuidv7()}, ${documentId}, ${ownerUserId}, ${purpose}, ${first.requestSha256},
               ${first.consentExpiresAt.toISOString()}::timestamptz,
               ${first.issuedAt.toISOString()}::timestamptz, ${first.expiresAt.toISOString()}::timestamptz,
               'revoked', clock_timestamp())`;
-          cancelled++;
-        }
-        const rows = await sql`UPDATE documents.cover_letter_work_authorizations
+      cancelled++;
+    }
+    const rows = await sql`UPDATE documents.cover_letter_work_authorizations
           SET state = 'revoked', terminal_at = clock_timestamp()
           WHERE user_id = ${ownerUserId} AND document_id = ${documentId} AND state = 'issued'
           RETURNING id`;
-        return cancelled + rows.length;
-      });
-    });
+    return cancelled + rows.length;
   }
 
   /** Cleanup consumes an existing exact reference, derives its owner and permanently fences

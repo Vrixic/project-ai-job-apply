@@ -1,3 +1,7 @@
+import {
+  type ProviderBackgroundTerminal,
+  validateProviderBackgroundTerminal,
+} from "@ai-job-apply/ai-sdk";
 import { coverLetterProviderTimestamp } from "./cover-letter-provider-contract.js";
 import type { CoverLetterWorkReference } from "./cover-letter-work-store.js";
 
@@ -19,6 +23,13 @@ export type CoverLetterProviderControlInput =
       action: "settle" | "settle_rejected" | "settle_undispatched";
       documentId: string;
       reference: CoverLetterWorkReference;
+    }
+  | {
+      schemaVersion: 1;
+      action: "settle_terminal";
+      documentId: string;
+      reference: CoverLetterWorkReference;
+      termination: ProviderBackgroundTerminal;
     };
 export type CoverLetterProviderControlOutput =
   | {
@@ -40,6 +51,14 @@ export type CoverLetterProviderControlOutput =
       documentId: string;
       outcome: "settled";
       reference: CoverLetterWorkReference;
+    }
+  | {
+      schemaVersion: 1;
+      action: "settle_terminal";
+      documentId: string;
+      reference: CoverLetterWorkReference;
+      termination: ProviderBackgroundTerminal;
+      outcome: "settled" | "unavailable";
     };
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
@@ -77,6 +96,15 @@ export function validateProviderControlReference(
 export function validateProviderControlInput(
   value: unknown,
 ): value is CoverLetterProviderControlInput {
+  if (record(value, ["schemaVersion", "action", "documentId", "reference", "termination"]))
+    return (
+      value.schemaVersion === 1 &&
+      value.action === "settle_terminal" &&
+      id(value.documentId) &&
+      validateProviderControlReference(value.reference) &&
+      value.reference.documentId === value.documentId &&
+      validateProviderBackgroundTerminal(value.termination)
+    );
   if (record(value, ["schemaVersion", "action", "documentId", "requestSha256", "consentExpiresAt"]))
     return (
       value.schemaVersion === 1 &&
@@ -100,6 +128,18 @@ export function validateProviderControlInput(
 export function validateProviderControlOutput(
   value: unknown,
 ): value is CoverLetterProviderControlOutput {
+  if (
+    record(value, ["schemaVersion", "action", "documentId", "reference", "termination", "outcome"])
+  )
+    return (
+      value.schemaVersion === 1 &&
+      value.action === "settle_terminal" &&
+      id(value.documentId) &&
+      validateProviderControlReference(value.reference) &&
+      value.reference.documentId === value.documentId &&
+      validateProviderBackgroundTerminal(value.termination) &&
+      (value.outcome === "settled" || value.outcome === "unavailable")
+    );
   if (record(value, ["schemaVersion", "action", "documentId", "outcome", "reference"]))
     return (
       value.schemaVersion === 1 &&

@@ -85,6 +85,13 @@ export class CoverLetterProviderControlClient {
         JSON.stringify(output) !== text ||
         !validateProviderControlOutput(output) ||
         output.action !== input.action ||
+        (input.action === "settle_terminal" &&
+          output.action === "settle_terminal" &&
+          (output.reference.id !== input.reference.id ||
+            output.reference.requestSha256 !== input.reference.requestSha256 ||
+            output.termination.reference.responseId !== input.termination.reference.responseId ||
+            output.termination.reference.createdAt !== input.termination.reference.createdAt ||
+            output.termination.terminalStatus !== input.termination.terminalStatus)) ||
         output.documentId !== input.documentId ||
         (input.action === "claim" &&
           output.outcome === "claimed" &&
@@ -152,5 +159,20 @@ export class CoverLetterProviderControlClient {
       reference,
     });
     if (result.outcome !== "settled") throw new CoverLetterProviderControlError();
+  }
+
+  async settleTerminalProviderDispatch(
+    reference: Parameters<PostgresCoverLetterWorkStore["settleTerminalProviderDispatch"]>[0],
+    termination: Parameters<PostgresCoverLetterWorkStore["settleTerminalProviderDispatch"]>[1],
+  ): Promise<void> {
+    const result = await this.call({
+      schemaVersion: 1,
+      action: "settle_terminal",
+      documentId: reference.documentId,
+      reference,
+      termination,
+    });
+    if (result.action !== "settle_terminal" || result.outcome !== "settled")
+      throw new CoverLetterProviderControlError();
   }
 }
