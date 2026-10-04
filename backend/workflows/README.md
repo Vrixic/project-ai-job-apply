@@ -200,3 +200,11 @@ contracts and retry/compensation definitions remain unchanged. `build:lambda:pre
 creates a separate local orchestration-only family. See [D3-069 source evidence](../../docs/product/delivery/evidence/d3-preparation-durable-bootstrap-2026-10-04.md).
 Native dispatcher/recovery/release, IAM/scheduling, retention/drain and accountable/deployed
 acceptance remain; nothing is deployed or activated.
+
+`application-preparation-starter-lambda.ts` supplies a default-off native SQS entrypoint with
+qualified managed-secret setup, one Applications SQL connection and one-attempt durable Invoke.
+Original ledger bindings survive retries; the compact retained-version list permits only exact
+versions of the same durable function and never retargets accepted work. Warm drift refuses.
+`build:lambda:preparation-starter` creates a separate local artifact; no deployment is implied.
+See [D3-070 evidence](../../docs/product/delivery/evidence/d3-preparation-starter-bootstrap-2026-10-04.md).
+Native terminal recovery, release/IAM/scheduling/retention/drain and accountable acceptance remain.

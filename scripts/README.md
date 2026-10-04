@@ -369,3 +369,9 @@ under Workflow dist/preparation-durable-lambda and probes actual bundled default
 refusals before SDK state access with zero fetches. The maintained
 `preparation-durable-bundle.test.mjs` checks emitted owning/AI/SQL/private-runtime isolation.
 No publisher/deployment is added; see [D3-069](../docs/product/delivery/evidence/d3-preparation-durable-bootstrap-2026-10-04.md).
+
+`build-application-preparation-starter-lambda.mjs` emits the separate source-bound native SQS
+starter under Workflow dist/preparation-starter-lambda. Actual default-off/wrong-version/invalid
+input probes perform zero fetches. `preparation-starter-bundle.test.mjs` positively requires owning
+dispatch code and excludes emitted private/document/provider/terminal recovery actors.
+No publisher/deployment is added; see [D3-070 evidence](../docs/product/delivery/evidence/d3-preparation-starter-bootstrap-2026-10-04.md).
