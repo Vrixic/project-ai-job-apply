@@ -3186,6 +3186,8 @@ Append only material cross-delivery events.
 
 | 2026-10-04 | D3 | D3-065 exact clean e071d9e passes full maintained verification (38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint/public contracts), local SQL/restore, both operator guard hosts and five unpublished source-bound artifact sets. New links resolve and original history is retained. Runtime/migration/current-source restore rollout, IAM, scheduling, ambiguous abandonment/drain and accountable/deployed acceptance remain; D1/D3 stay In progress. Docker/WSL stopped. Owner CI/CD deferral retained; no publication/deployment/activation or phase completion. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
 
+| 2026-10-04 | D3 | D3-065 review packet [PR #535](https://github.com/Vrixic/project-ai-job-apply/pull/535) opens at ad83be9 against #534 (itself based on #533), preserving explicit dependency order. Tested source e071d9e and all local evidence remain unchanged; this entry is documentation only. Owner review/merge, rollout and external/runtime acceptance remain; no hosted CI monitoring, deployment/activation or D1/D3 completion. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
+
 ## Cross-delivery decisions and changes
 
 | Date | Decision or change | Reason | Affected deliveries | Evidence |

@@ -152,3 +152,9 @@ Review/merge, the migration-before-code rollout, current-source restore helper/o
 reviewed IAM, maintenance scheduling, ambiguous abandonment/other-writer drain, retention and
 accountable/deployed acceptance remain. No D1/D3 exit criterion is marked complete from this slice.
 Hosted CI/CD remains deferred until production launch; no production gate is waived.
+
+
+Review packet: [PR #535](https://github.com/Vrixic/project-ai-job-apply/pull/535) opens against `feat/d3-isolated-provider-bootstrap` (#534), which depends
+on #533. Exact initial review head `ad83be9` adds delivery records only after tested source
+`e071d9e`. This link-recording change is documentation only. No GitHub merge, hosted-check
+monitoring, publication or runtime activation occurs.
