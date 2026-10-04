@@ -59,7 +59,13 @@ Ignored local logs: `.tmp/d3-064-focused-last.log`, `.tmp/d3-064-documents-integ
 The [separate local builder](../../../../scripts/build-isolated-provider-lambda.mjs) uses the
 existing source-bound artifact format and actual bundled default-off/closed-envelope smoke
 checks. It does not modify the maintained private-control/document publication families or
-introduce a provider publisher. Packaging validation is pending.
+introduce a provider publisher. One artifact set (archive/bundle/manifest/CycloneDX SBOM)
+builds from exact clean source `c7382cd`; independent archive byte/hash, bundle equality,
+manifest/source and SBOM integrity checks pass. Actual bundled default-off and closed-input
+refusal pass with zero fetch calls. Archive SHA-256:
+`543057ddda94ea8a8139c9f70a019dc3a6893cac532b94c4507135c69fadc684`.
+The 365,756-byte archive and its four-file set remain local and unpublished.
+Artifact build log: `.tmp/d3-064-isolated-artifact.log`.
 
 No public wire/schema, migration/backfill, frontend, Terraform or production runtime changes.
 The original-terminal path in #533 is a separately reviewed source change; pair any reviewed
