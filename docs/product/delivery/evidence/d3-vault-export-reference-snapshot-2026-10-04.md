@@ -8,6 +8,8 @@ D1 and D3 remain In progress. Hosted CI/CD is deferred until production launch.
 Started from freshly fetched main `bde17d9ed94448fb04393f295122176a875a8d2b`, then
 fast-forwarded the exact open #542 dependency `bf50b5651f1a88c0f8273c904c4b6e15338b7e5e`.
 Branch: `fix/d3-vault-export-reference-snapshot`.
+Review: [PR #543](https://github.com/Vrixic/project-ai-job-apply/pull/543), based on exact #542. Final delivery documentation follows
+verified source; merge and deployed acceptance remain.
 
 The Profile-owned export reader used the caller's mutable reference again after SQL and KMS
 awaits. Mutation could decrypt the original ciphertext using a changed field binding, or validate
