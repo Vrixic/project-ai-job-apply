@@ -33,7 +33,7 @@ Repeated full maintained verification on the carry-forward branch passes termina
 all 23 builds, baseline lint, operational/security regressions, Compose and scope. The earlier
 751 unit/204 PostgreSQL evidence is retained for byte-identical code; no new SQL run is claimed.
 No code redesign, cloud/model call, deployment or activation is included.
-Carry-forward PR #523 still targets main and remains open. Exact-head hosted quality, catalog,
+Carry-forward PR #523 merged to main as `f4975ef` at 2026-10-04T00:35:57Z. Exact-head hosted quality, catalog,
 integration and both container jobs pass; dependency audit fails without waiver. Static analysis
 reports 65 blocking findings over 140 rules and 1,072 targets; no finding equivalence or security
 approval is inferred from counts. [CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37159554301),
