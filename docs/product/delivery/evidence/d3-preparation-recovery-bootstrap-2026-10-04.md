@@ -1,7 +1,7 @@
 # D3-071: Native preparation terminal and scheduled recovery
 
 Date: 2026-10-04
-Status: Source/focused, real PostgreSQL and emitted isolation checks passed; full verifier/artifact pending.
+Status: Source/focused/SQL, exact-source full verifier and local artifact checks passed; review/release gates remain.
 
 The backend-only branch starts from fresh main bde17d9 and locally integrates exact open #540
 14371d70eb01c20301e0baef31436b232010b8e2. No GitHub merge occurs.
@@ -73,3 +73,31 @@ Full maintained exact-source verification and local artifact checks are pending.
 caller/metadata/queue IAM, maintained scheduling, retained versions, original writer drain/retention
 and accountable/deployed acceptance remain. No phase exit changes; D1/D3 stay In progress.
 Hosted CI/CD remains deferred until production launch by owner instruction.
+
+## Final exact-source verification and artifact
+
+Clean source `38b3891fc70764f6fb4bc5322ce72f84fa02d659` passes the full maintained
+`scripts/verify-phase0.ps1` with terminal exit 0 and its completion marker: 38 typecheck tasks,
+39 test tasks and 23 builds. All 1,578 Workflow tests pass; 50 opt-in tests remain explicitly
+skipped by the ordinary runner. The twelve new SQL cases passed separately as recorded above.
+Formatting, unchanged generated contracts, operational/security/dependency regression guards,
+all emitted actor isolation checks and Compose configuration pass. Lint remains zero errors,
+15 warnings and 58 informational notes. Log: `.tmp/d3-071-full-verification-38b3891f.log`.
+
+One separate unpublished native recovery artifact builds from the same clean source. Manifest
+schema 2 specifies Node24/x86_64, index.terminalHandler and index.reconcileHandler. Archive SHA256:
+`cde5d36b3c2d867bfbc30010662f856b62e0a2fdc83fe8bce1cb58e15c9b24db`
+(399,650 bytes; 31 SBOM components). Independent Python checks verify archive hash/bytes/base64
+digest, sole index.mjs member, identical local bundle/hash/source marker and SBOM hash/count.
+Actual bundle bytes contain no model endpoint, ModelGateway or cover-letter S3 store. Both actual
+bundled handlers refuse default-off, wrong numeric invoked version and invalid input with zero
+fetches. The AWS SDK includes generic command definitions; their presence is not an invoked actor
+or IAM authority. Native composition only sends GetDurableExecution for metadata and the scheduled
+handler's gated SendMessage; real-SQL tests reject any other command and emitted actor guards
+exclude the starter/dispatch implementation. IAM must independently deny Invoke. Artifact log:
+`.tmp/d3-071-artifact-38b3891f.log`.
+
+Only delivery documentation follows verified source. Nothing is published, deployed or activated.
+Release/caller/metadata/queue IAM, scheduling, retained versions, retention/original writer drain
+and accountable/deployed acceptance remain. Original phase/tracker history is preserved and new
+evidence links resolve. D1/D3 remain In progress, with hosted CI/CD deferred until production launch.
