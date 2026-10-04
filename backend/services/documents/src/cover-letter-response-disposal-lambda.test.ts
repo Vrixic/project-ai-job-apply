@@ -215,3 +215,42 @@ describe("source-only private response-disposal Lambda bootstrap", () => {
     expect(f.responses.recordDisposal).toHaveBeenCalledOnce();
   });
 });
+
+describe("completed eligibility in the existing disposal bootstrap", () => {
+  const completedInput = { ...input, action: "read_completed" as const };
+  const completedUnavailable = { ...completedInput, outcome: "unavailable", inventory: null };
+  it("refuses default-off completed read before secret resolution", async () => {
+    const f = setup();
+    delete f.env.COVER_LETTER_RESPONSE_DISPOSAL_ENABLED;
+    expect(await f.run(completedInput, { invokedFunctionArn: target })).toEqual(
+      completedUnavailable,
+    );
+    expect(f.resolve).not.toHaveBeenCalled();
+    expect(f.createResponses).not.toHaveBeenCalled();
+  });
+  it("refuses legacy composed stores without ordinary-read fallback", async () => {
+    const f = setup();
+    expect(await f.run(completedInput, { invokedFunctionArn: target })).toEqual(
+      completedUnavailable,
+    );
+    expect(f.responses.read).not.toHaveBeenCalled();
+    expect(f.responses.recordDisposal).not.toHaveBeenCalled();
+  });
+  it("routes completed read only after managed secret/target validation", async () => {
+    const f = setup();
+    const readCompleted = vi.fn(async () => structuredClone(inventory));
+    const run = createCoverLetterResponseDisposalLambda({
+      environment: () => f.env,
+      resolveDatabaseUrl: f.resolve,
+      createResponses: () => ({ ...f.responses, readCompleted }),
+    });
+    expect(await run(completedInput, { invokedFunctionArn: target })).toEqual({
+      ...completedInput,
+      outcome: "read",
+      inventory,
+    });
+    expect(readCompleted).toHaveBeenCalledExactlyOnceWith(reference);
+    expect(f.responses.read).not.toHaveBeenCalled();
+    expect(f.resolve).toHaveBeenCalledTimes(1);
+  });
+});
