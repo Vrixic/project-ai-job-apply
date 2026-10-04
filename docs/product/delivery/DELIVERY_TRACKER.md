@@ -9,6 +9,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-051 source-only private provider-work control Lambda bootstrap has started.
+It reuses the existing closed RPC and original Documents controls, with default-off activation,
+numeric-version target matching and same-account managed-secret validation before any I/O.
+Lazy single-flight initialization uses the existing secret helper and a one-connection pool;
+warm calls cannot rebind the target or secret. All 39 bootstrap and 790 Documents unit cases,
+typecheck/build and scoped Biome pass. An added default-pool regression exposed the ORM helper's
+string timestamp parser mutation; the bootstrap now uses native PostgreSQL Date parsing instead.
+Corrected source passes all 790 unit and 211 real-SQL cases, including seven new bootstrap cases.
+Full corrected-source maintained verification passes terminally: all 38 typecheck tasks,
+39 test tasks and 23 builds, formatting, baseline lint (0 errors/15 warnings/58 infos),
+operational/security regressions, Compose and product-scope checks. Both exact owned tmpfs fixtures
+are removed and Docker/WSL shutdown completed; shared volumes are retained. Artifact
+build/guard wiring, reviewed caller IAM, deployment and activation are separate unfinished gates.
+No public API/frontend, dependency, migration, guard/Terraform, model/cloud call or apply.
+
 PR #521 merged to main as `e155e8e` at 22:36:55 UTC on 2026-10-03. PR #522 then merged
 five seconds later into its feature base as `3928257`, so main contains D3-049 but not D3-050.
 The tested D3-050 commit is carried forward unchanged onto a new branch from main. Before
@@ -18,6 +33,11 @@ Repeated full maintained verification on the carry-forward branch passes termina
 all 23 builds, baseline lint, operational/security regressions, Compose and scope. The earlier
 751 unit/204 PostgreSQL evidence is retained for byte-identical code; no new SQL run is claimed.
 No code redesign, cloud/model call, deployment or activation is included.
+Carry-forward PR #523 merged to main as `f4975ef` at 2026-10-04T00:35:57Z. Exact-head hosted quality, catalog,
+integration and both container jobs pass; dependency audit fails without waiver. Static analysis
+reports 65 blocking findings over 140 rules and 1,072 targets; no finding equivalence or security
+approval is inferred from counts. [CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37159554301),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37159554332).
 
 2026-10-03 D3-050 private recovered-draft admission hardening is in progress. Persistence review
 corrected the initial fake-store regression interpretation: PostgreSQL completion already owns
