@@ -18,11 +18,20 @@ validation and a native one-connection pool exposing read/recordDisposal only. A
 including seven new native-pool/acknowledgement/quarantine cases. Publisher tests pass on both
 PowerShell hosts, including 14 smoke-verifier regressions and refusal of obsolete twelve-object
 private receipts. Two local builds produce four artifacts with sixteen identical companion
-hashes and eight actual bundled refusal checks per build. Exact-commit provenance and full
-maintained verification remain pending. Owned tmpfs fixture removed; Docker Desktop/WSL stopped.
+hashes and eight actual bundled refusal checks per build. Two clean-source builds bind exact
+commit `5fa53826dba338ff7a9c351c6b4c196680201fcb`; all ZIP/manifest/SBOM/hash checks pass.
+Full maintained verification passes: 38 typecheck tasks, 39 test tasks, 23 builds and 929
+Documents unit cases, with unchanged contracts and lint baseline (0 errors/15 warnings/58 notes). Owned tmpfs fixture removed; Docker Desktop/WSL stopped.
 Reviewed runtime/IAM, cloud publication/deployment, successful-generation cleanup, writer drain
 and accountable acceptance remain. No public/private RPC shape, frontend, migration, Terraform,
 cloud/model or activation change; D1 and D3 remain In progress.
+
+Original #529 RPC-only source `64e8e9b` hosted checks are terminal: quality, catalog,
+integration and both containers pass; dependency audit fails. [Static analysis](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37173335205)
+fails with 65 findings on 30 paths, independently confirmed outside all eleven changed files.
+[CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37173335161) provides no audit/scanner waiver.
+Expanded D3-058 head needs new hosted evidence. Local branch artifacts remain unpublished;
+release publication must rebuild exact merged main and pass its unchanged gates.
 
 2026-10-03 D3-057 begins on a new backend-only branch from main `cf7a2df` while #528 remains open; its original hosted CI is now terminal:
 quality, catalog, integration and both images pass, while audit/scanner fail without waiver. The separate default-off private response-disposal v1 RPC
@@ -33,7 +42,7 @@ All 52 focused, 899 Documents unit and 230 real PostgreSQL cases pass. Full main
 verification passes terminally: 38 typecheck tasks, 39 test tasks and 23 builds, unchanged public
 contracts, formatting/baseline lint, operational/security regressions, Compose and scope.
 Owned tmpfs fixture removed; Docker Desktop and WSL stopped. Existing capture/control/fence contracts, public APIs, migrations, frontend and
-Terraform are unchanged. Bootstrap/artifacts, reviewed runtime/IAM, successful-generation cleanup,
+Terraform are unchanged. Bootstrap/artifacts are now locally verified under D3-058; reviewed runtime/IAM, successful-generation cleanup,
 writer drain and deployed/accountable acceptance remain; D1 and D3 remain In progress.
 
 2026-10-03 D3-056 starts on a fresh backend-only branch from merged #527/main `cf7a2df`.
