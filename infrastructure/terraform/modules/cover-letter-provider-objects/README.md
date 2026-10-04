@@ -42,3 +42,8 @@ node --test scripts/tests/cover-letter-provider-object-policy.test.mjs
 The Node suite renders an actual synthetic Terraform plan and exercises the policy's supported
 IAM operators locally, including additional broad S3 grants. No AWS request, credential, state
 write, database, Docker or candidate data is used.
+
+Read-only AWS validation also reports zero errors/security warnings and one intentional
+literal-star comparison warning; 61 AWS custom-policy simulator evaluations pass. These checks
+do not attach the policy or contact S3. See the retained
+[source evidence](../../../../docs/product/delivery/evidence/d3-provider-object-policy-source-validation-2026-10-04.md).

@@ -9,11 +9,13 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 owner decision: defer hosted CI/CD until production launch; continue backend source work with local verification. This does not waive production dependency/security, deployment, privacy or acceptance gates. #531 merges source-only as 7cf19d0; complete tree 77c82be matches locally verified exact head 6c3a1ab. Hosted integration/containers were not started because of GitHub payment/spending limits and are not claimed verified. No deployment or activation.
+
 2026-10-04 D3-062 begins independently from fresh main `5dae0f6`: prepare an unattached,
 provider-free S3 identity policy for fixed generation slots and encrypted ETag replacement.
 Explicit denies refuse creation/deletion paths and extra S3 grants; no multipart exemption.
 Seven native Terraform cases and 46 actual-plan offline policy cases pass, including seven
-guard regressions. Full maintained verifier pending. No environment calls the module, resource
+guard regressions. Full maintained verification passes for source 257ae8c: 38 typecheck tasks, 39 test tasks, 23 builds, unchanged contracts/formatting/baseline lint and operational/security/Compose/scope checks. Read-only AWS policy validation reports zero errors/security warnings and one intentional literal-star warning retained for review; all 61 AWS custom-policy simulator evaluations pass. [Source/policy evidence](evidence/d3-provider-object-policy-source-validation-2026-10-04.md). No environment calls the module, resource
 creation, IAM attachment, state write or activation. Independent AWS enforcement, runtime,
 retention, original writer drain and accountable acceptance remain. D1/D3 stay In progress.
 
