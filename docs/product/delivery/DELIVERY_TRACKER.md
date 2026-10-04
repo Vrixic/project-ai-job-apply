@@ -9,6 +9,29 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+PR #521 merged to main as `e155e8e` at 22:36:55 UTC on 2026-10-03. PR #522 then merged
+five seconds later into its feature base as `3928257`, so main contains D3-049 but not D3-050.
+The tested D3-050 commit is carried forward unchanged onto a new branch from main. Before
+adding this record, the complete carry-forward tree equals the previously verified `4bc944b`
+tree. A main-targeted PR is required; merged PR state alone is not mainline delivery evidence.
+Repeated full maintained verification on the carry-forward branch passes terminally, including
+all 23 builds, baseline lint, operational/security regressions, Compose and scope. The earlier
+751 unit/204 PostgreSQL evidence is retained for byte-identical code; no new SQL run is claimed.
+No code redesign, cloud/model call, deployment or activation is included.
+
+2026-10-03 D3-050 private recovered-draft admission hardening is in progress. Persistence review
+corrected the initial fake-store regression interpretation: PostgreSQL completion already owns
+one-shot final-document admission and positive original settlement. Recovery now supplies its
+reconstructed original request digest to that boundary rather than claiming a second grant.
+Pending recovery defaults off; ready replay stays read-only. Persistence rejects malformed
+grant descriptors, wrong request digests and late admission before physical writes. All 751
+Documents unit cases, build and all 204 real-PostgreSQL integration cases pass (seven new).
+The exact owned tmpfs fixture is removed and Docker/WSL stopped; shared volumes retained.
+Full maintained verification passes: formatting, baseline lint (0 errors/15 warnings/58 infos),
+all 38 typecheck tasks, all 39 test tasks and all 23 builds, operational/security regressions,
+Compose and product-scope checks. Review/merge and guarded runtime/IAM/activation remain pending;
+no public API/frontend, migration, guard/Terraform, model/cloud, deployment or activation change.
+
 2026-10-03 D3-049 failed/abandoned original-response disposal reconciliation started, source
 only. Permanent owned admission fencing precedes inventory read and provider cleanup. Only
 positive original terminal/deletion acknowledgement may reach disposal persistence; original

@@ -1,4 +1,4 @@
-import { coverLetterContext } from "@ai-job-apply/ai-sdk";
+import { coverLetterContext, prepareCoverLetterPrompt } from "@ai-job-apply/ai-sdk";
 import { COVER_LETTER_DISCLOSURE_VERSION } from "@ai-job-apply/api-contracts";
 import { CoverLetterIntegrityError } from "./cover-letter.js";
 import { coverLetterReadyBinding, finalizeCoverLetterDraft } from "./cover-letter-finalize.js";
@@ -7,6 +7,10 @@ import type {
   CoverLetterGenerationOutcome,
   CoverLetterPreparationIdentity,
 } from "./cover-letter-generation.js";
+import {
+  coverLetterProviderSha256,
+  encodeCoverLetterProviderObject,
+} from "./cover-letter-provider-contract.js";
 import type { CoverLetterProviderRecovery } from "./cover-letter-provider-recovery.js";
 import type { PostgresCoverLetterStore } from "./cover-letter-store.js";
 
@@ -22,6 +26,7 @@ export class CoverLetterDraftRecoveryService {
     private readonly source: CoverLetterEvidenceSource,
     private readonly provider: Pick<CoverLetterProviderRecovery, "recover">,
     private readonly clock: () => Date = () => new Date(),
+    private readonly enabled: () => boolean = () => false,
   ) {}
 
   async recover(input: CoverLetterPreparationIdentity): Promise<CoverLetterGenerationOutcome> {
@@ -66,10 +71,47 @@ export class CoverLetterDraftRecoveryService {
         letter: coverLetterReadyBinding(document, evidence.facts, this.clock()),
       };
     }
+    // Ready replay above is read-only, never authority to settle an uncertain writer.
+    if (!this.enabled()) return { kind: "in_progress" };
     const generated = await this.store.withGenerationLease(identity.ownerUserId, () =>
       this.provider.recover(metadata, identity, { ...evidence, now: this.clock() }),
     );
     if (!generated) return { kind: "in_progress" };
-    return finalizeCoverLetterDraft(this.store, metadata, generated, evidence.facts, this.clock);
+    if (generated.status !== "needs_review")
+      return finalizeCoverLetterDraft(this.store, metadata, generated, evidence.facts, this.clock);
+    try {
+      const prompt = prepareCoverLetterPrompt({ ...evidence, now: this.clock() });
+      if (!prompt || !this.enabled()) return { kind: "in_progress" };
+      const requestSha256 = coverLetterProviderSha256(
+        encodeCoverLetterProviderObject("request", {
+          schemaVersion: 1,
+          documentId: identity.id,
+          noticeVersion: COVER_LETTER_DISCLOSURE_VERSION,
+          promptVersion: "1.0.0",
+          ...context,
+          approvedAt: identity.approvedAt.toISOString(),
+          expiresAt: identity.expiresAt.toISOString(),
+          ...prompt,
+          maxOutputChars: 8_000,
+        }),
+      );
+      const result = await finalizeCoverLetterDraft(
+        {
+          complete: async (document) => {
+            // Recheck after production parsing, immediately before any physical final write.
+            if (!this.enabled()) throw new CoverLetterIntegrityError();
+            // Persistence owns the single claim and original positive settlement.
+            return this.store.complete(document, { requestSha256 });
+          },
+        },
+        metadata,
+        generated,
+        evidence.facts,
+        this.clock,
+      );
+      return result;
+    } catch {
+      return { kind: "in_progress" };
+    }
   }
 }

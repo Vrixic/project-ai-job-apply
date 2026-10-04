@@ -172,8 +172,14 @@ export class PostgresCoverLetterStore {
     }) as Promise<T>;
   }
 
-  async complete(input: CoverLetterDocument): Promise<CoverLetterMetadata> {
+  async complete(
+    input: CoverLetterDocument,
+    binding?: { requestSha256: string },
+  ): Promise<CoverLetterMetadata> {
     const document = structuredClone(input);
+    const expectedRequestSha256 = binding?.requestSha256;
+    if (binding && !/^[a-f0-9]{64}$/u.test(expectedRequestSha256 ?? ""))
+      throw new CoverLetterIntegrityError();
     const bytes = encodeCoverLetterDocument(document);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     return this.client.begin(async (transaction) => {
@@ -200,17 +206,55 @@ export class PostgresCoverLetterStore {
       }
       if (!this.work) throw new CoverLetterIntegrityError();
       // Await original committed control results. A local race/abort is not settlement proof.
-      const claim = structuredClone(
-        await this.work.claimFinalDocument({
-          ownerUserId: document.ownerUserId,
-          documentId: document.id,
-        }),
-      );
+      const deadline = AbortSignal.timeout(60_000);
+      const raw = await this.work.claimFinalDocument({
+        ownerUserId: document.ownerUserId,
+        documentId: document.id,
+      });
+      // Validate descriptors before cloning so accessors cannot create authority.
+      const dataOnly = (value: unknown, expected: readonly string[]) => {
+        if (
+          !value ||
+          typeof value !== "object" ||
+          Array.isArray(value) ||
+          ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+        )
+          return false;
+        const keys = Reflect.ownKeys(value);
+        return (
+          keys.length === expected.length &&
+          keys.every((key) => {
+            const descriptor = Object.getOwnPropertyDescriptor(value, key);
+            return (
+              typeof key === "string" &&
+              expected.includes(key) &&
+              descriptor?.enumerable === true &&
+              Object.hasOwn(descriptor, "value")
+            );
+          })
+        );
+      };
+      if (!dataOnly(raw, ["kind"]) && !dataOnly(raw, ["kind", "reference"]))
+        throw new CoverLetterIntegrityError();
+      if (raw.kind !== "claimed" && raw.kind !== "unavailable")
+        throw new CoverLetterIntegrityError();
+      if (raw.kind === "unavailable" && !dataOnly(raw, ["kind"]))
+        throw new CoverLetterIntegrityError();
+      if (
+        raw.kind === "claimed" &&
+        !dataOnly(raw.reference, ["id", "documentId", "purpose", "requestSha256"])
+      )
+        throw new CoverLetterIntegrityError();
+      const claim = structuredClone(raw);
       if (
         claim.kind === "claimed" &&
         (claim.reference.purpose !== "final_document" ||
           claim.reference.documentId !== document.id ||
+          typeof claim.reference.requestSha256 !== "string" ||
+          typeof claim.reference.id !== "string" ||
           !/^[a-f0-9]{64}$/u.test(claim.reference.requestSha256) ||
+          (expectedRequestSha256 !== undefined &&
+            claim.reference.requestSha256 !== expectedRequestSha256) ||
           !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
             claim.reference.id,
           ))
@@ -232,6 +276,7 @@ export class PostgresCoverLetterStore {
         sha256,
         sizeBytes: bytes.byteLength,
       };
+      if (claim.kind === "claimed" && deadline.aborted) throw new CoverLetterIntegrityError();
       const stored =
         claim.kind === "claimed"
           ? await this.objects.putIfAbsent({ ...objectInput, bytes })
