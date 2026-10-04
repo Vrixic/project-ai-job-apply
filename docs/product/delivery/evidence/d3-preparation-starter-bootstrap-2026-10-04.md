@@ -1,7 +1,7 @@
 # D3-070: Native preparation SQS starter
 
 Date: 2026-10-04
-Status: Source, focused checks and real PostgreSQL checks passed; full verifier/artifact pending.
+Status: Source, focused/SQL, exact-source full verifier and local artifact checks passed; review/release gates remain.
 
 The backend-only branch starts from fresh main bde17d9 and integrates exact open #539
 212e6e28086093e0005fc197a0bd269ac886f0e2 locally. No GitHub merge occurs.
@@ -50,3 +50,26 @@ Full exact-source verifier and local artifact checks are pending. Native termina
 release/IAM/scheduling, retained versions, original writer drain/retention and accountable/deployed
 acceptance remain. Nothing is published, deployed or activated. D1/D3 remain In progress with
 all phase exits unchanged. Hosted CI/CD is deferred until production launch by owner instruction.
+
+## Final exact-source verification and artifact
+
+Clean source `893e5cfe2f2349e009736825866507ee6ce665dd` passes the full maintained
+`scripts/verify-phase0.ps1` with exit 0 and its completion marker: 38 typecheck tasks,
+39 test tasks, 23 builds; 1,539 Workflow tests pass and 38 opt-in tests are skipped by the
+ordinary runner. The seven new SQL cases passed separately as recorded above. Formatting,
+generated contracts, operational/security/dependency guards, all emitted isolation checks
+and Compose configuration pass. Lint remains zero errors, 15 warnings and 58 informational
+notes. Log: `.tmp/d3-070-full-verification-893e5cfe.log`.
+
+One unpublished source-bound native starter artifact builds from the same clean source.
+Manifest schema 2 specifies Node24/x86_64 and index.handler. Archive SHA256:
+`7946ef2a7defc54324803b64fed19f0d8b3949141a82b417f76e26e727c7e816`
+(385,208 bytes; 31 SBOM components). Independent Python checks verify archive hash/size/base64
+digest, sole index.mjs member, identical local bundle/hash/source marker and SBOM hash/count.
+Actual bytes contain no ModelGateway, model endpoint or cover-letter S3 store. The builder
+probes actual bundled default-off, wrong numeric invoked version and invalid strict input;
+all preserve the record failure with zero fetches. Artifact log: `.tmp/d3-070-artifact-893e5cfe.log`.
+
+Only delivery documentation follows verified source. No publication/deployment/activation occurs.
+Terminal recovery/release/IAM/scheduling/retention/drain and accountable/deployed acceptance remain;
+D1/D3 stay In progress with phase exits unchanged. Hosted CI/CD stays deferred until production launch.
