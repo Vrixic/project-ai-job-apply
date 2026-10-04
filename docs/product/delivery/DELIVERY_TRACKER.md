@@ -9,6 +9,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 local artifact probe builds all three private control/capture/cleanup entrypoints
+from exact clean commit `839181b` using the unchanged artifact helper. Six bundled-handler
+default-off/malformed-input smoke cases pass with zero instrumented fetch calls. Independent
+checks confirm each archive has only `index.mjs`, matching bundle/archive/SBOM hashes and exact
+source/runtime/architecture/handler metadata. These are ignored local artifacts, not published
+or approved release inputs. The maintained builder/publisher still supports only parser/processor;
+guarded integration, caller IAM, deployment and activation remain unfinished. No guard/Terraform
+edit, cloud/model call, third PR or apply. Records ride with the queued source changes.
+
 2026-10-03 D3-053 source-only private cleanup-fence bootstrap has started on a new local
 feature branch from tested D3-052. The unchanged maintenance RPC supplies only Documents'
 existing admission fence through the shared default-off numeric-target/managed-secret policy.
