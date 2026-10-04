@@ -9,6 +9,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 merge-queue handoff: #523 and #524 now exist on main as `f4975ef` and `7101ea3`.
+Integrating main into the combined D3-052/D3-053 branch preserves byte-identical tested backend
+source from `55d540a`; only delivery records change. No authored PR remains open, so a combined
+main-targeted source-only PR can now be prepared. Full maintained verification passes terminally:
+38 typecheck tasks, 39 test tasks, 23 builds, formatting (981 files), baseline lint (0 errors,
+15 warnings/58 infos), operational/security regressions, Compose and product scope. No new SQL run;
+private IAM, guarded publication/deployment, writer drain and accountable acceptance remain open.
+
 2026-10-03 local artifact probe builds all three private control/capture/cleanup entrypoints
 from exact clean commit `839181b` using the unchanged artifact helper. Six bundled-handler
 default-off/malformed-input smoke cases pass with zero instrumented fetch calls. Independent
@@ -54,7 +62,8 @@ Parent PR #524's exact-head hosted run is terminal: quality, catalog, integratio
 container jobs pass; dependency audit fails with only a generic terminal refusal, not an exact
 cause attribution. Static analysis fails with 65 findings, 140 rules and 1,074 targets. Its 30
 reported paths match #523 with zero path delta; this is not full finding equivalence or approval.
-Both PRs still target main directly and are open; no merge, waiver or deployment is performed.
+Those runs predate the subsequently verified mainline merges noted above; no waiver or deployment
+is inferred from the merge state.
 [CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37161750989),
 [scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37161750985).
 
@@ -82,7 +91,7 @@ Repeated full maintained verification on the carry-forward branch passes termina
 all 23 builds, baseline lint, operational/security regressions, Compose and scope. The earlier
 751 unit/204 PostgreSQL evidence is retained for byte-identical code; no new SQL run is claimed.
 No code redesign, cloud/model call, deployment or activation is included.
-Carry-forward PR #523 still targets main and remains open. Exact-head hosted quality, catalog,
+Carry-forward PR #523 merged to main as `f4975ef` at 2026-10-04T00:35:57Z. Exact-head hosted quality, catalog,
 integration and both container jobs pass; dependency audit fails without waiver. Static analysis
 reports 65 blocking findings over 140 rules and 1,072 targets; no finding equivalence or security
 approval is inferred from counts. [CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37159554301),
