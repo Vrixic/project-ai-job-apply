@@ -9,6 +9,17 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-064 starts independently from fresh main `bde17d9` while locally verified
+[PR #533](https://github.com/Vrixic/project-ai-job-apply/pull/533) is open. Add a source-only
+isolated provider bootstrap for the existing background actor, exact private control/capture
+targets and managed provider key. No database/plaintext-key fallback, provider object creation
+or disposal capability. Local verification passes: 70 focused and 1,049 Documents units, 266 real PostgreSQL cases
+and full maintained verification (38 typecheck tasks, 39 test tasks, 23 builds plus the added
+compiled dependency isolation check). [Evidence](evidence/d3-isolated-provider-bootstrap-source-validation-2026-10-04.md).
+Exact-source packaging remains; IAM, writer drain, retention and deployed acceptance still
+block activation. Hosted CI/CD remains deferred until production launch.
+
+
 Combined source 8f37b1e integrates merged #531/main 7cf19d0, preserves all original D3-061/D3-062 history and has exactly the verified main application tree. Full maintained verification passes again: 38 typecheck tasks, 39 test tasks, 23 builds, unchanged contracts/formatting/baseline lint and operational/security/Compose/scope checks. The provider-free policy and test source are byte-unchanged from independently tested 257ae8c; no repeated SQL or UI check is claimed or needed for this policy-only change. Owner defers hosted CI/CD until production launch; no source security waiver, attachment, deployment or activation.
 
 2026-10-04 owner decision: defer hosted CI/CD until production launch; continue backend source work with local verification. This does not waive production dependency/security, deployment, privacy or acceptance gates. #531 merges source-only as 7cf19d0; complete tree 77c82be matches locally verified exact head 6c3a1ab. Hosted integration/containers were not started because of GitHub payment/spending limits and are not claimed verified. No deployment or activation.

@@ -414,3 +414,42 @@ exact numeric version under reviewed maintenance-only IAM. Ordinary read/disposa
 their existing protocol. Missing eligibility remains null, never completion or purge authority.
 No migration/backfill is needed. This is local/source compatibility evidence; cloud publication,
 runtime/IAM, maintained scheduling, writer drain and deployed/accountable acceptance remain.
+
+## Source-only isolated provider Lambda bootstrap
+
+`src/cover-letter-isolated-provider-lambda.ts` supplies a separate default-off entrypoint for
+the existing background actor. `COVER_LETTER_ISOLATED_PROVIDER_ENABLED` and
+`COVER_LETTER_BACKGROUND_PROVIDER_ENABLED` must both be exactly `true`. Configuration checks
+the qualified invoked numeric version, `us-east-2`/account, three distinct function identities,
+exact same-account control/capture versions, the candidate-document bucket, a same-account
+KMS key and a qualified provider secret before I/O. Target matching is not caller authentication.
+
+`DATABASE_URL`, `DATABASE_SECRET_ID` and `OPENAI_API_KEY` are rejected, including empty configured
+values. The fixed localhost Lambda extension endpoint reads a bounded plain-string provider
+key with one attempt, a three-second deadline and a 4,096-byte response limit. Errors contain
+no secret/transport diagnostic. Concurrent setup coalesces secret reads; completed invocations
+do not retain keys. The extension owns its managed cache/rotation. No environment key fallback
+or Profile/database dependency is imported.
+
+Native S3 and Lambda clients use one attempt and ignore configured endpoint overrides. The
+actor receives only the frozen find/read/conditional-transition facade plus exact-version
+work-control and creation-capture clients; it cannot initialize objects, renew work or dispose
+responses through those ports. Actual creation/deletion denial still requires reviewed IAM.
+Completed results preserve the original one-dispatch/capture/provenance protocol; ambiguous
+ACKs remain unresolved and replay cannot call the model again.
+
+Required environment identifiers: `CANDIDATE_DOCUMENT_BUCKET`, `PLATFORM_KMS_KEY_ARN`,
+`COVER_LETTER_OPENAI_SECRET_ID`, `COVER_LETTER_PROVIDER_CONTROL_FUNCTION_ARN` and
+`COVER_LETTER_RESPONSE_CAPTURE_FUNCTION_ARN`, plus the established Lambda region/account/name/
+version/session context. Secret values are never configuration inputs. No environment/runtime
+resource is wired by this source change. Pair a reviewed actor with compatible numeric private
+handler versions; D3-063's separate original-terminal closure is a parallel source change.
+
+`pnpm --filter @ai-job-apply/documents-service build:lambda:isolated-provider` builds one artifact set
+(four local files) in its separate output directory. It smoke-tests the actual
+bundled default-off/closed-envelope behavior. The full verifier also checks that the bundle
+excludes SQL, private persistence, rendering, test fixtures and disposal capability. Existing
+private-control/document publication families are unchanged; no isolated-provider publisher is
+introduced. Reviewed role/bucket/KMS/secret/private-caller IAM, original writer drain, maintenance
+and transient retention, real-provider evaluation, accountable review and deployed acceptance
+remain prerequisites to deployment/activation.

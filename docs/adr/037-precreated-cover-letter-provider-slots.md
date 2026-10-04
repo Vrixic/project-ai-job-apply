@@ -512,3 +512,23 @@ guard regressions. This is source policy evidence, not independent review or AWS
 UUID/owner/request/version bindings remain handler responsibilities because IAM path wildcards
 can cross slashes. Complete role/bucket/KMS/private caller review, deployed S3 adversarial
 evidence, retention and original writer drain still precede composition or activation.
+
+## Source-only isolated provider bootstrap (2026-10-04)
+
+D3-064 adds a source-only, default-off entrypoint that qualifies the numeric invoked target,
+region/account, distinct numeric private control/capture targets, bucket/KMS and managed
+provider-secret ARN before I/O. Database settings and plaintext API-key environment values
+are refused. One bounded fixed-extension read supplies a per-invocation provider key; completed
+invocations do not retain it. Native object/Invoke clients have one attempt and ignore
+configured endpoint overrides. The actor receives the existing transition-only facade, work
+control/capture clients and background gateway. Target matching does not authenticate callers.
+
+Seventy focused and 1,049 Documents unit cases, 266 PostgreSQL cases (four new native-bootstrap
+cases) and full maintained verification pass with simulated external transports/authentication.
+A compiled bundle check excludes SQL/private persistence, rendering, initialization, cleanup,
+disposal and test fixtures. A separate local builder does not change publisher families.
+This source bootstrap does not deploy or activate the actor, satisfy IAM enforcement, prove
+original writer quiescence or settle ambiguous external requests. Reviewed private caller/
+secret/bucket/KMS/provider role, maintenance/retention, real-provider evaluation, accountable
+approval and deployed evidence remain prerequisites to production composition/activation.
+The ADR remains Proposed.

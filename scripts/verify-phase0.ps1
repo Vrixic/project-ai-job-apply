@@ -35,6 +35,7 @@ Invoke-CheckedCommand "Type checking" { pnpm typecheck }
 Invoke-CheckedCommand "Dependency security regressions" { pnpm test:dependency-security }
 Invoke-CheckedCommand "Tests" { pnpm test }
 Invoke-CheckedCommand "Build" { pnpm build }
+Invoke-CheckedCommand "Isolated provider bundle dependency isolation" { node --test scripts/tests/isolated-provider-bundle.test.mjs }
 Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }
 
 $legacy = rg -n -i `

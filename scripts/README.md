@@ -343,3 +343,11 @@ Both are included in maintained infrastructure and full repository verification.
 Use portable Terraform `1.16.2`, temporary IAM Identity Center credentials, environment-specific encrypted
 state, immutable artifacts, refresh-backed saved plans, and explicit checksum approval for every
 material cloud change. Never replay historical cutover commands or reconstruct a retired runtime.
+
+`build-isolated-provider-lambda.mjs` builds the source-only isolated cover-letter provider into
+`backend/services/documents/dist/isolated-provider-lambda` and verifies the actual bundled
+default-off/closed-envelope refusal. The package command builds its dependencies first.
+`tests/isolated-provider-bundle.test.mjs` checks the compiled dependency graph for absence of
+SQL/private persistence/rendering/disposal/test fixtures and is part of the full verifier.
+This is local packaging only; existing publisher families are unchanged and no provider
+publication, deployment, role grant or activation is authorized by the builder.

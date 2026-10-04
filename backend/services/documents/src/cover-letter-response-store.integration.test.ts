@@ -6,7 +6,9 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCoverLetterDocument } from "./cover-letter.js";
+import { isolatedProviderFixture } from "./cover-letter-isolated-provider-test-support.js";
 import { COVER_LETTER_PROVIDER_MODEL } from "./cover-letter-provider-contract.js";
+import { createCoverLetterProviderControlLambda } from "./cover-letter-provider-control-lambda.js";
 import { CoverLetterResponseCaptureClient } from "./cover-letter-response-capture-client.js";
 import { createCoverLetterResponseCaptureHandler } from "./cover-letter-response-capture-handler.js";
 import { createCoverLetterResponseCaptureLambda } from "./cover-letter-response-capture-lambda.js";
@@ -129,6 +131,119 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await work.claim(ref);
     return store.reserve(ref);
   }
+
+  it.each(["success", "lost_capture_ack", "quarantine", "lost_settle_ack"] as const)(
+    "connects isolated actor bootstrap to native control/capture PostgreSQL: %s",
+    async (fault) => {
+      const extraId = uuidv7();
+      await documents.reserve({
+        id: extraId,
+        ownerUserId: owner,
+        applicationId: uuidv7(),
+        jobRevision: "a".repeat(64),
+        confirmedFactsHash: "b".repeat(64),
+      });
+      const pools: postgres.Sql[] = [];
+      const privateEnv = (name: string, version: string, flag: string) => ({
+        [flag]: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: name,
+        AWS_LAMBDA_FUNCTION_VERSION: version,
+        AWS_SESSION_TOKEN: "synthetic-session-token",
+        DATABASE_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+      });
+      const createPool = (
+        url: string,
+        options: { max: 1; idle_timeout: 20; connect_timeout: 10 },
+      ) => {
+        expect(options.max).toBe(1);
+        const pool = postgres(url, options);
+        pools.push(pool);
+        return pool;
+      };
+      const resolveDatabaseUrl = async () => databaseUrl ?? "postgres://invalid";
+      const control = createCoverLetterProviderControlLambda({
+        environment: () =>
+          privateEnv("synthetic-control", "3", "COVER_LETTER_PROVIDER_CONTROL_ENABLED"),
+        resolveDatabaseUrl,
+        createPool,
+      });
+      const capture = createCoverLetterResponseCaptureLambda({
+        environment: () =>
+          privateEnv("synthetic-capture", "5", "COVER_LETTER_RESPONSE_CAPTURE_ENABLED"),
+        resolveDatabaseUrl,
+        createPool,
+      });
+      let lost = false;
+      const f = await isolatedProviderFixture({
+        documentId: extraId,
+        now: new Date(),
+        rpc: async (input, target) => {
+          const output = target.endsWith("synthetic-control:3")
+            ? await control(input, { invokedFunctionArn: target })
+            : await capture(input, { invokedFunctionArn: target });
+          if (input.action === "record_creation" && fault === "quarantine")
+            await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+          if (
+            !lost &&
+            ((fault === "lost_capture_ack" && input.action === "record_creation") ||
+              (fault === "lost_settle_ack" && input.action === "settle"))
+          ) {
+            lost = true;
+            throw Error("SyntheticLostCommittedPrivateACK");
+          }
+          return output;
+        },
+      });
+      const issued = await work.issue({
+        ownerUserId: owner,
+        documentId: extraId,
+        purpose: "provider_dispatch",
+        requestSha256: f.input.request.sha256,
+        consentExpiresAt: f.expiresAt,
+      });
+      const extraRef: CoverLetterWorkReference = {
+        id: issued.authorization.id,
+        documentId: extraId,
+        purpose: "provider_dispatch",
+        requestSha256: f.input.request.sha256,
+      };
+      try {
+        expect((await f.call()).outcome).toBe(fault.startsWith("lost_") ? "in_progress" : "ready");
+        expect((await f.call()).outcome).toBe(
+          fault === "lost_capture_ack" ? "in_progress" : "ready",
+        );
+        const [row] =
+          await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${extraRef.id}`;
+        expect(row?.state).toBe(fault === "lost_capture_ack" ? "running" : "settled");
+        const inventory = await store.read(extraRef);
+        expect(inventory?.state).toBe("acknowledged");
+        expect(inventory?.response?.responseId).toBe("resp_syntheticBootstrap1");
+        expect(f.modelFetch).toHaveBeenCalledTimes(1);
+        expect(f.createObjectClient).toHaveBeenCalledTimes(1);
+        expect(f.createLambdaClient).toHaveBeenCalledTimes(1);
+        expect(pools).toHaveLength(2);
+        if (fault === "quarantine")
+          await expect(
+            work.claimFinalDocument({ ownerUserId: owner, documentId: extraId }),
+          ).rejects.toThrow();
+      } finally {
+        await Promise.all(pools.map((pool) => pool.end()));
+        const inventory = await store.read(extraRef);
+        if (inventory?.state === "acknowledged" && inventory.response)
+          await store.recordDisposal(extraRef, {
+            kind: "response_deleted",
+            reference: inventory.response,
+            terminalStatus: "completed",
+          });
+        await work.recordSettled(extraRef); // Explicit synthetic fixture cleanup only.
+        await work.revokeUnclaimed(owner, extraId);
+        await sql`DELETE FROM documents.cover_letters WHERE id = ${extraId}`;
+      }
+    },
+  );
 
   async function successfulDraft(
     slots: "settled" | "running" | "revoked" | "missing" = "settled",
