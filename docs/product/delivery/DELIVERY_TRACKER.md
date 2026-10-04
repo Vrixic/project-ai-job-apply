@@ -9,6 +9,14 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-060 extends #530 with successful-generation maintenance eligibility and reconciliation.
+The completion-only port passed full verification; durable ready content and all three positively
+settled original phases must now precede provider disposal. Exact bound metadata, positive completed
+receipt and durable readback preserve unresolved outcomes. No generic inventory read or cancellation
+port is used. All 73 focused, 876 Documents unit and 239 real PostgreSQL cases pass (sixteen new),
+with typecheck/build. Final-source full verification and production private eligibility RPC/runtime/IAM,
+scheduling, writer drain and deployed/accountable acceptance remain. D1/D3 stay In progress.
+
 2026-10-03 D3-059 starts independently from fresh main `792bb92` while #529 runs hosted checks.
 Successful-generation cleanup needs a completion-only provider port with no cancellation.
 Exact original completed proof must precede deletion; queued/running and other terminal states

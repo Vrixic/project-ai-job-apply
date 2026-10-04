@@ -167,16 +167,51 @@ export class PostgresCoverLetterResponseStore {
     return this.guarded(reference, async (ref) => {
       const [row] = await this.rows(this.client, ref);
       if (!row) return null;
-      const response =
-        row.responseId === null
-          ? null
-          : {
-              schemaVersion: 1 as const,
-              responseId: row.responseId,
-              createdAt: Number(row.responseCreatedAt),
-            };
-      if (response && !validateOpenAiBackgroundResponseReference(response)) throw Error();
-      return { reference: ref, state: row.state, response };
+      return this.project(row, ref);
+    });
+  }
+
+  private project(row: ResponseRow, ref: CoverLetterWorkReference): CoverLetterResponseInventory {
+    const response =
+      row.responseId === null
+        ? null
+        : {
+            schemaVersion: 1 as const,
+            responseId: row.responseId,
+            createdAt: Number(row.responseCreatedAt),
+          };
+    if (response && !validateOpenAiBackgroundResponseReference(response)) throw Error();
+    return { reference: ref, state: row.state, response };
+  }
+
+  /** Successful-generation maintenance only. Immutable ready draft and all three positively
+   * settled original phases precede response cleanup. Ledger state is NOT remote quiescence.
+   * Quarantine may drain existing responses; no candidate content, lease or renewal is exposed.
+   * A previously disposed non-completed response cannot satisfy this success path.
+   */
+  async readCompleted(
+    reference: CoverLetterWorkReference,
+  ): Promise<CoverLetterResponseInventory | null> {
+    return this.guarded(reference, async (ref) => {
+      const [row] = await this.client<ResponseRow[]>`
+        SELECT r.work_id AS "workId", r.document_id AS "documentId",
+          r.request_sha256 AS "requestSha256", r.state, r.response_id AS "responseId",
+          r.response_created_at::text AS "responseCreatedAt", r.terminal_status AS "terminalStatus"
+        FROM documents.cover_letter_provider_responses r
+        JOIN documents.cover_letter_work_authorizations w ON w.id = r.work_id
+          AND w.document_id = r.document_id AND w.user_id = r.user_id
+          AND w.request_sha256 = r.request_sha256
+          AND w.purpose = 'provider_dispatch' AND w.state = 'settled'
+        JOIN documents.cover_letters d ON d.id = r.document_id AND d.user_id = r.user_id
+        WHERE r.work_id = ${ref.id} AND r.document_id = ${ref.documentId}
+          AND r.request_sha256 = ${ref.requestSha256} AND d.status = 'ready'
+          AND (r.state <> 'disposed' OR r.terminal_status = 'completed')
+          AND (SELECT count(*) FROM documents.cover_letter_work_authorizations phases
+            WHERE phases.document_id = r.document_id AND phases.user_id = r.user_id
+              AND phases.request_sha256 = r.request_sha256 AND phases.state = 'settled'
+              AND phases.purpose IN ('private_slots', 'provider_dispatch', 'final_document')) = 3`;
+      if (!this.enabled()) throw Error();
+      return row ? this.project(row, ref) : null;
     });
   }
 }

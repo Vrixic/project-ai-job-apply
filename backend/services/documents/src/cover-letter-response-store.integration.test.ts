@@ -8,7 +8,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { CoverLetterResponseCaptureClient } from "./cover-letter-response-capture-client.js";
 import { createCoverLetterResponseCaptureHandler } from "./cover-letter-response-capture-handler.js";
 import { createCoverLetterResponseCaptureLambda } from "./cover-letter-response-capture-lambda.js";
-import { createCoverLetterResponseReconciler } from "./cover-letter-response-reconciliation.js";
+import {
+  createCoverLetterResponseReconciler,
+  createCoverLetterSuccessfulResponseReconciler,
+} from "./cover-letter-response-reconciliation.js";
+import { createCoverLetterDocument } from "./cover-letter.js";
+import { COVER_LETTER_PROVIDER_MODEL } from "./cover-letter-provider-contract.js";
 import { PostgresCoverLetterResponseStore } from "./cover-letter-response-store.js";
 import { PostgresCoverLetterStore } from "./cover-letter-store.js";
 import {
@@ -46,6 +51,7 @@ describe.skipIf(!requested)("original provider response inventory with real Post
   let owner: string;
   let documentId: string;
   let ref: CoverLetterWorkReference;
+  let reserved: Awaited<ReturnType<typeof documents.reserve>>;
   const response = () => ({
     schemaVersion: 1 as const,
     responseId: `resp_${ref.id.replaceAll("-", "")}`,
@@ -74,7 +80,7 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     owner = uuidv7();
     documentId = uuidv7();
     await sql`INSERT INTO identity.users (id) VALUES (${owner})`;
-    await documents.reserve({
+    reserved = await documents.reserve({
       id: documentId,
       ownerUserId: owner,
       applicationId: uuidv7(),
@@ -120,6 +126,265 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await work.claim(ref);
     return store.reserve(ref);
   }
+
+  async function successfulDraft(
+    slots: "settled" | "running" | "revoked" | "missing" = "settled",
+    capture = true,
+  ) {
+    await reserve();
+    const original = response();
+    if (capture) await store.recordCreation(ref, original);
+    const [binding] = await sql<Array<{ consent: Date }>>`
+      SELECT consent_expires_at AS consent FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+    if (!binding) throw Error("SyntheticMissingOriginalBinding");
+    if (slots !== "missing") {
+      const slot = (
+        await work.issue({
+          ownerUserId: owner,
+          documentId,
+          purpose: "private_slots",
+          requestSha256: ref.requestSha256,
+          consentExpiresAt: binding.consent,
+        })
+      ).authorization;
+      if (slots !== "revoked") await work.claim(slot);
+      if (slots === "settled") await work.recordSettled(slot);
+    }
+    await work.recordSettled(ref); // Explicit synthetic original provider completion, never live proof.
+    if (slots === "revoked") await work.revokeUnclaimed(owner, documentId);
+    const factId = uuidv7();
+    const draft = createCoverLetterDocument(
+      reserved,
+      {
+        status: "needs_review",
+        purpose: "cover_letter",
+        reviewRequired: true,
+        paragraphs: [{ text: "I build synthetic reliable systems.", factIds: [factId] }],
+        sourceFactIds: [factId],
+        findings: [],
+        confidence: 0.95,
+        promptVersion: "cover_letter.v1",
+        model: COVER_LETTER_PROVIDER_MODEL,
+      },
+      reserved.createdAt,
+    );
+    let bytes: Uint8Array | undefined;
+    const final = new PostgresCoverLetterStore(
+      sql,
+      {
+        putIfAbsent: async (input) => {
+          bytes = Uint8Array.from(input.bytes);
+          return { objectVersion: "synthetic-final-v1", created: true };
+        },
+        read: async () => {
+          if (!bytes) throw Error("SyntheticAbsentBytes");
+          return Uint8Array.from(bytes);
+        },
+      },
+      work,
+    );
+    // Revocation permanently fences finalization. This case does not manufacture ready metadata.
+    if (slots === "revoked") await expect(final.complete(draft)).rejects.toThrow();
+    else expect((await final.complete(draft)).status).toBe("ready");
+    return original;
+  }
+
+  function completedCleanup(
+    original: ReturnType<typeof response>,
+    state = "completed",
+    loseAck = false,
+  ) {
+    const methods: string[] = [];
+    let removed = false;
+    const cleanup = new OpenAiLunaResponseCleanup({
+      enabled: () => true,
+      apiKey: () => "synthetic-key",
+      fetch: async (_url, options) => {
+        const method = options?.method ?? "GET";
+        methods.push(method);
+        if (removed) return new Response(null, { status: 404 });
+        if (method === "GET")
+          return new Response(
+            JSON.stringify({
+              id: original.responseId,
+              object: "response",
+              created_at: original.createdAt,
+              model: "gpt-6-luna",
+              background: true,
+              store: false,
+              tools: [],
+              previous_response_id: null,
+              status: state,
+              output: [{ text: "Synthetic output never returned." }],
+            }),
+          );
+        if (method !== "DELETE") throw Error("SyntheticForbiddenCancellation");
+        removed = true;
+        if (loseAck) throw Error("SyntheticLostProviderDeletionAck");
+        return new Response(
+          JSON.stringify({ id: original.responseId, object: "response.deleted", deleted: true }),
+        );
+      },
+    });
+    return { cleanup, methods };
+  }
+
+  it("disposes a successful original response after actual immutable final completion, without changing work or draft", async () => {
+    const original = await successfulDraft();
+    const beforeWork =
+      await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
+    const beforeDraft = await sql`SELECT * FROM documents.cover_letters WHERE id = ${documentId}`;
+    const transport = completedCleanup(original);
+    const reconcile = createCoverLetterSuccessfulResponseReconciler({
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({
+      kind: "response_disposed",
+      reference: ref,
+    });
+    expect(transport.methods).toEqual(["GET", "DELETE"]);
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({
+      kind: "response_disposed",
+      reference: ref,
+    });
+    expect(transport.methods).toHaveLength(2);
+    expect(
+      await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
+    ).toEqual(beforeWork);
+    expect(await sql`SELECT * FROM documents.cover_letters WHERE id = ${documentId}`).toEqual(
+      beforeDraft,
+    );
+  });
+  it.each(["running", "revoked", "missing"] as const)(
+    "refuses successful cleanup with %s private-slot work before provider access",
+    async (slots) => {
+      const original = await successfulDraft(slots);
+      const transport = completedCleanup(original);
+      expect(await store.readCompleted(ref)).toBeNull();
+      const reconcile = createCoverLetterSuccessfulResponseReconciler({
+        responses: store,
+        cleanup: transport.cleanup,
+        enabled: () => true,
+      });
+      expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+      expect(transport.methods).toEqual([]);
+      expect((await store.read(ref))?.state).toBe("acknowledged");
+      if (slots === "running") {
+        const [slot] = await sql<
+          Array<{ id: string }>
+        >`SELECT id FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose = 'private_slots'`;
+        if (!slot) throw Error("SyntheticMissingSlot");
+        await work.recordSettled({ ...ref, id: slot.id, purpose: "private_slots" });
+      }
+    },
+  );
+  it("refuses pending drafts and running original provider work without disposing them", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    const transport = completedCleanup(original);
+    const reconcile = createCoverLetterSuccessfulResponseReconciler({
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect(transport.methods).toEqual([]);
+  });
+  it("keeps successful work with unknown creation identity unresolved", async () => {
+    const original = await successfulDraft("settled", false);
+    const transport = completedCleanup(original);
+    const reconcile = createCoverLetterSuccessfulResponseReconciler({
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect(transport.methods).toEqual([]);
+    expect((await store.read(ref))?.state).toBe("reserved");
+  });
+  it("allows original successful-response drain after owner quarantine without fresh admission", async () => {
+    const original = await successfulDraft();
+    await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+    const transport = completedCleanup(original);
+    const reconcile = createCoverLetterSuccessfulResponseReconciler({
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({
+      kind: "response_disposed",
+      reference: ref,
+    });
+    expect(transport.methods).toEqual(["GET", "DELETE"]);
+    const [account] = await sql`SELECT account_state FROM identity.users WHERE id = ${owner}`;
+    expect(account?.account_state).toBe("quarantined");
+  });
+  it("recovers successful committed-but-lost SQL disposal ACK without repeating provider effects", async () => {
+    const original = await successfulDraft();
+    const transport = completedCleanup(original);
+    const reconcile = createCoverLetterSuccessfulResponseReconciler({
+      responses: {
+        readCompleted: store.readCompleted.bind(store),
+        recordDisposal: async (binding, positive) => {
+          await store.recordDisposal(binding, positive);
+          throw Error("SyntheticLostSqlAck");
+        },
+      },
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({
+      kind: "response_disposed",
+      reference: ref,
+    });
+    expect(transport.methods).toEqual(["GET", "DELETE"]);
+  });
+  it("does not treat lost provider DELETE ACK or subsequent 404 as success", async () => {
+    const original = await successfulDraft();
+    const transport = completedCleanup(original, "completed", true);
+    const reconcile = createCoverLetterSuccessfulResponseReconciler({
+      responses: store,
+      cleanup: transport.cleanup,
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+    expect(transport.methods).toEqual(["GET", "DELETE", "GET"]);
+    expect((await store.read(ref))?.state).toBe("acknowledged");
+  });
+  it.each(["queued", "in_progress", "cancelled"])(
+    "never cancels or deletes unexpectedly %s provider state",
+    async (state) => {
+      const original = await successfulDraft();
+      const transport = completedCleanup(original, state);
+      const reconcile = createCoverLetterSuccessfulResponseReconciler({
+        responses: store,
+        cleanup: transport.cleanup,
+        enabled: () => true,
+      });
+      expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+      expect(transport.methods).toEqual(["GET"]);
+      expect((await store.read(ref))?.state).toBe("acknowledged");
+    },
+  );
+  it("excludes non-completed durable disposal from successful replay", async () => {
+    const original = await successfulDraft();
+    await store.recordDisposal(ref, receipt(original));
+    expect(await store.readCompleted(ref)).toBeNull();
+  });
+  it.each(["id", "documentId", "requestSha256"] as const)(
+    "refuses changed successful binding %s and preserves original eligibility",
+    async (key) => {
+      await successfulDraft();
+      const other = { ...ref, [key]: key === "requestSha256" ? "f".repeat(64) : uuidv7() };
+      expect(await store.readCompleted(other)).toBeNull();
+      expect((await store.readCompleted(ref))?.state).toBe("acknowledged");
+    },
+  );
 
   it.each([
     "none",
