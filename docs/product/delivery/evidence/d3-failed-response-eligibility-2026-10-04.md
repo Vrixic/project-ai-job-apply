@@ -2,6 +2,8 @@
 
 Date: 2026-10-04
 Scope: backend source and local synthetic verification only; D1/D3 remain In progress.
+Current result: full exact-source local verification passes for `e071d9e`; five artifact sets
+pass independent integrity and bundled refusal checks, unpublished. Review/merge/deployment remain.
 Branch: `fix/d3-failed-response-eligibility`, created from fresh main `bde17d9`, then fast-forward
 integrating exact open #534 head `10f196b` as an explicit dependency (which includes open #533).
 Neither dependency is claimed GitHub-merged. Hosted CI/CD is deferred by owner until production launch.
@@ -110,3 +112,43 @@ bundled read_failed/settle_terminal default-off/closed-input refusals attempt ze
 The initial unconstrained build correctly reports sourceSha=local; rebuild with explicit clean
 ARTIFACT_SOURCE_SHA yields verified committed provenance. Nothing is published or activated.
 Full exact-source verification/rebuilt final artifacts are still pending after restore identity correction.
+
+
+## Final local verification (2026-10-04)
+
+Exact clean source `e071d9e` passes `scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks,
+23 builds, public contract generation, formatting, operational/security guards, Compose, product
+scope and compiled isolated-provider dependency checks. Lint remains 0 errors, 15 warnings and
+58 informational notes. This final result supersedes earlier pending/failure checkpoints above.
+
+The final verifier includes all 1,106 Documents units, 1,412 workflow units (20 existing external
+integration cases skipped) and 42 restore units. Separately, all 308 Documents real PostgreSQL
+cases passed on source `60bc469`; the later change synchronizes restore manifest identity and
+synthetic fixtures without changing Documents implementation/migration bytes. The strengthened
+59-migration restore replay preserves both classified failure proofs and all 84 exact relation
+row sets, with fixture cleanup succeeding. Provider/Lambda/secret/object/auth responses remain
+simulated. The actual local diagnostic migration image and its network-disabled production
+runtime smoke pass; nothing is published to a registry or deployed.
+
+Migration image publisher and restore verifier guards pass on PowerShell 7.5.4 and 5.1; D2
+inventory guards pass 252 assertions on both hosts. The candidate deletion replay suite explicitly
+requires PowerShell 7.4 or newer: all 697 generated boundary checks pass on the supported host,
+including the final verifier. An attempted PS5 launch correctly refuses that version requirement;
+no PS5 replay pass is claimed. The initial direct-call wrapper mistook a residual native negative
+check exit code for suite failure after the successful summary; the supported full verifier
+provides the terminal pass. No runtime/version guard was weakened.
+
+Five artifact sets rebuild from exact clean `e071d9e`: four private control and one isolated actor,
+twenty archive/bundle/manifest/CycloneDX SBOM objects. Independent archive contents/bytes, hashes,
+source SHA and SBOM integrity all pass. Actual bundled read_failed and settle_terminal default-off
+and extra-field refusal checks make zero fetch calls. These artifacts are local and unpublished.
+
+All five newly added relative Markdown targets resolve. Complete original tracker/phase nonblank
+lines from dependency `10f196b` remain in order. One pre-existing historical tracker link to the
+removed frontend foundation-form file remains outside this backend change. Docker Desktop/WSL
+are stopped and no owned SQL fixture remains; shared volumes are retained.
+
+Review/merge, the migration-before-code rollout, current-source restore helper/operator release,
+reviewed IAM, maintenance scheduling, ambiguous abandonment/other-writer drain, retention and
+accountable/deployed acceptance remain. No D1/D3 exit criterion is marked complete from this slice.
+Hosted CI/CD remains deferred until production launch; no production gate is waived.

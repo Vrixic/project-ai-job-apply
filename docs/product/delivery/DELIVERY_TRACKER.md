@@ -9,6 +9,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-065 exact-source verification complete at `e071d9e`: full maintained verifier
+passes 38 typecheck tasks, 39 test tasks and 23 builds, with unchanged public contracts and
+lint baseline. All 1,106 Documents units, 308 real PostgreSQL cases, 1,412 workflow units and
+42 restore units pass. The 59-migration restore replay preserves both immutable failure proofs
+across 84 exact relations. Local migration image/runtime smoke and five clean-source artifact
+sets pass, unpublished. [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md). Review/merge, migration-before-code/current-source restore
+release, IAM/scheduling, abandonment/writer drain, retention and accountable/deployed acceptance
+remain. D1/D3 stay In progress; no deployment/activation or hosted CI/CD resumption.
+
 2026-10-04 D3-065 starts from fresh main `bde17d9` with exact open #534 head `10f196b`
 as an explicit source dependency. Failed-response maintenance now requires Documents-owned
 immutable original-failure proof before fencing or provider effects. Nullable forward migration
@@ -3174,6 +3183,8 @@ Append only material cross-delivery events.
 | 2026-10-04 | D3 | Start D3-065 and implement original-failure eligibility before response maintenance, preserving the owning ledger and existing identity/purge guards. Local focused/unit/real-SQL and runtime smoke pass; whole-boundary restore/image/full verification remain. Open #533/#534 are explicit dependencies, not merged. No deployment/activation or phase completion; owner CI/CD deferral remains. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
 
 | 2026-10-04 | D3 | D3-065 source 60bc469 passes Documents unit/real-SQL, restored immutable failure proof, local image/runtime smoke and five unpublished source-bound artifact checks. Full verifier discovers stale private restore identity; synchronize TypeScript/PowerShell SHA and synthetic fixture with 59-migration manifest. All 1,412 workflow units and both guard hosts pass; exact-source full rerun/final artifacts remain. Docker/WSL stopped. No publication/deployment/activation, CI/CD resumption or phase completion. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
+
+| 2026-10-04 | D3 | D3-065 exact clean e071d9e passes full maintained verification (38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint/public contracts), local SQL/restore, both operator guard hosts and five unpublished source-bound artifact sets. New links resolve and original history is retained. Runtime/migration/current-source restore rollout, IAM, scheduling, ambiguous abandonment/drain and accountable/deployed acceptance remain; D1/D3 stay In progress. Docker/WSL stopped. Owner CI/CD deferral retained; no publication/deployment/activation or phase completion. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
 
 ## Cross-delivery decisions and changes
 
