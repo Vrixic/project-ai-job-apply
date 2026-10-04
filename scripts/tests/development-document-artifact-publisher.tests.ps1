@@ -148,3 +148,54 @@ if ($source.Contains('@($receipt.artifacts).Count -ne 2')) {
 }
 
 Write-Host "Development document artifact publisher pure guard tests passed."
+
+$privateNames = @("cover-letter-provider-control-lambda", "cover-letter-response-capture-lambda", "cover-letter-cleanup-lambda")
+$privateMatrix = @()
+foreach ($privateName in $privateNames) {
+  foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
+    $privateMatrix += [pscustomobject]@{ artifactName = $privateName; artifactSha256 = $digest; suffix = $suffix }
+  }
+}
+if (-not (Assert-CanonicalReceiptMatrix -Artifacts $privateMatrix -ExpectedArtifactNames $privateNames)) {
+  throw "The canonical twelve-object private receipt was refused."
+}
+foreach ($invalidPrivateMatrix in @(
+    [pscustomobject]@{ Entries = $canonicalArtifacts },
+    [pscustomobject]@{ Entries = @($privateMatrix | Select-Object -First 11) },
+    [pscustomobject]@{ Entries = @($privateMatrix[0]) + @($privateMatrix | Select-Object -Skip 1 -First 10) + @($privateMatrix[0]) },
+    [pscustomobject]@{ Entries = @($privateMatrix) + @($canonicalArtifacts) }
+  )) {
+  $refused = $false
+  try { $null = Assert-CanonicalReceiptMatrix -Artifacts $invalidPrivateMatrix.Entries -ExpectedArtifactNames $privateNames }
+  catch { $refused = $true }
+  if (-not $refused) { throw "A mixed, incomplete or duplicated private receipt was accepted." }
+}
+
+# Execute only the family-selection assignments, never the live operator entrypoint.
+$configurationAssignments = @($ast.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+    $node.Left.Extent.Text -in @('$isCoreWorkflow', '$isIngestion', '$isPublicJob', '$isApplicationsRecovery',
+      '$isPrivateDocumentControls', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
+      '$artifactKeyRoot', '$receiptKind', '$artifactLabel', '$expectedObjectCount')
+  }, $false) | Sort-Object { $_.Extent.StartOffset })
+if ($configurationAssignments.Count -ne 12) { throw "Unexpected publication family-selection inventory." }
+foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS")) {
+  $ArtifactFamily = $family
+  foreach ($assignment in $configurationAssignments) { Invoke-Expression $assignment.Extent.Text }
+  if ($family -eq "PrivateDocumentControls") {
+    if (($artifactNames -join ',') -cne ($privateNames -join ',') -or $expectedObjectCount -ne 12 -or
+        $receiptKind -cne "development-private-document-controls-lambda-publication" -or
+        $artifactKeyRoot -cne "lambda/documents/private-controls" -or
+        $operatorDirectoryName -cne "development-private-document-control-artifacts" -or
+        $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/services/documents/dist/private-control-lambda')) {
+      throw "Private artifact family escaped its exact dedicated boundary."
+    }
+  } elseif (($artifactNames -join ',') -cne 'document-processor-lambda,document-parser-lambda' -or
+      $expectedObjectCount -ne 8 -or $receiptKind -cne 'development-document-lambda-publication') {
+    throw "Existing document publication family changed."
+  }
+}
+Write-Host "Private control family and receipt-isolation regressions passed; no cloud calls."
+& node --test (Join-Path $repositoryRoot 'scripts/tests/private-document-artifacts.test.mjs')
+if ($LASTEXITCODE -ne 0) { throw "Private artifact smoke regressions failed." }

@@ -9,6 +9,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-054 begins on `feat/d3-private-artifact-build` from merged main `7535bc5`.
+The owner's renewed recommendation direction permits the recommended source-only build/publisher
+integration, not cloud publication or deployment. A separate closed three-artifact private family
+preserves existing parser/processor builds and eight-object receipts. Eleven smoke-verifier
+regressions and pure publisher family/receipt-isolation regressions pass. The actual new build
+produces three local artifacts with six bundled-handler refusal checks; no fetch is attempted by
+those checks. All twelve companion files match across two local builds; independent one-entry ZIP,
+archive/bundle/SBOM hash and runtime metadata checks pass. These artifacts use local provenance,
+not a reviewed release SHA. Full maintained verification passes terminally: 38 typecheck tasks,
+39 test tasks, 23 builds, formatting (984 files), baseline lint (0 errors/15 warnings/58 infos),
+operational/security regressions, Compose and product scope. A case-variant family regression
+exposed an initial parser/processor fallback; the corrected private selector passes on both
+PowerShell hosts without changing existing document receipts. No API, frontend, migration,
+Terraform, cloud/model call, deployment or activation change.
+
 2026-10-03 merge-queue handoff: #523 and #524 now exist on main as `f4975ef` and `7101ea3`.
 Integrating main into the combined D3-052/D3-053 branch preserves byte-identical tested backend
 source from `55d540a`; only delivery records change. No authored PR remains open, so a combined

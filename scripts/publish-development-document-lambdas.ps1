@@ -3,7 +3,7 @@ param(
   [ValidateSet("Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
-  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery")]
+  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery", "PrivateDocumentControls")]
   [string]$ArtifactFamily = "Document",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -52,6 +52,12 @@ audit, two deterministic builds, and every bucket/artifact guard before writing 
 object set. Verify performs an independent exact-version readback. No action deploys Lambda code or
 enables a trigger.
 
+PrivateDocumentControls is a separate three-artifact/twelve-object family for the private
+provider-control, response-capture and maintenance-fence entrypoints. It uses dedicated local
+output, receipt and immutable key roots; it never extends an existing Document receipt. Select
+it only for separately authorized publication. Building or publishing does not authenticate,
+deploy or activate these default-off controls.
+
 Receipts and command logs remain below the ignored development .terraform directory. Do not copy
 account IDs, bucket names, KMS identifiers, raw object content, or command logs into shared evidence.
 "@
@@ -70,6 +76,8 @@ $isCoreWorkflow = $ArtifactFamily -ceq "CoreWorkflow"
 $isIngestion = $ArtifactFamily -ceq "Ingestion"
 $isPublicJob = $ArtifactFamily -ceq "PublicJob"
 $isApplicationsRecovery = $ArtifactFamily -ceq "ApplicationsRecovery"
+# Match ValidateSet's case-insensitive binding; never fall back to parser/processor artifacts.
+$isPrivateDocumentControls = $ArtifactFamily -eq "PrivateDocumentControls"
 $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-workflow-artifacts"
 } elseif ($isIngestion) {
@@ -78,6 +86,8 @@ $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-public-job-artifacts"
 } elseif ($isApplicationsRecovery) {
   "development-applications-recovery-artifacts"
+} elseif ($isPrivateDocumentControls) {
+  "development-private-document-control-artifacts"
 } else {
   "development-document-artifacts"
 }
@@ -87,6 +97,8 @@ $artifactDirectory = if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRec
   Join-Path $repositoryRoot "backend\workflows\dist\lambda"
 } elseif ($isPublicJob) {
   Join-Path $repositoryRoot "backend\gateway\dist\public-job-lambda"
+} elseif ($isPrivateDocumentControls) {
+  Join-Path $repositoryRoot "backend\services\documents\dist\private-control-lambda"
 } else {
   Join-Path $repositoryRoot "backend\services\documents\dist\lambda"
 }
@@ -100,6 +112,8 @@ $artifactNames = @(
     @("public-job-edge-lambda", "public-job-projection-lambda")
   } elseif ($isApplicationsRecovery) {
     @("applications-attempt-recovery-lambda")
+  } elseif ($isPrivateDocumentControls) {
+    @("cover-letter-provider-control-lambda", "cover-letter-response-capture-lambda", "cover-letter-cleanup-lambda")
   } else {
     @("document-processor-lambda", "document-parser-lambda")
   }
@@ -112,6 +126,8 @@ $artifactKeyRoot = if ($isCoreWorkflow) {
   "lambda/public-jobs"
 } elseif ($isApplicationsRecovery) {
   "lambda/applications"
+} elseif ($isPrivateDocumentControls) {
+  "lambda/documents/private-controls"
 } else {
   "lambda/documents"
 }
@@ -123,6 +139,8 @@ $receiptKind = if ($isCoreWorkflow) {
   "development-public-job-lambda-publication"
 } elseif ($isApplicationsRecovery) {
   "development-applications-recovery-lambda-publication"
+} elseif ($isPrivateDocumentControls) {
+  "development-private-document-controls-lambda-publication"
 } else {
   "development-document-lambda-publication"
 }
@@ -134,6 +152,8 @@ $artifactLabel = if ($isCoreWorkflow) {
   "public job"
 } elseif ($isApplicationsRecovery) {
   "applications recovery"
+} elseif ($isPrivateDocumentControls) {
+  "private document controls"
 } else {
   "document"
 }
@@ -552,6 +572,7 @@ if ($Action -eq "Publish") {
       elseif ($isIngestion) { pnpm --filter @ai-job-apply/workflows build:lambda:ingestion }
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       elseif ($isApplicationsRecovery) { pnpm --filter @ai-job-apply/workflows build:lambda:applications-attempt-recovery }
+      elseif ($isPrivateDocumentControls) { pnpm --filter @ai-job-apply/documents-service build:lambda:private-controls }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $first = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)
@@ -561,6 +582,7 @@ if ($Action -eq "Publish") {
       elseif ($isIngestion) { pnpm --filter @ai-job-apply/workflows build:lambda:ingestion }
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       elseif ($isApplicationsRecovery) { pnpm --filter @ai-job-apply/workflows build:lambda:applications-attempt-recovery }
+      elseif ($isPrivateDocumentControls) { pnpm --filter @ai-job-apply/documents-service build:lambda:private-controls }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $second = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)

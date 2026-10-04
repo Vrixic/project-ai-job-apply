@@ -151,6 +151,14 @@ before it appears, and new runtime function/object permissions need deployment r
 
 ## Private original-response capture RPC
 
+The separate local `build:lambda:private-controls` command now builds exactly the provider-control,
+response-capture and cleanup entrypoints into `dist/private-control-lambda`. Actual bundled handlers
+must refuse valid work while their independent flags are off and reject additional content fields
+without secret fetches. The publisher's `PrivateDocumentControls` family has dedicated receipt,
+operator and immutable key roots and exactly twelve companion objects; legacy parser/processor
+receipts remain unchanged. This source wiring is not publication, deployment, IAM authentication
+or remote-quiescence proof. Runtime composition and activation remain unfinished and default-off.
+
 ### Source-only provider-work control Lambda bootstrap
 
 `src/cover-letter-cleanup-lambda.ts` is a separate source-only maintenance fence entrypoint.
