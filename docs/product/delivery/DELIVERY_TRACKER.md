@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-03
+Last updated: 2026-10-04
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -13,8 +13,10 @@ This is the master record for the delivery phases defined in the [product and sy
 The completion-only port passed full verification; durable ready content and all three positively
 settled original phases must now precede provider disposal. Exact bound metadata, positive completed
 receipt and durable readback preserve unresolved outcomes. No generic inventory read or cancellation
-port is used. All 73 focused, 876 Documents unit and 239 real PostgreSQL cases pass (sixteen new),
-with typecheck/build. Final-source full verification and production private eligibility RPC/runtime/IAM,
+port is used. Initial 73 focused/876 unit/239 SQL cases pass. After integrating merged #529/main
+`280953c`, combined source `1433473` passes all 958 Documents unit and 253 real PostgreSQL
+cases (sixteen new success-maintenance cases), with typecheck/build. The owned tmpfs fixture
+is removed; Docker Desktop/WSL are stopped. Final-source full verification and production private eligibility RPC/runtime/IAM,
 scheduling, writer drain and deployed/accountable acceptance remain. D1/D3 stay In progress.
 
 2026-10-03 D3-059 starts independently from fresh main `792bb92` while #529 runs hosted checks.
