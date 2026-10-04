@@ -422,6 +422,17 @@ read-only recovery of an original already-settled result, not manufactured settl
 This is not deployment, live-provider or trusted failed-call quiescence evidence. The proposal remains
 incomplete and default-dark.
 
+### Source-only completion-only response disposal (2026-10-03)
+
+D3-059 adds an independent completion-only provider port for future successful-generation
+maintenance. Exact original completed response metadata precedes positive DELETE acknowledgement;
+queued/running and other terminal states remain unresolved and cannot trigger cancellation.
+The existing failed/abandoned stopping port is unchanged. Default-off and bounded single-attempt
+transport cannot create responses or expose output. Lost acknowledgements remain unresolved.
+Owned durable eligibility, success reconciliation, runtime/IAM, maintained scheduling and trusted
+writer drain remain required; this port cannot settle work or authorize platform object/row purge.
+No provider call or activation is made. The ADR remains Proposed.
+
 - Conditional creation by the provider: rejected because deletion markers allow recreation.
 - Caller cancellation as remote cancellation: rejected because it does not prove remote quiescence.
 - Unconditional replacement or retry on conflict: rejected because it can restore deleted bytes
