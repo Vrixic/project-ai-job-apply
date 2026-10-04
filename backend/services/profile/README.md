@@ -18,6 +18,8 @@ Generated job-specific artifacts belong to the documents service. Protected-clas
 The internal `readActiveValue` port returns only the exact owner's latest active field/context
 snapshot before database wall-clock expiry. KMS decryption holds no SQL lock; a second read
 withholds the value if its version, state or expiry changed while decryption was pending.
+Both reads require an active Identity owner, so account quarantine withholds ordinary reuse
+before privacy cleanup removes the retained vault rows, including quarantine during decryption.
 Owner, field and context are detached before asynchronous work. This is a point-in-time read,
 not packet approval or an active-candidate lease; an eventual Applications consumer must preserve
 those separate controls and mandatory review. No public route exposes this plaintext port.
