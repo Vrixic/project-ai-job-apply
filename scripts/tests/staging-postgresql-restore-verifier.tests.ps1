@@ -156,12 +156,12 @@ Assert-Throws { Assert-D1RestoreContextBoundary (New-TestContext $d1Boundary) $b
   "Historical D1 restore context"
 
 # Prior release evidence remains valid only against its own exact source boundary.
-foreach ($priorMigrationCount in @(41, 42, 52, 57)) {
+foreach ($priorMigrationCount in @(41, 42, 52, 57, 58)) {
   $priorD2Boundary = [pscustomobject]@{
     ManifestId = [string]$boundary.ManifestId
     ManifestSha256 = if ($priorMigrationCount -eq 41) { ("3" * 64) -join "" } else { ("5" * 64) -join "" }
     OwnerCount = if ($priorMigrationCount -ge 52) { 7 } else { 6 }
-    RelationCount = if ($priorMigrationCount -eq 57) { 83 } elseif ($priorMigrationCount -eq 52) { 78 } else { 68 }
+    RelationCount = if ($priorMigrationCount -eq 58) { 84 } elseif ($priorMigrationCount -eq 57) { 83 } elseif ($priorMigrationCount -eq 52) { 78 } else { 68 }
     MigrationCount = $priorMigrationCount
   }
   $priorD2Event = [ordered]@{
@@ -178,9 +178,9 @@ foreach ($priorMigrationCount in @(41, 42, 52, 57)) {
   $null = ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $priorD2Boundary "historical"
   Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $priorD2Boundary
   Assert-Throws { ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $boundary "current" } `
-    "Prior $priorMigrationCount-migration D2 aggregate used as current 58-migration evidence"
+    "Prior $priorMigrationCount-migration D2 aggregate used as current 59-migration evidence"
   Assert-Throws { Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $boundary } `
-    "Prior $priorMigrationCount-migration D2 restore context used as current 58-migration evidence"
+    "Prior $priorMigrationCount-migration D2 restore context used as current 59-migration evidence"
 }
 
 foreach ($mutation in @(

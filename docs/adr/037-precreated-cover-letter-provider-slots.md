@@ -532,3 +532,13 @@ original writer quiescence or settle ambiguous external requests. Reviewed priva
 secret/bucket/KMS/provider role, maintenance/retention, real-provider evaluation, accountable
 approval and deployed evidence remain prerequisites to production composition/activation.
 The ADR remains Proposed.
+
+
+Source-only D3-065 checkpoint (2026-10-04): failed-response maintenance requires owned immutable
+original-failure proof before any cleanup fence. Migration `0009` adds nullable fixed metadata
+only on original provider running-to-settled transitions; old rows remain unclassified. Original
+rejection/non-dispatch settlement is now atomic with future fencing, preserving running writers.
+The private v1 disposal boundary adds exact-echo `read_failed`; missing owning ports refuse.
+This does not classify ambiguous abandonment, certify quiescence, choose retention periods or
+activate the proposed runtime. Migrate before updated functions; old code tolerates NULL and
+cannot obtain eligibility from an ordinary read. Existing purge/identity protections remain.

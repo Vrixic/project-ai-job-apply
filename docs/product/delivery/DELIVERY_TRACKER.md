@@ -9,6 +9,15 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-065 starts from fresh main `bde17d9` with exact open #534 head `10f196b`
+as an explicit source dependency. Failed-response maintenance now requires Documents-owned
+immutable original-failure proof before fencing or provider effects. Nullable forward migration
+0009 performs no backfill; original closure is atomic, and private v1 `read_failed` defaults off.
+174 focused/1,106 Documents unit cases, 308 real PostgreSQL cases, 42 restore units and 153
+runtime smoke cases pass. Full verifier, whole-boundary restore and local image remain pending.
+[Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md). Ambiguous abandonment, writer drain and accountable/deployed gates remain;
+no publication/deployment/activation or D1/D3 completion. CI/CD stays deferred until production launch.
+
 2026-10-04 D3-063/D3-064 integration checkpoint: locally integrate exact open #533 head
 `1abc7e7` into #534 as `8aba600`. Both full test blocks are retained. Correct an initial
 conflict-script error by restoring complete tracker/phase records from both original heads;
@@ -3161,6 +3170,8 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | Exact `fa01d53` passes full maintained verification, 721 workflow tests/seven explicit DB opt-ins skipped and all 20 builds/17 cached. Separate fresh PostgreSQL acceptance passes 5/5. Generated tmpfs cleanup leaves no test container or persistent volume; Docker/WSL are stopped. Only the existing two delivery documents change afterward. D2-050/051 cloud continuation, corrective Gateway/core releases and final cleanup remain; neither historical marker repair nor Phase 2 completion is claimed. | [Verified retry repair](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps) |
 | 2026-09-10 | D2 | Exact `9b608ac` matching artifacts, reviewed preparation and Create pass. Its single Inspect reports fixed `store_preflight` / `CompletionCollision` after initial SQL reads; precise predicate/incorrect value and retry-bug causality remain unknown. No validated inspection, Replay or historical mutation runs. Maintained Cleanup `88848` removes the exact executor after full drain, preserving immutable/local artifacts and the same verified private RDS copy with `320`/`20` permissions. D2-052/R20 track conditional exact-version historical correction authority; future-writer Gateway/core releases and final recovery/cleanup remain. Phase 2 is not complete. | [Historical completion blocker](phase-2-extension-and-community.md#d2-052--historical-completion-consistency) |
 | 2026-09-11 | D2 | Gateway `423d63b` and core `2ff32ef` are deployed/verified; core `14` is resumed at Platform `328` with zero drift. D2-051 is Complete for code/deployment, with generated concurrency and real already-terminal SQL evidence explicitly distinguished from a real concurrent lock race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` prove agreeing persisted completion evidence versus the tag and three acknowledged/unclaimed dispatches, with no writes. Repair `45914` / `a9336e` reserves stable attempt `1` after its first writer/retirement pass, then refuses the second metadata read before Put. Exact `00fadf` preimage/tag readback is unchanged; a later successful read-only repetition neither proves the earlier cause nor renews authority. Preserve the journal; new D2-053/R21 gate further writing. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact; the same PITR and `328`/`20` permissions remain. No historical mutation or Replay; Phase 2 remains In progress. | [Current diagnosis](phase-2-extension-and-community.md#d2-052--historical-completion-consistency), [completed writer deployment](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps), [pre-dispatch blocker](phase-2-extension-and-community.md#risks-and-blockers) |
+
+| 2026-10-04 | D3 | Start D3-065 and implement original-failure eligibility before response maintenance, preserving the owning ledger and existing identity/purge guards. Local focused/unit/real-SQL and runtime smoke pass; whole-boundary restore/image/full verification remain. Open #533/#534 are explicit dependencies, not merged. No deployment/activation or phase completion; owner CI/CD deferral remains. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
 
 ## Cross-delivery decisions and changes
 

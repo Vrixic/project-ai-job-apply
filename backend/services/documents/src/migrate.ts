@@ -17,6 +17,7 @@ const migrationVersions = [
   "0006_cover_letters",
   "0007_cover_letter_work_authorizations",
   "0008_cover_letter_provider_responses",
+  "0009_cover_letter_provider_failure",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -62,6 +63,7 @@ try {
         triggerCount: number;
         workTriggerCount: number;
         responseTriggerCount: number;
+        failureTriggerCount: number;
       }>
     >`
       SELECT
@@ -95,14 +97,19 @@ try {
           SELECT count(*)::int FROM pg_trigger
           WHERE tgrelid = 'documents.cover_letter_provider_responses'::regclass
             AND tgname = 'cover_letter_provider_responses_protect' AND NOT tgisinternal
-        ) AS "responseTriggerCount"
+        ) AS "responseTriggerCount",
+        (SELECT count(*)::int FROM pg_trigger
+          WHERE tgrelid = 'documents.cover_letter_work_authorizations'::regclass
+            AND tgname = 'cover_letter_provider_failure_protect' AND NOT tgisinternal
+        ) AS "failureTriggerCount"
     `;
     if (
       verification?.tableCount !== 9 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.triggerCount !== 2 ||
       verification.workTriggerCount !== 1 ||
-      verification.responseTriggerCount !== 1
+      verification.responseTriggerCount !== 1 ||
+      verification.failureTriggerCount !== 1
     ) {
       throw new Error("Documents migration verification failed");
     }

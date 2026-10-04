@@ -100,6 +100,10 @@
         {
           "version": "0008_cover_letter_provider_responses",
           "checksum": "54511777975b6806c84824f3aaa4301fe436a3763391d7c4527b70ebbbb2d73f"
+        },
+        {
+          "version": "0009_cover_letter_provider_failure",
+          "checksum": "6c265ffe62f961d2b7b7e4df17d3ec87c574680f886e5522843a881aee1c9306"
         }
       ],
       "relations": [

@@ -213,3 +213,16 @@ permit exact read-only metadata recovery, but leave original work running; delet
 until trusted original positive drain evidence exists. Lost settlement acknowledgements cannot
 be repaired by manufacturing settlement on replay. No TTL, purge guard, retention policy or
 deployed settings are changed; pending recovery defaults off.
+
+
+Source-only D3-065 closes the caller-classification gap in failed-response reconciliation.
+Before a permanent fence or provider effect, Documents must read immutable failure metadata
+written by the original actor with its running-to-settled transition and future-phase fence.
+No existing settlement is backfilled. A caller's failed/abandoned label, quarantine, generic
+fence, local timeout or pending slot cannot stop active generation. Unknown and ambiguous
+abandonment remains unresolved pending its owning decision/drain protocol. The additive private
+eligibility RPC contains identifiers only and defaults off; older compositions refuse without
+ordinary-inventory fallback. Disposal never settles another private writer, certifies remote
+quiescence or grants object/row purge. Public retention durations, policy and deployed settings
+are unchanged. Migration-before-code, reviewed maintenance IAM/scheduling, writer drain and
+accountable/deployed acceptance remain open; no model/cloud mutation occurs.

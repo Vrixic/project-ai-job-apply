@@ -30,3 +30,19 @@ are kept so the exact inventory above still names every stored object until a se
 `complete_resume_purge` removes a tombstone's row, its idempotency entries (which store the file name), receipts, and
 dispositions once the caller attests that every stored object is gone, and records one value-free `resume.purged` audit
 event. It also adds that audit action.
+
+
+`0009_cover_letter_provider_failure` adds nullable, value-free original-provider failure metadata.
+Only the original running-to-settled provider transition can write it; an additional trigger keeps
+all existing identity/transition protections unchanged. No backfill is performed: old settlements,
+including successful ones, remain NULL and cannot authorize failed-response cleanup. Generic
+maintenance fences, quarantine, expiry and unacknowledged calls are not failure proof.
+
+Roll out this migration before the updated private work-control/disposal functions and before
+any separately reviewed maintenance activation. An older writer remains compatible with NULL;
+an older disposal composition refuses the additive `read_failed` action. Rolling back code must
+retain the column, trigger, original response inventory and strict positive-disposal purge guards.
+Candidate deletion still cascades this metadata only through the existing owning deletion path.
+Restore/image inventories add exactly this ninth Documents migration (59 across seven owners);
+prior exact-source boundaries remain historical evidence, not evidence for the new boundary.
+This is source/local validation only, not a deployed migration or production retention policy.

@@ -9,8 +9,8 @@ another service's tables.
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
   after Trust): eleven owned schemas (including the empty-table `jobs_public` projection schema), 84
-  regular relations, and 58 checksum-bound migrations (Profile through `0011`; Applications through
-  `0005`; Documents through `0008`). The
+  regular relations, and 59 checksum-bound migrations (Profile through `0011`; Applications through
+  `0005`; Documents through `0009`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
   purges Applications data (run 2026-09-18 against an isolated local cluster).
 
@@ -37,7 +37,7 @@ orchestrator, checks the disposable-container ownership guards, and uses a uniqu
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.
 
-The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 58-migration
+The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 59-migration
 seven-owner boundary while retaining its D2-focused generated-data and behavior assertions,
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through

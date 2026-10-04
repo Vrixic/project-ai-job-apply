@@ -476,3 +476,20 @@ private-control/document publication families are unchanged; no isolated-provide
 introduced. Reviewed role/bucket/KMS/secret/private-caller IAM, original writer drain, maintenance
 and transient retention, real-provider evaluation, accountable review and deployed acceptance
 remain prerequisites to deployment/activation.
+
+
+Source-only D3-065 requires Documents-owned original-failure eligibility before failed-response
+maintenance can fence work or call the provider. Migration `0009` records only fixed failure
+reasons selected by the existing original actor's settlement methods, atomically with future
+phase fencing. `readFailed` requires a pending owned document, exact captured response, settled
+original failure and revoked final authority. Generic fences, old NULL settlements, successful
+work, unknown response identities and non-dispatch receipts cannot qualify. Disposed receipts
+must retain the original terminal status (completed for rejected completed output).
+
+The separate private v1 disposal RPC adds `read_failed` with exact action/reference echoes; old
+compositions refuse without ordinary-inventory fallback. The native default-off bootstrap binds
+the owned read. Reconciliation converges through the same eligibility read, preserves ambiguous
+acknowledgements, and settles no other writer. Ambiguous abandoned operations still need a
+separate owning abandonment decision/drain protocol; caller labels and elapsed time grant none.
+Migration-before-code, reviewed IAM, maintained scheduling, retention, writer drain and deployed
+acceptance remain prerequisites. No public API, frontend, provider call or activation changes.

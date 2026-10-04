@@ -485,23 +485,43 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
           ).toEqual([{ state: "running" }]);
         },
       );
-      it("settlement failure after the committed rejection fence leaves running work and no final authority", async () => {
+      it("a real SQL settlement failure atomically rolls back proof and future fences without granting final authority", async () => {
         const original = (await issue("provider_dispatch")).authorization;
         await work.claim(original);
-        const broken = new PostgresCoverLetterWorkStore(sql, () => true);
-        vi.spyOn(broken, "settleProviderDispatch").mockRejectedValue(
-          Error("SyntheticSettlementUnavailable"),
+        const before =
+          await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
+        await sql.unsafe(
+          `CREATE FUNCTION documents.synthetic_reject_provider_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.provider_failure IS NOT NULL THEN RAISE EXCEPTION 'SyntheticSettlementUnavailable'; END IF; RETURN NEW; END; $$; CREATE TRIGGER synthetic_reject_provider_failure BEFORE UPDATE ON documents.cover_letter_work_authorizations FOR EACH ROW EXECUTE FUNCTION documents.synthetic_reject_provider_failure()`,
         );
-        await expect(settle(broken, cleanupReference(original))).rejects.toThrow(
-          /^CoverLetterWorkUnavailable$/u,
-        );
-        expect(await work.readDrainState(ownerUserId, documentId)).toBe("pending");
-        expect(
-          await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose = 'final_document'`,
-        ).toEqual([{ state: "revoked" }]);
-        await expect(
-          sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
-        ).rejects.toThrow();
+        try {
+          await expect(settle(work, cleanupReference(original))).rejects.toThrow(
+            /^CoverLetterWorkUnavailable$/u,
+          );
+          expect(
+            await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
+          ).toEqual(before);
+          expect(await work.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+            kind: "unavailable",
+          });
+          await expect(
+            sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+          ).rejects.toThrow();
+        } finally {
+          await sql.unsafe(
+            `DROP TRIGGER synthetic_reject_provider_failure ON documents.cover_letter_work_authorizations; DROP FUNCTION documents.synthetic_reject_provider_failure()`,
+          );
+        }
+        await settle(work, cleanupReference(original));
+        const [proof] =
+          await sql`SELECT state, provider_failure FROM documents.cover_letter_work_authorizations WHERE id = ${original.id}`;
+        expect(proof).toEqual({
+          state: "settled",
+          provider_failure:
+            method === "settleRejectedProviderDispatch" ? "output_rejected" : "not_dispatched",
+        });
+        expect(await work.claimFinalDocument({ ownerUserId, documentId })).toEqual({
+          kind: "unavailable",
+        });
       });
     },
   );

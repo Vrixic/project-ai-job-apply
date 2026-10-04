@@ -253,7 +253,7 @@ export class PostgresCoverLetterWorkStore {
    * A thrown/aborted/timed-out provider request is NEVER authority to call this operation.
    */
   async settleRejectedProviderDispatch(reference: CoverLetterWorkReference): Promise<void> {
-    return this.settleFencedProviderDispatch(reference);
+    return this.settleFencedProviderDispatch(reference, "output_rejected");
   }
 
   /** Trusted original actor only, after fulfilled terminal observation and positive creation
@@ -301,9 +301,7 @@ export class PostgresCoverLetterWorkStore {
           throw Error();
         await this.revokeUnclaimedInTransaction(sql, current.ownerUserId, ref.documentId);
         if (!this.enabled()) throw Error();
-        if (current.state === "running")
-          await sql`UPDATE documents.cover_letter_work_authorizations
-            SET state = 'settled', terminal_at = clock_timestamp() WHERE id = ${ref.id}`;
+        await this.recordProviderFailure(sql, current, original.terminalStatus);
       });
     });
   }
@@ -312,26 +310,51 @@ export class PostgresCoverLetterWorkStore {
    * dispatch-slot write and must issue no further effects. Error codes are not receipts.
    */
   async settleUndispatchedProviderDispatch(reference: CoverLetterWorkReference): Promise<void> {
-    return this.settleFencedProviderDispatch(reference);
+    return this.settleFencedProviderDispatch(reference, "not_dispatched");
   }
 
-  private async settleFencedProviderDispatch(reference: CoverLetterWorkReference): Promise<void> {
+  private async settleFencedProviderDispatch(
+    reference: CoverLetterWorkReference,
+    failure: "output_rejected" | "not_dispatched",
+  ): Promise<void> {
     return this.guarded(async () => {
+      if (!validateProviderControlReference(reference)) throw Error();
       const ref = structuredClone(reference);
-      if (ref.purpose !== "provider_dispatch" || !UUID.test(ref.id) || !validBinding(ref))
-        throw Error();
-      const original = await find(this.client, ref.documentId, ref.purpose);
-      if (
-        !original ||
-        !referenceMatches(original, ref) ||
-        (original.state !== "running" && original.state !== "settled")
-      )
-        throw Error();
-      // Original committed fence is awaited first. A lost settlement ACK may leave running
-      // work, but never opens finalization; repeat consumes the same immutable identity.
-      await this.fenceForCleanup(ref);
-      await this.settleProviderDispatch(ref);
+      await this.client.begin(async (sql) => {
+        const seed = await find(sql, ref.documentId, ref.purpose);
+        if (!seed || !referenceMatches(seed, ref)) throw Error();
+        // Same document-first order as terminal settlement and maintenance fencing.
+        const owned = await sql`SELECT id FROM documents.cover_letters
+          WHERE id = ${ref.documentId} AND user_id = ${seed.ownerUserId} FOR UPDATE`;
+        if (!owned[0] || !this.enabled()) throw Error();
+        const current = await find(sql, ref.documentId, ref.purpose, true);
+        if (
+          !current ||
+          !referenceMatches(current, ref) ||
+          (current.state !== "running" && current.state !== "settled")
+        )
+          throw Error();
+        await this.revokeUnclaimedInTransaction(sql, current.ownerUserId, ref.documentId);
+        await this.recordProviderFailure(sql, current, failure);
+      });
     });
+  }
+
+  private async recordProviderFailure(
+    sql: postgres.TransactionSql,
+    current: CoverLetterWorkAuthorization,
+    failure: "output_rejected" | "not_dispatched" | "failed" | "cancelled" | "incomplete",
+  ): Promise<void> {
+    if (!this.enabled()) throw Error();
+    const [row] = await sql<Array<{ failure: string | null }>>`
+      SELECT provider_failure AS failure FROM documents.cover_letter_work_authorizations
+      WHERE id = ${current.id} FOR UPDATE`;
+    if (!row || (row.failure !== null && row.failure !== failure)) throw Error();
+    // Preserve old successful/idempotent closure behavior, but never backfill guessed proof.
+    if (current.state === "settled") return;
+    await sql`UPDATE documents.cover_letter_work_authorizations
+      SET state = 'settled', terminal_at = clock_timestamp(), provider_failure = ${failure}
+      WHERE id = ${current.id}`;
   }
 
   /** Private finalization uses the original settled provider binding, never caller consent. */

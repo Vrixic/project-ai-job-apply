@@ -100,7 +100,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(58);
+    ).toBe(59);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -253,7 +253,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 7,
       relationCount: 84,
-      migrationCount: 58,
+      migrationCount: 59,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -443,6 +443,7 @@ describe("read-only aggregate restore verification", () => {
                   "0006_cover_letters",
                   "0007_cover_letter_work_authorizations",
                   "0008_cover_letter_provider_responses",
+                  "0009_cover_letter_provider_failure",
                   ...(migrationCount === 52 ? [] : ["0010_restricted_answer_vault"]),
                   "0011_active_candidate_lease",
                 ].includes(migration.version),
@@ -474,6 +475,34 @@ describe("read-only aggregate restore verification", () => {
     },
   );
 
+  it("retains the prior 58-migration boundary only against its exact historical manifest", async () => {
+    const current = loadCurrentRestoreManifest();
+    const manifest = parseRestoreManifest({
+      ...current.manifest,
+      contributors: current.manifest.contributors.map((contributor) => ({
+        ...contributor,
+        migrations: contributor.migrations.filter(
+          (migration) => migration.version !== "0009_cover_letter_provider_failure",
+        ),
+      })),
+    });
+    const historical = {
+      manifest,
+      sha256: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
+    };
+    const client: RestoreSqlClient = {
+      async begin(_options, work) {
+        return work(successfulExecutor(historical));
+      },
+    };
+    await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
+      ownerCount: 7,
+      relationCount: 84,
+      migrationCount: 58,
+    });
+    await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(/migration/iu);
+  });
+
   it("retains the prior 57-migration boundary only as historical evidence", async () => {
     const current = loadCurrentRestoreManifest();
     const manifest = parseRestoreManifest({
@@ -481,7 +510,11 @@ describe("read-only aggregate restore verification", () => {
       contributors: current.manifest.contributors.map((contributor) => ({
         ...contributor,
         migrations: contributor.migrations.filter(
-          (migration) => migration.version !== "0008_cover_letter_provider_responses",
+          (migration) =>
+            ![
+              "0008_cover_letter_provider_responses",
+              "0009_cover_letter_provider_failure",
+            ].includes(migration.version),
         ),
         relations: contributor.relations.filter(
           (relation) => relation !== "documents.cover_letter_provider_responses",
