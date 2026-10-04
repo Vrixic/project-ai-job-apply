@@ -108,3 +108,14 @@ on the final facade source using a fresh owned tmpfs fixture. Workflow build, ty
 the emitted-port model-isolation guard also pass. The first full-verifier result is historical;
 full verification for the final facade source remains pending. The owned fixture is removed
 and Docker Desktop/WSL are stopped again.
+
+## Private-slot purpose guard checkpoint
+
+The initializer's frozen ledger facade now also restricts issue, claim and settlement to
+`private_slots`, refusing provider-dispatch/final-document purposes before any owning ledger
+call. Inputs are detached before delegation. Two additional refusal cases bring focused
+verification to 43 passing tests (22 port and 21 evidence cases). Seven real PostgreSQL cases,
+Workflow build/typecheck and emitted model-isolation check pass again on this final source.
+Docker fixture removed; Desktop and WSL stopped. The verifier started at 56f0b29 also passed,
+but source changed during execution, so it is superseded by a clean-source full rerun.
+No schema, SQL authorization, frontend or deployment change.

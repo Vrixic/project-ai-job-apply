@@ -149,6 +149,38 @@ function fixture(defaultOff = false) {
 
 afterEach(() => vi.restoreAllMocks());
 describe("private Applications to isolated Documents preparation composition", () => {
+  it.each(["provider_dispatch", "final_document"] as const)(
+    "initializer cannot issue, claim or settle %s work",
+    async (purpose) => {
+      const f = fixture();
+      vi.spyOn(CoverLetterProviderInitializer.prototype, "initialize").mockImplementationOnce(
+        async function (this: CoverLetterProviderInitializer) {
+          const work: Pick<Options["work"], "issue" | "claim" | "recordSettled"> = Reflect.get(
+            this,
+            "work",
+          );
+          const reference = { id: factId, documentId: id, purpose, requestSha256: "a".repeat(64) };
+          await expect(
+            work.issue({
+              documentId: id,
+              ownerUserId: owner,
+              purpose,
+              requestSha256: reference.requestSha256,
+              consentExpiresAt: f.record.expiresAt,
+            }),
+          ).rejects.toThrow("CoverLetterPreparationUnavailable");
+          await expect(work.claim(reference)).rejects.toThrow("CoverLetterPreparationUnavailable");
+          await expect(work.recordSettled(reference)).rejects.toThrow(
+            "CoverLetterPreparationUnavailable",
+          );
+          return { kind: "in_progress" };
+        },
+      );
+      expect(await f.port.generate(f.record)).toEqual({ kind: "in_progress" });
+      for (const call of [f.issue, f.claim, f.recordSettled, f.issueProviderDispatch, f.invoke])
+        expect(call).not.toHaveBeenCalled();
+    },
+  );
   it("recovery receives frozen exact store and provider-read capabilities", async () => {
     const f = fixture();
     vi.spyOn(CoverLetterDraftRecoveryService.prototype, "recover").mockImplementationOnce(

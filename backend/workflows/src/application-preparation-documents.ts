@@ -106,6 +106,24 @@ export function createIsolatedCoverLetterPreparationPort(options: {
     clock,
     enabled,
   );
+  const slotsWork = Object.freeze({
+    issue: async (input: Parameters<PostgresCoverLetterWorkStore["issue"]>[0]) => {
+      if (input.purpose !== "private_slots") throw new Error("CoverLetterPreparationUnavailable");
+      return options.work.issue(structuredClone(input));
+    },
+    claim: async (reference: Parameters<PostgresCoverLetterWorkStore["claim"]>[0]) => {
+      if (reference.purpose !== "private_slots")
+        throw new Error("CoverLetterPreparationUnavailable");
+      return options.work.claim(structuredClone(reference));
+    },
+    recordSettled: async (
+      reference: Parameters<PostgresCoverLetterWorkStore["recordSettled"]>[0],
+    ) => {
+      if (reference.purpose !== "private_slots")
+        throw new Error("CoverLetterPreparationUnavailable");
+      return options.work.recordSettled(structuredClone(reference));
+    },
+  });
   const initializer = new CoverLetterProviderInitializer(
     Object.freeze({
       reserveGeneration: documents.reserveGeneration,
@@ -119,11 +137,7 @@ export function createIsolatedCoverLetterPreparationPort(options: {
     enabled,
     clock,
     60_000,
-    Object.freeze({
-      issue: options.work.issue.bind(options.work),
-      claim: options.work.claim.bind(options.work),
-      recordSettled: options.work.recordSettled.bind(options.work),
-    }),
+    slotsWork,
   );
   const preparation = new CoverLetterPreparationService(
     Object.freeze({ generationMetadata: documents.generationMetadata }),
