@@ -30,7 +30,8 @@
     "test": "vitest run src --exclude=dist/** --exclude=src/**/*.integration.test.ts --testTimeout=30000 --hookTimeout=30000",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build:lambda:isolated-provider": "pnpm --filter @ai-job-apply/documents-service... build && node ../../../scripts/build-isolated-provider-lambda.mjs"
+    "build:lambda:isolated-provider": "pnpm --filter @ai-job-apply/documents-service... build && node ../../../scripts/build-isolated-provider-lambda.mjs",
+    "build:lambda:response-maintenance": "pnpm --filter @ai-job-apply/documents-service... build && node ../../../scripts/build-response-maintenance-lambda.mjs"
   },
   "dependencies": {
     "@ai-job-apply/ai-sdk": "workspace:*",

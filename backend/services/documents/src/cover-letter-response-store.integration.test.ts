@@ -6,6 +6,8 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCoverLetterDocument } from "./cover-letter.js";
+import { createCoverLetterCleanupLambda } from "./cover-letter-cleanup-lambda.js";
+import { createCoverLetterResponseMaintenanceLambda } from "./cover-letter-response-maintenance-lambda.js";
 import { isolatedProviderFixture } from "./cover-letter-isolated-provider-test-support.js";
 import {
   COVER_LETTER_PROVIDER_MODEL,
@@ -140,6 +142,171 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await work.claim(ref);
     return store.reserve(ref);
   }
+
+  it.each([
+    "failed",
+    "cancelled",
+    "incomplete",
+    "completed",
+    "active",
+    "legacy",
+    "unknown",
+    "quarantined",
+    "lost_disposal_ack",
+  ] as const)("native internet maintenance and both private SQL bootstraps: %s", async (state) => {
+    const original = state === "completed" ? await successfulDraft() : response();
+    if (state !== "completed") {
+      await reserve();
+      await runningSlots();
+      if (state !== "unknown") await store.recordCreation(ref, original);
+      if (state === "legacy") await work.recordSettled(ref);
+      else if (!["active", "unknown"].includes(state))
+        await work.settleTerminalProviderDispatch(ref, {
+          kind: "terminal_no_content",
+          reference: original,
+          terminalStatus: state === "cancelled" || state === "incomplete" ? state : "failed",
+        });
+    }
+    if (state === "quarantined")
+      await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+    const prefix = "arn:aws:lambda:us-east-2:123456789012:function:";
+    const target = `${prefix}synthetic-maintenance:9`;
+    const disposal = `${prefix}synthetic-disposal:7`;
+    const fence = `${prefix}synthetic-fence:5`;
+    const pools: postgres.Sql[] = [];
+    const createPool = (
+      url: string,
+      settings: { max: 1; idle_timeout: 20; connect_timeout: 10 },
+    ) => {
+      const pool = postgres(url, { ...settings, onnotice: () => undefined });
+      pools.push(pool);
+      return pool;
+    };
+    const privateEnvironment = (name: string, version: string, flag: string) => ({
+      [flag]: "true",
+      AWS_REGION: "us-east-2",
+      PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+      AWS_LAMBDA_FUNCTION_NAME: name,
+      AWS_LAMBDA_FUNCTION_VERSION: version,
+      AWS_SESSION_TOKEN: "synthetic-session-token",
+      DATABASE_SECRET_ID:
+        "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+    });
+    const privateDisposal = createCoverLetterResponseDisposalLambda({
+      environment: () =>
+        privateEnvironment("synthetic-disposal", "7", "COVER_LETTER_RESPONSE_DISPOSAL_ENABLED"),
+      resolveDatabaseUrl: async () => databaseUrl ?? "postgres://invalid",
+      createPool,
+    });
+    const privateFence = createCoverLetterCleanupLambda({
+      environment: () =>
+        privateEnvironment("synthetic-fence", "5", "COVER_LETTER_CLEANUP_CONTROL_ENABLED"),
+      resolveDatabaseUrl: async () => databaseUrl ?? "postgres://invalid",
+      createPool,
+    });
+    const actions: string[] = [];
+    let lost = false;
+    const providerFetch = vi.fn<typeof fetch>(async (_url, options) => {
+      if (options?.method === "DELETE")
+        return Response.json({
+          id: original.responseId,
+          object: "response.deleted",
+          deleted: true,
+        });
+      return Response.json({
+        id: original.responseId,
+        object: "response",
+        created_at: original.createdAt,
+        model: "gpt-6-luna",
+        background: true,
+        store: false,
+        previous_response_id: null,
+        tools: [],
+        status:
+          state === "completed"
+            ? "completed"
+            : state === "cancelled" || state === "incomplete"
+              ? state
+              : "failed",
+      });
+    });
+    const resolve = vi.fn(async () => "synthetic-provider-key");
+    const run = createCoverLetterResponseMaintenanceLambda({
+      environment: () => ({
+        COVER_LETTER_RESPONSE_MAINTENANCE_ENABLED: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: "synthetic-maintenance",
+        AWS_LAMBDA_FUNCTION_VERSION: "9",
+        AWS_SESSION_TOKEN: "synthetic-token",
+        COVER_LETTER_RESPONSE_DISPOSAL_FUNCTION_ARN: disposal,
+        COVER_LETTER_CLEANUP_FUNCTION_ARN: fence,
+        COVER_LETTER_OPENAI_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-key",
+      }),
+      resolveProviderKey: resolve,
+      providerFetch,
+      createLambdaClient: () => ({
+        config: { maxAttempts: async () => 1 },
+        send: async (command) => {
+          const input = JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array));
+          actions.push(input.action);
+          const value =
+            command.input.FunctionName === disposal
+              ? await privateDisposal(input, { invokedFunctionArn: disposal })
+              : command.input.FunctionName === fence
+                ? await privateFence(input, { invokedFunctionArn: fence })
+                : undefined;
+          if (!value) throw Error("SyntheticUnexpectedTarget");
+          if (state === "lost_disposal_ack" && input.action === "record_disposal" && !lost) {
+            lost = true;
+            throw Error("SyntheticCommittedACKLost");
+          }
+          return {
+            StatusCode: 200,
+            ExecutedVersion: command.input.FunctionName === disposal ? "7" : "5",
+            Payload: new TextEncoder().encode(JSON.stringify(value)),
+          };
+        },
+      }),
+    });
+    const input = {
+      schemaVersion: 1,
+      action: state === "completed" ? "reconcile_completed" : "reconcile_failed",
+      reference: ref,
+    };
+    try {
+      const eligible = !["active", "legacy", "unknown"].includes(state);
+      const before =
+        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY id`;
+      expect((await run(input, { invokedFunctionArn: target })).outcome).toBe(
+        eligible && state !== "lost_disposal_ack" ? "response_disposed" : "unresolved",
+      );
+      expect(providerFetch).toHaveBeenCalledTimes(eligible ? 2 : 0);
+      expect(resolve).toHaveBeenCalledTimes(eligible ? 1 : 0);
+      if (!eligible) {
+        expect(actions).toEqual(["read_failed"]);
+        expect(
+          await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY id`,
+        ).toEqual(before);
+      } else {
+        expect((await store.read(ref))?.state).toBe("disposed");
+        if (state === "completed") expect(actions).not.toContain("fence");
+        else {
+          expect(await work.readDrainState(owner, documentId)).toBe("pending");
+          await expect(
+            sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+          ).rejects.toThrow();
+        }
+        expect((await run(input, { invokedFunctionArn: target })).outcome).toBe(
+          "response_disposed",
+        );
+        expect(providerFetch).toHaveBeenCalledTimes(2);
+      }
+    } finally {
+      await Promise.all(pools.map((pool) => pool.end()));
+    }
+  });
 
   it.each([
     "success",

@@ -542,3 +542,11 @@ The private v1 disposal boundary adds exact-echo `read_failed`; missing owning p
 This does not classify ambiguous abandonment, certify quiescence, choose retention periods or
 activate the proposed runtime. Migrate before updated functions; old code tolerates NULL and
 cannot obtain eligibility from an ordinary read. Existing purge/identity protections remain.
+
+Source-only D3-066 (2026-10-04) connects a separate default-off internet maintenance Lambda to
+owned failed/completed eligibility and private fence/disposal controls. Caller selectors never
+classify work. Successful cleanup has no fence/cancel capability; missing/unknown/legacy proof
+prevents downstream effects. The actual emitted artifact excludes SQL, S3, rendering and model
+creation code. Target matching is not authentication, and no publication/runtime IAM/scheduler
+or activation is introduced. Retention, abandonment, original writer drain and accountable/
+deployed acceptance remain prerequisites; this ADR remains Proposed.

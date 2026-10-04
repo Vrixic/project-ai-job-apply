@@ -226,3 +226,12 @@ ordinary-inventory fallback. Disposal never settles another private writer, cert
 quiescence or grants object/row purge. Public retention durations, policy and deployed settings
 are unchanged. Migration-before-code, reviewed maintenance IAM/scheduling, writer drain and
 accountable/deployed acceptance remain open; no model/cloud mutation occurs.
+
+Source-only D3-066 native internet response maintenance connects owning eligibility to separate
+private fence/disposal controls and the existing provider cleanup adapter. It accepts no caller
+failure proof, owner override or provider identity. Missing/unknown/unclassified proof refuses
+before fence, managed-key access or provider effects; successful cleanup has no cancel/fence
+capability. Keys are invocation-local and native Invoke has one attempt. Positive provider
+disposal and local deadlines do not prove other writers stopped or authorize object/row purge.
+Reviewed IAM, scheduling, retention, ambiguous abandonment, writer drain and accountable/deployed
+acceptance remain open; no deployment or activation follows from source composition.

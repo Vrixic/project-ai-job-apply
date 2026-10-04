@@ -493,3 +493,21 @@ acknowledgements, and settles no other writer. Ambiguous abandoned operations st
 separate owning abandonment decision/drain protocol; caller labels and elapsed time grant none.
 Migration-before-code, reviewed IAM, maintained scheduling, retention, writer drain and deployed
 acceptance remain prerequisites. No public API, frontend, provider call or activation changes.
+
+## Source-only native response maintenance (D3-066)
+
+`cover-letter-response-maintenance-lambda.ts` connects owning private `read_failed`/
+`read_completed`, failed-only cleanup fencing and positive disposal persistence to the
+existing fixed-provider cleanup adapter. Both selectors default off; selectors never classify
+work. Missing/unknown/unclassified proof refuses before fence, managed-key read or provider
+effects. Successful cleanup has no fence/cancel capability. Numeric same-account distinct
+targets and managed-secret identity are qualified before I/O; one-attempt native clients
+ignore configured endpoint overrides. Keys remain local to each invocation. The new bounded
+`CoverLetterCleanupClient` sends the existing private v1 fence contract with exact echo/version
+validation. Local deadlines and disposed receipts never settle another writer or authorize purge.
+
+`build:lambda:response-maintenance` emits a separate internet-maintenance artifact family and
+checks its actual exported default-off handler. The emitted bundle guard excludes SQL, S3,
+rendering and generation code. Reviewed IAM, maintained scheduling, retention/abandonment/drain
+and accountable/deployed acceptance remain open. Nothing is deployed or activated. See
+[local evidence](../../../docs/product/delivery/evidence/d3-response-maintenance-bootstrap-2026-10-04.md).

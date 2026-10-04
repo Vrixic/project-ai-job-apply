@@ -351,3 +351,10 @@ default-off/closed-envelope refusal. The package command builds its dependencies
 SQL/private persistence/rendering/disposal/test fixtures and is part of the full verifier.
 This is local packaging only; existing publisher families are unchanged and no provider
 publication, deployment, role grant or activation is authorized by the builder.
+
+- `build-response-maintenance-lambda.mjs` builds the source-only internet-maintenance Lambda
+  into `backend/services/documents/dist/response-maintenance-lambda`, separate from private SQL
+  controls and isolated generation. Actual bundle smoke checks default-off/extra-content refusal;
+  `tests/response-maintenance-bundle.test.mjs` verifies emitted capability isolation. Set exact
+  clean `ARTIFACT_SOURCE_SHA` for committed provenance. No publisher or runtime activation is
+  introduced. Reviewed IAM, scheduling, retention and original writer drain remain prerequisites.

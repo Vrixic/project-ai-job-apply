@@ -9,6 +9,17 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-066 starts from fresh main `bde17d9` with exact open #535 head
+`0c91183` as an explicit source dependency. A default-off internet maintenance Lambda now
+connects separate owned failed/completed reads to private fence/disposal controls and the
+existing provider cleanup adapter. No caller classification or provider identity is accepted.
+49 focused cases and 141 real PostgreSQL response-inventory cases (nine new native-composition
+cases) pass. The actual emitted bundle excludes SQL, S3, rendering and model creation code.
+[Evidence](evidence/d3-response-maintenance-bootstrap-2026-10-04.md). Full verification and
+clean-source artifact binding remain pending. IAM, scheduling, retention, ambiguous abandonment,
+writer drain and accountable/deployed acceptance remain. No deployment/activation or D1/D3
+completion; hosted CI/CD stays deferred until production launch.
+
 2026-10-04 D3-065 exact-source verification complete at `e071d9e`: full maintained verifier
 passes 38 typecheck tasks, 39 test tasks and 23 builds, with unchanged public contracts and
 lint baseline. All 1,106 Documents units, 308 real PostgreSQL cases, 1,412 workflow units and
