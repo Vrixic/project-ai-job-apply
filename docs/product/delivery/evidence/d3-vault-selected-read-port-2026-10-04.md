@@ -58,7 +58,15 @@ check → submission permission or truthful refusal. No jurisdiction is inferred
 - PostgreSQL 16.14-alpine, owned tmpfs `ai-job-apply-d3-075-pg`, loopback port 55443, disposable
   `vault_selected_d3_075` database. Profile migrations apply and replay successfully without
   source migration changes. No production PII or raw artifacts are used.
-- Full maintained verifier pending. Fixture removal and Docker/WSL shutdown pending.
+- Full maintained verifier passes on clean source `fb8010b308bb6d9862fa1176fbc4330acf9e33c8`,
+  terminal exit 0 with `Phase 0 repository verification passed.`: 38 typecheck tasks, 39 test
+  tasks and 23 builds. Profile 120 units with 46 database opt-ins skipped; Gateway 298 units
+  with 15 opt-in skips; Workflows 1,588 units with 57 opt-in skips. The Profile SQL cases above
+  ran separately against PostgreSQL. Formatting, contract, security/operational, restore,
+  Compose and emitted-isolation checks pass. Existing lint baseline remains 0 errors,
+  15 warnings and 58 informational notes. `.tmp/d3-075-full-verification.log`.
+- Exact owned fixture removed, Docker Desktop stopped and WSL shutdown completed, terminal
+  exit 0; shared volumes retained. Only delivery documentation follows verified source.
 
 ## Remaining acceptance
 

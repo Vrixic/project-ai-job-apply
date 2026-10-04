@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-075 clean fb8010b3 passes full maintained verification: 38 typecheck tasks, 39 test tasks, 23 builds; Profile 120 units and unchanged lint. All 46 real Profile SQL cases separately pass, with eight new selected-answer cases; KMS simulated. [Evidence](evidence/d3-vault-selected-read-port-2026-10-04.md). Docker/WSL stopped; only delivery documentation follows. Packet selection/hash/version invalidation, candidate review and accountable/deployed gates remain. No Applications consumer, deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
 2026-10-04 D3-075 starts exact selected-answer private Profile reads on fresh main bde17d9 plus exact #544 8f72e13b. 48 focused units and 46 real Profile SQL cases pass (eight new); KMS simulated. [Evidence](evidence/d3-vault-selected-read-port-2026-10-04.md). Full verifier pending. Packet selection/hash/version invalidation, candidate review, key activation and accountable/deployed gates remain. No Applications consumer, deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
 
 2026-10-04 D3-074 [PR #544](https://github.com/Vrixic/project-ai-job-apply/pull/544) opens on exact #543 3ee4d2c1. Verified source adf46c8a unchanged; only delivery documentation follows. Review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
