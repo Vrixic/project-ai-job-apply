@@ -87,3 +87,10 @@ UI/source-contract shape changes or Docker/WSL startup occur. Native dispatcher/
 release, caller/checkpoint/activity IAM, retained versions, maintained scheduling, retention/
 abandonment/original writer drain and accountable/deployed acceptance remain. D1/D3 stay
 In progress, with hosted CI/CD deferred until production launch.
+
+## Review handoff
+
+[PR #539](https://github.com/Vrixic/project-ai-job-apply/pull/539) opens on exact #538 dependency `c493a7ef`. Verified source/artifact
+`6986b2b` is unchanged; only delivery documentation follows. No GitHub merge, publication,
+deployment or activation occurs. Remaining native dispatch/recovery/release and accountable/
+deployed acceptance remain; D1/D3 stay In progress and hosted checks are not monitored.
