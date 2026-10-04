@@ -21,7 +21,9 @@ the complete verified source tree unchanged. Four exact-clean-source artifacts p
 archive/manifest/bundle/SBOM checks and actual bundled completed-read default-off refusal.
 Artifacts remain unpublished; release must rebuild merged main under unchanged gates. #530 merges
 as `5dae0f6`, preserving verified tree `ea51233`; hosted functional jobs pass while audit/scanner
-fail without waiver. Full maintained verification remains live; runtime/IAM, scheduling, writer drain
+fail without waiver. Full maintained verification passes for `c0da721`: 38 typecheck tasks, 39 test tasks,
+23 builds, unchanged public contracts/formatting/baseline lint and operational/security/Compose/
+scope checks. New source PR/hosted evidence, runtime/IAM, scheduling, writer drain
 and accountable acceptance remain. No public API/frontend, migration, Terraform, deployment or activation; D1/D3 stay In progress.
 
 2026-10-03 D3-060 extends #530 with successful-generation maintenance eligibility and reconciliation.
