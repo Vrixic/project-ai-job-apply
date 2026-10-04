@@ -40,6 +40,7 @@ Invoke-CheckedCommand "Response maintenance bundle dependency isolation" { node 
 Invoke-CheckedCommand "Private preparation port model isolation" { node --test scripts/tests/private-preparation-port-bundle.test.mjs }
 Invoke-CheckedCommand "Preparation durable orchestration isolation" { node --test scripts/tests/preparation-durable-bundle.test.mjs }
 Invoke-CheckedCommand "Preparation starter actor isolation" { node --test scripts/tests/preparation-starter-bundle.test.mjs }
+Invoke-CheckedCommand "Preparation recovery actor isolation" { node --test scripts/tests/preparation-recovery-bundle.test.mjs }
 Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }
 
 $legacy = rg -n -i `

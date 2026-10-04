@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-071 starts native terminal/scheduled preparation recovery from fresh main bde17d9 plus exact #540 14371d70. 82 focused (39 new), twelve real PostgreSQL cases, typecheck/build and emitted actor isolation pass. Original metadata independently verifies settlement; nudges remain separately gated. [Evidence](evidence/d3-preparation-recovery-bootstrap-2026-10-04.md). Full verifier/artifact pending. Release/IAM/scheduling/retention/drain/accountable gates remain; no deployment/activation or D1/D3 completion. Docker/WSL stopped; hosted CI/CD stays deferred until production launch.
+
 2026-10-04 D3-070 [PR #540](https://github.com/Vrixic/project-ai-job-apply/pull/540) opens on exact #539 212e6e2. Verified source/artifact 893e5cfe unchanged; only delivery documentation follows. Review/merge and terminal recovery/release/accountable gates remain; no publication/deployment/activation or phase completion. Hosted CI/CD deferred until production launch.
 
 2026-10-04 D3-070 clean 893e5cfe passes full maintained verification: 38 typechecks, 39 test tasks, 23 builds; 1,539 Workflow units and unchanged lint. 48 focused and seven real PostgreSQL cases plus one unpublished source-bound artifact pass actual refusal and independent archive/bundle/SBOM integrity (31 components). [Evidence](evidence/d3-preparation-starter-bootstrap-2026-10-04.md). Docker/WSL stopped. Terminal recovery/release/IAM/scheduling/retention/drain/accountable gates remain; D1/D3 stay In progress. No publication/deployment/activation; hosted CI/CD deferred until production launch.

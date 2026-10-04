@@ -375,3 +375,10 @@ starter under Workflow dist/preparation-starter-lambda. Actual default-off/wrong
 input probes perform zero fetches. `preparation-starter-bundle.test.mjs` positively requires owning
 dispatch code and excludes emitted private/document/provider/terminal recovery actors.
 No publisher/deployment is added; see [D3-070 evidence](../docs/product/delivery/evidence/d3-preparation-starter-bootstrap-2026-10-04.md).
+
+`build-application-preparation-recovery-lambda.mjs` creates a separate source-bound native family
+under Workflow dist/preparation-recovery-lambda, exporting index.terminalHandler and
+index.reconcileHandler. Actual default-off, wrong-version and invalid-input probes run with zero
+fetches. `preparation-recovery-bundle.test.mjs` positively requires owning recovery and excludes
+emitted starter/Invoke/private/provider actors. No publisher/deployment is added; see
+[D3-071 evidence](../docs/product/delivery/evidence/d3-preparation-recovery-bootstrap-2026-10-04.md).

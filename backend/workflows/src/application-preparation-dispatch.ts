@@ -9,6 +9,7 @@ import {
   type ApplicationPreparationDurableInput,
   validateApplicationPreparationDurableInput,
 } from "./application-preparation-contract.js";
+import { PreparationDispatchPendingError } from "./application-preparation-errors.js";
 
 export type PreparationStarterStore = Pick<
   PostgresApplicationStore,
@@ -21,12 +22,7 @@ export interface PreparationExecutionStarter {
     payload: ApplicationPreparationDurableInput;
   }): Promise<{ executionArn: string }>;
 }
-export class PreparationDispatchPendingError extends Error {
-  constructor() {
-    super("PreparationDispatchPending");
-    this.name = "PreparationDispatchPendingError";
-  }
-}
+export { PreparationDispatchPendingError } from "./application-preparation-errors.js";
 
 /** No environment bootstrap or provider activation. The caller must supply owned private ports. */
 export function createPreparationStarter(

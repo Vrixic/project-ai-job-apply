@@ -208,3 +208,13 @@ versions of the same durable function and never retargets accepted work. Warm dr
 `build:lambda:preparation-starter` creates a separate local artifact; no deployment is implied.
 See [D3-070 evidence](../../docs/product/delivery/evidence/d3-preparation-starter-bootstrap-2026-10-04.md).
 Native terminal recovery, release/IAM/scheduling/retention/drain and accountable acceptance remain.
+
+`application-preparation-recovery-lambda.ts` exports separate terminal and scheduled entrypoints
+from a default-off native artifact. Terminal configuration has no queue/nudge settings; scheduled
+recovery keeps original metadata settlement active with new nudges disabled. Exact retained
+versions and strict envelopes precede managed-secret setup; metadata reads exclude execution data.
+No durable Invoke, model/private activity or document writer is composed. The pure pending-error
+module preserves the existing starter export. `build:lambda:preparation-recovery` packages both
+handlers locally; their separate caller/metadata/queue IAM and scheduling still require release.
+See [D3-071 evidence](../../docs/product/delivery/evidence/d3-preparation-recovery-bootstrap-2026-10-04.md).
+Nothing is deployed or activated; retention/drain and accountable/deployed acceptance remain.
