@@ -54,3 +54,8 @@ that guard. This is logical database recovery, not cluster-role recovery, AWS PI
 acceptance, provider-fetch validation, or deployed evidence. Success emits aggregate metrics only
 after clients close and the exact validated container is removed; the caller remains responsible
 for Docker/WSL runtime shutdown when no following step needs them.
+
+The current source manifest SHA also pins the private TypeScript and PowerShell deletion-restore
+validators. Update those exact identities and their cross-runtime synthetic fixture together with
+the manifest; strict old-boundary refusal stays in place. This source update is not a deployed
+restore operator, container publication or production restore acceptance.

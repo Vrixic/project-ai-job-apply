@@ -112,7 +112,7 @@ if (
   (@($boundary.OwnerNames) -join ",") -cne "applications,billing,documents,jobs,matching,profile,trust" -or
   [int]$boundary.SchemaCount -ne 11 -or
   [int]$boundary.RelationCount -ne 84 -or
-  [int]$boundary.MigrationCount -ne 58 -or
+  [int]$boundary.MigrationCount -ne 59 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."

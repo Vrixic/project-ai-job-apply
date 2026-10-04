@@ -85,3 +85,28 @@ rerunning. The first local image attempt passes package smoke but refuses the om
 SOURCE_DATE_EPOCH. Rerun uses the required source timestamp; local image/full verifier are pending.
 No user-facing change requires browser acceptance. Runtime/IAM, maintained scheduling, ambiguous
 abandonment/writer drain, retention and accountable/deployed acceptance remain open.
+
+
+## Additional local checkpoint
+
+Source commit `60bc469` contains the original eligibility/migration work. Full verification
+then exposed the retained old manifest SHA in the TypeScript/PowerShell deletion-restore
+validators and one old expected migration count in the restore guard test. Synchronize the
+exact new SHA, recompute only generated-synthetic fixture configuration/inspection digests,
+and retain strict historical-boundary refusal. This is required migration rollout work, not
+an acceptance waiver. All 1,412 workflow unit cases now pass (20 existing integration cases
+remain skipped); both restore/operator guard hosts pass, with cross-runtime replay rerun pending.
+
+The local migration image builds with the required deterministic SOURCE_DATE_EPOCH, passes
+package smoke and actual production-runtime smoke in a network-disabled non-root container.
+This local diagnostic image is not a released source-bound image/receipt or AWS evidence.
+The strengthened 59-migration restore replay passes with both immutable failure rows retained.
+Both owned PostgreSQL fixtures were removed, recovery cleanup passed, Docker Desktop stopped
+and WSL shut down. Shared volumes remain intact.
+
+Four private control artifact sets and one isolated actor set build from exact clean `60bc469`.
+All twenty archive/bundle/manifest/SBOM objects pass independent integrity checks, and actual
+bundled read_failed/settle_terminal default-off/closed-input refusals attempt zero fetch calls.
+The initial unconstrained build correctly reports sourceSha=local; rebuild with explicit clean
+ARTIFACT_SOURCE_SHA yields verified committed provenance. Nothing is published or activated.
+Full exact-source verification/rebuilt final artifacts are still pending after restore identity correction.

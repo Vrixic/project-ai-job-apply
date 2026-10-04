@@ -46,3 +46,7 @@ Candidate deletion still cascades this metadata only through the existing owning
 Restore/image inventories add exactly this ninth Documents migration (59 across seven owners);
 prior exact-source boundaries remain historical evidence, not evidence for the new boundary.
 This is source/local validation only, not a deployed migration or production retention policy.
+
+The same release must synchronize both private deletion-restore validators and their synthetic
+contract fixture to the exact new restore-manifest SHA. Prior snapshots require their original
+source/artifact boundary; do not relax the current manifest identity to accept old receipts.

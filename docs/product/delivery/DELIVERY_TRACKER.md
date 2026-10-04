@@ -3173,6 +3173,8 @@ Append only material cross-delivery events.
 
 | 2026-10-04 | D3 | Start D3-065 and implement original-failure eligibility before response maintenance, preserving the owning ledger and existing identity/purge guards. Local focused/unit/real-SQL and runtime smoke pass; whole-boundary restore/image/full verification remain. Open #533/#534 are explicit dependencies, not merged. No deployment/activation or phase completion; owner CI/CD deferral remains. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
 
+| 2026-10-04 | D3 | D3-065 source 60bc469 passes Documents unit/real-SQL, restored immutable failure proof, local image/runtime smoke and five unpublished source-bound artifact checks. Full verifier discovers stale private restore identity; synchronize TypeScript/PowerShell SHA and synthetic fixture with 59-migration manifest. All 1,412 workflow units and both guard hosts pass; exact-source full rerun/final artifacts remain. Docker/WSL stopped. No publication/deployment/activation, CI/CD resumption or phase completion. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
+
 ## Cross-delivery decisions and changes
 
 | Date | Decision or change | Reason | Affected deliveries | Evidence |
