@@ -153,6 +153,15 @@ before it appears, and new runtime function/object permissions need deployment r
 
 ### Source-only provider-work control Lambda bootstrap
 
+`src/cover-letter-cleanup-lambda.ts` is a separate source-only maintenance fence entrypoint.
+Its independent `COVER_LETTER_CLEANUP_CONTROL_ENABLED=true` gate uses the same shared lazy
+target/managed-secret policy and a native one-connection pool. Only the existing Documents
+`fenceForCleanup` method is bound. Running work stays pending; unclaimed admission is permanently
+fenced, including during quarantine. A lost original ACK stays unavailable, not terminal.
+There is no settlement, renewal, capture/read/disposal, model/object/render/Invoke or purge port.
+Even `ledger_terminal` is not a quiescence certificate or permission to delete objects. Reviewed
+maintenance-only caller IAM, build/guard wiring, deployment and activation remain unfinished.
+
 The separate `src/cover-letter-response-capture-lambda.ts` entrypoint supplies only existing
 `reserve` and `recordCreation` controls, with its independent default-off
 `COVER_LETTER_RESPONSE_CAPTURE_ENABLED=true` gate. Both private entrypoints use the shared

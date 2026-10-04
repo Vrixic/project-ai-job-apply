@@ -358,6 +358,18 @@ unfinished/default-off. The proposed protocol and deployment posture are unchang
 
 ## Alternatives
 
+### Source-only private maintenance-fence bootstrap (2026-10-03)
+
+D3-053 reuses the unchanged maintenance fence RPC and Documents admission-fence control through
+the shared lazy target/managed-secret policy and a native bounded SQL pool. Its independent gate
+defaults off. Only `fenceForCleanup` is supplied; unclaimed authority is permanently fenced while
+running work remains pending. Original effects are awaited without retries or local timeout
+settlement. Neither a positive ledger-terminal outcome nor a lost ACK certifies remote
+quiescence or authorizes object/row purge. No settlement, renewal, capture/read/disposal,
+generation, object, renderer or Invoke capability is supplied. Reviewed maintenance-only IAM,
+artifact/build guard wiring, deployed proof and activation remain unfinished. No public/private
+RPC shape, migration, guard/Terraform, frontend or live cloud/model change; still Proposed.
+
 ### Source-only private response-capture Lambda bootstrap (2026-10-03)
 
 D3-052 composes the unchanged capture RPC with only original Documents reservation and

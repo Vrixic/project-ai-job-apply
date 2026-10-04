@@ -11,6 +11,7 @@ import {
   encodeCoverLetterDocument,
 } from "./cover-letter.js";
 import { createCoverLetterCleanupHandler } from "./cover-letter-cleanup-handler.js";
+import { createCoverLetterCleanupLambda } from "./cover-letter-cleanup-lambda.js";
 import {
   COVER_LETTER_PROVIDER_MODEL,
   type CoverLetterProviderSlot,
@@ -115,6 +116,114 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
   async function issue(purpose: CoverLetterWorkPurpose = "private_slots") {
     return work.issue({ ownerUserId, documentId, purpose, requestSha256, consentExpiresAt });
   }
+
+  it.each(["unclaimed", "running", "quarantined", "lost_ack", "concurrent", "disabled"] as const)(
+    "connects private cleanup bootstrap to original real-SQL admission fencing: %s",
+    async (fault) => {
+      const original = (await issue()).authorization;
+      const reference = cleanupReference(original);
+      if (fault === "running" || fault === "quarantined") await work.claim(reference);
+      if (fault === "quarantined")
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-cleanup:3";
+      const env: Record<string, string | undefined> = {
+        COVER_LETTER_CLEANUP_CONTROL_ENABLED: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: "synthetic-cleanup",
+        AWS_LAMBDA_FUNCTION_VERSION: "3",
+        AWS_SESSION_TOKEN: "synthetic-session-token",
+        DATABASE_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+      };
+      let pool: postgres.Sql | undefined;
+      const createPool = vi.fn(
+        (url: string, options: { max: 1; idle_timeout: 20; connect_timeout: 10 }) => {
+          pool = postgres(url, options);
+          return pool;
+        },
+      );
+      const resolve = vi.fn(async () => {
+        if (fault === "disabled") env.COVER_LETTER_CLEANUP_CONTROL_ENABLED = "false";
+        return databaseUrl as string;
+      });
+      const fence = vi.fn<PostgresCoverLetterWorkStore["fenceForCleanup"]>();
+      const createWork = (url: string, enabled: () => boolean) => {
+        const originalWork = new PostgresCoverLetterWorkStore(
+          createPool(url, { max: 1, idle_timeout: 20, connect_timeout: 10 }),
+          enabled,
+        );
+        fence.mockImplementation(async (binding) => {
+          await originalWork.fenceForCleanup(binding);
+          throw Error("SyntheticLostOriginalFenceAck");
+        });
+        return { fenceForCleanup: fence };
+      };
+      try {
+        const cleanup = createCoverLetterCleanupLambda({
+          environment: () => env,
+          resolveDatabaseUrl: resolve,
+          createPool,
+          // Ordinary cases require actual default store composition; injection only loses ACK.
+          ...(fault === "lost_ack" ? { createWork } : {}),
+        });
+        const input = { schemaVersion: 1, action: "fence", documentId, reference };
+        const results = await Promise.all(
+          Array.from({ length: fault === "concurrent" ? 8 : 1 }, () =>
+            cleanup(input, { invokedFunctionArn: target }),
+          ),
+        );
+        expect(resolve).toHaveBeenCalledOnce();
+        const rows = await sql<Array<{ id: string; state: string; expiresAt: Date }>>`
+          SELECT id, state, expires_at AS "expiresAt" FROM documents.cover_letter_work_authorizations
+          WHERE document_id = ${documentId}`;
+        if (fault === "disabled") {
+          expect(results[0]?.outcome).toBe("unavailable");
+          expect(createPool).not.toHaveBeenCalled();
+          expect(rows).toHaveLength(1);
+          expect(rows[0]?.state).toBe("issued");
+          return;
+        }
+        expect(createPool).toHaveBeenCalledOnce();
+        expect(createPool).toHaveBeenCalledWith(databaseUrl, {
+          max: 1,
+          idle_timeout: 20,
+          connect_timeout: 10,
+        });
+        if (!pool) throw Error("SyntheticPoolMissing");
+        const [clock] = await pool`SELECT clock_timestamp() AS at`;
+        expect(clock?.at).toBeInstanceOf(Date);
+        expect(rows).toHaveLength(3);
+        expect(rows.find((row) => row.id === original.id)?.expiresAt).toEqual(original.expiresAt);
+        const running = fault === "running" || fault === "quarantined";
+        const outcome = running ? "pending" : "ledger_terminal";
+        expect(
+          results.every(
+            (result) => result.outcome === (fault === "lost_ack" ? "unavailable" : outcome),
+          ),
+        ).toBe(true);
+        expect(rows.find((row) => row.id === original.id)?.state).toBe(
+          running ? "running" : "revoked",
+        );
+        expect(rows.filter((row) => row.state === "revoked")).toHaveLength(running ? 2 : 3);
+        if (fault === "lost_ack") expect(fence).toHaveBeenCalledOnce();
+        else expect((await cleanup(input, { invokedFunctionArn: target })).outcome).toBe(outcome);
+        if (fault === "quarantined")
+          await expect(work.claim(reference)).rejects.toThrow(/^CoverLetterWorkUnavailable$/u);
+        else expect((await work.claim(reference)).kind).toBe("unavailable");
+        expect(
+          await sql`SELECT id FROM documents.cover_letters WHERE id = ${documentId}`,
+        ).toHaveLength(1);
+        if (running)
+          await expect(
+            sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+          ).rejects.toMatchObject({ code: "55000" });
+        expect(resolve).toHaveBeenCalledOnce();
+      } finally {
+        await pool?.end();
+      }
+    },
+  );
   it.each(["none", "concurrent", "claim_ack", "settle_ack", "disabled", "quarantined"] as const)(
     "connects private Lambda bootstrap to original real-SQL controls: %s",
     async (fault) => {
