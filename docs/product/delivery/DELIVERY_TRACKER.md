@@ -9,6 +9,21 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-058 extends #529 with the private response-disposal bootstrap and maintained
+artifact family. #528 is merged as `792bb92`; its complete main tree matches verified source
+`72072b3`. Integrating main preserves both source changes and all delivery records. The new
+default-off bootstrap uses unchanged private v1 RPC, strict numeric target/managed-secret
+validation and a native one-connection pool exposing read/recordDisposal only. All 30 new and
+96 existing bootstrap tests, typecheck/build and 237 real PostgreSQL Documents cases pass,
+including seven new native-pool/acknowledgement/quarantine cases. Publisher tests pass on both
+PowerShell hosts, including 14 smoke-verifier regressions and refusal of obsolete twelve-object
+private receipts. Two local builds produce four artifacts with sixteen identical companion
+hashes and eight actual bundled refusal checks per build. Exact-commit provenance and full
+maintained verification remain pending. Owned tmpfs fixture removed; Docker Desktop/WSL stopped.
+Reviewed runtime/IAM, cloud publication/deployment, successful-generation cleanup, writer drain
+and accountable acceptance remain. No public/private RPC shape, frontend, migration, Terraform,
+cloud/model or activation change; D1 and D3 remain In progress.
+
 2026-10-03 D3-057 begins on a new backend-only branch from main `cf7a2df` while #528 remains open; its original hosted CI is now terminal:
 quality, catalog, integration and both images pass, while audit/scanner fail without waiver. The separate default-off private response-disposal v1 RPC
 supplies exact original inventory reads and positive terminal-deletion receipt persistence.

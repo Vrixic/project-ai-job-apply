@@ -50,3 +50,21 @@ readback for all eight objects.
 The later dark-deployment operator consumes only the two receipt entries whose suffix is `zip`:
 `key`, `versionId`, `artifactSha256`, and `objectBase64Sha256`. Keep both processing triggers
 disabled until their separate conformance and activation gates pass.
+
+## Private Documents control family
+
+`-ArtifactFamily PrivateDocumentControls` selects a separate closed inventory:
+`cover-letter-provider-control-lambda`, `cover-letter-response-capture-lambda`,
+`cover-letter-cleanup-lambda`, and `cover-letter-response-disposal-lambda`. The local
+`build:lambda:private-controls` command builds those four entrypoints under
+`backend/services/documents/dist/private-control-lambda`, with default-off and forbidden-content
+refusal checks against every actual bundle and no secret fetch.
+
+Its sixteen-object ZIP/manifest/SBOM/checksum matrix uses the dedicated private-control operator
+and receipt roots and immutable `lambda/documents/private-controls` key root. Incomplete legacy
+twelve-object, mixed document-family and duplicate receipts refuse. Existing two-artifact/eight-object
+parser/processor publication stays unchanged. No private family has been published or deployed by
+this source work. The unchanged clean-main, dependency-audit, deterministic-build, exact-version,
+KMS/checksum and immutable-write guards still apply; this family cannot enable functions or IAM.
+Reviewed maintenance-only permissions, runtime composition, writer drain and accountable acceptance
+must precede activation. Response disposal does not settle private work or authorize platform purge.

@@ -118,10 +118,15 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
   `infrastructure/runbooks/deployments/development-public-job-lambda-publication.md`.
 - `build-document-lambdas.mjs` — Builds separate deterministic document coordinator and isolated
   parser artifacts, manifests, and CycloneDX SBOMs; the parser artifact has no database runtime.
+- `build-private-document-lambdas.mjs` — Builds the closed four-entry provider-control, response-capture,
+  maintenance-fence and response-disposal family into its separate private-control output root.
+  Every actual bundle refuses default-off work and extra content without secret transport.
 - `publish-development-document-lambdas.ps1` — Provides the fail-closed local development fallback
   for an exhausted GitHub Actions budget: it tests and reproducibly builds both document Lambda
   artifacts, publishes eight new conditional/versioned/KMS-bound objects, verifies exact checksums
   and metadata, and emits a checksum-reviewed ignored receipt without deploying either Lambda.
+  `-ArtifactFamily PrivateDocumentControls` selects the dedicated four-artifact/sixteen-object
+  family with isolated receipt/key roots and unchanged audit/source/KMS/immutable-write guards.
 - `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
   fallback for the migration-only container. Its cloud-independent `LocalBuild` action proves two
   source-bound `linux/amd64` builds have identical configuration and rootfs identities and passes a

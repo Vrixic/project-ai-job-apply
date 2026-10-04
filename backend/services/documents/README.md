@@ -34,9 +34,13 @@ positive terminal-deletion receipt persistence to private maintenance. It defaul
 one numeric Lambda target, permits one SDK attempt and carries metadata only. Unknown identity,
 lost acknowledgements and deadlines remain unresolved; disposed inventory does not settle work
 or authorize platform purge. Existing capture/work/fence contracts are unchanged. Its handler
-must be published and bound through reviewed maintenance-only IAM before its client is composed;
-bootstrap, artifacts, runtime/IAM, successful-generation disposal, writer drain and deployment
-remain unfinished. Offline Lambda/provider transports and generated-synthetic PostgreSQL tests
+must be published and bound through reviewed maintenance-only IAM before its client is composed.
+
+The source-only `cover-letter-response-disposal-lambda` bootstrap uses the shared lazy
+target/managed-secret policy and a native one-connection pool supplying read/recordDisposal only.
+Its independent `COVER_LETTER_RESPONSE_DISPOSAL_ENABLED` flag defaults off. Reviewed runtime/IAM,
+successful-generation disposal, writer drain and deployment remain unfinished.
+Offline Lambda/provider transports and generated-synthetic PostgreSQL tests
 are layer evidence, not live provider or retention evidence.
 
 The private `./cover-letter-provider` entrypoint supplies transport contracts, injected S3
@@ -162,10 +166,10 @@ before it appears, and new runtime function/object permissions need deployment r
 ## Private original-response capture RPC
 
 The separate local `build:lambda:private-controls` command now builds exactly the provider-control,
-response-capture and cleanup entrypoints into `dist/private-control-lambda`. Actual bundled handlers
+response-capture, cleanup and response-disposal entrypoints into `dist/private-control-lambda`. Actual bundled handlers
 must refuse valid work while their independent flags are off and reject additional content fields
 without secret fetches. The publisher's `PrivateDocumentControls` family has dedicated receipt,
-operator and immutable key roots and exactly twelve companion objects; legacy parser/processor
+operator and immutable key roots and exactly sixteen companion objects; legacy parser/processor
 receipts remain unchanged. This source wiring is not publication, deployment, IAM authentication
 or remote-quiescence proof. Runtime composition and activation remain unfinished and default-off.
 

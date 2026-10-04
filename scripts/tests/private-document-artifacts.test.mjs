@@ -12,6 +12,7 @@ test("private artifact inventory is closed and separate from document processing
       "cover-letter-provider-control-lambda",
       "cover-letter-response-capture-lambda",
       "cover-letter-cleanup-lambda",
+      "cover-letter-response-disposal-lambda",
     ],
   );
   assert.ok(Object.isFrozen(privateDocumentArtifacts));

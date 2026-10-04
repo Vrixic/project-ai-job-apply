@@ -56,6 +56,19 @@ export const privateDocumentArtifacts = Object.freeze([
       outcome: "unavailable",
     }),
   }),
+  Object.freeze({
+    name: "cover-letter-response-disposal-lambda",
+    flag: "COVER_LETTER_RESPONSE_DISPOSAL_ENABLED",
+    error: "CoverLetterResponseDisposalUnavailable",
+    input: Object.freeze({ schemaVersion: 1, action: "read", reference }),
+    unavailable: Object.freeze({
+      schemaVersion: 1,
+      action: "read",
+      reference,
+      outcome: "unavailable",
+      inventory: null,
+    }),
+  }),
 ]);
 
 // The real bundled handler must refuse without secret transport. This is not live IAM proof.

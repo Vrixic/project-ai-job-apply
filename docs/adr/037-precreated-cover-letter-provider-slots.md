@@ -358,6 +358,21 @@ unfinished/default-off. The proposed protocol and deployment posture are unchang
 
 ## Alternatives
 
+### Source-only response-disposal Lambda and artifact composition (2026-10-03)
+
+D3-058 uses the existing D3-057 v1 read/recordDisposal contract through the shared lazy
+private-Documents bootstrap. Its independent default-off gate, exact numeric invoked target,
+same-account qualified managed secret and native one-connection pool precede owner SQL. Original
+effects are awaited without retries or local timeout settlement. No reserve/capture, provider,
+work settlement, renewal, object/renderer, Invoke, finalization or purge capability is supplied.
+The maintained private family now has four artifacts and sixteen companion objects, keeping
+its isolated output/key/receipt roots and the existing parser/processor family unchanged.
+Every bundle refuses default-off work and extra content without secret transport; incomplete
+legacy private receipts refuse. Local artifact/SQL evidence does not prove caller authentication,
+provider retention, private-writer quiescence or deletion permission. Reviewed IAM, cloud publication,
+runtime deployment/activation, successful-generation cleanup and writer drain remain unfinished.
+No public API/frontend, contract change, migration, Terraform or cloud/model effect; still Proposed.
+
 ### Source-only original-response disposal RPC (2026-10-03)
 
 D3-057 supplies a separate closed metadata-only v1 maintenance boundary for exact original
