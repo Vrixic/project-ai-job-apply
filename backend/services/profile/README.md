@@ -28,6 +28,16 @@ It pins the original entry ID, version, field and context before awaiting SQL or
 mutation cannot retarget decryption or the post-decrypt correction/deletion check to a neighbour.
 It remains a point-in-time export snapshot, without a SQL lock across KMS or packet approval.
 
+The private `RestrictedAnswerReuseReader` port adds two exact-selection reads for Applications:
+`readSelectedValue(owner, {id, version, fieldKey, context})` never substitutes a newer revision,
+and `readCurrentReference` checks that same latest active revision without KMS or ciphertext.
+Both detach caller input and require an active owner and database wall-clock expiry. Metadata
+receipts include `validUntilEpochMs` (null means no recorded expiry), so a future admission guard
+can recheck the immutable deadline after waiting for its own lock. Same-value corrections still
+invalidate an old selection. The existing unselected read and portable export retain their shapes.
+This is a locally verified owner boundary, not connected packet reuse, semantic question mapping,
+mandatory candidate review or approval invalidation. No public plaintext route is added.
+
 ## Phase 0 implementation
 
 The initial PostgreSQL module owns provider-neutral identities, job preferences, operations,

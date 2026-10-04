@@ -7,8 +7,8 @@ import { v7 as uuidv7 } from "uuid";
  * values the candidate supplies and chooses to save for reuse (work authorization, voluntary
  * demographics, sponsorship, and similar). Persistence and matching are deliberately split:
  * `packages/domain/src/answer-vault.ts` decides which stored entry answers a question; this file
- * only stores and retrieves ciphertext. The value is never held in the clear in this process
- * longer than one encrypt or decrypt call, and it is never logged.
+ * owns storage and private reuse reads. Plaintext is confined to the requested encryption or
+ * private decrypted read and its snapshot validation; it is never logged.
  *
  * Concurrency follows the same optimistic pattern as Applications packets (`expectedRevision`):
  * the caller supplies the version it last saw (0 for a new entry), and a mismatch is a conflict
@@ -22,6 +22,41 @@ const MAX_VALUE_BYTES = 3_900; // Leaves margin under the 4096-byte ciphertext c
 
 export type RestrictedAnswerValueType = "string" | "text" | "boolean" | "date" | "decimal" | "enum";
 export type RestrictedAnswerSensitivity = "confidential" | "restricted";
+
+/** Candidate-selected identity; never a "latest answer" instruction or inferred context. */
+export interface SelectedRestrictedAnswerReference {
+  id: string;
+  version: number;
+  fieldKey: string;
+  context?: string;
+}
+
+/** Value-free point-in-time receipt. A consumer must check this deadline again at admission. */
+export interface CurrentRestrictedAnswerReference {
+  id: string;
+  version: number;
+  fieldKey: string;
+  context: string;
+  validUntilEpochMs: number | null;
+}
+
+/** Private Profile read boundary. It grants no save, deletion, export or general-list capability. */
+export interface RestrictedAnswerReuseReader {
+  readCurrentReference(
+    userId: string,
+    reference: SelectedRestrictedAnswerReference,
+  ): Promise<CurrentRestrictedAnswerReference | undefined>;
+  readSelectedValue(
+    userId: string,
+    reference: SelectedRestrictedAnswerReference,
+  ): Promise<
+    | (CurrentRestrictedAnswerReference & {
+        valueType: RestrictedAnswerValueType;
+        value: string;
+      })
+    | undefined
+  >;
+}
 
 export interface RestrictedAnswerCiphertext {
   ciphertext: Uint8Array;
@@ -137,6 +172,29 @@ export interface RestrictedAnswerVaultStore {
   removeByField(command: RemoveRestrictedAnswerByFieldCommand): Promise<{ deleted: boolean }>;
 }
 
+const REFERENCE_UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
+
+function selectedReference(userId: string, reference: SelectedRestrictedAnswerReference) {
+  const { id, version, fieldKey } = reference;
+  const context = reference.context ?? "";
+  if (
+    typeof userId !== "string" ||
+    typeof id !== "string" ||
+    typeof fieldKey !== "string" ||
+    typeof context !== "string" ||
+    !REFERENCE_UUID.test(userId) ||
+    !REFERENCE_UUID.test(id) ||
+    !Number.isSafeInteger(version) ||
+    version < 1 ||
+    version > 2_147_483_647
+  ) {
+    throw new RestrictedAnswerVaultInputError("Invalid restricted-answer selection");
+  }
+  assertKey(fieldKey, "fieldKey", true);
+  if (context !== "") assertKey(context, "context", true);
+  return { userId, id, version, fieldKey, context };
+}
+
 function assertKey(value: string | undefined, label: string, required: boolean): void {
   if (value === undefined) {
     if (required) throw new RestrictedAnswerVaultInputError(`${label} is required`);
@@ -216,7 +274,9 @@ interface VersionRow {
   expiresAt: Date | string | null;
 }
 
-export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVaultStore {
+export class PostgresRestrictedAnswerVaultStore
+  implements RestrictedAnswerVaultStore, RestrictedAnswerReuseReader
+{
   constructor(
     private readonly client: postgres.Sql,
     private readonly cipher: RestrictedAnswerCipher | undefined,
@@ -423,6 +483,72 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
   }
 
   /**
+   * Checks an exact selected revision without KMS or ciphertext. Latest-version selection happens
+   * before testing the requested version, so a tombstone or correction cannot resurrect history.
+   * No SQL lock is held, and the receipt is not an atomic cross-owner admission lease.
+   */
+  async readCurrentReference(
+    userId: string,
+    reference: SelectedRestrictedAnswerReference,
+  ): Promise<CurrentRestrictedAnswerReference | undefined> {
+    const selected = selectedReference(userId, reference);
+    const [row] = await this.client<
+      Array<{ id: string; version: number; validUntilEpochMs: number | null }>
+    >`
+      SELECT answer.id, version.version,
+        (extract(epoch FROM version.expires_at) * 1000)::float8 AS valid_until_epoch_ms
+      FROM profile.restricted_answers AS answer
+      JOIN LATERAL (
+        SELECT version, state, expires_at FROM profile.restricted_answer_versions
+        WHERE answer_id = answer.id ORDER BY version DESC LIMIT 1
+      ) AS version ON true
+      WHERE answer.user_id = ${selected.userId}::uuid AND answer.id = ${selected.id}::uuid
+        AND answer.field_key = ${selected.fieldKey}
+        AND coalesce(answer.context, '') = ${selected.context}
+        AND version.version = ${selected.version} AND version.state = 'active'
+        AND (version.expires_at IS NULL OR version.expires_at > clock_timestamp())
+        AND EXISTS (
+          SELECT 1 FROM identity.users AS candidate
+          WHERE candidate.id = answer.user_id AND candidate.account_state = 'active'
+        )
+    `;
+    if (!row || row.id !== selected.id || row.version !== selected.version) return undefined;
+    if (
+      row.validUntilEpochMs !== null &&
+      (typeof row.validUntilEpochMs !== "number" || !Number.isFinite(row.validUntilEpochMs))
+    ) {
+      throw new RestrictedAnswerVaultInputError("Invalid restricted-answer expiry receipt");
+    }
+    return {
+      id: selected.id,
+      version: selected.version,
+      fieldKey: selected.fieldKey,
+      context: selected.context,
+      validUntilEpochMs: row.validUntilEpochMs,
+    };
+  }
+
+  /** Selected preparation read; never substitutes the owner's newer answer for this selection. */
+  async readSelectedValue(
+    userId: string,
+    reference: SelectedRestrictedAnswerReference,
+  ): Promise<
+    | (CurrentRestrictedAnswerReference & {
+        valueType: RestrictedAnswerValueType;
+        value: string;
+      })
+    | undefined
+  > {
+    const selected = selectedReference(userId, reference);
+    const value = await this.readReusableValue(selected, selected);
+    if (!value) return undefined;
+    // Read the deadline from the exact original immutable version after decryption. A concurrent
+    // correction/deletion/quarantine must withhold the value, not refresh its selection.
+    const current = await this.readCurrentReference(selected.userId, selected);
+    return current ? { ...current, valueType: value.valueType, value: value.value } : undefined;
+  }
+
+  /**
    * Reads and decrypts the caller's own currently active entry for a question, for a future
    * server-side consumer (Applications packet preparation) rather than any HTTP response. It is
    * never exposed through a Gateway route: a restricted answer's plaintext leaves this boundary
@@ -435,8 +561,19 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
   }): Promise<
     { id: string; version: number; valueType: RestrictedAnswerValueType; value: string } | undefined
   > {
+    return this.readReusableValue(input);
+  }
+
+  private async readReusableValue(
+    input: { userId: string; fieldKey: string; context?: string },
+    selected?: SelectedRestrictedAnswerReference,
+  ): Promise<
+    { id: string; version: number; valueType: RestrictedAnswerValueType; value: string } | undefined
+  > {
     const { userId, fieldKey } = input;
     const context = input.context ?? "";
+    const selectedId = selected?.id ?? null;
+    const selectedVersion = selected?.version ?? null;
     const [row] = await this.client<
       Array<{
         id: string;
@@ -457,6 +594,8 @@ export class PostgresRestrictedAnswerVaultStore implements RestrictedAnswerVault
       WHERE answer.user_id = ${userId}::uuid
         AND answer.field_key = ${fieldKey}
         AND coalesce(answer.context, '') = ${context}
+        AND answer.id = coalesce(${selectedId}::uuid, answer.id)
+        AND version.version = coalesce(${selectedVersion}::integer, version.version)
         AND version.state = 'active'
         AND (version.expires_at IS NULL OR version.expires_at > clock_timestamp())
         AND EXISTS (
