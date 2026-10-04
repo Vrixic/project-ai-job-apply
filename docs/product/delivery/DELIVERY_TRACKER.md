@@ -9,6 +9,16 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-03 D3-056 starts on a fresh backend-only branch from merged #527/main `cf7a2df`.
+Two real PostgreSQL regressions reproduce private vault reuse after owner quarantine, both
+before and during KMS. Both reads now require the exact Identity owner to remain active;
+no SQL lock spans decryption. All 93 Profile unit and 35 PostgreSQL cases, typecheck/build
+and the strengthened two-case owner-isolation regression pass locally with simulated KMS.
+Full maintained verification passes terminally: 38 typecheck tasks, 39 test tasks and 23 builds,
+formatting, unchanged baseline lint, operational/security regressions, Compose and product scope.
+The owned tmpfs fixture is removed; Docker Desktop and WSL are stopped. Source review/merge, deployment and external phase gates remain open;
+D1 and D3 remain In progress. No frontend, API, migration, Terraform or activation change.
+
 2026-10-03 D3-055 starts from merged main `1922dd9`, whose complete tree matches the
 verified #526 head. Hosted quality, catalog, integration and both container jobs pass;
 audit/scanner fail without waiver. Inspecting the existing private vault reuse read exposes

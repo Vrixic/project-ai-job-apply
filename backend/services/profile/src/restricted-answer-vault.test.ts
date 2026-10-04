@@ -115,6 +115,8 @@ describe("restricted answer reuse read", () => {
     for (const query of queries) {
       expect(query.text).toContain("version.expires_at > clock_timestamp()");
       expect(query.text).toContain("ORDER BY version DESC LIMIT 1");
+      expect(query.text).toContain("candidate.id = answer.user_id");
+      expect(query.text).toContain("candidate.account_state = 'active'");
       expect(query.values).not.toContain("synthetic-saved-value");
     }
   });
