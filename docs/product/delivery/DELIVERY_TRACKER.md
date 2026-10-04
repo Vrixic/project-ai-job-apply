@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-074 [PR #544](https://github.com/Vrixic/project-ai-job-apply/pull/544) opens on exact #543 3ee4d2c1. Verified source adf46c8a unchanged; only delivery documentation follows. Review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
 2026-10-04 D3-074 clean adf46c8a passes full maintained verification: 38 typecheck tasks, 39 test tasks, 23 builds; Applications 120 units, Gateway 298 with 15 opt-in skips and Workflows 1,588 with 57 opt-in skips; unchanged lint. Separate 67 Applications and five Gateway real SQL cases pass. [Evidence](evidence/d3-pre-dispatch-approval-recheck-2026-10-04.md). Docker/WSL stopped; only delivery documentation follows. Review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
 
 2026-10-04 D3-074 starts pre-dispatch approval rechecking on fresh main bde17d9 plus exact #543 3ee4d2c1. Five real SQL reproductions establish the stale-dispatch gap. 120 Applications units, 67 Applications SQL, five Gateway SQL and authenticated HTTP/projection checks pass after the fix; build/typecheck/formatting pass. [Evidence](evidence/d3-pre-dispatch-approval-recheck-2026-10-04.md). Full verifier pending; review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.

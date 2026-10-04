@@ -8,6 +8,8 @@ D1/D3 remain In progress. Hosted CI/CD remains deferred until production launch.
 Started from freshly fetched main `bde17d9ed94448fb04393f295122176a875a8d2b`, then
 fast-forwarded exact open #543 `3ee4d2c196770b74a113b358824e8cb5238add53`.
 Branch: `fix/d3-pre-dispatch-approval-recheck`.
+Review: [PR #544](https://github.com/Vrixic/project-ai-job-apply/pull/544), stacked on #543.
+Only delivery documentation follows verified source `adf46c8aec1d401407976dce666a236cb3277561`.
 
 The existing store checked approval at attempt start, then issued a later write-ahead dispatch
 receipt without rechecking approval expiry or current bindings. Five real PostgreSQL reproductions
