@@ -33,7 +33,16 @@ that original binding in both SQL reads and KMS. The neighbour cannot substitute
   `ai-job-apply-d3-073-pg`, loopback port 55441, database `vault_export_d3_073`.
   Existing Profile migration runner applies the real schema. KMS is an in-process synthetic
   cipher; this is not live KMS, managed authentication or deployed export acceptance.
-- Full maintained verifier: pending. Temporary fixture removal and Docker/WSL shutdown initiated.
+- Clean source `03c6d294064d1bb530617b5f11a0a8b372b31609` passes the maintained
+  `scripts/verify-phase0.ps1` with terminal exit 0 and completion marker, log
+  `.tmp/d3-073-full-verification-03c6d294.log`: 38 typecheck tasks, 39 test tasks, 23 builds;
+  Profile 96 unit cases (38 opt-in integration skips), Workflows 1,588 unit cases (57 opt-in
+  integration skips); formatting/contracts/security/operational/restore/Compose and emitted
+  actor-isolation checks pass. Lint remains 0 errors, 15 warnings and 58 informational notes.
+- Temporary fixture removed; Docker Desktop stopped and WSL shutdown completed with exit 0.
+  Shared volumes retained. No immediately following task requires Docker.
+- Only delivery documentation follows the verified source. Review/merge and a compatible
+  deployed export release remain; no artifact publication or live acceptance is claimed.
 
 ## Compatibility and remaining work
 
