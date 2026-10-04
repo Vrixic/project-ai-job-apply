@@ -17,7 +17,8 @@ native-bootstrap cases cover terminal statuses, quarantine, lost committed termi
 another running writer. All 285 PostgreSQL cases, 1,084 Documents units and 283 AI SDK units
 pass. Combined full verification passes 38 typecheck tasks, 39 test tasks, 23 builds and the
 compiled bundle isolation check, with unchanged public contracts/formatting/lint baseline.
-Combined exact-source artifact builds remain.
+Five exact-clean-source artifact sets build from `f23accd`; all archive/bundle/manifest/SBOM
+checks and actual bundled default-off refusals pass, unpublished.
 No GitHub merge, publication/deployment/activation or phase completion. CI/CD stays deferred.
 
 

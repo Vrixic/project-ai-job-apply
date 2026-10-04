@@ -103,3 +103,11 @@ and scope. Rebuilt combined exact-source artifacts remain.
 Logs: `.tmp/d3-064-combined-integration-final.log`,
 `.tmp/d3-064-combined-full-verification.log`. IAM, original writer drain, maintained retention/
 disposal, production composition, accountable/deployed acceptance and D1/D3 exit gates remain.
+
+Combined exact clean source `f23accd` builds all five artifact sets (20 local files): isolated
+provider plus the four existing private controls. Independent archive/bundle/manifest/SBOM
+integrity checks pass for all five; actual bundled default-off/closed-input refusal passes,
+including `settle_terminal` with zero fetch calls. The isolated archive SHA-256 is
+`79140fde006cb45df3f0d1845f57b00c896761309d66271ee84fbf95ce400a41`.
+Artifacts remain unpublished. Logs: `.tmp/d3-064-combined-isolated-artifact.log` and
+`.tmp/d3-064-combined-private-artifacts.log`. Later recording changes documentation only.
