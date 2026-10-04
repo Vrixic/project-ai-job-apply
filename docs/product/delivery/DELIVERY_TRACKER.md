@@ -16,9 +16,12 @@ needs the owning eligibility read across the private boundary. Add metadata-only
 refuse. Bootstrap binds the existing owned read, with default-off gates unchanged. All 103
 focused RPC/bootstrap cases, 979 Documents unit cases, typecheck/build and 262 real PostgreSQL
 cases pass (nine new native-pool/RPC cases). Two public generations leave types unchanged.
-The owned fixture is removed; Docker Desktop stopped and WSL shutdown finishing. #530 merges
+The owned fixture is removed; Docker Desktop/WSL stopped. Main integrates as `c0da721` with
+the complete verified source tree unchanged. Four exact-clean-source artifacts pass independent
+archive/manifest/bundle/SBOM checks and actual bundled completed-read default-off refusal.
+Artifacts remain unpublished; release must rebuild merged main under unchanged gates. #530 merges
 as `5dae0f6`, preserving verified tree `ea51233`; hosted functional jobs pass while audit/scanner
-fail without waiver. Main integration/full verification, runtime/IAM, scheduling, writer drain
+fail without waiver. Full maintained verification remains live; runtime/IAM, scheduling, writer drain
 and accountable acceptance remain. No public API/frontend, migration, Terraform, deployment or activation; D1/D3 stay In progress.
 
 2026-10-03 D3-060 extends #530 with successful-generation maintenance eligibility and reconciliation.
