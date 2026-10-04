@@ -12,6 +12,7 @@ export * from "./cover-letter-provider-invoke.js";
 export * from "./cover-letter-provider-recovery.js";
 export * from "./cover-letter-read.js";
 export * from "./cover-letter-response-capture-handler.js";
+export * from "./cover-letter-response-disposal-handler.js";
 export * from "./cover-letter-response-reconciliation.js";
 export * from "./cover-letter-response-store.js";
 export * from "./cover-letter-store.js";

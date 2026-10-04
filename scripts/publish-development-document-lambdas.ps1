@@ -52,8 +52,8 @@ audit, two deterministic builds, and every bucket/artifact guard before writing 
 object set. Verify performs an independent exact-version readback. No action deploys Lambda code or
 enables a trigger.
 
-PrivateDocumentControls is a separate three-artifact/twelve-object family for the private
-provider-control, response-capture and maintenance-fence entrypoints. It uses dedicated local
+PrivateDocumentControls is a separate four-artifact/sixteen-object family for the private
+provider-control, response-capture, maintenance-fence and response-disposal entrypoints. It uses dedicated local
 output, receipt and immutable key roots; it never extends an existing Document receipt. Select
 it only for separately authorized publication. Building or publishing does not authenticate,
 deploy or activate these default-off controls.
@@ -113,7 +113,7 @@ $artifactNames = @(
   } elseif ($isApplicationsRecovery) {
     @("applications-attempt-recovery-lambda")
   } elseif ($isPrivateDocumentControls) {
-    @("cover-letter-provider-control-lambda", "cover-letter-response-capture-lambda", "cover-letter-cleanup-lambda")
+    @("cover-letter-provider-control-lambda", "cover-letter-response-capture-lambda", "cover-letter-cleanup-lambda", "cover-letter-response-disposal-lambda")
   } else {
     @("document-processor-lambda", "document-parser-lambda")
   }

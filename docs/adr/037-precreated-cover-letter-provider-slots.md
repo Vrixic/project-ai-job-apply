@@ -358,6 +358,37 @@ unfinished/default-off. The proposed protocol and deployment posture are unchang
 
 ## Alternatives
 
+### Source-only response-disposal Lambda and artifact composition (2026-10-03)
+
+D3-058 uses the existing D3-057 v1 read/recordDisposal contract through the shared lazy
+private-Documents bootstrap. Its independent default-off gate, exact numeric invoked target,
+same-account qualified managed secret and native one-connection pool precede owner SQL. Original
+effects are awaited without retries or local timeout settlement. No reserve/capture, provider,
+work settlement, renewal, object/renderer, Invoke, finalization or purge capability is supplied.
+The maintained private family now has four artifacts and sixteen companion objects, keeping
+its isolated output/key/receipt roots and the existing parser/processor family unchanged.
+Every bundle refuses default-off work and extra content without secret transport; incomplete
+legacy private receipts refuse. Local artifact/SQL evidence does not prove caller authentication,
+provider retention, private-writer quiescence or deletion permission. Reviewed IAM, cloud publication,
+runtime deployment/activation, successful-generation cleanup and writer drain remain unfinished.
+No public API/frontend, contract change, migration, Terraform or cloud/model effect; still Proposed.
+
+### Source-only original-response disposal RPC (2026-10-03)
+
+D3-057 supplies a separate closed metadata-only v1 maintenance boundary for exact original
+inventory reads and positive terminal-deletion receipts. It has no reserve/creation capture,
+model, work settlement, renewal, finalization or purge port. Absent or reserved inventory is
+unresolved; a disposed response does not prove private-writer or platform quiescence. Client
+and handler default off, pin the exact numeric target and use one SDK attempt. Original receipt
+persistence is awaited without effect retry or local timeout settlement; durable inventory
+readback may recover a committed-but-lost acknowledgement. Quarantine permits draining original
+receipts without issuing new dispatch authority. Handler publication and reviewed maintenance-only
+IAM must precede client composition; older capture/control handlers refuse these commands.
+Bootstrap, maintained artifacts, production runtime/IAM, successful-generation cleanup, writer
+drain and deployed/accountable acceptance remain unfinished. Local tests use synthetic metadata,
+offline Lambda/provider transports and real PostgreSQL. No public API, schema migration,
+frontend, Terraform, model/cloud call, activation or deployment; this ADR remains Proposed.
+
 ### Source-only private maintenance-fence bootstrap (2026-10-03)
 
 D3-053 reuses the unchanged maintenance fence RPC and Documents admission-fence control through
