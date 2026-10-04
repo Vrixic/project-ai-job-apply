@@ -1,8 +1,10 @@
 /** Private activity composition only. Never import this renderer/AI boundary into the Gateway. */
+export { createCoverLetterDocument, encodeCoverLetterDocument } from "./cover-letter.js";
 
 export * from "./cover-letter-cleanup-contract.js";
 export * from "./cover-letter-cleanup-handler.js";
 export * from "./cover-letter-draft-recovery.js";
+export * from "./cover-letter-export.js";
 export * from "./cover-letter-generation.js";
 export * from "./cover-letter-objects.js";
 export * from "./cover-letter-persistence.js";

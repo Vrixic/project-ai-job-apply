@@ -14,3 +14,8 @@ Contains pure, stable value objects and primitives that have identical meaning a
 - `schemas/v1/` — Versioned domain entity schemas and their ownership registry.
 
 Service-specific entities and policies stay with their owning service instead of being centralized here.
+
+CandidateDataExport v1 optionally carries ready cover-letter paragraphs with `reviewRequired=true`.
+The bounded fields appear together; pending letters cannot contain them. Existing metadata-only
+exports remain valid, while old strict readers require upgrade before the producer is activated.
+No object identities, prompts, grants or provider responses enter this portability extension.

@@ -382,3 +382,7 @@ index.reconcileHandler. Actual default-off, wrong-version and invalid-input prob
 fetches. `preparation-recovery-bundle.test.mjs` positively requires owning recovery and excludes
 emitted starter/Invoke/private/provider actors. No publisher/deployment is added; see
 [D3-071 evidence](../docs/product/delivery/evidence/d3-preparation-recovery-bootstrap-2026-10-04.md).
+
+`tests/cover-letter-export-bundle.test.mjs` checks the compiled owned export reader/codec and
+excludes generation/work/provider/Invoke actors. It is part of the maintained verifier.
+See [D3-072 evidence](../docs/product/delivery/evidence/d3-cover-letter-export-content-2026-10-04.md); no deployment is implied.

@@ -19,6 +19,10 @@
     "./cover-letter-runtime": {
       "types": "./dist/src/cover-letter-runtime.d.ts",
       "default": "./dist/src/cover-letter-runtime.js"
+    },
+    "./cover-letter-export": {
+      "types": "./dist/src/cover-letter-export.d.ts",
+      "default": "./dist/src/cover-letter-export.js"
     }
   },
   "scripts": {

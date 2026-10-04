@@ -516,3 +516,10 @@ and accountable/deployed acceptance remain open. Nothing is deployed or activate
 pools for document persistence, work and candidate leases. Final-document settlement refuses
 other purposes before SQL; the lease receives only its frozen lease method. Native codec and
 connected activity evidence is in [D3-068](../../../docs/product/delivery/evidence/d3-preparation-activity-bootstrap-2026-10-04.md).
+
+The dedicated `cover-letter-export` entrypoint reads exact saved IDs/versions under an active
+candidate lease, checks metadata and pinned object/canonical hashes, and returns only paragraph
+text/citations. It never selects a latest same-hash draft or regenerates missing bytes.
+The native factory exposes a frozen read port, owns one Date/JSON pool and fixed one-attempt S3.
+It defaults off, rechecks activation around reads, and never exports object/work/provider identities.
+See [D3-072 evidence](../../../docs/product/delivery/evidence/d3-cover-letter-export-content-2026-10-04.md).

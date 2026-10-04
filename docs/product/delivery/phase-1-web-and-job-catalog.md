@@ -4,7 +4,7 @@
 - Start: 2026-08-11
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-10-03
+- Last updated: 2026-10-04
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d1--useful-web-product-and-canonical-job-catalog)
 
 ## Objective
@@ -20,6 +20,12 @@ continuously provisioned application compute, or always-on staging without measu
 release/recovery requirement. Keep staging dormant between bounded acceptance windows.
 
 ## Current implementation checkpoint
+
+2026-10-04 cross-phase source checkpoint: D3-072 adds exact saved cover-letter paragraphs to
+the existing candidate export through the Documents owner, retaining metadata-only compatibility
+and default-off native activation. Seven real SQL cases and focused/contract/read-isolation checks
+pass. [Evidence](evidence/d3-cover-letter-export-content-2026-10-04.md). Full verifier/artifact checks and release/accountable
+acceptance remain; no deployment/activation or D1/D3 phase exit changes.
 
 2026-10-03 cross-phase privacy checkpoint: owner-approved [D3-042 private cleanup control](phase-3-application-preparation.md)
 permanently fences unclaimed cover-letter authority without changing public APIs or frontend.

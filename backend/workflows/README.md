@@ -218,3 +218,11 @@ module preserves the existing starter export. `build:lambda:preparation-recovery
 handlers locally; their separate caller/metadata/queue IAM and scheduling still require release.
 See [D3-071 evidence](../../docs/product/delivery/evidence/d3-preparation-recovery-bootstrap-2026-10-04.md).
 Nothing is deployed or activated; retention/drain and accountable/deployed acceptance remain.
+
+Candidate export can enrich ready cover letters with verified saved paragraphs/review metadata
+through the Documents owner. Pending entries and legacy exports remain metadata-only. Native
+privacy activity composes the separate read pool only for exact `COVER_LETTER_EXPORT_ENABLED=true`
+and available document KMS configuration. Withdrawal refuses subsequent reads; no model/provider
+or document write is composed. Updated export readers must precede producer activation because
+old strict validators reject the new optional fields. See [D3-072 evidence](../../docs/product/delivery/evidence/d3-cover-letter-export-content-2026-10-04.md).
+No deployment/activation is implied; read IAM, release, privacy and deployed acceptance remain.
