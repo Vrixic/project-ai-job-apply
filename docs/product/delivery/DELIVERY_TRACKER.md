@@ -16,7 +16,9 @@ receipt and durable readback preserve unresolved outcomes. No generic inventory 
 port is used. Initial 73 focused/876 unit/239 SQL cases pass. After integrating merged #529/main
 `280953c`, combined source `1433473` passes all 958 Documents unit and 253 real PostgreSQL
 cases (sixteen new success-maintenance cases), with typecheck/build. The owned tmpfs fixture
-is removed; Docker Desktop/WSL are stopped. Final-source full verification and production private eligibility RPC/runtime/IAM,
+is removed; Docker Desktop/WSL are stopped. Full maintained verification passes for combined
+source `1433473`: 38 typecheck tasks, 39 test tasks, 23 builds, unchanged public contracts,
+formatting/baseline lint and operational/security/Compose/scope checks. Production private eligibility RPC/runtime/IAM,
 scheduling, writer drain and deployed/accountable acceptance remain. D1/D3 stay In progress.
 
 Original #530 transport head `da07a57` hosted checks are terminal: quality, catalog,
