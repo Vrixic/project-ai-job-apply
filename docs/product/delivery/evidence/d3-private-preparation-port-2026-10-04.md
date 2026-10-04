@@ -84,3 +84,10 @@ maintained scheduling, transient retention/expiry, ambiguous abandonment, origin
 and accountable security/privacy/deployed acceptance remain. Migration 0009/current-source
 restore release from #535 still precedes updated owning functions. No phase-exit box changes;
 D1/D3 remain In progress and hosted CI/CD remains deferred until production launch.
+
+The compiled-port guard `scripts/tests/private-preparation-port-bundle.test.mjs` also passes.
+It positively requires owning evidence, controlled preparation/initialization and original
+draft/provider-result recovery, and rejects emitted legacy direct generation, ModelGateway,
+OpenAI/background/cleanup implementations, isolated actor, provider-key resolver and maintenance
+actor. Parsed barrel reexports with zero emitted bytes are not capabilities. The maintained
+verifier now includes this boundary check; this is not a native activity artifact or deployment.
