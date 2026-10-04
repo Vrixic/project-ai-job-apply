@@ -24,6 +24,9 @@ Owner, field and context are detached before asynchronous work. This is a point-
 not packet approval or an active-candidate lease; an eventual Applications consumer must preserve
 those separate controls and mandatory review. No public route exposes this plaintext port.
 The separate candidate-export reader intentionally permits expired saved values for portability.
+It pins the original entry ID, version, field and context before awaiting SQL or KMS. Caller
+mutation cannot retarget decryption or the post-decrypt correction/deletion check to a neighbour.
+It remains a point-in-time export snapshot, without a SQL lock across KMS or packet approval.
 
 ## Phase 0 implementation
 
