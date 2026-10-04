@@ -42,6 +42,7 @@ export function createCoverLetterProviderControlLambda(
         settleProviderDispatch: work.settleProviderDispatch.bind(work),
         settleRejectedProviderDispatch: work.settleRejectedProviderDispatch.bind(work),
         settleUndispatchedProviderDispatch: work.settleUndispatchedProviderDispatch.bind(work),
+        settleTerminalProviderDispatch: work.settleTerminalProviderDispatch.bind(work),
       };
     });
   return createPrivateDocumentsLambda<
@@ -51,12 +52,15 @@ export function createCoverLetterProviderControlLambda(
     flag: "COVER_LETTER_PROVIDER_CONTROL_ENABLED",
     validateInput: validateProviderControlInput,
     invalidInput: () => new CoverLetterProviderControlError(),
-    unavailable: (input): CoverLetterProviderControlOutput => ({
-      schemaVersion: 1,
-      action: input.action,
-      documentId: input.documentId,
-      outcome: "unavailable",
-    }),
+    unavailable: (input): CoverLetterProviderControlOutput =>
+      input.action === "settle_terminal"
+        ? { ...input, outcome: "unavailable" }
+        : {
+            schemaVersion: 1,
+            action: input.action,
+            documentId: input.documentId,
+            outcome: "unavailable",
+          },
     createControl: (url, functionArn, enabled) =>
       createCoverLetterProviderControlHandler({
         functionArn,

@@ -64,6 +64,7 @@ export async function originalBackgroundResponse(options: {
   apiKey: string;
   transport: typeof fetch;
   body: Record<string, unknown>;
+  terminalReceipts?: boolean;
 }): Promise<Record<string, unknown>> {
   const { request, capture, enabled, transport } = options;
   request.signal.throwIfAborted();
@@ -137,6 +138,7 @@ export async function originalBackgroundResponse(options: {
     verify(value);
   }
   request.signal.throwIfAborted();
-  if (!enabled() || value.status !== "completed") throw Error();
+  if (!enabled() || (value.status !== "completed" && options.terminalReceipts !== true))
+    throw Error();
   return value;
 }

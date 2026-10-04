@@ -130,6 +130,83 @@ async function backgroundFixture() {
 }
 
 describe("isolated original background capture", () => {
+  async function terminalFixture(status: string, patch: Record<string, unknown> = {}) {
+    const f = await backgroundFixture();
+    const original = f.transport.getMockImplementation();
+    if (!original) throw Error("SyntheticMissingTransport");
+    const value = await (await original("https://api.openai.com/v1/responses")).json();
+    f.transport.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...value,
+          status,
+          output: [{ text: "SyntheticDiscardedContent" }],
+          ...patch,
+        }),
+      ),
+    );
+    return f;
+  }
+  it.each(["failed", "cancelled", "incomplete"] as const)(
+    "positively captured original %s uses separate terminal closure",
+    async (terminalStatus) => {
+      const f = await terminalFixture(terminalStatus);
+      const handler = f.make();
+      await expect(handler(f.input)).resolves.toMatchObject({ outcome: "failed" });
+      expect(f.work.settleTerminalProviderDispatch).toHaveBeenCalledWith(
+        {
+          id: otherId,
+          documentId,
+          purpose: "provider_dispatch",
+          requestSha256: f.input.request.sha256,
+        },
+        {
+          kind: "terminal_no_content",
+          reference: { schemaVersion: 1, responseId: "resp_originalActor1", createdAt: 1790942460 },
+          terminalStatus,
+        },
+      );
+      expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+      expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+      expect(f.current("result")).toMatchObject({ state: "pending" });
+      await expect(handler(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+      expect(f.transport).toHaveBeenCalledTimes(1);
+      expect(f.work.settleTerminalProviderDispatch).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("lost terminal SQL acknowledgement leaves in progress and never redispatches", async () => {
+    const f = await terminalFixture("failed");
+    f.work.settleTerminalProviderDispatch.mockRejectedValue(Error("SyntheticLostTerminalACK"));
+    const handler = f.make();
+    await expect(handler(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+    await expect(handler(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+    expect(f.work.settleTerminalProviderDispatch).toHaveBeenCalledTimes(1);
+    expect(f.transport).toHaveBeenCalledTimes(1);
+    expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+  });
+  it("legacy work port cannot fall back to output-rejection settlement", async () => {
+    const f = await terminalFixture("failed");
+    Object.defineProperty(f.work, "settleTerminalProviderDispatch", { value: undefined });
+    await expect(f.make()(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+    expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+  });
+  it.each([{ model: "other" }, { background: false }, { store: true }, { tools: [{}] }])(
+    "invalid original terminal metadata cannot settle: %j",
+    async (patch) => {
+      const f = await terminalFixture("failed", patch);
+      await expect(f.make()(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+      expect(f.work.settleTerminalProviderDispatch).not.toHaveBeenCalled();
+      expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+      expect(f.current("result")).toMatchObject({ state: "pending" });
+    },
+  );
+  it("lost positive capture acknowledgement cannot settle original terminal work", async () => {
+    const f = await terminalFixture("cancelled");
+    f.capture.recordCreation.mockRejectedValue(Error("SyntheticLostCaptureACK"));
+    await expect(f.make()(f.input)).resolves.toMatchObject({ outcome: "in_progress" });
+    expect(f.work.settleTerminalProviderDispatch).not.toHaveBeenCalled();
+  });
   it("acknowledges original capture before result write and settlement, with no duplicate dispatch", async () => {
     const f = await backgroundFixture();
     const handler = f.make();
@@ -319,6 +396,9 @@ async function fixture(
   const port = coverLetterProviderTransitionPort(objects);
   let workClaimed = false;
   const work = {
+    settleTerminalProviderDispatch: vi.fn<
+      PostgresCoverLetterWorkStore["settleTerminalProviderDispatch"]
+    >(async () => undefined),
     settleUndispatchedProviderDispatch: vi.fn<
       PostgresCoverLetterWorkStore["settleUndispatchedProviderDispatch"]
     >(async () => undefined),

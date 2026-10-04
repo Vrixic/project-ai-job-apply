@@ -74,6 +74,51 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("terminal settlement bootstrap compatibility", () => {
+  const terminal = {
+    schemaVersion: 1 as const,
+    documentId,
+    reference,
+    action: "settle_terminal" as const,
+    termination: {
+      kind: "terminal_no_content" as const,
+      reference: { schemaVersion: 1 as const, responseId: "resp_original1", createdAt: 1791028800 },
+      terminalStatus: "failed" as const,
+    },
+  };
+  it("default-off terminal request refuses before managed secret", async () => {
+    const f = setup();
+    f.env.COVER_LETTER_PROVIDER_CONTROL_ENABLED = "false";
+    await expect(f.run(terminal, { invokedFunctionArn: target })).resolves.toEqual({
+      ...terminal,
+      outcome: "unavailable",
+    });
+    expect(f.resolve).not.toHaveBeenCalled();
+  });
+  it("legacy composed work refuses without ordinary settlement", async () => {
+    const f = setup();
+    await expect(f.run(terminal, { invokedFunctionArn: target })).resolves.toMatchObject({
+      outcome: "unavailable",
+      action: "settle_terminal",
+    });
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+    expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+  });
+  it("qualified bootstrap routes explicit terminal port and echoes original receipt", async () => {
+    const f = setup();
+    const settleTerminalProviderDispatch = vi.fn(async () => undefined);
+    f.createWork.mockReturnValue({ ...f.work, settleTerminalProviderDispatch } as ReturnType<
+      typeof f.createWork
+    >);
+    await expect(f.run(terminal, { invokedFunctionArn: target })).resolves.toEqual({
+      ...terminal,
+      outcome: "settled",
+    });
+    expect(settleTerminalProviderDispatch).toHaveBeenCalledWith(reference, terminal.termination);
+    expect(f.resolve).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("source-only private provider-control Lambda bootstrap", () => {
   it("composes the production one-connection pool and real ledger without a fake work factory", async () => {
     const f = setup();

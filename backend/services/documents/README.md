@@ -371,6 +371,28 @@ disposal reconciliation remain pending. Neither a stored response nor a disposal
 platform quiescence or provider-wide deletion. Apply the forward migration with compatible restore
 and maintenance consumers before any separately reviewed activation. No guessed-identity backfill.
 
+## Original failed background work settlement
+
+The captured actor uses the additive terminal gateway path and separate private v1
+`settle_terminal` action. Its closed metadata envelope echoes the original work reference,
+response id/time and failed/cancelled/incomplete status. The numeric-version client uses one
+SDK attempt and refuses mismatched echoes. Older handler compositions refuse this action
+without falling back to ordinary or rejected-output settlement.
+
+The default-off native control bootstrap binds the owning SQL operation. In one transaction,
+it validates the exact owned acknowledged response inventory (or matching disposed status),
+fences unclaimed future phases and settles only the original running provider grant. Replay
+preserves its terminal timestamp. Quarantine does not prevent draining original work; it still
+prevents new admission. Running private/final writers remain running. No SQL lock spans provider
+I/O. Inventory remains unchanged and no result object is written by this path.
+
+This remains an authenticated private-runtime responsibility. Deploy the compatible control
+handler before a separately reviewed actor pinned to its numeric version; an older composition
+leaves work unresolved. No public API, migration or backfill changes are required. Timeouts,
+404, lost capture/settlement acknowledgements and generic errors never authorize another call
+or certify quiescence. Private writer drain, disposal maintenance, IAM and deployed acceptance
+remain open; nothing is activated by this source change.
+
 ## Planned expansion
 
 - `tailoring/` — Evidence-grounded selection and rewriting.

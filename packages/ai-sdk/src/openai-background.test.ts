@@ -2,6 +2,203 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { type BackgroundResponseCapture, ModelGateway } from "./gateway.js";
 import { OpenAiLunaProvider } from "./openai.js";
 
+describe("original background terminal receipts (offline only)", () => {
+  const run = (f: ReturnType<typeof fixture>) =>
+    f.gateway.generateWithBackgroundTermination(request, disclosure, f.capture);
+
+  it.each(["failed", "cancelled", "incomplete"] as const)(
+    "%s original creation closes with metadata only after capture",
+    async (terminalStatus) => {
+      const f = fixture();
+      f.transport.mockImplementation(async () =>
+        response({
+          status: terminalStatus,
+          output: [{ secret: "SyntheticDiscardedContent" }],
+          error: { message: "SyntheticDiscardedError" },
+        }),
+      );
+      const ordinary = vi.spyOn(f.provider, "completeBackgroundForLifecycle");
+      const receipt = await run(f);
+      expect(receipt).toEqual({
+        kind: "terminal_no_content",
+        terminalStatus,
+        reference: { schemaVersion: 1, responseId: "resp_original1", createdAt: 1791028800 },
+        model: f.provider.identity,
+        promptId: "cover_letter",
+        promptVersion: "1.0.0",
+      });
+      expect(f.events).toEqual(["reserve", "capture"]);
+      expect(f.transport).toHaveBeenCalledTimes(1);
+      expect(ordinary).not.toHaveBeenCalled();
+      expect(JSON.stringify(receipt)).not.toContain("SyntheticDiscarded");
+    },
+  );
+
+  it.each(["failed", "cancelled", "incomplete"] as const)(
+    "old capture API still throws for %s",
+    async (status) => {
+      const f = fixture();
+      f.transport.mockResolvedValue(response({ status }));
+      await expect(f.run()).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+      expect(f.capture.recordCreation).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["failed", "cancelled", "incomplete"] as const)(
+    "polls the exact captured response before %s receipt",
+    async (status) => {
+      vi.useFakeTimers();
+      const f = fixture();
+      f.transport
+        .mockResolvedValueOnce(response({ status: "queued" }))
+        .mockResolvedValueOnce(response({ status }));
+      const pending = run(f);
+      await vi.advanceTimersByTimeAsync(1_001);
+      await expect(pending).resolves.toMatchObject({
+        kind: "terminal_no_content",
+        terminalStatus: status,
+      });
+      expect(f.transport.mock.calls.map(([url, input]) => [String(url), input?.method])).toEqual([
+        ["https://api.openai.com/v1/responses", "POST"],
+        ["https://api.openai.com/v1/responses/resp_original1", "GET"],
+      ]);
+      expect(f.capture.recordCreation).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("completed original response retains successful JSON result", async () => {
+    const f = fixture();
+    await expect(run(f)).resolves.toMatchObject({
+      kind: "completed",
+      result: { value: JSON.parse(text) },
+    });
+  });
+
+  it("older provider ports remain compatible without error fallback", async () => {
+    const f = fixture();
+    Object.defineProperty(f.provider, "completeBackgroundForTermination", { value: undefined });
+    const old = vi.spyOn(f.provider, "completeBackgroundForLifecycle");
+    await expect(run(f)).resolves.toMatchObject({ kind: "completed" });
+    expect(old).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { id: "resp_changed" },
+    { created_at: 1791028801 },
+    { model: "other" },
+    { background: false },
+    { store: true },
+    { tools: [{}] },
+    { previous_response_id: "resp_other" },
+  ])("changed terminal poll metadata refuses: %j", async (patch) => {
+    vi.useFakeTimers();
+    const f = fixture();
+    f.transport
+      .mockResolvedValueOnce(response({ status: "queued" }))
+      .mockResolvedValueOnce(response({ status: "failed", ...patch }));
+    const checked = expect(run(f)).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    await vi.advanceTimersByTimeAsync(1_001);
+    await checked;
+  });
+
+  it("lost original capture ACK cannot return even a terminal creation receipt", async () => {
+    const f = fixture();
+    f.transport.mockResolvedValue(response({ status: "cancelled" }));
+    f.capture.recordCreation.mockRejectedValue(Error("SyntheticLostACK"));
+    await expect(run(f)).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    expect(f.transport).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([404, 500])("HTTP %i never proves original termination", async (status) => {
+    const f = fixture();
+    f.transport.mockResolvedValue(
+      new Response(JSON.stringify(responseValue({ status: "failed" })), { status }),
+    );
+    await expect(run(f)).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    expect(f.capture.recordCreation).not.toHaveBeenCalled();
+  });
+
+  it("late fulfilled receipt after gateway deadline cannot become terminal proof", async () => {
+    vi.useFakeTimers();
+    const f = fixture({ timeoutMs: 10 });
+    let finish: (value: never) => void = () => undefined;
+    vi.spyOn(f.provider, "completeBackgroundForTermination").mockImplementation(
+      async (_request, capture) => {
+        await capture.reserve();
+        await capture.recordCreation({
+          schemaVersion: 1,
+          responseId: "resp_original1",
+          createdAt: 1791028800,
+        });
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+    );
+    const checked = expect(run(f)).rejects.toMatchObject({ code: "PROVIDER_TIMEOUT" });
+    await vi.advanceTimersByTimeAsync(11);
+    await checked;
+    finish({
+      kind: "terminal_no_content",
+      reference: { schemaVersion: 1, responseId: "resp_original1", createdAt: 1791028800 },
+      terminalStatus: "failed",
+    } as never);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.transport).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { terminalStatus: "completed" },
+    { terminalStatus: "in_progress" },
+    { terminalStatus: "queued" },
+    { reference: { schemaVersion: 1, responseId: "resp_other", createdAt: 1791028800 } },
+    { reference: { schemaVersion: 1, responseId: "resp_original1", createdAt: 1791028801 } },
+    { text: "SyntheticForbiddenText" },
+    { reference: null },
+  ])("forged fulfilled terminal metadata is refused: %j", async (patch) => {
+    const f = fixture();
+    vi.spyOn(f.provider, "completeBackgroundForTermination").mockImplementation(
+      async (_request, capture) => {
+        await capture.reserve();
+        await capture.recordCreation({
+          schemaVersion: 1,
+          responseId: "resp_original1",
+          createdAt: 1791028800,
+        });
+        return {
+          kind: "terminal_no_content",
+          terminalStatus: "failed",
+          reference: { schemaVersion: 1, responseId: "resp_original1", createdAt: 1791028800 },
+          ...patch,
+        } as never;
+      },
+    );
+    await expect(run(f)).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    expect(f.transport).not.toHaveBeenCalled();
+  });
+
+  it("fulfilled receipt without positive original capture is refused", async () => {
+    const f = fixture();
+    vi.spyOn(f.provider, "completeBackgroundForTermination").mockResolvedValue({
+      kind: "terminal_no_content",
+      terminalStatus: "failed",
+      reference: { schemaVersion: 1, responseId: "resp_original1", createdAt: 1791028800 },
+    });
+    await expect(run(f)).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+    expect(f.capture.reserve).not.toHaveBeenCalled();
+  });
+
+  it("a thrown receipt never becomes positive fulfillment", async () => {
+    const f = fixture();
+    vi.spyOn(f.provider, "completeBackgroundForTermination").mockRejectedValue({
+      kind: "terminal_no_content",
+      terminalStatus: "failed",
+      reference: { schemaVersion: 1, responseId: "resp_original1", createdAt: 1791028800 },
+    });
+    await expect(run(f)).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
+  });
+});
+
 const approvedAt = new Date("2026-10-03T12:00:00.000Z");
 const text = JSON.stringify({ paragraphs: [{ text: "Synthetic services", factIds: ["f1"] }] });
 const responseValue = (patch: Record<string, unknown> = {}) => ({
