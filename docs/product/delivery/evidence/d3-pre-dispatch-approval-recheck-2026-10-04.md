@@ -64,7 +64,15 @@ approval evaluation → dispatch receipt or committed no-effect refusal.
   Applications runner is independently replayed. Fault injection only installs a generated,
   exact-application trigger in a guarded loopback disposable database; it replaces no guard and
   removes its own trigger/function. No fixture data is production candidate data.
-- Full maintained verifier pending. Temporary fixture removal and Docker/WSL shutdown initiated.
+- Full maintained verifier passes on clean source `adf46c8aec1d401407976dce666a236cb3277561`,
+  terminal exit 0 and `Phase 0 repository verification passed.`: 38 typecheck tasks, 39 test
+  tasks and 23 builds. Applications 120 units; Gateway 298 units with 15 explicit opt-in skips;
+  Workflows 1,588 units with 57 explicit opt-in skips. Contract, formatting, security/operational,
+  restore-boundary, Compose and emitted-isolation checks pass. Lint retains the existing
+  0 errors, 15 warnings and 58 informational notes. These unit tasks do not replace the real
+  SQL runs above. `.tmp/d3-074-full-verification-adf46c8a.log`.
+- Exact owned temporary fixture removed; Docker Desktop stopped and WSL shutdown completed,
+  terminal exit 0. Shared volumes retained. Only delivery documentation follows verified source.
 
 [Applications SQL regressions](../../../../backend/services/applications/src/store.integration.test.ts),
 [Gateway SQL composition](../../../../backend/gateway/src/applications-database.integration.test.ts),
