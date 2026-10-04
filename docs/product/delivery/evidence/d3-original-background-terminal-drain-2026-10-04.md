@@ -1,4 +1,4 @@
-# D3-063 original background terminal drain — local source evidence
+# D3-063 original background terminal drain - local source evidence
 
 Date: 2026-10-04. Backend-only branch `feat/d3-original-background-terminal-drain`,
 base main `bde17d9ed94448fb04393f295122176a875a8d2b`. No deployment or activation.
@@ -61,3 +61,8 @@ Implementation and executable evidence: [gateway](../../../../packages/ai-sdk/sr
 [private contract](../../../../backend/services/documents/src/cover-letter-provider-control-contract.ts),
 [owning transaction](../../../../backend/services/documents/src/cover-letter-work-store.ts),
 and [SQL cases](../../../../backend/services/documents/src/cover-letter-response-store.integration.test.ts).
+
+Four private Lambda artifacts built from exact clean source `c5a561e`. Independent archive,
+manifest, bundle and CycloneDX SBOM checks pass. The actual bundled `settle_terminal` action
+refuses while disabled and rejects extra content fields, with zero fetch calls. Existing
+builder refusal checks also pass. Sixteen companion objects remain local and unpublished.
