@@ -173,3 +173,13 @@ operator. The old direct-URL/per-marker replay path is removed. See the
 and [Phase 2 record](../../docs/product/delivery/phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery)
 for exact implementation, deployment and acceptance status. Local tests do not imply IAM activation
 or cloud replay acceptance.
+
+`application-preparation-documents.ts` now supplies a default-off source composition from the
+existing Applications activity to owned evidence, controlled initialization, one isolated Invoke
+and original draft recovery. Recovery receives no initializer/Invoke capability; original consent
+is detached and never refreshed. An independent candidate-lease pool avoids nested-query deadlock
+while preserving each owner's supported codecs. 39 focused and seven real PostgreSQL cases pass,
+including durable SDK execution and consent-expired recovery without another dispatch. See
+[local evidence](../../docs/product/delivery/evidence/d3-private-preparation-port-2026-10-04.md).
+Native bootstrap/artifacts, IAM/scheduling, retention/drain and accountable/deployed gates remain;
+no production activity or provider is activated by this factory.

@@ -550,3 +550,12 @@ prevents downstream effects. The actual emitted artifact excludes SQL, S3, rende
 creation code. Target matching is not authentication, and no publication/runtime IAM/scheduler
 or activation is introduced. Retention, abandonment, original writer drain and accountable/
 deployed acceptance remain prerequisites; this ADR remains Proposed.
+
+Source-only D3-067 (2026-10-04) supplies the private Applications preparation port into owned
+evidence, controlled initialization, original isolated Invoke and independent draft recovery.
+Retry recovery has no initializer/Invoke capability and never renews original disclosure. Owner
+codecs and independent candidate-lease/persistence pools remain mandatory. Seven connected SQL
+cases include durable SDK execution, original-result recovery after consent expiry and lost ACKs
+without new dispatch; external transports/authentication are simulated. Native bootstrap/artifacts,
+IAM/scheduling, retention/abandonment/drain and accountable/deployed acceptance remain open.
+Nothing is deployed or activated; this ADR remains Proposed.

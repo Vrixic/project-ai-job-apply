@@ -9,6 +9,17 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-067 starts from fresh main `bde17d9` with exact open #536 source
+`2a69030` as an explicit dependency. A default-off private Applications→Documents port now
+connects owned evidence, independently pooled candidate leases, controlled slot initialization,
+one isolated Invoke and original draft recovery to the existing preparation activity.
+Retry recovery has no initializer/Invoke capability. 39 focused cases and seven real PostgreSQL
+cases pass, including one durable SDK run, post-disclosure recovery, lost acknowledgements and
+quarantine. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). Full verification pending;
+native activity bootstrap/artifacts, IAM/scheduling, retention/abandonment/writer drain and
+accountable/deployed acceptance remain. No deployment/activation or D1/D3 completion.
+Hosted CI/CD stays deferred until production launch.
+
 2026-10-04 D3-066 [PR #536](https://github.com/Vrixic/project-ai-job-apply/pull/536) opens on #535 for reviewed native response maintenance. Locally verified source/artifact a63233a remains unpublished and disabled; review/merge and release gates remain.
 
 2026-10-04 D3-066 exact-source verification completes at `a63233a`: full maintained
