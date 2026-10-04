@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+Combined source 8f37b1e integrates merged #531/main 7cf19d0, preserves all original D3-061/D3-062 history and has exactly the verified main application tree. Full maintained verification passes again: 38 typecheck tasks, 39 test tasks, 23 builds, unchanged contracts/formatting/baseline lint and operational/security/Compose/scope checks. The provider-free policy and test source are byte-unchanged from independently tested 257ae8c; no repeated SQL or UI check is claimed or needed for this policy-only change. Owner defers hosted CI/CD until production launch; no source security waiver, attachment, deployment or activation.
+
 2026-10-04 owner decision: defer hosted CI/CD until production launch; continue backend source work with local verification. This does not waive production dependency/security, deployment, privacy or acceptance gates. #531 merges source-only as 7cf19d0; complete tree 77c82be matches locally verified exact head 6c3a1ab. Hosted integration/containers were not started because of GitHub payment/spending limits and are not claimed verified. No deployment or activation.
 
 2026-10-04 D3-062 begins independently from fresh main `5dae0f6`: prepare an unattached,

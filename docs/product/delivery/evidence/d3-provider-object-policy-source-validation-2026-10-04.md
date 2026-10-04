@@ -48,3 +48,8 @@ hosted SQL/container verification or deployment is claimed.
 
 The owner's CI/CD deferral permits source progress and merging with local verification; it
 does not authorize deployment, activation, production security exceptions or phase completion.
+
+Combined source `8f37b1e` passes the same complete verifier after integrating merged #531;
+all backend/packages/frontend application files equal verified main `7cf19d0`, and the policy
+and tests are byte-identical to `257ae8c`. Merge conflicts were confined to delivery records;
+all original D3-061 work-log rows and summary are preserved alongside the owner decision.
