@@ -103,3 +103,7 @@ Windows/Node 24/pnpm 10 with real PostgreSQL 16.14 and simulated external authen
 Lambda transport and provider responses. There was no user-facing change requiring a UI pass.
 Reviewed IAM, maintained caller/scheduling, retention/expiry, abandonment/writer drain and
 accountable/deployed acceptance remain. D1/D3 are not complete.
+
+Review: [PR #536](https://github.com/Vrixic/project-ai-job-apply/pull/536) is open, stacked on exact #535 source 0c91183.
+The tested production source and artifact remain a63233a; later commits only record evidence.
+No GitHub merge, deployment, activation or hosted-check monitoring is performed.

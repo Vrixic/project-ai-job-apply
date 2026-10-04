@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-066 [PR #536](https://github.com/Vrixic/project-ai-job-apply/pull/536) opens on #535 for reviewed native response maintenance. Locally verified source/artifact a63233a remains unpublished and disabled; review/merge and release gates remain.
+
 2026-10-04 D3-066 exact-source verification completes at `a63233a`: full maintained
 verifier passes 38 typecheck tasks, 39 test tasks and 23 builds, including all 1,155 Documents
 units, unchanged lint baseline and both emitted-bundle isolation checks. 141 real PostgreSQL
