@@ -29,7 +29,7 @@ rendering state, version diffs, and artifact metadata.
 - `src/resume-tailoring.ts` serves the fixed `resume-tailoring-v1` request from the document processor ([ADR-031](../../../docs/adr/031-deterministic-resume-tailoring-in-documents-runtime.md)): an owner-scoped parsed-resume lookup, the verified normalized read, deterministic tailoring, and verified DOCX/PDF rendering. Nothing is persisted beyond the content hash the packet stores. The dependency-free wire contract is `src/resume-tailoring-contract.ts`, which the Gateway imports.
 
 Generative rewrites are not implemented. Cover-letter preparation (D3-017) is in progress.
-The separate source-only response-disposal v1 RPC exposes exact original inventory reads and
+The separate source-only response-disposal v1 RPC exposes exact original inventory/complete-eligibility reads and
 positive terminal-deletion receipt persistence to private maintenance. It defaults off, pins
 one numeric Lambda target, permits one SDK attempt and carries metadata only. Unknown identity,
 lost acknowledgements and deadlines remain unresolved; disposed inventory does not settle work
@@ -397,3 +397,20 @@ required. Lost SQL ACK recovers from eligible disposed inventory without repeati
 lost provider ACK or subsequent 404 stays unresolved. Defaults remain off. No work settlement,
 renewal, dispatch, document write or platform purge capability is supplied. Private eligibility
 RPC, reviewed runtime/IAM, scheduling, writer drain and deployed acceptance remain unfinished.
+
+
+### Private completed-eligibility RPC compatibility
+
+The metadata-only disposal v1 contract adds `read_completed`, retaining `read` and
+`record_disposal` shapes. Exact action/reference echoes distinguish the owning completed
+eligibility read from ordinary inventory. The client exposes `readCompleted`; the existing
+lazy, default-off disposal bootstrap binds the owning SQL method after target/managed-secret
+validation. No new function, flag, artifact family, credential or effect authority is introduced.
+
+Older composed stores may omit the optional method; the new action returns unavailable without
+ordinary-inventory fallback. Older deployed handler versions refuse unsupported new requests;
+new clients do not retry or downgrade. Roll out the new handler first, then pin clients to its
+exact numeric version under reviewed maintenance-only IAM. Ordinary read/disposal clients retain
+their existing protocol. Missing eligibility remains null, never completion or purge authority.
+No migration/backfill is needed. This is local/source compatibility evidence; cloud publication,
+runtime/IAM, maintained scheduling, writer drain and deployed/accountable acceptance remain.

@@ -9,6 +9,23 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-061 begins from fresh main `280953c`, integrating verified open #530 source
+`e091f50` as a dependency while its exact-head hosted jobs remain live. Successful maintenance
+needs the owning eligibility read across the private boundary. Add metadata-only v1
+`read_completed` with exact action echo and no ordinary-read fallback; older compositions
+refuse. Bootstrap binds the existing owned read, with default-off gates unchanged. All 103
+focused RPC/bootstrap cases, 979 Documents unit cases, typecheck/build and 262 real PostgreSQL
+cases pass (nine new native-pool/RPC cases). Two public generations leave types unchanged.
+The owned fixture is removed; Docker Desktop/WSL stopped. Main integrates as `c0da721` with
+the complete verified source tree unchanged. Four exact-clean-source artifacts pass independent
+archive/manifest/bundle/SBOM checks and actual bundled completed-read default-off refusal.
+Artifacts remain unpublished; release must rebuild merged main under unchanged gates. #530 merges
+as `5dae0f6`, preserving verified tree `ea51233`; hosted functional jobs pass while audit/scanner
+fail without waiver. Full maintained verification passes for `c0da721`: 38 typecheck tasks, 39 test tasks,
+23 builds, unchanged public contracts/formatting/baseline lint and operational/security/Compose/
+scope checks. New source PR/hosted evidence, runtime/IAM, scheduling, writer drain
+and accountable acceptance remain. No public API/frontend, migration, Terraform, deployment or activation; D1/D3 stay In progress.
+
 2026-10-03 D3-060 extends #530 with successful-generation maintenance eligibility and reconciliation.
 The completion-only port passed full verification; durable ready content and all three positively
 settled original phases must now precede provider disposal. Exact bound metadata, positive completed

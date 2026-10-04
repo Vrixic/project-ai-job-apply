@@ -115,6 +115,16 @@ export class CoverLetterResponseDisposalClient {
     return output.inventory;
   }
 
+  /** Owned successful-generation eligibility only, never ordinary inventory fallback. */
+  async readCompleted(
+    reference: Parameters<PostgresCoverLetterResponseStore["readCompleted"]>[0],
+  ): ReturnType<PostgresCoverLetterResponseStore["readCompleted"]> {
+    const output = await this.call({ schemaVersion: 1, action: "read_completed", reference });
+    if (output.action !== "read_completed" || output.outcome !== "read")
+      throw new CoverLetterResponseDisposalError();
+    return output.inventory;
+  }
+
   async recordDisposal(
     reference: Parameters<PostgresCoverLetterResponseStore["recordDisposal"]>[0],
     cleanup: Parameters<PostgresCoverLetterResponseStore["recordDisposal"]>[1],

@@ -38,6 +38,7 @@ export function createCoverLetterResponseDisposalLambda(
       const responses = new PostgresCoverLetterResponseStore(client, enabled);
       return {
         read: responses.read.bind(responses),
+        readCompleted: responses.readCompleted.bind(responses),
         recordDisposal: responses.recordDisposal.bind(responses),
       };
     });
@@ -49,9 +50,9 @@ export function createCoverLetterResponseDisposalLambda(
     validateInput: validateResponseDisposalInput,
     invalidInput: () => new CoverLetterResponseDisposalError(),
     unavailable: (input): CoverLetterResponseDisposalOutput =>
-      input.action === "read"
-        ? { ...input, outcome: "unavailable", inventory: null }
-        : { ...input, outcome: "unavailable" },
+      input.action === "record_disposal"
+        ? { ...input, outcome: "unavailable" }
+        : { ...input, outcome: "unavailable", inventory: null },
     createControl: (url, functionArn, enabled) =>
       createCoverLetterResponseDisposalHandler({
         functionArn,

@@ -232,6 +232,144 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     return { cleanup, methods };
   }
 
+  it.each([
+    "none",
+    "quarantined",
+    "unknown",
+    "legacy",
+    "disabled",
+    "foreign_target",
+    "record_ack",
+    "read_ack",
+    "partial",
+  ] as const)(
+    "connects successful maintenance through native disposal bootstrap and exact completed-read RPC: %s",
+    async (fault) => {
+      const original = await successfulDraft(
+        fault === "partial" ? "running" : "settled",
+        fault !== "unknown",
+      );
+      if (fault === "quarantined")
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+      const transport = completedCleanup(original);
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-disposal:7";
+      const env: Record<string, string | undefined> = {
+        COVER_LETTER_RESPONSE_DISPOSAL_ENABLED: fault === "disabled" ? "false" : "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: "synthetic-disposal",
+        AWS_LAMBDA_FUNCTION_VERSION: "7",
+        DATABASE_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+        AWS_SESSION_TOKEN: "synthetic-session-token",
+      };
+      let pool: postgres.Sql | undefined;
+      const createPool = vi.fn(
+        (url: string, options: { max: 1; idle_timeout: 20; connect_timeout: 10 }) => {
+          pool = postgres(url, options);
+          return pool;
+        },
+      );
+      const createResponses =
+        fault === "legacy" || fault === "record_ack"
+          ? (url: string, enabled: () => boolean) => {
+              const responses = new PostgresCoverLetterResponseStore(
+                createPool(url, { max: 1, idle_timeout: 20, connect_timeout: 10 }),
+                enabled,
+              );
+              return {
+                read: responses.read.bind(responses),
+                ...(fault === "legacy"
+                  ? {}
+                  : { readCompleted: responses.readCompleted.bind(responses) }),
+                recordDisposal: async (
+                  binding: CoverLetterWorkReference,
+                  positive: Parameters<typeof responses.recordDisposal>[1],
+                ) => {
+                  await responses.recordDisposal(binding, positive);
+                  if (fault === "record_ack") throw Error("SyntheticCommittedDisposalLostAck");
+                },
+              };
+            }
+          : undefined;
+      const resolveDatabaseUrl = vi.fn(async () => databaseUrl ?? "postgres://invalid");
+      const handler = createCoverLetterResponseDisposalLambda({
+        environment: () => env,
+        resolveDatabaseUrl,
+        createPool,
+        ...(createResponses ? { createResponses } : {}),
+      });
+      const actions: string[] = [];
+      let lostRead = false;
+      const client = new CoverLetterResponseDisposalClient(
+        target,
+        {
+          config: { maxAttempts: async () => 1 },
+          send: async (command) => {
+            const input = JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array));
+            actions.push(input.action);
+            const output = await handler(input, {
+              invokedFunctionArn: fault === "foreign_target" ? target.replace(":7", ":8") : target,
+            });
+            if (fault === "read_ack" && !lostRead) {
+              lostRead = true;
+              throw Error("SyntheticLostEligibilityAck");
+            }
+            return {
+              StatusCode: 200,
+              ExecutedVersion: "7",
+              Payload: new TextEncoder().encode(JSON.stringify(output)),
+            };
+          },
+        },
+        () => true,
+      );
+      const reconcile = createCoverLetterSuccessfulResponseReconciler({
+        responses: client,
+        cleanup: transport.cleanup,
+        enabled: () => true,
+      });
+      try {
+        const positive = fault === "none" || fault === "quarantined";
+        expect(await reconcile(ref, new AbortController().signal)).toEqual(
+          positive ? { kind: "response_disposed", reference: ref } : { kind: "unresolved" },
+        );
+        expect(actions).not.toContain("read");
+        expect(transport.methods).toEqual(
+          positive || fault === "record_ack" ? ["GET", "DELETE"] : [],
+        );
+        if (positive || fault === "record_ack" || fault === "read_ack") {
+          expect(await reconcile(ref, new AbortController().signal)).toEqual({
+            kind: "response_disposed",
+            reference: ref,
+          });
+          expect(transport.methods).toEqual(["GET", "DELETE"]);
+          expect((await store.readCompleted(ref))?.state).toBe("disposed");
+          expect(await work.readDrainState(owner, documentId)).toBe("settled");
+        }
+        if (fault === "disabled" || fault === "foreign_target") {
+          expect(resolveDatabaseUrl).not.toHaveBeenCalled();
+          expect(createPool).not.toHaveBeenCalled();
+        } else {
+          expect(resolveDatabaseUrl).toHaveBeenCalledTimes(1);
+          expect(createPool).toHaveBeenCalledExactlyOnceWith(databaseUrl, {
+            max: 1,
+            idle_timeout: 20,
+            connect_timeout: 10,
+          });
+        }
+      } finally {
+        await pool?.end();
+        if (fault === "partial") {
+          const [slot] = await sql<
+            Array<{ id: string }>
+          >`SELECT id FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose = 'private_slots'`;
+          if (slot) await work.recordSettled({ ...ref, id: slot.id, purpose: "private_slots" });
+        }
+      }
+    },
+  );
+
   it("disposes a successful original response after actual immutable final completion, without changing work or draft", async () => {
     const original = await successfulDraft();
     const beforeWork =
