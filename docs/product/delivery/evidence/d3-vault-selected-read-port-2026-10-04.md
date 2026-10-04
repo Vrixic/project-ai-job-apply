@@ -8,6 +8,8 @@ D1/D3 remain In progress. Hosted CI/CD remains deferred until production launch.
 Freshly fetched main `bde17d9ed94448fb04393f295122176a875a8d2b`, then fast-forwarded
 exact open #544 `8f72e13b08601d72d32d44a72c2818f18611d641`.
 Branch: `feat/d3-vault-selected-read-port`.
+Review: [PR #545](https://github.com/Vrixic/project-ai-job-apply/pull/545), stacked on #544.
+Only delivery documentation follows verified source `fb8010b308bb6d9862fa1176fbc4330acf9e33c8`.
 
 D3-001/D3-005 still require explicit saved-answer reuse through packet preparation and review.
 The existing Profile private read selected the latest answer only by field/context and returned
