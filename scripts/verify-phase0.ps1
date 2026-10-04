@@ -38,6 +38,7 @@ Invoke-CheckedCommand "Build" { pnpm build }
 Invoke-CheckedCommand "Isolated provider bundle dependency isolation" { node --test scripts/tests/isolated-provider-bundle.test.mjs }
 Invoke-CheckedCommand "Response maintenance bundle dependency isolation" { node --test scripts/tests/response-maintenance-bundle.test.mjs }
 Invoke-CheckedCommand "Private preparation port model isolation" { node --test scripts/tests/private-preparation-port-bundle.test.mjs }
+Invoke-CheckedCommand "Preparation durable orchestration isolation" { node --test scripts/tests/preparation-durable-bundle.test.mjs }
 Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }
 
 $legacy = rg -n -i `

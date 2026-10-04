@@ -363,3 +363,9 @@ publication, deployment, role grant or activation is authorized by the builder.
 activity family under Workflow dist/preparation-lambda. It checks the actual bundled default-off
 refusal and strict extra-content rejection with zero fetches. No publisher, deployment or activation
 is added; see [D3-068 evidence](../docs/product/delivery/evidence/d3-preparation-activity-bootstrap-2026-10-04.md).
+
+`build-application-preparation-durable-lambda.mjs` emits a separate native orchestration family
+under Workflow dist/preparation-durable-lambda and probes actual bundled default-off/wrong-version
+refusals before SDK state access with zero fetches. The maintained
+`preparation-durable-bundle.test.mjs` checks emitted owning/AI/SQL/private-runtime isolation.
+No publisher/deployment is added; see [D3-069](../docs/product/delivery/evidence/d3-preparation-durable-bootstrap-2026-10-04.md).

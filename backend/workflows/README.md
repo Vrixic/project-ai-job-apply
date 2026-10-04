@@ -192,3 +192,11 @@ private-activity artifact family; both emitted port/activity checks exclude prov
 See [source evidence](../../docs/product/delivery/evidence/d3-preparation-activity-bootstrap-2026-10-04.md).
 Nothing is deployed or activated; caller IAM, native durable/dispatcher/recovery bootstrap,
 retention/drain and accountable/deployed acceptance remain.
+
+`application-preparation-durable-lambda.ts` qualifies numeric same-account target/activity
+configuration and activation outside deterministic SDK workflow code. Warm drift refuses
+retargeting; private/provider settings refuse before SDK state handling. The existing metadata
+contracts and retry/compensation definitions remain unchanged. `build:lambda:preparation-durable`
+creates a separate local orchestration-only family. See [D3-069 source evidence](../../docs/product/delivery/evidence/d3-preparation-durable-bootstrap-2026-10-04.md).
+Native dispatcher/recovery/release, IAM/scheduling, retention/drain and accountable/deployed
+acceptance remain; nothing is deployed or activated.
