@@ -10,6 +10,7 @@ import {
   ApprovalRefusedError,
   AttemptRefusedError,
   PreparationNotFoundError,
+  StalePacketError,
 } from "@ai-job-apply/applications-service";
 import "reflect-metadata";
 import { createHash } from "node:crypto";
@@ -3804,6 +3805,26 @@ describe("Applications routes", () => {
 
   const token = (scope: string) => issuer.issue(owner, { scope });
   const key = "applications-route-key-0001";
+
+  it("returns a sanitized no-store conflict when dispatch approval expired", async () => {
+    const expired = new StalePacketError(["approval_expired"]);
+    expired.message = "synthetic-private-expired-dispatch";
+    failure = expired;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/attempts/${attemptId}/dispatch`,
+      headers: { authorization: `Bearer ${await token("applications:read applications:write")}` },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({
+      code: "application_packet_stale",
+      title: "Approval expired",
+      detail: "The packet approval expired; review and approve it again",
+    });
+    expect(response.body).not.toContain(expired.message);
+    expect(calls.map((call) => call.method)).toEqual(["dispatchAttempt"]);
+  });
 
   it("accepts opted-in Prepare as 202 without falling through to synchronous packet creation", async () => {
     const request = {

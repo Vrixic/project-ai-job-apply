@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-074 starts pre-dispatch approval rechecking on fresh main bde17d9 plus exact #543 3ee4d2c1. Five real SQL reproductions establish the stale-dispatch gap. 120 Applications units, 67 Applications SQL, five Gateway SQL and authenticated HTTP/projection checks pass after the fix; build/typecheck/formatting pass. [Evidence](evidence/d3-pre-dispatch-approval-recheck-2026-10-04.md). Full verifier pending; review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
 2026-10-04 D3-073 [PR #543](https://github.com/Vrixic/project-ai-job-apply/pull/543) opens on exact #542 bf50b565. Verified source 03c6d294 unchanged; delivery documentation only follows. Review/merge and a compatible deployed export release remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
 
 2026-10-04 D3-073 clean 03c6d294 passes full verification: 38 typecheck tasks, 39 test tasks, 23 builds; Profile 96 units; unchanged lint. Seven export units and 26 real PostgreSQL cases pass, including three reference-retargeting races. [Evidence](evidence/d3-vault-export-reference-snapshot-2026-10-04.md). Docker/WSL stopped; review/merge and compatible deployed export release remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.

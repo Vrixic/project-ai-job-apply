@@ -20,6 +20,7 @@ export const applicationEvents = [
   "packet_created",
   "approved",
   "approval_invalidated",
+  "dispatch_refused",
   "attempt_started",
   "attempt_failed_no_effect",
   "attempt_failed_requires_review",
@@ -48,6 +49,8 @@ const transitions: Readonly<
     cancelled: "cancelled",
   },
   submitting: {
+    // Write-ahead dispatch may discover stale approval before any provider effect.
+    dispatch_refused: "review_required",
     attempt_failed_no_effect: "approved",
     attempt_failed_requires_review: "review_required",
     takeover_requested: "takeover",

@@ -37,7 +37,7 @@ import type {
   PostgresApplicationStore,
   StartAttemptResult,
 } from "./store.js";
-import { ApplicationIntegrityError, StalePacketError } from "./store.js";
+import { ApplicationIntegrityError, AttemptNotFoundError, StalePacketError } from "./store.js";
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -695,8 +695,23 @@ export class ApplicationsService implements ApplicationsApi {
     applicationId: string,
     attemptId: string,
   ): Promise<ApiApplicationAttempt> {
+    const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    if (!current.attempts.some((attempt) => attempt.id === attemptId))
+      throw new AttemptNotFoundError();
+    const live = await this.dependencies.bindings.resolve({
+      ownerUserId,
+      application: current.application,
+      // The dispatch endpoint carries no new observed form. Its original packet form binding
+      // remains the context; the adapter must separately verify the live destination structure.
+      formHash: current.currentPacket?.form?.formHash ?? null,
+    });
     return toApiAttempt(
-      await this.dependencies.store.dispatchAttempt({ ownerUserId, applicationId, attemptId }),
+      await this.dependencies.store.dispatchAttempt({
+        ownerUserId,
+        applicationId,
+        attemptId,
+        current: live,
+      }),
     );
   }
 

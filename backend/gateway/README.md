@@ -15,6 +15,13 @@ The gateway must not perform long-running AI, ingestion, or browser work. It cre
 
 ## D3 cover-letter source boundary (2026-10-02)
 
+The existing submission dispatch route now resolves current Applications owner bindings before
+the write-ahead store check. Missing/foreign applications or attempts refuse before private
+binding reads. Expired queued approval returns the existing `application_packet_stale` 409 with
+fixed review-and-approve guidance and `no-store`; material changes retain new-packet guidance.
+No exception diagnostics or candidate values enter that problem response. Native SQL composition
+and simulated authenticated HTTP tests are local evidence, not live ATS or managed-OIDC acceptance.
+
 Explicit versioned cover-letter opt-in on Prepare routes to a durable `202` operation; omission
 retains `201 Application`. The three new owner reads cover preparation status, exact packet-bound
 preview and PDF/DOCX download. They require `applications:read`, reject unknown/body/query inputs

@@ -95,6 +95,13 @@ export function projectApplicationsFailure(exception: unknown): ApplicationsFail
     );
   }
   if (exception instanceof StalePacketError) {
+    if (exception.reasons.length === 1 && exception.reasons[0] === "approval_expired") {
+      return conflict(
+        "application_packet_stale",
+        "Approval expired",
+        "The packet approval expired; review and approve it again",
+      );
+    }
     return conflict(
       "application_packet_stale",
       "Packet is stale",
