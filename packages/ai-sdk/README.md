@@ -56,6 +56,20 @@ unchanged. Real adapter composition uses offline HTTP responses in tests, never 
 
 ## OpenAI development adapter
 
+### Source-only completion-only disposal
+
+`OpenAiLunaResponseCleanup.deleteCompleted` is a separate completion-only maintenance port.
+It requires exact original id/time/model/settings and `completed` status before one DELETE;
+queued/running, other terminal states and malformed or missing responses stay unresolved.
+It never sends cancellation. Default-off activation, bounded single-attempt I/O, positive
+original deletion acknowledgement and metadata-only results preserve the existing transport
+policy. The failed/abandoned `stopAndDelete` port retains its cancellation behavior.
+
+This source-only port does not establish owned successful-generation eligibility or compose
+runtime/IAM/scheduling. It cannot settle private writers, certify platform quiescence or authorize
+object/row purge. Provider acknowledgement loss/404 is unresolved; no elapsed-time inference,
+retry, polling or generation is supplied. Offline tests use simulated HTTP only; no activation.
+
 ### Source-only original background capture
 
 The opt-in `generateWithBackgroundCapture` path uses a separate provider port, never a

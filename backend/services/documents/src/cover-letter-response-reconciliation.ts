@@ -150,3 +150,63 @@ export function createCoverLetterResponseReconciler(options: {
     }
   };
 }
+
+/** Successful-generation response disposal only, with no admission fence/cancel/work port.
+ * readCompleted must be the owning durable eligibility read, never ordinary inventory read.
+ * Response disposal does not settle writers, certify quiescence or authorize object/row purge.
+ */
+export function createCoverLetterSuccessfulResponseReconciler(options: {
+  responses: Pick<PostgresCoverLetterResponseStore, "readCompleted" | "recordDisposal">;
+  cleanup: Pick<OpenAiLunaResponseCleanup, "deleteCompleted">;
+  enabled?: () => boolean;
+  timeoutMs?: number;
+}) {
+  const enabled = options.enabled ?? (() => false);
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30_000)
+    throw Error("CoverLetterResponseReconciliationUnavailable");
+  return async (raw: unknown, signal: AbortSignal): Promise<CoverLetterResponseReconciliation> => {
+    const unresolved: CoverLetterResponseReconciliation = { kind: "unresolved" };
+    try {
+      if (!enabled() || signal.aborted || !validateProviderControlReference(raw)) return unresolved;
+      const ref = structuredClone(raw);
+      const deadline = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+      const admitted = () => {
+        deadline.throwIfAborted();
+        if (!enabled()) throw Error();
+      };
+      const row = await bounded(options.responses.readCompleted(structuredClone(ref)), deadline);
+      admitted();
+      if (!inventory(row, ref)) return unresolved;
+      if (row.state === "disposed") return { kind: "response_disposed", reference: ref };
+      if (!row.response) return unresolved;
+      const original = structuredClone(row.response);
+      const receipt = await bounded(
+        options.cleanup.deleteCompleted(structuredClone(original), deadline),
+        deadline,
+      );
+      admitted();
+      if (!positive(receipt, original) || receipt.terminalStatus !== "completed") return unresolved;
+      await bounded(
+        options.responses.recordDisposal(structuredClone(ref), structuredClone(receipt)),
+        deadline,
+      );
+      admitted();
+      const committed = await bounded(
+        options.responses.readCompleted(structuredClone(ref)),
+        deadline,
+      );
+      admitted();
+      if (
+        !inventory(committed, ref) ||
+        committed.state !== "disposed" ||
+        committed.response?.responseId !== original.responseId ||
+        committed.response.createdAt !== original.createdAt
+      )
+        return unresolved;
+      return { kind: "response_disposed", reference: ref };
+    } catch {
+      return unresolved;
+    }
+  };
+}

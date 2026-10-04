@@ -380,3 +380,20 @@ and maintenance consumers before any separately reviewed activation. No guessed-
 
 The service creates documents but does not approve or submit applications. Parsed values become
 proposals and cannot be used as confirmed facts without explicit candidate action.
+
+
+## Source-only successful-generation response maintenance
+
+`readCompleted` admits exact original metadata only when the owned draft is durably ready and
+all three request-bound work phases are positively settled. Missing, running or revoked phases
+refuse; no deadline inference is used. Quarantined owners may drain existing completed responses
+without a candidate lease or fresh admission. Disposed non-completed responses cannot satisfy
+successful replay. This read exposes no draft text or quiescence/purge certificate.
+
+`createCoverLetterSuccessfulResponseReconciler` uses this owning read and the separate
+completion-only provider port, never ordinary inventory or failed-work cancellation/fencing.
+Exact original completed deletion receipts precede durable disposal; convergence readback is
+required. Lost SQL ACK recovers from eligible disposed inventory without repeating provider I/O;
+lost provider ACK or subsequent 404 stays unresolved. Defaults remain off. No work settlement,
+renewal, dispatch, document write or platform purge capability is supplied. Private eligibility
+RPC, reviewed runtime/IAM, scheduling, writer drain and deployed acceptance remain unfinished.

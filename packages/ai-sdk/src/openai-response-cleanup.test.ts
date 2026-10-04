@@ -288,3 +288,186 @@ describe("OpenAI background response stop/disposal (offline)", () => {
     expect(cancelled).toHaveBeenCalledTimes(1);
   });
 });
+describe("completion-only provider response disposal (offline)", () => {
+  it("deletes exact original completion without cancellation or exposing output", async () => {
+    const { cleanup, transport } = setup(response("completed"), deleted());
+    expect(await cleanup.deleteCompleted(reference(), signal())).toEqual({
+      kind: "response_deleted",
+      reference: reference(),
+      terminalStatus: "completed",
+    });
+    expect(transport.mock.calls.map(([url, options]) => [url, options?.method])).toEqual([
+      ["https://api.openai.com/v1/responses/resp_synthetic123", "GET"],
+      ["https://api.openai.com/v1/responses/resp_synthetic123", "DELETE"],
+    ]);
+    for (const [, options] of transport.mock.calls) {
+      expect(options).toMatchObject({
+        redirect: "error",
+        headers: { Authorization: "Bearer synthetic-key" },
+      });
+      expect(options?.body).toBeUndefined();
+    }
+  });
+
+  it.each(["queued", "in_progress", "cancelled", "failed", "incomplete", "unknown"])(
+    "leaves %s unresolved with no cancellation or deletion",
+    async (state) => {
+      const { cleanup, transport } = setup(response(state), deleted());
+      expect(await cleanup.deleteCompleted(reference(), signal())).toEqual({ kind: "unresolved" });
+      expect(transport).toHaveBeenCalledExactlyOnceWith(
+        "https://api.openai.com/v1/responses/resp_synthetic123",
+        expect.objectContaining({ method: "GET" }),
+      );
+    },
+  );
+
+  it("defaults off before credentials or network", async () => {
+    const { apiKey, transport } = setup();
+    const cleanup = new OpenAiLunaResponseCleanup({ apiKey, fetch: transport });
+    expect(await cleanup.deleteCompleted(reference(), signal())).toEqual({ kind: "unresolved" });
+    expect(apiKey).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { id: "resp_other" },
+    { created_at: 1 },
+    { model: "other" },
+    { background: false },
+    { store: true },
+    { previous_response_id: "resp_other" },
+    { tools: [{}] },
+  ])("refuses changed original completion %j before deletion", async (extra) => {
+    const { cleanup, transport } = setup(response("completed", extra), deleted());
+    expect(await cleanup.deleteCompleted(reference(), signal())).toEqual({ kind: "unresolved" });
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    null,
+    { ...reference(), createdAt: 0 },
+    { ...reference(), responseId: "resp_../other" },
+    { ...reference(), owner: "extra" },
+  ])("refuses invalid input %j before credentials", async (raw) => {
+    const { cleanup, apiKey, transport } = setup();
+    expect(await cleanup.deleteCompleted(raw, signal())).toEqual({ kind: "unresolved" });
+    expect(apiKey).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("rejects accessors without executing them", async () => {
+    const getter = vi.fn(() => reference().responseId);
+    const raw = reference();
+    Object.defineProperty(raw, "responseId", { get: getter, enumerable: true });
+    const { cleanup, transport } = setup();
+    expect(await cleanup.deleteCompleted(raw, signal())).toEqual({ kind: "unresolved" });
+    expect(getter).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("detaches original metadata before asynchronous completion read", async () => {
+    const { cleanup, transport } = setup();
+    const raw = reference();
+    transport.mockImplementationOnce(async () => {
+      raw.responseId = "resp_changed";
+      raw.createdAt = 1;
+      return json(response("completed"));
+    });
+    transport.mockResolvedValueOnce(json(deleted()));
+    expect(await cleanup.deleteCompleted(raw, signal())).toMatchObject({ reference: reference() });
+    expect(transport.mock.calls[1]?.[0]).toBe(
+      "https://api.openai.com/v1/responses/resp_synthetic123",
+    );
+  });
+
+  it("refuses withdrawal during completion read before deletion", async () => {
+    let enabled = true;
+    const { apiKey, transport } = setup();
+    transport.mockImplementationOnce(async () => {
+      enabled = false;
+      return json(response("completed"));
+    });
+    const cleanup = new OpenAiLunaResponseCleanup({
+      enabled: () => enabled,
+      apiKey,
+      fetch: transport,
+    });
+    expect(await cleanup.deleteCompleted(reference(), signal())).toEqual({ kind: "unresolved" });
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["read", "delete"])("never retries lost %s acknowledgement", async (phase) => {
+    const { cleanup, transport } = setup();
+    if (phase === "delete") transport.mockResolvedValueOnce(json(response("completed")));
+    transport.mockRejectedValueOnce(Error("synthetic confidential diagnostics"));
+    expect(await cleanup.deleteCompleted(reference(), signal())).toEqual({ kind: "unresolved" });
+    expect(transport).toHaveBeenCalledTimes(phase === "read" ? 1 : 2);
+  });
+
+  it.each([
+    null,
+    { ...deleted(), deleted: false },
+    { ...deleted(), id: "resp_other" },
+    { ...deleted(), content: "synthetic" },
+  ])("refuses nonpositive deletion acknowledgement %j", async (ack) => {
+    const { cleanup, transport } = setup(response("completed"), ack);
+    expect(await cleanup.deleteCompleted(reference(), signal())).toEqual({ kind: "unresolved" });
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([404, 429, 500])("does not infer disposal from DELETE HTTP %s", async (status) => {
+    const { cleanup, transport } = setup(response("completed"));
+    transport.mockResolvedValueOnce(new Response("synthetic private response", { status }));
+    expect(await cleanup.deleteCompleted(reference(), signal())).toEqual({ kind: "unresolved" });
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses pre-aborted calls before credentials", async () => {
+    const { cleanup, transport, apiKey } = setup();
+    expect(await cleanup.deleteCompleted(reference(), AbortSignal.abort())).toEqual({
+      kind: "unresolved",
+    });
+    expect(transport).not.toHaveBeenCalled();
+    expect(apiKey).not.toHaveBeenCalled();
+  });
+
+  it("discards a late deletion ACK after local abort without certifying disposal", async () => {
+    const controller = new AbortController();
+    const { cleanup, transport } = setup(response("completed"));
+    let finish: (value: Response) => void = () => undefined;
+    let started: () => void = () => undefined;
+    const deletionStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    transport.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+          started();
+        }),
+    );
+    const pending = cleanup.deleteCompleted(reference(), controller.signal);
+    await deletionStarted;
+    controller.abort();
+    expect(await pending).toEqual({ kind: "unresolved" });
+    const discarded = vi.fn();
+    finish(new Response(new ReadableStream({ cancel: discarded })));
+    await Promise.resolve();
+    expect(discarded).toHaveBeenCalledTimes(1);
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("bounds stalled deletion without retry or elapsed-time completion", async () => {
+    const { apiKey, transport } = setup(response("completed"));
+    transport.mockImplementationOnce(() => new Promise(() => undefined));
+    const cleanup = new OpenAiLunaResponseCleanup({
+      enabled: () => true,
+      apiKey,
+      fetch: transport,
+      timeoutMs: 10,
+    });
+    expect(await cleanup.deleteCompleted(reference(), signal())).toEqual({ kind: "unresolved" });
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(transport.mock.calls[1]?.[1]?.signal?.aborted).toBe(true);
+  });
+});

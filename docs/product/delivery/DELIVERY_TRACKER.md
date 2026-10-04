@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-03
+Last updated: 2026-10-04
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -8,6 +8,33 @@ Program completion: Not completed
 This is the master record for the delivery phases defined in the [product and system architecture](../../PRODUCT_AND_SYSTEM_ARCHITECTURE.md#20-delivery-roadmap). It intentionally tracks actual start and completion dates rather than predicted schedules.
 
 ## Summary
+
+2026-10-03 D3-060 extends #530 with successful-generation maintenance eligibility and reconciliation.
+The completion-only port passed full verification; durable ready content and all three positively
+settled original phases must now precede provider disposal. Exact bound metadata, positive completed
+receipt and durable readback preserve unresolved outcomes. No generic inventory read or cancellation
+port is used. Initial 73 focused/876 unit/239 SQL cases pass. After integrating merged #529/main
+`280953c`, combined source `1433473` passes all 958 Documents unit and 253 real PostgreSQL
+cases (sixteen new success-maintenance cases), with typecheck/build. The owned tmpfs fixture
+is removed; Docker Desktop/WSL are stopped. Full maintained verification passes for combined
+source `1433473`: 38 typecheck tasks, 39 test tasks, 23 builds, unchanged public contracts,
+formatting/baseline lint and operational/security/Compose/scope checks. Production private eligibility RPC/runtime/IAM,
+scheduling, writer drain and deployed/accountable acceptance remain. D1/D3 stay In progress.
+
+Original #530 transport head `da07a57` hosted checks are terminal: quality, catalog,
+integration and both containers pass; audit fails. Scanner remains 65 findings on 30 paths,
+independently outside six changed files. No waiver; expanded success-maintenance head requires
+its own hosted evidence. [Original CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37174998967),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37174998948).
+
+2026-10-03 D3-059 starts independently from fresh main `792bb92` while #529 runs hosted checks.
+Successful-generation cleanup needs a completion-only provider port with no cancellation.
+Exact original completed proof must precede deletion; queued/running and other terminal states
+remain unresolved. All 36 new/57 existing cleanup cases, all 252 AI SDK cases, typecheck/build
+and scoped Biome pass. Five regressions detect reuse of unrestricted cleanup. Full maintained
+verification passes terminally for `ff81ee6`: 38 typecheck tasks, 39 test tasks, 23 builds,
+unchanged public contracts, formatting, baseline lint and operational/security/Compose/scope checks.
+Owned eligibility, runtime/IAM, scheduling, writer drain and deployed/accountable acceptance remain. HTTP is simulated; no model call or activation. D1/D3 stay In progress.
 
 2026-10-03 D3-058 extends #529 with the private response-disposal bootstrap and maintained
 artifact family. #528 is merged as `792bb92`; its complete main tree matches verified source

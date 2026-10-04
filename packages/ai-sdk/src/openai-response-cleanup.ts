@@ -147,6 +147,22 @@ export class OpenAiLunaResponseCleanup {
   }
 
   async stopAndDelete(raw: unknown, signal: AbortSignal): Promise<OpenAiResponseCleanup> {
+    return this.cleanup(raw, signal, "any_terminal");
+  }
+
+  /** Completion-only maintenance: exact original completed proof before deletion, no cancel.
+   * Caller must separately establish successful-generation eligibility from owned durable state.
+   * A completion/disposal receipt cannot settle writers or authorize platform purge.
+   */
+  async deleteCompleted(raw: unknown, signal: AbortSignal): Promise<OpenAiResponseCleanup> {
+    return this.cleanup(raw, signal, "completed");
+  }
+
+  private async cleanup(
+    raw: unknown,
+    signal: AbortSignal,
+    mode: "any_terminal" | "completed",
+  ): Promise<OpenAiResponseCleanup> {
     const unresolved: OpenAiResponseCleanup = { kind: "unresolved" };
     try {
       if (!validateOpenAiBackgroundResponseReference(raw)) return unresolved;
@@ -180,7 +196,8 @@ export class OpenAiLunaResponseCleanup {
         return value;
       };
       let observed = status(await call("GET"), reference);
-      if (observed === "queued" || observed === "in_progress")
+      if (mode === "completed" && observed !== "completed") return unresolved;
+      if (mode === "any_terminal" && (observed === "queued" || observed === "in_progress"))
         observed = status(await call("POST", "/cancel"), reference);
       if (!observed || observed === "queued" || observed === "in_progress") return unresolved;
       const deleted = await call("DELETE");

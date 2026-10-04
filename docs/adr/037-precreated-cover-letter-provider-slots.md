@@ -453,6 +453,31 @@ read-only recovery of an original already-settled result, not manufactured settl
 This is not deployment, live-provider or trusted failed-call quiescence evidence. The proposal remains
 incomplete and default-dark.
 
+### Source-only completion-only response disposal (2026-10-03)
+
+D3-059 adds an independent completion-only provider port for future successful-generation
+maintenance. Exact original completed response metadata precedes positive DELETE acknowledgement;
+queued/running and other terminal states remain unresolved and cannot trigger cancellation.
+The existing failed/abandoned stopping port is unchanged. Default-off and bounded single-attempt
+transport cannot create responses or expose output. Lost acknowledgements remain unresolved.
+Owned durable eligibility, success reconciliation, runtime/IAM, maintained scheduling and trusted
+writer drain remain required; this port cannot settle work or authorize platform object/row purge.
+No provider call or activation is made. The ADR remains Proposed.
+
+### Source-only successful-generation eligibility and reconciliation (2026-10-03)
+
+D3-060 supplies a separate owned completed-inventory read and default-off success reconciler.
+The read joins exact persisted owner/work/request bindings, immutable ready draft and all three
+positively settled phases in one SQL snapshot. Missing/running/revoked phases refuse; expired
+local authority is never settlement evidence. Quarantined owners may drain existing responses.
+Disposed rows qualify only for an original completed receipt. The reconciler has no failed-work
+fence/cancellation, generation, renewal, settlement, document write or purge capability. It uses
+completion-only provider disposal and requires durable convergence. Lost SQL acknowledgement
+recovers without repeating provider I/O; provider DELETE acknowledgement loss and 404 stay unresolved.
+These are source/real PostgreSQL checks with synthetic HTTP/object/model completion evidence,
+not a production eligibility RPC, deployment or trusted writer-drain authority. Runtime/IAM,
+scheduling, writer drain and accountable activation prerequisites remain; the ADR stays Proposed.
+
 - Conditional creation by the provider: rejected because deletion markers allow recreation.
 - Caller cancellation as remote cancellation: rejected because it does not prove remote quiescence.
 - Unconditional replacement or retry on conflict: rejected because it can restore deleted bytes
