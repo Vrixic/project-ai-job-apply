@@ -19,6 +19,12 @@ cases (sixteen new success-maintenance cases), with typecheck/build. The owned t
 is removed; Docker Desktop/WSL are stopped. Final-source full verification and production private eligibility RPC/runtime/IAM,
 scheduling, writer drain and deployed/accountable acceptance remain. D1/D3 stay In progress.
 
+Original #530 transport head `da07a57` hosted checks are terminal: quality, catalog,
+integration and both containers pass; audit fails. Scanner remains 65 findings on 30 paths,
+independently outside six changed files. No waiver; expanded success-maintenance head requires
+its own hosted evidence. [Original CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37174998967),
+[scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37174998948).
+
 2026-10-03 D3-059 starts independently from fresh main `792bb92` while #529 runs hosted checks.
 Successful-generation cleanup needs a completion-only provider port with no cancellation.
 Exact original completed proof must precede deletion; queued/running and other terminal states
