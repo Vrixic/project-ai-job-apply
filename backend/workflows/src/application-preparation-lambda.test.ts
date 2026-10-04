@@ -19,8 +19,8 @@ const environment = () => ({
   DATABASE_SECRET_ID: "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-db-123456",
   COVER_LETTER_PROVIDER_FUNCTION_ARN:
     "arn:aws:lambda:us-east-2:123456789012:function:synthetic-provider:7",
-  DOCUMENT_BUCKET_NAME: "synthetic-preparation",
-  DOCUMENT_KMS_KEY_ARN:
+  CANDIDATE_DOCUMENT_BUCKET: "synthetic-preparation",
+  PLATFORM_KMS_KEY_ARN:
     "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-4000-8000-000000000001",
 });
 const target = "arn:aws:lambda:us-east-2:123456789012:function:private-preparation:9";
@@ -79,12 +79,12 @@ describe("native private preparation bootstrap", () => {
       "COVER_LETTER_PROVIDER_FUNCTION_ARN",
       "arn:aws:lambda:us-east-2:123456789012:function:provider:alias",
     ],
-    ["DOCUMENT_BUCKET_NAME", undefined],
-    ["DOCUMENT_BUCKET_NAME", "bad..bucket"],
-    ["DOCUMENT_KMS_KEY_ARN", undefined],
+    ["CANDIDATE_DOCUMENT_BUCKET", undefined],
+    ["CANDIDATE_DOCUMENT_BUCKET", "bad..bucket"],
+    ["PLATFORM_KMS_KEY_ARN", undefined],
     [
-      "DOCUMENT_KMS_KEY_ARN",
-      environment().DOCUMENT_KMS_KEY_ARN.replace("123456789012", "999999999999"),
+      "PLATFORM_KMS_KEY_ARN",
+      environment().PLATFORM_KMS_KEY_ARN.replace("123456789012", "999999999999"),
     ],
   ] as const)("refuses %s=%s before secret/runtime I/O", async (key, value) => {
     const f = fixture();
@@ -145,8 +145,8 @@ describe("native private preparation bootstrap", () => {
     );
   });
   it.each([
-    "DOCUMENT_BUCKET_NAME",
-    "DOCUMENT_KMS_KEY_ARN",
+    "CANDIDATE_DOCUMENT_BUCKET",
+    "PLATFORM_KMS_KEY_ARN",
     "COVER_LETTER_PROVIDER_FUNCTION_ARN",
     "DATABASE_SECRET_ID",
   ])("refuses warm %s drift without recomposition", async (key) => {

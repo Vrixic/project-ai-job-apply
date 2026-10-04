@@ -461,8 +461,8 @@ describe.skipIf(!requested)(
             DATABASE_SECRET_ID:
               "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-db-123456",
             COVER_LETTER_PROVIDER_FUNCTION_ARN: providerArn,
-            DOCUMENT_BUCKET_NAME: bucket,
-            DOCUMENT_KMS_KEY_ARN: kms,
+            CANDIDATE_DOCUMENT_BUCKET: bucket,
+            PLATFORM_KMS_KEY_ARN: kms,
           };
           const secret = vi.fn(async () => url);
           const nativeHandler = createApplicationPreparationLambda({

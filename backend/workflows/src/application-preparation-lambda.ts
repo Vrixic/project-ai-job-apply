@@ -67,8 +67,8 @@ function configuration(env: Environment): Configuration | undefined {
   if (target.slice(0, target.lastIndexOf(":")) === provider.slice(0, provider.lastIndexOf(":")))
     return;
   const secretId = env.DATABASE_SECRET_ID;
-  const bucket = env.DOCUMENT_BUCKET_NAME;
-  const kms = env.DOCUMENT_KMS_KEY_ARN;
+  const bucket = env.CANDIDATE_DOCUMENT_BUCKET;
+  const kms = env.PLATFORM_KMS_KEY_ARN;
   if (
     !secretId ||
     !new RegExp(

@@ -17,7 +17,8 @@ exports the lazy handler; module loading performs no secret, SQL, object or prov
 
 Activation requires exact `APPLICATION_PREPARATION_ACTIVITY_ENABLED=true`, us-east-2, same-account
 numeric distinct provider/activity function targets, managed database-secret ARN, bucket and
-same-account KMS key. Plain database URLs and provider-key/secret configuration are refused.
+same-account KMS key through the existing `CANDIDATE_DOCUMENT_BUCKET`/`PLATFORM_KMS_KEY_ARN`
+configuration names. Plain database URLs and provider-key/secret configuration are refused.
 All configuration is pinned across warm calls; drift refuses recomposition. Session credentials
 may rotate. Invalid input is rejected before configuration or I/O, input is detached, and
 setup uses one bounded extension request without retry delays. Concurrent calls share read-only
@@ -81,3 +82,7 @@ caller IAM, secrets/bucket/KMS/private network policies, maintained scheduling, 
 ambiguous abandonment/original writer drain and accountable/deployed acceptance remain.
 Source composition is not deployment or candidate journey evidence. D1/D3 remain In progress,
 with no phase-exit changes. Hosted CI/CD stays deferred until production launch.
+
+Pre-review configuration correction: use the established provider bucket/KMS environment names
+throughout the activity and native tests. The initial clean e1f00b5 artifact/full run is historical;
+a corrected exact-source build and full verifier will supersede it before handoff.
