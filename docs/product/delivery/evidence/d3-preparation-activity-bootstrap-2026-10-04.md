@@ -1,7 +1,7 @@
 # D3-068: Native private preparation activity bootstrap
 
 Date: 2026-10-04
-Status: Source, focused and connected local checks passed; full verifier/artifact checks pending.
+Status: Source, focused/connected, exact-source full verifier and local artifact checks passed; review/release gates remain.
 
 The backend-only branch starts from fresh main `bde17d9`, then locally integrates exact open
 #537 head `b516611` as its explicit source dependency. No GitHub merge is performed.
@@ -76,7 +76,7 @@ logs: `.tmp/d3-068-focused.log`, `.tmp/d3-068-persistence-unit.log`, `.tmp/d3-06
 
 ## Remaining gates
 
-Exact-source full maintained verification and local artifact integrity remain pending. Native
+Exact-source full maintained verification and local artifact integrity pass as recorded below. Native
 durable/dispatcher/terminal-recovery environment bootstrap and release composition, qualified
 caller IAM, secrets/bucket/KMS/private network policies, maintained scheduling, retention,
 ambiguous abandonment/original writer drain and accountable/deployed acceptance remain.
@@ -86,3 +86,36 @@ with no phase-exit changes. Hosted CI/CD stays deferred until production launch.
 Pre-review configuration correction: use the established provider bucket/KMS environment names
 throughout the activity and native tests. The initial clean e1f00b5 artifact/full run is historical;
 a corrected exact-source build and full verifier will supersede it before handoff.
+
+## Final exact-source verification and local artifact
+
+Clean source `a7fb9ba3060711aaf84c086a4850f5e1b61a29af` passes the maintained
+`scripts/verify-phase0.ps1` with terminal exit 0 and its completion marker: 38 typecheck tasks,
+39 test tasks and 23 builds. All 1,472 Workflow units (31 opt-in cases skipped separately),
+1,160 Documents units and 283 AI SDK units pass. Lint stays at zero errors, 15 warnings and
+58 informational notes. Formatting, contract generation, dependency-security regressions,
+operational/security guards, provider/maintenance/private-port/native activity emitted isolation
+and Compose configuration pass. Log: `.tmp/d3-068-full-verification-a7fb9ba.log` (ignored).
+
+After the established environment-name correction, 81 focused and 11 fresh real PostgreSQL
+cases pass again, along with typecheck/build. The owned fixture is removed and Docker Desktop/
+WSL are stopped. The earlier e1f00b5 full invocation passed but changed source during execution
+and is superseded; it is not the final exact-source proof.
+
+One new unpublished native private-activity family builds directly from clean a7fb9ba. Manifest
+schema 2 names Node24/x86_64 and index.handler. Archive SHA256:
+`903723884ce3adf43213264e664c44a25f0bcdf76aace50c91d033b553253c6b`
+(1,414,855 bytes; 41 SBOM components). Independent checks compare archive bytes/size/base64
+checksum, sole index.mjs member, bundle file/hash/source marker and SBOM hash/component count
+with the manifest. Actual bytes contain no model-provider endpoint or ModelGateway class.
+The builder invokes the actual bundled handler for default-off and extra-content refusals with
+zero fetches. A separate probe configures activation and verifies wrong invoked numeric version
+refusal before any secret fetch. Local output is ignored under Workflow dist/preparation-lambda;
+no object is published or attached to infrastructure and no runtime/IAM is activated.
+
+New evidence links resolve and prior phase/tracker history is retained. No public API, event,
+domain, SQL migration, dependency, frontend or infrastructure shape changes. Existing exported
+background metadata types/validators remain compatible reexports; source implementations are
+unchanged. Native durable/dispatch/terminal-recovery/release wiring, IAM/scheduling, retention/
+abandonment/original writer drain and accountable/deployed acceptance remain. D1/D3 remain
+In progress. Hosted CI/CD stays deferred until production launch.
