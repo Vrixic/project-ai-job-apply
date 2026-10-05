@@ -60,6 +60,11 @@ import {
   type PreparationTerminalInput,
   preparationExecutionName,
 } from "./preparation-dispatch.js";
+import type { RestrictedPacketCipher } from "./restricted-packet-cipher.js";
+import {
+  createRestrictedPacketProtection,
+  type PreparedRestrictedPacketFields,
+} from "./restricted-packet-protection.js";
 import {
   type ApplicationEvent,
   type ApplicationStatus,
@@ -198,6 +203,9 @@ interface PacketRow {
   resume_hash: string | null;
   cover_letter_hash: string | null;
   fields: PacketFieldEntry[];
+  restricted_value_id: string | null;
+  restricted_metadata_sha256: string | null;
+  restricted_ciphertext_sha256: string | null;
   temporary_materials: TemporaryMaterialReference[];
   created_at: Date;
 }
@@ -265,6 +273,15 @@ function toPacket(row: PacketRow, application: ApplicationRow): ApplicationPacke
     jobRevision: row.job_revision,
     form,
     fields: row.fields,
+    ...(row.restricted_value_id
+      ? {
+          restrictedValues: {
+            id: row.restricted_value_id,
+            metadataSha256: row.restricted_metadata_sha256 ?? "",
+            ciphertextSha256: row.restricted_ciphertext_sha256 ?? "",
+          },
+        }
+      : {}),
     artifactHashes,
     ...(row.temporary_materials?.length ? { temporaryMaterials: row.temporary_materials } : {}),
     packetHash: row.packet_hash,
@@ -359,7 +376,18 @@ interface ChangeOptions {
   kind?: HistoryKind;
 }
 
+export class RestrictedPacketStoreUnavailableError extends Error {
+  constructor() {
+    super("Restricted packet protection is unavailable");
+    this.name = "RestrictedPacketStoreUnavailableError";
+  }
+}
 export interface ApplicationStoreOptions {
+  restrictedPackets?: {
+    cipher: RestrictedPacketCipher;
+    fingerprintKeyArn: string;
+    enabled: () => boolean;
+  };
   definitions: ReadonlyMap<string, FieldDefinition>;
   confidenceThreshold?: number;
   lockVaultReferences?: VaultReferenceLocker;
@@ -374,11 +402,126 @@ import {
 } from "./vault.js";
 
 export class PostgresApplicationStore {
+  private readonly restrictedPackets: ApplicationStoreOptions["restrictedPackets"];
+  private readonly restrictedProtection:
+    | ReturnType<typeof createRestrictedPacketProtection>
+    | undefined;
   constructor(
     private readonly client: Sql,
     private readonly clock: () => Date = () => new Date(),
     private readonly options: ApplicationStoreOptions = { definitions: new Map() },
-  ) {}
+  ) {
+    this.restrictedPackets = options.restrictedPackets
+      ? Object.freeze({ ...options.restrictedPackets })
+      : undefined;
+    this.restrictedProtection = this.restrictedPackets
+      ? createRestrictedPacketProtection({
+          cipher: this.restrictedPackets.cipher,
+          definitions: options.definitions,
+          enabled: this.restrictedPackets.enabled,
+        })
+      : undefined;
+  }
+
+  private requireRestrictedProtection() {
+    const configured = this.restrictedPackets;
+    if (
+      !configured ||
+      !this.restrictedProtection ||
+      !configured.enabled() ||
+      !/^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key\/[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
+        configured.fingerprintKeyArn,
+      )
+    )
+      throw new RestrictedPacketStoreUnavailableError();
+    return { configured, protection: this.restrictedProtection };
+  }
+
+  private async restrictedOwnerView(ownerUserId: string, applicationId: string) {
+    return this.client.begin(async (tx) => {
+      await tx`SELECT identity.require_active_candidate(${ownerUserId}::uuid)`;
+      return this.readView(tx, ownerUserId, applicationId);
+    });
+  }
+
+  /** Authorize in a completed owner read before crypto; never retain SQL locks across KMS. */
+  private async protectedRequestHash(
+    command: {
+      ownerUserId: string;
+      applicationId: string;
+      idempotencyKey: string;
+    },
+    operation: "create_packet" | "queue_preparation",
+    request: unknown,
+  ): Promise<string> {
+    const { configured } = this.requireRestrictedProtection();
+    await this.restrictedOwnerView(command.ownerUserId, command.applicationId);
+    const [prior] = await this.client<
+      Array<{ operation: string; scheme: string; key: string | null }>
+    >`
+      SELECT operation, request_hash_scheme AS scheme, request_key_arn AS key
+      FROM applications.command_receipts
+      WHERE owner_user_id = ${command.ownerUserId} AND idempotency_key = ${command.idempotencyKey}
+    `;
+    if (prior && prior.operation !== operation) throw new ApplicationIdempotencyConflictError();
+    if (
+      prior &&
+      (prior.scheme !== "kms-hmac-sha256.v1" || prior.key !== configured.fingerprintKeyArn)
+    )
+      throw new RestrictedPacketStoreUnavailableError();
+    try {
+      const hash = await configured.cipher.fingerprint({
+        ownerUserId: command.ownerUserId,
+        applicationId: command.applicationId,
+        operation,
+        requestSha256: canonicalHash(request),
+      });
+      this.requireRestrictedProtection();
+      if (!/^[a-f0-9]{64}$/u.test(hash)) throw new RestrictedPacketStoreUnavailableError();
+      return hash;
+    } catch {
+      throw new RestrictedPacketStoreUnavailableError();
+    }
+  }
+
+  private async prepareRestrictedFields(command: {
+    ownerUserId: string;
+    applicationId: string;
+    packet: Pick<
+      PacketInputs,
+      "jobRevision" | "form" | "fields" | "artifactHashes" | "temporaryMaterials"
+    >;
+  }): Promise<PreparedRestrictedPacketFields | null> {
+    const { protection } = this.requireRestrictedProtection();
+    const view = await this.restrictedOwnerView(command.ownerUserId, command.applicationId);
+    const packet = assemblePacket(
+      {
+        ...command.packet,
+        id: uuidv7(),
+        userId: command.ownerUserId,
+        applicationId: command.applicationId,
+        canonicalJobId: view.application.canonicalJobId,
+        version: 1,
+        createdAt: this.clock(),
+      },
+      this.options.definitions,
+      this.options.confidenceThreshold,
+    );
+    try {
+      return await protection.prepare(
+        {
+          ownerUserId: command.ownerUserId,
+          applicationId: command.applicationId,
+          jobRevision: packet.jobRevision,
+          form: packet.form,
+        },
+        uuidv7(),
+        packet.fields,
+      );
+    } catch {
+      throw new RestrictedPacketStoreUnavailableError();
+    }
+  }
 
   private async lockVaultReferences(
     tx: Tx,
@@ -485,7 +628,8 @@ export class PostgresApplicationStore {
       "jobRevision" | "form" | "fields" | "artifactHashes" | "temporaryMaterials"
     >;
   }): Promise<CommandResult> {
-    const requestHash = canonicalHash({
+    command = structuredClone(command);
+    const requestHash = await this.protectedRequestHash(command, "create_packet", {
       operation: "create_packet",
       applicationId: command.applicationId,
       expectedRevision: command.expectedRevision,
@@ -497,8 +641,17 @@ export class PostgresApplicationStore {
         : {}),
       fields: command.packet.fields,
     });
+    const prior = await this.findReceipt(
+      this.client,
+      command.ownerUserId,
+      command.idempotencyKey,
+      "create_packet",
+      requestHash,
+    );
+    const prepared = prior ? null : await this.prepareRestrictedFields(command);
     return this.commandResult(command, "create_packet", requestHash, async (tx, app, now) => {
-      return this.writePacket(tx, app, now, command.packet);
+      if (prior) throw new RestrictedPacketStoreUnavailableError();
+      return this.writePacket(tx, app, now, command.packet, prepared);
     });
   }
 
@@ -969,7 +1122,8 @@ export class PostgresApplicationStore {
     idempotencyKey: string;
     request: PreparationRequest;
   }): Promise<PreparationRecord | null> {
-    const requestHash = canonicalHash({
+    command = structuredClone(command);
+    const requestHash = await this.protectedRequestHash(command, "queue_preparation", {
       operation: "queue_preparation",
       applicationId: command.applicationId,
       request: command.request,
@@ -1006,11 +1160,20 @@ export class PostgresApplicationStore {
       "jobRevision" | "form" | "fields" | "artifactHashes" | "temporaryMaterials"
     >;
   }): Promise<{ replayed: boolean; preparation: PreparationRecord; view: ApplicationView }> {
-    const requestHash = canonicalHash({
+    command = structuredClone(command);
+    const requestHash = await this.protectedRequestHash(command, "queue_preparation", {
       operation: "queue_preparation",
       applicationId: command.applicationId,
       request: command.request,
     });
+    const receiptBeforeEncryption = await this.findReceipt(
+      this.client,
+      command.ownerUserId,
+      command.idempotencyKey,
+      "queue_preparation",
+      requestHash,
+    );
+    const prepared = receiptBeforeEncryption ? null : await this.prepareRestrictedFields(command);
     return this.retryOnKeyRace(command.ownerUserId, () =>
       this.client.begin(async (tx) => {
         await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
@@ -1035,6 +1198,7 @@ export class PostgresApplicationStore {
             view: await this.readView(tx, command.ownerUserId, app.id),
           };
         }
+        if (receiptBeforeEncryption) throw new RestrictedPacketStoreUnavailableError();
         if (Number(app.revision) !== command.request.expectedRevision)
           throw new ApplicationRevisionConflictError();
         const active = await tx`
@@ -1054,7 +1218,7 @@ export class PostgresApplicationStore {
         const now = this.clock();
         if (!Number.isFinite(now.getTime()))
           throw new PacketInvariantError("Invalid preparation clock");
-        const updated = await this.writePacket(tx, app, now, command.packet);
+        const updated = await this.writePacket(tx, app, now, command.packet, prepared);
         if (!updated.current_packet_id) throw new ApplicationIntegrityError("base packet");
         const id = uuidv7();
         await tx`
@@ -1711,6 +1875,7 @@ export class PostgresApplicationStore {
       PacketInputs,
       "jobRevision" | "form" | "fields" | "artifactHashes" | "temporaryMaterials"
     >,
+    prepared: PreparedRestrictedPacketFields | null = null,
   ): Promise<ApplicationRow> {
     nextStatus(app.status, "packet_created");
     const snapshot = structuredClone(inputs);
@@ -1729,7 +1894,7 @@ export class PostgresApplicationStore {
         SELECT coalesce(max(version), 0)::int AS version FROM applications.packets
         WHERE application_id = ${app.id}
       `;
-    const packet = assemblePacket(
+    let packet = assemblePacket(
       {
         ...snapshot,
         ...(temporaryMaterials.length ? { temporaryMaterials } : {}),
@@ -1743,15 +1908,33 @@ export class PostgresApplicationStore {
       this.options.definitions,
       this.options.confidenceThreshold,
     );
+    if (prepared) {
+      const { protection } = this.requireRestrictedProtection();
+      try {
+        packet = protection.bind(packet, prepared);
+      } catch {
+        throw new RestrictedPacketStoreUnavailableError();
+      }
+      const envelope = prepared.envelope;
+      await tx`
+        INSERT INTO applications_restricted.packet_values
+          (id, application_id, owner_user_id, metadata_sha256, ciphertext_sha256, schema_version,
+           encryption_key_arn, encrypted_data_key, iv, ciphertext, authentication_tag, created_at)
+        VALUES (${prepared.binding.id}, ${app.id}, ${app.owner_user_id}, ${prepared.binding.metadataSha256},
+          ${prepared.binding.ciphertextSha256}, ${envelope.schemaVersion}, ${envelope.encryptionKeyArn},
+          ${Buffer.from(envelope.encryptedDataKey)}, ${Buffer.from(envelope.iv)}, ${Buffer.from(envelope.ciphertext)},
+          ${Buffer.from(envelope.authenticationTag)}, ${now})
+      `;
+    }
     await tx`
         INSERT INTO applications.packets
           (id, application_id, owner_user_id, version, packet_hash, job_revision, form_adapter_id,
-           form_variant_id, form_hash, resume_hash, cover_letter_hash, fields, temporary_materials, created_at)
+           form_variant_id, form_hash, resume_hash, cover_letter_hash, fields, temporary_materials, restricted_value_id, restricted_metadata_sha256, restricted_ciphertext_sha256, created_at)
         VALUES (${packet.id}, ${app.id}, ${app.owner_user_id}, ${packet.version}, ${packet.packetHash},
           ${packet.jobRevision}, ${packet.form?.adapterId ?? null}, ${packet.form?.variantId ?? null},
           ${packet.form?.formHash ?? null}, ${packet.artifactHashes.resume ?? null},
           ${packet.artifactHashes.coverLetter ?? null},
-          ${tx.json(packet.fields as unknown as postgres.JSONValue)}, ${tx.json((packet.temporaryMaterials ?? []) as unknown as postgres.JSONValue)}, ${now})
+          ${tx.json(packet.fields as unknown as postgres.JSONValue)}, ${tx.json((packet.temporaryMaterials ?? []) as unknown as postgres.JSONValue)}, ${packet.restrictedValues?.id ?? null}, ${packet.restrictedValues?.metadataSha256 ?? null}, ${packet.restrictedValues?.ciphertextSha256 ?? null}, ${now})
       `;
     return this.change(tx, app, "packet_created", now, {
       packetId: packet.id,
@@ -1787,6 +1970,8 @@ export class PostgresApplicationStore {
   ): Promise<CommandResult & { note: CommandNote | null }> {
     return this.retryOnKeyRace(command.ownerUserId, () =>
       this.client.begin(async (tx) => {
+        if (operation === "create_packet")
+          await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
         const app = await this.lockApplication(tx, command.ownerUserId, command.applicationId);
         const receipt = await this.findReceipt(
           tx,
@@ -2074,7 +2259,7 @@ export class PostgresApplicationStore {
   }
 
   private async findReceipt(
-    tx: Tx,
+    tx: Tx | Sql,
     ownerUserId: string,
     idempotencyKey: string,
     operation: CommandOperation,
@@ -2084,16 +2269,27 @@ export class PostgresApplicationStore {
       {
         operation: string;
         request_hash: string;
+        request_hash_scheme: string;
+        request_key_arn: string | null;
         application_id: string;
         outcome_code: string | null;
         subject_id: string | null;
       }[]
     >`
-      SELECT operation, request_hash, application_id, outcome_code, subject_id
+      SELECT operation, request_hash, request_hash_scheme, request_key_arn, application_id, outcome_code, subject_id
       FROM applications.command_receipts
       WHERE owner_user_id = ${ownerUserId} AND idempotency_key = ${idempotencyKey}
     `;
     if (!row) return null;
+    if (row.operation !== operation) throw new ApplicationIdempotencyConflictError();
+    if (operation === "create_packet" || operation === "queue_preparation") {
+      const { configured } = this.requireRestrictedProtection();
+      if (
+        row.request_hash_scheme !== "kms-hmac-sha256.v1" ||
+        row.request_key_arn !== configured.fingerprintKeyArn
+      )
+        throw new RestrictedPacketStoreUnavailableError();
+    }
     if (row.operation !== operation || row.request_hash !== requestHash) {
       throw new ApplicationIdempotencyConflictError();
     }
@@ -2113,12 +2309,14 @@ export class PostgresApplicationStore {
     now: Date,
     note: CommandNote | null = null,
   ): Promise<void> {
+    const keyed = operation === "create_packet" || operation === "queue_preparation";
+    const keyArn = keyed ? this.requireRestrictedProtection().configured.fingerprintKeyArn : null;
     await tx`
       INSERT INTO applications.command_receipts
         (owner_user_id, idempotency_key, operation, request_hash, application_id, response_revision,
-         outcome_code, subject_id, created_at)
+         outcome_code, subject_id, request_hash_scheme, request_key_arn, created_at)
       VALUES (${command.ownerUserId}, ${command.idempotencyKey}, ${operation}, ${requestHash},
-        ${applicationId}, ${revision}, ${note?.code ?? null}, ${note?.subjectId ?? null}, ${now})
+        ${applicationId}, ${revision}, ${note?.code ?? null}, ${note?.subjectId ?? null}, ${keyed ? "kms-hmac-sha256.v1" : "sha256.v1"}, ${keyArn}, ${now})
     `;
   }
 

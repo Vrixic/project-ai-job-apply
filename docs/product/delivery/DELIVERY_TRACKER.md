@@ -3672,3 +3672,46 @@ Tested implementation `dda86480` is unchanged; subsequent commits record deliver
 #558's reviewed retirement source is included because its independent merge targeted the former
 feature-branch base. One authored PR is open. D1/D3 stay In progress; no authored main merge,
 cloud task operation, publication/deployment/activation or hosted CI/CD work.
+
+2026-10-05 D3-077 starts protected restricted packet storage on fresh main `2b6f59aa`, isolated
+backend branch `feat/d3-restricted-packet-storage`. Ordinary packet/receipt hashes also require
+protection against low-entropy answer enumeration. An uncomposed default-off envelope cipher and
+keyed request port pass 30 offline cases, including actual signed SDK serialization and fixed
+normal-client endpoint/one-attempt checks. Applications build/Gateway typecheck and scoped lint
+pass; no KMS/network/cloud call, Docker, SQL, migration or activation occurs. Storage/commitment/
+receipt/preparation/read/export/deletion/restore wiring and full verifier remain required.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). D1/D3 remain In progress; saved-answer
+reuse stays false and CI/CD remains deferred until production launch.
+
+2026-10-05 D3-077 adds the private owning metadata codec: restricted/selected vault values are
+masked in returned storage fields; exact immediate values use a separate map. Value-free
+commitments bind original context, provenance and snapshotted field policy. Strict shapes and
+canonical decode refuse unmodelled bodies, accessors, duplicates, tampering and malformed UTF-8.
+All 268 Applications unit tests and 30 Gateway cipher tests pass locally with synthetic inputs and
+offline transports; Applications typecheck and six-file Biome checks pass. Source remains
+uncommitted/uncomposed; SQL, packet hashing, keyed receipts, export/deletion/restore and complete
+verification remain unfinished. No activation, deployment, human review or D1/D3 completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). Hosted CI/CD remains deferred until
+production launch; Docker/WSL were not started.
+
+2026-10-05 D3-077 adds private packet.v2 ciphertext commitments, exact pre-lock prepare-result
+binding and guarded immediate public projection. Original unprotected v1 hash is preserved;
+protected plaintext/invalid markers and foreign or missing immediate read maps refuse. Mandatory
+review and direct candidate action remain enforced. All 304 Applications unit tests pass, along
+with Applications typecheck/build, Gateway typecheck and ten-file Biome checks. [ADR-041](../../adr/041-restricted-packet-values-and-keyed-replay.md)
+records the proposed technical boundary without acceptance. SQL, owning asynchronous reads,
+keyed receipts, preparation carry-forward, export/deletion/restore and full verification remain
+unfinished. Source is uncommitted/uncomposed; no activation, deployment or phase completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains deferred until launch.
+
+2026-10-05 D3-077 wires pre-lock envelope preparation/keyed receipts and atomic protected packet
+writes. Forward 0009 adds separate immutable ciphertext, exact packet references, active-candidate
+lease and privacy-authorized deletion; legacy restricted plaintext/unkeyed packet receipts block
+migration rather than being rewritten. Eight owned PostgreSQL 16.6 cases pass with synthetic data
+and offline crypto, including replay, no locks during encryption, rollback and duplicate safety.
+Applications typecheck/build and 307 units pass. The tmpfs fixture was removed, shared volume
+inventory retained, Docker Desktop stopped and WSL shut down. #559 merged to exact-tree main
+18b6b2e2. Preparation carry-forward, owning reads/composition, export/deletion/restore acceptance,
+role/inventory and maintained full verification remain unfinished. No review/activation/deployment
+or D1/D3 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains
+deferred until production launch.

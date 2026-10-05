@@ -54,3 +54,5 @@ Use `000-template.md` for future decisions.
 ADRs are immutable historical records after acceptance. A new ADR supersedes an old one instead of rewriting history.
 
 - [ADR-040: Native temporary material processes](040-native-temporary-material-processes.md) (proposed; default-off Linux process source/local evidence, transport and activation gates open)
+
+- [ADR-041: Restricted packet values and keyed replay](041-restricted-packet-values-and-keyed-replay.md) (proposed; private source work, storage and activation gates unfinished)

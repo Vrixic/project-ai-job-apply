@@ -4,7 +4,6 @@ import type {
   Application,
   ApplicationCoverLetterFile,
   ApplicationCoverLetterPreview,
-  ApplicationTemporaryMaterialAuthorization,
   ApplicationHistoryPage,
   ApplicationPacketPreparation,
   ApplicationPage,
@@ -12,6 +11,7 @@ import type {
   ApplicationResumePreview,
   ApplicationSubmissionResultRequest,
   ApplicationSubmissionStart,
+  ApplicationTemporaryMaterialAuthorization,
   ReconcileApplicationAttemptRequest,
 } from "@ai-job-apply/api-contracts";
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
@@ -28,8 +28,15 @@ import {
   safeRecord,
   versionToken,
 } from "./metrics.js";
-import type { ArtifactHashes, CurrentBindings, FormBinding } from "./packet.js";
+import { authorizeNativeMaterialRead } from "./native-material-read.js";
+import {
+  type ArtifactHashes,
+  type CurrentBindings,
+  type FormBinding,
+  verifyPacketHash,
+} from "./packet.js";
 import type { PreparationContext, PreparationRecord, PreparationRequest } from "./preparation.js";
+import type { RestrictedPacketPlaintext } from "./restricted-packet-cipher.js";
 import { type ResumePreviewSource, tailoredFileName, withPacketMatch } from "./resume-preview.js";
 import type {
   ApplicationRecord,
@@ -45,7 +52,6 @@ import {
   readBoundTemporaryCoverLetter,
 } from "./temporary-cover-letter-read.js";
 import { temporaryMaterialReasons } from "./temporary-material.js";
-import { authorizeNativeMaterialRead } from "./native-material-read.js";
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -358,7 +364,7 @@ export class ApplicationsService implements ApplicationsApi {
     });
     const last = page.items.at(-1)?.application;
     return {
-      items: page.items.map(toApiApplication),
+      items: page.items.map((view) => toApiApplication(view)),
       ...(page.hasMore && last ? { nextCursor: encodeCursor(last) } : {}),
     };
   }
@@ -979,9 +985,50 @@ function toApiAttempt(attempt: AttemptRecord): ApiApplicationAttempt {
   };
 }
 
-export function toApiApplication(view: ApplicationView): Application {
+/** Public projection accepts only an exact immediate owning read. Unwired protected reads
+ * fail unavailable rather than rendering a saved answer as null or exposing storage metadata. */
+export function toApiApplication(
+  view: ApplicationView,
+  plaintext?: RestrictedPacketPlaintext,
+): Application {
   const packet = view.currentPacket;
   const approval = view.approval;
+  const protectedFields = packet?.fields.filter((field) => field.protectedValue === true) ?? [];
+  if (protectedFields.length) {
+    if (
+      !packet ||
+      !verifyPacketHash(packet) ||
+      !plaintext ||
+      packet.userId !== view.application.ownerUserId ||
+      packet.applicationId !== view.application.id ||
+      view.application.currentPacketId !== packet.id ||
+      plaintext.ownerUserId !== packet.userId ||
+      plaintext.applicationId !== packet.applicationId ||
+      plaintext.packetId !== packet.id ||
+      plaintext.packetHash !== packet.packetHash ||
+      plaintext.values.size !== protectedFields.length ||
+      protectedFields.some((field) => !plaintext.values.has(field.fieldKey))
+    )
+      throw new ApplicationsUnavailableError();
+    for (const field of protectedFields) {
+      const value = plaintext.values.get(field.fieldKey);
+      if (
+        !(
+          typeof value === "string" ||
+          typeof value === "boolean" ||
+          (typeof value === "number" && Number.isFinite(value)) ||
+          (Array.isArray(value) &&
+            value.every(
+              (item) =>
+                typeof item === "string" ||
+                typeof item === "boolean" ||
+                (typeof item === "number" && Number.isFinite(item)),
+            ))
+        )
+      )
+        throw new ApplicationsUnavailableError();
+    }
+  } else if (plaintext) throw new ApplicationsUnavailableError();
   return {
     id: view.application.id,
     canonicalJobId: view.application.canonicalJobId,
@@ -999,7 +1046,11 @@ export function toApiApplication(view: ApplicationView): Application {
             fields: packet.fields.map((field) => ({
               ...(field.vaultReference ? { vaultReference: { ...field.vaultReference } } : {}),
               fieldKey: field.fieldKey,
-              value: cloneValue(field.value),
+              value: cloneValue(
+                field.protectedValue === true
+                  ? (plaintext?.values.get(field.fieldKey) as FieldValue)
+                  : field.value,
+              ),
               origin: field.origin,
               sourceFactIds: [...field.sourceFactIds],
               confidence: field.confidence,
