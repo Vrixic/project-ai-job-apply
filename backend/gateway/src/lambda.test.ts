@@ -1449,7 +1449,7 @@ describe("Applications routes at the Lambda boundary", () => {
       const response = await invoke(handler, invocation("GET", path, { rawQueryString: query }));
       expect(response.statusCode, query).toBe(status);
     }
-    // No other Applications route accepts a query string.
+    // The application detail route does not accept a query string.
     const { handler } = dispatcher();
     expect(
       (
@@ -1484,7 +1484,11 @@ describe("Applications routes at the Lambda boundary", () => {
         .replace("{attemptId}", attempt)
         .replace("{preparationId}", attempt);
       const { handler } = dispatcher();
-      const query = path.endsWith("/file") ? "format=pdf" : "";
+      const query = path.endsWith("/authorization")
+        ? `generationId=${attempt}`
+        : path.endsWith("/file")
+          ? "format=pdf"
+          : "";
       const commandBody = method === "POST" && !path.endsWith("/dispatch") ? "{}" : undefined;
       const response = await invoke(
         handler,
@@ -1495,6 +1499,45 @@ describe("Applications routes at the Lambda boundary", () => {
       );
       expect(response.statusCode, `${method} ${template}`).toBe(200);
     }
+  });
+
+  it.each([
+    ["missing", ""],
+    ["empty", "generationId="],
+    ["malformed", "generationId=nope"],
+    ["non-v7", "generationId=00000000-0000-1000-8000-000000000001"],
+    ["repeated", `generationId=${attempt}&generationId=${attempt}`],
+    ["owner override", `generationId=${attempt}&ownerUserId=${id}`],
+    ["oversized", `generationId=${"a".repeat(300)}`],
+  ])("refuses %s material authorization queries before dispatch", async (_label, query) => {
+    const { handler, inject } = dispatcher();
+    const response = await invoke(
+      handler,
+      invocation("GET", `/v1/applications/${id}/cover-letter/authorization`, {
+        rawQueryString: query,
+      }),
+    );
+    expect(response.statusCode).toBe(400);
+    expect(inject).not.toHaveBeenCalled();
+  });
+
+  it("forwards only authenticated body-free material authorization reads", async () => {
+    const { handler, inject } = dispatcher();
+    const path = `/v1/applications/${id}/cover-letter/authorization`;
+    const extra = { rawQueryString: `generationId=${attempt}` };
+    const anonymous = invocation("GET", path, extra);
+    delete anonymous.requestContext.authorizer;
+    expect((await invoke(handler, anonymous)).statusCode).toBe(401);
+    expect(
+      (await invoke(handler, invocation("GET", path, { ...extra, body: "{}" }))).statusCode,
+    ).toBe(400);
+    expect((await invoke(handler, invocation("POST", path, extra))).statusCode).toBe(404);
+    expect(inject).not.toHaveBeenCalled();
+    expect((await invoke(handler, invocation("GET", path, extra))).statusCode).toBe(200);
+    expect(inject).toHaveBeenCalledOnce();
+    expect(inject).toHaveBeenCalledWith(
+      expect.objectContaining({ url: `${path}?${extra.rawQueryString}` }),
+    );
   });
 
   it.each(["resume", "cover-letter"])("bounds %s file format and preview queries", async (kind) => {

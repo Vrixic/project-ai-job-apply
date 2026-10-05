@@ -253,6 +253,11 @@ const APPLICATION_COVER_LETTER_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/cover-letter$`,
   "u",
 );
+const APPLICATION_MATERIAL_AUTHORIZATION_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/cover-letter/authorization$`,
+  "u",
+);
+const APPLICATION_GENERATION_ID_PATTERN = new RegExp(`^${APPLICATION_ID}$`, "u");
 const APPLICATION_COVER_LETTER_FILE_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/cover-letter/file$`,
   "u",
@@ -291,6 +296,7 @@ interface AllowedRoute {
   protected: boolean;
   acceptsReviewQueueQuery?: true;
   acceptsApplicationHistoryQuery?: true;
+  acceptsApplicationGenerationQuery?: true;
   acceptsApplicationResumeFormatQuery?: true;
   acceptsRestrictedAnswerContextQuery?: true;
 }
@@ -325,6 +331,9 @@ function allowedRoute(
   }
   if (method === "GET" && APPLICATION_READ_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
+  }
+  if (method === "GET" && APPLICATION_MATERIAL_AUTHORIZATION_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true, acceptsApplicationGenerationQuery: true };
   }
   if (method === "GET" && APPLICATION_HISTORY_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true, acceptsApplicationHistoryQuery: true };
@@ -568,10 +577,15 @@ function requestPayload(
   event: APIGatewayProxyEventV2,
   route: AllowedRoute,
 ): { failure?: APIGatewayProxyStructuredResultV2; payload?: string } {
+  if (route.acceptsApplicationGenerationQuery && !event.rawQueryString) {
+    return { failure: boundaryFailure(event, 400, "invalid_request", "Invalid request") };
+  }
   if (
     event.rawQueryString &&
     !(
       (route.acceptsReviewQueueQuery && validReviewQueueQuery(event.rawQueryString)) ||
+      (route.acceptsApplicationGenerationQuery &&
+        validApplicationGenerationQuery(event.rawQueryString)) ||
       (route.acceptsApplicationHistoryQuery &&
         validApplicationHistoryQuery(event.rawQueryString)) ||
       (route.acceptsApplicationResumeFormatQuery &&
@@ -645,6 +659,17 @@ function validApplicationHistoryQuery(raw: string): boolean {
     return false;
   }
   return seen.size > 0;
+}
+
+function validApplicationGenerationQuery(raw: string): boolean {
+  if (raw.length > 256) return false;
+  const parameters = [...new URLSearchParams(raw)];
+  const only = parameters[0];
+  return (
+    parameters.length === 1 &&
+    only?.[0] === "generationId" &&
+    APPLICATION_GENERATION_ID_PATTERN.test(only[1])
+  );
 }
 
 /** The resume file route takes exactly one `format` parameter, `docx` or `pdf`, and nothing else. */
@@ -921,6 +946,7 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
         url:
           (route.acceptsReviewQueueQuery ||
             route.acceptsApplicationHistoryQuery ||
+            route.acceptsApplicationGenerationQuery ||
             route.acceptsApplicationResumeFormatQuery ||
             route.acceptsRestrictedAnswerContextQuery) &&
           event.rawQueryString

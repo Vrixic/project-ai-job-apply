@@ -88,3 +88,22 @@ resume/edit lifecycles, ATS handoff and D3-012 no-training/retention/entity/regi
 Metadata authorization is not a substitute for these requirements. Confirmed/ambiguous evidence
 and duplicate guards are unchanged. ADR-040 remains Proposed; no new deployment authorization.
 Hosted CI/CD remains deferred until production launch.
+
+## Full-verifier routing correction
+
+The first resumed full verifier on clean `ecb31c8f` fails the Gateway contract-route test:
+Nest serves the new authorization route but the independent API Gateway Lambda allowlist returns
+404. This is an implementation gap, not a hosted-CI failure. The Lambda adapter now recognizes
+only GET on the exact UUIDv7 application path, requires one bounded UUIDv7 generation query,
+refuses missing/repeated/extra queries and bodies, requires the existing trusted authorizer
+context, and forwards through the ordinary invocation principal bridge. It does not enable the
+Applications capability or bypass owner/scope checks. All 113 Lambda adapter tests pass, including
+eight new malformed/authentication/framing cases and the existing complete OpenAPI enumeration.
+Log: `.tmp/d3-native-authz-lambda.log`. A corrected clean-source full verifier is required.
+
+The final frozen `ecb31c8f` SQL and Linux runs separately passed 28 and 16 cases respectively:
+`.tmp/d3-native-authz-sql-final.log` / `.tmp/d3-native-authz-sql-final.exit` (0), and
+`.tmp/d3-native-authz-linux-final.log` / `.tmp/d3-native-authz-linux-final.exit` (0). The subsequent
+routing correction changes only the Lambda adapter/tests and this evidence, so those distinct
+owner/native proofs remain evidence for unchanged implementations. Exact owned fixture cleanup
+completed, Docker Desktop and WSL stopped; no shared volumes removed.
