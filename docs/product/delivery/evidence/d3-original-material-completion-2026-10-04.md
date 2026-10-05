@@ -71,3 +71,23 @@ The first maintained verifier on clean `3d12d84b` stops at the exact D2 runtime 
 guard. Extend its supported Documents list with exact 0010 while retaining all historical lists
 and rejecting unknown/mixed successors. The focused current/historical suite passes 256 assertions;
 no cloud call. This is a migration-compatibility fix, with a clean-source full rerun still required.
+
+
+## Final source verification (2026-10-05)
+
+Clean committed implementation `78388aa1ad6d92ed5dfb57cc5c648b9b5f96d65f` passes
+`scripts/verify-phase0.ps1` with exit 0: 38 typecheck tasks, 39 workspace test tasks, 23 production
+builds, formatting, operational/security/Compose/scope and compiled capability checks. Documents
+passes 1,269 units; Workflows passes 1,588 units with 57 integration cases skipped in that unit run.
+Lint remains zero errors, 15 warnings and 58 informational notes. Local PostgreSQL/restore and the
+two new completion-bundle checks were executed separately above; they are not hosted evidence.
+The committed source-bound migration-operator check passes, and current/historical D2 inventory
+checks pass 256 assertions after the exact-list fix. No tracked source changes occurred during the
+successful verifier. A preceding verifier tool session disappeared and OS inspection found no
+remaining verifier process; its incomplete log was not treated as a pass. The resumed full run
+finished normally with an explicit zero exit receipt.
+
+Only delivery documentation follows this verified implementation. Newly added local links resolve,
+the SQL migration checksum and exact manifest/TypeScript/PowerShell/fixture identities match,
+and whitespace checks pass. Docker/WSL remain stopped. D3-064 and both phases remain In progress;
+no browser/provider/cloud acceptance, publishing, deployment, activation or hosted CI/CD claim.

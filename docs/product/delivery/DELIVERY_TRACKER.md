@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -3394,3 +3394,13 @@ bundle isolation and restore/publisher guards pass. Source-bound full verificati
 [Evidence](evidence/d3-original-material-completion-2026-10-04.md). Content transport/actor, resume,
 packet/ATS expiry, client/no-store/worker/provider and deployed acceptance remain. Docker/WSL stopped;
 no publication, deployment, activation or D1/D3 completion. Owner defers CI/CD until production launch.
+
+
+2026-10-05 D3-064 clean native original-completion source `78388aa1` passes full maintained local
+verification: 38 typecheck tasks, 39 test tasks, 23 builds; Documents 1,269 units, Workflows 1,588
+units; unchanged lint. The source-bound migration operator and exact current/historical runtime
+inventory guards pass. Separate real-SQL and 62-migration/84-relation logical restore evidence is
+[recorded](evidence/d3-original-material-completion-2026-10-04.md). Only delivery documentation
+follows. Content/actor routing, resumes, packet/ATS expiry, no-store/client/worker/provider and
+accountable/deployed gates remain; D3-064 and D1/D3 stay In progress. Docker/WSL stopped; no
+publication, deployment or activation. Owner defers hosted CI/CD until production launch.
