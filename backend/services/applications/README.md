@@ -260,3 +260,9 @@ resolution. It checks current application/packet ownership, terminal state, exac
 material/hash, expiry and cancellation before returning only packet ID/hash and scalar reference.
 Native transport repeats it before sending. This is an injected in-process port, not an enabled
 remote RPC, SQL lease or content reader; private authentication/composition remains unfinished.
+
+`temporaryMaterialAuthorization` exposes only current packet ID/hash and public original material
+metadata after normal owner resolution. The independent `nativeReadAuthorizationsEnabled` flag
+defaults off; the capability does not call memory, rendering, model or object ports and does not
+claim physical availability, approval or deadline renewal. Native transport rechecks it before
+sending; other private launch/control adapters remain unfinished.

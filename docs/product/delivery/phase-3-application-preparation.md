@@ -1040,3 +1040,13 @@ with the locally verified native HTTPS source `aed4b391`; its base remains exact
 `50a9965a`, and the two-PR maximum is preserved. Subsequent commits change documentation only.
 No authored merge, image publication, deployment or activation. D1/D3 stay In progress;
 hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 extends exact #555 `8edcc3df` with an additive default-off authenticated
+Gateway scalar authorization route and a fixed-origin, one-attempt native metadata client.
+The current verified candidate token follows the normal owner boundary; generated bodies stay
+in the native process. Native responses now match direct existing public JSON schemas. 21 client,
+96 contract and 97 Gateway route tests pass, plus 28 real PostgreSQL owner/HTTP cases and 16
+Linux process cases (28 HTTPS checks; external ports simulated). Final clean-source/full checks
+pending. [Evidence](evidence/d3-native-read-authorization-2026-10-05.md). Private launch/adapters/
+registry/managed routing/stop, full content/client/ATS/provider/accountable gates remain; no
+frontend, deployment/activation or D1/D3 completion. CI/CD deferred until production launch.

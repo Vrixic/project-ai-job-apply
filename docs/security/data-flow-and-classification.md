@@ -680,3 +680,17 @@ process; SQL/provider/renderer/managed identity are simulated. Private remote au
 launch/task registry/TLS routing/managed stop, full client/ATS copy lifecycle and D3-012 provider
 terms remain gates. No deployment, enabled hostname, all-copy purge or remote settlement follows.
 [Evidence](../product/delivery/evidence/d3-native-memory-transport-2026-10-05.md).
+
+## D3-079 scalar Gateway authorization source delta — 2026-10-05
+
+The native HTTPS listener forwards its current verified candidate token only in Authorization
+to a fixed HTTPS Gateway metadata endpoint. The normal Gateway identity/scope/owner boundary
+reads Applications truth and returns only current packet ID/hash and original material metadata.
+The native client strictly validates bounded scalar JSON, original identity/hash/time and expiry;
+there is no content forwarding, caching, durable token payload, retry, model or object read.
+Generated bodies remain in the kernel-bounded native process. Native direct response JSON matches
+existing preview/file schemas. The new Applications capability defaults off and its production
+flag is not composed. Private launch/control adapters, registry/managed routing/positive stop,
+full client/ATS copy lifecycle and D3-012 terms remain gates. Local real SQL/Gateway and Linux/TLS
+proof have different simulated external boundaries; no deployed/UI/all-copy purge claim follows.
+[Evidence](../product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).

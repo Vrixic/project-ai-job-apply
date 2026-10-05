@@ -31,6 +31,8 @@ export type RequestedApplicationCoverLetter =
 export type ApplicationPacketPreparation = components["schemas"]["ApplicationPacketPreparation"];
 export type ApplicationCoverLetterPreview = components["schemas"]["ApplicationCoverLetterPreview"];
 export type ApplicationCoverLetterFile = components["schemas"]["ApplicationCoverLetterFile"];
+export type ApplicationTemporaryMaterialAuthorization =
+  components["schemas"]["ApplicationTemporaryMaterialAuthorization"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
 export type ProfileFact = components["schemas"]["ProfileFact"];
 export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];

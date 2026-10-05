@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-read-authorization-client": {
+      "types": "./dist/src/native-read-authorization-client.d.ts",
+      "default": "./dist/src/native-read-authorization-client.js"
+    },
     "./native-memory-transport": {
       "types": "./dist/src/native-memory-transport.d.ts",
       "default": "./dist/src/native-memory-transport.js"

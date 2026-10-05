@@ -102,3 +102,9 @@ current generation and fixed original expiry; owner/application fields and memor
 capabilities never enter public output. Old response bodies remain valid, but old closed-object
 consumers reject the new key: deploy upgraded readers before any producer. This source-only
 addition grants no generation/provider activation, persistence, historical read or renewed expiry.
+
+The additive v1 temporary cover-letter authorization route and strict
+`ApplicationTemporaryMaterialAuthorization` component contain only packet ID/hash and original
+public material metadata. They carry no owner ID, tokens, answers or document bodies. Normal
+application-read scope and no-store apply; the capability defaults off and is not an approval,
+availability, expiry-renewal or process-stop certificate.

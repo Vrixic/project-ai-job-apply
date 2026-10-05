@@ -272,3 +272,10 @@ timeout or response/connection closure. Per-request socket listeners are removed
 objects are cleared after delivery; delivered candidate-held bytes remain outside platform cleanup.
 This extends the earlier availability guard with a bounded local lease; authenticated native session
 transport, physical worker drain and client lifecycle still need evidence before activation.
+
+The additive owner-scoped temporary cover-letter authorization read is scalar-only, requires
+`applications:read`, rejects extra/repeated/missing query fields and uses no-store. It resolves
+identity through the normal authenticated boundary and delegates to the independent default-off
+Applications capability. No generated body is read/forwarded by this endpoint. Its production
+runtime flag is not composed. See
+[authorization evidence](../../docs/product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).

@@ -5,6 +5,7 @@ import type {
   ApplicationAttempt,
   ApplicationCoverLetterFile,
   ApplicationCoverLetterPreview,
+  ApplicationTemporaryMaterialAuthorization,
   ApplicationHistoryPage,
   ApplicationPacketPreparation,
   ApplicationPage,
@@ -2772,6 +2773,32 @@ class ApplicationsController {
       user.id,
       applicationId,
       format,
+      temporaryMaterialRequestSignal(request),
+    );
+  }
+
+  @Get("/:applicationId/cover-letter/authorization")
+  @Header("cache-control", "no-store")
+  async temporaryMaterialAuthorization(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationTemporaryMaterialAuthorization> {
+    const user = await this.identity.resolve(request, "applications:read");
+    const query = request.query as Record<string, unknown> | undefined;
+    if (
+      request.body !== undefined ||
+      !query ||
+      Object.keys(query).length !== 1 ||
+      typeof query.generationId !== "string"
+    )
+      throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
+    requireApplicationPath(applicationId, query.generationId);
+    if (!this.applications.temporaryMaterialAuthorization)
+      throw new HttpException("Applications are unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+    return this.applications.temporaryMaterialAuthorization(
+      user.id,
+      applicationId,
+      query.generationId,
       temporaryMaterialRequestSignal(request),
     );
   }
