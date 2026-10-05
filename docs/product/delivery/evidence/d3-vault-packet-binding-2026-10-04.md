@@ -40,4 +40,31 @@ security/privacy review before activation. This is a concrete engineering gap, n
 The first full verifier found historical restore fixtures accidentally inheriting new migration
 0006; the historical 52/57/58 counts remain unchanged. Their filters now omit 0006, with an added
 59-migration historical-boundary refusal case. Production migration/manifest bytes are unchanged;
-All 24 focused restore unit tests pass after the correction; a fresh clean full verifier remains required.
+All 43 focused migration/restore unit tests pass after the correction; the fresh clean full verifier passes on `21594bc4084f833bf9ac86845ed0142a97fdf211`.
+
+## Clean-source completion evidence
+
+Clean `21594bc4084f833bf9ac86845ed0142a97fdf211` passes `scripts/verify-phase0.ps1`:
+38 typecheck tasks, 39 test tasks, 23 production builds, formatting, operational/security and
+bundle-isolation guards, Compose and product-scope checks. Lint remains 0 errors, 15 warnings and
+58 informational notes. API contracts pass 85 tests; Domain 25; Applications 147; Profile 120
+with 46 SQL opt-ins separately verified; Gateway 300 with 38 SQL opt-ins skipped (23 new and
+five existing Applications cases separately verified); Workflows 1,588 with 57 opt-ins skipped,
+including the separately verified preparation/native cases above. No live provider/OIDC/KMS/ATS
+end-to-end claim or browser selection/review acceptance is made.
+
+The actual native preparation artifact is built twice from exact clean source `21594bc4`.
+All five local files (bundle, ZIP, manifest, SBOM and checksum) are byte-identical. ZIP SHA256:
+`fd264e27a59ea349855c8edf2bc18b6128d9b4ea0b867865adca26e8045abdbd`; bundle SHA256:
+`ad1be4638e495536dfdb7b6b75b971287ff75f0d710eb2464640b4591262ec47`. The builder executes
+the actual bundle's default-off refusal, extra-content rejection and zero-fetch checks.
+41 components; 1,421,323 ZIP bytes. Nothing is published or deployed.
+
+The owned fixtures are removed; Docker Desktop and WSL are stopped, shared volumes retained.
+Added Markdown links resolve and D1/D3 checklist lines match exact parent #545. Following edits
+are delivery documentation only. Logs: `.tmp/d3-076-full-verifier-final.log`,
+`.tmp/d3-076-native-artifact-1.log`, `.tmp/d3-076-native-artifact-2.log`.
+
+This completes local source verification, not D3-076's deployed journey or D1/D3. D3-077's
+restricted packet persistence, candidate review UI, reader-first/migration/native releases,
+accountable approvals and deployed acceptance remain. Keep reuse false.
