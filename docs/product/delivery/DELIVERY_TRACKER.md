@@ -3498,3 +3498,8 @@ including real loopback abort and terminal/idempotent disposal. [Evidence](evide
 Only documentation follows. Docker/WSL stopped. Managed-copy acknowledgement is not remote
 settlement/physical native-host purge; native actor/session/transport/drain/resume/client/provider/
 ATS gates remain. D1/D3 stay In progress; no activation/deployment; CI/CD deferred until launch.
+
+2026-10-05 D3-064 held temporary-content/disposal source is reviewable in
+[PR #553](https://github.com/Vrixic/project-ai-job-apply/pull/553), based on exact open #552.
+Verified implementation remains `56335f55`; following commits change delivery documentation
+only. D1/D3 and D3-064 stay In progress; no authored merge, publication, deployment or activation.

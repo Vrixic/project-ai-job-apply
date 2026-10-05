@@ -79,3 +79,9 @@ client idle/logout/cancel/confirmed-submit cleanup and ATS handoff remain. D3-01
 approval is mandatory before activation. None of this closes deployed/browser/accountable acceptance.
 The private disposal port must not be interpreted as a new remote settlement certificate.
 No UI changed or browser journey exercised; frontend work remains in the other worktree.
+
+## Reviewable source
+
+[PR #553](https://github.com/Vrixic/project-ai-job-apply/pull/553) is open, based on exact
+open #552. Verified implementation is `56335f55`; subsequent commits change delivery
+documentation only. No authored merge, artifact publication, deployment or activation.
