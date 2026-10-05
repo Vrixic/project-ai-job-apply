@@ -104,3 +104,8 @@ still names exact `467b48eb`. This change is reviewed against that exact branch 
 contains the new original actor only; stack promotion to main is separate. No authored merge,
 publication, deployment or activation occurred. D1/D3 remain In progress and all activation/
 accountable gates above remain open. Owner CI/CD deferral remains in force.
+
+2026-10-05 D3-064 original memory-only generation is reviewable in
+[PR #554](https://github.com/Vrixic/project-ai-job-apply/pull/554), based on exact #553 branch
+`467b48eb`. Verified implementation remains `e8fdc241`; subsequent commits change delivery
+documentation only. D1/D3 and D3-064 stay In progress. No authored merge, deployment or activation.
