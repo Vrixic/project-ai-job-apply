@@ -2,7 +2,7 @@
 
 Status: In progress; backend source and local evidence, default-off and undeployed.
 
-Started from freshly fetched main `e48bdf3a` with exact open #553 `467b48eb` fast-forward
+Started from freshly fetched main `e48bdf3a` with exact #553 `467b48eb` fast-forward
 integrated. [ADR-038](../../../adr/038-one-off-generated-application-materials.md) and
 [ADR-016](../../../adr/016-scale-to-zero-application-runtime.md) govern this replacement.
 D1/D3 remain In progress. Hosted CI/CD is deferred until production launch by the owner.
@@ -74,3 +74,33 @@ Temporary resume production/reads, same-deadline candidate edits, workflow/ATS h
 browser/logout cleanup, deployed installed-extension journeys, and existing accountable/ATS gates
 remain open. Do not reopen owner-removed Delivery queue/Your shared jobs manual panels. The
 separate D3-077 restricted packet storage gate remains open; saved-answer reuse remains false.
+
+## Final local verification
+
+Clean implementation `e8fdc2413f86466618ab5533abfba73cf3b675d3` passes
+`scripts/verify-phase0.ps1`, terminal exit `0`: 38 typecheck tasks, 39 workspace test tasks,
+23 builds, operational/security/Compose and emitted dependency isolation. Final AI SDK 291,
+Documents 1,303 and Gateway 307 units pass; Gateway's 61 opt-in skips are not SQL evidence.
+Lint remains zero errors, 15 baseline warnings and 58 infos. Local log/receipt:
+`.tmp/d3-original-memory-verify.log` / `.tmp/d3-original-memory-verify.exit`.
+No source changed while full verification was running; subsequent changes are documentation only.
+
+Final source native rerun: all 23 Gateway original-SDK/native-control/memory/render/HTTP cases
+pass. All 136 Documents native work-ledger cases pass with `COVER_LETTER_WORK_INTEGRATION=1`
+and its dedicated `work_ledger_original_20261005` database. The earlier invocation skipped all
+136 because its explicit opt-in was missing; it is not counted as persistence evidence.
+Local terminal logs: `.tmp/d3-original-memory-http.log` and
+`.tmp/d3-original-memory-ledger-optin.log`; both exit receipts are `0`.
+
+Owned synthetic tmpfs fixture
+`a150693ba1578407da509448438b786860a03b0b8f7329255974cc3aa7a6f2f0` was verified to have no
+mounts and the exact `d3-original-memory-20261005` task label, then removed by exact ID.
+Shared volumes were retained. Docker Desktop and WSL are stopped; no running WSL distribution.
+All verification handles are terminal.
+
+GitHub now reports #553 and the earlier stacked PRs merged into their respective branches;
+Git and GitHub's authoritative `main` ref both still name `e48bdf3a`. The #553 review branch
+still names exact `467b48eb`. This change is reviewed against that exact branch so its diff
+contains the new original actor only; stack promotion to main is separate. No authored merge,
+publication, deployment or activation occurred. D1/D3 remain In progress and all activation/
+accountable gates above remain open. Owner CI/CD deferral remains in force.

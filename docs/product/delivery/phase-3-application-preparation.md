@@ -973,3 +973,13 @@ generated objects or saved recovery. 291 AI units, 47 focused Documents cases an
 native SQL/HTTP cases pass; final source SQL rerun/full verifier remain pending. [Evidence](evidence/d3-original-memory-generation-2026-10-05.md).
 Native session host/issuer/transport/drain, resume/client/provider/ATS and accountable gates remain.
 D1/D3 stay In progress; no activation/deployment/authored merge; hosted CI/CD deferred until launch.
+
+2026-10-05 D3-064 clean `e8fdc241` passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 builds and operational/security/emitted-isolation checks; unchanged lint
+(0 errors, 15 warnings, 58 infos). AI SDK 291 and Documents 1,303 units pass. Final native
+runs pass 23 Gateway original-SDK/SQL/render/HTTP cases and 136 opted-in Documents ledger cases.
+[Evidence](evidence/d3-original-memory-generation-2026-10-05.md). Only documentation follows.
+Owned tmpfs fixture removed and Docker/WSL stopped. Native session host/issuer/transport/drain,
+resume/client/provider/ATS and accountable gates remain; D1/D3 stay In progress. Earlier stacked
+PRs are reported merged into their branches, while authoritative main still names `e48bdf3a`.
+No authored merge/deployment/activation; hosted CI/CD deferred until production launch.
