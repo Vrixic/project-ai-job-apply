@@ -3796,3 +3796,14 @@ Docker/WSL stopped. Native protected metadata carry still needs composition with
 capability, plus legacy transition, artifact isolation and clean full verification. Private WIP only;
 no production activation, deployed acceptance or D1/D3 phase completion.
 [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 separates exact protected metadata carry from cipher authority. All 11 isolated
+Documents preparation SQL cases now seed a restricted chosen answer, including actual native
+composition without a packet cipher. Successful finalization preserves the original single
+ciphertext/binding, masked review metadata, zero preparation read audit/decrypt and a later exact
+authorized candidate read. All 27 restricted storage SQL regressions, 314 Applications units,
+1,613 Workflow units and both builds pass. Five native/provider emitted isolation checks exclude
+packet crypto/test authority from their respective actors. Owned fixture removed; shared volumes
+retained and Docker/WSL stopped. Legacy transition, broader artifact checks and clean full verifier
+remain. No deployment/activation or D1/D3 completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.

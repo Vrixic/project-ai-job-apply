@@ -259,6 +259,94 @@ export function restrictedPacketEnvelopeSha256(envelope: RestrictedPacketEnvelop
   });
 }
 
+function validateRestrictedField(
+  field: PacketFieldEntry,
+  definitions: ReadonlyMap<string, FieldDefinition>,
+) {
+  const definition = definitions.get(field.fieldKey);
+  if (
+    !definition ||
+    !isRestricted(field, definitions) ||
+    !field.requiresReview ||
+    (definition.sensitivity === "restricted" && !field.reasons.includes("restricted_answer")) ||
+    (definition.answerPolicy === "never_infer" && !field.reasons.includes("never_infer")) ||
+    (definition.answerPolicy === "explicit_each_time" &&
+      !field.reasons.includes("explicit_each_time")) ||
+    field.disposition !== "review" ||
+    !Number.isFinite(field.confidence) ||
+    !valueMatchesDefinition(definition, field.value) ||
+    (definition.answerPolicy === "never_infer" &&
+      !["user_entered", "answer_vault"].includes(field.origin)) ||
+    (field.vaultReference &&
+      (field.origin !== "answer_vault" || isDirectActionField(field.fieldKey))) ||
+    field.fieldKey === "documents.resume" ||
+    field.fieldKey === "documents.cover_letter"
+  )
+    throw unavailable();
+}
+
+/** Original preparation carry-forward: metadata only, no decrypt/re-encrypt or renewed
+ * references. The owner transaction must independently admit the exact current base packet. */
+export function carryRestrictedPacketMetadata(
+  candidate: ApplicationPacket,
+  base: ApplicationPacket,
+  definitions: ReadonlyMap<string, FieldDefinition>,
+): ApplicationPacket {
+  try {
+    if (
+      !verifyPacketHash(candidate) ||
+      !verifyPacketHash(base) ||
+      !base.restrictedValues ||
+      candidate.restrictedValues ||
+      candidate.userId !== base.userId ||
+      candidate.applicationId !== base.applicationId ||
+      candidate.canonicalJobId !== base.canonicalJobId ||
+      candidate.version <= base.version ||
+      candidate.jobRevision !== base.jobRevision ||
+      canonicalJson(candidate.form) !== canonicalJson(base.form)
+    )
+      throw unavailable();
+    list(base.fields);
+    for (const field of base.fields) validateShape(field, true);
+    list(candidate.fields);
+    for (const field of candidate.fields) validateShape(field, false);
+    const selected = base.fields.filter((field) => field.protectedValue === true);
+    for (const field of selected) validateRestrictedField(field, definitions);
+    const context = {
+      ownerUserId: base.userId,
+      applicationId: base.applicationId,
+      jobRevision: base.jobRevision,
+      form: base.form,
+    };
+    if (
+      !selected.length ||
+      metadataSha256(context, selected, definitions) !== base.restrictedValues.metadataSha256 ||
+      selected.some((field) => candidate.fields.some((next) => next.fieldKey === field.fieldKey)) ||
+      candidate.fields.some((field) => isRestricted(field, definitions) && field.value !== null)
+    )
+      throw unavailable();
+    const fields = structuredClone([...candidate.fields, ...selected]).sort((left, right) =>
+      left.fieldKey.localeCompare(right.fieldKey),
+    );
+    for (const field of fields) {
+      Object.freeze(field.sourceFactIds);
+      Object.freeze(field.reasons);
+      if (field.vaultReference) Object.freeze(field.vaultReference);
+      if (Array.isArray(field.value)) Object.freeze(field.value);
+      Object.freeze(field);
+    }
+    Object.freeze(fields);
+    const content = {
+      ...candidate,
+      fields,
+      restrictedValues: Object.freeze({ ...base.restrictedValues }),
+    };
+    return Object.freeze({ ...content, packetHash: computePacketHash(content) });
+  } catch {
+    throw unavailable();
+  }
+}
+
 /** Only owning policy-classified immutable packet fields enter this codec. It supplies no SQL,
  * authorization, approval, export or provider capability. Callers must independently validate
  * owner/current snapshot after awaits, and keep reads separate from metadata-only admission. */
@@ -311,28 +399,7 @@ export function createRestrictedPacketProtection(options: {
       metadataSha256: sha,
     };
   }
-  function validate(field: PacketFieldEntry) {
-    const definition = definitions.get(field.fieldKey);
-    if (
-      !definition ||
-      !isRestricted(field, definitions) ||
-      !field.requiresReview ||
-      (definition.sensitivity === "restricted" && !field.reasons.includes("restricted_answer")) ||
-      (definition.answerPolicy === "never_infer" && !field.reasons.includes("never_infer")) ||
-      (definition.answerPolicy === "explicit_each_time" &&
-        !field.reasons.includes("explicit_each_time")) ||
-      field.disposition !== "review" ||
-      !Number.isFinite(field.confidence) ||
-      !valueMatchesDefinition(definition, field.value) ||
-      (definition.answerPolicy === "never_infer" &&
-        !["user_entered", "answer_vault"].includes(field.origin)) ||
-      (field.vaultReference &&
-        (field.origin !== "answer_vault" || isDirectActionField(field.fieldKey))) ||
-      field.fieldKey === "documents.resume" ||
-      field.fieldKey === "documents.cover_letter"
-    )
-      throw unavailable();
-  }
+  const validate = (field: PacketFieldEntry) => validateRestrictedField(field, definitions);
   return Object.freeze({
     async prepare(
       context: PacketContext,
@@ -451,65 +518,9 @@ export function createRestrictedPacketProtection(options: {
       }
     },
 
-    /** Original preparation carry-forward: metadata only, no decrypt/re-encrypt or renewed
-     * references. The owner transaction must independently admit the exact current base packet. */
     carry(candidate: ApplicationPacket, base: ApplicationPacket): ApplicationPacket {
-      try {
-        check();
-        if (
-          !verifyPacketHash(candidate) ||
-          !verifyPacketHash(base) ||
-          !base.restrictedValues ||
-          candidate.restrictedValues ||
-          candidate.userId !== base.userId ||
-          candidate.applicationId !== base.applicationId ||
-          candidate.canonicalJobId !== base.canonicalJobId ||
-          candidate.version <= base.version ||
-          candidate.jobRevision !== base.jobRevision ||
-          canonicalJson(candidate.form) !== canonicalJson(base.form)
-        )
-          throw unavailable();
-        list(base.fields);
-        for (const field of base.fields) validateShape(field, true);
-        list(candidate.fields);
-        for (const field of candidate.fields) validateShape(field, false);
-        const selected = base.fields.filter((field) => field.protectedValue === true);
-        selected.forEach(validate);
-        const context = {
-          ownerUserId: base.userId,
-          applicationId: base.applicationId,
-          jobRevision: base.jobRevision,
-          form: base.form,
-        };
-        if (
-          !selected.length ||
-          metadataSha256(context, selected, definitions) !== base.restrictedValues.metadataSha256 ||
-          selected.some((field) =>
-            candidate.fields.some((next) => next.fieldKey === field.fieldKey),
-          ) ||
-          candidate.fields.some((field) => isRestricted(field, definitions) && field.value !== null)
-        )
-          throw unavailable();
-        const fields = structuredClone([...candidate.fields, ...selected]).sort((left, right) =>
-          left.fieldKey.localeCompare(right.fieldKey),
-        );
-        for (const field of fields) {
-          Object.freeze(field.sourceFactIds);
-          Object.freeze(field.reasons);
-          if (field.vaultReference) Object.freeze(field.vaultReference);
-          if (Array.isArray(field.value)) Object.freeze(field.value);
-          Object.freeze(field);
-        }
-        Object.freeze(fields);
-        const content = {
-          ...candidate,
-          fields,
-          restrictedValues: Object.freeze({ ...base.restrictedValues }),
-        };
-        return Object.freeze({ ...content, packetHash: computePacketHash(content) });
-      } catch {
-        throw unavailable();
-      }
+      check();
+      return carryRestrictedPacketMetadata(candidate, base, definitions);
     },
 
     async read(

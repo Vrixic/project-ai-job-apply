@@ -18,7 +18,7 @@ test("isolated provider bundle excludes SQL, rendering and private persistence r
   });
   const inputs = Object.keys(result.metafile.inputs);
   const forbidden = inputs.filter((name) =>
-    /(?:services\/profile\/|postgres@|drizzle-orm@|pdfjs-dist@|cover-letter-(?:work|response|store).*store\.js|cover-letter-store\.js|\/render\/|test-support)/u.test(
+    /(?:services\/(?:profile|applications)\/|restricted-packet|restricted-packets|postgres@|drizzle-orm@|pdfjs-dist@|cover-letter-(?:work|response|store).*store\.js|cover-letter-store\.js|\/render\/|test-support)/u.test(
       name.replaceAll("\\", "/"),
     ),
   );

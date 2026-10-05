@@ -5,6 +5,7 @@ import { ModelGateway } from "@ai-job-apply/ai-sdk";
 import {
   type ApplicationStoreOptions,
   createApplicationsDatabase,
+  defaultFieldDefinitions,
   type FieldDefinition,
   PostgresApplicationStore,
   type PreparationRecord,
@@ -82,6 +83,7 @@ describe.skipIf(!requested)(
       searchCursorKeys: { active: { id: "synthetic-v1", key: Buffer.alloc(32, 1) } },
     });
     const definitions = new Map<string, FieldDefinition>([
+      ...defaultFieldDefinitions(),
       [
         "documents.cover_letter",
         {
@@ -144,6 +146,7 @@ describe.skipIf(!requested)(
         const fault = native ? variant.slice(7) : variant;
         let now = new Date();
         let revealResult = fault !== "delayed_result";
+        const decryptPacket = vi.spyOn(packetProtection.options.cipher, "decrypt");
         const applications = new PostgresApplicationStore(applicationsDb, () => now, {
           definitions,
           restrictedPackets: packetProtection.options,
@@ -367,10 +370,21 @@ describe.skipIf(!requested)(
           packet: {
             jobRevision: context.jobContextHash,
             form: null,
-            fields: [],
+            fields: [
+              {
+                fieldKey: "authorization.us_authorized",
+                value: false,
+                origin: "user_entered",
+                sourceFactIds: [],
+                sourceConfirmed: true,
+                confidence: 1,
+              },
+            ],
             artifactHashes: {},
           },
         });
+        const originalBinding = queued.view.currentPacket?.restrictedValues;
+        expect(originalBinding).toBeDefined();
         const [outbox] = await applicationsDb<
           Array<{ id: string; payload: { preparationId: string } }>
         >`SELECT id, payload FROM applications.preparation_outbox WHERE preparation_id = ${queued.preparation.id}`;
@@ -557,11 +571,45 @@ describe.skipIf(!requested)(
           const view = await applications.getApplication(user.id, applicationId);
           expect(view.application.status).toBe("review_required");
           expect(view.currentPacket?.version).toBe(2);
-          expect(view.currentPacket?.fields[0]).toMatchObject({
+          expect(
+            view.currentPacket?.fields.find((field) => field.fieldKey === "documents.cover_letter"),
+          ).toMatchObject({
             fieldKey: "documents.cover_letter",
             origin: "generated",
             requiresReview: true,
           });
+          expect(view.currentPacket?.restrictedValues).toEqual(originalBinding);
+          expect(
+            view.currentPacket?.fields.find(
+              (field) => field.fieldKey === "authorization.us_authorized",
+            ),
+          ).toMatchObject({
+            value: null,
+            protectedValue: true,
+            origin: "user_entered",
+            requiresReview: true,
+          });
+          const [stored] = await applicationsDb<{ values: number; audits: number }[]>`
+            SELECT
+              (SELECT count(*)::int FROM applications_restricted.packet_values
+                WHERE owner_user_id = ${user.id}) AS values,
+              (SELECT count(*)::int FROM applications_restricted.packet_read_audit
+                WHERE owner_user_id = ${user.id}) AS audits
+          `;
+          expect(stored).toEqual({ values: 1, audits: 0 });
+          expect(decryptPacket).not.toHaveBeenCalled();
+          expect(JSON.stringify(complete.mock.calls)).not.toContain("authorization.us_authorized");
+          const current = view.currentPacket;
+          if (!current) throw Error("MissingSyntheticCompletedPacket");
+          const selected = await applications.readCurrentPacketValues({
+            ownerUserId: user.id,
+            applicationId,
+            expectedRevision: view.application.revision,
+            packetId: current.id,
+            packetHash: current.packetHash,
+          });
+          expect(selected.values).toEqual(new Map([["authorization.us_authorized", false]]));
+          Map.prototype.clear.call(selected.values);
           expect(view.currentPacket?.artifactHashes.coverLetter).toMatch(/^[a-f0-9]{64}$/u);
           expect(finalWrite).toHaveBeenCalledTimes(1);
           expect(await activity(input)).toMatchObject({ outcome: "completed" });

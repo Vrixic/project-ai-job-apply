@@ -69,6 +69,7 @@ import type {
   RestrictedPacketExportScope,
 } from "./restricted-packet-export.js";
 import {
+  carryRestrictedPacketMetadata,
   createRestrictedPacketProtection,
   type PreparedRestrictedPacketFields,
 } from "./restricted-packet-protection.js";
@@ -411,6 +412,7 @@ import {
 
 export class PostgresApplicationStore {
   private readonly restrictedPackets: ApplicationStoreOptions["restrictedPackets"];
+  private readonly restrictedCarryDefinitions: ReadonlyMap<string, FieldDefinition>;
   private readonly restrictedProtection:
     | ReturnType<typeof createRestrictedPacketProtection>
     | undefined;
@@ -419,6 +421,9 @@ export class PostgresApplicationStore {
     private readonly clock: () => Date = () => new Date(),
     private readonly options: ApplicationStoreOptions = { definitions: new Map() },
   ) {
+    this.restrictedCarryDefinitions = new Map(
+      [...options.definitions].map(([key, definition]) => [key, structuredClone(definition)]),
+    );
     this.restrictedPackets = options.restrictedPackets
       ? Object.freeze({ ...options.restrictedPackets })
       : undefined;
@@ -2083,9 +2088,11 @@ export class PostgresApplicationStore {
         original.packetHash !== carriedBase.packetHash
       )
         throw new RestrictedPacketStoreUnavailableError();
-      const { protection } = this.requireRestrictedProtection();
+      // Completion carries already accepted masked metadata only. The native actor has no
+      // cipher; a configured private writer still honors withdrawal of its protection gate.
+      if (this.restrictedPackets) this.requireRestrictedProtection();
       try {
-        packet = protection.carry(packet, original);
+        packet = carryRestrictedPacketMetadata(packet, original, this.restrictedCarryDefinitions);
       } catch {
         throw new RestrictedPacketStoreUnavailableError();
       }

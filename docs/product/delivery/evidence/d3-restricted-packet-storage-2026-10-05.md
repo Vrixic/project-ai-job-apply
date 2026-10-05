@@ -468,6 +468,43 @@ above do not cover this path. Complete exact metadata-only carry without grantin
 actors a decryption capability, and verify it through actual native composition and artifact isolation
 before claiming the whole slice complete. Legacy transition and clean full verification remain.
 
+## Native protected-packet carry without cipher authority
+
+The synchronous exact protected metadata carry is now independent of the cipher factory. It retains
+all original scope/version/job/form/field-policy/metadata/hash checks and copies the exact original
+binding/fields without decrypt, re-encrypt or reference renewal. The store snapshots its owning
+field definitions even when no cipher is composed. Inside the original preparation transaction,
+the metadata-only native actor can finish already accepted protected packets; a configured private
+writer still requires its existing enabled protection gate. New protected writes, keyed commands
+and candidate/export reads retain their required private authority. No public port or feature flag
+is enabled, and the pure carry helper remains absent from root exports.
+
+The 11 actual isolated Documents preparation cases now seed a user-entered restricted false
+answer. This exercises the native runtime with no packet cipher across normal execution, durable
+replay, lost invoke acknowledgement and quarantine. Successful variants retain one original
+ciphertext record, exact protected binding and a masked mandatory-review field, with zero read audit
+and zero packet decrypt calls during preparation. A later authorized current candidate read returns
+the original false value; the test clears the controlled map. Model calls exclude the restricted
+field key. The original cancellation/provider acknowledgement and no-effect cases remain covered.
+This replaces the preceding ordinary-only native evidence gap, without claiming cloud execution.
+
+All 27 restricted-storage PostgreSQL regressions, 314 Applications units, 1,613 Workflow units and
+both builds pass. Workflow unit run skips 57 opt-in/database cases; native SQL opt-in executes all
+11 selected cases. Five emitted artifact-isolation checks pass: native preparation port/runtime/
+starter/recovery exclude the packet KMS adapter, offline integration authority and AWS KMS client;
+the isolated provider excludes Applications and all restricted packet modules. Logs:
+`.tmp/d3-native-restricted-carry-sql.log`, `.tmp/d3-native-restricted-carry-storage-sql.log`,
+`.tmp/d3-native-restricted-carry-unit.log`, `.tmp/d3-native-restricted-carry-workflow-unit.log`,
+`.tmp/d3-native-restricted-carry-workflow-build.log`, `.tmp/d3-native-restricted-carry-bundle.log`.
+These are source/dist emission checks; committed archive determinism is verified separately.
+
+Owned tmpfs PostgreSQL fixture
+`fa4c9e80de0cd9f7f693f084c627e956333125de04ce09c1192b41afd7a6d947` was checked against its
+exact ID/name/label/tmpfs and absence of mounts, then removed. Shared volume inventories stayed
+identical. Docker Desktop stopped and WSL reports no running distributions. No live KMS, managed
+OIDC, AWS/provider/ATS invocation, production SQL/IAM authority, deployment or activation is claimed.
+Legacy transition, broader artifact checks and clean full verification remain; private WIP only.
+
 ## Next work
 
 Finish legacy migration compatibility and all maintained integration/runtime protection fixtures;

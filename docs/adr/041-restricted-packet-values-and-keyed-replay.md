@@ -65,8 +65,10 @@ races in real SQL, while historical export retains exact original chosen values.
 65-migration/88-relation/12-schema boundary passes an actual PostgreSQL logical restore with exact
 full-row equality, original values/keyed replay, private metadata-role read refusal and authorized
 deletion. The deletion verifier includes both private relations and its actual SQL replay cases
-seed restricted snapshots/audit. Legacy transition, production role/key composition, maintained
-protection fixtures and complete verification remain unfinished. No
+seed restricted snapshots/audit. Maintained Applications/Gateway/Workflow fixtures pass with
+explicit offline protection. Actual native preparation now carries original protected metadata
+without cipher authority; emitted native/provider isolation checks pass. Legacy transition,
+production role/key composition, broader artifact checks and complete verification remain unfinished. No
 production data, live KMS/provider, deployment or activation is claimed. Saved-answer reuse remains
 disabled. See [D3-077 evidence](../product/delivery/evidence/d3-restricted-packet-storage-2026-10-05.md).
 
