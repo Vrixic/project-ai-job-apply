@@ -43,3 +43,22 @@ supported. Inventory and explicitly resolve any incompatible legacy rows before 
 validated migration and deploying writers. Rollback cannot re-enable plaintext writers.
 Second contract generation succeeds; full maintained verification is pending this checkpoint.
 No UI was changed/exercised and no live authenticated end-to-end acceptance is claimed.
+
+
+## Maintained verification
+
+Exact clean source `6f8a7746cc8aa3cba6d15b16471f738be5b1b7f0` passes `scripts/verify-phase0.ps1`: 38 typecheck tasks,
+39 workspace test tasks, 23 production builds, contract generation/formatting, dependency-security,
+operational/operator, Compose and compiled private-isolation checks. Lint stays at zero errors,
+15 warnings and 58 informational notes. The second contract generation leaves the tree clean.
+Unit-run integration skips are not included in the separately executed real-SQL counts above.
+Added local Markdown links resolve; task IDs are unique and accepted ADR-038 is unchanged.
+Docker Desktop and WSL are stopped, and owned fixtures are removed without touching shared volumes.
+No current-source migration image or Lambda artifact is published, no runtime is deployed/enabled,
+and no UI or live authenticated/model/ATS acceptance is claimed. Only delivery records change after
+this verified source revision. Hosted CI/CD remains deferred until production launch.
+
+Next backend work replaces generated draft/provider-slot persistence with bounded owner/application
+memory and a non-renewable generation-completion deadline, then enforces expiry at content reads,
+approval and ATS handoff while preserving confirmed/ambiguous submission evidence. Required browser
+and provider-retention acceptance remains outside this checkpoint; D3-064 and both phases stay open.

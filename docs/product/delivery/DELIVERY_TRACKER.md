@@ -2800,7 +2800,7 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
 
 2026-10-04 product-policy update: generated cover letters and improved/tailored resumes are one-off,
 never persisted, and limited to 30 minutes from generation completion under
-[ADR-038](../../adr/038-one-off-generated-application-materials.md). D3-064 is Not started and
+[ADR-038](../../adr/038-one-off-generated-application-materials.md). D3-064 is In progress (started 2026-10-04) and
 tracks enforcement, prevention of generated content in packet fields, and automated/browser
 cleanup evidence. Deterministic tailoring already avoids persisted content; expiry enforcement
 and deployed cleanup are not claimed. D3 remains In progress.
@@ -3336,3 +3336,12 @@ Append only material cross-delivery events.
 
 
 | 2026-10-04 | D3-064 backend persistence checkpoint: purpose-aware proposal refusal, document hash-only packet/export contracts, exact-bound owner SQL constraint and fail-closed legacy validation. AI285/Applications155/API86/Domain26/restore44/Documents1,174 units; 72 Applications and 317 Documents real-SQL cases across explicit complementary runs; 61-migration/84-relation logical recovery and runtime/publisher/restore guards pass. Full maintained verification pending. Entire memory/expiry/transport/browser/provider scope stays In progress; no deployment, activation or D1/D3 completion. Owner CI/CD deferral retained. | [Evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md) |
+
+
+2026-10-04 D3-064 exact clean source `6f8a7746` passes full maintained verification: 38 typecheck
+tasks, 39 workspace test tasks, 23 builds and operational/security/Compose/compiled-isolation
+checks, with unchanged lint baseline. Local persistence, 72 Applications/317 Documents SQL,
+61-migration/84-relation logical restore and current-source guard evidence is recorded in
+[the checkpoint](evidence/d3-one-off-generated-material-guards-2026-10-04.md). Temporary-memory,
+expiry/admission, transport/provider and browser scope remains In progress; no D1/D3 completion,
+publication, deployment or activation. Docker/WSL stopped. Owner CI/CD deferral retained.
