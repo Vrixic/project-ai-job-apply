@@ -3345,3 +3345,6 @@ checks, with unchanged lint baseline. Local persistence, 72 Applications/317 Doc
 [the checkpoint](evidence/d3-one-off-generated-material-guards-2026-10-04.md). Temporary-memory,
 expiry/admission, transport/provider and browser scope remains In progress; no D1/D3 completion,
 publication, deployment or activation. Docker/WSL stopped. Owner CI/CD deferral retained.
+
+
+2026-10-04 source checkpoint opened for review as [PR #548](https://github.com/Vrixic/project-ai-job-apply/pull/548), based on exact open #547. No authored PR was merged. Verified implementation source remains `6f8a7746`; later commits contain delivery records only. D3-064 and D1/D3 remain In progress.

@@ -807,3 +807,6 @@ lint baseline is unchanged. [Evidence](evidence/d3-one-off-generated-material-gu
 D3-064 remains In progress for the entire owner policy; memory/expiry/transport/browser/provider
 acceptance remains unfinished. No exit checkbox changes, deployment, publication or activation;
 D1/D3 stay In progress. Docker/WSL stopped; hosted CI/CD deferred until production launch.
+
+
+2026-10-04 source checkpoint opened for review as [PR #548](https://github.com/Vrixic/project-ai-job-apply/pull/548), based on exact open #547. No authored PR was merged. Verified implementation source remains `6f8a7746`; later commits contain delivery records only. D3-064 and D1/D3 remain In progress.

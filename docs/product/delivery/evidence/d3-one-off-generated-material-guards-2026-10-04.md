@@ -62,3 +62,6 @@ Next backend work replaces generated draft/provider-slot persistence with bounde
 memory and a non-renewable generation-completion deadline, then enforces expiry at content reads,
 approval and ATS handoff while preserving confirmed/ambiguous submission evidence. Required browser
 and provider-retention acceptance remains outside this checkpoint; D3-064 and both phases stay open.
+
+
+2026-10-04 source checkpoint opened for review as [PR #548](https://github.com/Vrixic/project-ai-job-apply/pull/548), based on exact open #547. No authored PR was merged. Verified implementation source remains `6f8a7746`; later commits contain delivery records only. D3-064 and D1/D3 remain In progress.
