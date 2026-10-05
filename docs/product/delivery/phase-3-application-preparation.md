@@ -841,3 +841,6 @@ links resolve, original history/accepted ADR-038 and exit criteria are preserved
 Native metadata/transport, resumes, packet/ATS admission, lifecycle/client, worker drain and
 provider/deployed acceptance remain open. D1/D3 and D3-064 stay In progress. Docker/WSL stopped;
 no publication, deployment or activation, and hosted CI/CD stays deferred until production launch.
+
+
+2026-10-04 memory replacement source checkpoint opened as [PR #549](https://github.com/Vrixic/project-ai-job-apply/pull/549), based on exact open #548. No authored PR is merged or feature activated. Verified implementation source remains `1df42237`; subsequent commits change delivery records only.

@@ -114,3 +114,6 @@ serialize one-time completion, reject refreshed timestamps, and refuse same-gene
 after memory loss without claiming writer settlement. Then integrate generated resumes, exact
 packet references and expiry at approval/submission handoff. Transport/no-store, lifecycle/client
 cleanup, native worker drain and provider-retention acceptance remain required under ADR-038.
+
+
+2026-10-04 memory replacement source checkpoint opened as [PR #549](https://github.com/Vrixic/project-ai-job-apply/pull/549), based on exact open #548. No authored PR is merged or feature activated. Verified implementation source remains `1df42237`; subsequent commits change delivery records only.
