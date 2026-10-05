@@ -42,3 +42,11 @@ certificate verification is disabled. Provider/SQL/render/managed OIDC remain si
 owning scalar proof and HTTPS session are actual source. This is not production routing or an
 authenticated private remote owner adapter. See
 [transport evidence](../../../../docs/product/delivery/evidence/d3-native-memory-transport-2026-10-05.md).
+
+The connected HTTPS fixture now uses the actual fixed-origin scalar authorization client, with
+signed candidate tokens verified again by a simulated Gateway fetch port and the actual owning
+scalar helper. SQL view/provider/renderer/managed OIDC remain synthetic in that fixture. Direct
+preview/file responses are validated against existing public schemas; production test-verifier
+injection is refused. Separate real PostgreSQL/Gateway HTTP cases cover actual authenticated
+metadata ownership and original completion. These proofs do not establish deployed end-to-end
+routing, an enabled client or positive AWS task retirement.

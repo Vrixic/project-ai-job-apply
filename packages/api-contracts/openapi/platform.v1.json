@@ -4853,6 +4853,76 @@
           }
         }
       }
+    },
+    "/applications/{applicationId}/cover-letter/authorization": {
+      "get": {
+        "operationId": "getApplicationTemporaryMaterialAuthorization",
+        "description": "Default-off scalar-only owner authorization for a native temporary cover-letter process. Authentication and owner resolution use the normal Gateway boundary. No generated body is read, rendered, reconstructed or persisted. An affirmative result is a point-in-time packet proof, not an approval, expiry renewal, process-stop or purge certificate.",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "generationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current original packet and material metadata only",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTemporaryMaterialAuthorization"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10215,6 +10285,29 @@
             "type": "integer",
             "minimum": 1800000,
             "maximum": 8640000000000000
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationTemporaryMaterialAuthorization": {
+        "type": "object",
+        "description": "Scalar current packet authorization for one original temporary cover letter. Does not carry generated content, tokens or ownership credentials and never extends expiry.",
+        "required": ["schemaVersion", "packetId", "packetHash", "temporaryMaterial"],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "packetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "temporaryMaterial": {
+            "$ref": "#/components/schemas/ApplicationTemporaryMaterial"
           }
         },
         "additionalProperties": false

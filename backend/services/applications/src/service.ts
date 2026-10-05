@@ -4,6 +4,7 @@ import type {
   Application,
   ApplicationCoverLetterFile,
   ApplicationCoverLetterPreview,
+  ApplicationTemporaryMaterialAuthorization,
   ApplicationHistoryPage,
   ApplicationPacketPreparation,
   ApplicationPage,
@@ -44,6 +45,7 @@ import {
   readBoundTemporaryCoverLetter,
 } from "./temporary-cover-letter-read.js";
 import { temporaryMaterialReasons } from "./temporary-material.js";
+import { authorizeNativeMaterialRead } from "./native-material-read.js";
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -156,6 +158,12 @@ export class InvalidApplicationCursorError extends Error {
 
 /** Owner-scoped API used by the gateway. Every method takes the authenticated owner. */
 export interface ApplicationsApi {
+  temporaryMaterialAuthorization?(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal?: AbortSignal,
+  ): Promise<ApplicationTemporaryMaterialAuthorization>;
   create(ownerUserId: string, jobId: string, idempotencyKey: string): Promise<Application>;
   search(
     ownerUserId: string,
@@ -280,6 +288,8 @@ export interface ApplicationsServiceDependencies {
   preparations?: ApplicationPreparations;
   coverLetters?: ApplicationCoverLetters;
   temporaryMaterials?: ApplicationTemporaryMaterials;
+  /** Scalar native-read authorization only; independent of content ports, default off. */
+  nativeReadAuthorizationsEnabled?: () => boolean;
   /** Optional privacy-safe measurement sink. Failures never affect a request. */
   metrics?: MetricSink;
   clock?: () => Date;
@@ -290,6 +300,37 @@ export class ApplicationsService implements ApplicationsApi {
 
   constructor(private readonly dependencies: ApplicationsServiceDependencies) {
     this.clock = dependencies.clock ?? (() => new Date());
+  }
+
+  async temporaryMaterialAuthorization(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal = new AbortController().signal,
+  ): Promise<ApplicationTemporaryMaterialAuthorization> {
+    const enabled = this.dependencies.nativeReadAuthorizationsEnabled ?? (() => false);
+    if (!enabled() || signal.aborted) throw new ApplicationsUnavailableError();
+    const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const reference = view.currentPacket?.temporaryMaterials?.find(
+      (ref) => ref.kind === "cover_letter" && ref.generationId === generationId,
+    );
+    if (!reference) throw new StalePacketError(["temporary_material_changed"]);
+    const proof = await authorizeNativeMaterialRead({
+      store: this.dependencies.store,
+      ownerUserId,
+      reference,
+      signal,
+      clock: this.clock,
+    });
+    if (!enabled() || signal.aborted) throw new ApplicationsUnavailableError();
+    if (!proof) throw new StalePacketError(["temporary_material_changed"]);
+    const { ownerUserId: _owner, applicationId: _application, ...metadata } = proof.reference;
+    return {
+      schemaVersion: 1,
+      packetId: proof.packetId,
+      packetHash: proof.packetHash,
+      temporaryMaterial: metadata,
+    };
   }
 
   async create(ownerUserId: string, jobId: string, idempotencyKey: string): Promise<Application> {

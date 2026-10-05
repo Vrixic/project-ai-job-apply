@@ -6,6 +6,8 @@ import { request } from "node:https";
 import { createTestTokenIssuer } from "../../../../packages/auth/src/testing.ts";
 import { authorizeNativeMaterialRead } from "../../../services/applications/src/native-material-read.ts";
 import { createNativeMemoryTransport } from "../../../services/documents/src/native-memory-transport.ts";
+import { createNativeReadAuthorizationClient } from "../../../services/documents/src/native-read-authorization-client.ts";
+import { compileComponentValidator } from "../../../../packages/api-contracts/src/index.ts";
 
 export async function exerciseNativeTransport(session, generated, ids) {
   const issuer = await createTestTokenIssuer();
@@ -33,7 +35,7 @@ export async function exerciseNativeTransport(session, generated, ids) {
       temporaryMaterials: [generated.reference],
     },
   });
-  const server = createNativeMemoryTransport({
+  const transportOptions = {
     session,
     reference: generated.reference,
     enabled: () => mode !== "disabled",
@@ -46,22 +48,55 @@ export async function exerciseNativeTransport(session, generated, ids) {
     origin: "https://candidate.test.invalid",
     tls: { key: readFileSync("/native/key.pem"), cert: certificate },
     testVerifier: issuer.verifier,
-    authorize: async (ownerUserId, _application, reference, signal) => {
-      reads++;
-      if (mode === "outage") throw Error("synthetic-private-secret-not-logged");
-      if (mode === "pending")
-        await new Promise((resolve) => {
-          resume = resolve;
-          pendingSignal = signal;
+    authorize: createNativeReadAuthorizationClient({
+      apiOrigin: "https://control.test.invalid",
+      enabled: () => mode !== "disabled",
+      fetch: async (url, init) => {
+        assert.equal(
+          url,
+          `https://control.test.invalid/v1/applications/${ids[1]}/cover-letter/authorization?generationId=${ids[2]}`,
+        );
+        assert.equal(init.headers.authorization, `Bearer ${token}`);
+        const principal = await issuer.verifier.verify(init.headers.authorization.slice(7));
+        assert.equal(principal.subject, "synthetic-candidate");
+        const ownerUserId = ids[0];
+        const reference = generated.reference;
+        const signal = init.signal;
+        reads++;
+        if (mode === "outage") throw Error("synthetic-private-secret-not-logged");
+        if (mode === "pending")
+          await new Promise((resolve) => {
+            resume = resolve;
+            pendingSignal = signal;
+          });
+        const proof = await authorizeNativeMaterialRead({
+          ownerUserId,
+          reference,
+          signal,
+          store: { getApplication: async () => view() },
         });
-      return authorizeNativeMaterialRead({
-        ownerUserId,
-        reference,
-        signal,
-        store: { getApplication: async () => view() },
-      });
-    },
-  });
+        const headers = { "cache-control": "no-store", "content-type": "application/json" };
+        if (!proof) return new Response("{}", { status: 409, headers });
+        const { ownerUserId: _owner, applicationId: _application, ...metadata } = proof.reference;
+        return new Response(
+          JSON.stringify({
+            schemaVersion: 1,
+            packetId: proof.packetId,
+            packetHash: proof.packetHash,
+            temporaryMaterial: metadata,
+          }),
+          { headers },
+        );
+      },
+    }),
+  };
+  process.env.NODE_ENV = "production";
+  assert.throws(
+    () => createNativeMemoryTransport(transportOptions),
+    /NativeMemoryTransportUnavailable/u,
+  );
+  process.env.NODE_ENV = "test";
+  const server = createNativeMemoryTransport(transportOptions);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const path = `/v1/applications/${ids[1]}/cover-letter`;
@@ -98,7 +133,7 @@ export async function exerciseNativeTransport(session, generated, ids) {
       req.end();
       extra.capture?.(req);
     });
-  let assertions = 0;
+  let assertions = 1;
   const expectStatus = async (status, ...args) => {
     const result = await send(...args);
     assert.equal(result.status, status);
@@ -114,7 +149,13 @@ export async function exerciseNativeTransport(session, generated, ids) {
     assert.equal(result.status, 200);
     assert.equal(result.headers["cache-control"], "no-store");
     assert.equal(result.headers["access-control-allow-origin"], "https://candidate.test.invalid");
-    const data = JSON.parse(result.bytes.toString()).data;
+    const data = JSON.parse(result.bytes.toString());
+    assert.equal(
+      compileComponentValidator(
+        suffix ? "ApplicationCoverLetterFile" : "ApplicationCoverLetterPreview",
+      )(data),
+      true,
+    );
     assert.equal(data.temporaryMaterial.generationId, ids[2]);
     assert.equal(data.temporaryMaterial.expiresAtMs, generated.reference.expiresAtMs);
     assert.equal(Object.hasOwn(data.temporaryMaterial, "ownerUserId"), false);

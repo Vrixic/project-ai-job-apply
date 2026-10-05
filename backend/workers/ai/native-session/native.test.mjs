@@ -71,7 +71,7 @@ for (const mode of [
           Date.now() - value.originalCompletion < (mode === "transport" ? 6000 : 2500),
           "Original kernel deadline exceeded test tolerance",
         );
-        if (mode === "transport") assert.ok(value.transportAssertions >= 27);
+        if (mode === "transport") assert.ok(value.transportAssertions >= 28);
       }
       if (mode === "settlement") assert.equal(output, "settlement-pending\n");
       if (mode === "boot") assert.equal(output, "");

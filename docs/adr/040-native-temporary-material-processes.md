@@ -87,3 +87,15 @@ launcher admission, authenticated remote owner/control adapters, task registry, 
 routing, positive managed stop or the complete browser/ATS content path. Existing Gateway/Lambda
 copies remain outside this proof. The proposal remains Proposed; D3-012 and release gates are
 unchanged. [Local source evidence](../product/delivery/evidence/d3-native-memory-transport-2026-10-05.md).
+
+## Scalar owner authorization checkpoint — 2026-10-05
+
+A default-off scalar Gateway route can now reuse the current verified candidate access token and
+normal identity/owner checks to return current packet/reference metadata. The dedicated native
+client pins the approved HTTPS origin, validates bounded original metadata and never retrieves
+or forwards generated bodies through Gateway/Lambda. Native reads repeat this proof; no new
+credential issuer is needed merely for this owner read. Launch admission and private evidence/
+work/completion adapters, allocation registry, managed routing/stop and complete client/ATS
+content routing remain gates. Existing Gateway body routes are outside this native path's proof.
+No production flag/hostname, deployment or provider is activated. The proposal remains Proposed.
+[Source evidence](../product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).

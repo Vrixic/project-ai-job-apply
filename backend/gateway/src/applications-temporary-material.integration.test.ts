@@ -24,6 +24,7 @@ import {
   TemporaryMaterialStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
+import { createNativeReadAuthorizationClient } from "@ai-job-apply/documents-service/native-read-authorization-client";
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
@@ -78,13 +79,17 @@ const key = () => `temporary-packet-${uuidv7()}`;
   const legacyLetter = vi.fn(async () => {
     throw Error("SavedDraftBindingMustNotRun");
   });
-  function runtime(memory?: ApplicationsRuntimeOptions["temporaryMaterials"]) {
+  function runtime(
+    memory?: ApplicationsRuntimeOptions["temporaryMaterials"],
+    authorizeNativeReads = false,
+  ) {
     return createApplicationsRuntime({
       client: database,
       profile,
       catalog,
       definitions,
       clock: () => at,
+      nativeReadAuthorizationsEnabled: () => authorizeNativeReads,
       ...(memory ? { temporaryMaterials: memory } : {}),
       tailoring: { tailor: legacyTailor },
       coverLetters: {
@@ -326,6 +331,11 @@ const key = () => `temporary-packet-${uuidv7()}`;
     "confirmed_cleanup",
     "cleanup_outage_retry",
     "network_abort",
+    "authorization",
+    "authorization_other_owner",
+    "authorization_expiry",
+    "authorization_terminal",
+    "authorization_disabled",
   ])(
     "serves or refuses %s through original SDK dispatch, native completion, real memory/render and authenticated HTTP",
     async (mode) => {
@@ -433,27 +443,31 @@ const key = () => `temporary-packet-${uuidv7()}`;
       let app: Awaited<ReturnType<typeof createGatewayApplication>> | undefined;
       try {
         at = new Date();
-        const modelTransport = vi.fn<typeof fetch>(
-          async () =>
-            new Response(
-              JSON.stringify({
-                status: "completed",
-                output: [
-                  {
-                    type: "message",
-                    role: "assistant",
-                    status: "completed",
-                    content: [
-                      {
-                        type: "output_text",
-                        text: JSON.stringify({ paragraphs: [{ text, factIds: [factId] }] }),
-                      },
-                    ],
-                  },
-                ],
-              }),
-            ),
-        );
+        const modelTransport = vi.fn<typeof fetch>(async () => {
+          // Synthetic provider/owner fixture shares PostgreSQL's clock. Real completion
+          // observes this clock once at fulfillment; later reads never refresh the deadline.
+          const [time] =
+            await database`SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`;
+          at = new Date(Number(time?.now_ms));
+          return new Response(
+            JSON.stringify({
+              status: "completed",
+              output: [
+                {
+                  type: "message",
+                  role: "assistant",
+                  status: "completed",
+                  content: [
+                    {
+                      type: "output_text",
+                      text: JSON.stringify({ paragraphs: [{ text, factIds: [factId] }] }),
+                    },
+                  ],
+                },
+              ],
+            }),
+          );
+        });
         const provider = new OpenAiLunaProvider({
           enabled: () => true,
           apiKey: () => "synthetic",
@@ -461,10 +475,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
         });
         const gateway = new ModelGateway(provider, {
           enabled: () => true,
-          clock: () => {
-            at = new Date();
-            return at;
-          },
+          clock: () => at,
         });
         const actor = new OriginalCoverLetterGenerationActor(
           source,
@@ -472,7 +483,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
           work,
           temporary,
           () => true,
-          () => new Date(),
+          () => at,
         );
         const completed = await actor.generate(generationIdentity);
         expect(completed.kind).toBe("ready");
@@ -512,36 +523,44 @@ const key = () => `temporary-packet-${uuidv7()}`;
           unblockNativeRead = resolve;
         });
         let cleanupAvailable = mode !== "cleanup_outage_retry";
-        const api = runtime({
-          ...reader,
-          discardApplication: async (owner, application) => {
-            if (!cleanupAvailable) throw Error("SyntheticLostDisposalAcknowledgement");
-            return reader.discardApplication(owner, application);
+        const api = runtime(
+          {
+            ...reader,
+            discardApplication: async (owner, application) => {
+              if (!cleanupAvailable) throw Error("SyntheticLostDisposalAcknowledgement");
+              return reader.discardApplication(owner, application);
+            },
+            coverLetterFile: async (owner, application, reference, format, signal) => {
+              const response = await reader.coverLetterFile(
+                owner,
+                application,
+                reference,
+                format,
+                signal,
+              );
+              if (mode === "network_abort") {
+                heldFile = response;
+                nativeReadReady();
+                await nativeReadGate;
+              }
+              return response;
+            },
+            coverLetterPreview: async (owner, application, reference, signal) => {
+              const response = await reader.coverLetterPreview(
+                owner,
+                application,
+                reference,
+                signal,
+              );
+              if (mode === "cancel_race") {
+                clearedPreview = response;
+                await api.cancel(f.owner, f.applicationId, bound.view.application.revision, key());
+              }
+              return response;
+            },
           },
-          coverLetterFile: async (owner, application, reference, format, signal) => {
-            const response = await reader.coverLetterFile(
-              owner,
-              application,
-              reference,
-              format,
-              signal,
-            );
-            if (mode === "network_abort") {
-              heldFile = response;
-              nativeReadReady();
-              await nativeReadGate;
-            }
-            return response;
-          },
-          coverLetterPreview: async (owner, application, reference, signal) => {
-            const response = await reader.coverLetterPreview(owner, application, reference, signal);
-            if (mode === "cancel_race") {
-              clearedPreview = response;
-              await api.cancel(f.owner, f.applicationId, bound.view.application.revision, key());
-            }
-            return response;
-          },
-        });
+          mode.startsWith("authorization") && mode !== "authorization_disabled",
+        );
         const adapter = new FastifyAdapter();
         if (mode === "discard_during_send")
           adapter.getInstance().addHook("onSend", async (_request, _reply, payload) => {
@@ -563,6 +582,77 @@ const key = () => `temporary-packet-${uuidv7()}`;
           verifier: issuer.verifier,
           releaseSha: "synthetic-local",
         });
+        if (mode.startsWith("authorization")) {
+          if (mode === "authorization_expiry") at = new Date(completed.reference.expiresAtMs);
+          if (mode === "authorization_terminal")
+            await api.cancel(f.owner, f.applicationId, bound.view.application.revision, key());
+          const credential =
+            mode === "authorization_other_owner"
+              ? await issuer.issue(`synthetic-foreign-${uuidv7()}`, { scope: "applications:read" })
+              : token;
+          const result = await app.inject({
+            method: "GET",
+            url: `/v1/applications/${f.applicationId}/cover-letter/authorization?generationId=${generationId}`,
+            headers: { authorization: `Bearer ${credential}` },
+          });
+          expect(result.statusCode).toBe(
+            mode === "authorization"
+              ? 200
+              : mode === "authorization_other_owner"
+                ? 404
+                : mode === "authorization_disabled"
+                  ? 503
+                  : 409,
+          );
+          expect(result.body).not.toContain(text);
+          if (mode === "authorization") {
+            expect(result.headers["cache-control"]).toBe("no-store");
+            expect(
+              compileComponentValidator("ApplicationTemporaryMaterialAuthorization")(result.json()),
+            ).toBe(true);
+            expect(result.json().temporaryMaterial.generationId).toBe(generationId);
+            expect(result.json().temporaryMaterial.expiresAtMs).toBe(
+              completed.reference.expiresAtMs,
+            );
+            expect(result.json().temporaryMaterial).not.toHaveProperty("ownerUserId");
+            const gateway = app;
+            const read = createNativeReadAuthorizationClient({
+              apiOrigin: "https://control.test.invalid",
+              enabled: () => true,
+              fetch: async (url, init) => {
+                const parsed = new URL(String(url));
+                const response = await gateway.inject({
+                  method: "GET",
+                  url: parsed.pathname + parsed.search,
+                  headers: { authorization: new Headers(init?.headers).get("authorization") ?? "" },
+                });
+                return new Response(response.body, {
+                  status: response.statusCode,
+                  headers: {
+                    "cache-control": String(response.headers["cache-control"]),
+                    "content-type": String(response.headers["content-type"]),
+                  },
+                });
+              },
+            });
+            expect(
+              await read(
+                f.owner,
+                f.applicationId,
+                completed.reference,
+                new AbortController().signal,
+                token,
+              ),
+            ).toMatchObject({
+              reference: completed.reference,
+              packetId: bound.view.currentPacket?.id,
+              packetHash: bound.view.currentPacket?.packetHash,
+            });
+          }
+          expect(objectRead).not.toHaveBeenCalled();
+          expect(objectWrite).not.toHaveBeenCalled();
+          return;
+        }
         if (mode === "network_abort") {
           await app.listen({ host: "127.0.0.1", port: 0 });
           const url = await app.getUrl();

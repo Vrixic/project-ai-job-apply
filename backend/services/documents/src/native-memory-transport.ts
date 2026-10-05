@@ -38,6 +38,8 @@ export interface NativeMemoryTransportOptions {
     applicationId: string,
     reference: Readonly<TemporaryMaterialReference>,
     signal: AbortSignal,
+    /** The current verified request token, memory only; metadata control plane re-verifies it. */
+    accessToken: string,
   ): Promise<NativeMaterialReadAuthorization | null>;
   enabled?: () => boolean;
   /** Synthetic verifier only; rejected outside NODE_ENV=test. Production always verifies OIDC. */
@@ -208,6 +210,7 @@ export function createNativeMemoryTransport(options: NativeMemoryTransportOption
           reference.applicationId,
           reference,
           controller.signal,
+          bearerToken(request.headers.authorization),
         );
         if (
           !live() ||
@@ -286,10 +289,7 @@ export function createNativeMemoryTransport(options: NativeMemoryTransportOption
           await authenticate();
           status = 503;
           const { ownerUserId: _owner, applicationId: _application, ...metadata } = reference;
-          bytes = Buffer.from(
-            JSON.stringify({ data: { ...value, temporaryMaterial: metadata } }),
-            "utf8",
-          );
+          bytes = Buffer.from(JSON.stringify({ ...value, temporaryMaterial: metadata }), "utf8");
           if (
             bytes.byteLength > maximumResponseBytes ||
             !live() ||

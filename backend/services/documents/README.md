@@ -660,3 +660,11 @@ after transport completion/abort. Only the trusted launcher can bind the listene
 object, model or process-death acknowledgement capability. Remote owner authentication, launch,
 registry, managed routing/stop and full client/ATS acceptance remain gates. See
 [transport evidence](../../../docs/product/delivery/evidence/d3-native-memory-transport-2026-10-05.md).
+
+The private `./native-read-authorization-client` entrypoint checks the fixed original material
+through the normal authenticated Gateway scalar endpoint using the current request token only
+in a header. It pins HTTPS origin, refuses redirects, retries and body-bearing responses, checks
+strict original metadata and clears bounded response bytes. The native listener supplies its
+verified token and emits direct existing preview/file JSON. The independent Gateway capability
+stays default-off; no generated body enters this metadata control path. See
+[authorization evidence](../../../docs/product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).

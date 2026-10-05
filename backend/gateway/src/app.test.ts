@@ -3735,6 +3735,20 @@ describe("Applications routes", () => {
   }
 
   const applications: ApplicationsApi = {
+    temporaryMaterialAuthorization: record("temporaryMaterialAuthorization", {
+      schemaVersion: 1,
+      packetId: jobId,
+      packetHash: hash,
+      temporaryMaterial: {
+        schemaVersion: 1,
+        kind: "cover_letter",
+        generationId: attemptId,
+        version: 1,
+        contentSha256: hash,
+        completedAtMs: 1000,
+        expiresAtMs: 1_801_000,
+      },
+    } as const),
     create: record("create", application),
     search: record("search", { items: [application] }),
     get: record("get", application),
@@ -3943,6 +3957,56 @@ describe("Applications routes", () => {
         ],
       });
     }
+  });
+
+  it("serves scalar native authorization with resolved owner and no-store", async () => {
+    const result = await app.inject({
+      method: "GET",
+      url: `/v1/applications/${applicationId}/cover-letter/authorization?generationId=${attemptId}`,
+      headers: { authorization: `Bearer ${await token("applications:read")}` },
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.headers["cache-control"]).toBe("no-store");
+    expect(result.json().packetHash).toBe(hash);
+    expect(result.json()).not.toHaveProperty("data");
+    expect(calls).toEqual([
+      {
+        method: "temporaryMaterialAuthorization",
+        args: [expect.any(String), applicationId, attemptId, expect.any(AbortSignal)],
+      },
+    ]);
+  });
+
+  it("rejects malformed scalar authorization queries before owner service access", async () => {
+    for (const suffix of [
+      "",
+      "?generationId=bad",
+      `?generationId=${attemptId}&owner=other`,
+      `?generationId=${attemptId}&generationId=${jobId}`,
+    ]) {
+      const result = await app.inject({
+        method: "GET",
+        url: `/v1/applications/${applicationId}/cover-letter/authorization${suffix}`,
+        headers: { authorization: `Bearer ${await token("applications:read")}` },
+      });
+      expect(result.statusCode).toBe(400);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("requires the normal authenticated applications read scope for scalar authorization", async () => {
+    const url = `/v1/applications/${applicationId}/cover-letter/authorization?generationId=${attemptId}`;
+    expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url,
+          headers: { authorization: `Bearer ${await token("profile:read")}` },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(calls).toHaveLength(0);
   });
 
   it("rejects unknown, repeated and missing cover-letter read inputs before service access", async () => {

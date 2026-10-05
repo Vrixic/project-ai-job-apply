@@ -32,7 +32,7 @@ or phase-exit acceptance is claimed.
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
-| D3-079 | Supply the native one-candidate material-session runtime, authenticated transport and positive process/task retirement. | In progress | Vrij Patel; engineering | D3-064; D3-012 | Started 2026-10-05 on exact #554. Default-off session/core kernel source; local child-process evidence only. [Evidence](evidence/d3-native-memory-session-2026-10-05.md), [proposed ADR-040](../../adr/040-native-temporary-material-processes.md). [Native HTTPS source](evidence/d3-native-memory-transport-2026-10-05.md) is locally verified at aed4b391. Native image, issuer/launcher/authenticated private adapters/registry, managed routing/stop and full content routing remain gates. No live provider/deployment or phase completion. |
+| D3-079 | Supply the native one-candidate material-session runtime, authenticated transport and positive process/task retirement. | In progress | Vrij Patel; engineering | D3-064; D3-012 | Started 2026-10-05 on exact #554. Default-off session/core kernel source; local child-process evidence only. [Evidence](evidence/d3-native-memory-session-2026-10-05.md), [proposed ADR-040](../../adr/040-native-temporary-material-processes.md). [Native HTTPS source](evidence/d3-native-memory-transport-2026-10-05.md) is locally verified at aed4b391. [Scalar Gateway/native client source](evidence/d3-native-read-authorization-2026-10-05.md) is locally verified at a5c29ef7, including Lambda routing. Native image, authenticated launcher/private adapters/registry, managed routing/positive stop and full content routing remain gates. No live provider/deployment or phase completion. |
 | D3-064 | Enforce one-off generated cover-letter and improved/tailored-resume lifetimes without persisted content. | In progress | Vrij Patel; engineering | D3-003; D3-004; D3-005; D3-012 | Started 2026-10-04 on fresh main e48bdf3 plus exact #547 25f0ca05. Backend persistence guards begin first; full temporary-memory/provider/expiry lifecycle remains. [Persistence evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md); [memory replacement evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md); [native completion evidence](evidence/d3-original-material-completion-2026-10-04.md); [packet binding evidence](evidence/d3-temporary-packet-binding-2026-10-05.md); [temporary read evidence](evidence/d3-temporary-material-reads-2026-10-05.md); [held copy/disposal evidence](evidence/d3-held-temporary-content-2026-10-05.md); [original actor evidence](evidence/d3-original-memory-generation-2026-10-05.md). Owner policy accepted 2026-10-04 in [ADR-038](../../adr/038-one-off-generated-application-materials.md). Maximum 1,800 seconds from generation completion; no sliding extension, database/packet-field copies, stored files, durable payloads, or persistent browser copies. Add owner/application-bound temporary content, no-store responses, idle/error/logout/cancel/submission cleanup, expiry checks and approval invalidation before ATS handoff; retain hashes/technical state only and preserve ambiguous-submission safety. Verify no generated content enters packet/idempotency/history/export records, boundary-time expiry, regeneration with fresh approval, restart loss, renderer failure, and actual idle-browser cleanup. D3-012 must verify provider retention/training terms. Current deterministic tailoring avoids content persistence. Locally verified proposal/packet/schema/SQL guards refuse persisted generated document material. Managed-memory expiry, exact-reference reads, native immutable completion metadata/private RPC, and packet identity/expiry admission are locally verified in default-off source; the full content/actor/client/packet/provider lifecycle is not evidenced. Revise the current source-only encrypted saved-draft/provider-slot persistence and export/read consumers before activation, preserving positive remote-settlement and writer fencing. Hosted browser acceptance remains human-only after agent automated/browser checks. |
 | D3-077 | Protect restricted packet values with their required separate encryption/storage boundary before saved-answer reuse activation. | Not started | Vrij Patel; engineering | D3-076; D3-012 | Discovered 2026-10-04: existing Applications packet JSON stores field values, including selected restricted answers, outside the vault key boundary. Architecture 12.3 and ADR-010 require separate keys/storage and just-in-time access. Default-off D3-076 proves selection/admission semantics only; its switch must stay false until this protection, retention/export/deletion tests and accountable review pass. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). |
 | D3-076 | Bind explicitly selected saved answers to immutable packets and serialize version checks with candidate corrections at approval, start, dispatch and preparation admission. | In progress | Vrij Patel; engineering | D3-075; D3-005; D3-012 | Started 2026-10-04 on exact #545 57d7b057. Default-off backend selection, mandatory review, hash metadata, stale-version refusal and migration 0006 implemented locally. Same-transaction Profile metadata locking passes 23 real SQL regressions; original 67 Applications and 46 Profile cases plus 39 preparation/native and five Gateway cases pass. Full verifier passes on clean 21594bc4: 38 typechecks, 39 test tasks, 23 builds; unchanged lint. Native artifact builds twice byte-identically and refuses default-off work. Docker/WSL stopped. D3-077 restricted packet-value protection, UI, review and deployed/accountable acceptance remain required; reuse stays false. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). No activation, frontend change or phase completion; CI/CD deferred until production launch. |
@@ -1039,4 +1039,40 @@ completion; hosted CI/CD deferred until production launch.
 with the locally verified native HTTPS source `aed4b391`; its base remains exact #554
 `50a9965a`, and the two-PR maximum is preserved. Subsequent commits change documentation only.
 No authored merge, image publication, deployment or activation. D1/D3 stay In progress;
+hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 extends exact #555 `8edcc3df` with an additive default-off authenticated
+Gateway scalar authorization route and a fixed-origin, one-attempt native metadata client.
+The current verified candidate token follows the normal owner boundary; generated bodies stay
+in the native process. Native responses now match direct existing public JSON schemas. 21 client,
+96 contract and 97 Gateway route tests pass, plus 28 real PostgreSQL owner/HTTP cases and 16
+Linux process cases (28 HTTPS checks; external ports simulated). Final clean-source/full checks
+pending. [Evidence](evidence/d3-native-read-authorization-2026-10-05.md). Private launch/adapters/
+registry/managed routing/stop, full content/client/ATS/provider/accountable gates remain; no
+frontend, deployment/activation or D1/D3 completion. CI/CD deferred until production launch.
+
+2026-10-05 D3-079 corrected clean `a5c29ef7` passes full maintained verification: 38 typecheck
+tasks, 39 test tasks and 23 builds; unchanged lint and operational/security/Compose/bundle guards.
+The initial full run caught a missing Lambda route; strict authenticated scalar forwarding and
+113 adapter tests now pass. API 96, Documents 1,328, Gateway 318 and Workflows 1,588 tests pass.
+Separate final PostgreSQL/Linux proofs pass 28/16 cases with external ports simulated.
+[Evidence](evidence/d3-native-read-authorization-2026-10-05.md). Docker/WSL stopped; only delivery
+documentation follows. [PR #556](https://github.com/Vrixic/project-ai-job-apply/pull/556) promotes
+the exact previously reviewed #555 tree to main; focused authorization review follows on that
+base. Private launch/adapters/registry/managed routing/positive stop and complete client/ATS/
+provider/accountable acceptance remain. D1/D3 stay In progress; no deployment/activation or
+authored main merge. Hosted CI/CD deferred until production launch.
+
+2026-10-05 D3-079 focused scalar authorization source is reviewable in
+[PR #557](https://github.com/Vrixic/project-ai-job-apply/pull/557) on
+[PR #556](https://github.com/Vrixic/project-ai-job-apply/pull/556), the exact previously reviewed
+backend consolidation. Tested implementation `a5c29ef7` is unchanged; subsequent commits record
+delivery evidence only. Two authored PRs are open. D1/D3 stay In progress; no authored main merge,
+deployment or activation, and hosted CI/CD deferred until production launch.
+
+2026-10-05 independent merge of #556 integrates the reviewed baseline into main
+`9478f068`; its complete tree equals exact baseline `01624a0c`/reviewed #555 `8edcc3df`.
+#557 is retargeted to main. Incorporating identical main ancestry changes no files; verified
+implementation `a5c29ef7` remains unchanged apart from delivery documentation. One authored PR
+remains open. No authored main merge, deployment or activation; D1/D3 remain In progress and
 hosted CI/CD remains deferred until production launch.

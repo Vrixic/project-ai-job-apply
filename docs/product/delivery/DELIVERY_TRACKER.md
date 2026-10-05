@@ -3575,3 +3575,39 @@ with the locally verified native HTTPS source `aed4b391`; its base remains exact
 `50a9965a`, and the two-PR maximum is preserved. Subsequent commits change documentation only.
 No authored merge, image publication, deployment or activation. D1/D3 stay In progress;
 hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 extends exact #555 `8edcc3df` with an additive default-off authenticated
+Gateway scalar authorization route and a fixed-origin, one-attempt native metadata client.
+The current verified candidate token follows the normal owner boundary; generated bodies stay
+in the native process. Native responses now match direct existing public JSON schemas. 21 client,
+96 contract and 97 Gateway route tests pass, plus 28 real PostgreSQL owner/HTTP cases and 16
+Linux process cases (28 HTTPS checks; external ports simulated). Final clean-source/full checks
+pending. [Evidence](evidence/d3-native-read-authorization-2026-10-05.md). Private launch/adapters/
+registry/managed routing/stop, full content/client/ATS/provider/accountable gates remain; no
+frontend, deployment/activation or D1/D3 completion. CI/CD deferred until production launch.
+
+2026-10-05 D3-079 corrected clean `a5c29ef7` passes full maintained verification: 38 typecheck
+tasks, 39 test tasks and 23 builds; unchanged lint and operational/security/Compose/bundle guards.
+The initial full run caught a missing Lambda route; strict authenticated scalar forwarding and
+113 adapter tests now pass. API 96, Documents 1,328, Gateway 318 and Workflows 1,588 tests pass.
+Separate final PostgreSQL/Linux proofs pass 28/16 cases with external ports simulated.
+[Evidence](evidence/d3-native-read-authorization-2026-10-05.md). Docker/WSL stopped; only delivery
+documentation follows. [PR #556](https://github.com/Vrixic/project-ai-job-apply/pull/556) promotes
+the exact previously reviewed #555 tree to main; focused authorization review follows on that
+base. Private launch/adapters/registry/managed routing/positive stop and complete client/ATS/
+provider/accountable acceptance remain. D1/D3 stay In progress; no deployment/activation or
+authored main merge. Hosted CI/CD deferred until production launch.
+
+2026-10-05 D3-079 focused scalar authorization source is reviewable in
+[PR #557](https://github.com/Vrixic/project-ai-job-apply/pull/557) on
+[PR #556](https://github.com/Vrixic/project-ai-job-apply/pull/556), the exact previously reviewed
+backend consolidation. Tested implementation `a5c29ef7` is unchanged; subsequent commits record
+delivery evidence only. Two authored PRs are open. D1/D3 stay In progress; no authored main merge,
+deployment or activation, and hosted CI/CD deferred until production launch.
+
+2026-10-05 independent merge of #556 integrates the reviewed baseline into main
+`9478f068`; its complete tree equals exact baseline `01624a0c`/reviewed #555 `8edcc3df`.
+#557 is retargeted to main. Incorporating identical main ancestry changes no files; verified
+implementation `a5c29ef7` remains unchanged apart from delivery documentation. One authored PR
+remains open. No authored main merge, deployment or activation; D1/D3 remain In progress and
+hosted CI/CD remains deferred until production launch.
