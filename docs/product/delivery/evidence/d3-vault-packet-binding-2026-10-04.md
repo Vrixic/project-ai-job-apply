@@ -10,13 +10,13 @@ Explicit candidate selection and meaning confirmation → Gateway → exact priv
 
 ## Evidence so far
 
-Before the transaction-lock refinement: 147 Applications unit tests and 15 new real Gateway/Profile/Applications PostgreSQL tests passed. The SQL suite exercises authenticated HTTP with a simulated OIDC issuer, local opaque-handle cipher (simulated KMS) and synthetic job catalog; actual SQL ownership, services and packet persistence are used. Two tests advance the clock while approval/dispatch waits for a real application row lock. After the locking change, 23 real SQL cases pass, including correction, remove and removeByField committed during approve/dispatch lock waits, and a writer blocked until an admission rollback. Original 67 Applications SQL tests (including fault injection) and 46 Profile SQL tests pass. Package suites pass: Applications 147 units, Profile 120, Gateway 300, Workflows 1,588; API and Domain pass. Six real preparation workflow tests and five original Gateway SQL tests pass. The missing-admission-capability case passes with no approval. Native opt-in suites pass 22 evidence/starter/recovery cases and 11 isolated Documents/native-actor cases. Their first parallel run hit cluster-wide Jobs role creation/grant isolation checks; an exact single-database fixture resolves this without weakening guards. The maintained logical dump/restore passes with 60 migrations and exact row-set equality for all 84 relations, owned container cleanup true. Formatting passes. Both owned packet/native fixtures are removed; Docker/WSL are stopped. Full verifier and artifact checks remain pending.
+Before the transaction-lock refinement: 147 Applications unit tests and 15 new real Gateway/Profile/Applications PostgreSQL tests passed. The SQL suite exercises authenticated HTTP with a simulated OIDC issuer, local opaque-handle cipher (simulated KMS) and synthetic job catalog; actual SQL ownership, services and packet persistence are used. Two tests advance the clock while approval/dispatch waits for a real application row lock. After the locking change, 23 real SQL cases pass, including correction, remove and removeByField committed during approve/dispatch lock waits, and a writer blocked until an admission rollback. Original 67 Applications SQL tests (including fault injection) and 46 Profile SQL tests pass. Package suites pass: Applications 147 units, Profile 120, Gateway 300, Workflows 1,588; API and Domain pass. Six real preparation workflow tests and five original Gateway SQL tests pass. The missing-admission-capability case passes with no approval. Native opt-in suites pass 22 evidence/starter/recovery cases and 11 isolated Documents/native-actor cases. Their first parallel run hit cluster-wide Jobs role creation/grant isolation checks; an exact single-database fixture resolves this without weakening guards. The maintained logical dump/restore passes with 60 migrations and exact row-set equality for all 84 relations, owned container cleanup true. Formatting passes. Both owned packet/native fixtures are removed; Docker/WSL are stopped. Full verifier and artifact checks were pending at that checkpoint; final results are recorded below.
 
 ## Rollout and remaining work
 
 Apply Applications migration `0006_vault_approval_binding.sql` before admitting the new invalidation reason. Restore inventory is 60 migrations and 84 relations. Deploy compatible strict schema readers before producers: new optional packet reference objects are rejected by old strict readers despite unchanged legacy packet hashes. Keep the switch false until candidate review UI, least-privilege runtime composition, legal/privacy/security approval and deployed journey checks pass. No live KMS/model/ATS calls, deployment or production data are authorized by this source checkpoint.
 
-Final maintained verification, original integration suites, restore checks, local artifact checks, documentation and review remain. D1 and D3 exit checkboxes remain unchanged. CI/CD is deferred by the owner until production launch.
+Local automated source, integration, restore and artifact checks are complete as recorded below. Review, protected packet storage and deployed/accountable acceptance remain. D1 and D3 exit checkboxes remain unchanged. CI/CD is deferred by the owner until production launch.
 
 ## Sources and local logs
 
@@ -68,3 +68,11 @@ are delivery documentation only. Logs: `.tmp/d3-076-full-verifier-final.log`,
 This completes local source verification, not D3-076's deployed journey or D1/D3. D3-077's
 restricted packet persistence, candidate review UI, reader-first/migration/native releases,
 accountable approvals and deployed acceptance remain. Keep reuse false.
+
+## Review checkpoint
+
+[PR #547](https://github.com/Vrixic/project-ai-job-apply/pull/547) is open on exact #545
+`57d7b057ef5bb25cfdd4b66aa81db2c4474da460`, branch `feat/d3-vault-packet-binding`.
+Verified source `21594bc4084f833bf9ac86845ed0142a97fdf211` is unchanged; only delivery
+documentation follows. CI/CD remains deferred until production launch. D3-077 and the other
+activation gates above remain unresolved; reuse stays false and neither D1 nor D3 is complete.
