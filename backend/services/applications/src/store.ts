@@ -64,6 +64,10 @@ import type {
   RestrictedPacketCipher,
   RestrictedPacketPlaintext,
 } from "./restricted-packet-cipher.js";
+import type {
+  RestrictedPacketExportAuthorizer,
+  RestrictedPacketExportScope,
+} from "./restricted-packet-export.js";
 import {
   createRestrictedPacketProtection,
   type PreparedRestrictedPacketFields,
@@ -386,6 +390,7 @@ export class RestrictedPacketStoreUnavailableError extends Error {
   }
 }
 export interface ApplicationStoreOptions {
+  authorizeRestrictedPacketExport?: RestrictedPacketExportAuthorizer;
   restrictedPackets?: {
     cipher: RestrictedPacketCipher;
     fingerprintKeyArn: string;
@@ -1052,28 +1057,77 @@ export class PostgresApplicationStore {
     packetHash: string;
     expectedRevision: number;
   }): Promise<RestrictedPacketPlaintext> {
+    return this.readProtectedPacketValues(command);
+  }
+
+  async readExportPacketValues(
+    command: RestrictedPacketExportScope & {
+      applicationId: string;
+      packetId: string;
+      packetHash: string;
+    },
+  ): Promise<RestrictedPacketPlaintext> {
+    const {
+      ownerUserId,
+      exportId,
+      operationId,
+      policyVersion,
+      applicationId,
+      packetId,
+      packetHash,
+    } = command;
+    return this.readProtectedPacketValues(
+      { ownerUserId, applicationId, packetId, packetHash },
+      { ownerUserId, exportId, operationId, policyVersion },
+    );
+  }
+
+  private async readProtectedPacketValues(
+    command: {
+      ownerUserId: string;
+      applicationId: string;
+      packetId: string;
+      packetHash: string;
+      expectedRevision?: number;
+    },
+    exportScope?: RestrictedPacketExportScope,
+  ): Promise<RestrictedPacketPlaintext> {
     command = structuredClone(command);
+    exportScope = exportScope ? structuredClone(exportScope) : undefined;
+    const authorizer = this.options.authorizeRestrictedPacketExport;
+    if (exportScope && !authorizer) throw new RestrictedPacketStoreUnavailableError();
     const { protection } = this.requireRestrictedProtection();
     const readId = uuidv7();
     const snapshot = async (stage: "admitted" | "validated") =>
       this.client.begin(async (tx) => {
         await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
+        if (exportScope) {
+          if (!authorizer || exportScope.ownerUserId !== command.ownerUserId)
+            throw new RestrictedPacketStoreUnavailableError();
+          await authorizer(exportScope, tx as unknown as VaultAdmissionQuery);
+        }
         const app = await this.lockApplication(tx, command.ownerUserId, command.applicationId);
         if (
-          Number(app.revision) !== command.expectedRevision ||
-          app.current_packet_id !== command.packetId
+          !exportScope &&
+          (Number(app.revision) !== command.expectedRevision ||
+            app.current_packet_id !== command.packetId)
         )
           throw new RestrictedPacketStoreUnavailableError();
-        const packet = await this.loadCurrentPacket(tx, app);
+        const packet = await this.loadCurrentPacket(
+          tx,
+          exportScope ? { ...app, current_packet_id: command.packetId } : app,
+        );
         if (
           !packet?.restrictedValues ||
           packet.id !== command.packetId ||
           packet.packetHash !== command.packetHash
         )
           throw new RestrictedPacketStoreUnavailableError();
-        const references = await this.lockVaultReferences(tx, packet);
-        if (evaluateVaultBindings(packet, references, this.clock()).length)
-          throw new RestrictedPacketStoreUnavailableError();
+        if (!exportScope) {
+          const references = await this.lockVaultReferences(tx, packet);
+          if (evaluateVaultBindings(packet, references, this.clock()).length)
+            throw new RestrictedPacketStoreUnavailableError();
+        }
         const [row] = await tx<
           Array<{
             schema_version: 1;
@@ -1093,9 +1147,9 @@ export class PostgresApplicationStore {
         if (!row) throw new RestrictedPacketStoreUnavailableError();
         this.requireRestrictedProtection();
         await tx`INSERT INTO applications_restricted.packet_read_audit
-        (id, read_id, owner_user_id, application_id, packet_id, purpose, stage, created_at)
+        (id, read_id, owner_user_id, application_id, packet_id, purpose, stage, export_request_id, export_operation_id, created_at)
         VALUES (${uuidv7()}, ${readId}, ${command.ownerUserId}, ${command.applicationId}, ${command.packetId},
-          'candidate_review', ${stage}, ${this.clock()})`;
+          ${exportScope ? "candidate_export" : "candidate_review"}, ${stage}, ${exportScope?.exportId ?? null}, ${exportScope?.operationId ?? null}, ${this.clock()})`;
         return {
           context: {
             ownerUserId: command.ownerUserId,

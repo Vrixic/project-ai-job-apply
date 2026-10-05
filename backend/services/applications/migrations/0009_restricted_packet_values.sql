@@ -113,6 +113,10 @@ CREATE TABLE applications_restricted.packet_read_audit (
   packet_id uuid NOT NULL,
   purpose text NOT NULL CHECK (purpose IN ('candidate_review', 'candidate_export', 'authorized_submission')),
   stage text NOT NULL CHECK (stage IN ('admitted', 'validated')),
+  export_request_id uuid,
+  export_operation_id uuid,
+  CHECK ((purpose = 'candidate_export' AND export_request_id IS NOT NULL AND export_operation_id IS NOT NULL)
+    OR (purpose <> 'candidate_export' AND export_request_id IS NULL AND export_operation_id IS NULL)),
   created_at timestamptz NOT NULL,
   UNIQUE (read_id, stage),
   FOREIGN KEY (packet_id, application_id, owner_user_id)
@@ -176,3 +180,117 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION applications.delete_candidate_data(uuid, uuid) FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION applications.export_candidate_data(candidate_user_id uuid)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, applications
+AS $$
+  SELECT jsonb_build_object(
+    'restrictedPacketReferences', jsonb_build_object('schemaVersion', 1, 'packets', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object('applicationId', packet.application_id, 'packetId', packet.id,
+        'packetHash', packet.packet_hash, 'fieldKeys', (
+          SELECT jsonb_agg(field->>'fieldKey' ORDER BY field->>'fieldKey')
+          FROM jsonb_array_elements(packet.fields) AS field WHERE field->'protectedValue' = 'true'::jsonb
+        )) ORDER BY packet.application_id, packet.version)
+      FROM applications.packets packet WHERE packet.owner_user_id = candidate_user_id
+        AND packet.restricted_value_id IS NOT NULL
+    ), '[]'::jsonb)),
+    'applications', jsonb_build_object(
+      'schemaVersion', 1,
+      'preparations', COALESCE((
+        SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+          'id', preparation.id, 'applicationId', preparation.application_id,
+          'basePacketId', preparation.base_packet_id, 'state', preparation.state,
+          'noticeVersion', preparation.notice_version, 'purpose', preparation.purpose,
+          'provider', preparation.provider, 'model', preparation.model, 'categories', preparation.categories,
+          'approvedAt', preparation.approved_at, 'expiresAt', preparation.expires_at,
+          'generationClaimedAt', preparation.generation_claimed_at,
+          'resultPacketId', preparation.result_packet_id, 'errorCode', preparation.error_code,
+          'createdAt', preparation.created_at, 'updatedAt', preparation.updated_at
+        )) ORDER BY preparation.created_at, preparation.id)
+        FROM applications.packet_preparations preparation
+        WHERE preparation.owner_user_id = candidate_user_id
+      ), '[]'::jsonb),
+      'applications', COALESCE((
+        SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+          'id', application.id, 'canonicalJobId', application.canonical_job_id,
+          'status', application.status, 'revision', application.revision,
+          'currentPacketId', application.current_packet_id,
+          'createdAt', application.created_at, 'updatedAt', application.updated_at
+        )) ORDER BY application.created_at, application.id)
+        FROM applications.applications application
+        WHERE application.owner_user_id = candidate_user_id
+      ), '[]'::jsonb),
+      'packets', COALESCE((
+        SELECT jsonb_agg(
+          jsonb_strip_nulls(jsonb_build_object(
+            'id', packet.id, 'applicationId', packet.application_id, 'version', packet.version,
+            'packetHash', packet.packet_hash, 'jobRevision', packet.job_revision,
+            'formAdapterId', packet.form_adapter_id, 'formVariantId', packet.form_variant_id,
+            'formHash', packet.form_hash, 'resumeHash', packet.resume_hash,
+            'coverLetterHash', packet.cover_letter_hash, 'createdAt', packet.created_at
+          )) || jsonb_build_object('fields', (SELECT COALESCE(jsonb_agg(field - 'protectedValue' ORDER BY position), '[]'::jsonb) FROM jsonb_array_elements(packet.fields) WITH ORDINALITY AS entry(field, position))) ||
+          CASE WHEN jsonb_array_length(packet.temporary_materials) = 0 THEN '{}'::jsonb ELSE
+            jsonb_build_object('temporaryMaterials', (
+              SELECT jsonb_agg(reference - 'ownerUserId' - 'applicationId' ORDER BY reference->>'kind')
+              FROM jsonb_array_elements(packet.temporary_materials) AS reference
+            )) END
+          ORDER BY packet.application_id, packet.version
+        )
+        FROM applications.packets packet
+        WHERE packet.owner_user_id = candidate_user_id
+      ), '[]'::jsonb),
+      'approvals', COALESCE((
+        SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+          'id', approval.id, 'packetId', approval.packet_id,
+          'applicationId', approval.application_id, 'packetHash', approval.packet_hash,
+          'acknowledgedFieldKeys', to_jsonb(approval.acknowledged_field_keys),
+          'approvedAt', approval.approved_at, 'expiresAt', approval.expires_at,
+          'invalidatedAt', approval.invalidated_at,
+          'invalidationReason', approval.invalidation_reason
+        )) ORDER BY approval.approved_at, approval.id)
+        FROM applications.approvals approval
+        WHERE approval.owner_user_id = candidate_user_id
+      ), '[]'::jsonb),
+      'attempts', COALESCE((
+        SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+          'id', attempt.id, 'applicationId', attempt.application_id,
+          'packetId', attempt.packet_id, 'sequence', attempt.sequence,
+          'status', attempt.status, 'adapterId', attempt.adapter_id,
+          'adapterVersion', attempt.adapter_version, 'startedAt', attempt.started_at,
+          'dispatchedAt', attempt.dispatched_at, 'resolvedAt', attempt.resolved_at,
+          'evidenceKind', attempt.evidence_kind,
+          'evidenceObservedAt', attempt.evidence_observed_at,
+          'evidenceProviderReference', attempt.evidence_provider_reference
+        )) ORDER BY attempt.application_id, attempt.sequence)
+        FROM applications.attempts attempt
+        WHERE attempt.owner_user_id = candidate_user_id
+      ), '[]'::jsonb),
+      'history', COALESCE((
+        SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+          'applicationId', event.application_id, 'seq', event.seq, 'kind', event.kind,
+          'fromStatus', event.from_status, 'toStatus', event.to_status,
+          'packetId', event.packet_id, 'attemptId', event.attempt_id,
+          'reasonCode', event.reason_code, 'occurredAt', event.occurred_at
+        )) ORDER BY event.application_id, event.seq)
+        FROM applications.history event
+        WHERE event.owner_user_id = candidate_user_id
+      ), '[]'::jsonb)
+    ),
+    'audit', jsonb_build_object(
+      'events', COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+          'owner', 'applications', 'action', 'applications.' || event.kind,
+          'resourceType', 'application', 'resourceId', event.application_id,
+          'occurredAt', event.occurred_at
+        ) ORDER BY event.occurred_at, event.application_id, event.seq)
+        FROM applications.history event
+        WHERE event.owner_user_id = candidate_user_id
+      ), '[]'::jsonb)
+    )
+  )
+$$;
+REVOKE ALL ON FUNCTION applications.export_candidate_data(uuid) FROM PUBLIC;

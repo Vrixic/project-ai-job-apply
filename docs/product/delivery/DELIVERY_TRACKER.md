@@ -3733,3 +3733,14 @@ Profile-backed selected-answer races, role/inventory/legacy compatibility and fu
 Fixture removed, shared volumes retained and Docker/WSL stopped. No publication/review/activation/
 deployment or phase completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
 D1/D3 remain In progress; saved-answer reuse stays false and CI/CD remains deferred until launch.
+
+2026-10-05 D3-077 adds Profile-owned exact export admission, audited historical packet reads and
+strict portable artifact enrichment. All 19 real PostgreSQL cases pass with offline crypto,
+including historical true/false originals, request failure during decrypt and exact privacy deletion
+that preserves another candidate. Applications 314 units, Profile seven admission cases and 44
+focused Workflow cases pass; actual activity tests prove private references stay outside artifacts
+and failures write no partial object. Docker/WSL stopped; owned fixture removed and shared volumes
+retained. Whole restore, selected-answer races, maintained fixtures/inventory/role/legacy acceptance
+and clean full verification remain outstanding. Private WIP; no PR, activation, cloud deployment or
+phase completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains
+deferred until production launch.

@@ -222,12 +222,59 @@ The owned tmpfs fixture `eee854cf32bf6903eb68ae963887b1b5dd8d79b811fbc3f8b859841
 identity/label/tmpfs-validated and removed. Shared Docker volumes stayed identical; Docker Desktop
 stopped and WSL reports no running distributions. No UI/browser or complete-verifier claim is made.
 
+## Historical export authorization and privacy deletion checkpoint
+
+The private Applications export reader now admits the exact owner/export request/running
+operation/policy through a Profile-owned transaction callback before and after decryption.
+Request and operation locks are released before crypto awaits. Historical reads bind each original
+packet/hash/envelope rather than the current packet or latest saved-answer value. Candidate-review
+reads retain their stricter current-revision and current-vault requirements. Identifier-only audit
+entries distinguish export purpose and exact request/operation IDs; no answers or key material enter
+audit. Missing authorizer/protection fails unavailable without SQL or crypto effects.
+
+Unshipped migration 0009 strips the internal protected-field marker from public owner exports and
+returns a separate private inventory containing exact application/packet/hash/field-key references.
+Workflow assembly checks the strict metadata envelope, enriches only exact declared fields through
+the narrow reader, clears controlled returned maps, then validates the strict portable envelope
+again. The private inventory, bindings, envelope and keys never enter the portable artifact. Reader
+composition remains optional and absent by default; a nonempty private inventory without its reader
+refuses artifact creation. Applications uses Profile only as a workspace dev dependency for the
+actual authorization integration; production ownership remains through the structural private port.
+
+All 19 real PostgreSQL 16.6 cases pass with synthetic identities and offline envelope/MAC crypto.
+Five added cases prove distinct original true/false values across two historical packets; missing
+and foreign rights-request refusal before decryption; request/operation lock availability during
+decryption and refusal after request failure; unauthorized direct deletion refusal; and exact
+privacy-authorized removal of audit/packet/ciphertext while retaining another candidate's records.
+These are local persistence and authorization checks, not live OIDC/KMS/AWS or whole logical restore.
+Log: `.tmp/d3-restricted-packet-export-sql.log` (2026-10-05, 18:49:58 local).
+
+Applications' 314 unit tests pass after the shared reader refactor. Seven Profile-owned export
+admission cases and 46 focused Workflow helper/owner-composition cases pass. Four new actual
+activity-assembly cases validate the stored strict artifact, unchanged source metadata and cleared
+returned map, and prove no artifact is written for missing readers, malformed private references or
+foreign reader scope. The existing unavailable-protection cases now also cover historical export.
+Applications, Profile and Workflows typechecks/builds pass; scoped Biome checks pass on all 13
+changed TypeScript/JSON files. Reader result accessors are refused without invoking them during
+cleanup; Maps with overridden methods are refused and controlled Maps are cleared through the
+native method. These two additional adversarial cases pass with the focused suite. The complete
+Workflow unit suite passes: 1,613 tests passed, 57 skipped (42 files passed, nine skipped).
+Logs: `.tmp/d3-restricted-packet-export-applications-unit.log`,
+`.tmp/d3-restricted-packet-export-workflows-unit.log`.
+No frontend/public contract, production configuration, feature activation or deployment changes.
+
+The owned tmpfs PostgreSQL fixture
+`0ca525bc10a18805b8af445f08f6c678a70590148ee5f4d0c96e448d8cc81bd0` was checked against
+its exact identity, name, label and tmpfs before removal. Shared volume inventories stayed identical.
+Docker Desktop was stopped and WSL reported no running distributions. No actual restore or full
+maintained-verifier claim is made for this incomplete private checkpoint.
+
 ## Next work
 
-Finish Profile-backed selected-answer correction/expiry read acceptance, exact historical export
-enrichment, inventory/role/restore boundary registration, legacy migration compatibility and full
-export/deletion/restore acceptance. Update all maintained integration/runtime fixtures for mandatory
-protection and complete the clean full verifier before review. Existing legacy restricted plaintext must be handled by an explicit
+Finish Profile-backed selected-answer correction/expiry read acceptance, inventory/role/restore
+boundary registration, legacy migration compatibility and whole logical restore acceptance.
+Update all maintained integration/runtime fixtures for mandatory protection and complete the clean
+full verifier before review. Existing legacy restricted plaintext must be handled by an explicit
 reviewed transition; do not silently rewrite approved/ambiguous submission evidence. Retain exact
 key authority for supported historical records; key rotation must never silently change replay
 or approval semantics. Complete the whole storage path before requesting review of this slice.

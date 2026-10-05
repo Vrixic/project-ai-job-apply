@@ -165,6 +165,10 @@ importers:
       uuid:
         specifier: 14.0.2
         version: 14.0.2
+    devDependencies:
+      '@ai-job-apply/profile-service':
+        specifier: workspace:*
+        version: link:../profile
 
   backend/services/billing:
     dependencies:

@@ -102,6 +102,17 @@ describe("restricted packet store refuses unavailable protection", () => {
       await expect(
         store.readCurrentPacketValues({ ...base, packetId: APPLICATION_ID, packetHash: HASH_A }),
       ).rejects.toThrow(RestrictedPacketStoreUnavailableError);
+      await expect(
+        store.readExportPacketValues({
+          ownerUserId: USER_ID,
+          exportId: APPLICATION_ID,
+          operationId: APPLICATION_ID,
+          policyVersion: "synthetic-v1",
+          applicationId: APPLICATION_ID,
+          packetId: APPLICATION_ID,
+          packetHash: HASH_A,
+        }),
+      ).rejects.toThrow(RestrictedPacketStoreUnavailableError);
       expect(query).not.toHaveBeenCalled();
       expect(begin).not.toHaveBeenCalled();
       expect(cipher.encrypt).not.toHaveBeenCalled();

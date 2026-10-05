@@ -20,6 +20,12 @@ export type {
   RestrictedPacketPlaintext,
   RestrictedPacketScope,
 } from "./restricted-packet-cipher.js";
+export type {
+  RestrictedPacketExportAuthorizer,
+  RestrictedPacketExportReader,
+  RestrictedPacketExportReference,
+  RestrictedPacketExportScope,
+} from "./restricted-packet-export.js";
 export * from "./resume-preview.js";
 export * from "./service.js";
 export * from "./state-machine.js";

@@ -3,6 +3,10 @@ import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
+import {
+  candidateRightsOwnerInventoryWithApplications,
+  createBuildingCandidateExportAuthorizer,
+} from "@ai-job-apply/profile-service";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -86,6 +90,24 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
     valueType: "file",
     sensitivity: "standard",
     answerPolicy: "explicit_each_time",
+  });
+  const authorizeRestrictedPacketExport = createBuildingCandidateExportAuthorizer({
+    enabled: () => true,
+    policy: {
+      version: "synthetic-restricted-export-v1",
+      accountablePolicySha256: "a".repeat(64),
+      exportArtifactLifetimeSeconds: 3600,
+      downloadGrantLifetimeSeconds: 300,
+      backupRetentionDays: 35,
+      recentAuthenticationMaxAgeSeconds: 300,
+      ownerInventory: candidateRightsOwnerInventoryWithApplications,
+      subprocessorInventory: [],
+    },
+  });
+  const exportStore = new PostgresApplicationStore(sql, undefined, {
+    definitions: ownedDefinitions,
+    restrictedPackets: { cipher, fingerprintKeyArn, enabled: () => true },
+    authorizeRestrictedPacketExport,
   });
   const store = new PostgresApplicationStore(sql, undefined, {
     definitions: ownedDefinitions,
@@ -403,5 +425,184 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
     expect(
       await sql`SELECT id FROM applications_restricted.packet_values WHERE owner_user_id = ${command.ownerUserId}`,
     ).toHaveLength(1);
+  });
+  async function exportRequest(ownerUserId: string) {
+    const exportId = uuidv7();
+    const operationId = uuidv7();
+    const policyVersion = "synthetic-restricted-export-v1";
+    await sql`INSERT INTO platform.operations (id, user_id, kind, state) VALUES (${operationId}, ${ownerUserId}, 'candidate_data_export', 'running')`;
+    await sql`INSERT INTO profile.candidate_data_exports (id, user_id, operation_id, format, policy_version, state)
+      VALUES (${exportId}, ${ownerUserId}, ${operationId}, 'candidate-data-export-v1', ${policyVersion}, 'building')`;
+    return { ownerUserId, exportId, operationId, policyVersion };
+  }
+  it("exports original chosen values independently from two historical packet versions", async () => {
+    const command = await application();
+    const first = await store.createPacket({ ...command, packet });
+    await store.createPacket({
+      ...command,
+      expectedRevision: first.view.application.revision,
+      idempotencyKey: idempotencyKey(),
+      packet: {
+        ...packet,
+        fields: [
+          proposal(),
+          proposal({
+            fieldKey: "authorization.us_authorized",
+            value: false,
+            origin: "user_entered",
+            sourceFactIds: [],
+          }),
+        ],
+      },
+    });
+    const scope = await exportRequest(command.ownerUserId);
+    const [fragment] = await sql<
+      Array<{
+        data: {
+          applications: {
+            packets: Array<{
+              id: string;
+              applicationId: string;
+              packetHash: string;
+              fields: Array<{ fieldKey: string; value: unknown }>;
+            }>;
+          };
+          restrictedPacketReferences: {
+            schemaVersion: number;
+            packets: Array<{
+              applicationId: string;
+              packetId: string;
+              packetHash: string;
+              fieldKeys: string[];
+            }>;
+          };
+        };
+      }>
+    >`
+      SELECT applications.export_candidate_data(${command.ownerUserId}::uuid) AS data`;
+    if (!fragment) throw Error("Missing synthetic export fragment");
+    expect(fragment.data.restrictedPacketReferences.schemaVersion).toBe(1);
+    expect(fragment.data.restrictedPacketReferences.packets).toHaveLength(2);
+    expect(JSON.stringify(fragment.data.applications)).not.toContain("protectedValue");
+    expect(JSON.stringify(fragment.data.applications)).not.toContain("restrictedValues");
+    const values = [];
+    for (const reference of fragment.data.restrictedPacketReferences.packets) {
+      const result = await exportStore.readExportPacketValues({
+        ...scope,
+        applicationId: reference.applicationId,
+        packetId: reference.packetId,
+        packetHash: reference.packetHash,
+      });
+      values.push(result.values.get("authorization.us_authorized"));
+    }
+    expect(values).toEqual([true, false]);
+    const firstPacket = first.view.currentPacket;
+    if (!firstPacket) throw Error("Missing synthetic original packet");
+    await expect(
+      store.readCurrentPacketValues({
+        ...command,
+        packetId: firstPacket.id,
+        packetHash: firstPacket.packetHash,
+        expectedRevision: first.view.application.revision,
+      }),
+    ).rejects.toThrow(RestrictedPacketStoreUnavailableError);
+  });
+  it("refuses an absent or foreign rights request before historical decryption", async () => {
+    const target = await review();
+    const scope = await exportRequest(target.ownerUserId);
+    const calls = vi.mocked(cipher.decrypt).mock.calls.length;
+    await expect(
+      exportStore.readExportPacketValues({
+        ...scope,
+        applicationId: target.applicationId,
+        packetId: target.packetId,
+        packetHash: target.packetHash,
+        exportId: uuidv7(),
+      }),
+    ).rejects.toThrow(RestrictedPacketStoreUnavailableError);
+    const foreign = await application();
+    const foreignScope = await exportRequest(foreign.ownerUserId);
+    await expect(
+      exportStore.readExportPacketValues({
+        ...scope,
+        applicationId: target.applicationId,
+        packetId: target.packetId,
+        packetHash: target.packetHash,
+        exportId: foreignScope.exportId,
+      }),
+    ).rejects.toThrow(RestrictedPacketStoreUnavailableError);
+    expect(vi.mocked(cipher.decrypt).mock.calls.length).toBe(calls);
+  });
+  it("holds no rights request/operation locks during decrypt and withholds a request that fails meanwhile", async () => {
+    const target = await review();
+    const scope = await exportRequest(target.ownerUserId);
+    onDecrypt = async () => {
+      await sql.begin(async (tx) => {
+        await tx`SELECT id FROM profile.candidate_data_exports WHERE id = ${scope.exportId} FOR UPDATE NOWAIT`;
+        await tx`SELECT id FROM platform.operations WHERE id = ${scope.operationId} FOR UPDATE NOWAIT`;
+        await tx`UPDATE profile.candidate_data_exports SET state = 'failed', failure_code = 'owner_unavailable' WHERE id = ${scope.exportId}`;
+      });
+    };
+    try {
+      await expect(
+        exportStore.readExportPacketValues({
+          ...scope,
+          applicationId: target.applicationId,
+          packetId: target.packetId,
+          packetHash: target.packetHash,
+        }),
+      ).rejects.toThrow(RestrictedPacketStoreUnavailableError);
+    } finally {
+      onDecrypt = undefined;
+    }
+  });
+  it("rejects direct ciphertext/audit deletion without privacy authority", async () => {
+    const target = await review();
+    await store.readCurrentPacketValues(target);
+    await expect(
+      sql`DELETE FROM applications_restricted.packet_read_audit WHERE owner_user_id = ${target.ownerUserId}`,
+    ).rejects.toMatchObject({ code: "55000" });
+    await expect(
+      sql`DELETE FROM applications_restricted.packet_values WHERE owner_user_id = ${target.ownerUserId}`,
+    ).rejects.toMatchObject({ code: "55000" });
+    await expect(
+      sql`SELECT applications.delete_candidate_data(${target.ownerUserId}::uuid, ${uuidv7()}::uuid)`,
+    ).rejects.toMatchObject({ code: "42501" });
+  });
+  it("removes only the exact candidate ciphertext/audit after privacy-authorized packet deletion", async () => {
+    const doomed = await review();
+    const survivor = await review();
+    await store.readCurrentPacketValues(doomed);
+    await store.readCurrentPacketValues(survivor);
+    const requestId = uuidv7();
+    const operationId = uuidv7();
+    const now = new Date();
+    const expires = new Date(now.getTime() + 35 * 86400000);
+    await sql`INSERT INTO platform.operations (id, user_id, kind, state) VALUES (${operationId}, ${doomed.ownerUserId}, 'account_deletion', 'queued')`;
+    await sql`INSERT INTO profile.account_deletion_requests (id, user_id, operation_id, policy_version, state, version,
+      requested_at, updated_at, confirmed_at, backup_expires_at) VALUES (${requestId}, ${doomed.ownerUserId}, ${operationId},
+      'synthetic-restricted-delete-v1', 'quarantined', 2, ${now}, ${now}, ${now}, ${expires})`;
+    await sql`INSERT INTO privacy.account_deletion_ledger (request_id, subject_digest, policy_version, policy_sha256, state,
+      owner_inventory, subprocessor_inventory, confirmed_at, backup_expires_at, updated_at) VALUES (${requestId}, ${"1".repeat(64)},
+      'synthetic-restricted-delete-v1', ${"2".repeat(64)}, 'quarantined', ${sql.json({ applications: "pending" })}, ${sql.json({})}, ${now}, ${expires}, ${now})`;
+    await expect(
+      sql`SELECT applications.delete_candidate_data(${survivor.ownerUserId}::uuid, ${requestId}::uuid)`,
+    ).rejects.toMatchObject({ code: "42501" });
+    await sql`SELECT applications.delete_candidate_data(${doomed.ownerUserId}::uuid, ${requestId}::uuid)`;
+    expect(
+      await sql`SELECT id FROM applications_restricted.packet_values WHERE owner_user_id = ${doomed.ownerUserId}`,
+    ).toHaveLength(0);
+    expect(
+      await sql`SELECT id FROM applications_restricted.packet_read_audit WHERE owner_user_id = ${doomed.ownerUserId}`,
+    ).toHaveLength(0);
+    expect(
+      await sql`SELECT id FROM applications_restricted.packet_values WHERE owner_user_id = ${survivor.ownerUserId}`,
+    ).toHaveLength(1);
+    expect(
+      await sql`SELECT id FROM applications_restricted.packet_read_audit WHERE owner_user_id = ${survivor.ownerUserId}`,
+    ).toHaveLength(2);
+    await expect(store.readCurrentPacketValues(doomed)).rejects.toThrow(
+      RestrictedPacketStoreUnavailableError,
+    );
   });
 });

@@ -55,8 +55,12 @@ before activation.
 
 Private envelope crypto, strict metadata codec, synchronous binding, packet.v2 commitment, keyed
 receipts, atomic restricted persistence, candidate-review JIT reads, identifier-only read audit and
-preparation carry-forward have local synthetic/offline unit and real PostgreSQL evidence. Historical
-export, full deletion/restore acceptance, legacy transition/role/inventory and maintained complete
+preparation carry-forward, exact authorized historical export and privacy-authorized deletion have
+local synthetic/offline unit and real PostgreSQL evidence. Profile owns export request/operation
+admission through a narrow transaction callback; historical readers release SQL locks before crypto
+and recheck exact authority afterward. Workflow assembly copies only authorized declared field
+values into the strict portable envelope; private inventory/bindings remain outside artifacts. Whole
+logical restore, selected-answer read races, legacy transition/role/inventory and maintained complete
 verification remain unfinished. No
 production data, live KMS/provider, deployment or activation is claimed. Saved-answer reuse remains
 disabled. See [D3-077 evidence](../product/delivery/evidence/d3-restricted-packet-storage-2026-10-05.md).
