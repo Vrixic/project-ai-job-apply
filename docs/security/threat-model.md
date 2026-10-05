@@ -137,6 +137,15 @@ creation prohibition, transient retention and runtime gates pass.
 
 ## Protected assets
 
+Generated cover letters and improved/tailored resumes have a distinct temporary lifecycle under
+[ADR-038](../adr/038-one-off-generated-application-materials.md): at most 30 minutes from generation
+completion with no persisted content. Packet JSON, command receipts, durable checkpoints, browser
+storage, renderer scratch files, and AI-provider diagnostic logs are potential hidden copies.
+D3-064 must prove no-content persistence, active cleanup on idle/error/session termination, and
+deadline enforcement immediately before ATS handoff. Expiry invalidates unsubmitted approval but
+must preserve technical confirmation/ambiguity state so it cannot cause duplicate submission.
+These are required controls; implementation/deployed evidence is pending.
+
 - Candidate identity, sessions, resume/profile facts, preferences, application artifacts, answers,
   approvals, and submission evidence
 - Restricted tokens, voluntary sensitive answers, secrets, and remote-browser sessions

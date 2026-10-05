@@ -46,7 +46,9 @@ Approve, reject, or condition the foundational assumptions that later deliveries
   shown during the application's final review and requires approval as part of the immutable packet.
 - Confirmed account deletion is not recoverable; inaccessible backup copies age out within the
   documented 35-day window.
-- Generated application artifacts remain until the user deletes them or deletes the account.
+- Generated cover letters and improved/tailored resumes are one-off materials, never persisted,
+  and cleaned up within 30 minutes of generation completion under
+  [ADR-038](../../adr/038-one-off-generated-application-materials.md); enforcement is pending D3-064.
 - Phase 0 uses operational telemetry only. Optional product analytics require a later explicit
   preference and applicable review.
 - Shared development, CI, staging, and demos use synthetic data until the applicable legal/privacy
@@ -64,7 +66,7 @@ Approve, reject, or condition the foundational assumptions that later deliveries
 | LP-D05 | Whether the strict synthetic-only pre-approval gate is accepted | Staged policy accepted: synthetic shared environments; isolated founder-only real-data use; adapter-gated founder live submissions |
 | LP-D06 | Restricted-answer storage and reuse | Store user-supplied values in the restricted vault; never infer; always show during final application review |
 | LP-D07 | Account-deletion recovery window | No recovery after confirmed deletion; active access ends immediately and backups age out within 35 days |
-| LP-D08 | Default generated-artifact retention | Until the user deletes the artifact or account |
+| LP-D08 | Generated cover-letter/improved-resume retention | Owner updated 2026-10-04: one-off, maximum 30 minutes from generation completion; never persist content for future use ([ADR-038](../../adr/038-one-off-generated-application-materials.md)); enforcement and provider/privacy review pending |
 | LP-D09 | Optional product analytics consent model | Phase 0 operational telemetry only; optional product analytics later require an explicit preference |
 
 ## Product-owner-authorized pre-approval development modes

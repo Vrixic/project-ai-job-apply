@@ -1,16 +1,17 @@
 # Retention and Deletion Specification
 
 - Status: Provisional engineering defaults; product and counsel approval pending
-- Last updated: 2026-08-25
+- Last updated: 2026-10-04
 
-All durations are configuration, not hard-coded policy.
+Durations are configured against policy. Generated cover letters and improved/tailored resumes
+have an owner-decided maximum of 1,800 seconds; configuration must not extend it.
 
 | Data | Provisional retention |
 |---|---|
 | Active account/profile/preferences | Until user deletion |
 | Private source resumes and normalized documents | User controlled; provisional default until document or account deletion. A candidate can delete one resume: it is hidden and unusable at once, the profile suggestions from it that the candidate had not reviewed are erased at once (reviewed facts stay), and a sweep every 5 minutes then removes its stored versions and markers and the Documents row (D3-027, deployed and accepted in development 2026-09-28); account deletion also purges them (its case with a stored resume is D3-028, not yet proven deployed) ([ADR-033](../adr/033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md)) |
 | Deleted account | No recovery after confirmation; active access ends immediately |
-| Generated application artifacts | User controlled; default until account deletion |
+| Generated cover letters and improved/tailored resumes | One-off; maximum 30 minutes from generation completion, sooner on cancellation/logout/completed submission. Temporary memory only; no database, object-store, packet-field, history, or backup copies. Product direction accepted 2026-10-04; enforcement pending D3-064 ([ADR-038](../adr/038-one-off-generated-application-materials.md)) |
 | Raw contributed-page quarantine | Maximum 30 days |
 | Approved sanitized fixture | While required for regression and permission remains valid |
 | Detailed application/workflow logs | 30 days, redacted |
@@ -22,6 +23,33 @@ All durations are configuration, not hard-coded policy.
 No provisional duration is an approved public promise. Counsel must confirm applicable legal holds,
 consumer-rights response periods, contractual requirements, and jurisdictional exceptions before
 real candidate data is collected.
+
+## One-off generated application materials
+
+[ADR-038](../adr/038-one-off-generated-application-materials.md) replaces the previous generated-artifact
+default. The deadline covers text, edits to generated drafts, content-bearing diffs, PDF/DOCX bytes,
+and renderer scratch files. Downloads, edits, approval, retries, and background work never refresh
+it. Refuse preview/download/submission at expiry, discard temporary server/client copies even when
+idle, invalidate approval of an expired unsubmitted packet, and require new generation and review.
+Keep only hashes and minimal non-content approval/submission metadata. Do not erase confirmed
+submission evidence or retry an ambiguous submission because content expired.
+
+Generated material must never enter packet JSON, idempotency results, exports, durable execution
+history, queues, logs, telemetry, persistent browser storage, or provider-retained payloads.
+Use no-store responses and explicit cleanup rather than relying on an object-store lifecycle rule
+or eventual TTL deletion. Downloaded candidate files and employer/ATS copies are outside platform
+cleanup; disclose this limitation. Source resumes, confirmed facts, candidate-authored answers,
+and account export artifacts have separate policies.
+
+Current deterministic tailoring avoids persisted generated content, but the 30-minute lifecycle
+is not yet verified. The offline AI SDK can create a cover-letter packet proposal, and Applications
+persists packet fields, so that composition must be prevented before generation is exposed. D3-064
+tracks implementation and automated/browser acceptance; D3-012 still gates provider use and terms.
+
+Newer source-only cover-letter persistence also stores encrypted drafts and request/result slots
+in S3 and supports saved-draft recovery. Those paths do not meet the new policy and must be
+redesigned before activation; encryption and eventual account deletion do not provide a 30-minute
+lifetime. Preserve positive remote-settlement and writer-fencing controls during that redesign.
 
 ## Current synthetic-environment enforcement
 
@@ -98,7 +126,7 @@ and an opportunity to export data or cancel the request. Inaccessible backup cop
 | Decision | Provisional value | State |
 |---|---|---|
 | Deleted-account recovery | None after confirmation; active access ends immediately; backup copies age out within 35 days | Product decided; implementation and counsel/security approval required |
-| Generated-artifact default | Retain until user deletes the artifact or account | Product decided; counsel/privacy approval required |
+| Generated cover-letter/improved-resume lifetime | One-off, maximum 30 minutes; never persist content for future use | Product decided 2026-10-04; D3-064 implementation/expiry evidence and D3-012 provider/privacy review required |
 | Raw contribution quarantine | Maximum 30 days | Source/UGC counsel approval required |
 | Detailed workflow logs | 30 days, redacted | Security/privacy approval required |
 | Security/audit events | 365 days, access controlled | Security/privacy and counsel approval required |

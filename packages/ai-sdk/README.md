@@ -154,3 +154,12 @@ retain their return types and error behavior; older providers may use the existi
 port once, without retry on failure. Thrown errors, HTTP 404, timeout, lost capture acknowledgement
 and late fulfillment cannot become terminal receipts. This proves the original response's
 terminal observation, not provider-wide deletion or platform writer quiescence.
+Generated cover letters and improved resumes must follow
+[ADR-038](../../docs/adr/038-one-off-generated-application-materials.md): temporary, one-off content,
+maximum 30 minutes from generation completion, no database or other persisted content. The offline
+`toGeneratedProposal` helper does not enforce this lifecycle; its cover-letter output must not be
+saved in Applications packet fields. D3-064 tracks that integration guard and cleanup evidence;
+D3-012 still blocks live provider use.
+The source-only background adapter and disposal receipts above do not establish the required
+30-minute maximum for all provider copies; reviewed provider terms and end-to-end evidence remain
+necessary before activation under this policy.

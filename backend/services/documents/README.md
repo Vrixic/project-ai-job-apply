@@ -393,12 +393,21 @@ leaves work unresolved. No public API, migration or backfill changes are require
 or certify quiescence. Private writer drain, disposal maintenance, IAM and deployed acceptance
 remain open; nothing is activated by this source change.
 
+[ADR-038](../../../docs/adr/038-one-off-generated-application-materials.md) requires generated cover
+letters and improved/tailored resumes to be one-off, temporary materials with a maximum 30-minute
+lifetime from generation completion. Persist only hashes and minimal non-content metadata, never
+the text, diffs, files, or packet-field copies. Deterministic tailoring already avoids persistence;
+deadline enforcement and temporary-copy cleanup remain D3-064 work, not verified deployed behavior.
+The existing source-only saved-cover-letter and encrypted provider-slot paths described above do
+not satisfy this new policy. D3-064 must revise them before activation while preserving positive
+remote-settlement, deletion-fencing, and duplicate-prevention controls.
+
 ## Planned expansion
 
 - `tailoring/` — Evidence-grounded selection and rewriting.
 - `rendering/` — PDF/DOCX generation and rendered-text verification.
 - `factuality/` — Claim provenance, date, contradiction, and unsupported-claim checks.
-- `api/` — Later artifact reads, deletion, and version selection.
+- `api/` — Owner-scoped source-document management and temporary generated-material reads with expiry enforcement; no saved generated-document library.
 
 The service creates documents but does not approve or submit applications. Parsed values become
 proposals and cannot be used as confirmed facts without explicit candidate action.
