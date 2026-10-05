@@ -3441,3 +3441,15 @@ to runtime and import its pure scalar entrypoint. No external package/version ch
 offline lockfile update and Gateway build pass. Final clean-source verification follows this
 packaging correction. [Evidence](evidence/d3-temporary-packet-binding-2026-10-05.md). D3-064 and D1/D3
 remain In progress; no deployment, activation or authored merge. Docker/WSL stopped; CI/CD deferred.
+
+
+2026-10-05 final clean packet-binding implementation `f91d2312` passes the full maintained
+verifier: 38 typecheck tasks, 39 workspace test tasks, 23 builds, unchanged lint, formatting,
+operational/security/Compose/emitted isolation and the committed migration operator. Earlier
+export-corrected 92 Applications/40 Gateway SQL cases, three restored packet states and the exact
+63-migration/84-relation recovery are [recorded](evidence/d3-temporary-packet-binding-2026-10-05.md).
+The final packaging change preserves behavior and declares Domain as Gateway's production
+validation dependency. Only delivery documentation follows. Original actor/content/resume/preview/
+file/ATS lease, client cleanup, worker drain, approved provider terms and deployed acceptance remain;
+D3-064 and D1/D3 stay In progress, with eight/thirteen unchecked exits. Docker/WSL stopped; no
+publication, deployment, activation or authored merge. Hosted CI/CD deferred until production launch.
