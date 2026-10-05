@@ -99,3 +99,14 @@ work/completion adapters, allocation registry, managed routing/stop and complete
 content routing remain gates. Existing Gateway body routes are outside this native path's proof.
 No production flag/hostname, deployment or provider is activated. The proposal remains Proposed.
 [Source evidence](../product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).
+
+## Trusted task retirement checkpoint — 2026-10-05
+
+A private default-off control client now pins one immutable allocation/task and uses signed ECS
+DescribeTasks/StopTask. Only a fresh exact terminal task/container description supplies a scalar
+retirement receipt. A stop request, missing task, timeout, abort or native-process reply does not.
+The actual owning registry/sealed launch admission and durable receipt composition, reviewed IAM,
+managed task conformance and full application-wide disposal remain gates. There is no generated
+content, SQL, launch/list or provider-settlement capability on this path. This source does not
+authorize a cloud call, deployment, activation or physical all-copy purge. The proposal stays
+Proposed. [Local evidence](../product/delivery/evidence/d3-native-task-retirement-2026-10-05.md).

@@ -1076,3 +1076,12 @@ deployment or activation, and hosted CI/CD deferred until production launch.
 implementation `a5c29ef7` remains unchanged apart from delivery documentation. One authored PR
 remains open. No authored main merge, deployment or activation; D1/D3 remain In progress and
 hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 starts exact native task-retirement source on fresh main `9478f068` plus
+explicit #557 `eb3879b6`. Default-off signed fixed-region ECS client returns a scalar receipt only
+from positively described exact task/container STOPPED state; stop ACK, missing task, timeout and
+abort are not authority. 48 focused cases and actual emitted isolation/default-off guard pass;
+AWS transport is simulated. Full clean-source verifier pending.
+[Evidence](evidence/d3-native-task-retirement-2026-10-05.md). Registry/sealed launcher, private
+adapters/IAM, image/routing, actual managed stop, full client/ATS/provider/accountable gates remain.
+No frontend/cloud call/deployment/activation or phase completion. Docker/WSL stopped; CI/CD deferred.

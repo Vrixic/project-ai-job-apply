@@ -398,3 +398,8 @@ signed test JWTs, owning scalar proof, strict request/CORS checks, packet races 
 cancellation. It generates only synthetic TLS keys in test tmpfs and validates the exact test
 certificate/hostname. SQL/provider/renderer/managed OIDC remain simulated; no hosted endpoint or
 remote owner authentication is enabled.
+
+`native-task-retirement-bundle.test.mjs` checks the compiled private retirement client has only its
+control owner and ECS SDK, excludes SQL/Profile/model/object/render/Invoke owners, and refuses
+default-off use in the actual emitted artifact. It performs no AWS call; the maintained verifier
+runs it after build. Real managed-task terminal conformance remains a release prerequisite.

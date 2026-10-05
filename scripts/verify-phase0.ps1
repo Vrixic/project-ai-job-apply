@@ -42,6 +42,7 @@ Invoke-CheckedCommand "Preparation durable orchestration isolation" { node --tes
 Invoke-CheckedCommand "Preparation starter actor isolation" { node --test scripts/tests/preparation-starter-bundle.test.mjs }
 Invoke-CheckedCommand "Preparation recovery actor isolation" { node --test scripts/tests/preparation-recovery-bundle.test.mjs }
 Invoke-CheckedCommand "Cover-letter export read isolation" { node --test scripts/tests/cover-letter-export-bundle.test.mjs }
+Invoke-CheckedCommand "Native task retirement control isolation" { node --test scripts/tests/native-task-retirement-bundle.test.mjs }
 Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }
 
 $legacy = rg -n -i `

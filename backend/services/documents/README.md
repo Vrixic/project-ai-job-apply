@@ -668,3 +668,11 @@ strict original metadata and clears bounded response bytes. The native listener 
 verified token and emits direct existing preview/file JSON. The independent Gateway capability
 stays default-off; no generated body enters this metadata control path. See
 [authorization evidence](../../../docs/product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).
+
+The private `./native-task-retirement` entrypoint runs only in a trusted control process. It pins
+one immutable owner/application/generation/allocation and task, sends at most one signed ECS stop
+request and requires a fresh exact task/container STOPPED description before a scalar receipt.
+Timeout, abort, missing tasks and stop replies are not proof. It defaults off and has no generated
+content, SQL, launch/list or provider-settlement port. Complete registry/sealed launch admission,
+IAM and real managed-task conformance remain prerequisites for application-wide disposal. See
+[retirement evidence](../../../docs/product/delivery/evidence/d3-native-task-retirement-2026-10-05.md).

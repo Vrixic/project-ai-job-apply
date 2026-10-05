@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-task-retirement": {
+      "types": "./dist/src/native-task-retirement.d.ts",
+      "default": "./dist/src/native-task-retirement.js"
+    },
     "./native-read-authorization-client": {
       "types": "./dist/src/native-read-authorization-client.d.ts",
       "default": "./dist/src/native-read-authorization-client.js"
@@ -56,6 +60,7 @@
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
+    "@aws-sdk/client-ecs": "3.1133.0",
     "@aws-sdk/client-lambda": "3.1133.0",
     "@aws-sdk/client-s3": "3.1133.0",
     "@aws-sdk/client-sts": "3.1133.0",
