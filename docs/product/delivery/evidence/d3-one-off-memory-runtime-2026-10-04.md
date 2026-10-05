@@ -91,3 +91,26 @@ context during verification/download and active expiry while the final context r
 rendered output is cleared before that read returns. All 1,231 Documents units and build pass.
 This remains a point-in-time context check, not cross-owner fact-version serialization or final
 ATS-handoff approval. Full exact-source rerun remains pending the final context fix.
+
+
+## Final maintained verification
+
+Exact clean implementation source `1df42237a59c64eecb15f5d796502514ade06f0e` passes
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 builds, contract generation,
+formatting, dependency-security, operational/operator, Compose and compiled private-isolation
+checks. Lint stays at zero errors, 15 warnings and 58 informational notes. Documents units are
+1,231, including 57 new cases. The compiled context probe refuses late content; no simulated
+native completion authority is described as real SQL proof. Separately executed SQL counts and
+skips above remain accurate. The contract-generation pass leaves the tree clean, current restore
+identity is unchanged, and added local Markdown links resolve. Accepted ADR-038 is unchanged.
+Only delivery records change after this verified implementation source. Owned PostgreSQL fixture
+is removed, Docker Desktop/WSL are stopped and shared volumes are retained. No current-source
+native memory artifact, publication, deployment, activation, browser or live authenticated/model/
+ATS acceptance is claimed. D3-064 and both phases remain In progress; no exit checkbox is changed.
+
+Next backend step implements immutable original-completion metadata admission and its qualified
+private RPC before composing the memory boundary. It must verify original dispatch ownership,
+serialize one-time completion, reject refreshed timestamps, and refuse same-generation restoration
+after memory loss without claiming writer settlement. Then integrate generated resumes, exact
+packet references and expiry at approval/submission handoff. Transport/no-store, lifecycle/client
+cleanup, native worker drain and provider-retention acceptance remain required under ADR-038.
