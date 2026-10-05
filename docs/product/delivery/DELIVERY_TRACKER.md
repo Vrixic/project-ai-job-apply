@@ -3646,3 +3646,12 @@ registry SQL cases, 136 work-ledger SQL cases, 59 focused Documents cases and ac
 [Evidence](evidence/d3-native-material-registry-2026-10-05.md). No frontend/cloud call/publication/
 deployment/activation or phase completion. Launcher/private RPC/IAM/image/routing/managed task/
 client/ATS/provider/accountable gates remain; hosted CI/CD deferred until production launch.
+
+2026-10-05 #557 independently merges to main `2b6f59aa`, whose complete tree equals #557
+`eb3879b6`. #558 merges to its feature-branch base rather than main; the native registry follow-up
+therefore includes the reviewed retirement source. Identical current-main ancestry changes no
+files; no authored main merge occurs. Initial registry full verifier `3e932407` stops on a stale
+synthetic replay digest, now regenerated; 697 replay/908 role-guard assertions and 60 focused
+Documents cases pass. Clean full rerun pending. Docker/WSL stopped; owned tmpfs fixture removed.
+[Evidence](evidence/d3-native-material-registry-2026-10-05.md). D1/D3 stay In progress; no cloud
+call/deployment/activation or hosted CI/CD work.

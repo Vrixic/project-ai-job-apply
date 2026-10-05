@@ -47,6 +47,7 @@ export function createNativeMaterialDisposal(options: {
           if (
             intent.ownerUserId !== owner ||
             intent.applicationId !== application ||
+            intent.epochId !== plan.epochId ||
             intent.state !== "bound" ||
             !intent.allocation ||
             intent.allocation.allocationId !== intent.allocationId ||

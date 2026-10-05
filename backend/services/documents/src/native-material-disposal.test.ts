@@ -64,7 +64,7 @@ it("refuses default-off before sealing or remote effects", async () => {
   expect(retire).not.toHaveBeenCalled();
 });
 
-it.each(["pending", "foreign_owner", "foreign_generation", "multiple"] as const)(
+it.each(["pending", "foreign_owner", "foreign_generation", "foreign_epoch", "multiple"] as const)(
   "refuses %s intent before remote effects",
   async (fault) => {
     const original = intent();
@@ -74,6 +74,7 @@ it.each(["pending", "foreign_owner", "foreign_generation", "multiple"] as const)
     }
     if (fault === "foreign_owner") original.ownerUserId = epochId;
     if (fault === "foreign_generation") original.generationId = epochId;
+    if (fault === "foreign_epoch") original.epochId = allocation.generationId;
     const { create, retire, registry } = setup(
       fault === "multiple" ? [original, intent()] : [original],
     );

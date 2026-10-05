@@ -41,7 +41,7 @@ ECS transport is simulated; no managed task is launched, listed or stopped.
   exact task binding, sealed startup refusal, late launch capture, fresh epochs, original work
   preservation, immutable receipts, technical export, expiry, quarantine and authorized deletion.
 - 136 original work-ledger SQL cases pass with the new migration, separately from registry cases.
-- 59 focused Documents cases pass: 48 original retirement and 11 disposal failures/lifecycle cases.
+- 60 focused Documents cases pass: 48 original retirement and 12 disposal failures/lifecycle cases.
 - 27 Domain cases and 47 migration/restore unit cases pass. Historical manifests retain their
   historical relation/migration counts and cannot verify the expanded current boundary.
 - Three actual esbuild artifacts pass dependency-isolation and default-off execution refusals.
@@ -57,7 +57,11 @@ ECS transport is simulated; no managed task is launched, listed or stopped.
 Local ignored receipts: `.tmp/d3-native-registry-sql.log`, `work-sql.log`, `unit.log`,
 `bundle.log`, `domain.log`, `restore-unit.log` under the same `d3-native-registry-` prefix;
 logical restore proof: `.tmp/d3-native-registry-restore.log` and terminal exit receipt.
-Full clean committed-source verifier is pending. Local SQL checks found and corrected a PL/pgSQL
+Docker Desktop and WSL are stopped; the owned tmpfs fixture is removed.
+The initial clean-source full verifier at `3e932407` stopped at a stale synthetic deletion-replay
+environment checksum after manifest expansion. Derived environment/inspection digests were
+regenerated; 697 deletion-replay and 908 role-guard assertions pass. Full verifier rerun is pending.
+Local SQL checks found and corrected a PL/pgSQL
 OLD-alias conflict and preserved the existing cleanup tombstone protocol before this checkpoint.
 
 ## Rollout and remaining gates
@@ -73,3 +77,11 @@ managed conformance remain unimplemented/unverified. Pending unknown launch deli
 fresh generation until positive exact capture/retirement is possible. This is not a complete
 launcher or enabled user flow. There is no browser verification for this private backend source.
 D3-012 provider retention/no-training/accountable approvals and D1/D3 deployed acceptance remain.
+
+## Integration ancestry
+
+#557 independently merged to main `2b6f59aa`; the complete main tree equals exact #557
+`eb3879b6`. #558 merged to the already merged feature-branch base rather than main. Its source
+retirement implementation therefore remains part of this follow-up against main. Current main
+ancestry is integrated without changing the verified source tree; no authored main merge occurs.
+The follow-up uses `feat/d3-native-material-registry`, rather than updating a merged PR.
