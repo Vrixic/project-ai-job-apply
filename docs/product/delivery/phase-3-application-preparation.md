@@ -1130,3 +1130,10 @@ follows the tested implementation. [Evidence](evidence/d3-native-material-regist
 Docker/WSL stopped; fixture removed and shared volumes retained. Private launcher/RPC/IAM/image/
 routing/managed-task/client/ATS/provider/accountable gates remain. No publication/deployment/
 activation or authored main merge; D1/D3 remain In progress and CI/CD deferred until launch.
+
+2026-10-05 D3-079 owning native registry/disposal source is reviewable in
+[PR #559](https://github.com/Vrixic/project-ai-job-apply/pull/559) against current main `2b6f59aa`.
+Tested implementation `dda86480` is unchanged; subsequent commits record delivery evidence only.
+#558's reviewed retirement source is included because its independent merge targeted the former
+feature-branch base. One authored PR is open. D1/D3 stay In progress; no authored main merge,
+cloud task operation, publication/deployment/activation or hosted CI/CD work.

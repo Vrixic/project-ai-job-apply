@@ -101,3 +101,6 @@ Terminal receipts: `.tmp/d3-native-registry-verify-final.log` and `.exit` (0).
 Docker Desktop and WSL remain stopped, the owned tmpfs fixture is removed and shared volumes are
 retained. Only delivery documentation changes follow the tested implementation. No browser,
 managed ECS, provider, deployment, production or all-copy purge acceptance is claimed.
+
+Review: [PR #559](https://github.com/Vrixic/project-ai-job-apply/pull/559) against current main.
+Tested implementation `dda86480` is unchanged; only delivery documentation follows.
