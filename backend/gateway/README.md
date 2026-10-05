@@ -260,3 +260,6 @@ fixed value-free `application_packet_stale` 409 and `no-store`. This does not ce
 client copy cleanup or remote settlement. Production entry points compose no temporary producer
 or reader. Upgrade closed-object consumers before activation; temporary resumes remain refused
 until their owned reader exists. Native actor/session/client/provider/ATS gates remain.
+
+The synchronous memory guard is availability authority, not a held borrowed content lease.
+Bounded outgoing native content leases and all-copy disposal remain activation requirements.

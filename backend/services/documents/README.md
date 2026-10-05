@@ -613,3 +613,6 @@ check that Applications uses after its final SQL read and during HTTP serializat
 is never durable or public metadata. Completion remains default-off and native original authority
 is required. Native session host/transport, all-copy idle/cancel/logout/confirmed-submit disposal,
 client lifecycle and approved provider retention are still required before activation.
+
+The synchronous memory guard is availability authority, not a held borrowed content lease.
+Bounded outgoing native content leases and all-copy disposal remain activation requirements.

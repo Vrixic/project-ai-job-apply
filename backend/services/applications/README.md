@@ -238,3 +238,6 @@ Native session transport, original actor composition, native edit authority, idl
 cancel/confirmed-submission owner disposal, ATS handoff and D3-012 provider approval remain gates.
 These point-in-time reads and transport guards do not certify atomic concurrent cancellation,
 all-copy purge, remote settlement, socket delivery or a frozen Lambda's physical memory expiry.
+
+The synchronous memory guard is availability authority, not a held borrowed content lease.
+Bounded outgoing native content leases and all-copy disposal remain activation requirements.

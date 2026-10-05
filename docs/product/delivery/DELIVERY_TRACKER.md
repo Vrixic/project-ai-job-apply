@@ -3466,3 +3466,13 @@ skip), and 47 Gateway SQL/HTTP cases pass. Seven new connected cases use native 
 real memory/rendering and simulated authentication/generation. [Evidence](evidence/d3-temporary-material-reads-2026-10-05.md).
 Full verifier pending; native actor/session/resume/client/provider/ATS gates remain; D1/D3
 stay In progress. No activation or deployment; hosted CI/CD deferred until production launch.
+
+2026-10-05 D3-064 clean `9da00ff8` passes the full maintained verifier: 38 typecheck tasks,
+39 test tasks, 23 builds and operational/security/emitted-isolation checks; unchanged lint
+(0 errors, 15 warnings, 58 informational notes). Documents 1,270 and Applications 202 units
+pass. Earlier `56743f78` failed a test-only mock inference and is not passing full evidence;
+owner-contract mock typing fixes it. Separate SQL/HTTP evidence remains 91 Applications cases
+(one opt-in skip) and 47 Gateway cases. [Evidence](evidence/d3-temporary-material-reads-2026-10-05.md).
+Docker/WSL stopped. Native actor/session/held content leases/resume/client/provider/ATS gates
+remain; all-copy cleanup and deployed/browser acceptance are not certified. D1/D3 stay In progress,
+with no activation or deployment and hosted CI/CD deferred until production launch.
