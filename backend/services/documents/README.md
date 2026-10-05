@@ -602,3 +602,14 @@ activated. A code rollback cannot renew or remove a recorded completion; memory 
 preparation and fresh review. Resume integration, memory routing/no-store, packet/ATS expiry,
 client lifecycle, native worker drain and approved provider retention remain open. See
 [local evidence](../../../docs/product/delivery/evidence/d3-original-material-completion-2026-10-04.md).
+
+## Narrow temporary cover-letter reader (2026-10-05, source-only)
+
+`TemporaryCoverLetterService.reader()` returns a frozen process-local availability/preview/file
+capability with explicit owner/application/exact-reference checks, never completion, model, SQL,
+object recovery or generation methods. Known absent memory returns `null`; evidence/owner outage
+is an availability failure. Content responses carry a process-local synchronous memory lease
+check that Applications uses after its final SQL read and during HTTP serialization. That callback
+is never durable or public metadata. Completion remains default-off and native original authority
+is required. Native session host/transport, all-copy idle/cancel/logout/confirmed-submit disposal,
+client lifecycle and approved provider retention are still required before activation.

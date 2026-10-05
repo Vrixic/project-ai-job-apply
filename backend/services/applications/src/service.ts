@@ -39,6 +39,11 @@ import type {
   StartAttemptResult,
 } from "./store.js";
 import { ApplicationIntegrityError, AttemptNotFoundError, StalePacketError } from "./store.js";
+import {
+  type ApplicationTemporaryMaterials,
+  readBoundTemporaryCoverLetter,
+} from "./temporary-cover-letter-read.js";
+import { temporaryMaterialReasons } from "./temporary-material.js";
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -272,6 +277,7 @@ export interface ApplicationsServiceDependencies {
   /** Absent until preparation persistence and owned Documents context/read boundaries are wired. */
   preparations?: ApplicationPreparations;
   coverLetters?: ApplicationCoverLetters;
+  temporaryMaterials?: ApplicationTemporaryMaterials;
   /** Optional privacy-safe measurement sink. Failures never affect a request. */
   metrics?: MetricSink;
   clock?: () => Date;
@@ -325,6 +331,16 @@ export class ApplicationsService implements ApplicationsApi {
     applicationId: string,
   ): Promise<ApplicationResumePreview> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const temporaryResume = view.currentPacket?.temporaryMaterials?.find(
+      (reference) => reference.kind === "tailored_resume",
+    );
+    if (temporaryResume) {
+      const reasons = temporaryMaterialReasons([temporaryResume], [temporaryResume], this.clock());
+      if (reasons.length) throw new StalePacketError(reasons);
+      if (view.application.status === "applied" || view.application.status === "cancelled")
+        throw new StalePacketError(["temporary_material_changed"]);
+      throw new ApplicationsUnavailableError();
+    }
     const resumes = this.dependencies.resumes;
     if (!resumes) {
       return {
@@ -401,6 +417,21 @@ export class ApplicationsService implements ApplicationsApi {
   ): Promise<ApplicationCoverLetterPreview> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const hash = view.currentPacket?.artifactHashes.coverLetter;
+    const reference = view.currentPacket?.temporaryMaterials?.find(
+      (item) => item.kind === "cover_letter",
+    );
+    if (reference)
+      return readBoundTemporaryCoverLetter({
+        store: this.dependencies.store,
+        materials: this.dependencies.temporaryMaterials,
+        view,
+        reference,
+        clock: this.clock,
+        read: (port, fixed) => {
+          if (!port.coverLetterPreview) throw new ApplicationsUnavailableError();
+          return port.coverLetterPreview(ownerUserId, applicationId, fixed);
+        },
+      });
     if (!hash) return { status: "no_cover_letter", matchesPacket: false };
     const letters = this.dependencies.coverLetters;
     if (!letters) throw new ApplicationsUnavailableError();
@@ -421,6 +452,22 @@ export class ApplicationsService implements ApplicationsApi {
   ): Promise<ApplicationCoverLetterFile> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const hash = view.currentPacket?.artifactHashes.coverLetter;
+    const reference = view.currentPacket?.temporaryMaterials?.find(
+      (item) => item.kind === "cover_letter",
+    );
+    if (reference)
+      return readBoundTemporaryCoverLetter({
+        store: this.dependencies.store,
+        materials: this.dependencies.temporaryMaterials,
+        view,
+        reference,
+        clock: this.clock,
+        format,
+        read: (port, fixed) => {
+          if (!port.coverLetterFile) throw new ApplicationsUnavailableError();
+          return port.coverLetterFile(ownerUserId, applicationId, fixed, format);
+        },
+      });
     if (!hash) throw new StalePacketError(["cover_letter_changed"]);
     const letters = this.dependencies.coverLetters;
     if (!letters) throw new ApplicationsUnavailableError();
@@ -443,6 +490,16 @@ export class ApplicationsService implements ApplicationsApi {
     format: ApplicationResumeFile["format"],
   ): Promise<ApplicationResumeFile> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const temporaryResume = view.currentPacket?.temporaryMaterials?.find(
+      (reference) => reference.kind === "tailored_resume",
+    );
+    if (temporaryResume) {
+      const reasons = temporaryMaterialReasons([temporaryResume], [temporaryResume], this.clock());
+      if (reasons.length) throw new StalePacketError(reasons);
+      if (view.application.status === "applied" || view.application.status === "cancelled")
+        throw new StalePacketError(["temporary_material_changed"]);
+      throw new ApplicationsUnavailableError();
+    }
     const resumes = this.dependencies.resumes;
     if (!resumes) throw new ApplicationsUnavailableError();
     const packetHash = view.currentPacket?.artifactHashes.resume;

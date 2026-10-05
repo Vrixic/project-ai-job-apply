@@ -11,8 +11,17 @@ import {
   StalePacketError,
 } from "@ai-job-apply/applications-service";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
+import {
+  CoverLetterReadService,
+  PostgresCoverLetterStore,
+  PostgresCoverLetterWorkStore,
+  PostgresTemporaryMaterialCompletionStore,
+  TemporaryCoverLetterService,
+  TemporaryMaterialStore,
+} from "@ai-job-apply/documents-service/cover-letter-runtime";
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
+import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createGatewayApplication } from "./application.js";
@@ -89,7 +98,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
     });
   }
   beforeAll(async () => {
-    for (const owner of ["profile", "applications"]) {
+    for (const owner of ["profile", "documents", "applications"]) {
       await execute(
         process.execPath,
         [fileURLToPath(new URL(`../../services/${owner}/dist/src/migrate.js`, import.meta.url))],
@@ -298,6 +307,217 @@ const key = () => `temporary-packet-${uuidv7()}`;
         expect(response.body).not.toContain(f.reference.generationId);
       } finally {
         await app.close();
+      }
+    },
+  );
+  it.each([
+    "preview",
+    "pdf",
+    "docx",
+    "expiry",
+    "cancel_race",
+    "lost_memory",
+    "discard_during_send",
+  ])(
+    "serves or refuses %s through native original completion, real memory/render and authenticated HTTP",
+    async (mode) => {
+      const issuer = await createTestTokenIssuer();
+      const subject = `synthetic-temporary-reader-${uuidv7()}`;
+      const token = await issuer.issue(subject, { scope: "applications:read applications:write" });
+      const owner = await profile.resolveUser(await issuer.verifier.verify(token), uuidv7());
+      const f = await fixture("cover_letter", owner.id);
+      const generationId = uuidv7();
+      const factId = uuidv7();
+      const text = "I have experience with TypeScript.";
+      const evidence = {
+        facts: [
+          {
+            id: factId,
+            kind: "skill" as const,
+            key: "skill",
+            value: "TypeScript",
+            verification: "confirmed" as const,
+            sensitivity: "standard" as const,
+            source: { type: "user" as const, reference: "synthetic" },
+            version: 1,
+          },
+        ],
+        job: { title: "Engineer", company: "Synthetic", description: "Build reliable systems." },
+      };
+      const source = { load: async () => evidence };
+      const context = await new CoverLetterReadService(
+        {
+          withReadLease: async (_owner, run) =>
+            run({
+              read: async () => {
+                throw Error("SavedObjectsMustNotBeRead");
+              },
+            }),
+        },
+        source,
+        () => at,
+      ).context({ ownerUserId: f.owner, applicationId: f.applicationId });
+      const objectWrite = vi.fn(async () => {
+        throw Error("GeneratedObjectsMustNotBeWritten");
+      });
+      const objectRead = vi.fn(async () => {
+        throw Error("GeneratedObjectsMustNotBeRead");
+      });
+      const documents = new PostgresCoverLetterStore(database, {
+        putIfAbsent: objectWrite,
+        read: objectRead,
+      });
+      const identity = {
+        id: generationId,
+        ownerUserId: f.owner,
+        applicationId: f.applicationId,
+        version: 1,
+        jobRevision: context.jobContextHash,
+        confirmedFactsHash: context.confirmedFactsHash,
+      };
+      await documents.reserve(identity);
+      const work = new PostgresCoverLetterWorkStore(database, () => true);
+      const issued = await work.issue({
+        ownerUserId: f.owner,
+        documentId: generationId,
+        purpose: "provider_dispatch",
+        requestSha256: "d".repeat(64),
+        consentExpiresAt: new Date(Date.now() + 900_000),
+      });
+      const original = {
+        id: issued.authorization.id,
+        documentId: generationId,
+        purpose: "provider_dispatch" as const,
+        requestSha256: issued.authorization.requestSha256,
+      };
+      expect(await work.claim(original)).toEqual({ kind: "claimed" });
+      const completion = new PostgresTemporaryMaterialCompletionStore(database, () => true);
+      const memory = new TemporaryMaterialStore({
+        wallNow: () => at.getTime(),
+        monotonicNow: () => at.getTime(),
+      });
+      const temporary = new TemporaryCoverLetterService(
+        memory,
+        source,
+        {
+          claimOriginalCompletion: (reference) =>
+            completion.claimOriginalCompletion(original, { ...reference }),
+        },
+        () => true,
+        () => at,
+      );
+      let app: Awaited<ReturnType<typeof createGatewayApplication>> | undefined;
+      try {
+        at = new Date();
+        const completed = await temporary.complete(
+          identity,
+          {
+            status: "needs_review",
+            purpose: "cover_letter",
+            reviewRequired: true,
+            paragraphs: [{ text, factIds: [factId] }],
+            findings: [],
+            sourceFactIds: [factId],
+            confidence: 1,
+            promptVersion: "cover_letter.v1",
+            model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+          },
+          at.getTime(),
+        );
+        const bound = await store.createPacket({
+          ownerUserId: f.owner,
+          applicationId: f.applicationId,
+          expectedRevision: f.packeted.view.application.revision,
+          idempotencyKey: key(),
+          packet: {
+            jobRevision: f.packet.jobRevision,
+            form,
+            fields: [],
+            artifactHashes: { coverLetter: completed.reference.contentSha256 },
+            temporaryMaterials: [{ ...completed.reference }],
+          },
+        });
+        const reader = temporary.reader();
+        let clearedPreview: Awaited<ReturnType<typeof reader.coverLetterPreview>> | undefined;
+        const api = runtime({
+          ...reader,
+          coverLetterPreview: async (owner, application, reference) => {
+            const response = await reader.coverLetterPreview(owner, application, reference);
+            if (mode === "cancel_race") {
+              clearedPreview = response;
+              await store.cancel({
+                ownerUserId: f.owner,
+                applicationId: f.applicationId,
+                expectedRevision: bound.view.application.revision,
+                idempotencyKey: key(),
+              });
+            }
+            return response;
+          },
+        });
+        const adapter = new FastifyAdapter();
+        if (mode === "discard_during_send")
+          adapter.getInstance().addHook("onSend", async (_request, _reply, payload) => {
+            memory.discard({ ...completed.reference });
+            return payload;
+          });
+        app = await createGatewayApplication({
+          adapter,
+          store: profile,
+          catalog: catalog as never,
+          jobReports: {} as never,
+          jobContributions: {} as never,
+          moderation: {} as never,
+          savedJobs: {} as never,
+          matchAssessments: {} as never,
+          entitlements: {} as never,
+          documents: {} as never,
+          applications: api,
+          verifier: issuer.verifier,
+          releaseSha: "synthetic-local",
+        });
+        if (mode === "expiry") at = new Date(completed.reference.expiresAtMs);
+        if (mode === "lost_memory") memory.discard({ ...completed.reference });
+        const suffix = mode === "pdf" || mode === "docx" ? `/file?format=${mode}` : "";
+        const result = await app.inject({
+          method: "GET",
+          url: `/v1/applications/${f.applicationId}/cover-letter${suffix}`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(result.headers["cache-control"]).toBe("no-store");
+        if (["expiry", "cancel_race", "lost_memory", "discard_during_send"].includes(mode)) {
+          expect(result.statusCode).toBe(409);
+          expect(result.json().code).toBe("application_packet_stale");
+          expect(result.body).not.toContain(text);
+          if (clearedPreview) expect(clearedPreview.value).toHaveProperty("paragraphs", []);
+        } else {
+          expect(result.statusCode).toBe(200);
+          const value = result.json();
+          expect(
+            compileComponentValidator(
+              suffix ? "ApplicationCoverLetterFile" : "ApplicationCoverLetterPreview",
+            )(value),
+          ).toBe(true);
+          expect(value.temporaryMaterial.generationId).toBe(generationId);
+          expect(value.temporaryMaterial.expiresAtMs).toBe(completed.reference.expiresAtMs);
+          expect(value.temporaryMaterial).not.toHaveProperty("ownerUserId");
+          if (suffix) {
+            expect(Buffer.from(value.contentBase64, "base64").length).toBe(value.sizeBytes);
+            expect(value.format).toBe(mode);
+          } else expect(value.paragraphs[0].text).toBe(text);
+        }
+        expect(objectWrite).not.toHaveBeenCalled();
+        expect(objectRead).not.toHaveBeenCalled();
+        const [row] =
+          await database`SELECT status, material_work_id, material_expires_at_ms FROM documents.cover_letters WHERE id = ${generationId}`;
+        expect(row?.status).toBe("pending");
+        expect(row?.material_work_id).toBe(original.id);
+        expect(Number(row?.material_expires_at_ms)).toBe(completed.reference.expiresAtMs);
+        const snapshot = JSON.stringify(await store.getApplication(f.owner, f.applicationId));
+        expect(snapshot).not.toContain(text);
+      } finally {
+        if (app) await app.close();
+        memory.dispose();
       }
     },
   );

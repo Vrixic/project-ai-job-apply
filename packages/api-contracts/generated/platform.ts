@@ -2394,6 +2394,8 @@ export interface components {
                 version: "gpt-6-luna";
             };
             promptVersion: string;
+            /** @description Exact current memory generation and original fixed expiry. This response must not be persisted or cached; discard platform copies at expiry, logout, cancellation or confirmed submission. */
+            temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
         ApplicationCoverLetterFile: {
             /** @enum {string} */
@@ -2407,6 +2409,8 @@ export interface components {
             /** @description Format-independent immutable cover-letter content hash bound to the packet. */
             contentSha256: string;
             contentBase64: string;
+            /** @description Exact current memory generation and original fixed expiry. This response must not be persisted or cached; discard platform copies at expiry, logout, cancellation or confirmed submission. */
+            temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
         /** @description Omit coverLetter for existing synchronous preparation. Explicit opt-in acknowledges the current OpenAI cover-letter notice; acknowledgement time is server-recorded. Clients cannot supply timestamps or provider/model overrides. Generated text always requires candidate review. Saved-answer reuse is default-off; explicit selections confirm exact question meaning/context and require review. No context is inferred. */
         PrepareApplicationPacketRequest: {

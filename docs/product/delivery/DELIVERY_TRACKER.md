@@ -3459,3 +3459,10 @@ publication, deployment, activation or authored merge. Hosted CI/CD deferred unt
 [PR #551](https://github.com/Vrixic/project-ai-job-apply/pull/551), based on exact open #550.
 No authored PR is merged and no feature is activated. Verified implementation remains `f91d2312`;
 subsequent commits change delivery documentation only. D3-064 and D1/D3 stay In progress.
+
+2026-10-05 D3-064 owned temporary cover-letter reads start on exact #551 `2e171167` after
+fresh main `e48bdf3a`. 202 Applications units, 91 native Applications SQL cases (one opt-in
+skip), and 47 Gateway SQL/HTTP cases pass. Seven new connected cases use native completion,
+real memory/rendering and simulated authentication/generation. [Evidence](evidence/d3-temporary-material-reads-2026-10-05.md).
+Full verifier pending; native actor/session/resume/client/provider/ATS gates remain; D1/D3
+stay In progress. No activation or deployment; hosted CI/CD deferred until production launch.

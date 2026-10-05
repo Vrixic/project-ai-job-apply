@@ -21,4 +21,5 @@ export * from "./cover-letter-response-store.js";
 export * from "./cover-letter-store.js";
 export * from "./cover-letter-work-store.js";
 export * from "./temporary-cover-letter.js";
+export * from "./temporary-material-completion-store.js";
 export * from "./temporary-materials.js";

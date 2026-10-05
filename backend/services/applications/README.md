@@ -219,3 +219,22 @@ file routing, original actor integration, native descendant authority, resume pr
 idle/logout/cancel/submission cleanup, renderer/worker drain and approved provider retention still
 belong to D3-064. Legacy saved-draft/provider-slot and re-tailoring paths cannot be activated under
 ADR-038. Scalar availability is an admission check, not an ATS content lease or all-copy cleanup.
+
+## Temporary cover-letter reads (2026-10-05, source-only)
+
+Applications accepts a narrow owned memory availability/preview/file port. Packets carrying
+cover-letter temporary references use this port exclusively; reads never fall back to saved
+drafts. References, content hashes, generation/version, packet identity, terminal state and
+the original deadline are checked before/after asynchronous work. No SQL lock spans rendering.
+A final owner-scoped SQL read follows the availability recheck, then a synchronous live memory
+lease guards the response through HTTP serialization. Failed reads clear returned paragraphs
+or file content. Bound temporary resumes refuse legacy re-tailoring; their typed temporary
+reader is still required. Original/unbound reads retain their existing behavior.
+
+Ready temporary cover-letter preview/file responses add public seven-scalar `temporaryMaterial`
+metadata, without owner/application identifiers or lease callbacks. Upgrade strict consumers
+before enabling any producer. No migration or durable response body is introduced.
+Native session transport, original actor composition, native edit authority, idle/client cleanup,
+cancel/confirmed-submission owner disposal, ATS handoff and D3-012 provider approval remain gates.
+These point-in-time reads and transport guards do not certify atomic concurrent cancellation,
+all-copy purge, remote settlement, socket delivery or a frozen Lambda's physical memory expiry.

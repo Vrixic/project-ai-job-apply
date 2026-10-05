@@ -32,6 +32,7 @@ import {
   applyRequestContext,
   type CandidateDataExportDownloadSigner,
 } from "./app.module.js";
+import { installTemporaryMaterialResponseGuards } from "./temporary-material-http.js";
 import {
   OidcTrustReviewerAuthority,
   type TrustReviewerAssignment,
@@ -168,6 +169,7 @@ export async function createGatewayApplication(
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
   });
   app.getHttpAdapter().getInstance().addHook("onRequest", applyRequestContext);
+  installTemporaryMaterialResponseGuards(app.getHttpAdapter().getInstance());
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   return app;

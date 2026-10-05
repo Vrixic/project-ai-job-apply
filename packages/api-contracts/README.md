@@ -95,3 +95,10 @@ Optional packet-field `vaultReference` requires answer-vault origin and mandator
 Old strict readers must be deployed with these shapes before producers are enabled; legacy
 requests and packet hashes remain unchanged. The existing stale problem code adds the closed
 `vault_answer_changed` reason without returning private metadata in failure details.
+
+Temporary cover-letter ready preview/file responses optionally include the existing closed
+seven-scalar `ApplicationTemporaryMaterial` under `temporaryMaterial`. It identifies the exact
+current generation and fixed original expiry; owner/application fields and memory lease
+capabilities never enter public output. Old response bodies remain valid, but old closed-object
+consumers reject the new key: deploy upgraded readers before any producer. This source-only
+addition grants no generation/provider activation, persistence, historical read or renewed expiry.

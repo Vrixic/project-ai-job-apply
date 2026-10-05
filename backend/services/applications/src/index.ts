@@ -14,4 +14,6 @@ export * from "./resume-preview.js";
 export * from "./service.js";
 export * from "./state-machine.js";
 export * from "./store.js";
+export * from "./temporary-cover-letter-read.js";
+export * from "./temporary-response.js";
 export * from "./vault.js";

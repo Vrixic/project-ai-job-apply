@@ -249,3 +249,14 @@ It exposes explicit selection through the existing preparation contract and fixe
 `application_packet_stale` guidance after changed/expired selections. Admission receives only
 Profile's bounded metadata locking capability, not save/delete/export/list authority.
 The flag is not activated or provisioned by this source change.
+
+## Temporary cover-letter preview/download (2026-10-05, source-only)
+
+The owned memory port now reaches Applications preview/file reads. Bound generations never use
+the legacy saved-draft reader. Public metadata echoes the exact current generation and original
+expiry; internal owner/application fields and live lease callbacks are not serialized. Fastify
+checks response guards before serialization and in `onSend`, replacing stale content with a
+fixed value-free `application_packet_stale` 409 and `no-store`. This does not certify delivery,
+client copy cleanup or remote settlement. Production entry points compose no temporary producer
+or reader. Upgrade closed-object consumers before activation; temporary resumes remain refused
+until their owned reader exists. Native actor/session/client/provider/ATS gates remain.

@@ -6,6 +6,7 @@ import {
   type ApplicationsApi,
   ApplicationsService,
   ApplicationsUnavailableError,
+  type ApplicationTemporaryMaterials,
   type ArtifactHashes,
   type CurrentBindings,
   FactBackedPacketSource,
@@ -40,13 +41,7 @@ export interface ApplicationsRuntimeOptions {
   /** Owned Documents context/read port only; no live provider is composed inside the Gateway. */
   coverLetters?: ApplicationCoverLetters;
   /** Owned memory availability only. No generation, persistence or refreshed reference. */
-  temporaryMaterials?: {
-    current(
-      ownerUserId: string,
-      applicationId: string,
-      reference: Readonly<TemporaryMaterialReference>,
-    ): Promise<TemporaryMaterialReference | null>;
-  };
+  temporaryMaterials?: ApplicationTemporaryMaterials;
   /** Default false. Enable only with compatible migrations and the owned dispatch/recovery runtime. */
   coverLetterPreparationEnabled?: boolean;
   catalog: Pick<JobCatalogReader, "resolveActiveJobSummaries" | "getActiveJob">;
@@ -308,6 +303,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     jobs,
     resumes,
     ...(options.coverLetters ? { coverLetters: options.coverLetters } : {}),
+    ...(options.temporaryMaterials ? { temporaryMaterials: options.temporaryMaterials } : {}),
     ...(options.metrics ? { metrics: options.metrics } : {}),
     clock,
   });

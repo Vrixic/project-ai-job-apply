@@ -9786,6 +9786,10 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 64
+              },
+              "temporaryMaterial": {
+                "$ref": "#/components/schemas/ApplicationTemporaryMaterial",
+                "description": "Exact current memory generation and original fixed expiry. This response must not be persisted or cached; discard platform copies at expiry, logout, cancellation or confirmed submission."
               }
             },
             "additionalProperties": false
@@ -9839,6 +9843,10 @@
             "type": "string",
             "minLength": 4,
             "maxLength": 400000
+          },
+          "temporaryMaterial": {
+            "$ref": "#/components/schemas/ApplicationTemporaryMaterial",
+            "description": "Exact current memory generation and original fixed expiry. This response must not be persisted or cached; discard platform copies at expiry, logout, cancellation or confirmed submission."
           }
         },
         "additionalProperties": false

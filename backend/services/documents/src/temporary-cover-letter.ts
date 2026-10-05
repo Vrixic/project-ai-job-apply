@@ -32,6 +32,8 @@ type Identity = Pick<
 export interface TemporaryCoverLetterResponse<T> {
   reference: Readonly<TemporaryMaterialReference>;
   value: T;
+  /** Process-local active memory lease check; never serialize this callback. */
+  isCurrent(): boolean;
 }
 type Renderer = (
   document: CoverLetterDocument,
@@ -58,6 +60,48 @@ export class TemporaryCoverLetterService {
     private readonly clock: () => Date = () => new Date(),
     private readonly render: Renderer = coverLetterFile,
   ) {}
+
+  /** Narrow, process-local owner adapter. The Gateway receives no completion/model/persistence
+   * capability. Native session transport and its all-copy cleanup remain activation gates. */
+  reader() {
+    const scoped = (
+      ownerUserId: string,
+      applicationId: string,
+      reference: Readonly<TemporaryMaterialReference>,
+    ): TemporaryMaterialReference => {
+      if (
+        !validateTemporaryMaterialReference(reference) ||
+        reference.ownerUserId !== ownerUserId ||
+        reference.applicationId !== applicationId ||
+        reference.kind !== "cover_letter"
+      )
+        throw new TemporaryMaterialUnavailable();
+      return { ...reference };
+    };
+    return Object.freeze({
+      current: async (
+        owner: string,
+        application: string,
+        reference: Readonly<TemporaryMaterialReference>,
+      ) => {
+        const fixed = scoped(owner, application, reference);
+        this.requireEnabled();
+        if (!this.materials.has(fixed)) return null;
+        return { ...(await this.binding(fixed)) };
+      },
+      coverLetterPreview: (
+        owner: string,
+        application: string,
+        reference: Readonly<TemporaryMaterialReference>,
+      ) => this.preview(scoped(owner, application, reference)),
+      coverLetterFile: (
+        owner: string,
+        application: string,
+        reference: Readonly<TemporaryMaterialReference>,
+        format: "pdf" | "docx",
+      ) => this.file(scoped(owner, application, reference), format),
+    });
+  }
 
   async complete(
     identity: Identity,
@@ -177,6 +221,7 @@ export class TemporaryCoverLetterService {
         return {
           reference: fixed,
           value: preview,
+          isCurrent: () => this.enabled() && Boolean(this.completion) && this.materials.has(fixed),
         };
       });
     } catch {
@@ -224,7 +269,12 @@ export class TemporaryCoverLetterService {
             await this.source.load(fixed.ownerUserId, fixed.applicationId),
           );
           signal.throwIfAborted();
-          return { reference: fixed, value };
+          return {
+            reference: fixed,
+            value,
+            isCurrent: () =>
+              this.enabled() && Boolean(this.completion) && this.materials.has(fixed),
+          };
         } finally {
           signal.removeEventListener("abort", discard);
         }

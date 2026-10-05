@@ -122,6 +122,37 @@ afterEach(() => {
 });
 
 describe("Documents temporary cover-letter completion and reads", () => {
+  it("exposes only a frozen scope-checked read capability", async () => {
+    const f = setup();
+    const completed = await f.service.complete(f.identity, generation(), NOW);
+    const reader = f.service.reader();
+    expect(Object.isFrozen(reader)).toBe(true);
+    expect(Object.keys(reader).sort()).toEqual([
+      "coverLetterFile",
+      "coverLetterPreview",
+      "current",
+    ]);
+    expect(await reader.current(OWNER, APP, completed.reference)).toEqual(completed.reference);
+    expect((await reader.coverLetterPreview(OWNER, APP, completed.reference)).value).toHaveProperty(
+      "status",
+      "ready",
+    );
+    expect(
+      (await reader.coverLetterFile(OWNER, APP, completed.reference, "docx")).value,
+    ).toHaveProperty("format", "docx");
+    await expect(reader.current(OTHER, APP, completed.reference)).rejects.toThrow(
+      "TemporaryMaterialUnavailable",
+    );
+    expect(() => reader.coverLetterPreview(OWNER, OTHER, completed.reference)).toThrow(
+      "TemporaryMaterialUnavailable",
+    );
+    const preview = await reader.coverLetterPreview(OWNER, APP, completed.reference);
+    expect(preview.isCurrent()).toBe(true);
+    f.store.discard({ ...completed.reference });
+    expect(preview.isCurrent()).toBe(false);
+    expect(await reader.current(OWNER, APP, completed.reference)).toBeNull();
+  });
+
   it("verifies both production renderers, returns metadata only, and downloads nonempty verified bytes", async () => {
     const f = setup({ render: coverLetterFile });
     const completed = await f.service.complete(f.identity, generation(), NOW);
