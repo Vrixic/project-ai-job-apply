@@ -175,3 +175,9 @@ timeout requests cancellation. Late fulfilled content is withheld through a valu
 there is no background request or fallback dispatch. Existing `generateWithCompletion` receipts
 are unchanged. Hosts must bound admission and physically retire non-acknowledging actors; this
 method intentionally cannot make abort into remote-stop or provider-retention evidence.
+
+The original foreground path accepts a private synchronous scalar completion observer in gateway
+options. It runs before decoding and asynchronous actor work and cannot change the captured
+original time. Observer failure withholds content through the existing value-free late-discard
+receipt; it never triggers fallback dispatch. Ordinary/background generation does not invoke it.
+The native session uses it for kernel expiry; production process/task observation is separate.

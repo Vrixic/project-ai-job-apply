@@ -386,3 +386,9 @@ emitted starter/Invoke/private/provider actors. No publisher/deployment is added
 `tests/cover-letter-export-bundle.test.mjs` checks the compiled owned export reader/codec and
 excludes generation/work/provider/Invoke actors. It is part of the maintained verifier.
 See [D3-072 evidence](../docs/product/delivery/evidence/d3-cover-letter-export-content-2026-10-04.md); no deployment is implied.
+
+`verify-native-memory-session.mjs --enable-local-linux-tests --image sha256:<existing-image-id>`
+runs the explicit local Linux kernel/session test. It never pulls an image or calls AWS/model
+providers; network is disabled and only synthetic copied inputs are mounted read-only. Native
+code compiles with warnings treated as errors. Exact owned container/staging cleanup preserves
+other data. See [native session](../backend/workers/ai/native-session/README.md).

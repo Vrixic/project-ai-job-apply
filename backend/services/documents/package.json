@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-memory-session": {
+      "types": "./dist/src/native-memory-session.d.ts",
+      "default": "./dist/src/native-memory-session.js"
+    },
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"

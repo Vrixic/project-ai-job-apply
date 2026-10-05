@@ -15,6 +15,52 @@ const disclosure = { ...request, approvedAt: new Date(at) };
 afterEach(() => vi.useRealTimers());
 
 describe("original foreground completion lifetime", () => {
+  it("notifies the native scalar observer at original fulfillment before later work can move the clock", async () => {
+    let now = at;
+    const observed: number[] = [];
+    const gateway = new ModelGateway(
+      {
+        identity,
+        complete: async () => {
+          now += 41;
+          return { text: "{}" };
+        },
+      },
+      {
+        enabled: () => true,
+        clock: () => new Date(now),
+        originalCompletionObserver: (completed) => {
+          observed.push(completed);
+          now += 120_000;
+        },
+      },
+    );
+    const completed = await gateway.generateOriginalWithCompletion(request, disclosure);
+    expect(completed).toMatchObject({ kind: "completed", completedAtMs: at + 41 });
+    expect(observed).toEqual([at + 41]);
+    await gateway.generateWithCompletion(request, disclosure);
+    expect(observed).toEqual([at + 41]);
+  });
+
+  it("observer failure withholds content without retrying the positively fulfilled provider", async () => {
+    const complete = vi.fn(async () => ({ text: JSON.stringify({ synthetic: "withheld" }) }));
+    const gateway = new ModelGateway(
+      { identity, complete },
+      {
+        enabled: () => true,
+        clock: () => new Date(at),
+        originalCompletionObserver: () => {
+          throw Error("SensitiveHostBody");
+        },
+      },
+    );
+    expect(await gateway.generateOriginalWithCompletion(request, disclosure)).toEqual({
+      kind: "completed_discarded",
+      completedAtMs: at,
+      model: identity,
+    });
+    expect(complete).toHaveBeenCalledOnce();
+  });
   it("captures original fulfillment time and preserves ordinary receipt compatibility", async () => {
     let now = at;
     const provider = {

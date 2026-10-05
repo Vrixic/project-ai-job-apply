@@ -648,3 +648,19 @@ never proves remote settlement, retention compliance, host drain or physical pur
 admits one pending original promise; process-wide host admission, authenticated private issuer/
 transport, physical expiry/shutdown and D3-012 provider terms remain activation gates. Default-off
 source and simulated model/OIDC evidence do not expose generated material to real candidates.
+
+## D3-079 native material-process source delta — 2026-10-05
+
+Private admitted candidate/application/generation → default-off dedicated Linux session → one
+original SDK dispatch → synchronous original completion clock → kernel deadline → existing
+scalar native completion/temporary memory/read capabilities. The kernel module receives only
+timestamps/limits, disables core dumps/dumpability and kills this allocation on fixed expiry or
+invalid/repeat binding. Session admission refuses another allocation/worker-thread use. Native
+process disposal cannot acknowledge its own death; the separate trusted task/process observer
+must positively observe retirement. Remote provider settlement remains independent.
+
+[Proposed ADR-040](../adr/040-native-temporary-material-processes.md) preserves private SQL/provider
+separation and forbids native-module use in shared APIs, Lambda or clients. Authenticated
+launcher/transport/task registry/stop observation, managed-runtime integrity/conformance, full
+content routing, client/ATS cleanup and D3-012 terms remain gates. Local kernel tests use synthetic
+provider/SQL/render adapters and cannot establish cleanup of a remote system or another process.

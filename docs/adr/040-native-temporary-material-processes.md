@@ -1,0 +1,76 @@
+# ADR-040: Native temporary material processes
+
+Status: Proposed; default-off source and local kernel evidence only
+Date: 2026-10-05
+
+## Context
+
+[ADR-038](038-one-off-generated-application-materials.md) limits generated material to bounded
+memory for at most 1,800 seconds from original completion. The original actor and held-copy
+read path enforce logical lifetime and clear controlled buffers. JavaScript timers cannot act
+while their event loop is blocked, and Lambda freeze prevents evidence of proactive idle cleanup.
+The content process therefore needs a resource envelope ordinary Lambda cannot supply.
+[ADR-016](016-scale-to-zero-application-runtime.md) permits explicitly on-demand containers for
+such requirements and still forbids always-on gateways, general workers or pools.
+
+## Proposed decision
+
+Use one dedicated Linux process in an explicitly started, bounded on-demand task for one
+candidate, application and original generation. Keep private owning SQL/control activities in
+the accepted Lambda control plane; the material process has injected authenticated owner and
+scalar claim/settlement/completion ports, no database credentials or generated object access.
+Do not load the native deadline module into a shared API process, Lambda or browser.
+
+Before candidate content is admitted, load the Node-API deadline module. Initialization arms a
+60-second kernel boot deadline and disables core dumps and process dumpability. The session
+factory only shortens startup time, refuses another allocation in the same process and refuses
+worker-thread allocation. A synchronous scalar SDK observation binds original completion before
+decoding, grounding, control acknowledgements or rendering. The first valid binding replaces
+startup expiry with a deadline no later than completion plus 1,800 seconds. Realtime and
+monotonic absolute timers signal SIGKILL to the material process; either can expire first.
+Reads, edits, retries, rendering and approval do not renew it. Repeat binding or module/worker
+reinitialization retires the process rather than granting new authority. Limits may be lowered.
+
+Cancellation/logout/confirmed submission must clear controlled memory and request process
+retirement sooner. A process cannot positively acknowledge its own death: the separate trusted
+process/task observer must observe the exact allocation terminal before returning a native
+cleanup acknowledgement. Requesting termination, expiry or losing an HTTP response never settles
+remote provider work or grants candidate-rights purge authority. Unknown provider work remains
+unresolved; confirmed and ambiguous submission evidence and duplicate guards remain intact.
+
+The production task must use a reviewed immutable Linux image, read-only filesystem, bounded
+memory/CPU, no generated scratch files or content-bearing logs, no debugger/ECS Exec, and no
+separate rendering child processes. Existing PDF/DOCX rendering uses in-process memory. No
+content-bearing sidecar, shared pool, ALB, NAT gateway or Redis is introduced by this proposal.
+
+## Transport and activation gates
+
+This source defines process lifecycle, not an authorized production content endpoint. The
+launcher, exact scoped task registry, authentication/IAM, TLS/DNS routing and native stop observer
+remain unimplemented. The selected content path must keep generated bodies out of frozen Lambda
+copies: the existing Gateway content tests prove local ownership/HTTP checks, not such a native
+production transport. Gateway/durable control can retain scalar references and authorize access;
+review the complete content path before enabling it. Browser cleanup and ATS handoff still need
+separate evidence. Do not enable an endpoint simply because the Linux process test passed.
+
+D3-012 no-training/retention/diagnostic/entity/region approval remains mandatory before any live
+provider. D1/D3 are not complete. This proposal does not authorize a deployment or new public
+hostname, and does not reinterpret the owner policy as reusable or saved material.
+
+## Evidence and tradeoffs
+
+The Linux test compiles the C module with strict warnings, bundles the actual SDK/actor/session,
+and observes child exit signals. It exercises idle/busy/suspended processes, unsettled control,
+cancellation, repeat binding, invalid clocks/limits and module/worker reinitialization. Provider,
+SQL and renderer ports are synthetic for this kernel test; prior connected SQL/render/HTTP
+proof remains separate. No live AWS task, provider or installed-client acceptance follows.
+
+The native module adds a small Linux-specific build and review surface. It is justified by
+an independently observable process lifetime that event-loop callbacks cannot provide. Keep
+this boundary small and value-free, rather than placing document logic in C.
+
+Implementation uses [Linux absolute POSIX timers](https://man7.org/linux/man-pages/man2/timer_settime.2.html)
+and [Node-API](https://nodejs.org/api/n-api.html). Native timer behavior on the selected managed
+runtime, exact image/architecture, task failure/stop and external-copy cleanup must be verified
+before activation. Local process exit covers the tested process, not remote systems or another
+allocation.

@@ -3526,3 +3526,11 @@ No authored merge/deployment/activation; hosted CI/CD deferred until production 
 [PR #554](https://github.com/Vrixic/project-ai-job-apply/pull/554), based on exact #553 branch
 `467b48eb`. Verified implementation remains `e8fdc241`; subsequent commits change delivery
 documentation only. D1/D3 and D3-064 stay In progress. No authored merge, deployment or activation.
+
+2026-10-05 D3-079 native material-process source begins on fresh main `e48bdf3a` and exact #554
+`50a9965a`. Default-off single-allocation session connects original SDK completion to one-time
+Linux kernel deadlines, with no event-loop dependence or renewal. Eight SDK and 49 focused
+Documents cases pass; corrected local native runs pass 14 actual process cases, with final
+second-allocation/full verification pending. [Evidence](evidence/d3-native-memory-session-2026-10-05.md).
+Issuer/launcher/authenticated transport/task registry/managed stop/content routing, provider and
+client/ATS/accountable gates remain. D1/D3 stay In progress; no activation/deployment or CI/CD work.
