@@ -1095,3 +1095,10 @@ installed signed SDK behavior is exercised offline. No managed task is launched 
 Registry/sealed launch admission, private adapters/IAM, reviewed image/routing, actual managed
 stop and full client/ATS/provider/accountable acceptance remain. D1/D3 stay In progress; no
 deployment/activation or authored main merge. Docker/WSL stopped; hosted CI/CD deferred until launch.
+
+2026-10-05 D3-079 exact task-retirement source is reviewable in
+[PR #558](https://github.com/Vrixic/project-ai-job-apply/pull/558), stacked on exact
+[PR #557](https://github.com/Vrixic/project-ai-job-apply/pull/557) `eb3879b6`. Tested implementation
+`ba58619c` is unchanged; subsequent commits change delivery documentation only. Two authored PRs
+are open. No authored main merge, cloud task operation, deployment or activation. D1/D3 stay
+In progress; hosted CI/CD remains deferred until production launch.

@@ -94,3 +94,10 @@ refusal/isolation is exercised. No new native process, SQL or AWS runtime proof 
 No implementation changed during the full verifier. Subsequent changes are delivery documentation
 only. Docker Desktop and WSL remain stopped; verifier handles are terminal. D3-079/D3-064 and
 D1/D3 stay In progress behind the remaining gates above. CI/CD remains deferred until launch.
+
+2026-10-05 D3-079 exact task-retirement source is reviewable in
+[PR #558](https://github.com/Vrixic/project-ai-job-apply/pull/558), stacked on exact
+[PR #557](https://github.com/Vrixic/project-ai-job-apply/pull/557) `eb3879b6`. Tested implementation
+`ba58619c` is unchanged; subsequent commits change delivery documentation only. Two authored PRs
+are open. No authored main merge, cloud task operation, deployment or activation. D1/D3 stay
+In progress; hosted CI/CD remains deferred until production launch.
