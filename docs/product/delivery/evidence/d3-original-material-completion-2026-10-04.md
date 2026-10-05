@@ -65,3 +65,9 @@ historical synthetic object inventory and D3-012 approved provider retention/no-
 Metadata admission neither proves all-copy cleanup nor authorizes an ambiguous submission retry.
 Reviewed IAM/runtime release and accountable/deployed acceptance remain mandatory. D1/D3 retain
 all eight/thirteen unchecked exit criteria; no phase/task completion or activation is claimed.
+
+
+The first maintained verifier on clean `3d12d84b` stops at the exact D2 runtime migration-inventory
+guard. Extend its supported Documents list with exact 0010 while retaining all historical lists
+and rejecting unknown/mixed successors. The focused current/historical suite passes 256 assertions;
+no cloud call. This is a migration-compatibility fix, with a clean-source full rerun still required.
