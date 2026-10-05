@@ -4,9 +4,12 @@ import { promisify } from "node:util";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ApplicationsService } from "./service.js";
+import {
+  createFixtureServiceApplication,
+  createIntegrationApplicationStore,
+  createIntegrationApplicationsService,
+} from "./restricted-packet-integration-support.js";
 import { allowedStatusPairs, applicationStatuses } from "./state-machine.js";
-import { PostgresApplicationStore } from "./store.js";
 import { definitions, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -20,8 +23,8 @@ describeWithDatabase("D3-011 Applications hardening over PostgreSQL", () => {
     onnotice: () => undefined,
   });
   const secret = "very-private-candidate-value@example.test";
-  const service = new ApplicationsService({
-    store: new PostgresApplicationStore(client, () => new Date(), { definitions }),
+  const service = createIntegrationApplicationsService({
+    store: createIntegrationApplicationStore(client, () => new Date(), { definitions }),
     packets: {
       async prepare() {
         return {
@@ -41,6 +44,11 @@ describeWithDatabase("D3-011 Applications hardening over PostgreSQL", () => {
   });
 
   beforeAll(async () => {
+    await execFileAsync(
+      process.execPath,
+      [fileURLToPath(new URL("../../profile/dist/src/migrate.js", import.meta.url))],
+      { env: { ...process.env, DATABASE_URL: databaseUrl } },
+    );
     const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
     await execFileAsync(process.execPath, [migrationExecutable], {
       env: { ...process.env, DATABASE_URL: databaseUrl },
@@ -53,7 +61,13 @@ describeWithDatabase("D3-011 Applications hardening over PostgreSQL", () => {
 
   async function approvedApplication() {
     const owner = uuidv7();
-    const created = await service.create(owner, uuidv7(), key("create"));
+    const created = await createFixtureServiceApplication(
+      service,
+      client,
+      owner,
+      uuidv7(),
+      key("create"),
+    );
     const prepared = await service.preparePacket(
       owner,
       created.id,
@@ -215,9 +229,13 @@ describeWithDatabase("D3-011 Applications hardening over PostgreSQL", () => {
     );
     await service.dispatchAttempt(owner, applicationId, start.attemptId ?? "");
     // The worker dies here. Recovery marks it ambiguous; nothing can dispatch again.
-    const store = new PostgresApplicationStore(client, () => new Date(Date.now() + 3_600_000), {
-      definitions,
-    });
+    const store = createIntegrationApplicationStore(
+      client,
+      () => new Date(Date.now() + 3_600_000),
+      {
+        definitions,
+      },
+    );
     await store.recoverStaleAttempts(60_000, 500);
     const recovered = await service.get(owner, applicationId);
     expect(recovered.status).toBe("reconciliation_required");

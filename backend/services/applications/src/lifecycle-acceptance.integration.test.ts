@@ -9,8 +9,11 @@ import {
   applicationsAcceptanceSubject,
   executeApplicationsAcceptance,
 } from "./lifecycle-acceptance.js";
-import { ApplicationsService } from "./service.js";
-import { PostgresApplicationStore } from "./store.js";
+import {
+  createFixtureServiceApplication,
+  createIntegrationApplicationStore,
+  createIntegrationApplicationsService,
+} from "./restricted-packet-integration-support.js";
 import { definitions, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -24,8 +27,8 @@ describeWithDatabase("Applications lifecycle acceptance fixture over PostgreSQL"
     max: 4,
     onnotice: () => undefined,
   });
-  const service = new ApplicationsService({
-    store: new PostgresApplicationStore(client, () => new Date(), { definitions }),
+  const service = createIntegrationApplicationsService({
+    store: createIntegrationApplicationStore(client, () => new Date(), { definitions }),
     packets: {
       async prepare() {
         return {
@@ -81,7 +84,13 @@ describeWithDatabase("Applications lifecycle acceptance fixture over PostgreSQL"
   }
 
   async function appliedApplication(owner: string) {
-    const created = await service.create(owner, uuidv7(), key("create"));
+    const created = await createFixtureServiceApplication(
+      service,
+      client,
+      owner,
+      uuidv7(),
+      key("create"),
+    );
     const prepared = await service.preparePacket(
       owner,
       created.id,

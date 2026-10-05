@@ -359,6 +359,41 @@ stopped and WSL reported no running distributions. Scoped Biome retains six pre-
 informational template suggestions in the touched replay integration test; no unsafe fixes applied.
 This remains a private local WIP checkpoint, without full maintained-verifier or deployment claims.
 
+## Maintained Applications SQL fixture compatibility
+
+The eight maintained Applications integration modules now supply explicit offline packet protection
+and seed active synthetic identities before invoking the original store/service commands. A private
+integration-only adapter shares one process cipher authority per module so clock-shifted stores
+retain exact request replay and decryption semantics. The real Applications service receives the
+owning private read port; no SQL/provider/response is mocked and no production default is changed.
+The adapter refuses factory use outside test mode, is absent from the service root exports, and
+clears controlled process test keys in test teardown. Artifact isolation remains an outstanding
+whole-slice requirement rather than an assumption about this support file.
+
+All 92 maintained PostgreSQL cases pass across eight files, including hardening, rights, preparation,
+service projection, lifecycle acceptance, measurement and submission dispatch. The 27 separately
+owned restricted-storage cases are skipped under this fixture's strict
+`application_dispatch_protection` database identity; their prior separate 27-case evidence is
+unchanged. All 314 Applications unit cases and the package build pass. Scoped Biome has no
+remaining new warnings or errors. Tests use synthetic identities and offline AES/HMAC authority,
+not live sign-in/KMS/provider/ATS. Logs:
+`.tmp/d3-restricted-maintained-applications-sql.log` (2026-10-05, 19:23:38 local),
+`.tmp/d3-restricted-maintained-applications-unit.log`, `.tmp/d3-restricted-fixture-biome.log`.
+
+The historical pre-0007 document migration refusal fixture removes the later restricted-fields
+constraint only inside its deliberately rolled-back synthetic transaction, preserving the original
+legacy-data refusal target. It now also asserts both production constraints remain validated after
+rollback. Current valid direct-SQL packet fixtures use the complete required closed metadata shape;
+no production guard is relaxed. Duplicate candidate setup retains existing active identities, and
+the manual-service fixture now seeds its candidate explicitly before packet protection admission.
+
+Owned PostgreSQL tmpfs fixture
+`2f93a3cace706266f3359bc826b0059edd7260b4afaefb1c30b71cbf36bd33f3` was verified against its
+exact ID/name/label/tmpfs and removed. Shared volumes remain identical. Docker Desktop stopped and
+WSL reports no running distributions. No frontend, public contract, production activation or deployed
+verification claim. Gateway/Workflow maintained protection fixtures, legacy transition and complete
+clean verification remain unfinished; this checkpoint is private WIP.
+
 ## Next work
 
 Finish legacy migration compatibility and all maintained integration/runtime protection fixtures;

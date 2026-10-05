@@ -3765,3 +3765,13 @@ volumes retained. Legacy transition, remaining maintained protection fixtures, p
 isolation and clean full verification remain. No publication, activation, deployed key/role acceptance
 or D1/D3 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
 CI/CD remains deferred until production launch.
+
+2026-10-05 D3-077 updates eight maintained Applications SQL fixtures to explicitly supply offline
+packet protection, active candidate identities and owning service projections. All 92 maintained
+PostgreSQL cases, 314 units and the Applications build pass. The separate 27 restricted-storage
+cases are skipped under this fixture identity and retain their earlier separate evidence. Historical
+document refusal guards remain validated after synthetic rollback; no production guard/default
+changes. Owned fixture removed, shared volumes retained, Docker/WSL stopped. Gateway/Workflow
+fixture compatibility, legacy transition, artifact isolation and clean full verification remain.
+Private WIP only; no deployment/activation or phase completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.

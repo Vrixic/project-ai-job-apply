@@ -6,7 +6,10 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PacketInvariantError } from "./packet.js";
-import { PostgresApplicationStore } from "./store.js";
+import {
+  createFixtureApplication,
+  createIntegrationApplicationStore,
+} from "./restricted-packet-integration-support.js";
 import { definitions, FACT_A, HASH_A, HASH_B, proposal } from "./test-support.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -16,7 +19,7 @@ const execute = promisify(execFile);
     max: 3,
     onnotice: () => undefined,
   });
-  const store = new PostgresApplicationStore(client, undefined, { definitions });
+  const store = createIntegrationApplicationStore(client, undefined, { definitions });
   beforeAll(async () => {
     for (const owner of ["profile", "applications"])
       await execute(
@@ -30,7 +33,7 @@ const execute = promisify(execFile);
   });
   async function fixture() {
     const ownerUserId = uuidv7();
-    const created = await store.createApplication({
+    const created = await createFixtureApplication(store, client, {
       ownerUserId,
       canonicalJobId: uuidv7(),
       idempotencyKey: uuidv7(),
@@ -111,6 +114,7 @@ const execute = promisify(execFile);
       client.begin(async (transaction) => {
         // Restore the pre-0007 boundary only inside this rolled-back synthetic transaction.
         await transaction`ALTER TABLE applications.packets DROP CONSTRAINT packets_document_field_hashes_ck`;
+        await transaction`ALTER TABLE applications.packets DROP CONSTRAINT packets_restricted_fields_ck`;
         await transaction`INSERT INTO applications.packets (id, application_id, owner_user_id, version, packet_hash, job_revision, cover_letter_hash, fields, created_at)
         VALUES (${id}, ${f.app.id}, ${f.ownerUserId}, 1, ${HASH_A}, ${HASH_A}, ${HASH_A}, ${transaction.json(fields)}, now())`;
         await expect(
@@ -130,12 +134,33 @@ const execute = promisify(execFile);
     const [guard] =
       await client`SELECT convalidated FROM pg_constraint WHERE conrelid = 'applications.packets'::regclass AND conname = 'packets_document_field_hashes_ck'`;
     expect(guard?.convalidated).toBe(true);
+    const [restrictedGuard] =
+      await client`SELECT convalidated FROM pg_constraint WHERE conrelid = 'applications.packets'::regclass AND conname = 'packets_restricted_fields_ck'`;
+    expect(restrictedGuard?.convalidated).toBe(true);
   });
   it("SQL accepts exact bound hash metadata and unresolved nulls; migration replays", async () => {
     const f = await fixture();
     const fields = [
-      { fieldKey: "documents.cover_letter", value: HASH_A },
-      { fieldKey: "documents.resume", value: null },
+      {
+        fieldKey: "documents.cover_letter",
+        value: HASH_A,
+        origin: "generated",
+        sourceFactIds: [FACT_A],
+        confidence: 1,
+        disposition: "review",
+        reasons: ["generated_content"],
+        requiresReview: true,
+      },
+      {
+        fieldKey: "documents.resume",
+        value: null,
+        origin: "user_entered",
+        sourceFactIds: [],
+        confidence: 1,
+        disposition: "user_action",
+        reasons: ["unsupported_value"],
+        requiresReview: true,
+      },
     ];
     await client`INSERT INTO applications.packets (id, application_id, owner_user_id, version, packet_hash, job_revision, cover_letter_hash, fields, created_at)
       VALUES (${uuidv7()}, ${f.app.id}, ${f.ownerUserId}, 1, ${HASH_A}, ${HASH_A}, ${HASH_A}, ${client.json(fields)}, now())`;
@@ -144,8 +169,6 @@ const execute = promisify(execFile);
       [fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url))],
       { env: { ...process.env, DATABASE_URL: databaseUrl } },
     );
-    expect(replay.stdout).toContain(
-      "through 0008_temporary_material_bindings applied and verified",
-    );
+    expect(replay.stdout).toContain("through 0009_restricted_packet_values applied and verified");
   });
 });
