@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { execFile } from "node:child_process";
+import { request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
@@ -318,6 +319,10 @@ const key = () => `temporary-packet-${uuidv7()}`;
     "cancel_race",
     "lost_memory",
     "discard_during_send",
+    "cancel_cleanup",
+    "confirmed_cleanup",
+    "cleanup_outage_retry",
+    "network_abort",
   ])(
     "serves or refuses %s through native original completion, real memory/render and authenticated HTTP",
     async (mode) => {
@@ -395,6 +400,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
       const memory = new TemporaryMaterialStore({
         wallNow: () => at.getTime(),
         monotonicNow: () => at.getTime(),
+        maximumBorrows: 1,
       });
       const temporary = new TemporaryCoverLetterService(
         memory,
@@ -439,18 +445,42 @@ const key = () => `temporary-packet-${uuidv7()}`;
         });
         const reader = temporary.reader();
         let clearedPreview: Awaited<ReturnType<typeof reader.coverLetterPreview>> | undefined;
+        let heldFile: Awaited<ReturnType<typeof reader.coverLetterFile>> | undefined;
+        let nativeReadReady: () => void = () => {};
+        let unblockNativeRead: () => void = () => {};
+        const readReady = new Promise<void>((resolve) => {
+          nativeReadReady = resolve;
+        });
+        const nativeReadGate = new Promise<void>((resolve) => {
+          unblockNativeRead = resolve;
+        });
+        let cleanupAvailable = mode !== "cleanup_outage_retry";
         const api = runtime({
           ...reader,
-          coverLetterPreview: async (owner, application, reference) => {
-            const response = await reader.coverLetterPreview(owner, application, reference);
+          discardApplication: async (owner, application) => {
+            if (!cleanupAvailable) throw Error("SyntheticLostDisposalAcknowledgement");
+            return reader.discardApplication(owner, application);
+          },
+          coverLetterFile: async (owner, application, reference, format, signal) => {
+            const response = await reader.coverLetterFile(
+              owner,
+              application,
+              reference,
+              format,
+              signal,
+            );
+            if (mode === "network_abort") {
+              heldFile = response;
+              nativeReadReady();
+              await nativeReadGate;
+            }
+            return response;
+          },
+          coverLetterPreview: async (owner, application, reference, signal) => {
+            const response = await reader.coverLetterPreview(owner, application, reference, signal);
             if (mode === "cancel_race") {
               clearedPreview = response;
-              await store.cancel({
-                ownerUserId: f.owner,
-                applicationId: f.applicationId,
-                expectedRevision: bound.view.application.revision,
-                idempotencyKey: key(),
-              });
+              await api.cancel(f.owner, f.applicationId, bound.view.application.revision, key());
             }
             return response;
           },
@@ -476,6 +506,125 @@ const key = () => `temporary-packet-${uuidv7()}`;
           verifier: issuer.verifier,
           releaseSha: "synthetic-local",
         });
+        if (mode === "network_abort") {
+          await app.listen({ host: "127.0.0.1", port: 0 });
+          const url = await app.getUrl();
+          const connection = httpRequest(
+            `${url}/v1/applications/${f.applicationId}/cover-letter/file?format=pdf`,
+            { headers: { authorization: `Bearer ${token}` } },
+          );
+          connection.on("error", () => {});
+          connection.end();
+          await readReady;
+          connection.destroy();
+          await vi.waitFor(() => {
+            expect(heldFile?.signal.aborted).toBe(true);
+            expect(heldFile?.value.contentBase64).toBe("");
+          });
+          unblockNativeRead();
+          expect((await api.get(f.owner, f.applicationId)).status).toBe("review_required");
+          expect(memory.has({ ...completed.reference })).toBe(true);
+          const next = await reader.coverLetterPreview(
+            f.owner,
+            f.applicationId,
+            completed.reference,
+          );
+          next.release();
+          return;
+        }
+        if (["cancel_cleanup", "confirmed_cleanup", "cleanup_outage_retry"].includes(mode)) {
+          let attemptId: string | undefined;
+          if (mode === "confirmed_cleanup") {
+            const packet = bound.view.currentPacket;
+            if (!packet) throw Error("SyntheticPacketMissing");
+            const approved = await api.approve(
+              f.owner,
+              f.applicationId,
+              {
+                expectedRevision: bound.view.application.revision,
+                packetHash: packet.packetHash,
+                acknowledgedFieldKeys: [],
+              },
+              key(),
+            );
+            const started = await api.startSubmission(
+              f.owner,
+              f.applicationId,
+              {
+                expectedRevision: approved.revision,
+                adapterId: "greenhouse",
+                adapterVersion: "1.0.0",
+                observedFormHash: form.formHash,
+              },
+              key(),
+            );
+            if (started.outcome !== "started" || !started.attemptId)
+              throw Error("SyntheticAttemptMissing");
+            attemptId = started.attemptId;
+            await api.dispatchAttempt(f.owner, f.applicationId, attemptId);
+          }
+          const held = await reader.coverLetterFile(
+            f.owner,
+            f.applicationId,
+            completed.reference,
+            "pdf",
+          );
+          const idem = key();
+          const url =
+            mode === "confirmed_cleanup"
+              ? `/v1/applications/${f.applicationId}/attempts/${attemptId}/result`
+              : `/v1/applications/${f.applicationId}/cancel`;
+          const payload =
+            mode === "confirmed_cleanup"
+              ? {
+                  kind: "confirmed",
+                  confirmation: {
+                    kind: "provider_confirmation_page",
+                    observedAt: at.toISOString(),
+                    fingerprintSha256: "e".repeat(64),
+                  },
+                }
+              : { expectedRevision: bound.view.application.revision };
+          const gateway = app;
+          const send = () =>
+            gateway.inject({
+              method: "POST",
+              url,
+              headers: { authorization: `Bearer ${token}`, "idempotency-key": idem },
+              payload,
+            });
+          const first = await send();
+          if (mode === "cleanup_outage_retry") {
+            expect(first.statusCode).toBe(503);
+            expect((await api.get(f.owner, f.applicationId)).status).toBe("cancelled");
+            expect(held.isCurrent()).toBe(true);
+            cleanupAvailable = true;
+          } else expect(first.statusCode).toBe(200);
+          const replay = await send();
+          expect(replay.statusCode).toBe(200);
+          const terminal = replay.json();
+          expect(terminal.status).toBe(mode === "confirmed_cleanup" ? "applied" : "cancelled");
+          expect(held.value.contentBase64).toBe("");
+          expect(held.signal.aborted).toBe(true);
+          expect(memory.has({ ...completed.reference })).toBe(false);
+          expect(terminal.currentPacket.temporaryMaterials[0].expiresAtMs).toBe(
+            completed.reference.expiresAtMs,
+          );
+          if (attemptId) {
+            expect(terminal.attempts).toHaveLength(1);
+            expect(terminal.attempts[0].status).toBe("confirmed");
+            expect(terminal.attempts[0].confirmation.kind).toBe("provider_confirmation_page");
+            await expect(
+              api.dispatchAttempt(f.owner, f.applicationId, attemptId),
+            ).rejects.toThrow();
+          }
+          const history = await api.history(f.owner, f.applicationId, {});
+          expect(JSON.stringify(history)).not.toContain(text);
+          const view = await store.getApplication(f.owner, f.applicationId);
+          expect(view.application.status).toBe(terminal.status);
+          expect(view.currentPacket?.temporaryMaterials?.[0]).toEqual(completed.reference);
+          return;
+        }
         if (mode === "expiry") at = new Date(completed.reference.expiresAtMs);
         if (mode === "lost_memory") memory.discard({ ...completed.reference });
         const suffix = mode === "pdf" || mode === "docx" ? `/file?format=${mode}` : "";

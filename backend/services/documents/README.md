@@ -616,3 +616,20 @@ client lifecycle and approved provider retention are still required before activ
 
 The synchronous memory guard is availability authority, not a held borrowed content lease.
 Bounded outgoing native content leases and all-copy disposal remain activation requirements.
+
+## Held temporary responses and terminal sealing (2026-10-05, source-only)
+
+Temporary cover-letter reads now hold an accounted memory lease through the immediate consumer.
+A 512 KiB outgoing reservation is charged before rendering, within existing store/borrow limits.
+The response exposes process-local `signal`, `revalidate` and idempotent `release` capabilities;
+callers must release when finished. Revalidation uses the same held copy and scalar context hashes,
+with no second managed borrow. Idle original expiry, caller abort or application scope disposal
+clears controlled returned paragraphs/file content. Unknown renderer completion retains capacity
+until the callback actually finishes; cancellation is not settlement.
+
+The narrow adapter also exposes `discardApplication`, which seals a terminal scope and clears
+controlled material. New generations in that scope cannot publish in this process. Seals are bounded
+and capacity exhaustion closes memory. `discarded` is local copy/fence acknowledgement, not a
+provider, remote writer or physical native-host purge certificate. Host/transport/client/ATS and
+provider gates remain. Earlier source evidence described an availability-only guard; this extension
+adds a held borrow, with no durable/public capability or production composition.

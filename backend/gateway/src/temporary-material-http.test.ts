@@ -1,6 +1,6 @@
 import { bindTemporaryResponse } from "@ai-job-apply/applications-service";
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { installTemporaryMaterialResponseGuards } from "./temporary-material-http.js";
 
 describe("temporary material response serialization guards", () => {
@@ -79,6 +79,54 @@ describe("temporary material response serialization guards", () => {
       const result = await server.inject("/ordinary");
       expect(result.statusCode).toBe(200);
       expect(result.headers["cache-control"]).toBeUndefined();
+    } finally {
+      await server.close();
+    }
+  });
+  it("releases a successful response after sending without erasing the delivered bytes", async () => {
+    const server = Fastify();
+    installTemporaryMaterialResponseGuards(server);
+    const value = { contentBase64: "c3ludGhldGlj" };
+    const close = vi.fn();
+    server.get("/material", async () => {
+      bindTemporaryResponse(
+        value,
+        () => true,
+        () => {
+          value.contentBase64 = "";
+        },
+        close,
+      );
+      return value;
+    });
+    try {
+      const response = await server.inject("/material");
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ contentBase64: "c3ludGhldGlj" });
+      expect(value.contentBase64).toBe("");
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      await server.close();
+    }
+  });
+  it("releases the held response if serialization fails", async () => {
+    const server = Fastify();
+    installTemporaryMaterialResponseGuards(server);
+    const close = vi.fn();
+    const value = { synthetic: BigInt(1) };
+    server.get("/material", async () => {
+      bindTemporaryResponse(
+        value,
+        () => true,
+        () => {},
+        close,
+      );
+      return value;
+    });
+    try {
+      const response = await server.inject("/material");
+      expect(response.statusCode).toBe(500);
+      expect(close).toHaveBeenCalledTimes(1);
     } finally {
       await server.close();
     }

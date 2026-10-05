@@ -617,3 +617,16 @@ This is managed memory/content-boundary evidence, not arbitrary string erasure, 
 quiescence, HTTP/browser cleanup, packet/ATS admission or approved provider-retention evidence.
 Existing persisted generated-content paths remain ineligible for activation under ADR-038.
 [Evidence](../product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).
+
+## D3-064 held temporary response source boundary (2026-10-05)
+
+Default-off cover-letter reads now hold a Documents managed byte lease with a 512 KiB outgoing
+reservation through Applications/HTTP validation and release. Private revalidation, signal and
+release callbacks are process-local capabilities and never serialized/persisted. Original fixed
+expiry and owner disposal clear controlled output; request abort does not settle an unknown renderer
+callback. Terminal cancellation/confirmation commits SQL evidence before requesting bounded scope
+sealing/disposal; failed acknowledgement does not erase that evidence or permit redispatch.
+No schema/event/content persistence or public transport change is introduced. Native session/transport
+receipts, worker drain, client lifecycle, ATS and D3-012 retention approval still block activation.
+[Source evidence](../product/delivery/evidence/d3-held-temporary-content-2026-10-05.md) does not certify
+all-copy physical expiry, remote settlement or deployed candidate acceptance.

@@ -3,7 +3,10 @@ import type {
   ApplicationCoverLetterPreview,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
-import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
+import {
+  sameTemporaryMaterialReference,
+  type TemporaryMaterialReference,
+} from "@ai-job-apply/domain";
 import { describe, expect, it, vi } from "vitest";
 import { assemblePacket } from "./packet.js";
 import {
@@ -13,7 +16,7 @@ import {
 } from "./service.js";
 import { type ApplicationView, StalePacketError } from "./store.js";
 import type { ApplicationTemporaryMaterials } from "./temporary-cover-letter-read.js";
-import { temporaryResponseGuard } from "./temporary-response.js";
+import { temporaryResponseControl, temporaryResponseGuard } from "./temporary-response.js";
 import {
   APPLICATION_ID,
   definitions,
@@ -81,10 +84,17 @@ function fixture() {
     contentBase64: "dGVzdA==",
   };
   const current = vi.fn(async () => ({ ...reference }));
+  const release = vi.fn();
+  const revalidate = vi.fn(async () => {
+    const value = await current();
+    return value !== null && sameTemporaryMaterialReference(reference, value);
+  });
+  const leased = { release, revalidate, signal: new AbortController().signal };
   const readPreview = vi.fn<NonNullable<ApplicationTemporaryMaterials["coverLetterPreview"]>>(
     async () => ({
       reference: { ...reference },
       value: preview,
+      ...leased,
       isCurrent: () => true,
     }),
   );
@@ -92,6 +102,7 @@ function fixture() {
     async () => ({
       reference: { ...reference },
       value: file,
+      ...leased,
       isCurrent: () => true,
     }),
   );
@@ -142,6 +153,9 @@ function fixture() {
     preview,
     file,
     current,
+    leased,
+    release,
+    revalidate,
     readPreview,
     readFile,
     legacyPreview,
@@ -226,7 +240,12 @@ describe("exact temporary cover-letter owner reads", () => {
       if (fault === "memory_lost") f.current.mockResolvedValueOnce(null as never);
       if (fault === "same_text_new_generation")
         f.current.mockResolvedValueOnce({ ...f.reference, generationId: PACKET_ID });
-      return { reference: { ...f.reference }, value: f.preview, isCurrent: () => true };
+      return {
+        reference: { ...f.reference },
+        value: f.preview,
+        ...f.leased,
+        isCurrent: () => true,
+      };
     });
     await expect(f.service.coverLetterPreview(USER_ID, APPLICATION_ID)).rejects.toBeInstanceOf(
       StalePacketError,
@@ -288,6 +307,7 @@ describe("exact temporary cover-letter owner reads", () => {
     f.readFile.mockResolvedValueOnce({
       reference: { ...f.reference, ownerUserId: PACKET_ID },
       value: f.file,
+      ...f.leased,
       isCurrent: () => true,
     });
     await expect(f.service.coverLetterFile(USER_ID, APPLICATION_ID, "pdf")).rejects.toBeInstanceOf(
@@ -312,6 +332,7 @@ describe("exact temporary cover-letter owner reads", () => {
     f.readFile.mockResolvedValueOnce({
       reference: { ...f.reference },
       value: f.file,
+      ...f.leased,
       isCurrent: () => live,
     });
     const result = await f.service.coverLetterFile(USER_ID, APPLICATION_ID, "pdf");
@@ -325,6 +346,7 @@ describe("exact temporary cover-letter owner reads", () => {
     f.readFile.mockResolvedValueOnce({
       reference: { ...f.reference },
       value: f.file,
+      ...f.leased,
       isCurrent: () => live,
     });
     f.getApplication.mockResolvedValueOnce(f.view).mockImplementationOnce(async () => {
@@ -352,5 +374,118 @@ describe("exact temporary cover-letter owner reads", () => {
     await expect(f.service.resumeFile(USER_ID, APPLICATION_ID, "pdf")).rejects.toBeInstanceOf(
       StalePacketError,
     );
+  });
+  it("explicit response release clears content and closes the owned lease exactly once", async () => {
+    const f = fixture();
+    const result = await f.service.coverLetterFile(USER_ID, APPLICATION_ID, "pdf");
+    const control = temporaryResponseControl(result);
+    control?.release();
+    control?.release();
+    expect(f.release).toHaveBeenCalledTimes(1);
+    expect(f.file.contentBase64).toBe("");
+  });
+  it("refuses an aborted request before private content I/O", async () => {
+    const f = fixture();
+    const request = new AbortController();
+    request.abort();
+    await expect(
+      f.service.coverLetterPreview(USER_ID, APPLICATION_ID, request.signal),
+    ).rejects.toBeInstanceOf(ApplicationsUnavailableError);
+    expect(f.readPreview).not.toHaveBeenCalled();
+  });
+  it.each(["cancelled", "applied"] as const)(
+    "discards %s scope after the owning commit and again on replay",
+    async (status) => {
+      const f = fixture();
+      f.view.application.status = status;
+      const command = vi.fn(async () => ({ view: f.view, replayed: false }));
+      Object.assign(f.dependencies.store, {
+        cancel: command,
+        recordResult: command,
+        reconcile: command,
+      });
+      const discardApplication = vi.fn(async () => "discarded" as const);
+      f.dependencies.temporaryMaterials.discardApplication = discardApplication;
+      if (status === "cancelled")
+        await f.service.cancel(USER_ID, APPLICATION_ID, 2, "synthetic-cleanup");
+      else
+        await f.service.recordResult(
+          USER_ID,
+          APPLICATION_ID,
+          PACKET_ID,
+          {
+            kind: "confirmed",
+            confirmation: {
+              kind: "provider_confirmation_page",
+              observedAt: NOW.toISOString(),
+              fingerprintSha256: HASH_B,
+            },
+          },
+          "synthetic-cleanup",
+        );
+      expect(discardApplication).toHaveBeenCalledWith(USER_ID, APPLICATION_ID);
+      expect(command.mock.invocationCallOrder[0]).toBeLessThan(
+        discardApplication.mock.invocationCallOrder[0] ?? 0,
+      );
+      command.mockResolvedValueOnce({ view: f.view, replayed: true });
+      await f.service.cancel(USER_ID, APPLICATION_ID, 2, "synthetic-cleanup");
+      expect(discardApplication).toHaveBeenCalledTimes(2);
+    },
+  );
+  it.each(["missing", "unavailable", "outage"])(
+    "preserves committed terminal state when cleanup %s",
+    async (fault) => {
+      const f = fixture();
+      const command = vi.fn(async () => {
+        f.view.application.status = "cancelled";
+        return { view: f.view, replayed: false };
+      });
+      Object.assign(f.dependencies.store, { cancel: command });
+      if (fault !== "missing")
+        f.dependencies.temporaryMaterials.discardApplication = async () => {
+          if (fault === "outage") throw Error("SyntheticPrivateBody");
+          return "unavailable";
+        };
+      await expect(
+        f.service.cancel(USER_ID, APPLICATION_ID, 2, "synthetic-cleanup"),
+      ).rejects.toBeInstanceOf(ApplicationsUnavailableError);
+      expect(f.view.application.status).toBe("cancelled");
+      expect(f.view.currentPacket?.temporaryMaterials).toEqual([f.reference]);
+    },
+  );
+  it("does not dispose ambiguous submission memory or settle its evidence", async () => {
+    const f = fixture();
+    f.view.application.status = "reconciliation_required";
+    const command = vi.fn(async () => ({ view: f.view, replayed: false }));
+    Object.assign(f.dependencies.store, { recordResult: command });
+    const discardApplication = vi.fn(async () => "discarded" as const);
+    f.dependencies.temporaryMaterials.discardApplication = discardApplication;
+    const result = await f.service.recordResult(
+      USER_ID,
+      APPLICATION_ID,
+      PACKET_ID,
+      { kind: "unrecognized_response" },
+      "synthetic-ambiguous",
+    );
+    expect(result.status).toBe("reconciliation_required");
+    expect(discardApplication).not.toHaveBeenCalled();
+  });
+  it("disposes positively attested submission after reconciliation", async () => {
+    const f = fixture();
+    f.view.application.status = "applied";
+    Object.assign(f.dependencies.store, {
+      reconcile: vi.fn(async () => ({ view: f.view, replayed: false })),
+    });
+    const discardApplication = vi.fn(async () => "discarded" as const);
+    f.dependencies.temporaryMaterials.discardApplication = discardApplication;
+    const result = await f.service.reconcile(
+      USER_ID,
+      APPLICATION_ID,
+      PACKET_ID,
+      { kind: "user_attested_submitted", observedAt: NOW.toISOString(), fingerprintSha256: HASH_B },
+      "synthetic-reconcile",
+    );
+    expect(result.status).toBe("applied");
+    expect(discardApplication).toHaveBeenCalledWith(USER_ID, APPLICATION_ID);
   });
 });

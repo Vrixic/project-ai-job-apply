@@ -263,3 +263,12 @@ until their owned reader exists. Native actor/session/client/provider/ATS gates 
 
 The synchronous memory guard is availability authority, not a held borrowed content lease.
 Bounded outgoing native content leases and all-copy disposal remain activation requirements.
+
+## Held temporary response release (2026-10-05, source-only)
+
+Cover-letter controllers pass a request-scoped abort signal through Applications to the owning reader.
+Fastify keeps the held-copy control through sending and releases on completion, serialization error,
+timeout or response/connection closure. Per-request socket listeners are removed. Parsed response
+objects are cleared after delivery; delivered candidate-held bytes remain outside platform cleanup.
+This extends the earlier availability guard with a bounded local lease; authenticated native session
+transport, physical worker drain and client lifecycle still need evidence before activation.

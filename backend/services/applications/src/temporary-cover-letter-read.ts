@@ -19,10 +19,17 @@ export interface TemporaryCoverLetterRead<T> {
   value: T;
   /** Live process-local memory lease. Transport adapters must never persist/serialize it. */
   isCurrent(): boolean;
+  revalidate(): Promise<boolean>;
+  release(): void;
+  readonly signal: AbortSignal;
 }
 
 /** Only owned availability and reads. No generation, reconstruction, SQL, object or model port. */
 export interface ApplicationTemporaryMaterials {
+  discardApplication?(
+    ownerUserId: string,
+    applicationId: string,
+  ): Promise<"discarded" | "unavailable">;
   current(
     ownerUserId: string,
     applicationId: string,
@@ -32,12 +39,14 @@ export interface ApplicationTemporaryMaterials {
     ownerUserId: string,
     applicationId: string,
     reference: Readonly<TemporaryMaterialReference>,
+    signal?: AbortSignal,
   ): Promise<TemporaryCoverLetterRead<ApplicationCoverLetterPreview>>;
   coverLetterFile?(
     ownerUserId: string,
     applicationId: string,
     reference: Readonly<TemporaryMaterialReference>,
     format: "pdf" | "docx",
+    signal?: AbortSignal,
   ): Promise<TemporaryCoverLetterRead<ApplicationCoverLetterFile>>;
 }
 
@@ -65,6 +74,7 @@ export async function readBoundTemporaryCoverLetter<T extends Content>(input: {
   reference: TemporaryMaterialReference;
   clock: () => Date;
   format?: "pdf" | "docx";
+  signal?: AbortSignal;
   read: (
     port: ApplicationTemporaryMaterials,
     reference: Readonly<TemporaryMaterialReference>,
@@ -77,6 +87,7 @@ export async function readBoundTemporaryCoverLetter<T extends Content>(input: {
   const packetHash = view.currentPacket?.packetHash;
   let result: TemporaryCoverLetterRead<T> | undefined;
   function checkTime(): void {
+    if (input.signal?.aborted) throw new ApplicationsUnavailableError();
     const reasons = temporaryMaterialReasons([reference], [reference], clock());
     if (reasons.length) throw new StalePacketError(reasons);
   }
@@ -119,9 +130,14 @@ export async function readBoundTemporaryCoverLetter<T extends Content>(input: {
     checkTime();
     if (
       typeof result.isCurrent !== "function" ||
+      typeof result.revalidate !== "function" ||
+      typeof result.release !== "function" ||
+      !(result.signal instanceof AbortSignal) ||
       !validateTemporaryMaterialReference(result.reference) ||
       !sameTemporaryMaterialReference(reference, result.reference)
     )
+      throw new StalePacketError(["temporary_material_changed"]);
+    if (result.signal.aborted || !result.isCurrent())
       throw new StalePacketError(["temporary_material_changed"]);
     const value = result.value;
     if (
@@ -137,7 +153,9 @@ export async function readBoundTemporaryCoverLetter<T extends Content>(input: {
       value.contentSha256 !== reference.contentSha256
     )
       throw new ApplicationsUnavailableError();
-    await checkMemory();
+    const available = await result.revalidate();
+    checkTime();
+    if (!available) throw new StalePacketError(["temporary_material_changed"]);
     checkView(await store.getApplication(ownerUserId, applicationId));
     checkTime();
     if (!result.isCurrent()) throw new StalePacketError(["temporary_material_changed"]);
@@ -151,10 +169,18 @@ export async function readBoundTemporaryCoverLetter<T extends Content>(input: {
         return isCurrent();
       },
       () => discard(value),
+      result.release,
+      result.signal,
     );
     return value;
   } catch (error) {
-    if (result?.value) discard(result.value);
+    if (result?.value) {
+      try {
+        discard(result.value);
+      } finally {
+        result.release?.();
+      }
+    }
     if (error instanceof StalePacketError || error instanceof ApplicationsUnavailableError)
       throw error;
     throw new ApplicationsUnavailableError();

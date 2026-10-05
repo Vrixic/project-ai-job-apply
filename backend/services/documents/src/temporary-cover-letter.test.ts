@@ -61,12 +61,17 @@ function setup(
     enabled?: boolean;
     render?: Renderer;
     completion?: TemporaryMaterialCompletionAuthority;
+    memory?: ConstructorParameters<typeof TemporaryMaterialStore>[0];
   } = {},
 ) {
   let now = NOW;
   let enabled = options.enabled ?? true;
   let evidence = { facts: [structuredClone(fact)], job: { ...job } };
-  const store = new TemporaryMaterialStore({ wallNow: () => now, monotonicNow: () => now });
+  const store = new TemporaryMaterialStore({
+    wallNow: () => now,
+    monotonicNow: () => now,
+    ...options.memory,
+  });
   stores.push(store);
   const source = { load: vi.fn(async (_owner: string, _app: string) => evidence) };
   const render = vi.fn(options.render ?? syntheticRenderer);
@@ -122,6 +127,66 @@ afterEach(() => {
 });
 
 describe("Documents temporary cover-letter completion and reads", () => {
+  it("holds and revalidates a rendered response under one bounded borrow", async () => {
+    const f = setup({ memory: { maximumBorrows: 1 } });
+    const done = await f.service.complete(f.identity, generation(), NOW);
+    const response = await f.service.file(done.reference, "pdf");
+    expect(response.isCurrent()).toBe(true);
+    expect(await response.revalidate()).toBe(true);
+    await expect(f.service.preview(done.reference)).rejects.toThrow("TemporaryMaterialUnavailable");
+    response.release();
+    response.release();
+    expect(response.value.contentBase64).toBe("");
+    expect(response.isCurrent()).toBe(false);
+    const next = await f.service.preview(done.reference);
+    expect(next.value).toHaveProperty("status", "ready");
+    next.release();
+  });
+  it("actively clears idle outgoing content at the original deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const f = setup();
+      const done = await f.service.complete(f.identity, generation(), NOW);
+      const response = await f.service.preview(done.reference);
+      f.setNow(done.reference.expiresAtMs);
+      await vi.advanceTimersByTimeAsync(GENERATED_MATERIAL_LIFETIME_MS);
+      expect(response.value).toHaveProperty("paragraphs", []);
+      expect(response.signal.aborted).toBe(true);
+      expect(response.isCurrent()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("terminal discard seals scope, clears held output, and refuses late publication", async () => {
+    const f = setup();
+    const done = await f.service.complete(f.identity, generation(), NOW);
+    const response = await f.service.file(done.reference, "docx");
+    expect(await f.service.reader().discardApplication(OWNER, APP)).toBe("discarded");
+    expect(response.value.contentBase64).toBe("");
+    expect(response.isCurrent()).toBe(false);
+    await expect(
+      f.service.complete({ ...f.identity, id: OTHER, version: 2 }, generation(), NOW),
+    ).rejects.toThrow("TemporaryMaterialUnavailable");
+  });
+  it("clears held content when the request aborts after rendering", async () => {
+    const f = setup();
+    const done = await f.service.complete(f.identity, generation(), NOW);
+    const request = new AbortController();
+    const response = await f.service.file(done.reference, "pdf", request.signal);
+    request.abort();
+    expect(response.value.contentBase64).toBe("");
+    expect(response.signal.aborted).toBe(true);
+    expect(response.isCurrent()).toBe(false);
+  });
+  it("does not report owner outage as proof of a changed generation", async () => {
+    const f = setup();
+    const done = await f.service.complete(f.identity, generation(), NOW);
+    const response = await f.service.preview(done.reference);
+    f.source.load.mockRejectedValueOnce(Error(TEXT));
+    await expect(response.revalidate()).rejects.toThrow("TemporaryMaterialUnavailable");
+    response.release();
+  });
+
   it("exposes only a frozen scope-checked read capability", async () => {
     const f = setup();
     const completed = await f.service.complete(f.identity, generation(), NOW);
@@ -131,6 +196,7 @@ describe("Documents temporary cover-letter completion and reads", () => {
       "coverLetterFile",
       "coverLetterPreview",
       "current",
+      "discardApplication",
     ]);
     expect(await reader.current(OWNER, APP, completed.reference)).toEqual(completed.reference);
     expect((await reader.coverLetterPreview(OWNER, APP, completed.reference)).value).toHaveProperty(

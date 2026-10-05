@@ -176,11 +176,13 @@ export interface ApplicationsApi {
   coverLetterPreview(
     ownerUserId: string,
     applicationId: string,
+    signal?: AbortSignal,
   ): Promise<ApplicationCoverLetterPreview>;
   coverLetterFile(
     ownerUserId: string,
     applicationId: string,
     format: "pdf" | "docx",
+    signal?: AbortSignal,
   ): Promise<ApplicationCoverLetterFile>;
   /** The resume tailored for this application's job and whether the packet already carries it. */
   resumePreview(ownerUserId: string, applicationId: string): Promise<ApplicationResumePreview>;
@@ -414,6 +416,7 @@ export class ApplicationsService implements ApplicationsApi {
   async coverLetterPreview(
     ownerUserId: string,
     applicationId: string,
+    signal?: AbortSignal,
   ): Promise<ApplicationCoverLetterPreview> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const hash = view.currentPacket?.artifactHashes.coverLetter;
@@ -427,9 +430,10 @@ export class ApplicationsService implements ApplicationsApi {
         view,
         reference,
         clock: this.clock,
+        ...(signal ? { signal } : {}),
         read: (port, fixed) => {
           if (!port.coverLetterPreview) throw new ApplicationsUnavailableError();
-          return port.coverLetterPreview(ownerUserId, applicationId, fixed);
+          return port.coverLetterPreview(ownerUserId, applicationId, fixed, signal);
         },
       });
     if (!hash) return { status: "no_cover_letter", matchesPacket: false };
@@ -449,6 +453,7 @@ export class ApplicationsService implements ApplicationsApi {
     ownerUserId: string,
     applicationId: string,
     format: "pdf" | "docx",
+    signal?: AbortSignal,
   ): Promise<ApplicationCoverLetterFile> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const hash = view.currentPacket?.artifactHashes.coverLetter;
@@ -462,10 +467,11 @@ export class ApplicationsService implements ApplicationsApi {
         view,
         reference,
         clock: this.clock,
+        ...(signal ? { signal } : {}),
         format,
         read: (port, fixed) => {
           if (!port.coverLetterFile) throw new ApplicationsUnavailableError();
-          return port.coverLetterFile(ownerUserId, applicationId, fixed, format);
+          return port.coverLetterFile(ownerUserId, applicationId, fixed, format, signal);
         },
       });
     if (!hash) throw new StalePacketError(["cover_letter_changed"]);
@@ -802,6 +808,7 @@ export class ApplicationsService implements ApplicationsApi {
       result: toAdapterResult(result),
     });
     if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
+    await this.discardTerminalMaterials(settled.view);
     return toApiApplication(settled.view);
   }
 
@@ -820,6 +827,7 @@ export class ApplicationsService implements ApplicationsApi {
       reconciliation: toReconciliation(reconciliation),
     });
     if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
+    await this.discardTerminalMaterials(settled.view);
     return toApiApplication(settled.view);
   }
 
@@ -842,7 +850,27 @@ export class ApplicationsService implements ApplicationsApi {
   }
 
   private async command(pending: Promise<CommandResult>): Promise<Application> {
-    return toApiApplication((await pending).view);
+    const result = await pending;
+    await this.discardTerminalMaterials(result.view);
+    return toApiApplication(result.view);
+  }
+
+  private async discardTerminalMaterials(view: ApplicationView): Promise<void> {
+    if (view.application.status !== "applied" && view.application.status !== "cancelled") return;
+    const owner = this.dependencies.temporaryMaterials;
+    if (!owner?.discardApplication) {
+      if (view.currentPacket?.temporaryMaterials?.length) throw new ApplicationsUnavailableError();
+      return;
+    }
+    try {
+      if (
+        (await owner.discardApplication(view.application.ownerUserId, view.application.id)) !==
+        "discarded"
+      )
+        throw new ApplicationsUnavailableError();
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
   }
 }
 

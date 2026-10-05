@@ -241,3 +241,16 @@ all-copy purge, remote settlement, socket delivery or a frozen Lambda's physical
 
 The synchronous memory guard is availability authority, not a held borrowed content lease.
 Bounded outgoing native content leases and all-copy disposal remain activation requirements.
+
+## Held reads and terminal disposal (2026-10-05, source-only)
+
+The owned cover-letter read returns a held-copy revalidation/release capability and abort signal.
+Applications retains the lease through final state/deadline checks and HTTP completion. Known revoked
+leases refuse before cleared-body validation. Public bodies remain unchanged; private callbacks and
+signals are never serialized. Cancellation, confirmed result and submitted reconciliation request
+owner scope disposal after the owning SQL commit, including on replay. Missing/failed acknowledgement
+returns availability failure while retaining terminal evidence and duplicate guards; it never rolls
+back cancellation/confirmation or issues another submission. Ambiguous outcomes keep their evidence.
+
+Production still composes no temporary actor/host/reader. Compatible private adapters are required
+before activation; local disposal is not cross-process/provider settlement or physical all-copy purge.

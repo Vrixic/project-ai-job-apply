@@ -52,6 +52,78 @@ afterEach(() => {
 });
 
 describe("bounded temporary generated material storage", () => {
+  it("holds borrow capacity until an idempotent explicit release", async () => {
+    const store = fixture({ maximumBorrows: 1 });
+    publish(store);
+    const lease = store.leaseMaterial(reference(), 1024);
+    expect(lease.isCurrent()).toBe(true);
+    expect(lease.bytes).toEqual(bytes);
+    await expect(store.withMaterial(reference(), async () => true)).rejects.toThrow(
+      "TemporaryMaterialUnavailable",
+    );
+    lease.release();
+    lease.release();
+    expect(lease.isCurrent()).toBe(false);
+    expect(lease.signal.aborted).toBe(true);
+    expect(lease.bytes.every((byte) => byte === 0)).toBe(true);
+    expect(await store.withMaterial(reference(), async () => true)).toBe(true);
+  });
+  it("accounts reserved outgoing bytes before granting another copy", () => {
+    const store = fixture({ maximumBytes: bytes.length * 3 + 100 });
+    publish(store);
+    const lease = store.leaseMaterial(reference(), 100);
+    expect(() => store.leaseMaterial(reference(), 1)).toThrow("TemporaryMaterialUnavailable");
+    lease.release();
+    const next = store.leaseMaterial(reference(), 100);
+    expect(next.isCurrent()).toBe(true);
+    next.release();
+  });
+  it("cancels controlled bytes without releasing an unsettled callback's reservation", async () => {
+    const store = fixture({ maximumBorrows: 1 });
+    publish(store);
+    const lease = store.leaseMaterial(reference(), 100);
+    lease.cancel();
+    expect(lease.signal.aborted).toBe(true);
+    expect(lease.bytes.every((byte) => byte === 0)).toBe(true);
+    expect(() => store.leaseMaterial(reference())).toThrow("TemporaryMaterialUnavailable");
+    lease.release();
+    expect(await store.withMaterial(reference(), async () => true)).toBe(true);
+  });
+  it("terminal sealing clears staged/active material and refuses a late new generation", () => {
+    const store = fixture();
+    publish(store);
+    const lease = store.leaseMaterial(reference());
+    store.sealApplication(OWNER, APP);
+    expect(lease.isCurrent()).toBe(false);
+    expect(lease.signal.aborted).toBe(true);
+    expect(lease.bytes.every((byte) => byte === 0)).toBe(true);
+    expect(() => store.stage(reference({ generationId: OTHER }), bytes)).toThrow(
+      "TemporaryMaterialUnavailable",
+    );
+    lease.release();
+    store.sealApplication(OWNER, APP);
+  });
+  it("bounds terminal scope fences and closes safely when capacity is exhausted", () => {
+    const store = fixture({ maximumEntries: 1 });
+    publish(store);
+    store.sealApplication(OWNER, APP);
+    store.sealApplication(OWNER, OTHER);
+    expect(() =>
+      store.stage(reference({ generationId: OTHER, applicationId: GENERATION }), bytes),
+    ).toThrow("TemporaryMaterialUnavailable");
+  });
+  it.each([-1, NaN, 2 * 1024 * 1024 + 1])(
+    "refuses invalid outgoing reservation %s without consuming capacity",
+    async (budget) => {
+      const store = fixture({ maximumBorrows: 1 });
+      publish(store);
+      expect(() => store.leaseMaterial(reference(), budget)).toThrow(
+        "TemporaryMaterialUnavailable",
+      );
+      expect(await store.withMaterial(reference(), async () => true)).toBe(true);
+    },
+  );
+
   it("keeps staged material unavailable until publication and detaches caller inputs", async () => {
     const store = fixture();
     const ref = reference();

@@ -205,6 +205,7 @@ import {
   parseResumeFormatQuery,
   projectApplicationsFailure,
 } from "./applications-http.js";
+import { temporaryMaterialRequestSignal } from "./temporary-material-http.js";
 import {
   type OidcTrustReviewerAuthority,
   TrustReviewerAccessDeniedError,
@@ -2749,7 +2750,11 @@ class ApplicationsController {
     const user = await this.identity.resolve(request, "applications:read");
     requireApplicationsRead(request);
     requireApplicationPath(applicationId);
-    return this.applications.coverLetterPreview(user.id, applicationId);
+    return this.applications.coverLetterPreview(
+      user.id,
+      applicationId,
+      temporaryMaterialRequestSignal(request),
+    );
   }
 
   @Get("/:applicationId/cover-letter/file")
@@ -2763,7 +2768,12 @@ class ApplicationsController {
     const format = parseResumeFormatQuery(request.query);
     if (request.body !== undefined || format === null)
       throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
-    return this.applications.coverLetterFile(user.id, applicationId, format);
+    return this.applications.coverLetterFile(
+      user.id,
+      applicationId,
+      format,
+      temporaryMaterialRequestSignal(request),
+    );
   }
 
   @Get("/:applicationId/packet-preparations/:preparationId")

@@ -3937,6 +3937,9 @@ describe("Applications routes", () => {
           expect.any(String),
           applicationId,
           ...(method === "preparation" ? [attemptId] : method === "coverLetterFile" ? ["pdf"] : []),
+          ...(method === "coverLetterPreview" || method === "coverLetterFile"
+            ? [expect.any(AbortSignal)]
+            : []),
         ],
       });
     }

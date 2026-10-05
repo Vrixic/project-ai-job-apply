@@ -34,7 +34,13 @@ export interface TemporaryCoverLetterResponse<T> {
   value: T;
   /** Process-local active memory lease check; never serialize this callback. */
   isCurrent(): boolean;
+  /** Release after the immediate consumer/transport has finished; clears controlled output. */
+  release(): void;
+  readonly signal: AbortSignal;
+  revalidate(): Promise<boolean>;
 }
+const OUTGOING_CONTENT_BUDGET_BYTES = 512 * 1024;
+
 type Renderer = (
   document: CoverLetterDocument,
   ownerUserId: string,
@@ -79,6 +85,10 @@ export class TemporaryCoverLetterService {
       return { ...reference };
     };
     return Object.freeze({
+      discardApplication: async (owner: string, application: string) => {
+        this.materials.sealApplication(owner, application);
+        return "discarded" as const;
+      },
       current: async (
         owner: string,
         application: string,
@@ -93,13 +103,15 @@ export class TemporaryCoverLetterService {
         owner: string,
         application: string,
         reference: Readonly<TemporaryMaterialReference>,
-      ) => this.preview(scoped(owner, application, reference)),
+        signal?: AbortSignal,
+      ) => this.preview(scoped(owner, application, reference), signal),
       coverLetterFile: (
         owner: string,
         application: string,
         reference: Readonly<TemporaryMaterialReference>,
         format: "pdf" | "docx",
-      ) => this.file(scoped(owner, application, reference), format),
+        signal?: AbortSignal,
+      ) => this.file(scoped(owner, application, reference), format, signal),
     });
   }
 
@@ -203,84 +215,156 @@ export class TemporaryCoverLetterService {
 
   async preview(
     reference: TemporaryMaterialReference,
+    requestSignal?: AbortSignal,
   ): Promise<TemporaryCoverLetterResponse<ApplicationCoverLetterPreview>> {
-    let preview: ApplicationCoverLetterPreview | undefined;
-    try {
-      return await this.read(reference, async (document, signal, fixed) => {
+    return this.readResponse(
+      reference,
+      async (document, signal, fixed) => {
         this.requireContext(
           document,
           await this.source.load(fixed.ownerUserId, fixed.applicationId),
         );
         signal.throwIfAborted();
-        preview = coverLetterPreview(
+        return coverLetterPreview(
           document,
           fixed.ownerUserId,
           fixed.applicationId,
           fixed.contentSha256,
         );
-        return {
-          reference: fixed,
-          value: preview,
-          isCurrent: () => this.enabled() && Boolean(this.completion) && this.materials.has(fixed),
-        };
-      });
-    } catch {
-      if (preview?.status === "ready") {
-        for (const paragraph of preview.paragraphs) {
-          paragraph.text = "";
-          paragraph.factIds.length = 0;
-        }
-        preview.paragraphs.length = 0;
-      }
-      throw new TemporaryMaterialUnavailable();
-    }
+      },
+      requestSignal,
+    );
   }
 
   async file(
     reference: TemporaryMaterialReference,
     format: "pdf" | "docx",
+    requestSignal?: AbortSignal,
   ): Promise<TemporaryCoverLetterResponse<ApplicationCoverLetterFile>> {
     let artifact: ApplicationCoverLetterFile | undefined;
     try {
-      return await this.read(reference, async (document, signal, fixed) => {
-        this.requireContext(
-          document,
-          await this.source.load(fixed.ownerUserId, fixed.applicationId),
-        );
-        signal.throwIfAborted();
-        const value = await this.render(
-          document,
-          fixed.ownerUserId,
-          fixed.applicationId,
-          fixed.contentSha256,
-          format,
-          signal,
-        );
-        artifact = value;
-        const discard = () => {
-          value.contentBase64 = "";
-        };
-        signal.addEventListener("abort", discard, { once: true });
-        try {
-          if (signal.aborted) discard();
-          signal.throwIfAborted();
+      return await this.readResponse(
+        reference,
+        async (document, signal, fixed) => {
           this.requireContext(
             document,
             await this.source.load(fixed.ownerUserId, fixed.applicationId),
           );
           signal.throwIfAborted();
-          return {
-            reference: fixed,
-            value,
-            isCurrent: () =>
-              this.enabled() && Boolean(this.completion) && this.materials.has(fixed),
+          const value = await this.render(
+            document,
+            fixed.ownerUserId,
+            fixed.applicationId,
+            fixed.contentSha256,
+            format,
+            signal,
+          );
+          artifact = value;
+          const discard = () => {
+            value.contentBase64 = "";
           };
-        } finally {
-          signal.removeEventListener("abort", discard);
-        }
-      });
+          signal.addEventListener("abort", discard, { once: true });
+          try {
+            if (signal.aborted) discard();
+            signal.throwIfAborted();
+            this.requireContext(
+              document,
+              await this.source.load(fixed.ownerUserId, fixed.applicationId),
+            );
+            signal.throwIfAborted();
+            return value;
+          } finally {
+            signal.removeEventListener("abort", discard);
+          }
+        },
+        requestSignal,
+      );
     } catch {
       if (artifact) artifact.contentBase64 = "";
+      throw new TemporaryMaterialUnavailable();
+    }
+  }
+
+  private async readResponse<T extends ApplicationCoverLetterPreview | ApplicationCoverLetterFile>(
+    reference: TemporaryMaterialReference,
+    run: (
+      document: CoverLetterDocument,
+      signal: AbortSignal,
+      fixed: Readonly<TemporaryMaterialReference>,
+    ) => Promise<T>,
+    requestSignal?: AbortSignal,
+  ): Promise<TemporaryCoverLetterResponse<T>> {
+    this.requireEnabled();
+    if (!validateTemporaryMaterialReference(reference) || reference.kind !== "cover_letter")
+      throw new TemporaryMaterialUnavailable();
+    const fixed = Object.freeze({ ...reference });
+    const lease = this.materials.leaseMaterial(fixed, OUTGOING_CONTENT_BUDGET_BYTES);
+    let value: T | undefined;
+    let context: Pick<CoverLetterDocument, "jobRevision" | "confirmedFactsHash"> | undefined;
+    let released = false;
+    const cancel = () => lease.cancel();
+    requestSignal?.addEventListener("abort", cancel, { once: true });
+    if (requestSignal?.aborted) cancel();
+    const release = () => {
+      if (released) return;
+      released = true;
+      lease.signal.removeEventListener("abort", release);
+      requestSignal?.removeEventListener("abort", cancel);
+      if (value && "contentBase64" in value) value.contentBase64 = "";
+      if (value && "paragraphs" in value) {
+        for (const paragraph of value.paragraphs) {
+          paragraph.text = "";
+          paragraph.factIds.length = 0;
+        }
+        value.paragraphs.length = 0;
+      }
+      lease.release();
+    };
+    try {
+      value = await this.withDocument(lease.bytes, fixed, lease.signal, (document) => {
+        context = {
+          jobRevision: document.jobRevision,
+          confirmedFactsHash: document.confirmedFactsHash,
+        };
+        return run(document, lease.signal, fixed);
+      });
+      this.requireEnabled();
+      if (
+        !lease.isCurrent() ||
+        Buffer.byteLength(JSON.stringify(value), "utf8") + 1024 > OUTGOING_CONTENT_BUDGET_BYTES
+      )
+        throw new TemporaryMaterialUnavailable();
+      lease.signal.addEventListener("abort", release, { once: true });
+      if (lease.signal.aborted) {
+        release();
+        throw new TemporaryMaterialUnavailable();
+      }
+      const isCurrent = () =>
+        !released && this.enabled() && Boolean(this.completion) && lease.isCurrent();
+      return {
+        reference: fixed,
+        value,
+        isCurrent,
+        signal: lease.signal,
+        release,
+        revalidate: async () => {
+          if (!context || !isCurrent()) return false;
+          let evidence: Awaited<ReturnType<CoverLetterEvidenceSource["load"]>>;
+          try {
+            evidence = await this.source.load(fixed.ownerUserId, fixed.applicationId);
+          } catch {
+            throw new TemporaryMaterialUnavailable();
+          }
+          try {
+            this.requireContext(context, evidence);
+          } catch {
+            return false;
+          }
+          return isCurrent();
+        },
+      };
+    } catch {
+      release();
       throw new TemporaryMaterialUnavailable();
     }
   }
@@ -345,7 +429,7 @@ export class TemporaryCoverLetterService {
   }
 
   private requireContext(
-    document: CoverLetterDocument,
+    document: Pick<CoverLetterDocument, "jobRevision" | "confirmedFactsHash">,
     evidence: Awaited<ReturnType<CoverLetterEvidenceSource["load"]>>,
   ): void {
     const context = coverLetterContext({ ...evidence, now: this.clock() });

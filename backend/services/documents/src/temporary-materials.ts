@@ -16,7 +16,12 @@ const MAX_ENTRIES = 128;
 const MAX_BORROWS = 16;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
 
-type Borrow = { bytes: Uint8Array; sizeBytes: number; controller: AbortController };
+type Borrow = {
+  bytes: Uint8Array;
+  sizeBytes: number;
+  controller: AbortController;
+  released: boolean;
+};
 type Entry = {
   reference: Readonly<TemporaryMaterialReference>;
   bytes: Uint8Array;
@@ -32,6 +37,16 @@ export interface TemporaryMaterialAdmission {
   verify<T>(run: (bytes: Uint8Array, signal: AbortSignal) => Promise<T>): Promise<T>;
   publish(): void;
   discard(): void;
+}
+
+/** Held managed copy, including a reserved outgoing-content budget. No durable authority. */
+export interface TemporaryMaterialLease {
+  readonly reference: Readonly<TemporaryMaterialReference>;
+  readonly bytes: Uint8Array;
+  readonly signal: AbortSignal;
+  isCurrent(): boolean;
+  cancel(): void;
+  release(): void;
 }
 
 /**
@@ -54,6 +69,7 @@ export interface TemporaryMaterialCompletionAuthority {
  */
 export class TemporaryMaterialStore {
   #entries = new Map<string, Entry>();
+  #sealedApplications = new Set<string>();
   #bytes = 0;
   #borrows = 0;
   #closed = false;
@@ -100,6 +116,7 @@ export class TemporaryMaterialStore {
       !(bytes instanceof Uint8Array) ||
       bytes.byteLength < 1 ||
       bytes.byteLength > this.#maximumMaterialBytes ||
+      this.#sealedApplications.has(`${ref.ownerUserId}:${ref.applicationId}`) ||
       this.#entries.has(ref.generationId) ||
       this.#entries.size >= this.#maximumEntries ||
       this.#bytes + bytes.byteLength > this.#maximumBytes
@@ -142,6 +159,28 @@ export class TemporaryMaterialStore {
     const entry = this.#find(reference);
     if (!entry) throw new TemporaryMaterialUnavailable();
     return this.#borrow(entry, "ready", run);
+  }
+
+  leaseMaterial(
+    reference: TemporaryMaterialReference,
+    outgoingBudgetBytes = 0,
+  ): TemporaryMaterialLease {
+    const entry = this.#find(reference);
+    if (!entry) throw new TemporaryMaterialUnavailable();
+    return this.#lease(entry, "ready", outgoingBudgetBytes);
+  }
+
+  /** Terminal application fence. Unlike logout/idle discard, no new generation in this process
+   * may publish into the scope. Durable terminal-state admission still belongs to Applications. */
+  sealApplication(ownerUserId: string, applicationId: string): void {
+    this.discardApplication(ownerUserId, applicationId);
+    const scope = `${ownerUserId}:${applicationId}`;
+    if (this.#sealedApplications.has(scope) || this.#closed) return;
+    if (this.#sealedApplications.size >= this.#maximumEntries) {
+      this.dispose();
+      return;
+    }
+    this.#sealedApplications.add(scope);
   }
 
   discard(reference: TemporaryMaterialReference): void {
@@ -188,6 +227,7 @@ export class TemporaryMaterialStore {
       if (entry.timer) clearTimeout(entry.timer);
     }
     this.#entries.clear();
+    this.#sealedApplications.clear();
   }
 
   #reference(reference: TemporaryMaterialReference): TemporaryMaterialReference {
@@ -273,37 +313,70 @@ export class TemporaryMaterialStore {
     state: "pending" | "ready",
     run: (bytes: Uint8Array, signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
+    const lease = this.#lease(entry, state, 0);
+    try {
+      const result = await run(lease.bytes, lease.signal);
+      if (!lease.isCurrent()) throw new TemporaryMaterialUnavailable();
+      return result;
+    } catch {
+      throw new TemporaryMaterialUnavailable();
+    } finally {
+      lease.release();
+    }
+  }
+
+  #lease(
+    entry: Entry,
+    state: "pending" | "ready",
+    outgoingBudgetBytes: number,
+  ): TemporaryMaterialLease {
     this.#require(entry, state);
     if (
+      !Number.isSafeInteger(outgoingBudgetBytes) ||
+      outgoingBudgetBytes < 0 ||
+      outgoingBudgetBytes > this.#maximumMaterialBytes ||
       this.#borrows >= this.#maximumBorrows ||
-      this.#bytes + entry.bytes.byteLength > this.#maximumBytes
+      this.#bytes + entry.bytes.byteLength + outgoingBudgetBytes > this.#maximumBytes
     )
       throw new TemporaryMaterialUnavailable();
     const borrow = {
       bytes: Uint8Array.from(entry.bytes),
-      sizeBytes: entry.bytes.byteLength,
+      sizeBytes: entry.bytes.byteLength + outgoingBudgetBytes,
       controller: new AbortController(),
+      released: false,
     };
     entry.borrows.add(borrow);
     this.#borrows++;
-    this.#bytes += borrow.bytes.byteLength;
-    try {
-      const result = await run(borrow.bytes, borrow.controller.signal);
-      this.#require(entry, state);
-      if (
-        borrow.controller.signal.aborted ||
-        createHash("sha256").update(borrow.bytes).digest("hex") !== entry.bytesHash
-      )
-        throw new TemporaryMaterialUnavailable();
-      return result;
-    } catch {
-      // Do not leak decoder/renderer failures containing content or attacker-controlled errors.
-      throw new TemporaryMaterialUnavailable();
-    } finally {
-      this.#bytes -= borrow.sizeBytes;
-      this.#borrows--;
-      if (borrow.bytes.byteLength) borrow.bytes.fill(0);
-      entry.borrows.delete(borrow);
-    }
+    this.#bytes += borrow.sizeBytes;
+    return Object.freeze({
+      reference: entry.reference,
+      bytes: borrow.bytes,
+      signal: borrow.controller.signal,
+      isCurrent: () => {
+        try {
+          this.#require(entry, state);
+          return (
+            !borrow.released &&
+            !borrow.controller.signal.aborted &&
+            createHash("sha256").update(borrow.bytes).digest("hex") === entry.bytesHash
+          );
+        } catch {
+          return false;
+        }
+      },
+      cancel: () => {
+        if (borrow.bytes.byteLength) borrow.bytes.fill(0);
+        borrow.controller.abort(new TemporaryMaterialUnavailable());
+      },
+      release: () => {
+        if (borrow.released) return;
+        borrow.released = true;
+        this.#bytes -= borrow.sizeBytes;
+        this.#borrows--;
+        if (borrow.bytes.byteLength) borrow.bytes.fill(0);
+        entry.borrows.delete(borrow);
+        borrow.controller.abort(new TemporaryMaterialUnavailable());
+      },
+    });
   }
 }
