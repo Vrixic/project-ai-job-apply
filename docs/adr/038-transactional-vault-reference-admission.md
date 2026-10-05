@@ -16,3 +16,7 @@ Value preparation remains an exact selected read outside SQL locks, followed by 
 ## Consequences
 
 The capability adds no public route, general listing, writable Profile API or new grants. All vault writers must preserve their shared lock protocol. Deployment review must verify exact SQL privileges, runtime composition and schema/migration order. This decision does not certify privacy writer drain, provider quiescence, legal approval or full candidate deletion. The feature remains default-off pending the remaining D3 gates.
+
+Restricted packet-value storage is a separate unfinished prerequisite (D3-077): existing
+Applications JSON values lie outside the vault key/storage boundary. This metadata-locking
+decision cannot authorize enabling that path before protected persistence is implemented.

@@ -10,7 +10,7 @@ Explicit candidate selection and meaning confirmation → Gateway → exact priv
 
 ## Evidence so far
 
-Before the transaction-lock refinement: 147 Applications unit tests and 15 new real Gateway/Profile/Applications PostgreSQL tests passed. The SQL suite exercises authenticated HTTP with a simulated OIDC issuer, local opaque-handle cipher (simulated KMS) and synthetic job catalog; actual SQL ownership, services and packet persistence are used. Two tests advance the clock while approval/dispatch waits for a real application row lock. After the locking change, 23 real SQL cases pass, including correction, remove and removeByField committed during approve/dispatch lock waits, and a writer blocked until an admission rollback. Original 67 Applications SQL tests (including fault injection) and 46 Profile SQL tests pass. Package suites pass: Applications 147 units, Profile 120, Gateway 300, Workflows 1,588; API and Domain pass. Six real preparation workflow tests and five original Gateway SQL tests pass. The missing-admission-capability case passes with no approval. Native opt-in suites pass 22 evidence/starter/recovery cases and 11 isolated Documents/native-actor cases. Their first parallel run hit cluster-wide Jobs role creation/grant isolation checks; an exact single-database fixture resolves this without weakening guards. The maintained logical dump/restore passes with 60 migrations and exact row-set equality for all 84 relations, owned container cleanup true. Formatting passes. Both owned packet/native fixtures are removed; Docker/WSL shutdown is in progress. Full verifier and artifact checks remain pending.
+Before the transaction-lock refinement: 147 Applications unit tests and 15 new real Gateway/Profile/Applications PostgreSQL tests passed. The SQL suite exercises authenticated HTTP with a simulated OIDC issuer, local opaque-handle cipher (simulated KMS) and synthetic job catalog; actual SQL ownership, services and packet persistence are used. Two tests advance the clock while approval/dispatch waits for a real application row lock. After the locking change, 23 real SQL cases pass, including correction, remove and removeByField committed during approve/dispatch lock waits, and a writer blocked until an admission rollback. Original 67 Applications SQL tests (including fault injection) and 46 Profile SQL tests pass. Package suites pass: Applications 147 units, Profile 120, Gateway 300, Workflows 1,588; API and Domain pass. Six real preparation workflow tests and five original Gateway SQL tests pass. The missing-admission-capability case passes with no approval. Native opt-in suites pass 22 evidence/starter/recovery cases and 11 isolated Documents/native-actor cases. Their first parallel run hit cluster-wide Jobs role creation/grant isolation checks; an exact single-database fixture resolves this without weakening guards. The maintained logical dump/restore passes with 60 migrations and exact row-set equality for all 84 relations, owned container cleanup true. Formatting passes. Both owned packet/native fixtures are removed; Docker/WSL are stopped. Full verifier and artifact checks remain pending.
 
 ## Rollout and remaining work
 
@@ -26,3 +26,18 @@ Final maintained verification, original integration suites, restore checks, loca
 - [Migration 0006](../../../../backend/services/applications/migrations/0006_vault_approval_binding.sql), SHA256 `ecca6ad54d8199f32cb6765a748bdf311b0429dd779a2d1fe468efbcf82dbe1f`
 - Restore manifest SHA256 `6b6c237850f5b2a88a043eb975043a1dfd7145e40968647e9d53fadfce92c611`
 - Ignored local logs: `.tmp/d3-076-admission-gateway-sql-final.log`, `.tmp/d3-076-applications-postgres.log`, `.tmp/d3-076-profile-postgres.log`, `.tmp/d3-076-native-preparation-postgres.log` (first attempt; 22 cases passed), `.tmp/d3-076-native-documents-postgres.log` (correct isolated rerun), `.tmp/d3-076-restore.log`.
+
+## Required restricted-packet storage follow-up (D3-077)
+
+Existing Applications packet JSON stores scalar field values, including selected restricted
+answers, outside the vault's separate key/storage boundary. The synthetic D3-076 implementation
+proves explicit selection, review and transactional revision admission; it does not satisfy
+architecture section 12.3/ADR-010's restricted storage controls. **Keep the reuse switch false.**
+D3-077 must provide protected packet-value persistence and just-in-time owner reads, without
+KMS inside admission locks, plus corrected retention/export/deletion evidence and accountable
+security/privacy review before activation. This is a concrete engineering gap, not legal approval.
+
+The first full verifier found historical restore fixtures accidentally inheriting new migration
+0006; the historical 52/57/58 counts remain unchanged. Their filters now omit 0006, with an added
+59-migration historical-boundary refusal case. Production migration/manifest bytes are unchanged;
+All 24 focused restore unit tests pass after the correction; a fresh clean full verifier remains required.

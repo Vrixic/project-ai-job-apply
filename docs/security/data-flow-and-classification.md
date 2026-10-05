@@ -598,3 +598,8 @@ answer values. Corrected/deleted/expired references refuse admission; there is n
 substitution. See [ADR-038](../adr/038-transactional-vault-reference-admission.md). Reader-first
 strict-schema rollout, explicit migration 0006, candidate review UI and accountable/deployed
 acceptance remain required before activation; this does not certify privacy writer drain.
+
+The current source still persists selected scalar values in Applications packet JSON outside the
+vault's separate key/storage boundary. D3-077 must protect packet-value persistence and owner
+reads before the switch can be enabled. Default-off synthetic selection/admission tests do not
+satisfy that storage requirement or authorize representative data.

@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-077 records the concrete restricted-packet storage gap: existing Applications JSON field values sit outside the vault separate-key boundary. Required backend protection remains Not started and blocks saved-answer reuse activation. D3-076 stays source-only/default-off; D1/D3 exits unchanged. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md).
+
 2026-10-04 D3-076 starts default-off selected-answer packet binding on exact #545 57d7b057. Same-transaction Profile metadata admission checks under verification; full verifier and accountable/deployed gates remain. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). No activation, frontend change or D1/D3 completion; hosted CI/CD deferred until production launch.
 
 2026-10-04 D3-075 [PR #545](https://github.com/Vrixic/project-ai-job-apply/pull/545) opens on exact #544 8f72e13b. Verified source fb8010b3 unchanged; only delivery documentation follows. Packet selection/hash/version invalidation, candidate review and accountable/deployed acceptance remain. No Applications consumer, deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.

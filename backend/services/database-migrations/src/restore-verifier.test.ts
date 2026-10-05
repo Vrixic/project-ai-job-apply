@@ -440,6 +440,7 @@ describe("read-only aggregate restore verification", () => {
               (migration) =>
                 ![
                   ...omittedVersions,
+                  "0006_vault_approval_binding",
                   "0006_cover_letters",
                   "0007_cover_letter_work_authorizations",
                   "0008_cover_letter_provider_responses",
@@ -475,33 +476,38 @@ describe("read-only aggregate restore verification", () => {
     },
   );
 
-  it("retains the prior 58-migration boundary only against its exact historical manifest", async () => {
-    const current = loadCurrentRestoreManifest();
-    const manifest = parseRestoreManifest({
-      ...current.manifest,
-      contributors: current.manifest.contributors.map((contributor) => ({
-        ...contributor,
-        migrations: contributor.migrations.filter(
-          (migration) => migration.version !== "0009_cover_letter_provider_failure",
-        ),
-      })),
-    });
-    const historical = {
-      manifest,
-      sha256: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
-    };
-    const client: RestoreSqlClient = {
-      async begin(_options, work) {
-        return work(successfulExecutor(historical));
-      },
-    };
-    await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
-      ownerCount: 7,
-      relationCount: 84,
-      migrationCount: 58,
-    });
-    await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(/migration/iu);
-  });
+  it.each([59, 58])(
+    "retains the prior %s-migration boundary only against its exact historical manifest",
+    async (migrationCount) => {
+      const current = loadCurrentRestoreManifest();
+      const manifest = parseRestoreManifest({
+        ...current.manifest,
+        contributors: current.manifest.contributors.map((contributor) => ({
+          ...contributor,
+          migrations: contributor.migrations.filter(
+            (migration) =>
+              migration.version !== "0006_vault_approval_binding" &&
+              (migrationCount === 59 || migration.version !== "0009_cover_letter_provider_failure"),
+          ),
+        })),
+      });
+      const historical = {
+        manifest,
+        sha256: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
+      };
+      const client: RestoreSqlClient = {
+        async begin(_options, work) {
+          return work(successfulExecutor(historical));
+        },
+      };
+      await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
+        ownerCount: 7,
+        relationCount: 84,
+        migrationCount,
+      });
+      await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(/migration/iu);
+    },
+  );
 
   it("retains the prior 57-migration boundary only as historical evidence", async () => {
     const current = loadCurrentRestoreManifest();
@@ -514,6 +520,7 @@ describe("read-only aggregate restore verification", () => {
             ![
               "0008_cover_letter_provider_responses",
               "0009_cover_letter_provider_failure",
+              "0006_vault_approval_binding",
             ].includes(migration.version),
         ),
         relations: contributor.relations.filter(
