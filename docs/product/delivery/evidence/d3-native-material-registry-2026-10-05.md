@@ -60,7 +60,7 @@ logical restore proof: `.tmp/d3-native-registry-restore.log` and terminal exit r
 Docker Desktop and WSL are stopped; the owned tmpfs fixture is removed.
 The initial clean-source full verifier at `3e932407` stopped at a stale synthetic deletion-replay
 environment checksum after manifest expansion. Derived environment/inspection digests were
-regenerated; 697 deletion-replay and 908 role-guard assertions pass. Full verifier rerun is pending.
+regenerated; 697 deletion-replay and 908 role-guard assertions pass. The complete clean-source rerun passes at `dda86480168bcfe243a5be871bbb6656ab1cd6b3`.
 Local SQL checks found and corrected a PL/pgSQL
 OLD-alias conflict and preserved the existing cleanup tombstone protocol before this checkpoint.
 
@@ -85,3 +85,19 @@ D3-012 provider retention/no-training/accountable approvals and D1/D3 deployed a
 retirement implementation therefore remains part of this follow-up against main. Current main
 ancestry is integrated without changing the verified source tree; no authored main merge occurs.
 The follow-up uses `feat/d3-native-material-registry`, rather than updating a merged PR.
+
+## Complete maintained verification
+
+Clean committed source `dda86480168bcfe243a5be871bbb6656ab1cd6b3` passes
+`scripts/verify-phase0.ps1` with terminal exit 0. No source/HEAD changes occurred while it ran.
+The maintained run includes contract generation, 38 typecheck tasks, 39 test tasks, 23 builds,
+formatting, security/operational/source-binding guards, all emitted isolation/default-off checks,
+Compose configuration and product-scope checks. Lint remains 0 errors/15 warnings/58 informational
+notes. Documents 1,388; Gateway 318 with 85 opt-in skips; Workflows 1,588 with 57 opt-in skips;
+Domain 27 and database migration/restore 47 tests pass. These opt-in skips do not replace the
+separate 19/136 real PostgreSQL cases and actual logical restore described above.
+
+Terminal receipts: `.tmp/d3-native-registry-verify-final.log` and `.exit` (0).
+Docker Desktop and WSL remain stopped, the owned tmpfs fixture is removed and shared volumes are
+retained. Only delivery documentation changes follow the tested implementation. No browser,
+managed ECS, provider, deployment, production or all-copy purge acceptance is claimed.

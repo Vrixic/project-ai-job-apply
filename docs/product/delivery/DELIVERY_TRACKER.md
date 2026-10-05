@@ -3655,3 +3655,13 @@ synthetic replay digest, now regenerated; 697 replay/908 role-guard assertions a
 Documents cases pass. Clean full rerun pending. Docker/WSL stopped; owned tmpfs fixture removed.
 [Evidence](evidence/d3-native-material-registry-2026-10-05.md). D1/D3 stay In progress; no cloud
 call/deployment/activation or hosted CI/CD work.
+
+2026-10-05 D3-079 clean `dda86480` passes the full maintained verifier: 38 typecheck tasks,
+39 test tasks, 23 builds, unchanged lint and security/operational/Compose/scope/emitted refusal
+checks. Documents 1,388, Gateway 318 (85 opt-in skips), Workflows 1,588 (57 skips), Domain 27 and
+migration/restore 47 tests pass. Separate 19 registry/136 work-ledger real SQL cases and actual
+64-migration/86-relation logical restore pass with ECS simulated. Only delivery documentation
+follows the tested implementation. [Evidence](evidence/d3-native-material-registry-2026-10-05.md).
+Docker/WSL stopped; fixture removed and shared volumes retained. Private launcher/RPC/IAM/image/
+routing/managed-task/client/ATS/provider/accountable gates remain. No publication/deployment/
+activation or authored main merge; D1/D3 remain In progress and CI/CD deferred until launch.
