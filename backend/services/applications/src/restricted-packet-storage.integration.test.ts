@@ -6,6 +6,8 @@ import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import {
   candidateRightsOwnerInventoryWithApplications,
   createBuildingCandidateExportAuthorizer,
+  PostgresRestrictedAnswerVaultStore,
+  type RestrictedAnswerCipher,
 } from "@ai-job-apply/profile-service";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
@@ -84,6 +86,38 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
     ),
   };
   const ownedDefinitions = new Map(definitions);
+  const vaultValues = new Map<
+    string,
+    { userId: string; fieldKey: string; context: string; value: string }
+  >();
+  const vaultCipher: RestrictedAnswerCipher = {
+    encrypt: vi.fn(async (input) => {
+      const handle = uuidv7();
+      vaultValues.set(handle, { ...input, value: input.plaintext });
+      return {
+        ciphertext: Buffer.from(handle),
+        kmsKeyId: "synthetic-vault-key",
+        encryptionAlgorithm: "SYMMETRIC_DEFAULT" as const,
+      };
+    }),
+    decrypt: vi.fn(async (input) => {
+      const value = vaultValues.get(Buffer.from(input.ciphertext.ciphertext).toString("utf8"));
+      if (
+        !value ||
+        value.userId !== input.userId ||
+        value.fieldKey !== input.fieldKey ||
+        value.context !== input.context
+      )
+        throw Error("SyntheticVaultScopeMismatch");
+      return value.value;
+    }),
+  };
+  const vault = new PostgresRestrictedAnswerVaultStore(sql, vaultCipher);
+  const vaultStore = new PostgresApplicationStore(sql, undefined, {
+    definitions: ownedDefinitions,
+    restrictedPackets: { cipher, fingerprintKeyArn, enabled: () => true },
+    lockVaultReferences: vault.lockCurrentReferences.bind(vault),
+  });
   ownedDefinitions.set("documents.cover_letter", {
     key: "documents.cover_letter",
     label: "Synthetic document",
@@ -131,6 +165,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
   afterAll(async () => {
     aesKey.fill(0);
     macKey.fill(0);
+    vaultValues.clear();
     await sql.end({ timeout: 5 });
   });
   async function application() {
@@ -435,6 +470,181 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
       VALUES (${exportId}, ${ownerUserId}, ${operationId}, 'candidate-data-export-v1', ${policyVersion}, 'building')`;
     return { ownerUserId, exportId, operationId, policyVersion };
   }
+  async function selectedPacket(expiry?: Date) {
+    const command = await application();
+    const save = {
+      userId: command.ownerUserId,
+      fieldKey: "authorization.us_authorized",
+      context: "us",
+      expectedVersion: 0,
+      valueType: "boolean" as const,
+      value: "true",
+      sensitivity: "restricted" as const,
+      confirmedAt: new Date(),
+      sourceReference: "synthetic.restricted-packet",
+      idempotencyKey: idempotencyKey(),
+      traceId: "synthetic.restricted-packet",
+      ...(expiry ? { expiresAt: expiry } : {}),
+    };
+    const saved = await vault.save(save);
+    const result = await vaultStore.createPacket({
+      ...command,
+      packet: {
+        ...packet,
+        fields: [
+          proposal(),
+          proposal({
+            fieldKey: save.fieldKey,
+            value: true,
+            origin: "answer_vault",
+            sourceFactIds: [saved.id],
+            vaultReference: {
+              ...saved,
+              context: save.context,
+              questionHash: HASH_A,
+              meaningConfirmed: true,
+              validUntilEpochMs: expiry?.getTime() ?? null,
+            },
+          }),
+        ],
+      },
+    });
+    const current = result.view.currentPacket;
+    if (!current) throw Error("Missing selected synthetic packet");
+    return {
+      save,
+      saved,
+      target: {
+        ownerUserId: command.ownerUserId,
+        applicationId: command.applicationId,
+        expectedRevision: result.view.application.revision,
+        packetId: current.id,
+        packetHash: current.packetHash,
+      },
+    };
+  }
+  async function futureDeadline() {
+    const [row] = await sql<
+      Array<{ deadline: Date }>
+    >`SELECT clock_timestamp() + interval '3 seconds' AS deadline`;
+    if (!row) throw Error("Missing synthetic deadline");
+    return row.deadline;
+  }
+  async function waitUntil(deadline: Date) {
+    await sql`SELECT pg_sleep(greatest(0, extract(epoch FROM ${deadline}::timestamptz - clock_timestamp())) + 0.05)`;
+  }
+  it("reads the exact selected packet value with Profile metadata admission and no vault decryption", async () => {
+    const f = await selectedPacket();
+    const count = vi.mocked(vaultCipher.decrypt).mock.calls.length;
+    const result = await vaultStore.readCurrentPacketValues(f.target);
+    expect(result.values.get(f.save.fieldKey)).toBe(true);
+    expect(vi.mocked(vaultCipher.decrypt).mock.calls.length).toBe(count);
+    const current = await vaultStore.getApplication(f.target.ownerUserId, f.target.applicationId);
+    expect(
+      current.currentPacket?.fields.find((field) => field.fieldKey === f.save.fieldKey),
+    ).toMatchObject({ value: null, protectedValue: true, requiresReview: true });
+    if (result.values instanceof Map) result.values.clear();
+  });
+  it.each(["corrected", "deleted"] as const)(
+    "withholds selected packet values %s during decrypt without retaining Profile locks",
+    async (outcome) => {
+      const f = await selectedPacket();
+      onDecrypt = async () => {
+        await sql.begin(async (tx) => {
+          const [lock] = await tx<
+            Array<{ available: boolean }>
+          >`SELECT pg_try_advisory_xact_lock(hashtext(${`restricted-answer:${f.save.userId}:${f.save.fieldKey}:${f.save.context}`})) AS available`;
+          expect(lock?.available).toBe(true);
+          await tx`SELECT id FROM profile.restricted_answers WHERE id = ${f.saved.id} FOR UPDATE NOWAIT`;
+        });
+        if (outcome === "corrected")
+          await vault.save({
+            ...f.save,
+            expectedVersion: f.saved.version,
+            value: "true",
+            idempotencyKey: idempotencyKey(),
+          });
+        else
+          await vault.remove({
+            userId: f.save.userId,
+            id: f.saved.id,
+            expectedVersion: f.saved.version,
+            traceId: "synthetic.delete",
+          });
+      };
+      try {
+        await expect(vaultStore.readCurrentPacketValues(f.target)).rejects.toThrow(
+          RestrictedPacketStoreUnavailableError,
+        );
+      } finally {
+        onDecrypt = undefined;
+      }
+      const stages = await sql<
+        Array<{ stage: string }>
+      >`SELECT stage FROM applications_restricted.packet_read_audit WHERE packet_id = ${f.target.packetId}`;
+      expect(stages).toEqual([{ stage: "admitted" }]);
+    },
+  );
+  it("refuses an expired selected packet before decryption", async () => {
+    const deadline = await futureDeadline();
+    const f = await selectedPacket(deadline);
+    await waitUntil(deadline);
+    const count = vi.mocked(cipher.decrypt).mock.calls.length;
+    await expect(vaultStore.readCurrentPacketValues(f.target)).rejects.toThrow(
+      RestrictedPacketStoreUnavailableError,
+    );
+    expect(vi.mocked(cipher.decrypt).mock.calls.length).toBe(count);
+  });
+  it("withholds a selected packet whose original deadline expires during decryption", async () => {
+    const deadline = await futureDeadline();
+    const f = await selectedPacket(deadline);
+    onDecrypt = () => waitUntil(deadline);
+    try {
+      await expect(vaultStore.readCurrentPacketValues(f.target)).rejects.toThrow(
+        RestrictedPacketStoreUnavailableError,
+      );
+    } finally {
+      onDecrypt = undefined;
+    }
+    const stages = await sql<
+      Array<{ stage: string }>
+    >`SELECT stage FROM applications_restricted.packet_read_audit WHERE packet_id = ${f.target.packetId}`;
+    expect(stages).toEqual([{ stage: "admitted" }]);
+  });
+  it.each(["corrected", "deleted", "expired"] as const)(
+    "exports the original selected value after its saved source is %s",
+    async (outcome) => {
+      const deadline = outcome === "expired" ? await futureDeadline() : undefined;
+      const f = await selectedPacket(deadline);
+      if (outcome === "corrected")
+        await vault.save({
+          ...f.save,
+          expectedVersion: f.saved.version,
+          value: "false",
+          idempotencyKey: idempotencyKey(),
+        });
+      else if (outcome === "deleted")
+        await vault.remove({
+          userId: f.save.userId,
+          id: f.saved.id,
+          expectedVersion: f.saved.version,
+          traceId: "synthetic.delete",
+        });
+      else if (deadline) await waitUntil(deadline);
+      const scope = await exportRequest(f.target.ownerUserId);
+      const result = await exportStore.readExportPacketValues({
+        ...scope,
+        applicationId: f.target.applicationId,
+        packetId: f.target.packetId,
+        packetHash: f.target.packetHash,
+      });
+      expect(result.values.get(f.save.fieldKey)).toBe(true);
+      if (result.values instanceof Map) result.values.clear();
+      await expect(vaultStore.readCurrentPacketValues(f.target)).rejects.toThrow(
+        RestrictedPacketStoreUnavailableError,
+      );
+    },
+  );
   it("exports original chosen values independently from two historical packet versions", async () => {
     const command = await application();
     const first = await store.createPacket({ ...command, packet });

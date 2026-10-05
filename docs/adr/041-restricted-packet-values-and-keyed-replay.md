@@ -59,8 +59,11 @@ preparation carry-forward, exact authorized historical export and privacy-author
 local synthetic/offline unit and real PostgreSQL evidence. Profile owns export request/operation
 admission through a narrow transaction callback; historical readers release SQL locks before crypto
 and recheck exact authority afterward. Workflow assembly copies only authorized declared field
-values into the strict portable envelope; private inventory/bindings remain outside artifacts. Whole
-logical restore, selected-answer read races, legacy transition/role/inventory and maintained complete
+values into the strict portable envelope; private inventory/bindings remain outside artifacts.
+Actual Profile metadata admission now verifies selected-answer correction/deletion/expiry read
+races in real SQL, while historical export retains exact original chosen values. The expanded
+65-migration/88-relation/12-schema restore manifest has offline structural/operator evidence. Whole
+logical restore, legacy transition/role/deletion-verifier inventory and maintained complete
 verification remain unfinished. No
 production data, live KMS/provider, deployment or activation is claimed. Saved-answer reuse remains
 disabled. See [D3-077 evidence](../product/delivery/evidence/d3-restricted-packet-storage-2026-10-05.md).

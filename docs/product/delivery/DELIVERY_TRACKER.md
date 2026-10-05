@@ -3744,3 +3744,13 @@ retained. Whole restore, selected-answer races, maintained fixtures/inventory/ro
 and clean full verification remain outstanding. Private WIP; no PR, activation, cloud deployment or
 phase completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains
 deferred until production launch.
+
+2026-10-05 D3-077 verifies actual Profile-backed correction/deletion/expiry packet-read races and
+original historical export after saved-source changes: all 27 real PostgreSQL cases pass with
+simulated crypto. Private restore inventory expands to 65 migrations/88 relations/12 schemas;
+48 migration/restore units retain prior release boundaries, and 231 Workflow contract/policy cases,
+staging restore guards and 697 deletion replay operator checks pass offline. Whole logical restore,
+SQL role/deletion-verifier inventory, legacy transition, maintained protection fixtures and clean
+full verification remain. Owned fixture removed, shared volumes retained, Docker/WSL stopped.
+Private WIP only; no image publication, feature activation or D1/D3 phase completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains deferred until launch.

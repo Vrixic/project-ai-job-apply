@@ -269,10 +269,54 @@ its exact identity, name, label and tmpfs before removal. Shared volume inventor
 Docker Desktop was stopped and WSL reported no running distributions. No actual restore or full
 maintained-verifier claim is made for this incomplete private checkpoint.
 
+## Profile-backed selected-answer reads and expanded restore inventory
+
+Eight additional real PostgreSQL cases pass through the actual Profile owning vault store and its
+same-transaction metadata admission callback. Current review returns the original protected value
+without decrypting the saved vault again. Same-value correction and deletion during packet decrypt
+withhold the result; the tests acquire the exact Profile writer advisory lock and answer row lock
+while decrypt is pending, proving neither is retained across crypto. Already-expired selections
+refuse before packet decryption; expiry during decrypt withholds the value and retains only audit
+admission, not a validated read. Authorized historical export still returns the original packet
+value after the saved source is corrected to the opposite value, deleted or expired. Source
+metadata stays masked and mandatory review remains true. Profile vault crypto is simulated through
+opaque in-process handles; packet envelope/MAC crypto is offline. No live KMS/provider/OIDC claim.
+
+The expanded owned suite passes all 27 cases on PostgreSQL 16.6. Applications build passes, including
+TypeScript compilation of the new integration cases. Log:
+`.tmp/d3-restricted-packet-selected-sql.log` (2026-10-05, 19:01:14 local). The owned tmpfs fixture
+`b489251110eb85bc054c7e7bc522c464aa36b325770fea003b0f08279bb0c707` was verified against its
+exact ID/name/label/tmpfs and removed. Shared Docker volumes remain identical; Docker Desktop
+stopped and WSL reports no running distributions.
+
+The authoritative restore manifest adds `applications_restricted`, both private relations and the
+exact LF-normalized unshipped 0009 checksum. Current structural boundary is 65 migrations,
+88 relations and 12 owned schemas across seven owners. Its exact file SHA-256 is
+`0679090d17a5aedb76f7c44ebd9ea6b536a349b51ce34140c48154b147cac93e`.
+The Workflow/PowerShell private replay constants and generated configuration/inspection digests
+are synchronized. All 48 migration/restore unit cases pass, including a new exact historical
+64-migration/86-relation native boundary that cannot verify restricted storage. Existing historical
+42/47/52/57/58–63 fixtures retain their original schemas, relations and migration counts.
+
+The current staging restore/operator and migration runtime package inventory checks are updated
+for the expanded boundary. PowerShell manifest ordering now uses ordinal comparison for schemas
+and qualified relations, matching TypeScript lexical order when the underscore schema is present.
+No duplicate/unknown relation tolerance is added. Offline staging restore guard tests pass;
+697 generated deletion replay operator checks and 231 Workflow contract/policy cases pass with
+zero cloud calls. The exact migration runtime smoke passes all 165 offline checks, including
+every missing/tampered SQL migration; migration image publisher OCI guards pass. Migration
+orchestrator typecheck/build and Workflow build pass. Maintained
+logical recovery harness counts are updated, but it has not yet run against this boundary;
+actual restore, restricted-record behavior after restore and isolated SQL role grants remain
+outstanding. No migration image was built, published or deployed by this checkpoint.
+Logs: `.tmp/d3-restricted-packet-restore-operator.log`,
+`.tmp/d3-restricted-packet-replay-operator.log`,
+`.tmp/d3-restricted-packet-migration-publisher.log`.
+
 ## Next work
 
-Finish Profile-backed selected-answer correction/expiry read acceptance, inventory/role/restore
-boundary registration, legacy migration compatibility and whole logical restore acceptance.
+Finish isolated SQL role grants and deletion-verifier inventory, legacy migration compatibility
+and whole logical restore acceptance with original ciphertext/keyed replay/audit values.
 Update all maintained integration/runtime fixtures for mandatory protection and complete the clean
 full verifier before review. Existing legacy restricted plaintext must be handled by an explicit
 reviewed transition; do not silently rewrite approved/ambiguous submission evidence. Retain exact
