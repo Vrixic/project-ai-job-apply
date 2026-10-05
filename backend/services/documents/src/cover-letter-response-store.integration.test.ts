@@ -7,6 +7,8 @@ import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCoverLetterDocument } from "./cover-letter.js";
 import { COVER_LETTER_PROVIDER_MODEL } from "./cover-letter-provider-contract.js";
+import { CoverLetterProviderControlClient } from "./cover-letter-provider-control-client.js";
+import { createCoverLetterProviderControlLambda } from "./cover-letter-provider-control-lambda.js";
 import { CoverLetterResponseCaptureClient } from "./cover-letter-response-capture-client.js";
 import { createCoverLetterResponseCaptureHandler } from "./cover-letter-response-capture-handler.js";
 import { createCoverLetterResponseCaptureLambda } from "./cover-letter-response-capture-lambda.js";
@@ -129,6 +131,233 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await work.claim(ref);
     return store.reserve(ref);
   }
+
+  it.each([
+    "failed",
+    "cancelled",
+    "incomplete",
+    "quarantined",
+    "unknown",
+    "wrong_id",
+    "wrong_time",
+    "wrong_hash",
+    "disposed_match",
+    "disposed_conflict",
+    "lost_ack",
+    "legacy",
+    "running_slots",
+  ] as const)(
+    "connects original terminal capture and separate native control settlement: %s",
+    async (fault) => {
+      await work.claim(ref);
+      let slotsReference: typeof ref | undefined;
+      if (fault === "running_slots") {
+        const [binding] =
+          await sql`SELECT consent_expires_at FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+        const issued = await work.issue({
+          ownerUserId: owner,
+          documentId,
+          purpose: "private_slots",
+          requestSha256: ref.requestSha256,
+          consentExpiresAt: binding?.consent_expires_at,
+        });
+        slotsReference = {
+          id: issued.authorization.id,
+          documentId,
+          purpose: "private_slots",
+          requestSha256: ref.requestSha256,
+        };
+        await work.claim(slotsReference);
+      }
+      const original = response();
+      const terminalStatus = fault === "cancelled" || fault === "incomplete" ? fault : "failed";
+      const transport = vi.fn<typeof fetch>(
+        async () =>
+          new Response(
+            JSON.stringify({
+              object: "response",
+              id: original.responseId,
+              created_at: original.createdAt,
+              model: "gpt-6-luna",
+              background: true,
+              store: false,
+              previous_response_id: null,
+              conversation: null,
+              tools: [],
+              status: terminalStatus,
+              output: [{ text: "SyntheticDiscardedContent" }],
+            }),
+          ),
+      );
+      const gateway = new ModelGateway(
+        new OpenAiLunaProvider({
+          enabled: () => true,
+          backgroundEnabled: () => true,
+          apiKey: () => "synthetic-key",
+          fetch: transport,
+        }),
+        { enabled: () => true },
+      );
+      const approval = new Date();
+      const generate = () =>
+        gateway.generateWithBackgroundTermination(
+          {
+            promptId: "cover_letter",
+            promptVersion: "1.0.0",
+            purpose: "cover_letter",
+            categories: ["profile_facts", "job_posting"],
+            system: "Synthetic rules",
+            user: "Synthetic facts",
+          },
+          {
+            purpose: "cover_letter",
+            categories: ["profile_facts", "job_posting"],
+            approvedAt: approval,
+          },
+          {
+            reserve: async () => (await store.reserve(ref)).kind,
+            recordCreation: async (value) => {
+              if (fault === "unknown") throw Error("SyntheticLostOriginalCreationACK");
+              await store.recordCreation(ref, value);
+              if (fault === "quarantined")
+                await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+            },
+          },
+        );
+      let termination: {
+        kind: "terminal_no_content";
+        reference: ReturnType<typeof response>;
+        terminalStatus: "failed" | "cancelled" | "incomplete";
+      };
+      if (fault === "unknown") {
+        await expect(generate()).rejects.toThrow();
+        termination = { kind: "terminal_no_content", reference: original, terminalStatus };
+      } else {
+        const completion = await generate();
+        if (completion.kind !== "terminal_no_content")
+          throw Error("SyntheticMissingOriginalTerminalReceipt");
+        termination = {
+          kind: completion.kind,
+          reference: completion.reference,
+          terminalStatus: completion.terminalStatus,
+        };
+      }
+      if (fault === "disposed_match" || fault === "disposed_conflict")
+        await store.recordDisposal(ref, {
+          kind: "response_deleted",
+          reference: original,
+          terminalStatus: fault === "disposed_conflict" ? "completed" : terminalStatus,
+        });
+      if (fault === "wrong_id") termination.reference = { ...original, responseId: "resp_other" };
+      if (fault === "wrong_time")
+        termination.reference = { ...original, createdAt: original.createdAt + 1 };
+      const calledRef = fault === "wrong_hash" ? { ...ref, requestSha256: "b".repeat(64) } : ref;
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-terminal-control:7";
+      const env = {
+        COVER_LETTER_PROVIDER_CONTROL_ENABLED: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: "synthetic-terminal-control",
+        AWS_LAMBDA_FUNCTION_VERSION: "7",
+        DATABASE_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+        AWS_SESSION_TOKEN: "synthetic-session-token",
+      };
+      let pool: postgres.Sql | undefined;
+      const createPool = vi.fn(
+        (url: string, options: { max: 1; idle_timeout: 20; connect_timeout: 10 }) => {
+          pool = postgres(url, options);
+          return pool;
+        },
+      );
+      const bootstrap = createCoverLetterProviderControlLambda({
+        environment: () => env,
+        resolveDatabaseUrl: async () => databaseUrl ?? "postgres://invalid",
+        createPool,
+        ...(fault === "legacy"
+          ? {
+              createWork: () => ({
+                claimProviderDispatch: work.claimProviderDispatch.bind(work),
+                settleProviderDispatch: work.settleProviderDispatch.bind(work),
+              }),
+            }
+          : {}),
+      });
+      let lost = false;
+      const send = vi.fn<ConstructorParameters<typeof CoverLetterProviderControlClient>[1]["send"]>(
+        async (command) => {
+          const input = JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array));
+          expect(input.action).toBe("settle_terminal");
+          const output = await bootstrap(input, { invokedFunctionArn: target });
+          if (fault === "lost_ack" && !lost) {
+            lost = true;
+            throw Error("SyntheticLostOriginalLambdaACK");
+          }
+          return {
+            StatusCode: 200,
+            ExecutedVersion: "7",
+            Payload: new TextEncoder().encode(JSON.stringify(output)),
+          };
+        },
+      );
+      const client = new CoverLetterProviderControlClient(
+        target,
+        { config: { maxAttempts: async () => 1 }, send },
+        () => true,
+      );
+      const refused = [
+        "unknown",
+        "wrong_id",
+        "wrong_time",
+        "wrong_hash",
+        "disposed_conflict",
+        "legacy",
+      ].includes(fault);
+      try {
+        if (refused || fault === "lost_ack")
+          await expect(
+            client.settleTerminalProviderDispatch(calledRef, termination),
+          ).rejects.toThrow();
+        else await client.settleTerminalProviderDispatch(calledRef, termination);
+        expect(send).toHaveBeenCalledTimes(1);
+        const phases = await sql<
+          Array<{ purpose: string; state: string }>
+        >`SELECT purpose, state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
+        expect(phases.find((row) => row.purpose === "provider_dispatch")?.state).toBe(
+          refused ? "running" : "settled",
+        );
+        if (!refused) {
+          expect(phases.filter((row) => row.purpose !== "provider_dispatch")).toEqual([
+            { purpose: "final_document", state: "revoked" },
+            { purpose: "private_slots", state: fault === "running_slots" ? "running" : "revoked" },
+          ]);
+          if (fault === "running_slots")
+            expect(await work.readDrainState(owner, documentId)).toBe("pending");
+          await client.settleTerminalProviderDispatch(ref, termination); // Original receipt replay; no new provider call.
+        }
+        if (fault === "quarantined")
+          await expect(
+            work.claimFinalDocument({ ownerUserId: owner, documentId }),
+          ).rejects.toThrow();
+        else
+          expect((await work.claimFinalDocument({ ownerUserId: owner, documentId })).kind).toBe(
+            "unavailable",
+          );
+        expect((await store.read(ref))?.state).toBe(
+          fault === "unknown"
+            ? "reserved"
+            : fault.startsWith("disposed_")
+              ? "disposed"
+              : "acknowledged",
+        );
+        expect(transport).toHaveBeenCalledTimes(1);
+        if (fault !== "legacy") expect(createPool).toHaveBeenCalledTimes(1);
+      } finally {
+        if (slotsReference) await work.recordSettled(slotsReference); // Synthetic fixture cleanup only.
+        await pool?.end();
+      }
+    },
+  );
 
   async function successfulDraft(
     slots: "settled" | "running" | "revoked" | "missing" = "settled",

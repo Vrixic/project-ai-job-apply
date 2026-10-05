@@ -49,6 +49,17 @@ export interface ModelProvider {
     request: ProviderRequest,
     capture: BackgroundResponseCapture,
   ): Promise<{ text: string }>;
+  /** Opt-in original terminal observation only; never inferred from a rejected port. */
+  completeBackgroundForTermination?(
+    request: ProviderRequest,
+    capture: BackgroundResponseCapture,
+  ): Promise<{ text: string } | ProviderBackgroundTerminal>;
+}
+
+export interface ProviderBackgroundTerminal {
+  kind: "terminal_no_content";
+  reference: OpenAiBackgroundResponseReference;
+  terminalStatus: "failed" | "cancelled" | "incomplete";
 }
 
 export interface BackgroundResponseCapture {
@@ -131,6 +142,46 @@ export type ModelGatewayCompletion =
       outputCharacters: number;
     };
 
+export type ModelGatewayBackgroundCompletion =
+  | ModelGatewayCompletion
+  | (ProviderBackgroundTerminal & {
+      model: ModelIdentity;
+      promptId: string;
+      promptVersion: string;
+    });
+
+function completionOnly(completion: ModelGatewayBackgroundCompletion): ModelGatewayCompletion {
+  if (completion.kind === "terminal_no_content") throw new ModelGatewayError("PROVIDER_FAILED");
+  return completion;
+}
+
+export function validateProviderBackgroundTerminal(
+  value: unknown,
+): value is ProviderBackgroundTerminal {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (![Object.prototype, null].includes(Object.getPrototypeOf(value))) return false;
+  const keys = Reflect.ownKeys(value);
+  if (
+    keys.length !== 3 ||
+    !keys.every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return (
+        typeof key === "string" &&
+        ["kind", "reference", "terminalStatus"].includes(key) &&
+        descriptor?.enumerable === true &&
+        Object.hasOwn(descriptor, "value")
+      );
+    })
+  )
+    return false;
+  const receipt = value as ProviderBackgroundTerminal;
+  return (
+    receipt.kind === "terminal_no_content" &&
+    ["failed", "cancelled", "incomplete"].includes(receipt.terminalStatus) &&
+    validateOpenAiBackgroundResponseReference(receipt.reference)
+  );
+}
+
 export class ModelGateway {
   private readonly clock: () => Date;
   private readonly timeoutMs: number;
@@ -157,7 +208,7 @@ export class ModelGateway {
     request: GatewayRequest,
     disclosure: DataDisclosureApproval | undefined,
   ): Promise<GatewayResult> {
-    const completion = await this.generateLifecycle(request, disclosure, false);
+    const completion = completionOnly(await this.generateLifecycle(request, disclosure, false));
     if (completion.kind !== "completed") throw new ModelGatewayError(completion.code);
     return completion.result;
   }
@@ -170,7 +221,7 @@ export class ModelGateway {
     request: GatewayRequest,
     disclosure: DataDisclosureApproval | undefined,
   ): Promise<ModelGatewayCompletion> {
-    return this.generateLifecycle(request, disclosure, true);
+    return completionOnly(await this.generateLifecycle(request, disclosure, true));
   }
 
   /** Opt-in private actor path. Never falls back to foreground generation. */
@@ -179,6 +230,26 @@ export class ModelGateway {
     disclosure: DataDisclosureApproval | undefined,
     capture: BackgroundResponseCapture,
   ): Promise<ModelGatewayCompletion> {
+    return completionOnly(
+      await this.generateBackgroundLifecycle(request, disclosure, capture, false),
+    );
+  }
+
+  /** Only a positively captured original response and fulfilled terminal provider port qualify. */
+  async generateWithBackgroundTermination(
+    request: GatewayRequest,
+    disclosure: DataDisclosureApproval | undefined,
+    capture: BackgroundResponseCapture,
+  ): Promise<ModelGatewayBackgroundCompletion> {
+    return this.generateBackgroundLifecycle(request, disclosure, capture, true);
+  }
+
+  private async generateBackgroundLifecycle(
+    request: GatewayRequest,
+    disclosure: DataDisclosureApproval | undefined,
+    capture: BackgroundResponseCapture,
+    terminalReceipts: boolean,
+  ): Promise<ModelGatewayBackgroundCompletion> {
     let originalCapture: BackgroundResponseCapture;
     try {
       if (
@@ -210,7 +281,7 @@ export class ModelGateway {
     } catch {
       throw new ModelGatewayError("PROVIDER_FAILED");
     }
-    return this.generateLifecycle(request, disclosure, true, originalCapture);
+    return this.generateLifecycle(request, disclosure, true, originalCapture, terminalReceipts);
   }
 
   private async generateLifecycle(
@@ -218,7 +289,8 @@ export class ModelGateway {
     disclosure: DataDisclosureApproval | undefined,
     nonDispatchReceipts: boolean,
     backgroundCapture?: BackgroundResponseCapture,
-  ): Promise<ModelGatewayCompletion> {
+    terminalReceipts = false,
+  ): Promise<ModelGatewayBackgroundCompletion> {
     const capture = () => ({
       model: structuredClone(this.provider.identity),
       promptId: request.promptId,
@@ -256,7 +328,8 @@ export class ModelGateway {
       return refused("INPUT_TOO_LARGE");
     }
     const backgroundPort = backgroundCapture
-      ? this.provider.completeBackgroundForLifecycle
+      ? ((terminalReceipts ? this.provider.completeBackgroundForTermination : undefined) ??
+        this.provider.completeBackgroundForLifecycle)
       : undefined;
     if (backgroundCapture && !backgroundPort) return refused("MODEL_DISABLED");
     const admittedApprovalTime = backgroundCapture ? disclosure.approvedAt.getTime() : undefined;
@@ -267,6 +340,7 @@ export class ModelGateway {
     let reservationAcknowledged = false;
     let captureAttempted = false;
     let captureAcknowledged = false;
+    let capturedReference: OpenAiBackgroundResponseReference | undefined;
     let text: string;
     try {
       const providerRequest = {
@@ -303,7 +377,9 @@ export class ModelGateway {
               )
                 throw new ModelGatewayError("PROVIDER_FAILED");
               captureAttempted = true;
-              await backgroundCapture.recordCreation(structuredClone(reference));
+              const original = structuredClone(reference);
+              await backgroundCapture.recordCreation(structuredClone(original));
+              capturedReference = original;
               captureAcknowledged = true;
             },
           });
@@ -321,6 +397,20 @@ export class ModelGateway {
         }),
       ]);
       if (backgroundCapture && !captureAcknowledged) throw new ModelGatewayError("PROVIDER_FAILED");
+      if ("kind" in result) {
+        if (
+          !terminalReceipts ||
+          !validateProviderBackgroundTerminal(result) ||
+          !captureAcknowledged ||
+          !capturedReference ||
+          result.reference.responseId !== capturedReference.responseId ||
+          result.reference.createdAt !== capturedReference.createdAt ||
+          controller.signal.aborted ||
+          !this.options.enabled()
+        )
+          throw new ModelGatewayError("PROVIDER_FAILED");
+        return { ...structuredClone(result), ...provenance };
+      }
       text = result.text;
     } catch (error) {
       if (error instanceof ModelGatewayError) throw error;

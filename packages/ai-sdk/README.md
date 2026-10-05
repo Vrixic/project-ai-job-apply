@@ -143,3 +143,14 @@ The model identity records the selected alias, not a dated snapshot or a reprodu
 Offline transport tests are not real-model quality or account-access evidence. Live evaluation,
 packet wiring, candidate notice/approval transport and hosted acceptance remain outstanding.
 See the [development provider decision](../../docs/security/d3-012-accountable-disposition.md#openai-development-decision-2026-10-02).
+
+## Original background terminal receipts
+
+`generateWithBackgroundTermination` is an additive private opt-in. It returns a metadata-only
+`terminal_no_content` receipt for an originally observed `failed`, `cancelled` or `incomplete`
+response only after acknowledged creation capture and exact response id/time validation.
+Completed responses retain ordinary output validation. The old background and foreground APIs
+retain their return types and error behavior; older providers may use the existing background
+port once, without retry on failure. Thrown errors, HTTP 404, timeout, lost capture acknowledgement
+and late fulfillment cannot become terminal receipts. This proves the original response's
+terminal observation, not provider-wide deletion or platform writer quiescence.

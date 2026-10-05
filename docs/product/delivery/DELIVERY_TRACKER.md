@@ -9,6 +9,20 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-063 begins from fresh merged main `bde17d9`, whose full tree matches
+verified #532 source `0c0b332`. Original failed/cancelled/incomplete background responses
+currently leave running work despite positive original terminal metadata. Add a separate
+captured-reference gateway receipt and private `settle_terminal` path; preserve existing
+completion/rejection APIs and action meanings. Missing/lost proof remains unresolved.
+Locally verified: 283 AI SDK units, 1,014 Documents units and 275 real PostgreSQL cases.
+Full maintained verifier passes: 38 typecheck tasks, 39 test tasks and 23 builds, unchanged
+public contracts/formatting/baseline lint and operational/security/Compose/scope checks.
+The owning transaction fences future unclaimed work and settles only the exact captured
+provider grant; other running writers remain pending. Four exact-source artifacts and bundled
+default-off terminal refusal pass; unpublished. [Evidence](evidence/d3-original-background-terminal-drain-2026-10-04.md).
+No disposal, quiescence/purge certification, deployment or activation; D1/D3 stay In progress.
+Hosted CI/CD remains deferred until production launch.
+
 Combined source 8f37b1e integrates merged #531/main 7cf19d0, preserves all original D3-061/D3-062 history and has exactly the verified main application tree. Full maintained verification passes again: 38 typecheck tasks, 39 test tasks, 23 builds, unchanged contracts/formatting/baseline lint and operational/security/Compose/scope checks. The provider-free policy and test source are byte-unchanged from independently tested 257ae8c; no repeated SQL or UI check is claimed or needed for this policy-only change. Owner defers hosted CI/CD until production launch; no source security waiver, attachment, deployment or activation.
 
 2026-10-04 owner decision: defer hosted CI/CD until production launch; continue backend source work with local verification. This does not waive production dependency/security, deployment, privacy or acceptance gates. #531 merges source-only as 7cf19d0; complete tree 77c82be matches locally verified exact head 6c3a1ab. Hosted integration/containers were not started because of GitHub payment/spending limits and are not claimed verified. No deployment or activation.

@@ -2,9 +2,11 @@ import {
   type BackgroundResponseCapture,
   ModelGatewayError,
   type ModelProvider,
+  type ProviderBackgroundTerminal,
   type ProviderRequest,
 } from "./gateway.js";
 import { originalBackgroundResponse } from "./openai-background.js";
+import { validateOpenAiBackgroundResponseReference } from "./openai-response-cleanup.js";
 
 const ENDPOINT = "https://api.openai.com/v1/responses";
 const MAX_RESPONSE_BYTES = 128_000;
@@ -142,6 +144,23 @@ export class OpenAiLunaProvider implements ModelProvider {
     request: ProviderRequest,
     capture: BackgroundResponseCapture,
   ): Promise<{ text: string }> {
+    const result = await this.background(request, capture, false);
+    if ("kind" in result) throw new ModelGatewayError("PROVIDER_FAILED");
+    return result;
+  }
+
+  async completeBackgroundForTermination(
+    request: ProviderRequest,
+    capture: BackgroundResponseCapture,
+  ): Promise<{ text: string } | ProviderBackgroundTerminal> {
+    return this.background(request, capture, true);
+  }
+
+  private async background(
+    request: ProviderRequest,
+    capture: BackgroundResponseCapture,
+    terminalReceipts: boolean,
+  ): Promise<{ text: string } | ProviderBackgroundTerminal> {
     try {
       const enabled = () =>
         this.options.enabled?.() === true && this.options.backgroundEnabled?.() === true;
@@ -157,7 +176,25 @@ export class OpenAiLunaProvider implements ModelProvider {
         apiKey,
         transport: this.options.fetch ?? globalThis.fetch,
         body: requestBody(request, true),
+        terminalReceipts,
       });
+      if (
+        terminalReceipts &&
+        ["failed", "cancelled", "incomplete"].includes(String(value.status))
+      ) {
+        const reference = {
+          schemaVersion: 1 as const,
+          responseId: value.id,
+          createdAt: value.created_at,
+        };
+        if (!validateOpenAiBackgroundResponseReference(reference))
+          throw new ModelGatewayError("PROVIDER_FAILED");
+        return {
+          kind: "terminal_no_content",
+          reference,
+          terminalStatus: value.status as ProviderBackgroundTerminal["terminalStatus"],
+        };
+      }
       return completedText(value);
     } catch (error) {
       if (error instanceof ModelGatewayError) throw error;

@@ -1,4 +1,8 @@
-import type { ModelGateway } from "@ai-job-apply/ai-sdk";
+import {
+  type ModelGateway,
+  type OpenAiBackgroundResponseReference,
+  validateOpenAiBackgroundResponseReference,
+} from "@ai-job-apply/ai-sdk";
 import {
   type CoverLetterProviderInput,
   type CoverLetterProviderOutput,
@@ -52,7 +56,9 @@ export function createCoverLetterIsolatedProviderHandler(options: {
     Partial<
       Pick<
         PostgresCoverLetterWorkStore,
-        "settleRejectedProviderDispatch" | "settleUndispatchedProviderDispatch"
+        | "settleRejectedProviderDispatch"
+        | "settleUndispatchedProviderDispatch"
+        | "settleTerminalProviderDispatch"
       >
     >;
 }): (input: unknown) => Promise<CoverLetterProviderOutput> {
@@ -233,7 +239,8 @@ export function createCoverLetterIsolatedProviderHandler(options: {
       if (!enabled() || !fresh() || !validateCoverLetterProviderModel(options.gateway.identity))
         return failed;
       deadline.throwIfAborted();
-      let completion: Awaited<ReturnType<ModelGateway["generateWithCompletion"]>>;
+      let completion: Awaited<ReturnType<ModelGateway["generateWithBackgroundTermination"]>>;
+      let capturedResponse: OpenAiBackgroundResponseReference | undefined;
       try {
         const responseCapture = options.responseCapture;
         const generate = responseCapture
@@ -241,7 +248,7 @@ export function createCoverLetterIsolatedProviderHandler(options: {
               request: Parameters<ModelGateway["generateWithCompletion"]>[0],
               disclosure: Parameters<ModelGateway["generateWithCompletion"]>[1],
             ) =>
-              options.gateway.generateWithBackgroundCapture(request, disclosure, {
+              options.gateway.generateWithBackgroundTermination(request, disclosure, {
                 reserve: async () => {
                   if (!enabled() || !fresh() || deadline.aborted)
                     throw new CoverLetterProviderTransportError();
@@ -250,7 +257,11 @@ export function createCoverLetterIsolatedProviderHandler(options: {
                     throw new CoverLetterProviderTransportError();
                   return result.kind;
                 },
-                recordCreation: (response) => responseCapture.recordCreation(reference, response),
+                recordCreation: async (response) => {
+                  const original = structuredClone(response);
+                  await responseCapture.recordCreation(reference, structuredClone(original));
+                  capturedResponse = original;
+                },
               })
           : options.gateway.generateWithCompletion.bind(options.gateway);
         completion = await bounded(
@@ -318,6 +329,31 @@ export function createCoverLetterIsolatedProviderHandler(options: {
         )
           return inProgress;
         return await closeRejectedCompletion();
+      }
+      if (completion.kind === "terminal_no_content") {
+        // Original fulfilled provider observation after positive capture, never a caught error,
+        // maintenance GET, timeout or missing response. No result write has been attempted.
+        if (
+          !options.responseCapture ||
+          !work.settleTerminalProviderDispatch ||
+          !capturedResponse ||
+          !validateOpenAiBackgroundResponseReference(completion.reference) ||
+          completion.reference.responseId !== capturedResponse.responseId ||
+          completion.reference.createdAt !== capturedResponse.createdAt ||
+          !["failed", "cancelled", "incomplete"].includes(completion.terminalStatus) ||
+          !validateCoverLetterProviderModel(completion.model) ||
+          completion.promptId !== "cover_letter" ||
+          completion.promptVersion !== request.promptVersion
+        )
+          return inProgress;
+        if (!enabled()) return inProgress;
+        deadline.throwIfAborted();
+        await work.settleTerminalProviderDispatch(reference, {
+          kind: "terminal_no_content",
+          reference: structuredClone(completion.reference),
+          terminalStatus: completion.terminalStatus,
+        });
+        return failed;
       }
       const output = completion.result;
       const text = JSON.stringify(output.value);

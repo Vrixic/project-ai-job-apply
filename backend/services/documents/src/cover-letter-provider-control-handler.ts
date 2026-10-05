@@ -17,7 +17,9 @@ export function createCoverLetterProviderControlHandler(options: {
     Partial<
       Pick<
         PostgresCoverLetterWorkStore,
-        "settleRejectedProviderDispatch" | "settleUndispatchedProviderDispatch"
+        | "settleRejectedProviderDispatch"
+        | "settleUndispatchedProviderDispatch"
+        | "settleTerminalProviderDispatch"
       >
     >;
   enabled?: () => boolean;
@@ -32,14 +34,22 @@ export function createCoverLetterProviderControlHandler(options: {
   ): Promise<CoverLetterProviderControlOutput> => {
     if (!validateProviderControlInput(raw)) throw new CoverLetterProviderControlError();
     const input = structuredClone(raw);
-    const unavailable: CoverLetterProviderControlOutput = {
-      schemaVersion: 1,
-      action: input.action,
-      documentId: input.documentId,
-      outcome: "unavailable",
-    };
+    const unavailable: CoverLetterProviderControlOutput =
+      input.action === "settle_terminal"
+        ? { ...input, outcome: "unavailable" }
+        : {
+            schemaVersion: 1,
+            action: input.action,
+            documentId: input.documentId,
+            outcome: "unavailable",
+          };
     try {
       if (!enabled() || context.invokedFunctionArn !== target) return unavailable;
+      if (input.action === "settle_terminal") {
+        if (!work.settleTerminalProviderDispatch) return unavailable;
+        await work.settleTerminalProviderDispatch(input.reference, input.termination);
+        return enabled() ? { ...input, outcome: "settled" } : unavailable;
+      }
       if (input.action === "claim") {
         // Original committed control is awaited, not raced against a caller deadline.
         const result = await work.claimProviderDispatch({
