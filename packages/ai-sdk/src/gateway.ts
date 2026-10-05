@@ -88,6 +88,9 @@ export class ModelGatewayError extends Error {
 }
 
 export interface GatewayOptions {
+  /** Native memory-session host only: synchronous scalar notification before decoding/control
+   * awaits. Applies only to generateOriginalWithCompletion; failure withholds generated content. */
+  originalCompletionObserver?: (completedAtMs: number) => void;
   /** Must return true for any model call to happen. Default-off keeps generation dark. */
   enabled: () => boolean;
   clock?: () => Date;
@@ -411,6 +414,11 @@ export class ModelGateway {
         // Capture before decoding/grounding or any control-plane/rendering await.
         original.completedAtMs = this.clock().getTime();
         original.timedOut = controller.signal.aborted;
+        try {
+          this.options.originalCompletionObserver?.(original.completedAtMs);
+        } catch {
+          original.timedOut = true;
+        }
       }
       if (backgroundCapture && !captureAcknowledged) throw new ModelGatewayError("PROVIDER_FAILED");
       if ("kind" in result) {

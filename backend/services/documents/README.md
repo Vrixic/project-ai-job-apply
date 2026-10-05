@@ -643,3 +643,20 @@ or just after publication discards the exact material. A pending original provid
 this actor's admission occupied even after SDK timeout. The private issuer, process-wide bounded
 session host, authenticated ports and physical drain are still uncomposed; no activation or
 provider-retention/all-copy purge claim follows. [Local evidence](../../../docs/product/delivery/evidence/d3-original-memory-generation-2026-10-05.md).
+
+The private `./native-memory-session` source factory pins one candidate/application/generation
+in one dedicated Linux process and connects original SDK completion to a one-time kernel expiry.
+It defaults off, refuses another allocation/worker-thread use, and exposes no SQL/object/issuer
+or listener capability. Its disposal method requests native retirement without returning a death
+acknowledgement; a separate trusted process/task observer is required. [Proposed ADR-040](../../../docs/adr/040-native-temporary-material-processes.md)
+records native image/lifecycle, transport, authenticated owner ports and release gates. Do not
+load its kernel module into a shared API/worker or Lambda. This is not an enabled candidate flow.
+
+The private `./native-memory-transport` export adds a default-off dedicated Linux TLS 1.3 read
+listener for one native session's immutable application/generation. It requires exact OIDC
+identity/audience/scope/expiration, repeats private scalar packet/source/token checks, preserves
+original expiry, holds bounded admission through real pending calls and clears controlled output
+after transport completion/abort. Only the trusted launcher can bind the listener; it has no SQL,
+object, model or process-death acknowledgement capability. Remote owner authentication, launch,
+registry, managed routing/stop and full client/ATS acceptance remain gates. See
+[transport evidence](../../../docs/product/delivery/evidence/d3-native-memory-transport-2026-10-05.md).

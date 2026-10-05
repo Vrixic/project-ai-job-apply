@@ -13,3 +13,10 @@ Execute model calls for parsing, matching support, grounded document generation,
 - `tests/` — Provider, schema, failure, and adversarial tests.
 
 AI output is a proposal. Domain services validate and authorize any persisted fact or external side effect. AI workers provide no coaching, interview preparation, or post-submission hiring analysis.
+
+## Current native session source
+
+[native-session](native-session/README.md) contains the Linux kernel deadline and synthetic
+process verifier used by Documents' default-off one-candidate material session. It adds no
+always-on worker, public endpoint or live model call. Authenticated launcher/transport, exact
+managed-task stop observation and provider terms remain activation gates.

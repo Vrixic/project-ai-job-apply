@@ -648,3 +648,35 @@ never proves remote settlement, retention compliance, host drain or physical pur
 admits one pending original promise; process-wide host admission, authenticated private issuer/
 transport, physical expiry/shutdown and D3-012 provider terms remain activation gates. Default-off
 source and simulated model/OIDC evidence do not expose generated material to real candidates.
+
+## D3-079 native material-process source delta — 2026-10-05
+
+Private admitted candidate/application/generation → default-off dedicated Linux session → one
+original SDK dispatch → synchronous original completion clock → kernel deadline → existing
+scalar native completion/temporary memory/read capabilities. The kernel module receives only
+timestamps/limits, disables core dumps/dumpability and kills this allocation on fixed expiry or
+invalid/repeat binding. Session admission refuses another allocation/worker-thread use. Native
+process disposal cannot acknowledge its own death; the separate trusted task/process observer
+must positively observe retirement. Remote provider settlement remains independent.
+
+[Proposed ADR-040](../adr/040-native-temporary-material-processes.md) preserves private SQL/provider
+separation and forbids native-module use in shared APIs, Lambda or clients. Authenticated
+launcher/transport/task registry/stop observation, managed-runtime integrity/conformance, full
+content routing, client/ATS cleanup and D3-012 terms remain gates. Local kernel tests use synthetic
+provider/SQL/render adapters and cannot establish cleanup of a remote system or another process.
+
+## D3-079 native HTTPS read source delta — 2026-10-05
+
+Trusted admitted issuer/subject/internal owner → dedicated native session → fixed TLS 1.3
+preview/file route → RS256 OIDC with required expiration and scope → private owning scalar
+Applications packet/reference check → temporary read/render → repeated source/packet/token
+checks → bounded no-store output within the same kernel-bounded content process. There is no
+Gateway/Lambda content forwarding or durable content output in this new listener. Exact CORS
+origin and strict request framing precede reads. Disconnect aborts controlled copies but retains
+admission until real pending calls settle; native process expiry remains independent of JavaScript.
+
+Local loopback TLS and real signed synthetic tokens exercise the listener in the actual native
+process; SQL/provider/renderer/managed identity are simulated. Private remote authentication,
+launch/task registry/TLS routing/managed stop, full client/ATS copy lifecycle and D3-012 provider
+terms remain gates. No deployment, enabled hostname, all-copy purge or remote settlement follows.
+[Evidence](../product/delivery/evidence/d3-native-memory-transport-2026-10-05.md).

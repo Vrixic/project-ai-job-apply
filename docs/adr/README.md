@@ -52,3 +52,5 @@ Records important technical decisions, their context, alternatives, consequences
 Use `000-template.md` for future decisions.
 
 ADRs are immutable historical records after acceptance. A new ADR supersedes an old one instead of rewriting history.
+
+- [ADR-040: Native temporary material processes](040-native-temporary-material-processes.md) (proposed; default-off Linux process source/local evidence, transport and activation gates open)

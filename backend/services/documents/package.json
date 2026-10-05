@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-memory-transport": {
+      "types": "./dist/src/native-memory-transport.d.ts",
+      "default": "./dist/src/native-memory-transport.js"
+    },
+    "./native-memory-session": {
+      "types": "./dist/src/native-memory-session.d.ts",
+      "default": "./dist/src/native-memory-session.js"
+    },
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
@@ -40,6 +48,7 @@
   "dependencies": {
     "@ai-job-apply/ai-sdk": "workspace:*",
     "@ai-job-apply/api-contracts": "workspace:*",
+    "@ai-job-apply/auth": "workspace:*",
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",

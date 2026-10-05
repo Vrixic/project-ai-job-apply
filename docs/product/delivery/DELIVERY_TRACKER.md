@@ -3526,3 +3526,52 @@ No authored merge/deployment/activation; hosted CI/CD deferred until production 
 [PR #554](https://github.com/Vrixic/project-ai-job-apply/pull/554), based on exact #553 branch
 `467b48eb`. Verified implementation remains `e8fdc241`; subsequent commits change delivery
 documentation only. D1/D3 and D3-064 stay In progress. No authored merge, deployment or activation.
+
+2026-10-05 D3-079 native material-process source begins on fresh main `e48bdf3a` and exact #554
+`50a9965a`. Default-off single-allocation session connects original SDK completion to one-time
+Linux kernel deadlines, with no event-loop dependence or renewal. Eight SDK and 49 focused
+Documents cases pass; corrected local native runs pass 14 actual process cases, with final
+second-allocation/full verification pending. [Evidence](evidence/d3-native-memory-session-2026-10-05.md).
+Issuer/launcher/authenticated transport/task registry/managed stop/content routing, provider and
+client/ATS/accountable gates remain. D1/D3 stay In progress; no activation/deployment or CI/CD work.
+
+2026-10-05 D3-079 clean `304c01bf` passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 builds and operational/security/emitted-isolation checks; unchanged lint
+(0 errors, 15 warnings, 58 infos). AI SDK 293 and Documents 1,305 units pass. Separate final
+Linux run passes 15 real kernel/session process cases, including second-candidate refusal.
+[Evidence](evidence/d3-native-memory-session-2026-10-05.md). Only documentation follows.
+Owned test container/staging cleanup completed; Docker/WSL stopped. Proposed ADR-040 and
+issuer/launcher/authenticated transport/task registry/managed stop/content routing, provider,
+client/ATS/accountable gates remain open. D1/D3 stay In progress; no activation, deployment,
+authored merge or hosted CI/CD work.
+
+2026-10-05 D3-079 native kernel/session source is reviewable in
+[PR #555](https://github.com/Vrixic/project-ai-job-apply/pull/555), based on exact #554
+`50a9965a`. Verified implementation remains `304c01bf`; following commits change documentation
+only. ADR-040 stays proposed, and D1/D3 stay In progress. No authored merge, image publication,
+deployment or activation; hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 native HTTPS read source begins on exact #555 `265909a5` after fresh
+main fetch `e48bdf3a`. Default-off same-process TLS/OIDC reads use private scalar Applications
+proof and fixed original expiry; bounded pending calls survive disconnect without early
+admission release. Thirteen owning tests/four native admission/twelve Auth tests pass; final
+clean-source Linux/full verification pending. [Evidence](evidence/d3-native-memory-transport-2026-10-05.md).
+Issuer/private authenticated adapters/registry/managed stop, full content routing and external
+acceptance remain. No deployment/activation or D1/D3 completion; CI/CD deferred until launch.
+
+2026-10-05 D3-079 clean `aed4b391` passes full maintained verification: 38 typecheck tasks,
+39 test tasks and 23 builds, operational/security/Compose and emitted isolation; unchanged
+lint baseline. Auth 12, Applications 224 and Documents 1,307 units pass. The separate final Linux
+run passes 16 actual process cases, including 27 same-process TLS/signed-token read checks and
+observed original-deadline SIGKILL; provider/SQL/renderer/managed identity are synthetic in that
+fixture. Exact owned cleanup completes; Docker/WSL stopped and all handles terminal. Only
+documentation follows. [Evidence](evidence/d3-native-memory-transport-2026-10-05.md).
+Issuer/private authenticated adapters/registry/managed routing/positive stop, complete content
+routing and client/ATS/provider/accountable gates remain. No deployment/activation or D1/D3
+completion; hosted CI/CD deferred until production launch.
+
+2026-10-05 D3-079 extends existing [PR #555](https://github.com/Vrixic/project-ai-job-apply/pull/555)
+with the locally verified native HTTPS source `aed4b391`; its base remains exact #554
+`50a9965a`, and the two-PR maximum is preserved. Subsequent commits change documentation only.
+No authored merge, image publication, deployment or activation. D1/D3 stay In progress;
+hosted CI/CD remains deferred until production launch.

@@ -37,6 +37,8 @@ export class AuthenticationError extends Error {
 export function createOidcVerifier(options: {
   issuer: string;
   audience: string;
+  /** Direct transports without an upstream JWT authorizer must require expiration. */
+  requireExpiration?: boolean;
 }): AccessTokenVerifier {
   const issuer = new URL(options.issuer);
   const jwks = createRemoteJWKSet(new URL(".well-known/jwks.json", issuer));
@@ -48,6 +50,7 @@ export function createOidcVerifier(options: {
           issuer: options.issuer,
           audience: options.audience,
           algorithms: ["RS256"],
+          ...(options.requireExpiration ? { requiredClaims: ["exp"] } : {}),
         });
         if (!payload.sub || !payload.iss) {
           throw new AuthenticationError("The token is missing required identity claims");

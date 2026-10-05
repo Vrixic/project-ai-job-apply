@@ -5,6 +5,7 @@ export * from "./database.js";
 export * from "./field-definitions.js";
 export * from "./field-policy.js";
 export * from "./metrics.js";
+export * from "./native-material-read.js";
 export * from "./packet.js";
 export * from "./packet-source.js";
 export * from "./preparation.js";

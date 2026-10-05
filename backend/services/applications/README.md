@@ -254,3 +254,9 @@ back cancellation/confirmation or issues another submission. Ambiguous outcomes 
 
 Production still composes no temporary actor/host/reader. Compatible private adapters are required
 before activation; local disposal is not cross-process/provider settlement or physical all-copy purge.
+
+`authorizeNativeMaterialRead` is a private owning scalar read after authenticated subject-to-owner
+resolution. It checks current application/packet ownership, terminal state, exact original
+material/hash, expiry and cancellation before returning only packet ID/hash and scalar reference.
+Native transport repeats it before sending. This is an injected in-process port, not an enabled
+remote RPC, SQL lease or content reader; private authentication/composition remains unfinished.
