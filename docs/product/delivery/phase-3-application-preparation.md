@@ -1034,3 +1034,9 @@ documentation follows. [Evidence](evidence/d3-native-memory-transport-2026-10-05
 Issuer/private authenticated adapters/registry/managed routing/positive stop, complete content
 routing and client/ATS/provider/accountable gates remain. No deployment/activation or D1/D3
 completion; hosted CI/CD deferred until production launch.
+
+2026-10-05 D3-079 extends existing [PR #555](https://github.com/Vrixic/project-ai-job-apply/pull/555)
+with the locally verified native HTTPS source `aed4b391`; its base remains exact #554
+`50a9965a`, and the two-PR maximum is preserved. Subsequent commits change documentation only.
+No authored merge, image publication, deployment or activation. D1/D3 stay In progress;
+hosted CI/CD remains deferred until production launch.

@@ -100,3 +100,9 @@ Implementation: [native HTTPS](../../../../backend/services/documents/src/native
 [Prior native kernel evidence](d3-native-memory-session-2026-10-05.md) remains separate.
 No browser/UI, live private RPC, Auth0/provider/ATS/AWS task, deployment, activation or phase
 completion is claimed. D3-079/D3-064 and D1/D3 remain In progress, with remaining gates above.
+
+2026-10-05 D3-079 extends existing [PR #555](https://github.com/Vrixic/project-ai-job-apply/pull/555)
+with the locally verified native HTTPS source `aed4b391`; its base remains exact #554
+`50a9965a`, and the two-PR maximum is preserved. Subsequent commits change documentation only.
+No authored merge, image publication, deployment or activation. D1/D3 stay In progress;
+hosted CI/CD remains deferred until production launch.
