@@ -1,7 +1,8 @@
 # D3-077 restricted packet storage — started 2026-10-05
 
-Status: In progress. Backend-only source work on fresh main `2b6f59aa`, isolated branch
-`feat/d3-restricted-packet-storage`. PR #559's independent native registry work is not included.
+Status: In progress. Backend-only private WIP on isolated branch
+`feat/d3-restricted-packet-storage`, started from `2b6f59aa` and now rebased onto merged #559/main
+`18b6b2e2`. Local checkpoint `50a6c8ce` is not published or review-ready.
 Hosted CI/CD remains deferred until production launch. No feature is activated or deployed.
 
 ## Confirmed gap and required end state
@@ -162,6 +163,16 @@ and removed; shared Docker volume inventory stayed identical. Docker Desktop sto
 and WSL reports no running distributions. PR #559 merged as main `18b6b2e2`; main's complete tree
 matches its verified head. This SQL checkpoint used the isolated restricted branch before ancestry
 reconciliation; it is not evidence for the combined full restore boundary.
+
+## Ancestry reconciliation
+
+Local WIP `d084d74a` was rebased onto exact-tree merged #559/main `18b6b2e2`, producing
+`50a6c8ce`. Only the two appended delivery-log conflicts needed resolution; both histories were
+preserved. Git confirms the SQL-tested migration/store/driver/integration/packet/codec source is
+unchanged through rebase. The combined branch now includes the reviewed native registry boundary,
+so whole-boundary restore counts/inventory must include both additions. No authored PR is open;
+this incomplete restricted slice has not been pushed or submitted for review. Full clean verifier
+remains a requirement after the complete feature and compatible maintained fixtures are ready.
 
 ## Next work
 

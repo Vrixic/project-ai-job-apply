@@ -3715,3 +3715,10 @@ inventory retained, Docker Desktop stopped and WSL shut down. #559 merged to exa
 role/inventory and maintained full verification remain unfinished. No review/activation/deployment
 or D1/D3 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains
 deferred until production launch.
+
+2026-10-05 private D3-077 WIP 50a6c8ce rebases onto merged #559/main 18b6b2e2. Both appended
+history conflicts retain all existing entries; Git confirms the SQL-tested Applications boundary
+source is unchanged. No authored PR is open and the incomplete slice is not pushed/review-ready.
+Combined native/restricted inventory/restore and whole-feature verification remain required.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). D1/D3 remain In progress; no
+activation, deployment or hosted CI/CD work. Docker/WSL remain stopped.
