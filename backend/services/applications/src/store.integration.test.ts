@@ -1,11 +1,14 @@
 import { execFile } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ConfirmationEvidence } from "./attempt.js";
 import { MAX_APPROVAL_AGE_MS } from "./packet.js";
+import { toApiApplication } from "./service.js";
 import {
   ApplicationAlreadyExistsError,
   ApplicationIdempotencyConflictError,
@@ -62,7 +65,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const first = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const replay = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const expected =
-      "Applications migrations through 0007_document_field_hashes applied and verified.";
+      "Applications migrations through 0008_temporary_material_bindings applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
     await store.ping();
@@ -139,6 +142,339 @@ describeWithDatabase("PostgresApplicationStore", () => {
     if (result.kind !== "started") throw new Error("attempt expected");
     return result;
   }
+
+  describe("original temporary material SQL admission", () => {
+    async function materialPacket(completedAtMs = Date.now() - 1) {
+      now = new Date(completedAtMs + 1);
+      const ownerUserId = uuidv7();
+      const created = await store.createApplication({
+        ownerUserId,
+        canonicalJobId: uuidv7(),
+        idempotencyKey: key("material-create"),
+      });
+      const applicationId = created.view.application.id;
+      const reference: TemporaryMaterialReference = {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: uuidv7(),
+        ownerUserId,
+        applicationId,
+        version: 1,
+        contentSha256: HASH_C,
+        completedAtMs,
+        expiresAtMs: completedAtMs + 1_800_000,
+      };
+      const packetInput = {
+        jobRevision: HASH_A,
+        form: { adapterId: "greenhouse", variantId: "synthetic-v1", formHash: HASH_B },
+        fields: [proposal()],
+        artifactHashes: { resume: HASH_C },
+        temporaryMaterials: [reference],
+      };
+      const packeted = await store.createPacket({
+        ownerUserId,
+        applicationId,
+        expectedRevision: created.view.application.revision,
+        idempotencyKey: key("material-packet"),
+        packet: packetInput,
+      });
+      const packet = packeted.view.currentPacket;
+      if (!packet) throw Error("SyntheticPacketMissing");
+      const current = { ...bindings, temporaryMaterials: [reference] };
+      const approvalCommand = {
+        ownerUserId,
+        applicationId,
+        expectedRevision: packeted.view.application.revision,
+        idempotencyKey: key("material-approve"),
+        request: { packetHash: packet.packetHash, consentId: uuidv7(), acknowledgedFieldKeys: [] },
+        current,
+      };
+      return {
+        ownerUserId,
+        applicationId,
+        reference,
+        packetInput,
+        packeted,
+        packet,
+        current,
+        approvalCommand,
+      };
+    }
+
+    it("round-trips original metadata, caps approval and redacts portable ownership", async () => {
+      const context = await materialPacket();
+      const approved = await store.approve(context.approvalCommand);
+      expect(approved.view.approval?.expiresAt.getTime()).toBe(context.reference.expiresAtMs);
+      const view = await store.getApplication(context.ownerUserId, context.applicationId);
+      expect(view.currentPacket?.temporaryMaterials).toEqual([context.reference]);
+      const { ownerUserId: _owner, applicationId: _application, ...portable } = context.reference;
+      expect(toApiApplication(view).currentPacket?.temporaryMaterials).toEqual([portable]);
+      const [exported] =
+        await client`SELECT applications.export_candidate_data(${context.ownerUserId}::uuid) AS data`;
+      expect(exported?.data.applications.packets[0].temporaryMaterials).toEqual([portable]);
+      expect(JSON.stringify(exported?.data)).not.toContain(context.ownerUserId);
+    });
+
+    it.each(["missing", "different_generation"])(
+      "refuses %s live memory without persisting approval",
+      async (fault) => {
+        const context = await materialPacket();
+        const current = {
+          ...context.current,
+          temporaryMaterials:
+            fault === "missing" ? [] : [{ ...context.reference, generationId: uuidv7() }],
+        };
+        await expect(store.approve({ ...context.approvalCommand, current })).rejects.toMatchObject({
+          reasons: ["temporary_material_changed"],
+        });
+        const view = await store.getApplication(context.ownerUserId, context.applicationId);
+        expect(view.application.revision).toBe(context.packeted.view.application.revision);
+        expect(view.approval).toBeNull();
+      },
+    );
+
+    it("refuses approval exactly at expiry without a durable mutation", async () => {
+      const context = await materialPacket();
+      now = new Date(context.reference.expiresAtMs);
+      await expect(store.approve(context.approvalCommand)).rejects.toMatchObject({
+        reasons: ["temporary_material_expired"],
+      });
+      const view = await store.getApplication(context.ownerUserId, context.applicationId);
+      expect(view.application.revision).toBe(context.packeted.view.application.revision);
+      expect(view.approval).toBeNull();
+    });
+
+    it.each(["start", "dispatch"])(
+      "invalidates expired authority atomically at %s",
+      async (stage) => {
+        const context = await materialPacket();
+        const approved = await store.approve(context.approvalCommand);
+        const command = {
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          expectedRevision: approved.view.application.revision,
+          idempotencyKey: key("material-start"),
+          current: context.current,
+          adapterId: "greenhouse",
+          adapterVersion: "1.0.0",
+        };
+        const start = stage === "dispatch" ? await store.startAttempt(command) : undefined;
+        now = new Date(context.reference.expiresAtMs);
+        if (stage === "start") {
+          await expect(store.startAttempt(command)).resolves.toMatchObject({
+            kind: "approval_invalidated",
+            reasons: expect.arrayContaining(["temporary_material_expired"]),
+          });
+        } else {
+          if (start?.kind !== "started") throw Error("SyntheticAttemptMissing");
+          await expect(
+            store.dispatchAttempt({
+              ownerUserId: context.ownerUserId,
+              applicationId: context.applicationId,
+              attemptId: start.attempt.id,
+              current: context.current,
+            }),
+          ).rejects.toMatchObject({
+            reasons: expect.arrayContaining(["temporary_material_expired"]),
+          });
+        }
+        const view = await store.getApplication(context.ownerUserId, context.applicationId);
+        expect(view.application.status).toBe("review_required");
+        expect(view.approval).toBeNull();
+        expect(view.attempts).toHaveLength(stage === "start" ? 0 : 1);
+        if (stage === "dispatch")
+          expect(view.attempts[0]).toMatchObject({ status: "failed_no_effect" });
+        const [row] =
+          await client`SELECT invalidation_reason FROM applications.approvals WHERE application_id = ${context.applicationId}`;
+        expect(row?.invalidation_reason).toBe("temporary_material_expired");
+        const history = await store.getHistory(context.ownerUserId, context.applicationId);
+        expect(history.entries.some((entry) => entry.kind === "attempt_dispatched")).toBe(false);
+      },
+    );
+
+    it("carries the original deadline across field edits and refuses same-generation renewal", async () => {
+      const context = await materialPacket();
+      const command = {
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        expectedRevision: context.packeted.view.application.revision,
+        idempotencyKey: key("material-edit"),
+      };
+      const { temporaryMaterials: _refs, ...legacyInput } = context.packetInput;
+      const edited = await store.createPacket({
+        ...command,
+        packet: { ...legacyInput, fields: [proposal({ value: "synthetic corrected answer" })] },
+      });
+      expect(edited.view.currentPacket?.temporaryMaterials).toEqual([context.reference]);
+      expect(edited.view.currentPacket?.packetHash).not.toBe(context.packet.packetHash);
+      await expect(
+        store.createPacket({
+          ...command,
+          expectedRevision: edited.view.application.revision,
+          idempotencyKey: key("material-renew"),
+          packet: {
+            ...context.packetInput,
+            temporaryMaterials: [
+              {
+                ...context.reference,
+                completedAtMs: context.reference.completedAtMs + 1,
+                expiresAtMs: context.reference.expiresAtMs + 1,
+              },
+            ],
+          },
+        }),
+      ).rejects.toThrow("Invalid original temporary material replacement");
+      await expect(
+        store.createPacket({
+          ...command,
+          expectedRevision: edited.view.application.revision,
+          idempotencyKey: key("material-strip"),
+          packet: { ...legacyInput, artifactHashes: { resume: HASH_B } },
+        }),
+      ).rejects.toThrow("Invalid original temporary material replacement");
+    });
+
+    it.each(["start", "manual_start", "dispatch"])(
+      "native %s admission uses the database clock independently of the caller clock",
+      async (stage) => {
+        const context = await materialPacket(Date.now() - 1_797_000);
+        const approved = await store.approve(context.approvalCommand);
+        const command = {
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          expectedRevision: approved.view.application.revision,
+          idempotencyKey: key("native-material-start"),
+          current: context.current,
+          adapterId: "greenhouse",
+          adapterVersion: "1.0.0",
+          ...(stage === "manual_start" ? { manual: true } : {}),
+        };
+        const start = stage === "dispatch" ? await store.startAttempt(command) : undefined;
+        await delay(Math.max(0, context.reference.expiresAtMs - Date.now() + 25));
+        // The application clock remains inside the original window: only native SQL can refuse this.
+        if (stage === "dispatch") {
+          if (start?.kind !== "started") throw Error("SyntheticAttemptMissing");
+          await expect(
+            store.dispatchAttempt({
+              ownerUserId: context.ownerUserId,
+              applicationId: context.applicationId,
+              attemptId: start.attempt.id,
+              current: context.current,
+            }),
+          ).rejects.toMatchObject({
+            code: "55000",
+            message: "temporary material admission unavailable",
+          });
+        } else
+          await expect(store.startAttempt(command)).rejects.toMatchObject({
+            code: "55000",
+            message: "temporary material admission unavailable",
+          });
+        const view = await store.getApplication(context.ownerUserId, context.applicationId);
+        expect(view.application.revision).toBe(
+          stage === "dispatch"
+            ? start?.view.application.revision
+            : approved.view.application.revision,
+        );
+        expect(view.attempts).toHaveLength(stage === "dispatch" ? 1 : 0);
+        if (stage === "dispatch") expect(view.attempts[0]?.dispatchedAt).toBeUndefined();
+      },
+    );
+
+    it.each(["past", "future"])(
+      "native admission refuses a %s window despite a forged application clock",
+      async (direction) => {
+        const context = await materialPacket(
+          Date.now() + (direction === "past" ? -1_800_001 : 60_000),
+        );
+        await expect(store.approve(context.approvalCommand)).rejects.toMatchObject({
+          code: "55000",
+          message: "temporary material admission unavailable",
+        });
+        const view = await store.getApplication(context.ownerUserId, context.applicationId);
+        expect(view.approval).toBeNull();
+        expect(view.application.revision).toBe(context.packeted.view.application.revision);
+      },
+    );
+
+    it.each(["drop", "renew", "content"])(
+      "native packet insertion refuses %s without changing the current packet",
+      async (fault) => {
+        const context = await materialPacket();
+        const refs =
+          fault === "drop"
+            ? []
+            : [
+                {
+                  ...context.reference,
+                  ...(fault === "renew"
+                    ? {
+                        completedAtMs: context.reference.completedAtMs + 1,
+                        expiresAtMs: context.reference.expiresAtMs + 1,
+                      }
+                    : { text: "synthetic forbidden draft" }),
+                },
+              ];
+        await expect(client`INSERT INTO applications.packets
+        (id, application_id, owner_user_id, version, packet_hash, job_revision, form_adapter_id,
+        form_variant_id, form_hash, resume_hash, cover_letter_hash, fields, created_at, temporary_materials)
+        SELECT ${uuidv7()}, application_id, owner_user_id, version + 1, ${HASH_A}, job_revision,
+        form_adapter_id, form_variant_id, form_hash, resume_hash, cover_letter_hash, fields,
+        created_at, ${client.json(refs)} FROM applications.packets WHERE id = ${context.packet.id}`).rejects.toMatchObject(
+          { code: "55000" },
+        );
+        expect(
+          (await store.getApplication(context.ownerUserId, context.applicationId)).currentPacket
+            ?.id,
+        ).toBe(context.packet.id);
+      },
+    );
+
+    it.each(["confirmed", "ambiguous"])(
+      "preserves %s submission evidence and duplicate guards after expiry",
+      async (outcome) => {
+        const context = await materialPacket();
+        const approved = await store.approve(context.approvalCommand);
+        const start = await store.startAttempt({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          expectedRevision: approved.view.application.revision,
+          idempotencyKey: key("material-result-start"),
+          current: context.current,
+          adapterId: "greenhouse",
+          adapterVersion: "1.0.0",
+        });
+        if (start.kind !== "started") throw Error("SyntheticAttemptMissing");
+        await store.dispatchAttempt({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          attemptId: start.attempt.id,
+          current: context.current,
+        });
+        now = new Date(context.reference.expiresAtMs);
+        const result = await store.recordResult({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          attemptId: start.attempt.id,
+          idempotencyKey: key("material-result"),
+          result:
+            outcome === "confirmed"
+              ? { kind: "confirmed", evidence: { ...evidence, observedAt: now } }
+              : { kind: "timeout" },
+        });
+        expect(result.view.attempts[0]?.status).toBe(outcome);
+        expect(result.view.currentPacket?.temporaryMaterials).toEqual([context.reference]);
+        await expect(
+          store.dispatchAttempt({
+            ownerUserId: context.ownerUserId,
+            applicationId: context.applicationId,
+            attemptId: start.attempt.id,
+            current: context.current,
+          }),
+        ).rejects.toMatchObject({ code: "ILLEGAL_ATTEMPT_TRANSITION" });
+      },
+    );
+  });
 
   it.each([
     { label: "expiry", reason: "approval_expired", current: bindings },

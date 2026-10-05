@@ -1,3 +1,4 @@
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import type {
   GenerationClaim,
   PreparationContext,
@@ -17,6 +18,7 @@ export type PreparationActivityStore = Pick<
   | "failPreparation"
 >;
 export interface ReadyCoverLetter {
+  temporaryMaterial?: TemporaryMaterialReference;
   contentSha256: string;
   sourceFactIds: readonly string[];
   confidence: number;
@@ -24,7 +26,8 @@ export interface ReadyCoverLetter {
 export interface CoverLetterPreparationPort {
   /** Loads current owned job/evidence through their APIs, without exposing values to workflow state. */
   context(preparation: PreparationRecord): Promise<PreparationContext>;
-  /** May recover only an already-persisted immutable draft, never regenerate it. */
+  /** Recovers only the original result from its owner; never starts another generation.
+   * Temporary generated material requires the still-live memory reference. */
   recover(preparation: PreparationRecord): Promise<ReadyCoverLetter | null>;
   /** Called only by the winner of the write-ahead claim. Consent time is never refreshed. */
   generate(
@@ -114,6 +117,7 @@ export function createPreparationActivity(
       return completed;
     }
     letter = {
+      ...(letter.temporaryMaterial ? { temporaryMaterial: { ...letter.temporaryMaterial } } : {}),
       contentSha256: letter.contentSha256,
       confidence: letter.confidence,
       sourceFactIds: [...letter.sourceFactIds],

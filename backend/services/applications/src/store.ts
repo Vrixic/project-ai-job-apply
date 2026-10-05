@@ -1,4 +1,8 @@
 import { COVER_LETTER_DISCLOSURE_VERSION } from "@ai-job-apply/api-contracts";
+import {
+  type TemporaryMaterialReference,
+  validateTemporaryMaterialReference,
+} from "@ai-job-apply/domain";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import {
@@ -63,6 +67,7 @@ import {
   type HistoryKind,
   nextStatus,
 } from "./state-machine.js";
+import { carryTemporaryMaterialBindings, temporaryMaterialReasons } from "./temporary-material.js";
 
 type Sql = postgres.Sql;
 type Tx = postgres.TransactionSql;
@@ -193,6 +198,7 @@ interface PacketRow {
   resume_hash: string | null;
   cover_letter_hash: string | null;
   fields: PacketFieldEntry[];
+  temporary_materials: TemporaryMaterialReference[];
   created_at: Date;
 }
 
@@ -260,6 +266,7 @@ function toPacket(row: PacketRow, application: ApplicationRow): ApplicationPacke
     form,
     fields: row.fields,
     artifactHashes,
+    ...(row.temporary_materials?.length ? { temporaryMaterials: row.temporary_materials } : {}),
     packetHash: row.packet_hash,
     createdAt: row.created_at,
   };
@@ -473,7 +480,10 @@ export class PostgresApplicationStore {
     applicationId: string;
     expectedRevision: number;
     idempotencyKey: string;
-    packet: Pick<PacketInputs, "jobRevision" | "form" | "fields" | "artifactHashes">;
+    packet: Pick<
+      PacketInputs,
+      "jobRevision" | "form" | "fields" | "artifactHashes" | "temporaryMaterials"
+    >;
   }): Promise<CommandResult> {
     const requestHash = canonicalHash({
       operation: "create_packet",
@@ -482,6 +492,9 @@ export class PostgresApplicationStore {
       jobRevision: command.packet.jobRevision,
       form: command.packet.form,
       artifactHashes: command.packet.artifactHashes,
+      ...(command.packet.temporaryMaterials?.length
+        ? { temporaryMaterials: command.packet.temporaryMaterials }
+        : {}),
       fields: command.packet.fields,
     });
     return this.commandResult(command, "create_packet", requestHash, async (tx, app, now) => {
@@ -513,11 +526,11 @@ export class PostgresApplicationStore {
       const vaultReferences = await this.lockVaultReferences(tx, packet);
       const admissionAt = this.clock();
       const stale = evaluateBindings(packet, { ...command.current, vaultReferences }, admissionAt);
-      const approval = approvePacket(packet, command.request, admissionAt);
-      if (stale.length > 0) {
-        // The packet no longer matches the live job/form/artifacts: it can never be approved.
+      if (stale.includes("temporary_material_expired")) {
         throw new StalePacketError(stale);
       }
+      const approval = approvePacket(packet, command.request, admissionAt);
+      if (stale.length > 0) throw new StalePacketError(stale);
       const approvalId = uuidv7();
       await tx`
         INSERT INTO applications.approvals
@@ -988,7 +1001,10 @@ export class PostgresApplicationStore {
     idempotencyKey: string;
     request: PreparationRequest;
     context: PreparationContext;
-    packet: Pick<PacketInputs, "jobRevision" | "form" | "fields" | "artifactHashes">;
+    packet: Pick<
+      PacketInputs,
+      "jobRevision" | "form" | "fields" | "artifactHashes" | "temporaryMaterials"
+    >;
   }): Promise<{ replayed: boolean; preparation: PreparationRecord; view: ApplicationView }> {
     const requestHash = canonicalHash({
       operation: "queue_preparation",
@@ -1147,7 +1163,12 @@ export class PostgresApplicationStore {
         });
         const vaultReferences = original ? await this.lockVaultReferences(tx, original) : undefined;
         const now = this.clock();
-        if (!original || evaluateVaultBindings(original, vaultReferences, now).length > 0) {
+        if (
+          !original ||
+          evaluateVaultBindings(original, vaultReferences, now).length > 0 ||
+          temporaryMaterialReasons(original.temporaryMaterials, current.temporaryMaterials, now)
+            .length > 0
+        ) {
           await this.failPreparationRow(
             tx,
             preparation,
@@ -1169,7 +1190,11 @@ export class PostgresApplicationStore {
       });
       const vaultReferences = base ? await this.lockVaultReferences(tx, base) : undefined;
       const now = this.clock();
-      const vaultChanged = !base || evaluateVaultBindings(base, vaultReferences, now).length > 0;
+      const vaultChanged =
+        !base ||
+        evaluateVaultBindings(base, vaultReferences, now).length > 0 ||
+        temporaryMaterialReasons(base.temporaryMaterials, current.temporaryMaterials, now).length >
+          0;
       const age = now.getTime() - preparation.approvedAt.getTime();
       const errorCode: PreparationFailureCode | null =
         !Number.isFinite(age) || age < 0 || now > preparation.expiresAt
@@ -1213,7 +1238,12 @@ export class PostgresApplicationStore {
     eventId: string,
     preparationId: string,
     current: PreparationContext,
-    letter: { contentSha256: string; sourceFactIds: readonly string[]; confidence: number },
+    letter: {
+      contentSha256: string;
+      sourceFactIds: readonly string[];
+      confidence: number;
+      temporaryMaterial?: TemporaryMaterialReference;
+    },
   ): Promise<PreparationRecord> {
     const target = await this.getPreparationForEvent(eventId, preparationId);
     return this.client.begin(async (tx) => {
@@ -1235,7 +1265,11 @@ export class PostgresApplicationStore {
       });
       const vaultReferences = base ? await this.lockVaultReferences(tx, base) : undefined;
       const now = this.clock();
-      const vaultChanged = !base || evaluateVaultBindings(base, vaultReferences, now).length > 0;
+      const vaultChanged =
+        !base ||
+        evaluateVaultBindings(base, vaultReferences, now).length > 0 ||
+        temporaryMaterialReasons(base.temporaryMaterials, current.temporaryMaterials, now).length >
+          0;
       const failure =
         Number(app.revision) !== preparation.expectedRevision ||
         app.current_packet_id !== preparation.basePacketId ||
@@ -1262,10 +1296,37 @@ export class PostgresApplicationStore {
         throw new PacketInvariantError("Invalid grounded cover-letter binding");
 
       if (!base) throw new ApplicationIntegrityError("preparation packet");
+      if (
+        letter.temporaryMaterial &&
+        (!validateTemporaryMaterialReference(letter.temporaryMaterial) ||
+          letter.temporaryMaterial.kind !== "cover_letter" ||
+          letter.temporaryMaterial.ownerUserId !== target.ownerUserId ||
+          letter.temporaryMaterial.applicationId !== app.id ||
+          letter.temporaryMaterial.contentSha256 !== letter.contentSha256)
+      )
+        throw new PacketInvariantError("Invalid original cover-letter material binding");
+      if (
+        letter.temporaryMaterial &&
+        temporaryMaterialReasons([letter.temporaryMaterial], [letter.temporaryMaterial], now)
+          .length > 0
+      ) {
+        await this.failPreparationRow(tx, preparation, "bindings_changed", now);
+        return this.readPreparation(tx, target.ownerUserId, app.id, preparationId);
+      }
       const updated = await this.writePacket(tx, app, now, {
         jobRevision: base.jobRevision,
         form: base.form,
         artifactHashes: { ...base.artifactHashes, coverLetter: letter.contentSha256 },
+        ...(base.temporaryMaterials?.length || letter.temporaryMaterial
+          ? {
+              temporaryMaterials: [
+                ...(base.temporaryMaterials ?? []).filter(
+                  (reference) => reference.kind !== "cover_letter",
+                ),
+                ...(letter.temporaryMaterial ? [letter.temporaryMaterial] : []),
+              ],
+            }
+          : {}),
         fields: [
           ...base.fields
             .filter((field) => field.fieldKey !== "documents.cover_letter")
@@ -1646,16 +1707,32 @@ export class PostgresApplicationStore {
     tx: Tx,
     app: ApplicationRow,
     now: Date,
-    inputs: Pick<PacketInputs, "jobRevision" | "form" | "fields" | "artifactHashes">,
+    inputs: Pick<
+      PacketInputs,
+      "jobRevision" | "form" | "fields" | "artifactHashes" | "temporaryMaterials"
+    >,
   ): Promise<ApplicationRow> {
     nextStatus(app.status, "packet_created");
+    const snapshot = structuredClone(inputs);
+    const original = app.current_packet_id ? await this.loadCurrentPacket(tx, app) : null;
+    let temporaryMaterials: TemporaryMaterialReference[];
+    try {
+      temporaryMaterials = carryTemporaryMaterialBindings(
+        original?.temporaryMaterials,
+        snapshot.temporaryMaterials,
+        snapshot.artifactHashes,
+      );
+    } catch {
+      throw new PacketInvariantError("Invalid original temporary material replacement");
+    }
     const [{ version } = { version: 0 }] = await tx<{ version: number }[]>`
         SELECT coalesce(max(version), 0)::int AS version FROM applications.packets
         WHERE application_id = ${app.id}
       `;
     const packet = assemblePacket(
       {
-        ...inputs,
+        ...snapshot,
+        ...(temporaryMaterials.length ? { temporaryMaterials } : {}),
         id: uuidv7(),
         userId: app.owner_user_id,
         applicationId: app.id,
@@ -1669,12 +1746,12 @@ export class PostgresApplicationStore {
     await tx`
         INSERT INTO applications.packets
           (id, application_id, owner_user_id, version, packet_hash, job_revision, form_adapter_id,
-           form_variant_id, form_hash, resume_hash, cover_letter_hash, fields, created_at)
+           form_variant_id, form_hash, resume_hash, cover_letter_hash, fields, temporary_materials, created_at)
         VALUES (${packet.id}, ${app.id}, ${app.owner_user_id}, ${packet.version}, ${packet.packetHash},
           ${packet.jobRevision}, ${packet.form?.adapterId ?? null}, ${packet.form?.variantId ?? null},
           ${packet.form?.formHash ?? null}, ${packet.artifactHashes.resume ?? null},
           ${packet.artifactHashes.coverLetter ?? null},
-          ${tx.json(packet.fields as unknown as postgres.JSONValue)}, ${now})
+          ${tx.json(packet.fields as unknown as postgres.JSONValue)}, ${tx.json((packet.temporaryMaterials ?? []) as unknown as postgres.JSONValue)}, ${now})
       `;
     return this.change(tx, app, "packet_created", now, {
       packetId: packet.id,
@@ -2078,6 +2155,7 @@ export class StalePacketError extends Error {
 }
 
 function firstReason(reasons: readonly ApprovalInvalidReason[]): ApprovalInvalidReason {
+  if (reasons.includes("temporary_material_expired")) return "temporary_material_expired";
   return reasons[0] ?? "packet_hash_mismatch";
 }
 

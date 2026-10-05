@@ -3410,3 +3410,14 @@ publication, deployment or activation. Owner defers hosted CI/CD until productio
 [PR #550](https://github.com/Vrixic/project-ai-job-apply/pull/550), based on exact open #549.
 No authored PR is merged or feature activated. Verified implementation remains `78388aa1`;
 subsequent commits change delivery records only. D3-064 and D1/D3 stay In progress.
+
+
+2026-10-05 D3-064 original temporary-material packet checkpoint starts on fresh main e48bdf3 plus
+exact open #550 1ce90b55. Closed scalar identity/deadline enters immutable packet hashes; ordinary
+edits retain original expiry and new authority requires exact live memory metadata. Approval/start/
+manual start/dispatch and native SQL independently refuse expired authority, preserving technical
+confirmed/ambiguous settlement and duplicate guards. Apps 0008 advances restore inventory to 63
+migrations/84 relations. Applications179 units/92 SQL, Gateway40 SQL including simulated-OIDC
+HTTP, API87/Domain27/Documents1,269/migration46 units and populated logical restore pass; full exact-source verification pending. [Evidence](evidence/d3-temporary-packet-binding-2026-10-05.md).
+Content/actor/resume/preview/file/client/worker/provider and deployed gates remain; D3-064 and D1/D3
+stay In progress. No publication, deployment or activation. Owner CI/CD deferral retained.

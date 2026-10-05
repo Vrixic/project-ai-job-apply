@@ -20,6 +20,37 @@ function application(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Applications OpenAPI contract", () => {
+  it("accepts scalar public material metadata and refuses content or private authority fields", () => {
+    const validate = compileComponentValidator("ApplicationTemporaryMaterial");
+    const reference = {
+      schemaVersion: 1,
+      kind: "tailored_resume",
+      generationId: randomUUID(),
+      version: 1,
+      contentSha256: hash,
+      completedAtMs: 1_000,
+      expiresAtMs: 1_801_000,
+    };
+    expect(validate(reference)).toBe(true);
+    expect(validate({ ...reference, kind: "cover_letter" })).toBe(true);
+    for (const patch of [
+      { text: "synthetic forbidden content" },
+      { contentBase64: "c3ludGhldGlj" },
+      { ownerUserId: randomUUID() },
+      { applicationId: randomUUID() },
+      { version: 0 },
+      { version: 1.5 },
+      { completedAtMs: -1 },
+      { expiresAtMs: 8_640_000_000_000_001 },
+      { generationId: "invalid" },
+      { kind: "original_resume" },
+    ]) {
+      expect(validate({ ...reference, ...patch })).toBe(false);
+    }
+    const request = compileComponentValidator("PrepareApplicationPacketRequest");
+    expect(request({ expectedRevision: 1, temporaryMaterials: [reference] })).toBe(false);
+  });
+
   it("accepts explicit bounded question/context selections and refuses unconfirmed or unbound requests", () => {
     const validate = compileComponentValidator("PrepareApplicationPacketRequest");
     const selection = {

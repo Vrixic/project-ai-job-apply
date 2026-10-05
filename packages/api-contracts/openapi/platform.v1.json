@@ -9080,6 +9080,15 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "temporaryMaterials": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/ApplicationTemporaryMaterial"
+            }
           }
         },
         "additionalProperties": false
@@ -10047,7 +10056,9 @@
                 "form_changed",
                 "resume_changed",
                 "cover_letter_changed",
-                "vault_answer_changed"
+                "vault_answer_changed",
+                "temporary_material_expired",
+                "temporary_material_changed"
               ]
             }
           },
@@ -10152,6 +10163,53 @@
             "additionalProperties": false
           }
         ]
+      },
+      "ApplicationTemporaryMaterial": {
+        "type": "object",
+        "description": "Original generated material metadata only. No content or ownership credentials. Expiry is completion plus exactly 1,800,000 milliseconds; access, edits and retries never renew it. Generation identity and deadline are part of the packet approval binding.",
+        "required": [
+          "schemaVersion",
+          "kind",
+          "generationId",
+          "version",
+          "contentSha256",
+          "completedAtMs",
+          "expiresAtMs"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["cover_letter", "tailored_resume"]
+          },
+          "generationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "contentSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "completedAtMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8639999998200000
+          },
+          "expiresAtMs": {
+            "type": "integer",
+            "minimum": 1800000,
+            "maximum": 8640000000000000
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

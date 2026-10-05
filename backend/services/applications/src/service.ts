@@ -13,6 +13,7 @@ import type {
   ApplicationSubmissionStart,
   ReconcileApplicationAttemptRequest,
 } from "@ai-job-apply/api-contracts";
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import type {
   AdapterSubmissionResult,
   ConfirmationEvidence,
@@ -63,6 +64,7 @@ export interface PacketPreparation {
   /** Proposals derived only from confirmed facts, the answer vault, and generated drafts. */
   fields: readonly ProposedField[];
   artifactHashes: ArtifactHashes;
+  temporaryMaterials?: readonly TemporaryMaterialReference[];
 }
 
 import type { VaultSelection } from "./vault.js";
@@ -512,6 +514,9 @@ export class ApplicationsService implements ApplicationsApi {
         form: preparation.form,
         fields: preparation.fields,
         artifactHashes: preparation.artifactHashes,
+        ...(preparation.temporaryMaterials?.length
+          ? { temporaryMaterials: preparation.temporaryMaterials }
+          : {}),
       },
     });
     if (!result.replayed) {
@@ -877,6 +882,15 @@ export function toApiApplication(view: ApplicationView): Application {
               requiresReview: field.requiresReview,
             })),
             artifactHashes: { ...packet.artifactHashes },
+            ...(packet.temporaryMaterials?.length
+              ? {
+                  temporaryMaterials: packet.temporaryMaterials.map(
+                    ({ ownerUserId: _owner, applicationId: _application, ...reference }) => ({
+                      ...reference,
+                    }),
+                  ),
+                }
+              : {}),
             createdAt: packet.createdAt.toISOString(),
           },
         }

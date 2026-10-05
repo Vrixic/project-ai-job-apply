@@ -144,6 +144,8 @@ const execute = promisify(execFile);
       [fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url))],
       { env: { ...process.env, DATABASE_URL: databaseUrl } },
     );
-    expect(replay.stdout).toContain("through 0007_document_field_hashes applied and verified");
+    expect(replay.stdout).toContain(
+      "through 0008_temporary_material_bindings applied and verified",
+    );
   });
 });

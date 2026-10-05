@@ -1,3 +1,4 @@
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import { FactGraph, factConfidence, type GraphFact } from "@ai-job-apply/domain";
 import { canonicalHash } from "./canonical.js";
 import type { ProposedField } from "./field-policy.js";
@@ -106,6 +107,10 @@ export interface FactBackedPacketSourceDependencies {
   jobRevision(application: ApplicationRecord): Promise<string>;
   /** Hashes of the resume and cover-letter versions the candidate chose. */
   artifacts(ownerUserId: string, application: ApplicationRecord): Promise<ArtifactHashes>;
+  temporaryMaterials?: (
+    ownerUserId: string,
+    application: ApplicationRecord,
+  ) => Promise<readonly TemporaryMaterialReference[]>;
   vault?: VaultReader;
   definitions?: ReadonlyMap<string, FieldDefinition>;
   clock?: () => Date;
@@ -245,6 +250,14 @@ export class FactBackedPacketSource implements PacketPreparationSource {
       form: input.form,
       fields,
       artifactHashes: await this.dependencies.artifacts(input.ownerUserId, input.application),
+      ...(this.dependencies.temporaryMaterials
+        ? {
+            temporaryMaterials: await this.dependencies.temporaryMaterials(
+              input.ownerUserId,
+              input.application,
+            ),
+          }
+        : {}),
     };
   }
 }

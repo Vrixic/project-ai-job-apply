@@ -100,7 +100,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(62);
+    ).toBe(63);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -253,7 +253,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 7,
       relationCount: 84,
-      migrationCount: 62,
+      migrationCount: 63,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -447,6 +447,7 @@ describe("read-only aggregate restore verification", () => {
                   "0008_cover_letter_provider_responses",
                   "0009_cover_letter_provider_failure",
                   "0010_temporary_material_completion",
+                  "0008_temporary_material_bindings",
                   ...(migrationCount === 52 ? [] : ["0010_restricted_answer_vault"]),
                   "0011_active_candidate_lease",
                 ].includes(migration.version),
@@ -478,7 +479,7 @@ describe("read-only aggregate restore verification", () => {
     },
   );
 
-  it.each([61, 60, 59, 58])(
+  it.each([62, 61, 60, 59, 58])(
     "retains the prior %s-migration boundary only against its exact historical manifest",
     async (migrationCount) => {
       const current = loadCurrentRestoreManifest();
@@ -488,7 +489,9 @@ describe("read-only aggregate restore verification", () => {
           ...contributor,
           migrations: contributor.migrations.filter(
             (migration) =>
-              migration.version !== "0010_temporary_material_completion" &&
+              migration.version !== "0008_temporary_material_bindings" &&
+              (migrationCount >= 62 ||
+                migration.version !== "0010_temporary_material_completion") &&
               (migrationCount >= 61 || migration.version !== "0007_document_field_hashes") &&
               (migrationCount >= 60 || migration.version !== "0006_vault_approval_binding") &&
               (migrationCount >= 59 || migration.version !== "0009_cover_letter_provider_failure"),
@@ -525,6 +528,7 @@ describe("read-only aggregate restore verification", () => {
               "0008_cover_letter_provider_responses",
               "0009_cover_letter_provider_failure",
               "0010_temporary_material_completion",
+              "0008_temporary_material_bindings",
               "0006_vault_approval_binding",
               "0007_document_field_hashes",
             ].includes(migration.version),

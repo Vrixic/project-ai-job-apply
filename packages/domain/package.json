@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./temporary-material": {
+      "types": "./dist/temporary-material.d.ts",
+      "default": "./dist/temporary-material.js"
     }
   },
   "scripts": {

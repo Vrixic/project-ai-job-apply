@@ -21,6 +21,43 @@ async function exportDefinition(name: string) {
 }
 
 describe("domain schema registry", () => {
+  it("exports only portable original material metadata, without ownership or content", async () => {
+    const validate = await exportDefinition("applicationsPacket");
+    const id = "019d04cf-1f80-7000-8000-000000000001";
+    const reference = {
+      schemaVersion: 1,
+      kind: "tailored_resume",
+      generationId: id,
+      version: 1,
+      contentSha256: "a".repeat(64),
+      completedAtMs: 1_000,
+      expiresAtMs: 1_801_000,
+    };
+    const packet = {
+      id,
+      applicationId: id,
+      version: 1,
+      packetHash: "a".repeat(64),
+      jobRevision: "b".repeat(64),
+      resumeHash: "a".repeat(64),
+      fields: [],
+      createdAt: "2026-10-05T12:00:00Z",
+      temporaryMaterials: [reference],
+    };
+    expect(validate(packet)).toBe(true);
+    for (const patch of [
+      { ownerUserId: id },
+      { applicationId: id },
+      { text: "synthetic forbidden content" },
+      { schemaVersion: 2 },
+      { contentSha256: "invalid" },
+    ]) {
+      expect(validate({ ...packet, temporaryMaterials: [{ ...reference, ...patch }] })).toBe(false);
+    }
+    expect(validate({ ...packet, temporaryMaterials: [reference, reference] })).toBe(false);
+    expect(validate({ ...packet, temporaryMaterials: [] })).toBe(false);
+  });
+
   it("preserves optional selected-answer provenance in portable packet fields with mandatory review", async () => {
     const validate = await exportDefinition("applicationsPacketField");
     const id = "019d04cf-1f80-7000-8000-000000000001";

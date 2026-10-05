@@ -2207,6 +2207,7 @@ export interface components {
             };
             /** Format: date-time */
             createdAt: string;
+            temporaryMaterials?: components["schemas"]["ApplicationTemporaryMaterial"][];
         };
         ApplicationApproval: {
             /** Format: uuid */
@@ -2449,7 +2450,7 @@ export interface components {
             outcome: "started" | "approval_invalidated";
             /** Format: uuid */
             attemptId?: string;
-            invalidationReasons?: ("packet_hash_mismatch" | "approval_expired" | "job_changed" | "form_changed" | "resume_changed" | "cover_letter_changed" | "vault_answer_changed")[];
+            invalidationReasons?: ("packet_hash_mismatch" | "approval_expired" | "job_changed" | "form_changed" | "resume_changed" | "cover_letter_changed" | "vault_answer_changed" | "temporary_material_expired" | "temporary_material_changed")[];
             application: components["schemas"]["Application"];
         };
         ApplicationSubmissionResultRequest: {
@@ -2478,6 +2479,19 @@ export interface components {
             kind: "user_attested_not_submitted";
             /** @constant */
             acknowledgesDuplicateRisk: true;
+        };
+        /** @description Original generated material metadata only. No content or ownership credentials. Expiry is completion plus exactly 1,800,000 milliseconds; access, edits and retries never renew it. Generation identity and deadline are part of the packet approval binding. */
+        ApplicationTemporaryMaterial: {
+            /** @constant */
+            schemaVersion: 1;
+            /** @enum {string} */
+            kind: "cover_letter" | "tailored_resume";
+            /** Format: uuid */
+            generationId: string;
+            version: number;
+            contentSha256: string;
+            completedAtMs: number;
+            expiresAtMs: number;
         };
     };
     responses: {

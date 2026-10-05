@@ -34,6 +34,10 @@
         {
           "version": "0007_document_field_hashes",
           "checksum": "6df701682868c319b2c98cb9a65da83f4bfbdd8b3145fcf11b5f54aba8ae019c"
+        },
+        {
+          "version": "0008_temporary_material_bindings",
+          "checksum": "385633ece7f302eb743238812b1fb8998b9ab2e8449164798f9bc9a8eee5fe51"
         }
       ],
       "relations": [

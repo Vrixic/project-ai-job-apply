@@ -185,3 +185,37 @@ or content backfill is introduced. Restore and deletion-replay validators requir
 These guards are a first enforcement layer. Temporary-memory storage, the absolute 1,800-second
 lifetime, expiry/review/submission admission, no-store transport and provider approval remain
 D3-064 work. Existing generated draft/S3/provider-slot paths cannot be activated under ADR-038.
+
+## Original temporary-material packet admission (source only)
+
+The trusted producer can attach at most one cover-letter and one tailored-resume scalar reference
+through the owner port. Closed metadata binds generation ID, owner/application, revision, content
+hash, original completion and fixed 1,800,000 ms deadline. The packet hash includes these bindings;
+legacy absent/empty references keep their previous hash. Public API and portable export projections
+omit internal owner/application reference fields. No public preparation request accepts references.
+Ordinary packet edits carry existing bindings; replacing a hash requires replacement authority.
+A descendant revision keeps the original generation deadline. Native edit-authority issuance remains
+unimplemented; this port does not make an arbitrary caller a trusted generator.
+
+Approval expires at the earliest original deadline or the existing approval-age cap. Approval,
+automated/manual attempt start and queued dispatch compare exact current owner memory metadata and
+check time again at admission. The Gateway never recomputes tailoring or recovers a saved cover
+letter for a packet carrying temporary bindings. Missing owner capability/outage is unavailable;
+lost memory or a different generation requires fresh preparation and review. SQL 0008 independently
+checks its clock for new approval/start/dispatch authority, prevents omitted/renewed bindings, and
+supports the new invalidation reasons. Expiry does not clear confirmed/ambiguous submission evidence
+or authorize redispatch. Submission settlement and late takeover remain possible after expiry.
+
+Apply Applications `0008_temporary_material_bindings.sql` and the exact current restore manifest
+before these consumers. It adds one non-content JSON column, validated constraints and three
+triggers to existing relations; no backfill timestamps, new relation or generated content. Deploy
+all strict readers and Gateway/worker consumers before enabling a producer: older private packet
+readers cannot verify a hash containing the new reference, and older strict API consumers reject
+the optional property. Rollback can disable production but cannot restore an older reader for
+new-bound packets. Existing packets remain readable by the updated consumer.
+
+This checkpoint has no activated producer or ATS executor. Temporary content transport, preview/
+file routing, original actor integration, native descendant authority, resume production, client
+idle/logout/cancel/submission cleanup, renderer/worker drain and approved provider retention still
+belong to D3-064. Legacy saved-draft/provider-slot and re-tailoring paths cannot be activated under
+ADR-038. Scalar availability is an admission check, not an ATS content lease or all-copy cleanup.

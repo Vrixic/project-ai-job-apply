@@ -24,7 +24,11 @@ import {
   RESUME_TAILORING_REQUEST_KIND,
   type ResumeTailoringResult,
 } from "@ai-job-apply/documents-service";
-import type { GraphFact } from "@ai-job-apply/domain";
+import {
+  type GraphFact,
+  type TemporaryMaterialReference,
+  validateTemporaryMaterialReference,
+} from "@ai-job-apply/domain";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
 import { profileFactToGraphFact } from "@ai-job-apply/profile-service";
 import type postgres from "postgres";
@@ -38,6 +42,14 @@ export interface ApplicationsRuntimeOptions {
   tailoring?: ResumeTailoringClient;
   /** Owned Documents context/read port only; no live provider is composed inside the Gateway. */
   coverLetters?: ApplicationCoverLetters;
+  /** Owned memory availability only. No generation, persistence or refreshed reference. */
+  temporaryMaterials?: {
+    current(
+      ownerUserId: string,
+      applicationId: string,
+      reference: Readonly<TemporaryMaterialReference>,
+    ): Promise<TemporaryMaterialReference | null>;
+  };
   /** Default false. Enable only with compatible migrations and the owned dispatch/recovery runtime. */
   coverLetterPreparationEnabled?: boolean;
   catalog: Pick<JobCatalogReader, "resolveActiveJobSummaries" | "getActiveJob">;
@@ -196,9 +208,39 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
   const bindings: LiveBindingsSource = {
     async resolve({ ownerUserId, application, formHash }): Promise<CurrentBindings> {
       const view = await store.getApplication(ownerUserId, application.id);
+      const expectedMaterials = view.currentPacket?.temporaryMaterials ?? [];
+      const temporaryMaterials: TemporaryMaterialReference[] = [];
+      for (const reference of expectedMaterials) {
+        const at = clock().getTime();
+        if (!Number.isFinite(at) || at < reference.completedAtMs || at >= reference.expiresAtMs)
+          continue;
+        if (!options.temporaryMaterials) throw new ApplicationsUnavailableError();
+        try {
+          const live = await options.temporaryMaterials.current(
+            ownerUserId,
+            application.id,
+            structuredClone(reference),
+          );
+          if (live !== null) {
+            if (
+              !validateTemporaryMaterialReference(live) ||
+              live.ownerUserId !== ownerUserId ||
+              live.applicationId !== application.id
+            )
+              throw new ApplicationsUnavailableError();
+            temporaryMaterials.push(structuredClone(live));
+          }
+        } catch {
+          throw new ApplicationsUnavailableError();
+        }
+      }
       const packetLetterHash = view.currentPacket?.artifactHashes.coverLetter;
       let coverLetterHash: string | undefined;
-      if (packetLetterHash) {
+      if (expectedMaterials.some((reference) => reference.kind === "cover_letter")) {
+        coverLetterHash = temporaryMaterials.find(
+          (reference) => reference.kind === "cover_letter",
+        )?.contentSha256;
+      } else if (packetLetterHash) {
         if (!options.coverLetters) throw new ApplicationsUnavailableError();
         try {
           coverLetterHash = await options.coverLetters.binding(
@@ -233,10 +275,14 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
           throw new ApplicationsUnavailableError();
         }
       }
-      const resume = (await artifacts(ownerUserId, application.canonicalJobId)).resume;
+      const resume = expectedMaterials.some((reference) => reference.kind === "tailored_resume")
+        ? temporaryMaterials.find((reference) => reference.kind === "tailored_resume")
+            ?.contentSha256
+        : (await artifacts(ownerUserId, application.canonicalJobId)).resume;
       return {
         jobRevision: await jobRevision(application.canonicalJobId, clock()),
         formHash,
+        ...(expectedMaterials.length ? { temporaryMaterials } : {}),
         ...(selectedFields.length ? { vaultReferences } : {}),
         ...(resume ? { resumeHash: resume } : {}),
         ...(coverLetterHash ? { coverLetterHash } : {}),

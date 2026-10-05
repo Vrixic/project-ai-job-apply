@@ -37,7 +37,7 @@ orchestrator, checks the disposable-container ownership guards, and uses a uniqu
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.
 
-The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 62-migration
+The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 63-migration
 seven-owner boundary while retaining its D2-focused generated-data and behavior assertions,
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through
@@ -59,3 +59,9 @@ The current source manifest SHA also pins the private TypeScript and PowerShell 
 validators. Update those exact identities and their cross-runtime synthetic fixture together with
 the manifest; strict old-boundary refusal stays in place. This source update is not a deployed
 restore operator, container publication or production restore acceptance.
+
+The Applications 0008 boundary preserves original temporary-material scalar bindings during logical
+recovery. The maintained harness compares three restored packets (expired, confirmed, ambiguous),
+verifies portable ownership redaction, refuses binding removal and expired approval authority,
+and retains settled-attempt duplicate guards. Generated content and memory snapshots are absent.
+Restored metadata never reconstructs lost content; fresh preparation and exact review are required.
