@@ -516,6 +516,39 @@ refusal, closed-input rejection and zero-fetch checks. Logs:
 that exact local artifact; production key/role composition, legacy transition, broader artifact
 verification and the full maintained verifier remain separate unfinished requirements.
 
+## Actual historical migration refusal and rollback
+
+A separately opt-in PostgreSQL fixture reconstructs the exact original eight-migration Applications
+boundary from immutable SQL and LF-normalized recorded checksums after Profile migrations. It
+requires a fresh, explicitly generated loopback database and rejects another target. Six independent
+savepoint cases seed two original packet.v1 applications (approved and reconciliation-required),
+original approvals, an ambiguous scope-holding attempt and replay receipts. Restricted false/true,
+nonnull selected-vault values, a restricted policy reason, unkeyed create-packet receipts and
+unkeyed preparation receipts each refuse migration 0009 with SQLSTATE 55000. Exact row comparison
+across all eleven original Applications relations, function definitions and constraints proves no
+rewrite, rehash, receipt change, partial private schema, column or function remains after rollback.
+Each probe itself rolls back, so cases do not contaminate each other.
+
+A compatible ordinary-packet case applies 0009 without rewriting original packet data/hashes,
+approvals, ambiguous evidence or permitted ordinary receipts. Its newly added private binding/key
+columns are null; the ordinary receipt's explicit legacy authority is sha256.v1. Private snapshot/
+audit relations stay empty. A separate final case commits legacy restricted evidence and invokes
+the actual current driver in another process. The full driver transaction refuses and exact original
+rows/functions/constraints/eight checksum records remain intact, with no new private schema,
+function or columns. All eight cases pass. Log: `.tmp/d3-restricted-legacy-sql.log`.
+No production migration SQL, recorded historical checksum or admission guard is changed.
+
+This verifies safe refusal and the supported ordinary transition. It does not migrate prohibited
+legacy restricted evidence. Accountable disposition of any such real inventory is still required
+before deployment/activation; neither silent deletion nor approval/ambiguous-evidence rehash is
+permitted. The test does not read production data, invoke KMS, or authorize a legacy-data purge.
+
+Owned tmpfs fixture
+`641f6f954a55f10a547495e385f8d85737470a497b11591f800dcae446ee9edd` was checked against exact
+ID/name/label/tmpfs and absence of mounts before removal. Shared volumes stayed identical; Docker
+Desktop stopped and WSL reports no running distributions. Scoped Biome/build checks pass. The clean
+full maintained verifier follows this committed evidence; it has not yet been claimed passing.
+
 ## Next work
 
 Finish legacy migration compatibility and all maintained integration/runtime protection fixtures;

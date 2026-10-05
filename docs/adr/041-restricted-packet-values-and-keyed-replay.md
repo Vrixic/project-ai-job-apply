@@ -68,7 +68,10 @@ deletion. The deletion verifier includes both private relations and its actual S
 seed restricted snapshots/audit. Maintained Applications/Gateway/Workflow fixtures pass with
 explicit offline protection. Actual native preparation now carries original protected metadata
 without cipher authority; emitted native/provider isolation checks pass. Legacy transition,
-production role/key composition, broader artifact checks and complete verification remain unfinished. No
+production role/key composition, broader artifact checks and complete verification remain unfinished.
+Eight real SQL historical cases verify exact ordinary transition and complete refusal/rollback
+without rewriting approved/ambiguous evidence or unkeyed packet/preparation receipts. Prohibited
+legacy inventory still requires accountable disposition before migration/activation. No
 production data, live KMS/provider, deployment or activation is claimed. Saved-answer reuse remains
 disabled. See [D3-077 evidence](../product/delivery/evidence/d3-restricted-packet-storage-2026-10-05.md).
 

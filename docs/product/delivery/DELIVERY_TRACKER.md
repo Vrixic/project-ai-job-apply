@@ -3813,3 +3813,12 @@ remain. No deployment/activation or D1/D3 completion.
 bundled checks refuse default-off work/extra payloads with zero fetch. No publication or deployment;
 legacy transition, broader artifact verification, full verifier and accountable acceptance remain.
 [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 verifies eight real historical migration cases: exact old eight-migration
+approved/ambiguous evidence and receipts survive all six refusal categories unchanged; compatible
+ordinary evidence migrates without rehash; the actual current driver rolls back its whole
+transaction on committed legacy restricted data. No SQL/checksum/guard change or prohibited legacy
+migration. Owned fixture removed; shared volumes retained and Docker/WSL stopped. Full maintained
+verification follows; production inventory/disposition, key/role composition and accountable
+acceptance remain. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
+CI/CD deferred until launch; no deployment/activation or D1/D3 completion.
