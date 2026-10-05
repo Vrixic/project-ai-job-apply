@@ -59,3 +59,35 @@ browser/logout cleanup and installed-client/deployed/accountable acceptance rema
 reopen removed Delivery queue/Your shared jobs manual panels. D3-077 reuse protection stays open.
 Process retirement covers only its allocation; it does not settle provider work, prove another
 copy purged, delete a candidate-held download, or erase confirmed/ambiguous evidence.
+
+## Final local verification
+
+Clean implementation `304c01bf8430cef8551d91f9e99a2204762bcc08` passes
+`scripts/verify-phase0.ps1`, terminal exit `0`: 38 typecheck tasks, 39 workspace test tasks,
+23 builds, operational/security/Compose and emitted dependency isolation. AI SDK 293,
+Documents 1,305 and Gateway 307 units pass; Gateway's 61 opt-in skips are not persistence or
+live-provider evidence. Lint remains zero errors, 15 baseline warnings and 58 infos.
+Local full log/receipt: `.tmp/d3-native-session-verify.log` / `.tmp/d3-native-session-verify.exit`.
+No source changed while the verifier was running. Following changes are documentation only.
+
+Final expanded Linux run passes all 15 actual child-process cases, including second-candidate
+allocation refusal. The startup/core-dump guard, fixed owner/application, actual SDK grounding,
+one original dispatch, real memory preview and native SIGKILL are exercised; provider, SQL and
+renderer are synthetic in this kernel test. Boot/idle/busy/SIGSTOP/pending-settlement and early
+cancellation/retirement, invalid/repeat binding and module/worker reinitialization all stop the
+exact child. The parent fallback did not supply passing evidence. Original material metadata
+retains completion + 1,800,000 ms; shortened test native limits end availability earlier.
+Log/receipt: `.tmp/d3-native-session-final.log` / `.tmp/d3-native-session-final.exit` (`0`).
+
+The explicit verifier used the exact existing Linux image above, networking disabled, strict C
+compiler warnings, copied synthetic inputs only and bounded tmpfs. Its exact CID/label cleanup
+and checked staging cleanup completed; no owned native-test container remains. Docker Desktop
+and WSL are stopped, with no running distribution. All test/verification handles are terminal.
+No new SQL behavior/migration is introduced, so prior native SQL/HTTP evidence is referenced
+separately rather than relabeled as a new connected native-host test.
+
+D3-079, D3-064 and D1/D3 remain In progress. Proposed ADR-040 is not an accepted deployment or
+transport decision. No public endpoint, model/cloud call, image publication, deployment, native
+stop certificate or phase exit is claimed. The remaining issuer/launcher/authenticated transport/
+task registry/managed stop/content routing, provider/client/ATS/accountable gates remain open.
+Hosted CI/CD remains deferred until production launch.

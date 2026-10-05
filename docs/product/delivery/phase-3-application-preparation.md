@@ -997,3 +997,13 @@ Documents cases pass; corrected local native runs pass 14 actual process cases, 
 second-allocation/full verification pending. [Evidence](evidence/d3-native-memory-session-2026-10-05.md).
 Issuer/launcher/authenticated transport/task registry/managed stop/content routing, provider and
 client/ATS/accountable gates remain. D1/D3 stay In progress; no activation/deployment or CI/CD work.
+
+2026-10-05 D3-079 clean `304c01bf` passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 builds and operational/security/emitted-isolation checks; unchanged lint
+(0 errors, 15 warnings, 58 infos). AI SDK 293 and Documents 1,305 units pass. Separate final
+Linux run passes 15 real kernel/session process cases, including second-candidate refusal.
+[Evidence](evidence/d3-native-memory-session-2026-10-05.md). Only documentation follows.
+Owned test container/staging cleanup completed; Docker/WSL stopped. Proposed ADR-040 and
+issuer/launcher/authenticated transport/task registry/managed stop/content routing, provider,
+client/ATS/accountable gates remain open. D1/D3 stay In progress; no activation, deployment,
+authored merge or hosted CI/CD work.
