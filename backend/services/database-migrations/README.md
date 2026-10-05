@@ -9,8 +9,8 @@ another service's tables.
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
   after Trust): eleven owned schemas (including the empty-table `jobs_public` projection schema), 84
-  regular relations, and 58 checksum-bound migrations (Profile through `0011`; Applications through
-  `0005`; Documents through `0008`). The
+  regular relations, and 62 checksum-bound migrations (Profile through `0011`; Applications through
+  `0007`; Documents through `0010`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
   purges Applications data (run 2026-09-18 against an isolated local cluster).
 
@@ -32,12 +32,12 @@ decision-signal delivery, nor an AWS restore.
 ## Generated Phase 2 logical recovery regression
 
 Run `pnpm test:d2-recovery` with Docker already running and the local
-`postgres:16.6-alpine` image available. The command builds the six owners and migration
+`postgres:16.6-alpine` image available. The command builds the seven owners and migration
 orchestrator, checks the disposable-container ownership guards, and uses a uniquely labeled
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.
 
-The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 58-migration
+The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 63-migration
 seven-owner boundary while retaining its D2-focused generated-data and behavior assertions,
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through
@@ -54,3 +54,14 @@ that guard. This is logical database recovery, not cluster-role recovery, AWS PI
 acceptance, provider-fetch validation, or deployed evidence. Success emits aggregate metrics only
 after clients close and the exact validated container is removed; the caller remains responsible
 for Docker/WSL runtime shutdown when no following step needs them.
+
+The current source manifest SHA also pins the private TypeScript and PowerShell deletion-restore
+validators. Update those exact identities and their cross-runtime synthetic fixture together with
+the manifest; strict old-boundary refusal stays in place. This source update is not a deployed
+restore operator, container publication or production restore acceptance.
+
+The Applications 0008 boundary preserves original temporary-material scalar bindings during logical
+recovery. The maintained harness compares three restored packets (expired, confirmed, ambiguous),
+verifies portable ownership redaction, refuses binding removal and expired approval authority,
+and retains settled-attempt duplicate guards. Generated content and memory snapshots are absent.
+Restored metadata never reconstructs lost content; fresh preparation and exact review are required.

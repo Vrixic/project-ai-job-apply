@@ -32,6 +32,7 @@ describe("rendering verification", () => {
       line(`• ${"Shipped a very long sentence about reliable systems ".repeat(6)}`, "bullet"),
       line("Sr. Engineer – Café Corp — “quoted” (parens) back\\slash"),
     ]);
+    const originalBytes = Uint8Array.from(pdf.bytes);
     expect(pdf.pageCount).toBe(1);
     const expected = [
       ...blocks,
@@ -39,6 +40,8 @@ describe("rendering verification", () => {
       line("Sr. Engineer – Café Corp — “quoted” (parens) back\\slash"),
     ];
     expect(await verifyRenderedResume(pdf, expected)).toMatchObject({ ok: true });
+    expect(pdf.bytes).toEqual(originalBytes);
+    expect(pdf.bytes.byteLength).toBeGreaterThan(0);
   });
 
   it("is byte-for-byte reproducible", async () => {

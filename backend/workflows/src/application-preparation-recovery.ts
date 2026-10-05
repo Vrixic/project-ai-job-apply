@@ -9,7 +9,7 @@ import {
   preparationExecutionName,
 } from "@ai-job-apply/applications-service";
 import type { ApplicationPreparationDurableInput } from "./application-preparation-contract.js";
-import { PreparationDispatchPendingError } from "./application-preparation-dispatch.js";
+import { PreparationDispatchPendingError } from "./application-preparation-errors.js";
 
 export type PreparationRecoveryStore = Pick<
   PostgresApplicationStore,
@@ -148,6 +148,94 @@ function resourcesArray(value: unknown): value is string[] {
 // EventBridge event IDs are opaque GUID-shaped identifiers, not our domain UUID contract.
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u;
 
+/** Strict metadata-only envelope validation, shared before native secret/SQL setup. */
+export function parsePreparationTerminalEvent(
+  currentFunctionArn: string,
+  value: unknown,
+  time: Date,
+) {
+  if (!isPreparationFunctionArn(currentFunctionArn)) throw new PreparationDispatchError();
+  const scope = currentFunctionArn.split(":");
+  const base = currentFunctionArn.slice(0, currentFunctionArn.lastIndexOf(":"));
+  if (!(time instanceof Date) || !Number.isFinite(time.getTime()))
+    throw new PreparationDispatchError();
+  if (
+    !record(value, [
+      "version",
+      "id",
+      "detail-type",
+      "source",
+      "account",
+      "time",
+      "region",
+      "resources",
+      "detail",
+    ])
+  )
+    throw new PreparationDispatchError();
+  const envelope = timestamp(value.time);
+  if (
+    value.version !== "0" ||
+    typeof value.id !== "string" ||
+    !UUID.test(value.id) ||
+    value.source !== "aws.lambda" ||
+    value["detail-type"] !== "Durable Execution Status Change" ||
+    value.account !== scope[4] ||
+    value.region !== scope[3] ||
+    !envelope ||
+    envelope.getTime() < time.getTime() - 14 * 86_400_000 ||
+    envelope.getTime() > time.getTime() + 300_000 ||
+    !resourcesArray(value.resources) ||
+    !record(value.detail, [
+      "durableExecutionArn",
+      "durableExecutionName",
+      "functionArn",
+      "status",
+      "startTimestamp",
+      "endTimestamp",
+    ])
+  )
+    throw new PreparationDispatchError();
+  const detail = value.detail;
+  const start = timestamp(detail.startTimestamp);
+  const end = timestamp(detail.endTimestamp);
+  if (
+    !isPreparationFunctionArn(detail.functionArn) ||
+    detail.functionArn.slice(0, detail.functionArn.lastIndexOf(":")) !== base ||
+    (value.resources.length === 1 && value.resources[0] !== detail.functionArn) ||
+    typeof detail.durableExecutionName !== "string" ||
+    !detail.durableExecutionName.startsWith("preparation-") ||
+    typeof detail.durableExecutionArn !== "string" ||
+    !matchesPreparationExecutionArn(
+      detail.durableExecutionArn,
+      detail.functionArn,
+      detail.durableExecutionName,
+    ) ||
+    typeof detail.status !== "string" ||
+    !["SUCCEEDED", "FAILED", "STOPPED", "TIMED_OUT"].includes(detail.status) ||
+    !start ||
+    !end ||
+    end < start ||
+    Math.abs(end.getTime() - envelope.getTime()) > 300_000
+  )
+    throw new PreparationDispatchError();
+  const eventId = detail.durableExecutionName.slice("preparation-".length);
+  if (preparationExecutionName(eventId) !== detail.durableExecutionName)
+    throw new PreparationDispatchError();
+
+  return {
+    eventId,
+    detail: {
+      functionArn: detail.functionArn,
+      durableExecutionArn: detail.durableExecutionArn,
+      durableExecutionName: detail.durableExecutionName,
+      status: detail.status,
+    },
+    start,
+    end,
+  };
+}
+
 /** EventBridge is a nudge, not settlement authority. AWS metadata independently confirms it. */
 export function createPreparationTerminalHandler(
   currentFunctionArn: string,
@@ -156,75 +244,12 @@ export function createPreparationTerminalHandler(
   now: () => Date = () => new Date(),
 ) {
   if (!isPreparationFunctionArn(currentFunctionArn)) throw new PreparationDispatchError();
-  const scope = currentFunctionArn.split(":");
-  const base = currentFunctionArn.slice(0, currentFunctionArn.lastIndexOf(":"));
   return async (value: unknown): Promise<{ handled: boolean }> => {
-    const time = now();
-    if (!(time instanceof Date) || !Number.isFinite(time.getTime()))
-      throw new PreparationDispatchError();
-    if (
-      !record(value, [
-        "version",
-        "id",
-        "detail-type",
-        "source",
-        "account",
-        "time",
-        "region",
-        "resources",
-        "detail",
-      ])
-    )
-      throw new PreparationDispatchError();
-    const envelope = timestamp(value.time);
-    if (
-      value.version !== "0" ||
-      typeof value.id !== "string" ||
-      !UUID.test(value.id) ||
-      value.source !== "aws.lambda" ||
-      value["detail-type"] !== "Durable Execution Status Change" ||
-      value.account !== scope[4] ||
-      value.region !== scope[3] ||
-      !envelope ||
-      envelope.getTime() < time.getTime() - 14 * 86_400_000 ||
-      envelope.getTime() > time.getTime() + 300_000 ||
-      !resourcesArray(value.resources) ||
-      !record(value.detail, [
-        "durableExecutionArn",
-        "durableExecutionName",
-        "functionArn",
-        "status",
-        "startTimestamp",
-        "endTimestamp",
-      ])
-    )
-      throw new PreparationDispatchError();
-    const detail = value.detail;
-    const start = timestamp(detail.startTimestamp);
-    const end = timestamp(detail.endTimestamp);
-    if (
-      !isPreparationFunctionArn(detail.functionArn) ||
-      detail.functionArn.slice(0, detail.functionArn.lastIndexOf(":")) !== base ||
-      (value.resources.length === 1 && value.resources[0] !== detail.functionArn) ||
-      typeof detail.durableExecutionName !== "string" ||
-      !detail.durableExecutionName.startsWith("preparation-") ||
-      typeof detail.durableExecutionArn !== "string" ||
-      !matchesPreparationExecutionArn(
-        detail.durableExecutionArn,
-        detail.functionArn,
-        detail.durableExecutionName,
-      ) ||
-      typeof detail.status !== "string" ||
-      !["SUCCEEDED", "FAILED", "STOPPED", "TIMED_OUT"].includes(detail.status) ||
-      !start ||
-      !end ||
-      end < start ||
-      Math.abs(end.getTime() - envelope.getTime()) > 300_000
-    )
-      throw new PreparationDispatchError();
-    const eventId = detail.durableExecutionName.slice("preparation-".length);
-    if (preparationExecutionName(eventId) !== detail.durableExecutionName)
-      throw new PreparationDispatchError();
+    const { eventId, detail, start, end } = parsePreparationTerminalEvent(
+      currentFunctionArn,
+      value,
+      now(),
+    );
     try {
       const dispatch = await store.getPreparationDispatch(eventId);
       if (!dispatch) return { handled: false };

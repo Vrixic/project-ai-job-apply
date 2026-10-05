@@ -12,3 +12,8 @@ Contains shared OIDC/session helpers for clients, gateway, services, extension, 
 - `testing/` — Synthetic identities and authorization fixtures.
 
 This package contains no provider secrets and does not replace the profile service.
+
+`createOidcVerifier({ issuer, audience, requireExpiration: true })` requires a signed expiration
+claim for direct transports without an upstream JWT authorizer. It preserves the existing default
+for current callers. Native material HTTPS reads select this strict mode and verify again after
+asynchronous reads; production transport cannot inject a synthetic verifier.

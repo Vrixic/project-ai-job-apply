@@ -10,6 +10,7 @@ import {
   ApprovalRefusedError,
   AttemptRefusedError,
   PreparationNotFoundError,
+  StalePacketError,
 } from "@ai-job-apply/applications-service";
 import "reflect-metadata";
 import { createHash } from "node:crypto";
@@ -3805,6 +3806,75 @@ describe("Applications routes", () => {
   const token = (scope: string) => issuer.issue(owner, { scope });
   const key = "applications-route-key-0001";
 
+  it("forwards explicit saved-answer selection under the authenticated owner with no-store", async () => {
+    const selection = {
+      id: jobId,
+      version: 1,
+      fieldKey: "authorization.us_authorized",
+      context: "us",
+      questionHash: "a".repeat(64),
+      meaningConfirmed: true,
+    };
+    const payload = {
+      expectedRevision: 2,
+      form: { adapterId: "greenhouse", variantId: "synthetic", formHash: "b".repeat(64) },
+      vaultSelections: [selection],
+    };
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/packets`,
+      headers: {
+        authorization: `Bearer ${await token("applications:write")}`,
+        "idempotency-key": key,
+      },
+      payload,
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(calls[0]).toMatchObject({
+      method: "preparePacket",
+      args: [expect.any(String), applicationId, payload, key],
+    });
+  });
+
+  it("returns fixed private saved-answer guidance when dispatch refuses a changed selection", async () => {
+    const changed = new StalePacketError(["vault_answer_changed"]);
+    changed.message = "synthetic-private-vault-value";
+    failure = changed;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/attempts/${attemptId}/dispatch`,
+      headers: { authorization: `Bearer ${await token("applications:read applications:write")}` },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({
+      code: "application_packet_stale",
+      title: "Saved answer changed",
+    });
+    expect(response.body).not.toContain(changed.message);
+  });
+
+  it("returns a sanitized no-store conflict when dispatch approval expired", async () => {
+    const expired = new StalePacketError(["approval_expired"]);
+    expired.message = "synthetic-private-expired-dispatch";
+    failure = expired;
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/applications/${applicationId}/attempts/${attemptId}/dispatch`,
+      headers: { authorization: `Bearer ${await token("applications:read applications:write")}` },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({
+      code: "application_packet_stale",
+      title: "Approval expired",
+      detail: "The packet approval expired; review and approve it again",
+    });
+    expect(response.body).not.toContain(expired.message);
+    expect(calls.map((call) => call.method)).toEqual(["dispatchAttempt"]);
+  });
+
   it("accepts opted-in Prepare as 202 without falling through to synchronous packet creation", async () => {
     const request = {
       expectedRevision: 2,
@@ -3867,6 +3937,9 @@ describe("Applications routes", () => {
           expect.any(String),
           applicationId,
           ...(method === "preparation" ? [attemptId] : method === "coverLetterFile" ? ["pdf"] : []),
+          ...(method === "coverLetterPreview" || method === "coverLetterFile"
+            ? [expect.any(AbortSignal)]
+            : []),
         ],
       });
     }

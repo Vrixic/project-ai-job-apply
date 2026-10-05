@@ -1,9 +1,20 @@
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import { FactGraph, factConfidence, type GraphFact } from "@ai-job-apply/domain";
 import { canonicalHash } from "./canonical.js";
 import type { ProposedField } from "./field-policy.js";
+import { type FieldDefinition, isDirectActionField } from "./field-policy.js";
 import type { ArtifactHashes } from "./packet.js";
+import { PacketInvariantError } from "./packet.js";
 import type { PacketPreparation, PacketPreparationSource, UserEntry } from "./service.js";
+import { ApplicationsUnavailableError } from "./service.js";
 import type { ApplicationRecord } from "./store.js";
+import { StalePacketError } from "./store.js";
+import {
+  decodeVaultValue,
+  type VaultReader,
+  type VaultSelection,
+  validVaultReference,
+} from "./vault.js";
 
 export type FactValueType = "string" | "date" | "decimal" | "boolean" | "enum";
 
@@ -96,6 +107,12 @@ export interface FactBackedPacketSourceDependencies {
   jobRevision(application: ApplicationRecord): Promise<string>;
   /** Hashes of the resume and cover-letter versions the candidate chose. */
   artifacts(ownerUserId: string, application: ApplicationRecord): Promise<ArtifactHashes>;
+  temporaryMaterials?: (
+    ownerUserId: string,
+    application: ApplicationRecord,
+  ) => Promise<readonly TemporaryMaterialReference[]>;
+  vault?: VaultReader;
+  definitions?: ReadonlyMap<string, FieldDefinition>;
   clock?: () => Date;
 }
 
@@ -124,10 +141,36 @@ export class FactBackedPacketSource implements PacketPreparationSource {
     ownerUserId: string;
     application: ApplicationRecord;
     userEntries: readonly UserEntry[];
+    vaultSelections?: readonly VaultSelection[];
     form: PacketPreparation["form"];
   }): Promise<PacketPreparation> {
+    input = structuredClone(input);
+    const selections = input.vaultSelections ?? [];
+    if (
+      selections.length > 20 ||
+      new Set(selections.map((selection) => selection.fieldKey)).size !== selections.length
+    ) {
+      throw new PacketInvariantError("Invalid saved-answer selections");
+    }
+    for (const selection of selections) {
+      const definition = this.dependencies.definitions?.get(selection.fieldKey);
+      if (
+        !input.form ||
+        !validVaultReference({ ...selection, validUntilEpochMs: null }) ||
+        !definition ||
+        definition.sensitivity === "standard" ||
+        isDirectActionField(selection.fieldKey) ||
+        input.userEntries.some((entry) => entry.fieldKey === selection.fieldKey)
+      ) {
+        throw new PacketInvariantError("Invalid saved-answer selection");
+      }
+    }
+    if (selections.length && !this.dependencies.vault) throw new ApplicationsUnavailableError();
     const graph = FactGraph.build(await this.dependencies.facts(input.ownerUserId), this.clock());
-    const entered = new Set(input.userEntries.map((entry) => entry.fieldKey));
+    const entered = new Set([
+      ...input.userEntries.map((entry) => entry.fieldKey),
+      ...selections.map((selection) => selection.fieldKey),
+    ]);
     const fields: ProposedField[] = [];
 
     for (const mapping of FACT_FIELD_MAP) {
@@ -145,6 +188,53 @@ export class FactBackedPacketSource implements PacketPreparationSource {
         confidence: factConfidence(only),
       });
     }
+    for (const selection of selections) {
+      const vault = this.dependencies.vault;
+      const definition = this.dependencies.definitions?.get(selection.fieldKey);
+      if (!vault || !definition) throw new ApplicationsUnavailableError();
+      let saved: Awaited<ReturnType<VaultReader["readSelectedValue"]>>;
+      try {
+        saved = await vault.readSelectedValue(input.ownerUserId, selection);
+      } catch {
+        throw new ApplicationsUnavailableError();
+      }
+      if (
+        !saved ||
+        saved.id !== selection.id ||
+        saved.version !== selection.version ||
+        saved.fieldKey !== selection.fieldKey ||
+        saved.context !== selection.context
+      ) {
+        throw new StalePacketError(["vault_answer_changed"]);
+      }
+      const reference = {
+        id: saved.id,
+        version: saved.version,
+        context: saved.context,
+        questionHash: selection.questionHash,
+        meaningConfirmed: true as const,
+        validUntilEpochMs: saved.validUntilEpochMs,
+      };
+      const value = decodeVaultValue(definition, saved);
+      const selectedAt = this.clock().getTime();
+      if (
+        !Number.isFinite(selectedAt) ||
+        value === undefined ||
+        !validVaultReference(reference) ||
+        (reference.validUntilEpochMs !== null && selectedAt >= reference.validUntilEpochMs)
+      ) {
+        throw new PacketInvariantError("Unsupported saved answer");
+      }
+      fields.push({
+        fieldKey: selection.fieldKey,
+        value,
+        origin: "answer_vault",
+        sourceFactIds: [saved.id],
+        sourceConfirmed: true,
+        confidence: 1,
+        vaultReference: reference,
+      });
+    }
     for (const entry of input.userEntries) {
       fields.push({
         fieldKey: entry.fieldKey,
@@ -160,6 +250,14 @@ export class FactBackedPacketSource implements PacketPreparationSource {
       form: input.form,
       fields,
       artifactHashes: await this.dependencies.artifacts(input.ownerUserId, input.application),
+      ...(this.dependencies.temporaryMaterials
+        ? {
+            temporaryMaterials: await this.dependencies.temporaryMaterials(
+              input.ownerUserId,
+              input.application,
+            ),
+          }
+        : {}),
     };
   }
 }

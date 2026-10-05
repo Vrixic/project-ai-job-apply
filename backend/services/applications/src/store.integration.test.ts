@@ -1,11 +1,14 @@
 import { execFile } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ConfirmationEvidence } from "./attempt.js";
 import { MAX_APPROVAL_AGE_MS } from "./packet.js";
+import { toApiApplication } from "./service.js";
 import {
   ApplicationAlreadyExistsError,
   ApplicationIdempotencyConflictError,
@@ -22,6 +25,17 @@ const execFileAsync = promisify(execFile);
 
 const key = (label: string) => `${label}-${uuidv7()}`.slice(0, 64).padEnd(16, "x");
 const bindings = { jobRevision: HASH_A, formHash: HASH_B, resumeHash: HASH_C };
+const disposableDispatchDatabase = (() => {
+  if (!databaseUrl) return false;
+  const url = new URL(databaseUrl);
+  return (
+    url.protocol === "postgres:" &&
+    url.hostname === "127.0.0.1" &&
+    /^\/application_dispatch_[a-z0-9_]{1,40}$/u.test(url.pathname) &&
+    !url.search &&
+    !url.hash
+  );
+})();
 
 describeWithDatabase("PostgresApplicationStore", () => {
   const client = postgres(databaseUrl ?? "postgres://invalid", {
@@ -51,7 +65,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const first = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const replay = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const expected =
-      "Applications migrations through 0005_preparation_dispatch applied and verified.";
+      "Applications migrations through 0008_temporary_material_bindings applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
     await store.ping();
@@ -129,6 +143,551 @@ describeWithDatabase("PostgresApplicationStore", () => {
     return result;
   }
 
+  describe("original temporary material SQL admission", () => {
+    async function materialPacket(completedAtMs = Date.now() - 1) {
+      now = new Date(completedAtMs + 1);
+      const ownerUserId = uuidv7();
+      const created = await store.createApplication({
+        ownerUserId,
+        canonicalJobId: uuidv7(),
+        idempotencyKey: key("material-create"),
+      });
+      const applicationId = created.view.application.id;
+      const reference: TemporaryMaterialReference = {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: uuidv7(),
+        ownerUserId,
+        applicationId,
+        version: 1,
+        contentSha256: HASH_C,
+        completedAtMs,
+        expiresAtMs: completedAtMs + 1_800_000,
+      };
+      const packetInput = {
+        jobRevision: HASH_A,
+        form: { adapterId: "greenhouse", variantId: "synthetic-v1", formHash: HASH_B },
+        fields: [proposal()],
+        artifactHashes: { resume: HASH_C },
+        temporaryMaterials: [reference],
+      };
+      const packeted = await store.createPacket({
+        ownerUserId,
+        applicationId,
+        expectedRevision: created.view.application.revision,
+        idempotencyKey: key("material-packet"),
+        packet: packetInput,
+      });
+      const packet = packeted.view.currentPacket;
+      if (!packet) throw Error("SyntheticPacketMissing");
+      const current = { ...bindings, temporaryMaterials: [reference] };
+      const approvalCommand = {
+        ownerUserId,
+        applicationId,
+        expectedRevision: packeted.view.application.revision,
+        idempotencyKey: key("material-approve"),
+        request: { packetHash: packet.packetHash, consentId: uuidv7(), acknowledgedFieldKeys: [] },
+        current,
+      };
+      return {
+        ownerUserId,
+        applicationId,
+        reference,
+        packetInput,
+        packeted,
+        packet,
+        current,
+        approvalCommand,
+      };
+    }
+
+    it("round-trips original metadata, caps approval and redacts portable ownership", async () => {
+      const context = await materialPacket();
+      const approved = await store.approve(context.approvalCommand);
+      expect(approved.view.approval?.expiresAt.getTime()).toBe(context.reference.expiresAtMs);
+      const view = await store.getApplication(context.ownerUserId, context.applicationId);
+      expect(view.currentPacket?.temporaryMaterials).toEqual([context.reference]);
+      const { ownerUserId: _owner, applicationId: _application, ...portable } = context.reference;
+      expect(toApiApplication(view).currentPacket?.temporaryMaterials).toEqual([portable]);
+      const [exported] =
+        await client`SELECT applications.export_candidate_data(${context.ownerUserId}::uuid) AS data`;
+      expect(exported?.data.applications.packets[0].temporaryMaterials).toEqual([portable]);
+      expect(JSON.stringify(exported?.data)).not.toContain(context.ownerUserId);
+    });
+
+    it.each(["missing", "different_generation"])(
+      "refuses %s live memory without persisting approval",
+      async (fault) => {
+        const context = await materialPacket();
+        const current = {
+          ...context.current,
+          temporaryMaterials:
+            fault === "missing" ? [] : [{ ...context.reference, generationId: uuidv7() }],
+        };
+        await expect(store.approve({ ...context.approvalCommand, current })).rejects.toMatchObject({
+          reasons: ["temporary_material_changed"],
+        });
+        const view = await store.getApplication(context.ownerUserId, context.applicationId);
+        expect(view.application.revision).toBe(context.packeted.view.application.revision);
+        expect(view.approval).toBeNull();
+      },
+    );
+
+    it("refuses approval exactly at expiry without a durable mutation", async () => {
+      const context = await materialPacket();
+      now = new Date(context.reference.expiresAtMs);
+      await expect(store.approve(context.approvalCommand)).rejects.toMatchObject({
+        reasons: ["temporary_material_expired"],
+      });
+      const view = await store.getApplication(context.ownerUserId, context.applicationId);
+      expect(view.application.revision).toBe(context.packeted.view.application.revision);
+      expect(view.approval).toBeNull();
+    });
+
+    it.each(["start", "dispatch"])(
+      "invalidates expired authority atomically at %s",
+      async (stage) => {
+        const context = await materialPacket();
+        const approved = await store.approve(context.approvalCommand);
+        const command = {
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          expectedRevision: approved.view.application.revision,
+          idempotencyKey: key("material-start"),
+          current: context.current,
+          adapterId: "greenhouse",
+          adapterVersion: "1.0.0",
+        };
+        const start = stage === "dispatch" ? await store.startAttempt(command) : undefined;
+        now = new Date(context.reference.expiresAtMs);
+        if (stage === "start") {
+          await expect(store.startAttempt(command)).resolves.toMatchObject({
+            kind: "approval_invalidated",
+            reasons: expect.arrayContaining(["temporary_material_expired"]),
+          });
+        } else {
+          if (start?.kind !== "started") throw Error("SyntheticAttemptMissing");
+          await expect(
+            store.dispatchAttempt({
+              ownerUserId: context.ownerUserId,
+              applicationId: context.applicationId,
+              attemptId: start.attempt.id,
+              current: context.current,
+            }),
+          ).rejects.toMatchObject({
+            reasons: expect.arrayContaining(["temporary_material_expired"]),
+          });
+        }
+        const view = await store.getApplication(context.ownerUserId, context.applicationId);
+        expect(view.application.status).toBe("review_required");
+        expect(view.approval).toBeNull();
+        expect(view.attempts).toHaveLength(stage === "start" ? 0 : 1);
+        if (stage === "dispatch")
+          expect(view.attempts[0]).toMatchObject({ status: "failed_no_effect" });
+        const [row] =
+          await client`SELECT invalidation_reason FROM applications.approvals WHERE application_id = ${context.applicationId}`;
+        expect(row?.invalidation_reason).toBe("temporary_material_expired");
+        const history = await store.getHistory(context.ownerUserId, context.applicationId);
+        expect(history.entries.some((entry) => entry.kind === "attempt_dispatched")).toBe(false);
+      },
+    );
+
+    it("carries the original deadline across field edits and refuses same-generation renewal", async () => {
+      const context = await materialPacket();
+      const command = {
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        expectedRevision: context.packeted.view.application.revision,
+        idempotencyKey: key("material-edit"),
+      };
+      const { temporaryMaterials: _refs, ...legacyInput } = context.packetInput;
+      const edited = await store.createPacket({
+        ...command,
+        packet: { ...legacyInput, fields: [proposal({ value: "synthetic corrected answer" })] },
+      });
+      expect(edited.view.currentPacket?.temporaryMaterials).toEqual([context.reference]);
+      expect(edited.view.currentPacket?.packetHash).not.toBe(context.packet.packetHash);
+      await expect(
+        store.createPacket({
+          ...command,
+          expectedRevision: edited.view.application.revision,
+          idempotencyKey: key("material-renew"),
+          packet: {
+            ...context.packetInput,
+            temporaryMaterials: [
+              {
+                ...context.reference,
+                completedAtMs: context.reference.completedAtMs + 1,
+                expiresAtMs: context.reference.expiresAtMs + 1,
+              },
+            ],
+          },
+        }),
+      ).rejects.toThrow("Invalid original temporary material replacement");
+      await expect(
+        store.createPacket({
+          ...command,
+          expectedRevision: edited.view.application.revision,
+          idempotencyKey: key("material-strip"),
+          packet: { ...legacyInput, artifactHashes: { resume: HASH_B } },
+        }),
+      ).rejects.toThrow("Invalid original temporary material replacement");
+    });
+
+    it.each(["start", "manual_start", "dispatch"])(
+      "native %s admission uses the database clock independently of the caller clock",
+      async (stage) => {
+        const context = await materialPacket(Date.now() - 1_797_000);
+        const approved = await store.approve(context.approvalCommand);
+        const command = {
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          expectedRevision: approved.view.application.revision,
+          idempotencyKey: key("native-material-start"),
+          current: context.current,
+          adapterId: "greenhouse",
+          adapterVersion: "1.0.0",
+          ...(stage === "manual_start" ? { manual: true } : {}),
+        };
+        const start = stage === "dispatch" ? await store.startAttempt(command) : undefined;
+        await delay(Math.max(0, context.reference.expiresAtMs - Date.now() + 25));
+        // The application clock remains inside the original window: only native SQL can refuse this.
+        if (stage === "dispatch") {
+          if (start?.kind !== "started") throw Error("SyntheticAttemptMissing");
+          await expect(
+            store.dispatchAttempt({
+              ownerUserId: context.ownerUserId,
+              applicationId: context.applicationId,
+              attemptId: start.attempt.id,
+              current: context.current,
+            }),
+          ).rejects.toMatchObject({
+            code: "55000",
+            message: "temporary material admission unavailable",
+          });
+        } else
+          await expect(store.startAttempt(command)).rejects.toMatchObject({
+            code: "55000",
+            message: "temporary material admission unavailable",
+          });
+        const view = await store.getApplication(context.ownerUserId, context.applicationId);
+        expect(view.application.revision).toBe(
+          stage === "dispatch"
+            ? start?.view.application.revision
+            : approved.view.application.revision,
+        );
+        expect(view.attempts).toHaveLength(stage === "dispatch" ? 1 : 0);
+        if (stage === "dispatch") expect(view.attempts[0]?.dispatchedAt).toBeUndefined();
+      },
+    );
+
+    it.each(["past", "future"])(
+      "native admission refuses a %s window despite a forged application clock",
+      async (direction) => {
+        const context = await materialPacket(
+          Date.now() + (direction === "past" ? -1_800_001 : 60_000),
+        );
+        await expect(store.approve(context.approvalCommand)).rejects.toMatchObject({
+          code: "55000",
+          message: "temporary material admission unavailable",
+        });
+        const view = await store.getApplication(context.ownerUserId, context.applicationId);
+        expect(view.approval).toBeNull();
+        expect(view.application.revision).toBe(context.packeted.view.application.revision);
+      },
+    );
+
+    it.each(["drop", "renew", "content"])(
+      "native packet insertion refuses %s without changing the current packet",
+      async (fault) => {
+        const context = await materialPacket();
+        const refs =
+          fault === "drop"
+            ? []
+            : [
+                {
+                  ...context.reference,
+                  ...(fault === "renew"
+                    ? {
+                        completedAtMs: context.reference.completedAtMs + 1,
+                        expiresAtMs: context.reference.expiresAtMs + 1,
+                      }
+                    : { text: "synthetic forbidden draft" }),
+                },
+              ];
+        await expect(client`INSERT INTO applications.packets
+        (id, application_id, owner_user_id, version, packet_hash, job_revision, form_adapter_id,
+        form_variant_id, form_hash, resume_hash, cover_letter_hash, fields, created_at, temporary_materials)
+        SELECT ${uuidv7()}, application_id, owner_user_id, version + 1, ${HASH_A}, job_revision,
+        form_adapter_id, form_variant_id, form_hash, resume_hash, cover_letter_hash, fields,
+        created_at, ${client.json(refs)} FROM applications.packets WHERE id = ${context.packet.id}`).rejects.toMatchObject(
+          { code: "55000" },
+        );
+        expect(
+          (await store.getApplication(context.ownerUserId, context.applicationId)).currentPacket
+            ?.id,
+        ).toBe(context.packet.id);
+      },
+    );
+
+    it.each(["confirmed", "ambiguous"])(
+      "preserves %s submission evidence and duplicate guards after expiry",
+      async (outcome) => {
+        const context = await materialPacket();
+        const approved = await store.approve(context.approvalCommand);
+        const start = await store.startAttempt({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          expectedRevision: approved.view.application.revision,
+          idempotencyKey: key("material-result-start"),
+          current: context.current,
+          adapterId: "greenhouse",
+          adapterVersion: "1.0.0",
+        });
+        if (start.kind !== "started") throw Error("SyntheticAttemptMissing");
+        await store.dispatchAttempt({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          attemptId: start.attempt.id,
+          current: context.current,
+        });
+        now = new Date(context.reference.expiresAtMs);
+        const result = await store.recordResult({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          attemptId: start.attempt.id,
+          idempotencyKey: key("material-result"),
+          result:
+            outcome === "confirmed"
+              ? { kind: "confirmed", evidence: { ...evidence, observedAt: now } }
+              : { kind: "timeout" },
+        });
+        expect(result.view.attempts[0]?.status).toBe(outcome);
+        expect(result.view.currentPacket?.temporaryMaterials).toEqual([context.reference]);
+        await expect(
+          store.dispatchAttempt({
+            ownerUserId: context.ownerUserId,
+            applicationId: context.applicationId,
+            attemptId: start.attempt.id,
+            current: context.current,
+          }),
+        ).rejects.toMatchObject({ code: "ILLEGAL_ATTEMPT_TRANSITION" });
+      },
+    );
+  });
+
+  it.each([
+    { label: "expiry", reason: "approval_expired", current: bindings },
+    { label: "job", reason: "job_changed", current: { ...bindings, jobRevision: HASH_B } },
+    { label: "form", reason: "form_changed", current: { ...bindings, formHash: HASH_C } },
+    { label: "resume", reason: "resume_changed", current: { ...bindings, resumeHash: HASH_A } },
+    {
+      label: "cover letter",
+      reason: "cover_letter_changed",
+      current: { ...bindings, coverLetterHash: HASH_A },
+    },
+  ] as const)(
+    "refuses dispatch after $label changes and durably returns to review",
+    async ({ label, reason, current }) => {
+      now = new Date("2026-09-18T12:00:00.000Z");
+      const context = await approved();
+      const start = await started(context);
+      if (label === "expiry") now = new Date(now.getTime() + MAX_APPROVAL_AGE_MS);
+      const command = {
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        attemptId: start.attempt.id,
+        current,
+      };
+      await expect(store.dispatchAttempt(command)).rejects.toMatchObject({ reasons: [reason] });
+      const view = await store.getApplication(context.ownerUserId, context.applicationId);
+      expect(view.application).toMatchObject({
+        status: "review_required",
+        revision: start.view.application.revision + 1,
+      });
+      expect(view.approval).toBeNull();
+      expect(view.currentAction).toBe("review_and_approve");
+      expect(view.attempts[0]).toMatchObject({ status: "failed_no_effect" });
+      expect(view.attempts[0]?.dispatchedAt).toBeUndefined();
+      const [approval] = await client`SELECT invalidation_reason FROM applications.approvals
+      WHERE application_id = ${context.applicationId}`;
+      expect(approval?.invalidation_reason).toBe(reason);
+      const history = await store.getHistory(context.ownerUserId, context.applicationId);
+      expect(
+        history.entries.filter((item) => item.kind === "attempt_failed_no_effect"),
+      ).toHaveLength(1);
+      expect(history.entries.some((item) => item.kind === "attempt_dispatched")).toBe(false);
+      const [outbox] = await client`SELECT count(*)::int AS count FROM applications.outbox
+      WHERE application_id = ${context.applicationId} AND application_revision = ${view.application.revision}
+        AND payload->>'status' = 'review_required'`;
+      expect(outbox?.count).toBe(1);
+      const [noIntermediate] = await client`SELECT count(*)::int AS count FROM applications.outbox
+        WHERE application_id = ${context.applicationId} AND application_revision > ${start.view.application.revision}
+          AND payload->>'status' = 'approved'`;
+      expect(noIntermediate?.count).toBe(0);
+      await expect(store.dispatchAttempt(command)).rejects.toMatchObject({
+        code: "ILLEGAL_ATTEMPT_TRANSITION",
+      });
+      now = new Date("2026-09-18T12:00:00.000Z");
+    },
+  );
+
+  it("concurrent stale deliveries settle once without any dispatch receipt", async () => {
+    const context = await approved();
+    const start = await started(context);
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, () =>
+        store.dispatchAttempt({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          attemptId: start.attempt.id,
+          current: { ...bindings, jobRevision: HASH_B },
+        }),
+      ),
+    );
+    expect(results.every((result) => result.status === "rejected")).toBe(true);
+    expect(
+      results.filter(
+        (result) => result.status === "rejected" && result.reason instanceof StalePacketError,
+      ),
+    ).toHaveLength(1);
+    const view = await store.getApplication(context.ownerUserId, context.applicationId);
+    expect(view.application).toMatchObject({
+      status: "review_required",
+      revision: start.view.application.revision + 1,
+    });
+    expect(view.attempts[0]).toMatchObject({ status: "failed_no_effect" });
+    expect(view.attempts[0]?.dispatchedAt).toBeUndefined();
+    const history = await store.getHistory(context.ownerUserId, context.applicationId);
+    expect(history.entries.filter((entry) => entry.kind === "approval_invalidated")).toHaveLength(
+      1,
+    );
+    expect(history.entries.some((entry) => entry.kind === "attempt_dispatched")).toBe(false);
+  });
+
+  it("detaches a stale binding snapshot before waiting for the application lock", async () => {
+    const context = await approved();
+    const start = await started(context);
+    let unlock: () => void = () => undefined;
+    let ready: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      unlock = resolve;
+    });
+    const locked = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const holder = client.begin(async (tx) => {
+      await tx`SELECT id FROM applications.applications WHERE id = ${context.applicationId} FOR UPDATE`;
+      ready();
+      await held;
+    });
+    await locked;
+    const mutable = { ...bindings, jobRevision: HASH_B };
+    const pending = store.dispatchAttempt({
+      ownerUserId: context.ownerUserId,
+      applicationId: context.applicationId,
+      attemptId: start.attempt.id,
+      current: mutable,
+    });
+    mutable.jobRevision = HASH_A;
+    unlock();
+    await holder;
+    await expect(pending).rejects.toMatchObject({ reasons: ["job_changed"] });
+    expect(
+      (await store.getApplication(context.ownerUserId, context.applicationId)).application.status,
+    ).toBe("review_required");
+  });
+
+  it("refuses approval that expires while the dispatch waits for an application lock", async () => {
+    const context = await approved();
+    const start = await started(context);
+    let localNow = new Date(now);
+    const queuedStore = new PostgresApplicationStore(client, () => localNow, { definitions });
+    let unlock: () => void = () => undefined;
+    let ready: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      unlock = resolve;
+    });
+    const locked = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const holder = client.begin(async (tx) => {
+      await tx`SELECT id FROM applications.applications WHERE id = ${context.applicationId} FOR UPDATE`;
+      ready();
+      await held;
+    });
+    await locked;
+    const pending = queuedStore.dispatchAttempt({
+      ownerUserId: context.ownerUserId,
+      applicationId: context.applicationId,
+      attemptId: start.attempt.id,
+      current: bindings,
+    });
+    localNow = new Date(localNow.getTime() + MAX_APPROVAL_AGE_MS);
+    unlock();
+    await holder;
+    await expect(pending).rejects.toMatchObject({ reasons: ["approval_expired"] });
+    const view = await store.getApplication(context.ownerUserId, context.applicationId);
+    expect(view.application.status).toBe("review_required");
+    expect(view.attempts[0]?.dispatchedAt).toBeUndefined();
+  });
+
+  it.skipIf(!disposableDispatchDatabase)(
+    "rolls back the entire refusal when its final outbox write fails",
+    async () => {
+      const context = await approved();
+      const start = await started(context);
+      const command = {
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        attemptId: start.attempt.id,
+        current: { ...bindings, jobRevision: HASH_B },
+      };
+      const name = `dispatch_fault_${uuidv7().replaceAll("-", "")}`;
+      const [before] = await client`SELECT
+      (SELECT count(*)::int FROM applications.history WHERE application_id = ${context.applicationId}) AS history,
+      (SELECT count(*)::int FROM applications.outbox WHERE application_id = ${context.applicationId}) AS outbox`;
+      // Only this loopback disposable database permits the generated, exact-application test trigger.
+      // Native PostgreSQL raises on the final lifecycle write; the earlier no-effect settlement
+      // and approval invalidation must roll back too. No service/table guard is replaced.
+      await client.unsafe(`CREATE FUNCTION applications.${name}() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.application_id = '${context.applicationId}'::uuid AND NEW.payload->>'status' = 'review_required' THEN
+          RAISE EXCEPTION 'SyntheticDispatchOutboxFailure';
+        END IF;
+        RETURN NEW;
+      END; $$`);
+      try {
+        await client.unsafe(`CREATE TRIGGER ${name} BEFORE INSERT ON applications.outbox
+        FOR EACH ROW EXECUTE FUNCTION applications.${name}()`);
+        await expect(store.dispatchAttempt(command)).rejects.toThrow(
+          "SyntheticDispatchOutboxFailure",
+        );
+        const view = await store.getApplication(context.ownerUserId, context.applicationId);
+        expect(view.application).toMatchObject({
+          status: "submitting",
+          revision: start.view.application.revision,
+        });
+        expect(view.approval?.id).toBe(start.view.approval?.id);
+        expect(view.attempts[0]).toMatchObject({ status: "started" });
+        expect(view.attempts[0]?.dispatchedAt).toBeUndefined();
+        const [after] = await client`SELECT
+        (SELECT count(*)::int FROM applications.history WHERE application_id = ${context.applicationId}) AS history,
+        (SELECT count(*)::int FROM applications.outbox WHERE application_id = ${context.applicationId}) AS outbox`;
+        expect(after).toEqual(before);
+      } finally {
+        await client.unsafe(`DROP TRIGGER IF EXISTS ${name} ON applications.outbox`);
+        await client.unsafe(`DROP FUNCTION applications.${name}()`);
+      }
+      await expect(store.dispatchAttempt(command)).rejects.toMatchObject({
+        reasons: ["job_changed"],
+      });
+      expect(
+        (await store.getApplication(context.ownerUserId, context.applicationId)).application.status,
+      ).toBe("review_required");
+    },
+  );
+
   it("creates idempotently, isolates owners, and refuses duplicates", async () => {
     const ownerUserId = uuidv7();
     const canonicalJobId = uuidv7();
@@ -166,6 +725,98 @@ describeWithDatabase("PostgresApplicationStore", () => {
       ApplicationNotFoundError,
     );
     expect((await store.listApplications(other)).items).toHaveLength(0);
+  });
+
+  it.each(["started", "dispatched"] as const)(
+    "keeps edit-again forbidden while an attempt is %s",
+    async (status) => {
+      const context = await approved();
+      const start = await started(context);
+      if (status === "dispatched")
+        await store.dispatchAttempt({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          attemptId: start.attempt.id,
+          current: bindings,
+        });
+      await expect(
+        store.reopenForEdit({
+          ownerUserId: context.ownerUserId,
+          applicationId: context.applicationId,
+          expectedRevision: start.view.application.revision,
+          idempotencyKey: key("reopen-in-flight"),
+        }),
+      ).rejects.toMatchObject({
+        from: "submitting",
+        event: "approval_invalidated",
+      });
+      const view = await store.getApplication(context.ownerUserId, context.applicationId);
+      expect(view.application.status).toBe("submitting");
+      expect(view.attempts[0]?.status).toBe(status);
+      expect(view.approval).not.toBeNull();
+    },
+  );
+
+  it("permits one fresh reviewed packet after a refused stale dispatch", async () => {
+    const context = await approved();
+    const start = await started(context);
+    const fresh = { ...bindings, jobRevision: HASH_B };
+    await expect(
+      store.dispatchAttempt({
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        attemptId: start.attempt.id,
+        current: fresh,
+      }),
+    ).rejects.toBeInstanceOf(StalePacketError);
+    const refused = await store.getApplication(context.ownerUserId, context.applicationId);
+    const packeted = await store.createPacket({
+      ownerUserId: context.ownerUserId,
+      applicationId: context.applicationId,
+      expectedRevision: refused.application.revision,
+      idempotencyKey: key("fresh-packet"),
+      packet: {
+        jobRevision: HASH_B,
+        form: { adapterId: "greenhouse", variantId: "synthetic-v1", formHash: HASH_B },
+        fields: [proposal()],
+        artifactHashes: { resume: HASH_C },
+      },
+    });
+    const packet = packeted.view.currentPacket;
+    if (!packet) throw Error("SyntheticPacketMissing");
+    expect(packet.packetHash).not.toBe(start.attempt.packetHash);
+    const reviewed = await store.approve({
+      ownerUserId: context.ownerUserId,
+      applicationId: context.applicationId,
+      expectedRevision: packeted.view.application.revision,
+      idempotencyKey: key("fresh-approval"),
+      current: fresh,
+      request: { packetHash: packet.packetHash, consentId: uuidv7(), acknowledgedFieldKeys: [] },
+    });
+    const resumed = await store.startAttempt({
+      ownerUserId: context.ownerUserId,
+      applicationId: context.applicationId,
+      expectedRevision: reviewed.view.application.revision,
+      idempotencyKey: key("fresh-attempt"),
+      current: fresh,
+      adapterId: "greenhouse",
+      adapterVersion: "1.0.0",
+    });
+    if (resumed.kind !== "started") throw Error("SyntheticAttemptMissing");
+    expect(resumed.attempt.id).not.toBe(start.attempt.id);
+    await expect(
+      store.dispatchAttempt({
+        ownerUserId: context.ownerUserId,
+        applicationId: context.applicationId,
+        attemptId: resumed.attempt.id,
+        current: fresh,
+      }),
+    ).resolves.toMatchObject({ status: "dispatched" });
+    const view = await store.getApplication(context.ownerUserId, context.applicationId);
+    expect(view.attempts.filter((attempt) => attempt.status === "dispatched")).toHaveLength(1);
+    expect(
+      view.attempts.find((attempt) => attempt.id === start.attempt.id)?.dispatchedAt,
+    ).toBeUndefined();
   });
 
   it("builds an immutable packet, enforces revisions, and refuses unresolved approval", async () => {
@@ -252,6 +903,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     expect(start.view.application.status).toBe("submitting");
 
     const dispatched = await store.dispatchAttempt({
+      current: bindings,
       ownerUserId: context.ownerUserId,
       applicationId: context.applicationId,
       attemptId: start.attempt.id,
@@ -260,6 +912,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     // Write-ahead dispatch can happen exactly once.
     await expect(
       store.dispatchAttempt({
+        current: bindings,
         ownerUserId: context.ownerUserId,
         applicationId: context.applicationId,
         attemptId: start.attempt.id,
@@ -365,6 +1018,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const context = await approved();
     const start = await started(context);
     await store.dispatchAttempt({
+      current: bindings,
       ownerUserId: context.ownerUserId,
       applicationId: context.applicationId,
       attemptId: start.attempt.id,
@@ -444,6 +1098,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const context = await approved();
     const start = await started(context);
     await store.dispatchAttempt({
+      current: bindings,
       ownerUserId: context.ownerUserId,
       applicationId: context.applicationId,
       attemptId: start.attempt.id,
@@ -469,6 +1124,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const sent = await approved();
     const sentStart = await started(sent);
     await store.dispatchAttempt({
+      current: bindings,
       ownerUserId: sent.ownerUserId,
       applicationId: sent.applicationId,
       attemptId: sentStart.attempt.id,
@@ -568,6 +1224,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const context = await approved();
     const start = await started(context);
     await store.dispatchAttempt({
+      current: bindings,
       ownerUserId: context.ownerUserId,
       applicationId: context.applicationId,
       attemptId: start.attempt.id,
@@ -686,6 +1343,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
       // Dispatch is illegal: a manual attempt never goes through the automated dispatch step.
       await expect(
         store.dispatchAttempt({
+          current: bindings,
           ownerUserId: context.ownerUserId,
           applicationId: context.applicationId,
           attemptId: start.attempt.id,

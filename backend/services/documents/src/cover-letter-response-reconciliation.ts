@@ -87,14 +87,15 @@ async function bounded<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> 
   }
 }
 
-/** Trusted private maintenance for FAILED/ABANDONED work only, never ordinary generation.
+/** Trusted private maintenance for positively classified original provider failure only.
  * The permanent admission fence precedes any provider effect. Response disposal does NOT settle
  * private writers, certify quiescence, grant finalization or authorize object/row purge.
  * Runtime/IAM and maintained scheduling are separate prerequisites; all capabilities default off.
  */
 export function createCoverLetterResponseReconciler(options: {
   work: Pick<PostgresCoverLetterWorkStore, "fenceForCleanup">;
-  responses: Pick<PostgresCoverLetterResponseStore, "read" | "recordDisposal">;
+  responses: Pick<PostgresCoverLetterResponseStore, "read" | "recordDisposal"> &
+    Partial<Pick<PostgresCoverLetterResponseStore, "readFailed">>;
   cleanup: Pick<OpenAiLunaResponseCleanup, "stopAndDelete">;
   enabled?: () => boolean;
   timeoutMs?: number;
@@ -113,12 +114,15 @@ export function createCoverLetterResponseReconciler(options: {
         deadline.throwIfAborted();
         if (!enabled()) throw Error();
       };
+      // Missing owning proof refuses before any fence/read/provider effect. Old compositions
+      // and unclassified rows have no ordinary-inventory or caller-classification fallback.
+      if (typeof options.responses.readFailed !== "function") return unresolved;
+      const row = await bounded(options.responses.readFailed(structuredClone(ref)), deadline);
+      admitted();
+      if (!inventory(row, ref) || !row.response) return unresolved;
       const fence = await bounded(options.work.fenceForCleanup(structuredClone(ref)), deadline);
       admitted();
       if (fence !== "pending" && fence !== "ledger_terminal") return unresolved;
-      const row = await bounded(options.responses.read(structuredClone(ref)), deadline);
-      admitted();
-      if (!inventory(row, ref)) return unresolved;
       if (row.state === "disposed") return { kind: "response_disposed", reference: ref };
       if (!row.response) return unresolved;
       const original = structuredClone(row.response);
@@ -135,7 +139,7 @@ export function createCoverLetterResponseReconciler(options: {
         deadline,
       );
       admitted();
-      const committed = await bounded(options.responses.read(structuredClone(ref)), deadline);
+      const committed = await bounded(options.responses.readFailed(structuredClone(ref)), deadline);
       admitted();
       if (
         !inventory(committed, ref) ||

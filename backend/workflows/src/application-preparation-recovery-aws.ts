@@ -11,7 +11,7 @@ import {
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import type { SQSBatchResponse, SQSEvent } from "aws-lambda";
 import { validateApplicationPreparationDurableInput } from "./application-preparation-contract.js";
-import { PreparationDispatchPendingError } from "./application-preparation-dispatch.js";
+import { PreparationDispatchPendingError } from "./application-preparation-errors.js";
 import type {
   PreparationExecutionMetadata,
   PreparationNudgePublisher,

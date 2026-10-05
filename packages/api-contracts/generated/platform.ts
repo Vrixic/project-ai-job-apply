@@ -2177,7 +2177,17 @@ export interface components {
             disposition: "auto" | "review" | "user_action";
             reasons: ("restricted_answer" | "explicit_each_time" | "never_infer" | "unsupported_value" | "unconfirmed_source" | "low_confidence" | "generated_content" | "unknown_field" | "direct_user_action")[];
             requiresReview: boolean;
-        };
+            vaultReference?: {
+                /** Format: uuid */
+                id: string;
+                version: number;
+                context: string;
+                questionHash: string;
+                /** @constant */
+                meaningConfirmed: true;
+                validUntilEpochMs: number | null;
+            };
+        } & (unknown & unknown);
         ApplicationFormBinding: {
             adapterId: string;
             variantId: string;
@@ -2197,6 +2207,7 @@ export interface components {
             };
             /** Format: date-time */
             createdAt: string;
+            temporaryMaterials?: components["schemas"]["ApplicationTemporaryMaterial"][];
         };
         ApplicationApproval: {
             /** Format: uuid */
@@ -2383,6 +2394,8 @@ export interface components {
                 version: "gpt-6-luna";
             };
             promptVersion: string;
+            /** @description Exact current memory generation and original fixed expiry. This response must not be persisted or cached; discard platform copies at expiry, logout, cancellation or confirmed submission. */
+            temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
         ApplicationCoverLetterFile: {
             /** @enum {string} */
@@ -2396,8 +2409,10 @@ export interface components {
             /** @description Format-independent immutable cover-letter content hash bound to the packet. */
             contentSha256: string;
             contentBase64: string;
+            /** @description Exact current memory generation and original fixed expiry. This response must not be persisted or cached; discard platform copies at expiry, logout, cancellation or confirmed submission. */
+            temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
-        /** @description Omit coverLetter for existing synchronous preparation. Explicit opt-in acknowledges the current OpenAI cover-letter notice; acknowledgement time is server-recorded. Clients cannot supply timestamps or provider/model overrides. Generated text always requires candidate review. */
+        /** @description Omit coverLetter for existing synchronous preparation. Explicit opt-in acknowledges the current OpenAI cover-letter notice; acknowledgement time is server-recorded. Clients cannot supply timestamps or provider/model overrides. Generated text always requires candidate review. Saved-answer reuse is default-off; explicit selections confirm exact question meaning/context and require review. No context is inferred. */
         PrepareApplicationPacketRequest: {
             expectedRevision: number;
             form?: components["schemas"]["ApplicationFormBinding"];
@@ -2406,6 +2421,16 @@ export interface components {
                 value: string | number | boolean | (string | number | boolean)[] | null;
             }[];
             coverLetter?: components["schemas"]["RequestedApplicationCoverLetter"];
+            vaultSelections?: {
+                /** Format: uuid */
+                id: string;
+                version: number;
+                context: string;
+                questionHash: string;
+                /** @constant */
+                meaningConfirmed: true;
+                fieldKey: string;
+            }[];
         };
         ApproveApplicationPacketRequest: {
             expectedRevision: number;
@@ -2429,7 +2454,7 @@ export interface components {
             outcome: "started" | "approval_invalidated";
             /** Format: uuid */
             attemptId?: string;
-            invalidationReasons?: ("packet_hash_mismatch" | "approval_expired" | "job_changed" | "form_changed" | "resume_changed" | "cover_letter_changed")[];
+            invalidationReasons?: ("packet_hash_mismatch" | "approval_expired" | "job_changed" | "form_changed" | "resume_changed" | "cover_letter_changed" | "vault_answer_changed" | "temporary_material_expired" | "temporary_material_changed")[];
             application: components["schemas"]["Application"];
         };
         ApplicationSubmissionResultRequest: {
@@ -2458,6 +2483,19 @@ export interface components {
             kind: "user_attested_not_submitted";
             /** @constant */
             acknowledgesDuplicateRisk: true;
+        };
+        /** @description Original generated material metadata only. No content or ownership credentials. Expiry is completion plus exactly 1,800,000 milliseconds; access, edits and retries never renew it. Generation identity and deadline are part of the packet approval binding. */
+        ApplicationTemporaryMaterial: {
+            /** @constant */
+            schemaVersion: 1;
+            /** @enum {string} */
+            kind: "cover_letter" | "tailored_resume";
+            /** Format: uuid */
+            generationId: string;
+            version: number;
+            contentSha256: string;
+            completedAtMs: number;
+            expiresAtMs: number;
         };
     };
     responses: {

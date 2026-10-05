@@ -20,6 +20,126 @@ function application(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Applications OpenAPI contract", () => {
+  it("accepts scalar public material metadata and refuses content or private authority fields", () => {
+    const validate = compileComponentValidator("ApplicationTemporaryMaterial");
+    const reference = {
+      schemaVersion: 1,
+      kind: "tailored_resume",
+      generationId: randomUUID(),
+      version: 1,
+      contentSha256: hash,
+      completedAtMs: 1_000,
+      expiresAtMs: 1_801_000,
+    };
+    expect(validate(reference)).toBe(true);
+    expect(validate({ ...reference, kind: "cover_letter" })).toBe(true);
+    for (const patch of [
+      { text: "synthetic forbidden content" },
+      { contentBase64: "c3ludGhldGlj" },
+      { ownerUserId: randomUUID() },
+      { applicationId: randomUUID() },
+      { version: 0 },
+      { version: 1.5 },
+      { completedAtMs: -1 },
+      { expiresAtMs: 8_640_000_000_000_001 },
+      { generationId: "invalid" },
+      { kind: "original_resume" },
+    ]) {
+      expect(validate({ ...reference, ...patch })).toBe(false);
+    }
+    const request = compileComponentValidator("PrepareApplicationPacketRequest");
+    expect(request({ expectedRevision: 1, temporaryMaterials: [reference] })).toBe(false);
+  });
+
+  it("accepts explicit bounded question/context selections and refuses unconfirmed or unbound requests", () => {
+    const validate = compileComponentValidator("PrepareApplicationPacketRequest");
+    const selection = {
+      id: randomUUID(),
+      version: 1,
+      fieldKey: "authorization.us_authorized",
+      context: "us",
+      questionHash: hash,
+      meaningConfirmed: true,
+    };
+    const request = {
+      expectedRevision: 1,
+      form: { adapterId: "greenhouse", variantId: "synthetic", formHash: hash },
+      vaultSelections: [selection],
+    };
+    expect(validate(request)).toBe(true);
+    expect(validate({ expectedRevision: 1 })).toBe(true);
+    expect(validate({ ...request, form: undefined })).toBe(false);
+    for (const patch of [
+      { meaningConfirmed: false },
+      { version: 0 },
+      { version: 1.5 },
+      { context: "x".repeat(121) },
+      { questionHash: "not-a-hash" },
+      { value: "private" },
+    ]) {
+      expect(validate({ ...request, vaultSelections: [{ ...selection, ...patch }] })).toBe(false);
+    }
+    expect(
+      validate({ ...request, vaultSelections: Array.from({ length: 21 }, () => selection) }),
+    ).toBe(false);
+  });
+
+  it("carries selected provenance only on explicitly reviewed vault fields", () => {
+    const validate = compileComponentValidator("ApplicationPacketField");
+    const id = randomUUID();
+    const field = {
+      fieldKey: "authorization.us_authorized",
+      value: false,
+      origin: "answer_vault",
+      sourceFactIds: [id],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["restricted_answer"],
+      requiresReview: true,
+      vaultReference: {
+        id,
+        version: 1,
+        context: "us",
+        questionHash: hash,
+        meaningConfirmed: true,
+        validUntilEpochMs: null,
+      },
+    };
+    expect(validate(field)).toBe(true);
+    expect(validate({ ...field, requiresReview: false })).toBe(false);
+    expect(validate({ ...field, origin: "user_entered" })).toBe(false);
+    expect(validate({ ...field, disposition: "auto" })).toBe(false);
+    expect(
+      validate({ ...field, vaultReference: { ...field.vaultReference, ciphertext: "opaque" } }),
+    ).toBe(false);
+  });
+
+  it("never carries document material in a packet field", () => {
+    const validate = compileComponentValidator("ApplicationPacketField");
+    const field = {
+      fieldKey: "documents.cover_letter",
+      value: hash,
+      origin: "generated",
+      sourceFactIds: [randomUUID()],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["generated_content"],
+      requiresReview: true,
+    };
+    for (const fieldKey of ["documents.cover_letter", "documents.resume"]) {
+      expect(validate({ ...field, fieldKey })).toBe(true);
+      expect(validate({ ...field, fieldKey, value: null })).toBe(true);
+      for (const value of [
+        "Synthetic forbidden material",
+        "https://example.test/material",
+        "A".repeat(64),
+        [hash],
+        true,
+      ])
+        expect(validate({ ...field, fieldKey, value })).toBe(false);
+    }
+  });
+
   it("guards every route with an exact applications scope and no-store responses", () => {
     const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
       path.startsWith("/applications"),

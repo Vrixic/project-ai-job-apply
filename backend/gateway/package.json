@@ -22,6 +22,7 @@
     "@ai-job-apply/billing-service": "workspace:*",
     "@ai-job-apply/config": "workspace:*",
     "@ai-job-apply/documents-service": "workspace:*",
+    "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/jobs-service": "workspace:*",
     "@ai-job-apply/matching-service": "workspace:*",
     "@ai-job-apply/observability": "workspace:*",
@@ -42,7 +43,7 @@
     "rxjs": "7.8.2"
   },
   "devDependencies": {
-    "@ai-job-apply/domain": "workspace:*",
+    "@ai-job-apply/ai-sdk": "workspace:*",
     "@types/aws-lambda": "8.10.163",
     "tsx": "4.23.13",
     "uuid": "14.0.2"

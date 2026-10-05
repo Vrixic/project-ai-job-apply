@@ -585,3 +585,98 @@ cannot invoke this path, and a receipt is not caller authentication or productio
 Running/ambiguous work and retained reservation inventory remain protected; no purge occurs.
 All flags remain dark. Matching control must precede the actor during any separately reviewed
 rollout; public APIs, frontend, migrations, guard/Terraform and deployment are unchanged.
+
+### Selected saved-answer packet admission (proposed ADR-039)
+
+The default-off `RESTRICTED_ANSWER_REUSE_ENABLED` path reads only an exact candidate-selected
+answer through Profile, outside SQL locks, into the candidate's immutable reviewed packet.
+The packet binds its answer ID/version, exact context, observed question hash and expiry.
+Approval, submission start/dispatch and asynchronous preparation admission use Profile-owned
+metadata checks under the vault writers' advisory locks in the same Applications transaction.
+The metadata capability receives a narrow tagged query function and exposes no plaintext, cipher,
+general list, transaction lifecycle or write API. Events and generation inputs carry no saved
+answer values. Corrected/deleted/expired references refuse admission; there is no latest-version
+substitution. See [ADR-039](../adr/039-transactional-vault-reference-admission.md). Reader-first
+strict-schema rollout, explicit migration 0006, candidate review UI and accountable/deployed
+acceptance remain required before activation; this does not certify privacy writer drain.
+
+The current source still persists selected scalar values in Applications packet JSON outside the
+vault's separate key/storage boundary. D3-077 must protect packet-value persistence and owner
+reads before the switch can be enabled. Default-off synthetic selection/admission tests do not
+satisfy that storage requirement or authorize representative data.
+
+
+D3-064 now adds a source-only Documents memory replacement for generated cover-letter completion
+and reads. Exact generation metadata binds a non-renewable 1,800-second window; bounded buffers,
+staged publication, idle cleanup, cancellation scopes and post-async checks refuse late content.
+Original completion authority is mandatory but simulated in these tests; native immutable metadata
+admission/RPC remains unfinished. No SQL/S3/provider/export or reconstruction capability exists
+on the new content store. Production PDF verification uses separate scratch bytes so verification
+does not detach the download; transient cover-letter renderer buffers/references are cleared.
+This is managed memory/content-boundary evidence, not arbitrary string erasure, remote writer
+quiescence, HTTP/browser cleanup, packet/ATS admission or approved provider-retention evidence.
+Existing persisted generated-content paths remain ineligible for activation under ADR-038.
+[Evidence](../product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).
+
+## D3-064 held temporary response source boundary (2026-10-05)
+
+Default-off cover-letter reads now hold a Documents managed byte lease with a 512 KiB outgoing
+reservation through Applications/HTTP validation and release. Private revalidation, signal and
+release callbacks are process-local capabilities and never serialized/persisted. Original fixed
+expiry and owner disposal clear controlled output; request abort does not settle an unknown renderer
+callback. Terminal cancellation/confirmation commits SQL evidence before requesting bounded scope
+sealing/disposal; failed acknowledgement does not erase that evidence or permit redispatch.
+No schema/event/content persistence or public transport change is introduced. Native session/transport
+receipts, worker drain, client lifecycle, ATS and D3-012 retention approval still block activation.
+[Source evidence](../product/delivery/evidence/d3-held-temporary-content-2026-10-05.md) does not certify
+all-copy physical expiry, remote settlement or deployed candidate acceptance.
+
+## D3-064 original memory-only generation source delta — 2026-10-05
+
+Private owner evidence → bounded canonical request in memory → consume preissued native grant →
+foreground SDK with `store:false`, `background:false`, `stream:false` → original completion clock
+and grounding → positive scalar provider settlement → scalar native original completion →
+managed temporary material. The replacement actor has no object or SQL capability and returns
+only fixed statuses, identifiers, hashes/citations and expiry metadata. Generated paragraphs
+actively clear on original expiry/cancellation while control acknowledgement waits. Native
+completion/render admission uses the same cancellation signal and clears cancelled staged or
+just-published content. The Gateway SDK import added for connected acceptance is test-only.
+
+The new SDK path awaits the actual original promise through timeout; late fulfillment discards
+content and authorizes only its original provider-phase closure. Unknown rejection/abort/deadline
+never proves remote settlement, retention compliance, host drain or physical purge. One actor
+admits one pending original promise; process-wide host admission, authenticated private issuer/
+transport, physical expiry/shutdown and D3-012 provider terms remain activation gates. Default-off
+source and simulated model/OIDC evidence do not expose generated material to real candidates.
+
+## D3-079 native material-process source delta — 2026-10-05
+
+Private admitted candidate/application/generation → default-off dedicated Linux session → one
+original SDK dispatch → synchronous original completion clock → kernel deadline → existing
+scalar native completion/temporary memory/read capabilities. The kernel module receives only
+timestamps/limits, disables core dumps/dumpability and kills this allocation on fixed expiry or
+invalid/repeat binding. Session admission refuses another allocation/worker-thread use. Native
+process disposal cannot acknowledge its own death; the separate trusted task/process observer
+must positively observe retirement. Remote provider settlement remains independent.
+
+[Proposed ADR-040](../adr/040-native-temporary-material-processes.md) preserves private SQL/provider
+separation and forbids native-module use in shared APIs, Lambda or clients. Authenticated
+launcher/transport/task registry/stop observation, managed-runtime integrity/conformance, full
+content routing, client/ATS cleanup and D3-012 terms remain gates. Local kernel tests use synthetic
+provider/SQL/render adapters and cannot establish cleanup of a remote system or another process.
+
+## D3-079 native HTTPS read source delta — 2026-10-05
+
+Trusted admitted issuer/subject/internal owner → dedicated native session → fixed TLS 1.3
+preview/file route → RS256 OIDC with required expiration and scope → private owning scalar
+Applications packet/reference check → temporary read/render → repeated source/packet/token
+checks → bounded no-store output within the same kernel-bounded content process. There is no
+Gateway/Lambda content forwarding or durable content output in this new listener. Exact CORS
+origin and strict request framing precede reads. Disconnect aborts controlled copies but retains
+admission until real pending calls settle; native process expiry remains independent of JavaScript.
+
+Local loopback TLS and real signed synthetic tokens exercise the listener in the actual native
+process; SQL/provider/renderer/managed identity are simulated. Private remote authentication,
+launch/task registry/TLS routing/managed stop, full client/ATS copy lifecycle and D3-012 provider
+terms remain gates. No deployment, enabled hostname, all-copy purge or remote settlement follows.
+[Evidence](../product/delivery/evidence/d3-native-memory-transport-2026-10-05.md).

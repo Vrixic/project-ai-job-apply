@@ -2,6 +2,7 @@ import type {
   ApplicationPacketPreparation,
   PrepareApplicationPacketRequest,
 } from "@ai-job-apply/api-contracts";
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 
 export type PreparationFailureCode = NonNullable<ApplicationPacketPreparation["errorCode"]>;
 export interface PreparationRecord {
@@ -23,7 +24,11 @@ export interface PreparationRecord {
   updatedAt: Date;
 }
 
+import type { VaultCurrentReference } from "./vault.js";
+
 export interface PreparationContext {
+  temporaryMaterials?: readonly TemporaryMaterialReference[];
+  vaultReferences?: readonly VaultCurrentReference[];
   jobContextHash: string;
   confirmedFactsHash: string;
 }

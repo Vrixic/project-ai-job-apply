@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { SYNTHETIC_RESUME, syntheticDocument } from "./resume-ast/test-support.js";
 import {
@@ -158,6 +159,11 @@ describe("resume tailoring service", () => {
       if (result.status !== "ready") throw new Error(`expected ready for ${format}`);
       expect(result.artifact?.format).toBe(format);
       expect(result.artifact?.sha256).toMatch(/^[a-f0-9]{64}$/u);
+      const artifactBytes = Buffer.from(result.artifact?.contentBase64 ?? "", "base64");
+      expect(artifactBytes.byteLength).toBeGreaterThan(0);
+      expect(createHash("sha256").update(artifactBytes).digest("hex")).toBe(
+        result.artifact?.sha256,
+      );
       expect(Buffer.from(result.artifact?.contentBase64 ?? "", "base64").byteLength).toBe(
         result.artifact?.sizeBytes,
       );

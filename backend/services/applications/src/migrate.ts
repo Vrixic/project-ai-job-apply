@@ -12,6 +12,9 @@ const migrationVersions = [
   "0003_manual_submission",
   "0004_packet_preparation",
   "0005_preparation_dispatch",
+  "0006_vault_approval_binding",
+  "0007_document_field_hashes",
+  "0008_temporary_material_bindings",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -60,6 +63,9 @@ try {
         candidateRightsSecurityDefinerCount: number;
         candidateRightsPublicExecuteViolationCount: number;
         candidateDeletionGuardBodyCount: number;
+        documentFieldHashGuardCount: number;
+        temporaryMaterialConstraintCount: number;
+        temporaryMaterialTriggerCount: number;
       }[]
     >`
       SELECT
@@ -121,7 +127,24 @@ try {
           WHERE procedure.oid = to_regprocedure('applications.guard_candidate_delete()')
             AND pg_get_functiondef(procedure.oid)
               LIKE '%privacy.current_candidate_deletion_authorized%'
-        ) AS "candidateDeletionGuardBodyCount"
+        ) AS "candidateDeletionGuardBodyCount",
+        (SELECT count(*)::int FROM pg_constraint
+          WHERE conrelid = 'applications.packets'::regclass
+            AND conname = 'packets_document_field_hashes_ck' AND contype = 'c' AND convalidated
+            AND pg_get_constraintdef(oid) LIKE '%jsonb_path_query_array%'
+            AND pg_get_constraintdef(oid) LIKE '%documents.cover_letter%'
+            AND pg_get_constraintdef(oid) LIKE '%documents.resume%'
+            AND pg_get_constraintdef(oid) LIKE '%jsonb_build_array(cover_letter_hash)%'
+            AND pg_get_constraintdef(oid) LIKE '%jsonb_build_array(resume_hash)%'
+        ) AS "documentFieldHashGuardCount",
+        (SELECT count(*)::int FROM pg_constraint WHERE conrelid = 'applications.packets'::regclass
+          AND conname = 'packets_temporary_materials_ck' AND convalidated
+        ) AS "temporaryMaterialConstraintCount",
+        (SELECT count(*)::int FROM pg_trigger WHERE NOT tgisinternal AND (
+          (tgrelid = 'applications.packets'::regclass AND tgname = 'packets_temporary_material_edit') OR
+          (tgrelid = 'applications.approvals'::regclass AND tgname = 'approvals_temporary_material_admission') OR
+          (tgrelid = 'applications.attempts'::regclass AND tgname = 'attempts_temporary_material_admission'))
+        ) AS "temporaryMaterialTriggerCount"
     `;
     if (
       verification?.relationCount !== 11 ||
@@ -131,7 +154,10 @@ try {
       verification.candidateRightsFunctionCount !== 3 ||
       verification.candidateRightsSecurityDefinerCount !== 2 ||
       verification.candidateRightsPublicExecuteViolationCount !== 0 ||
-      verification.candidateDeletionGuardBodyCount !== 1
+      verification.candidateDeletionGuardBodyCount !== 1 ||
+      verification.documentFieldHashGuardCount !== 1 ||
+      verification.temporaryMaterialConstraintCount !== 1 ||
+      verification.temporaryMaterialTriggerCount !== 3
     ) {
       throw new Error(
         `Applications migration verification failed: ${JSON.stringify(verification)}`,

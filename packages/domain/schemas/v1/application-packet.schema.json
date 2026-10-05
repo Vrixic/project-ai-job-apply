@@ -88,9 +88,94 @@
           },
           "requiresReview": {
             "type": "boolean"
+          },
+          "vaultReference": {
+            "type": "object",
+            "required": [
+              "id",
+              "version",
+              "context",
+              "questionHash",
+              "meaningConfirmed",
+              "validUntilEpochMs"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "context": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "questionHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "meaningConfirmed": {
+                "const": true
+              },
+              "validUntilEpochMs": {
+                "type": ["number", "null"]
+              }
+            },
+            "additionalProperties": false
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "required": ["vaultReference"],
+              "properties": {
+                "vaultReference": {}
+              }
+            },
+            "then": {
+              "properties": {
+                "origin": {
+                  "const": "answer_vault"
+                },
+                "requiresReview": {
+                  "const": true
+                },
+                "disposition": {
+                  "const": "review"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["fieldKey"],
+              "properties": {
+                "fieldKey": {
+                  "enum": ["documents.cover_letter", "documents.resume"]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "artifactHashes": {
@@ -155,6 +240,68 @@
     "createdAt": {
       "type": "string",
       "format": "date-time"
+    },
+    "temporaryMaterials": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "kind",
+          "generationId",
+          "version",
+          "contentSha256",
+          "completedAtMs",
+          "expiresAtMs",
+          "ownerUserId",
+          "applicationId"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["cover_letter", "tailored_resume"]
+          },
+          "generationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "contentSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "completedAtMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8639999998200000
+          },
+          "expiresAtMs": {
+            "type": "integer",
+            "minimum": 1800000,
+            "maximum": 8640000000000000
+          },
+          "ownerUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false

@@ -10,6 +10,93 @@ const reference = {
 };
 
 describe("Profile-owned restricted answer export reader", () => {
+  it.each(["sql", "decrypt"] as const)(
+    "pins every reference field before awaiting %s",
+    async (timing) => {
+      const mutable = { ...reference };
+      const mutate = () =>
+        Object.assign(mutable, {
+          id: "other-entry",
+          version: 9,
+          fieldKey: "demographic.veteran",
+          context: "ca",
+        });
+      const client = vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          if (timing === "sql") mutate();
+          return [
+            {
+              ciphertext: Buffer.from([1]),
+              kmsKeyId: "key",
+              encryptionAlgorithm: "SYMMETRIC_DEFAULT",
+            },
+          ];
+        })
+        .mockResolvedValueOnce([{ current: true }]);
+      const cipher = {
+        decrypt: vi.fn(async () => {
+          if (timing === "decrypt") mutate();
+          return "false";
+        }),
+      };
+      const reader = new PostgresRestrictedAnswerExportReader(
+        client as unknown as postgres.Sql,
+        cipher,
+      );
+      await expect(reader.readValue("owner", mutable)).resolves.toBe("false");
+      expect(mutable).not.toEqual(reference);
+      for (const call of client.mock.calls) {
+        expect(call.slice(1)).toEqual([
+          "owner",
+          reference.id,
+          reference.fieldKey,
+          reference.context,
+          reference.version,
+        ]);
+      }
+      expect(cipher.decrypt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "owner",
+          fieldKey: reference.fieldKey,
+          context: reference.context,
+        }),
+      );
+    },
+  );
+
+  it("cannot substitute a live neighbour for an original snapshot changed during decrypt", async () => {
+    const mutable = { ...reference };
+    const client = vi
+      .fn()
+      .mockResolvedValueOnce([
+        { ciphertext: Buffer.from([1]), kmsKeyId: "key", encryptionAlgorithm: "SYMMETRIC_DEFAULT" },
+      ])
+      .mockImplementationOnce(async (_query, _owner, id, fieldKey, context, version) => [
+        {
+          current:
+            id === "other-entry" &&
+            fieldKey === "demographic.veteran" &&
+            context === "us" &&
+            version === 9,
+        },
+      ]);
+    const reader = new PostgresRestrictedAnswerExportReader(client as unknown as postgres.Sql, {
+      decrypt: async () => {
+        Object.assign(mutable, {
+          id: "other-entry",
+          version: 9,
+          fieldKey: "demographic.veteran",
+          context: "ca",
+        });
+        return "false";
+      },
+    });
+    await expect(reader.readValue("owner", mutable)).rejects.toThrow(
+      "RestrictedAnswerExportSnapshotChanged",
+    );
+  });
+
   it("refuses credentials, consent artifacts and unknown fields before database or KMS I/O", async () => {
     const client = vi.fn();
     const cipher = { decrypt: vi.fn() };

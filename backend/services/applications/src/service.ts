@@ -13,6 +13,7 @@ import type {
   ApplicationSubmissionStart,
   ReconcileApplicationAttemptRequest,
 } from "@ai-job-apply/api-contracts";
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import type {
   AdapterSubmissionResult,
   ConfirmationEvidence,
@@ -37,7 +38,12 @@ import type {
   PostgresApplicationStore,
   StartAttemptResult,
 } from "./store.js";
-import { ApplicationIntegrityError, StalePacketError } from "./store.js";
+import { ApplicationIntegrityError, AttemptNotFoundError, StalePacketError } from "./store.js";
+import {
+  type ApplicationTemporaryMaterials,
+  readBoundTemporaryCoverLetter,
+} from "./temporary-cover-letter-read.js";
+import { temporaryMaterialReasons } from "./temporary-material.js";
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -63,7 +69,10 @@ export interface PacketPreparation {
   /** Proposals derived only from confirmed facts, the answer vault, and generated drafts. */
   fields: readonly ProposedField[];
   artifactHashes: ArtifactHashes;
+  temporaryMaterials?: readonly TemporaryMaterialReference[];
 }
+
+import type { VaultSelection } from "./vault.js";
 
 export interface UserEntry {
   fieldKey: string;
@@ -79,6 +88,7 @@ export interface PacketPreparationSource {
     ownerUserId: string;
     application: ApplicationRecord;
     userEntries: readonly UserEntry[];
+    vaultSelections?: readonly VaultSelection[];
     /** The form structure the extension observed and mapped against, when known. */
     form: FormBinding | null;
   }): Promise<PacketPreparation>;
@@ -166,11 +176,13 @@ export interface ApplicationsApi {
   coverLetterPreview(
     ownerUserId: string,
     applicationId: string,
+    signal?: AbortSignal,
   ): Promise<ApplicationCoverLetterPreview>;
   coverLetterFile(
     ownerUserId: string,
     applicationId: string,
     format: "pdf" | "docx",
+    signal?: AbortSignal,
   ): Promise<ApplicationCoverLetterFile>;
   /** The resume tailored for this application's job and whether the packet already carries it. */
   resumePreview(ownerUserId: string, applicationId: string): Promise<ApplicationResumePreview>;
@@ -191,6 +203,7 @@ export interface ApplicationsApi {
     request: {
       expectedRevision: number;
       userEntries?: readonly UserEntry[];
+      vaultSelections?: readonly VaultSelection[];
       form?: FormBinding;
     },
     idempotencyKey: string,
@@ -266,6 +279,7 @@ export interface ApplicationsServiceDependencies {
   /** Absent until preparation persistence and owned Documents context/read boundaries are wired. */
   preparations?: ApplicationPreparations;
   coverLetters?: ApplicationCoverLetters;
+  temporaryMaterials?: ApplicationTemporaryMaterials;
   /** Optional privacy-safe measurement sink. Failures never affect a request. */
   metrics?: MetricSink;
   clock?: () => Date;
@@ -319,6 +333,16 @@ export class ApplicationsService implements ApplicationsApi {
     applicationId: string,
   ): Promise<ApplicationResumePreview> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const temporaryResume = view.currentPacket?.temporaryMaterials?.find(
+      (reference) => reference.kind === "tailored_resume",
+    );
+    if (temporaryResume) {
+      const reasons = temporaryMaterialReasons([temporaryResume], [temporaryResume], this.clock());
+      if (reasons.length) throw new StalePacketError(reasons);
+      if (view.application.status === "applied" || view.application.status === "cancelled")
+        throw new StalePacketError(["temporary_material_changed"]);
+      throw new ApplicationsUnavailableError();
+    }
     const resumes = this.dependencies.resumes;
     if (!resumes) {
       return {
@@ -367,6 +391,9 @@ export class ApplicationsService implements ApplicationsApi {
       ownerUserId,
       application: current.application,
       userEntries: command.request.userEntries ?? [],
+      ...(command.request.vaultSelections
+        ? { vaultSelections: command.request.vaultSelections }
+        : {}),
       form: command.request.form ?? null,
     });
     const accepted = await preparations.queuePreparation({ ...command, context, packet });
@@ -389,9 +416,26 @@ export class ApplicationsService implements ApplicationsApi {
   async coverLetterPreview(
     ownerUserId: string,
     applicationId: string,
+    signal?: AbortSignal,
   ): Promise<ApplicationCoverLetterPreview> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const hash = view.currentPacket?.artifactHashes.coverLetter;
+    const reference = view.currentPacket?.temporaryMaterials?.find(
+      (item) => item.kind === "cover_letter",
+    );
+    if (reference)
+      return readBoundTemporaryCoverLetter({
+        store: this.dependencies.store,
+        materials: this.dependencies.temporaryMaterials,
+        view,
+        reference,
+        clock: this.clock,
+        ...(signal ? { signal } : {}),
+        read: (port, fixed) => {
+          if (!port.coverLetterPreview) throw new ApplicationsUnavailableError();
+          return port.coverLetterPreview(ownerUserId, applicationId, fixed, signal);
+        },
+      });
     if (!hash) return { status: "no_cover_letter", matchesPacket: false };
     const letters = this.dependencies.coverLetters;
     if (!letters) throw new ApplicationsUnavailableError();
@@ -409,9 +453,27 @@ export class ApplicationsService implements ApplicationsApi {
     ownerUserId: string,
     applicationId: string,
     format: "pdf" | "docx",
+    signal?: AbortSignal,
   ): Promise<ApplicationCoverLetterFile> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const hash = view.currentPacket?.artifactHashes.coverLetter;
+    const reference = view.currentPacket?.temporaryMaterials?.find(
+      (item) => item.kind === "cover_letter",
+    );
+    if (reference)
+      return readBoundTemporaryCoverLetter({
+        store: this.dependencies.store,
+        materials: this.dependencies.temporaryMaterials,
+        view,
+        reference,
+        clock: this.clock,
+        ...(signal ? { signal } : {}),
+        format,
+        read: (port, fixed) => {
+          if (!port.coverLetterFile) throw new ApplicationsUnavailableError();
+          return port.coverLetterFile(ownerUserId, applicationId, fixed, format, signal);
+        },
+      });
     if (!hash) throw new StalePacketError(["cover_letter_changed"]);
     const letters = this.dependencies.coverLetters;
     if (!letters) throw new ApplicationsUnavailableError();
@@ -434,6 +496,16 @@ export class ApplicationsService implements ApplicationsApi {
     format: ApplicationResumeFile["format"],
   ): Promise<ApplicationResumeFile> {
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const temporaryResume = view.currentPacket?.temporaryMaterials?.find(
+      (reference) => reference.kind === "tailored_resume",
+    );
+    if (temporaryResume) {
+      const reasons = temporaryMaterialReasons([temporaryResume], [temporaryResume], this.clock());
+      if (reasons.length) throw new StalePacketError(reasons);
+      if (view.application.status === "applied" || view.application.status === "cancelled")
+        throw new StalePacketError(["temporary_material_changed"]);
+      throw new ApplicationsUnavailableError();
+    }
     const resumes = this.dependencies.resumes;
     if (!resumes) throw new ApplicationsUnavailableError();
     const packetHash = view.currentPacket?.artifactHashes.resume;
@@ -481,27 +553,33 @@ export class ApplicationsService implements ApplicationsApi {
     request: {
       expectedRevision: number;
       userEntries?: readonly UserEntry[];
+      vaultSelections?: readonly VaultSelection[];
       form?: FormBinding;
     },
     idempotencyKey: string,
   ): Promise<Application> {
+    const snapshot = structuredClone(request);
     const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const preparation = await this.dependencies.packets.prepare({
       ownerUserId,
       application: current.application,
-      userEntries: request.userEntries ?? [],
-      form: request.form ?? null,
+      userEntries: snapshot.userEntries ?? [],
+      form: snapshot.form ?? null,
+      ...(snapshot.vaultSelections ? { vaultSelections: snapshot.vaultSelections } : {}),
     });
     const result = await this.dependencies.store.createPacket({
       ownerUserId,
       applicationId,
-      expectedRevision: request.expectedRevision,
+      expectedRevision: snapshot.expectedRevision,
       idempotencyKey,
       packet: {
         jobRevision: preparation.jobRevision,
         form: preparation.form,
         fields: preparation.fields,
         artifactHashes: preparation.artifactHashes,
+        ...(preparation.temporaryMaterials?.length
+          ? { temporaryMaterials: preparation.temporaryMaterials }
+          : {}),
       },
     });
     if (!result.replayed) {
@@ -695,8 +773,23 @@ export class ApplicationsService implements ApplicationsApi {
     applicationId: string,
     attemptId: string,
   ): Promise<ApiApplicationAttempt> {
+    const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    if (!current.attempts.some((attempt) => attempt.id === attemptId))
+      throw new AttemptNotFoundError();
+    const live = await this.dependencies.bindings.resolve({
+      ownerUserId,
+      application: current.application,
+      // The dispatch endpoint carries no new observed form. Its original packet form binding
+      // remains the context; the adapter must separately verify the live destination structure.
+      formHash: current.currentPacket?.form?.formHash ?? null,
+    });
     return toApiAttempt(
-      await this.dependencies.store.dispatchAttempt({ ownerUserId, applicationId, attemptId }),
+      await this.dependencies.store.dispatchAttempt({
+        ownerUserId,
+        applicationId,
+        attemptId,
+        current: live,
+      }),
     );
   }
 
@@ -715,6 +808,7 @@ export class ApplicationsService implements ApplicationsApi {
       result: toAdapterResult(result),
     });
     if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
+    await this.discardTerminalMaterials(settled.view);
     return toApiApplication(settled.view);
   }
 
@@ -733,6 +827,7 @@ export class ApplicationsService implements ApplicationsApi {
       reconciliation: toReconciliation(reconciliation),
     });
     if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
+    await this.discardTerminalMaterials(settled.view);
     return toApiApplication(settled.view);
   }
 
@@ -755,7 +850,27 @@ export class ApplicationsService implements ApplicationsApi {
   }
 
   private async command(pending: Promise<CommandResult>): Promise<Application> {
-    return toApiApplication((await pending).view);
+    const result = await pending;
+    await this.discardTerminalMaterials(result.view);
+    return toApiApplication(result.view);
+  }
+
+  private async discardTerminalMaterials(view: ApplicationView): Promise<void> {
+    if (view.application.status !== "applied" && view.application.status !== "cancelled") return;
+    const owner = this.dependencies.temporaryMaterials;
+    if (!owner?.discardApplication) {
+      if (view.currentPacket?.temporaryMaterials?.length) throw new ApplicationsUnavailableError();
+      return;
+    }
+    try {
+      if (
+        (await owner.discardApplication(view.application.ownerUserId, view.application.id)) !==
+        "discarded"
+      )
+        throw new ApplicationsUnavailableError();
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
   }
 }
 
@@ -841,6 +956,7 @@ export function toApiApplication(view: ApplicationView): Application {
             jobRevision: packet.jobRevision,
             ...(packet.form ? { form: { ...packet.form } } : {}),
             fields: packet.fields.map((field) => ({
+              ...(field.vaultReference ? { vaultReference: { ...field.vaultReference } } : {}),
               fieldKey: field.fieldKey,
               value: cloneValue(field.value),
               origin: field.origin,
@@ -851,6 +967,15 @@ export function toApiApplication(view: ApplicationView): Application {
               requiresReview: field.requiresReview,
             })),
             artifactHashes: { ...packet.artifactHashes },
+            ...(packet.temporaryMaterials?.length
+              ? {
+                  temporaryMaterials: packet.temporaryMaterials.map(
+                    ({ ownerUserId: _owner, applicationId: _application, ...reference }) => ({
+                      ...reference,
+                    }),
+                  ),
+                }
+              : {}),
             createdAt: packet.createdAt.toISOString(),
           },
         }

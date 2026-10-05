@@ -1127,6 +1127,13 @@ async function createConfiguredApplication(
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
     profile: store,
+    restrictedAnswerReuseEnabled: process.env.RESTRICTED_ANSWER_REUSE_ENABLED === "true",
+    restrictedAnswers: Object.freeze({
+      lockCurrentReferences:
+        restrictedAnswerVault.lockCurrentReferences.bind(restrictedAnswerVault),
+      readSelectedValue: restrictedAnswerVault.readSelectedValue.bind(restrictedAnswerVault),
+      readCurrentReference: restrictedAnswerVault.readCurrentReference.bind(restrictedAnswerVault),
+    }),
     // The Documents runtime tailors the candidate's resume; the Gateway never reads resume text.
     ...(process.env.DOCUMENT_TAILORING_FUNCTION_ARN
       ? {

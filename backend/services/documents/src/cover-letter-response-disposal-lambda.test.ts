@@ -253,4 +253,38 @@ describe("completed eligibility in the existing disposal bootstrap", () => {
     expect(f.responses.read).not.toHaveBeenCalled();
     expect(f.resolve).toHaveBeenCalledTimes(1);
   });
+  it("routes failed eligibility only through the qualified managed bootstrap", async () => {
+    const f = setup();
+    const readFailed = vi.fn(async () => structuredClone(inventory));
+    const input = { schemaVersion: 1 as const, action: "read_failed" as const, reference };
+    const run = createCoverLetterResponseDisposalLambda({
+      environment: () => f.env,
+      resolveDatabaseUrl: f.resolve,
+      createResponses: () => ({ ...f.responses, readFailed }),
+    });
+    expect(await run(input, { invokedFunctionArn: target })).toEqual({
+      ...input,
+      outcome: "read",
+      inventory,
+    });
+    expect(readFailed).toHaveBeenCalledExactlyOnceWith(reference);
+    expect(f.responses.read).not.toHaveBeenCalled();
+    expect(f.resolve).toHaveBeenCalledTimes(1);
+  });
+  it("old managed bootstrap composition withholds failed eligibility without fallback", async () => {
+    const f = setup();
+    const input = { schemaVersion: 1 as const, action: "read_failed" as const, reference };
+    const run = createCoverLetterResponseDisposalLambda({
+      environment: () => f.env,
+      resolveDatabaseUrl: f.resolve,
+      createResponses: () => f.responses,
+    });
+    expect(await run(input, { invokedFunctionArn: target })).toEqual({
+      ...input,
+      outcome: "unavailable",
+      inventory: null,
+    });
+    expect(f.responses.read).not.toHaveBeenCalled();
+    expect(f.responses.recordDisposal).not.toHaveBeenCalled();
+  });
 });

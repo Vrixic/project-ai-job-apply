@@ -1,3 +1,4 @@
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import type {
   GenerationClaim,
   PreparationContext,
@@ -6,14 +7,18 @@ import type {
 } from "./preparation.js";
 import type { PostgresApplicationStore } from "./store.js";
 
+import type { VaultReader } from "./vault.js";
+
 export type PreparationActivityStore = Pick<
   PostgresApplicationStore,
   | "getPreparationForEvent"
+  | "getPreparationVaultReferences"
   | "claimPreparationGeneration"
   | "completePreparation"
   | "failPreparation"
 >;
 export interface ReadyCoverLetter {
+  temporaryMaterial?: TemporaryMaterialReference;
   contentSha256: string;
   sourceFactIds: readonly string[];
   confidence: number;
@@ -21,7 +26,8 @@ export interface ReadyCoverLetter {
 export interface CoverLetterPreparationPort {
   /** Loads current owned job/evidence through their APIs, without exposing values to workflow state. */
   context(preparation: PreparationRecord): Promise<PreparationContext>;
-  /** May recover only an already-persisted immutable draft, never regenerate it. */
+  /** Recovers only the original result from its owner; never starts another generation.
+   * Temporary generated material requires the still-live memory reference. */
   recover(preparation: PreparationRecord): Promise<ReadyCoverLetter | null>;
   /** Called only by the winner of the write-ahead claim. Consent time is never refreshed. */
   generate(
@@ -47,14 +53,27 @@ export interface PreparationActivityResult {
 export function createPreparationActivity(
   store: PreparationActivityStore,
   documents: CoverLetterPreparationPort,
+  vault?: Pick<VaultReader, "readCurrentReference">,
 ) {
   return async (eventId: string, preparationId: string): Promise<PreparationActivityResult> => {
     const completed: PreparationActivityResult = { preparationId, outcome: "completed" };
     const target = await store.getPreparationForEvent(eventId, preparationId);
     if (target.state === "succeeded" || target.state === "failed") return completed;
+    async function currentContext(preparation: PreparationRecord): Promise<PreparationContext> {
+      const references = await store.getPreparationVaultReferences(eventId, preparationId);
+      const vaultReferences: NonNullable<PreparationContext["vaultReferences"]>[number][] = [];
+      if (references.length && !vault) throw new Error("SavedAnswerContextUnavailable");
+      for (const reference of references) {
+        if (!vault) throw new Error("SavedAnswerContextUnavailable");
+        const current = await vault.readCurrentReference(preparation.ownerUserId, reference);
+        if (current) vaultReferences.push(current);
+      }
+      const context = await documents.context(preparation);
+      return { ...context, ...(references.length ? { vaultReferences } : {}) };
+    }
     let context: PreparationContext;
     try {
-      context = await documents.context(target);
+      context = await currentContext(target);
     } catch {
       return { preparationId, outcome: "retryable_failure", errorCode: "context_unavailable" };
     }
@@ -98,12 +117,13 @@ export function createPreparationActivity(
       return completed;
     }
     letter = {
+      ...(letter.temporaryMaterial ? { temporaryMaterial: { ...letter.temporaryMaterial } } : {}),
       contentSha256: letter.contentSha256,
       confidence: letter.confidence,
       sourceFactIds: [...letter.sourceFactIds],
     };
     try {
-      context = await documents.context(claim.preparation);
+      context = await currentContext(claim.preparation);
     } catch {
       return { preparationId, outcome: "retryable_failure", errorCode: "context_unavailable" };
     }

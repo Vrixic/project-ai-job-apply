@@ -7,6 +7,18 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 
 ## Current D3 slice (source and local verification only)
 
+Submission dispatch rechecks current owner job/artifact bindings and the original packet/approval
+under the application lock. Expiry is evaluated after those SQL reads. A stale queued attempt
+settles as `failed_no_effect`, invalidates approval and returns directly to review with one revision
+and one status outbox event; its two history entries and approval change commit atomically before
+the fixed HTTP conflict. No intermediate approved event or dispatch permission is emitted.
+Concurrent and repeated deliveries cannot dispatch that attempt. A fresh packet and explicit
+approval can start a new attempt. The internal store requires a detached current-binding snapshot;
+it never falls back to the original packet's values. The public dispatch signature is unchanged.
+The endpoint carries the original form context, not a newly observed employer form; the adapter
+must independently validate the destination structure. Owner reads remain point-in-time snapshots,
+not a cross-owner lease. Vault-version invalidation and enabled-ATS/browser acceptance remain open.
+
 ### Cover-letter preparation in progress (2026-10-02)
 
 The unshipped D3-017 slice adds an atomic base packet, short-lived disclosure-bound preparation,
@@ -138,3 +150,113 @@ never mapped. Add a row only after the owner approves it and a test pins it.
 `search` takes an optional `jobId`. The result is this candidate's applications for that job, newest first. The web
 workspace uses `limit: 1` to reopen the live application, treating a cancelled newest one as "none" because a
 cancelled application may be restarted.
+
+## Selected saved answers (default off)
+
+Explicit `vaultSelections` require an observed form, exact answer revision/context, question hash
+and candidate meaning confirmation. The private Profile port never substitutes a newer answer.
+Packet fields bind a closed `vaultReference` in the content hash and always require review.
+Profile-owned metadata admission locks run in the same Applications SQL transaction at approval,
+start, dispatch, generation claim/recovery and final preparation completion. Correction, deletion
+or expiry refuses the old selection with `vault_answer_changed` (preparation uses
+`bindings_changed`). Missing admission capability fails closed; no KMS call occurs under these locks.
+Migration `0006_vault_approval_binding.sql` adds the reason to the existing closed approval constraint.
+Strict-reader rollout and candidate review UI precede activation; no live ATS executor is enabled.
+
+## One-off document material persistence guard (ADR-038 / D3-064)
+
+Document fields in v1 packets and account-export packet projections accept only unresolved nulls
+or canonical SHA-256 artifact digests. Applications also requires each non-null document field to
+match its packet's corresponding resume/cover-letter binding. The AI helper refuses to turn a
+cover-letter result into a persisted proposal, including under an ordinary answer field name.
+Candidate-authored non-document answers retain their separate policy.
+
+Migration `0007_document_field_hashes.sql` validates all existing packet rows and adds the same
+exact-binding SQL guard. This tightens previously accepted document values: an older packet with
+material text cannot pass the new reader contracts or migration. Inventory and explicitly resolve
+incompatible legacy data before rollout; do not rewrite immutable packet/history rows silently,
+waive validation, or treat encryption as compliance with the no-content persistence policy. Apply
+and verify the owner migration before deploying new writers. Rolling code back does not remove
+this forward-only constraint; older writers that persist document text remain incompatible.
+Deletion continues through existing owner-scoped candidate-rights participation; no new relation
+or content backfill is introduced. Restore and deletion-replay validators require the exact current
+61-migration manifest, preserving refusal of older boundaries.
+
+These guards are a first enforcement layer. Temporary-memory storage, the absolute 1,800-second
+lifetime, expiry/review/submission admission, no-store transport and provider approval remain
+D3-064 work. Existing generated draft/S3/provider-slot paths cannot be activated under ADR-038.
+
+## Original temporary-material packet admission (source only)
+
+The trusted producer can attach at most one cover-letter and one tailored-resume scalar reference
+through the owner port. Closed metadata binds generation ID, owner/application, revision, content
+hash, original completion and fixed 1,800,000 ms deadline. The packet hash includes these bindings;
+legacy absent/empty references keep their previous hash. Public API and portable export projections
+omit internal owner/application reference fields. No public preparation request accepts references.
+Ordinary packet edits carry existing bindings; replacing a hash requires replacement authority.
+A descendant revision keeps the original generation deadline. Native edit-authority issuance remains
+unimplemented; this port does not make an arbitrary caller a trusted generator.
+
+Approval expires at the earliest original deadline or the existing approval-age cap. Approval,
+automated/manual attempt start and queued dispatch compare exact current owner memory metadata and
+check time again at admission. The Gateway never recomputes tailoring or recovers a saved cover
+letter for a packet carrying temporary bindings. Missing owner capability/outage is unavailable;
+lost memory or a different generation requires fresh preparation and review. SQL 0008 independently
+checks its clock for new approval/start/dispatch authority, prevents omitted/renewed bindings, and
+supports the new invalidation reasons. Expiry does not clear confirmed/ambiguous submission evidence
+or authorize redispatch. Submission settlement and late takeover remain possible after expiry.
+
+Apply Applications `0008_temporary_material_bindings.sql` and the exact current restore manifest
+before these consumers. It adds one non-content JSON column, validated constraints and three
+triggers to existing relations; no backfill timestamps, new relation or generated content. Deploy
+all strict readers and Gateway/worker consumers before enabling a producer: older private packet
+readers cannot verify a hash containing the new reference, and older strict API consumers reject
+the optional property. Rollback can disable production but cannot restore an older reader for
+new-bound packets. Existing packets remain readable by the updated consumer.
+
+This checkpoint has no activated producer or ATS executor. Temporary content transport, preview/
+file routing, original actor integration, native descendant authority, resume production, client
+idle/logout/cancel/submission cleanup, renderer/worker drain and approved provider retention still
+belong to D3-064. Legacy saved-draft/provider-slot and re-tailoring paths cannot be activated under
+ADR-038. Scalar availability is an admission check, not an ATS content lease or all-copy cleanup.
+
+## Temporary cover-letter reads (2026-10-05, source-only)
+
+Applications accepts a narrow owned memory availability/preview/file port. Packets carrying
+cover-letter temporary references use this port exclusively; reads never fall back to saved
+drafts. References, content hashes, generation/version, packet identity, terminal state and
+the original deadline are checked before/after asynchronous work. No SQL lock spans rendering.
+A final owner-scoped SQL read follows the availability recheck, then a synchronous live memory
+lease guards the response through HTTP serialization. Failed reads clear returned paragraphs
+or file content. Bound temporary resumes refuse legacy re-tailoring; their typed temporary
+reader is still required. Original/unbound reads retain their existing behavior.
+
+Ready temporary cover-letter preview/file responses add public seven-scalar `temporaryMaterial`
+metadata, without owner/application identifiers or lease callbacks. Upgrade strict consumers
+before enabling any producer. No migration or durable response body is introduced.
+Native session transport, original actor composition, native edit authority, idle/client cleanup,
+cancel/confirmed-submission owner disposal, ATS handoff and D3-012 provider approval remain gates.
+These point-in-time reads and transport guards do not certify atomic concurrent cancellation,
+all-copy purge, remote settlement, socket delivery or a frozen Lambda's physical memory expiry.
+
+The synchronous memory guard is availability authority, not a held borrowed content lease.
+Bounded outgoing native content leases and all-copy disposal remain activation requirements.
+
+## Held reads and terminal disposal (2026-10-05, source-only)
+
+The owned cover-letter read returns a held-copy revalidation/release capability and abort signal.
+Applications retains the lease through final state/deadline checks and HTTP completion. Known revoked
+leases refuse before cleared-body validation. Public bodies remain unchanged; private callbacks and
+signals are never serialized. Cancellation, confirmed result and submitted reconciliation request
+owner scope disposal after the owning SQL commit, including on replay. Missing/failed acknowledgement
+returns availability failure while retaining terminal evidence and duplicate guards; it never rolls
+back cancellation/confirmation or issues another submission. Ambiguous outcomes keep their evidence.
+
+Production still composes no temporary actor/host/reader. Compatible private adapters are required
+before activation; local disposal is not cross-process/provider settlement or physical all-copy purge.
+
+`authorizeNativeMaterialRead` is a private owning scalar read after authenticated subject-to-owner
+resolution. It checks current application/packet ownership, terminal state, exact original
+material/hash, expiry and cancellation before returning only packet ID/hash and scalar reference.
+Native transport repeats it before sending. This is an injected in-process port, not an enabled
+remote RPC, SQL lease or content reader; private authentication/composition remains unfinished.

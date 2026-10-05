@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-memory-transport": {
+      "types": "./dist/src/native-memory-transport.d.ts",
+      "default": "./dist/src/native-memory-transport.js"
+    },
+    "./native-memory-session": {
+      "types": "./dist/src/native-memory-session.d.ts",
+      "default": "./dist/src/native-memory-session.js"
+    },
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
@@ -19,6 +27,10 @@
     "./cover-letter-runtime": {
       "types": "./dist/src/cover-letter-runtime.d.ts",
       "default": "./dist/src/cover-letter-runtime.js"
+    },
+    "./cover-letter-export": {
+      "types": "./dist/src/cover-letter-export.d.ts",
+      "default": "./dist/src/cover-letter-export.js"
     }
   },
   "scripts": {
@@ -29,11 +41,14 @@
     "db:migrate": "node --env-file-if-exists=../../../.env dist/src/migrate.js",
     "test": "vitest run src --exclude=dist/** --exclude=src/**/*.integration.test.ts --testTimeout=30000 --hookTimeout=30000",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:lambda:isolated-provider": "pnpm --filter @ai-job-apply/documents-service... build && node ../../../scripts/build-isolated-provider-lambda.mjs",
+    "build:lambda:response-maintenance": "pnpm --filter @ai-job-apply/documents-service... build && node ../../../scripts/build-response-maintenance-lambda.mjs"
   },
   "dependencies": {
     "@ai-job-apply/ai-sdk": "workspace:*",
     "@ai-job-apply/api-contracts": "workspace:*",
+    "@ai-job-apply/auth": "workspace:*",
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",

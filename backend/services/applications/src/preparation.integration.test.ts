@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -213,6 +214,72 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
       );
     });
   });
+
+  it.each(["live", "expired", "foreign_owner"])(
+    "completes only the original %s cover-letter metadata without content persistence",
+    async (condition) => {
+      await withApplication(async (owner, app) => {
+        const queued = await store.queuePreparation(command(owner, app));
+        const id = queued.preparation.id;
+        const event = await eventId(id);
+        expect((await store.claimPreparationGeneration(event, id, context)).kind).toBe("claimed");
+        const completedAtMs = now.getTime() - (condition === "expired" ? 1_800_000 : 1);
+        const temporaryMaterial: TemporaryMaterialReference = {
+          schemaVersion: 1,
+          kind: "cover_letter",
+          generationId: uuidv7(),
+          ownerUserId: owner,
+          applicationId: app,
+          version: 1,
+          contentSha256: HASH_C,
+          completedAtMs,
+          expiresAtMs: completedAtMs + 1_800_000,
+        };
+        if (condition === "foreign_owner") temporaryMaterial.ownerUserId = uuidv7();
+        const letter = {
+          contentSha256: HASH_C,
+          sourceFactIds: [FACT_A],
+          confidence: 1,
+          temporaryMaterial,
+        };
+        if (condition === "foreign_owner") {
+          await expect(store.completePreparation(event, id, context, letter)).rejects.toThrow(
+            "Invalid original cover-letter material binding",
+          );
+          expect((await store.getPreparation(owner, app, id)).state).toBe("running");
+          return;
+        }
+        const completed = await store.completePreparation(event, id, context, letter);
+        expect(completed.state).toBe(condition === "live" ? "succeeded" : "failed");
+        const view = await store.getApplication(owner, app);
+        if (condition === "expired") {
+          expect(completed.errorCode).toBe("bindings_changed");
+          expect(view.application.revision).toBe(queued.view.application.revision);
+          expect(view.currentPacket?.temporaryMaterials).toBeUndefined();
+        } else {
+          expect(view.currentPacket?.temporaryMaterials).toEqual([temporaryMaterial]);
+          expect(
+            view.currentPacket?.fields.find((field) => field.fieldKey === "documents.cover_letter"),
+          ).toMatchObject({ value: HASH_C, requiresReview: true });
+          expect(view.approval).toBeNull();
+          expect(await store.completePreparation(event, id, context, letter)).toEqual(completed);
+          const [exported] =
+            await client`SELECT applications.export_candidate_data(${owner}::uuid) AS data`;
+          expect(exported?.data.applications.preparations).toEqual([
+            expect.objectContaining({
+              id,
+              state: "succeeded",
+              noticeVersion: "openai-cover-letter.v1",
+              resultPacketId: completed.resultPacketId,
+            }),
+          ]);
+          const [eventRow] =
+            await client`SELECT payload FROM applications.preparation_outbox WHERE id = ${event}`;
+          expect(eventRow?.payload).toEqual({ preparationId: id });
+        }
+      });
+    },
+  );
 
   it("replays an owned receipt after later application changes without renewing consent or creating rows", async () => {
     await withApplication(async (owner, app) => {

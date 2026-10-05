@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { createApplicationsDatabase } from "../../../backend/services/applications/dist/src/index.js";
 import { migrationRunners } from "../../../backend/services/database-migrations/dist/src/index.js";
 import {
   loadCurrentRestoreManifest,
@@ -19,7 +20,14 @@ import {
   requiredNonemptyD2Relations,
   seedD2RecoveryFixtures,
 } from "./fixtures.mjs";
-import { exerciseRestoredResponseInventory, seedResponseInventory } from "./response-inventory.mjs";
+import {
+  exerciseRestoredResponseInventory,
+  exerciseRestoredTemporaryMaterialCompletion,
+  seedResponseInventory,
+  seedTemporaryMaterialCompletion,
+} from "./response-inventory.mjs";
+
+import { exerciseRestoredTemporaryPackets, seedTemporaryPackets } from "./temporary-packets.mjs";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 const execute = promisify(execFile);
@@ -185,7 +193,7 @@ try {
   assert.equal(source.manifest.contributors.length, 7);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 11);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 84);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 58);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 63);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
@@ -226,6 +234,10 @@ try {
   });
   stage = "seed-generated-response-inventory";
   const responseFixtures = await seedResponseInventory(sourceStore, fixtures.ownerUserId);
+  const materialFixture = await seedTemporaryMaterialCompletion(sourceStore, fixtures.ownerUserId);
+  const sourceApplications = createApplicationsDatabase(sourceUrl, { maxConnections: 2 });
+  clients.push(sourceApplications);
+  const packetFixtures = await seedTemporaryPackets(sourceApplications, fixtures.ownerUserId);
   stage = "source-aggregate-and-row-snapshot";
   const sourceAggregate = await verifyRestoreDatabase(sourceReader, source);
   const sourceRows = await exactRows(sourceReader, source.manifest);
@@ -281,6 +293,13 @@ try {
   await rejectReadOnlyWrite(targetReader);
   stage = "restored-response-inventory-behavior";
   const responseBehavior = await exerciseRestoredResponseInventory(targetStore, responseFixtures);
+  const materialBehavior = await exerciseRestoredTemporaryMaterialCompletion(
+    targetStore,
+    materialFixture,
+  );
+  const targetApplications = createApplicationsDatabase(targetUrl, { maxConnections: 2 });
+  clients.push(targetApplications);
+  const packetBehavior = await exerciseRestoredTemporaryPackets(targetApplications, packetFixtures);
   stage = "restored-d2-behavior";
   const behavior = await exerciseRestoredD2(targetStore, targetProfile, fixtures, (value) => {
     stage = value;
@@ -289,7 +308,7 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 58,
+    migrationCount: 63,
     ownerCount: 7,
     schemaCount: 11,
     exactRelationRowSetsMatched: 84,
@@ -298,6 +317,8 @@ try {
     sourceUnchanged: true,
     readOnlyWritesRejected: 2,
     ...responseBehavior,
+    ...materialBehavior,
+    ...packetBehavior,
     ...behavior,
   };
 } catch (error) {
@@ -309,7 +330,9 @@ try {
       : "FAILED";
   const location =
     typeof error?.stack === "string"
-      ? /((?:fixtures|response-inventory|run)\.mjs:[0-9]+:[0-9]+)/u.exec(error.stack)?.[1]
+      ? /((?:fixtures|response-inventory|temporary-packets|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
+          error.stack,
+        )?.[1]
       : undefined;
   failure = { stage, code, ...(location ? { testLocation: location } : {}) };
 } finally {

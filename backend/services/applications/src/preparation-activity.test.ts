@@ -37,12 +37,15 @@ function setup() {
     generationClaimedAt: preparation.approvedAt,
   };
   const store = {
+    getPreparationVaultReferences: vi.fn<PreparationActivityStore["getPreparationVaultReferences"]>(
+      async () => [],
+    ),
     getPreparationForEvent: vi.fn(async () => ({ ...preparation })),
     claimPreparationGeneration: vi.fn(async () => ({
       kind: "claimed" as const,
       preparation: running,
     })),
-    completePreparation: vi.fn(async () => ({
+    completePreparation: vi.fn<PreparationActivityStore["completePreparation"]>(async () => ({
       ...running,
       state: "succeeded" as const,
       resultPacketId: preparation.basePacketId,
@@ -56,12 +59,95 @@ function setup() {
   const documents = {
     context: vi.fn(async () => context),
     recover: vi.fn<CoverLetterPreparationPort["recover"]>(async () => letter),
-    generate: vi.fn(async () => ({ kind: "ready" as const, letter })),
+    generate: vi.fn<CoverLetterPreparationPort["generate"]>(async () => ({
+      kind: "ready" as const,
+      letter,
+    })),
   };
   return { store, documents, running };
 }
 
 describe("identifier-only preparation activity", () => {
+  it("passes original scalar material authority to completion while keeping workflow output identifier-only", async () => {
+    const { store, documents } = setup();
+    const temporaryMaterial = {
+      schemaVersion: 1 as const,
+      kind: "cover_letter" as const,
+      generationId: preparation.id,
+      ownerUserId: preparation.ownerUserId,
+      applicationId: preparation.applicationId,
+      version: 1,
+      contentSha256: letter.contentSha256,
+      completedAtMs: preparation.approvedAt.getTime(),
+      expiresAtMs: preparation.approvedAt.getTime() + 1_800_000,
+    };
+    documents.generate.mockResolvedValue({
+      kind: "ready",
+      letter: { ...letter, temporaryMaterial },
+    });
+    const result = await createPreparationActivity(store, documents)("event", preparation.id);
+    expect(store.completePreparation).toHaveBeenCalledWith("event", preparation.id, context, {
+      ...letter,
+      temporaryMaterial,
+    });
+    expect(result).toEqual({ preparationId: preparation.id, outcome: "completed" });
+    expect(store.completePreparation.mock.calls[0]?.[3].temporaryMaterial).not.toBe(
+      temporaryMaterial,
+    );
+  });
+
+  it("withholds generation when a selected-answer metadata capability is unavailable", async () => {
+    const { store, documents } = setup();
+    store.getPreparationVaultReferences.mockResolvedValue([
+      {
+        fieldKey: "authorization.us_authorized",
+        id: preparation.id,
+        version: 1,
+        context: "us",
+        questionHash: "a".repeat(64),
+        meaningConfirmed: true,
+        validUntilEpochMs: null,
+      },
+    ]);
+    expect(
+      await createPreparationActivity(store, documents)("event", preparation.id),
+    ).toMatchObject({ outcome: "retryable_failure", errorCode: "context_unavailable" });
+    expect(documents.generate).not.toHaveBeenCalled();
+    expect(store.claimPreparationGeneration).not.toHaveBeenCalled();
+  });
+
+  it("rechecks selected metadata before completion without sending answer values to Documents", async () => {
+    const { store, documents } = setup();
+    const reference = {
+      fieldKey: "authorization.us_authorized",
+      id: preparation.id,
+      version: 1,
+      context: "us",
+      questionHash: "a".repeat(64),
+      meaningConfirmed: true as const,
+      validUntilEpochMs: null,
+    };
+    store.getPreparationVaultReferences.mockResolvedValue([reference]);
+    let calls = 0;
+    const vault = { readCurrentReference: async () => (++calls === 1 ? reference : undefined) };
+    await createPreparationActivity(store, documents, vault)("event", preparation.id);
+    expect(store.claimPreparationGeneration).toHaveBeenCalledWith("event", preparation.id, {
+      ...context,
+      vaultReferences: [reference],
+    });
+    expect(store.completePreparation).toHaveBeenCalledWith(
+      "event",
+      preparation.id,
+      { ...context, vaultReferences: [] },
+      letter,
+    );
+    expect(documents.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: preparation.id }),
+    );
+    expect(documents.generate.mock.calls[0]?.[0]).not.toHaveProperty("vaultReferences");
+    expect(calls).toBe(2);
+  });
+
   it("polls an already-reserved Documents dispatch instead of failing or generating again", async () => {
     const { store, documents } = setup();
     const port: CoverLetterPreparationPort = {

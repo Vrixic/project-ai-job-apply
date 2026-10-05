@@ -1,3 +1,4 @@
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import { canonicalHash } from "./canonical.js";
 import {
   classifyField,
@@ -9,6 +10,8 @@ import {
   type ProposedField,
   type ReviewReason,
 } from "./field-policy.js";
+import { temporaryMaterialReasons, validPacketTemporaryMaterials } from "./temporary-material.js";
+import { type VaultCurrentReference, type VaultReference, validVaultReference } from "./vault.js";
 
 export const PACKET_HASH_SCHEMA = "application-packet.v1";
 /** Approval never outlives this window even if nothing else changed. */
@@ -29,6 +32,7 @@ export interface ArtifactHashes {
 }
 
 export interface PacketFieldEntry {
+  vaultReference?: VaultReference;
   fieldKey: string;
   value: FieldValue;
   origin: FieldOrigin;
@@ -40,6 +44,7 @@ export interface PacketFieldEntry {
 }
 
 export interface PacketContent {
+  temporaryMaterials?: readonly TemporaryMaterialReference[];
   userId: string;
   applicationId: string;
   canonicalJobId: string;
@@ -58,6 +63,7 @@ export interface ApplicationPacket extends PacketContent {
 }
 
 export interface PacketInputs {
+  temporaryMaterials?: readonly TemporaryMaterialReference[];
   id: string;
   userId: string;
   applicationId: string;
@@ -119,6 +125,16 @@ export function assemblePacket(
   if (!Number.isSafeInteger(inputs.version) || inputs.version < 1) {
     throw new PacketInvariantError("Packet version must be a positive integer");
   }
+  if (!validPacketTemporaryMaterials(inputs.temporaryMaterials, inputs))
+    throw new PacketInvariantError("Invalid original temporary material binding");
+  if (
+    temporaryMaterialReasons(
+      inputs.temporaryMaterials,
+      inputs.temporaryMaterials,
+      inputs.createdAt,
+    ).includes("temporary_material_expired")
+  )
+    throw new PacketInvariantError("Temporary material cannot enter an expired packet");
   for (const [name, hash] of [
     ["jobRevision", inputs.jobRevision],
     ["form.formHash", inputs.form?.formHash],
@@ -136,6 +152,35 @@ export function assemblePacket(
       throw new PacketInvariantError("Packet fields must be unique by key");
     }
     seen.add(proposal.fieldKey);
+    if (
+      proposal.vaultReference &&
+      (!inputs.form ||
+        proposal.origin !== "answer_vault" ||
+        !validVaultReference(proposal.vaultReference) ||
+        !proposal.sourceConfirmed ||
+        proposal.value === null ||
+        proposal.sourceFactIds.length !== 1 ||
+        proposal.sourceFactIds[0] !== proposal.vaultReference.id)
+    ) {
+      throw new PacketInvariantError("Invalid selected-answer provenance");
+    }
+    // These fields retain only the exact bound artifact digest, never document material.
+    if (
+      proposal.value !== null &&
+      (proposal.fieldKey === "documents.cover_letter" || proposal.fieldKey === "documents.resume")
+    ) {
+      const expected =
+        proposal.fieldKey === "documents.cover_letter"
+          ? inputs.artifactHashes.coverLetter
+          : inputs.artifactHashes.resume;
+      if (
+        typeof proposal.value !== "string" ||
+        !expected ||
+        proposal.value !== expected ||
+        !SHA256.test(proposal.value)
+      )
+        throw new PacketInvariantError("Document fields must reference their bound artifact hash");
+    }
     const definition = definitions.get(proposal.fieldKey);
     const classification = classifyField(definition, proposal, confidenceThreshold);
     const reasons: ReviewReason[] = [...classification.reasons];
@@ -144,8 +189,11 @@ export function assemblePacket(
       usable = false;
       if (!reasons.includes("unsupported_value")) reasons.push("unsupported_value");
     }
+    if (proposal.vaultReference && !usable)
+      throw new PacketInvariantError("Unusable selected answer");
     const disposition: FieldDisposition = usable ? classification.disposition : "user_action";
     entries.push({
+      ...(proposal.vaultReference ? { vaultReference: { ...proposal.vaultReference } } : {}),
       fieldKey: proposal.fieldKey,
       value: usable ? proposal.value : null,
       origin: proposal.origin,
@@ -166,6 +214,13 @@ export function assemblePacket(
     form: inputs.form ? { ...inputs.form } : null,
     fields: entries,
     artifactHashes: { ...inputs.artifactHashes },
+    ...(inputs.temporaryMaterials?.length
+      ? {
+          temporaryMaterials: inputs.temporaryMaterials
+            .map((reference) => ({ ...reference }))
+            .sort((left, right) => left.kind.localeCompare(right.kind)),
+        }
+      : {}),
   };
   return deepFreeze({
     ...content,
@@ -175,7 +230,8 @@ export function assemblePacket(
   });
 }
 
-/** The hash binds content only: it excludes ids, timestamps, and any approval state. */
+/** Binds packet content and exact original material identities/deadlines. Packet ID, creation
+ * timestamp and approval state remain excluded; absence preserves the existing v1 hash. */
 export function computePacketHash(content: PacketContent): string {
   return canonicalHash({
     schema: PACKET_HASH_SCHEMA,
@@ -186,6 +242,7 @@ export function computePacketHash(content: PacketContent): string {
     jobRevision: content.jobRevision,
     form: content.form,
     fields: content.fields.map((field) => ({
+      ...(field.vaultReference ? { vaultReference: field.vaultReference } : {}),
       fieldKey: field.fieldKey,
       value: field.value,
       origin: field.origin,
@@ -196,10 +253,18 @@ export function computePacketHash(content: PacketContent): string {
       requiresReview: field.requiresReview,
     })),
     artifactHashes: content.artifactHashes,
+    ...(content.temporaryMaterials?.length
+      ? {
+          temporaryMaterials: [...content.temporaryMaterials].sort((left, right) =>
+            left.kind.localeCompare(right.kind),
+          ),
+        }
+      : {}),
   });
 }
 
 export function verifyPacketHash(packet: ApplicationPacket): boolean {
+  if (!validPacketTemporaryMaterials(packet.temporaryMaterials, packet)) return false;
   return computePacketHash(packet) === packet.packetHash;
 }
 
@@ -224,7 +289,8 @@ export class ApprovalRefusedError extends Error {
     | "PACKET_HASH_MISMATCH"
     | "UNRESOLVED_FIELD"
     | "UNACKNOWLEDGED_FIELD"
-    | "PACKET_TAMPERED";
+    | "PACKET_TAMPERED"
+    | "TEMPORARY_MATERIAL_EXPIRED";
   readonly fieldKeys: readonly string[];
 
   constructor(code: ApprovalRefusedError["code"], fieldKeys: readonly string[] = []) {
@@ -241,6 +307,12 @@ export function approvePacket(
   now: Date,
 ): PacketApproval {
   if (!verifyPacketHash(packet)) throw new ApprovalRefusedError("PACKET_TAMPERED");
+  if (
+    temporaryMaterialReasons(packet.temporaryMaterials, packet.temporaryMaterials, now).includes(
+      "temporary_material_expired",
+    )
+  )
+    throw new ApprovalRefusedError("TEMPORARY_MATERIAL_EXPIRED");
   if (request.packetHash !== packet.packetHash) {
     throw new ApprovalRefusedError("PACKET_HASH_MISMATCH");
   }
@@ -260,15 +332,22 @@ export function approvePacket(
     consentId: request.consentId,
     acknowledgedFieldKeys: [...acknowledged].sort(),
     approvedAt: new Date(now.getTime()),
-    expiresAt: new Date(now.getTime() + MAX_APPROVAL_AGE_MS),
+    expiresAt: new Date(
+      Math.min(
+        now.getTime() + MAX_APPROVAL_AGE_MS,
+        ...(packet.temporaryMaterials ?? []).map((reference) => reference.expiresAtMs),
+      ),
+    ),
   };
 }
 
 export interface CurrentBindings {
+  temporaryMaterials?: readonly TemporaryMaterialReference[];
   jobRevision: string;
   formHash: string | null;
   resumeHash?: string;
   coverLetterHash?: string;
+  vaultReferences?: readonly VaultCurrentReference[];
 }
 
 export type ApprovalInvalidReason =
@@ -277,7 +356,10 @@ export type ApprovalInvalidReason =
   | "job_changed"
   | "form_changed"
   | "resume_changed"
-  | "cover_letter_changed";
+  | "cover_letter_changed"
+  | "temporary_material_expired"
+  | "temporary_material_changed"
+  | "vault_answer_changed";
 
 export type ApprovalValidity =
   | { valid: true }
@@ -287,6 +369,7 @@ export type ApprovalValidity =
 export function evaluateBindings(
   packet: ApplicationPacket,
   current: CurrentBindings,
+  now: Date = new Date(),
 ): ApprovalInvalidReason[] {
   const reasons: ApprovalInvalidReason[] = [];
   if (current.jobRevision !== packet.jobRevision) reasons.push("job_changed");
@@ -294,6 +377,39 @@ export function evaluateBindings(
   if (current.resumeHash !== packet.artifactHashes.resume) reasons.push("resume_changed");
   if (current.coverLetterHash !== packet.artifactHashes.coverLetter) {
     reasons.push("cover_letter_changed");
+  }
+  reasons.push(...evaluateVaultBindings(packet, current.vaultReferences, now));
+  reasons.push(
+    ...temporaryMaterialReasons(packet.temporaryMaterials, current.temporaryMaterials, now),
+  );
+  return reasons;
+}
+
+/** The same exact source/deadline guard protects asynchronous preparation admission. */
+export function evaluateVaultBindings(
+  packet: ApplicationPacket,
+  current: readonly VaultCurrentReference[] | undefined,
+  now: Date,
+): ApprovalInvalidReason[] {
+  const reasons: ApprovalInvalidReason[] = [];
+  for (const field of packet.fields) {
+    const expected = field.vaultReference;
+    if (!expected) continue;
+    const matches = (current ?? []).filter((ref) => ref.fieldKey === field.fieldKey);
+    const live = matches[0];
+    if (
+      matches.length !== 1 ||
+      !live ||
+      live.id !== expected.id ||
+      live.version !== expected.version ||
+      live.context !== expected.context ||
+      live.validUntilEpochMs !== expected.validUntilEpochMs ||
+      !Number.isFinite(now.getTime()) ||
+      !validVaultReference(expected) ||
+      (expected.validUntilEpochMs !== null && now.getTime() >= expected.validUntilEpochMs)
+    ) {
+      if (!reasons.includes("vault_answer_changed")) reasons.push("vault_answer_changed");
+    }
   }
   return reasons;
 }
@@ -313,7 +429,7 @@ export function evaluateApproval(
     reasons.push("packet_hash_mismatch");
   }
   if (now.getTime() >= approval.expiresAt.getTime()) reasons.push("approval_expired");
-  reasons.push(...evaluateBindings(packet, current));
+  reasons.push(...evaluateBindings(packet, current, now));
   return reasons.length === 0 ? { valid: true } : { valid: false, reasons };
 }
 

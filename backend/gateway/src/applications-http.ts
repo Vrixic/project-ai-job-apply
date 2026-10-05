@@ -15,6 +15,7 @@ import {
   PacketInvariantError,
   PreparationNotFoundError,
   StalePacketError,
+  VaultBindingsUnavailableError,
 } from "@ai-job-apply/applications-service";
 import { HttpStatus } from "@nestjs/common";
 
@@ -95,6 +96,34 @@ export function projectApplicationsFailure(exception: unknown): ApplicationsFail
     );
   }
   if (exception instanceof StalePacketError) {
+    if (exception.reasons.includes("temporary_material_expired")) {
+      return conflict(
+        "application_packet_stale",
+        "Generated material expired",
+        "Prepare new application materials and review them again",
+      );
+    }
+    if (exception.reasons.includes("temporary_material_changed")) {
+      return conflict(
+        "application_packet_stale",
+        "Generated material unavailable",
+        "Prepare new application materials and review them again",
+      );
+    }
+    if (exception.reasons.length === 1 && exception.reasons[0] === "vault_answer_changed") {
+      return conflict(
+        "application_packet_stale",
+        "Saved answer changed",
+        "A selected saved answer changed or expired; prepare a new packet and review it again",
+      );
+    }
+    if (exception.reasons.length === 1 && exception.reasons[0] === "approval_expired") {
+      return conflict(
+        "application_packet_stale",
+        "Approval expired",
+        "The packet approval expired; review and approve it again",
+      );
+    }
     return conflict(
       "application_packet_stale",
       "Packet is stale",
@@ -130,7 +159,10 @@ export function projectApplicationsFailure(exception: unknown): ApplicationsFail
       detail: "The application cannot be served safely",
     };
   }
-  if (exception instanceof ApplicationsUnavailableError) {
+  if (
+    exception instanceof ApplicationsUnavailableError ||
+    exception instanceof VaultBindingsUnavailableError
+  ) {
     return {
       status: HttpStatus.SERVICE_UNAVAILABLE,
       code: "applications_unavailable",

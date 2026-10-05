@@ -171,6 +171,12 @@ describe("packet-bound cover-letter rendering", () => {
       );
       expect(artifact.contentSha256).toBe(document.contentSha256);
       expect(artifact.sizeBytes).toBe(Buffer.from(artifact.contentBase64, "base64").length);
+      expect(artifact.sizeBytes).toBeGreaterThan(0);
+      if (format === "pdf") {
+        expect(Buffer.from(artifact.contentBase64, "base64").subarray(0, 5).toString()).toBe(
+          "%PDF-",
+        );
+      }
       expect(artifact.fileName).toBe(`cover-letter.${format}`);
       expect(
         await coverLetterFile(

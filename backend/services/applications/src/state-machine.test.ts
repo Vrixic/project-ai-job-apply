@@ -47,6 +47,8 @@ describe("application state machine", () => {
 
   it("returns to review when approval is invalidated and supersedes packets in review", () => {
     expect(nextStatus("approved", "approval_invalidated")).toBe("review_required");
+    expect(nextStatus("submitting", "dispatch_refused")).toBe("review_required");
+    expect(canTransition("submitting", "approval_invalidated")).toBe(false);
     expect(nextStatus("review_required", "packet_created")).toBe("review_required");
     expect(canTransition("approved", "packet_created")).toBe(false);
   });

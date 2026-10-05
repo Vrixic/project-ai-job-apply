@@ -24,6 +24,23 @@ Owner, field and context are detached before asynchronous work. This is a point-
 not packet approval or an active-candidate lease; an eventual Applications consumer must preserve
 those separate controls and mandatory review. No public route exposes this plaintext port.
 The separate candidate-export reader intentionally permits expired saved values for portability.
+It pins the original entry ID, version, field and context before awaiting SQL or KMS. Caller
+mutation cannot retarget decryption or the post-decrypt correction/deletion check to a neighbour.
+It remains a point-in-time export snapshot, without a SQL lock across KMS or packet approval.
+
+The private `RestrictedAnswerReuseReader` port adds two exact-selection reads for Applications:
+`readSelectedValue(owner, {id, version, fieldKey, context})` never substitutes a newer revision,
+and `readCurrentReference` checks that same latest active revision without KMS or ciphertext.
+Both detach caller input and require an active owner and database wall-clock expiry. Metadata
+receipts include `validUntilEpochMs` (null means no recorded expiry), so the admission guard
+can recheck the immutable deadline after waiting for its own lock. Same-value corrections still
+invalidate an old selection. The existing unselected read and portable export retain their shapes.
+The default-off Applications consumer binds selected metadata into reviewed immutable packets.
+Profile also owns `lockCurrentReferences`, a metadata-only admission capability using the caller's
+transaction and the same sorted advisory keys as every vault writer. Its fresh reads occur after
+locking; locks persist through admission commit/rollback. No KMS call occurs under admission locks.
+Semantic question confirmation, reviewed UI and accountable/deployed activation remain gates.
+No public plaintext read route is added.
 
 ## Phase 0 implementation
 

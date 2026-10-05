@@ -392,6 +392,29 @@ describe("narrative answers and packet proposals", () => {
     expect(provider.calls).toHaveLength(0);
   });
 
+  it("never shapes one-off cover-letter material as a persisted proposal, even under another field", async () => {
+    const result = await generateCoverLetter(
+      dependencies(
+        new ScriptedProvider(paragraphOutput("I have experience with TypeScript.", ["f2"])),
+      ),
+    );
+    expect(result.status).toBe("needs_review");
+    expect(toGeneratedProposal("documents.cover_letter", result)).toBeNull();
+    expect(toGeneratedProposal("questions.why_company", result)).toBeNull();
+  });
+  it("never shapes a narrative result as document material", async () => {
+    const result = await generateNarrativeAnswer(
+      dependencies(
+        new ScriptedProvider(paragraphOutput("I have experience with TypeScript.", ["f2"])),
+        { disclosure: narrativeDisclosure },
+      ),
+      question("questions.why_company"),
+    );
+    expect(result.status).toBe("needs_review");
+    expect(toGeneratedProposal("documents.cover_letter", result)).toBeNull();
+    expect(toGeneratedProposal("documents.resume", result)).toBeNull();
+  });
+
   it("produces a reviewable proposal with provenance for an ordinary question", async () => {
     const provider = new ScriptedProvider(
       paragraphOutput("I have experience with TypeScript.", ["f2"]),

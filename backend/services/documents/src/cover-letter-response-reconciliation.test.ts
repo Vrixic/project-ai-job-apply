@@ -31,10 +31,11 @@ function fixture() {
     }),
   };
   const responses = {
-    read: vi.fn(async () => {
-      order.push("read");
+    readFailed: vi.fn(async (): Promise<CoverLetterResponseInventory | null> => {
+      order.push("eligible");
       return structuredClone(row);
     }),
+    read: vi.fn(async () => structuredClone(row)),
     recordDisposal: vi.fn(async () => {
       order.push("record");
       row = { reference, state: "disposed", response };
@@ -63,6 +64,36 @@ function fixture() {
   };
 }
 describe("source-only failed/abandoned response reconciliation", () => {
+  it("refuses an old composition before ordinary inventory, fencing or provider effects", async () => {
+    const f = fixture();
+    const { readFailed: _, ...responses } = f.responses;
+    expect(
+      await createCoverLetterResponseReconciler({ ...f.options, responses })(reference, signal()),
+    ).toEqual({ kind: "unresolved" });
+    expect(f.order).toEqual([]);
+    expect(f.responses.read).not.toHaveBeenCalled();
+  });
+  it.each([null, { reference, state: "reserved" as const, response: null }])(
+    "refuses absent original failure proof %j before a permanent fence",
+    async (row) => {
+      const f = fixture();
+      f.responses.readFailed.mockResolvedValue(row);
+      expect(await f.reconcile(reference, signal())).toEqual({ kind: "unresolved" });
+      expect(f.responses.readFailed).toHaveBeenCalledExactlyOnceWith(reference);
+      expect(f.work.fenceForCleanup).not.toHaveBeenCalled();
+      expect(f.responses.read).not.toHaveBeenCalled();
+      expect(f.cleanup.stopAndDelete).not.toHaveBeenCalled();
+    },
+  );
+  it("refuses eligibility lost during convergence without ordinary-read fallback", async () => {
+    const f = fixture();
+    f.responses.readFailed
+      .mockImplementationOnce(async () => ({ reference, state: "acknowledged", response }))
+      .mockImplementationOnce(async () => null);
+    expect(await f.reconcile(reference, signal())).toEqual({ kind: "unresolved" });
+    expect(f.responses.read).not.toHaveBeenCalled();
+    expect(f.cleanup.stopAndDelete).toHaveBeenCalledTimes(1);
+  });
   it("refuses an already-aborted maintenance call before I/O", async () => {
     const f = fixture();
     const abort = new AbortController();
@@ -95,7 +126,7 @@ describe("source-only failed/abandoned response reconciliation", () => {
       kind: "response_disposed",
       reference,
     });
-    expect(f.order).toEqual(["fence", "read", "provider", "record", "read"]);
+    expect(f.order).toEqual(["eligible", "fence", "provider", "record", "eligible"]);
     expect(f.cleanup.stopAndDelete).toHaveBeenCalledExactlyOnceWith(
       response,
       expect.any(AbortSignal),
@@ -127,13 +158,14 @@ describe("source-only failed/abandoned response reconciliation", () => {
     const f = fixture();
     f.setRow({ reference, state: "reserved", response: null });
     await expect(f.reconcile(reference, signal())).resolves.toEqual({ kind: "unresolved" });
-    expect(f.order).toEqual(["fence", "read"]);
+    expect(f.order).toEqual(["eligible"]);
   });
   it("refuses a lost permanent fence ACK before response/provider access", async () => {
     const f = fixture();
     f.work.fenceForCleanup.mockRejectedValue(Error("SyntheticCommittedFenceLostACK"));
     await expect(f.reconcile(reference, signal())).resolves.toEqual({ kind: "unresolved" });
     expect(f.responses.read).not.toHaveBeenCalled();
+    expect(f.responses.readFailed).toHaveBeenCalledTimes(1);
     expect(f.cleanup.stopAndDelete).not.toHaveBeenCalled();
   });
   it("refuses activation withdrawn during the original fence", async () => {
@@ -144,6 +176,7 @@ describe("source-only failed/abandoned response reconciliation", () => {
     });
     await expect(f.reconcile(reference, signal())).resolves.toEqual({ kind: "unresolved" });
     expect(f.responses.read).not.toHaveBeenCalled();
+    expect(f.responses.readFailed).toHaveBeenCalledTimes(1);
   });
   it.each(["id", "documentId", "requestSha256"] as const)(
     "rejects changed inventory %s",
@@ -193,7 +226,7 @@ describe("source-only failed/abandoned response reconciliation", () => {
   });
   it("bounds stalled private reads without calling the provider", async () => {
     const f = fixture();
-    f.responses.read.mockImplementation(() => new Promise(() => undefined));
+    f.responses.readFailed.mockImplementation(() => new Promise(() => undefined));
     await expect(
       createCoverLetterResponseReconciler({ ...f.options, timeoutMs: 10 })(reference, signal()),
     ).resolves.toEqual({ kind: "unresolved" });
