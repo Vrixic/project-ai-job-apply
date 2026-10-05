@@ -20,6 +20,69 @@ function application(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Applications OpenAPI contract", () => {
+  it("accepts explicit bounded question/context selections and refuses unconfirmed or unbound requests", () => {
+    const validate = compileComponentValidator("PrepareApplicationPacketRequest");
+    const selection = {
+      id: randomUUID(),
+      version: 1,
+      fieldKey: "authorization.us_authorized",
+      context: "us",
+      questionHash: hash,
+      meaningConfirmed: true,
+    };
+    const request = {
+      expectedRevision: 1,
+      form: { adapterId: "greenhouse", variantId: "synthetic", formHash: hash },
+      vaultSelections: [selection],
+    };
+    expect(validate(request)).toBe(true);
+    expect(validate({ expectedRevision: 1 })).toBe(true);
+    expect(validate({ ...request, form: undefined })).toBe(false);
+    for (const patch of [
+      { meaningConfirmed: false },
+      { version: 0 },
+      { version: 1.5 },
+      { context: "x".repeat(121) },
+      { questionHash: "not-a-hash" },
+      { value: "private" },
+    ]) {
+      expect(validate({ ...request, vaultSelections: [{ ...selection, ...patch }] })).toBe(false);
+    }
+    expect(
+      validate({ ...request, vaultSelections: Array.from({ length: 21 }, () => selection) }),
+    ).toBe(false);
+  });
+
+  it("carries selected provenance only on explicitly reviewed vault fields", () => {
+    const validate = compileComponentValidator("ApplicationPacketField");
+    const id = randomUUID();
+    const field = {
+      fieldKey: "authorization.us_authorized",
+      value: false,
+      origin: "answer_vault",
+      sourceFactIds: [id],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["restricted_answer"],
+      requiresReview: true,
+      vaultReference: {
+        id,
+        version: 1,
+        context: "us",
+        questionHash: hash,
+        meaningConfirmed: true,
+        validUntilEpochMs: null,
+      },
+    };
+    expect(validate(field)).toBe(true);
+    expect(validate({ ...field, requiresReview: false })).toBe(false);
+    expect(validate({ ...field, origin: "user_entered" })).toBe(false);
+    expect(validate({ ...field, disposition: "auto" })).toBe(false);
+    expect(
+      validate({ ...field, vaultReference: { ...field.vaultReference, ciphertext: "opaque" } }),
+    ).toBe(false);
+  });
+
   it("guards every route with an exact applications scope and no-store responses", () => {
     const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
       path.startsWith("/applications"),

@@ -17,6 +17,7 @@ import { createJobCatalogDatabase, PostgresJobCatalog } from "@ai-job-apply/jobs
 import {
   createDatabase,
   PostgresProfileStore,
+  PostgresRestrictedAnswerVaultStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
 import { LambdaClient } from "@aws-sdk/client-lambda";
@@ -106,8 +107,10 @@ export function createApplicationPreparationRuntime(
   const applicationsPool = createApplicationsDatabase(url, { maxConnections: 1 });
   const profilePool = createDatabase(url, { maxConnections: 1 });
   const jobsPool = createJobCatalogDatabase(url, { maxConnections: 1 });
+  const vaultMetadata = new PostgresRestrictedAnswerVaultStore(profilePool.client, undefined);
   const applications = new PostgresApplicationStore(applicationsPool, undefined, {
     definitions: defaultFieldDefinitions(),
+    lockVaultReferences: vaultMetadata.lockCurrentReferences.bind(vaultMetadata),
   });
   const profile = new PostgresProfileStore(profilePool);
   // This capability never searches or emits cursors; a fresh key keeps unused search authority private.
@@ -127,11 +130,16 @@ export function createApplicationPreparationRuntime(
     run: createApplicationPreparationActivityHandler(
       Object.freeze({
         getPreparationForEvent: applications.getPreparationForEvent.bind(applications),
+        getPreparationVaultReferences:
+          applications.getPreparationVaultReferences.bind(applications),
         claimPreparationGeneration: applications.claimPreparationGeneration.bind(applications),
         completePreparation: applications.completePreparation.bind(applications),
         failPreparation: applications.failPreparation.bind(applications),
       }),
       port,
+      Object.freeze({
+        readCurrentReference: vaultMetadata.readCurrentReference.bind(vaultMetadata),
+      }),
     ),
     close: async () => {
       await Promise.all([

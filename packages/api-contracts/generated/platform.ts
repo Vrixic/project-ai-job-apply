@@ -2177,7 +2177,17 @@ export interface components {
             disposition: "auto" | "review" | "user_action";
             reasons: ("restricted_answer" | "explicit_each_time" | "never_infer" | "unsupported_value" | "unconfirmed_source" | "low_confidence" | "generated_content" | "unknown_field" | "direct_user_action")[];
             requiresReview: boolean;
-        };
+            vaultReference?: {
+                /** Format: uuid */
+                id: string;
+                version: number;
+                context: string;
+                questionHash: string;
+                /** @constant */
+                meaningConfirmed: true;
+                validUntilEpochMs: number | null;
+            };
+        } & unknown;
         ApplicationFormBinding: {
             adapterId: string;
             variantId: string;
@@ -2397,7 +2407,7 @@ export interface components {
             contentSha256: string;
             contentBase64: string;
         };
-        /** @description Omit coverLetter for existing synchronous preparation. Explicit opt-in acknowledges the current OpenAI cover-letter notice; acknowledgement time is server-recorded. Clients cannot supply timestamps or provider/model overrides. Generated text always requires candidate review. */
+        /** @description Omit coverLetter for existing synchronous preparation. Explicit opt-in acknowledges the current OpenAI cover-letter notice; acknowledgement time is server-recorded. Clients cannot supply timestamps or provider/model overrides. Generated text always requires candidate review. Saved-answer reuse is default-off; explicit selections confirm exact question meaning/context and require review. No context is inferred. */
         PrepareApplicationPacketRequest: {
             expectedRevision: number;
             form?: components["schemas"]["ApplicationFormBinding"];
@@ -2406,6 +2416,16 @@ export interface components {
                 value: string | number | boolean | (string | number | boolean)[] | null;
             }[];
             coverLetter?: components["schemas"]["RequestedApplicationCoverLetter"];
+            vaultSelections?: {
+                /** Format: uuid */
+                id: string;
+                version: number;
+                context: string;
+                questionHash: string;
+                /** @constant */
+                meaningConfirmed: true;
+                fieldKey: string;
+            }[];
         };
         ApproveApplicationPacketRequest: {
             expectedRevision: number;
@@ -2429,7 +2449,7 @@ export interface components {
             outcome: "started" | "approval_invalidated";
             /** Format: uuid */
             attemptId?: string;
-            invalidationReasons?: ("packet_hash_mismatch" | "approval_expired" | "job_changed" | "form_changed" | "resume_changed" | "cover_letter_changed")[];
+            invalidationReasons?: ("packet_hash_mismatch" | "approval_expired" | "job_changed" | "form_changed" | "resume_changed" | "cover_letter_changed" | "vault_answer_changed")[];
             application: components["schemas"]["Application"];
         };
         ApplicationSubmissionResultRequest: {

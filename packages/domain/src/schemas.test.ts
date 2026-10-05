@@ -21,6 +21,40 @@ async function exportDefinition(name: string) {
 }
 
 describe("domain schema registry", () => {
+  it("preserves optional selected-answer provenance in portable packet fields with mandatory review", async () => {
+    const validate = await exportDefinition("applicationsPacketField");
+    const id = "019d04cf-1f80-7000-8000-000000000001";
+    const field = {
+      fieldKey: "authorization.us_authorized",
+      value: false,
+      origin: "answer_vault",
+      sourceFactIds: [id],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["restricted_answer"],
+      requiresReview: true,
+      vaultReference: {
+        id,
+        version: 1,
+        context: "us",
+        questionHash: "a".repeat(64),
+        meaningConfirmed: true,
+        validUntilEpochMs: null,
+      },
+    };
+    expect(validate(field)).toBe(true);
+    for (const patch of [
+      { requiresReview: false },
+      { disposition: "auto" },
+      { origin: "confirmed_fact" },
+    ]) {
+      expect(validate({ ...field, ...patch })).toBe(false);
+    }
+    expect(
+      validate({ ...field, vaultReference: { ...field.vaultReference, value: "private" } }),
+    ).toBe(false);
+  });
+
   it("allows optional bounded saved paragraphs only with mandatory review metadata", async () => {
     const validate = await exportDefinition("coverLetter");
     const ready = {

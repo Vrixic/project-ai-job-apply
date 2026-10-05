@@ -40,6 +40,12 @@ export interface CurrentRestrictedAnswerReference {
   validUntilEpochMs: number | null;
 }
 
+/** Only a caller's transaction-scoped tagged query, with no lifecycle or general SQL methods. */
+export type RestrictedAnswerAdmissionQuery = <Rows extends Record<string, unknown>[]>(
+  parts: TemplateStringsArray,
+  ...values: unknown[]
+) => Promise<Rows>;
+
 /** Private Profile read boundary. It grants no save, deletion, export or general-list capability. */
 export interface RestrictedAnswerReuseReader {
   readCurrentReference(
@@ -256,9 +262,9 @@ function requestHash(command: SaveRestrictedAnswerCommand): string {
     .digest("hex");
 }
 
-// This store is always composed with the shared, camelCase-transforming client (`createDatabase`),
-// never a raw or transaction-scoped client from another service; every row type below matches that
-// transform rather than the underlying snake_case column names. A timestamptz column can come back
+// Storage methods use the shared camelCase-transforming client (`createDatabase`).
+// The private admission facade uses only readCurrentReference, whose explicit aliases also
+// support the caller's plain transaction codec. Other row types rely on the shared transform. A timestamptz column can come back
 // as either a Date or a string depending on how it was read, so every row type allows both.
 function iso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
@@ -487,6 +493,42 @@ export class PostgresRestrictedAnswerVaultStore
    * before testing the requested version, so a tombstone or correction cannot resurrect history.
    * No SQL lock is held, and the receipt is not an atomic cross-owner admission lease.
    */
+  /** Serialize metadata admission with every existing vault writer in the caller's transaction.
+   * No KMS operation or plaintext read occurs while these locks are held.
+   */
+  async lockCurrentReferences(
+    userId: string,
+    references: readonly SelectedRestrictedAnswerReference[],
+    query: RestrictedAnswerAdmissionQuery,
+  ): Promise<readonly CurrentRestrictedAnswerReference[]> {
+    if (references.length < 1 || references.length > 20) {
+      throw new RestrictedAnswerVaultInputError("Invalid restricted-answer admission selection");
+    }
+    const selected = references.map((reference) => selectedReference(userId, reference));
+    // Same key as save/remove/removeByField; stable order avoids opposing multi-answer admissions.
+    const keys = [
+      ...new Set(
+        selected.map(
+          (reference) =>
+            `restricted-answer:${reference.userId}:${reference.fieldKey}:${reference.context}`,
+        ),
+      ),
+    ].sort();
+    await query`SELECT identity.require_active_candidate(${userId}::uuid)`;
+    for (const key of keys) await query`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+    // This facade is used solely by the fixed metadata query below, never by writes or KMS.
+    const reader = new PostgresRestrictedAnswerVaultStore(
+      query as unknown as postgres.Sql,
+      undefined,
+    );
+    const current: CurrentRestrictedAnswerReference[] = [];
+    for (const reference of selected) {
+      const receipt = await reader.readCurrentReference(userId, reference);
+      if (receipt) current.push(Object.freeze(receipt));
+    }
+    return Object.freeze(current);
+  }
+
   async readCurrentReference(
     userId: string,
     reference: SelectedRestrictedAnswerReference,
@@ -496,7 +538,7 @@ export class PostgresRestrictedAnswerVaultStore
       Array<{ id: string; version: number; validUntilEpochMs: number | null }>
     >`
       SELECT answer.id, version.version,
-        (extract(epoch FROM version.expires_at) * 1000)::float8 AS valid_until_epoch_ms
+        (extract(epoch FROM version.expires_at) * 1000)::float8 AS "validUntilEpochMs"
       FROM profile.restricted_answers AS answer
       JOIN LATERAL (
         SELECT version, state, expires_at FROM profile.restricted_answer_versions

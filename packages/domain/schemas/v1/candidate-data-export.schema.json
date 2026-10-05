@@ -1330,21 +1330,41 @@
         "requiresReview"
       ],
       "properties": {
-        "fieldKey": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "fieldKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
         "value": {
           "oneOf": [
-            { "type": "null" },
-            { "type": "string", "maxLength": 20000 },
-            { "type": "number" },
-            { "type": "boolean" },
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "maxLength": 20000
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
             {
               "type": "array",
               "maxItems": 100,
               "items": {
                 "oneOf": [
-                  { "type": "string", "maxLength": 2000 },
-                  { "type": "number" },
-                  { "type": "boolean" }
+                  {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
                 ]
               }
             }
@@ -1353,9 +1373,21 @@
         "origin": {
           "enum": ["confirmed_fact", "answer_vault", "user_entered", "generated", "derived"]
         },
-        "sourceFactIds": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/uuid" } },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "disposition": { "enum": ["auto", "review", "user_action"] },
+        "sourceFactIds": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/uuid"
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "disposition": {
+          "enum": ["auto", "review", "user_action"]
+        },
         "reasons": {
           "type": "array",
           "maxItems": 20,
@@ -1373,9 +1405,69 @@
             ]
           }
         },
-        "requiresReview": { "type": "boolean" }
+        "requiresReview": {
+          "type": "boolean"
+        },
+        "vaultReference": {
+          "type": "object",
+          "required": [
+            "id",
+            "version",
+            "context",
+            "questionHash",
+            "meaningConfirmed",
+            "validUntilEpochMs"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "context": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "questionHash": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "meaningConfirmed": {
+              "const": true
+            },
+            "validUntilEpochMs": {
+              "type": ["number", "null"]
+            }
+          },
+          "additionalProperties": false
+        }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["vaultReference"],
+            "properties": { "vaultReference": {} }
+          },
+          "then": {
+            "properties": {
+              "origin": {
+                "const": "answer_vault"
+              },
+              "requiresReview": {
+                "const": true
+              },
+              "disposition": {
+                "const": "review"
+              }
+            }
+          }
+        }
+      ]
     },
     "applicationsPacket": {
       "type": "object",
@@ -1440,6 +1532,7 @@
             "form_changed",
             "resume_changed",
             "cover_letter_changed",
+            "vault_answer_changed",
             "superseded",
             "attempt_requires_review",
             "cancelled"

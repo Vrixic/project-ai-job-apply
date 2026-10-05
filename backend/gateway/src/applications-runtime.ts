@@ -17,6 +17,8 @@ import {
   type ResumeFileBody,
   type ResumePreviewBody,
   type ResumePreviewSource,
+  type VaultCurrentReference,
+  type VaultReader,
 } from "@ai-job-apply/applications-service";
 import {
   RESUME_TAILORING_REQUEST_KIND,
@@ -40,6 +42,8 @@ export interface ApplicationsRuntimeOptions {
   coverLetterPreparationEnabled?: boolean;
   catalog: Pick<JobCatalogReader, "resolveActiveJobSummaries" | "getActiveJob">;
   definitions: ReadonlyMap<string, FieldDefinition>;
+  restrictedAnswers?: VaultReader;
+  restrictedAnswerReuseEnabled?: boolean;
   clock?: () => Date;
   metrics?: MetricSink;
 }
@@ -66,6 +70,14 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
   const clock = options.clock ?? (() => new Date());
   const store = new PostgresApplicationStore(options.client, clock, {
     definitions: options.definitions,
+    ...(options.restrictedAnswerReuseEnabled === true &&
+    options.restrictedAnswers?.lockCurrentReferences
+      ? {
+          lockVaultReferences: options.restrictedAnswers.lockCurrentReferences.bind(
+            options.restrictedAnswers,
+          ),
+        }
+      : {}),
   });
 
   async function jobRevision(jobId: string, at: Date): Promise<string> {
@@ -199,10 +211,33 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
           throw new ApplicationsUnavailableError();
         }
       }
+      const vaultReferences: VaultCurrentReference[] = [];
+      const selectedFields =
+        view.currentPacket?.fields.filter((field) => field.vaultReference) ?? [];
+      if (
+        selectedFields.length &&
+        (options.restrictedAnswerReuseEnabled !== true || !options.restrictedAnswers)
+      ) {
+        throw new ApplicationsUnavailableError();
+      }
+      for (const field of selectedFields) {
+        const expected = field.vaultReference;
+        if (!expected || !options.restrictedAnswers) throw new ApplicationsUnavailableError();
+        try {
+          const current = await options.restrictedAnswers.readCurrentReference(ownerUserId, {
+            ...expected,
+            fieldKey: field.fieldKey,
+          });
+          if (current) vaultReferences.push(current);
+        } catch {
+          throw new ApplicationsUnavailableError();
+        }
+      }
       const resume = (await artifacts(ownerUserId, application.canonicalJobId)).resume;
       return {
         jobRevision: await jobRevision(application.canonicalJobId, clock()),
         formHash,
+        ...(selectedFields.length ? { vaultReferences } : {}),
         ...(resume ? { resumeHash: resume } : {}),
         ...(coverLetterHash ? { coverLetterHash } : {}),
       };
@@ -210,6 +245,10 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
   };
 
   const packets = new FactBackedPacketSource({
+    definitions: options.definitions,
+    ...(options.restrictedAnswerReuseEnabled === true && options.restrictedAnswers
+      ? { vault: options.restrictedAnswers }
+      : {}),
     facts: async (ownerUserId) =>
       (await options.profile.listProfileFacts(ownerUserId)).facts.map(toGraphFact),
     jobRevision: (application: ApplicationRecord) =>

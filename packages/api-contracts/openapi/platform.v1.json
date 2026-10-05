@@ -6550,9 +6550,67 @@
           },
           "requiresReview": {
             "type": "boolean"
+          },
+          "vaultReference": {
+            "type": "object",
+            "required": [
+              "id",
+              "version",
+              "context",
+              "questionHash",
+              "meaningConfirmed",
+              "validUntilEpochMs"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "context": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "questionHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "meaningConfirmed": {
+                "const": true
+              },
+              "validUntilEpochMs": {
+                "type": ["number", "null"]
+              }
+            },
+            "additionalProperties": false
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "required": ["vaultReference"],
+              "properties": { "vaultReference": {} }
+            },
+            "then": {
+              "properties": {
+                "origin": {
+                  "const": "answer_vault"
+                },
+                "requiresReview": {
+                  "const": true
+                },
+                "disposition": {
+                  "const": "review"
+                }
+              }
+            }
+          }
+        ]
       },
       "ApplicationFormBinding": {
         "type": "object",
@@ -7383,10 +7441,55 @@
           },
           "coverLetter": {
             "$ref": "#/components/schemas/RequestedApplicationCoverLetter"
+          },
+          "vaultSelections": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "version",
+                "fieldKey",
+                "context",
+                "questionHash",
+                "meaningConfirmed"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "context": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "questionHash": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "meaningConfirmed": {
+                  "const": true
+                },
+                "fieldKey": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_.-]{1,119}$"
+                }
+              },
+              "additionalProperties": false
+            }
           }
         },
         "additionalProperties": false,
-        "description": "Omit coverLetter for existing synchronous preparation. Explicit opt-in acknowledges the current OpenAI cover-letter notice; acknowledgement time is server-recorded. Clients cannot supply timestamps or provider/model overrides. Generated text always requires candidate review."
+        "description": "Omit coverLetter for existing synchronous preparation. Explicit opt-in acknowledges the current OpenAI cover-letter notice; acknowledgement time is server-recorded. Clients cannot supply timestamps or provider/model overrides. Generated text always requires candidate review. Saved-answer reuse is default-off; explicit selections confirm exact question meaning/context and require review. No context is inferred.",
+        "dependentRequired": {
+          "vaultSelections": ["form"]
+        }
       },
       "ApproveApplicationPacketRequest": {
         "type": "object",
@@ -7486,7 +7589,8 @@
                 "job_changed",
                 "form_changed",
                 "resume_changed",
-                "cover_letter_changed"
+                "cover_letter_changed",
+                "vault_answer_changed"
               ]
             }
           },

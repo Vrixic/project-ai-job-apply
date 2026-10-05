@@ -32,11 +32,15 @@ The private `RestrictedAnswerReuseReader` port adds two exact-selection reads fo
 `readSelectedValue(owner, {id, version, fieldKey, context})` never substitutes a newer revision,
 and `readCurrentReference` checks that same latest active revision without KMS or ciphertext.
 Both detach caller input and require an active owner and database wall-clock expiry. Metadata
-receipts include `validUntilEpochMs` (null means no recorded expiry), so a future admission guard
+receipts include `validUntilEpochMs` (null means no recorded expiry), so the admission guard
 can recheck the immutable deadline after waiting for its own lock. Same-value corrections still
 invalidate an old selection. The existing unselected read and portable export retain their shapes.
-This is a locally verified owner boundary, not connected packet reuse, semantic question mapping,
-mandatory candidate review or approval invalidation. No public plaintext route is added.
+The default-off Applications consumer binds selected metadata into reviewed immutable packets.
+Profile also owns `lockCurrentReferences`, a metadata-only admission capability using the caller's
+transaction and the same sorted advisory keys as every vault writer. Its fresh reads occur after
+locking; locks persist through admission commit/rollback. No KMS call occurs under admission locks.
+Semantic question confirmation, reviewed UI and accountable/deployed activation remain gates.
+No public plaintext read route is added.
 
 ## Phase 0 implementation
 

@@ -26,6 +26,10 @@
         {
           "version": "0005_preparation_dispatch",
           "checksum": "a3dab88e3dc5ce170678444d5202085593786851d14d11a2ffd0320ae3fd0f29"
+        },
+        {
+          "version": "0006_vault_approval_binding",
+          "checksum": "ecca6ad54d8199f32cb6765a748bdf311b0429dd779a2d1fe468efbcf82dbe1f"
         }
       ],
       "relations": [

@@ -584,3 +584,17 @@ cannot invoke this path, and a receipt is not caller authentication or productio
 Running/ambiguous work and retained reservation inventory remain protected; no purge occurs.
 All flags remain dark. Matching control must precede the actor during any separately reviewed
 rollout; public APIs, frontend, migrations, guard/Terraform and deployment are unchanged.
+
+### Selected saved-answer packet admission (proposed ADR-038)
+
+The default-off `RESTRICTED_ANSWER_REUSE_ENABLED` path reads only an exact candidate-selected
+answer through Profile, outside SQL locks, into the candidate's immutable reviewed packet.
+The packet binds its answer ID/version, exact context, observed question hash and expiry.
+Approval, submission start/dispatch and asynchronous preparation admission use Profile-owned
+metadata checks under the vault writers' advisory locks in the same Applications transaction.
+The metadata capability receives a narrow tagged query function and exposes no plaintext, cipher,
+general list, transaction lifecycle or write API. Events and generation inputs carry no saved
+answer values. Corrected/deleted/expired references refuse admission; there is no latest-version
+substitution. See [ADR-038](../adr/038-transactional-vault-reference-admission.md). Reader-first
+strict-schema rollout, explicit migration 0006, candidate review UI and accountable/deployed
+acceptance remain required before activation; this does not certify privacy writer drain.

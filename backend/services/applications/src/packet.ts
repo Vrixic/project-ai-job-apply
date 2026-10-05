@@ -10,6 +10,8 @@ import {
   type ReviewReason,
 } from "./field-policy.js";
 
+import { type VaultCurrentReference, type VaultReference, validVaultReference } from "./vault.js";
+
 export const PACKET_HASH_SCHEMA = "application-packet.v1";
 /** Approval never outlives this window even if nothing else changed. */
 export const MAX_APPROVAL_AGE_MS = 24 * 60 * 60 * 1000;
@@ -29,6 +31,7 @@ export interface ArtifactHashes {
 }
 
 export interface PacketFieldEntry {
+  vaultReference?: VaultReference;
   fieldKey: string;
   value: FieldValue;
   origin: FieldOrigin;
@@ -136,6 +139,18 @@ export function assemblePacket(
       throw new PacketInvariantError("Packet fields must be unique by key");
     }
     seen.add(proposal.fieldKey);
+    if (
+      proposal.vaultReference &&
+      (!inputs.form ||
+        proposal.origin !== "answer_vault" ||
+        !validVaultReference(proposal.vaultReference) ||
+        !proposal.sourceConfirmed ||
+        proposal.value === null ||
+        proposal.sourceFactIds.length !== 1 ||
+        proposal.sourceFactIds[0] !== proposal.vaultReference.id)
+    ) {
+      throw new PacketInvariantError("Invalid selected-answer provenance");
+    }
     const definition = definitions.get(proposal.fieldKey);
     const classification = classifyField(definition, proposal, confidenceThreshold);
     const reasons: ReviewReason[] = [...classification.reasons];
@@ -144,8 +159,11 @@ export function assemblePacket(
       usable = false;
       if (!reasons.includes("unsupported_value")) reasons.push("unsupported_value");
     }
+    if (proposal.vaultReference && !usable)
+      throw new PacketInvariantError("Unusable selected answer");
     const disposition: FieldDisposition = usable ? classification.disposition : "user_action";
     entries.push({
+      ...(proposal.vaultReference ? { vaultReference: { ...proposal.vaultReference } } : {}),
       fieldKey: proposal.fieldKey,
       value: usable ? proposal.value : null,
       origin: proposal.origin,
@@ -186,6 +204,7 @@ export function computePacketHash(content: PacketContent): string {
     jobRevision: content.jobRevision,
     form: content.form,
     fields: content.fields.map((field) => ({
+      ...(field.vaultReference ? { vaultReference: field.vaultReference } : {}),
       fieldKey: field.fieldKey,
       value: field.value,
       origin: field.origin,
@@ -269,6 +288,7 @@ export interface CurrentBindings {
   formHash: string | null;
   resumeHash?: string;
   coverLetterHash?: string;
+  vaultReferences?: readonly VaultCurrentReference[];
 }
 
 export type ApprovalInvalidReason =
@@ -277,7 +297,8 @@ export type ApprovalInvalidReason =
   | "job_changed"
   | "form_changed"
   | "resume_changed"
-  | "cover_letter_changed";
+  | "cover_letter_changed"
+  | "vault_answer_changed";
 
 export type ApprovalValidity =
   | { valid: true }
@@ -287,6 +308,7 @@ export type ApprovalValidity =
 export function evaluateBindings(
   packet: ApplicationPacket,
   current: CurrentBindings,
+  now: Date = new Date(),
 ): ApprovalInvalidReason[] {
   const reasons: ApprovalInvalidReason[] = [];
   if (current.jobRevision !== packet.jobRevision) reasons.push("job_changed");
@@ -294,6 +316,36 @@ export function evaluateBindings(
   if (current.resumeHash !== packet.artifactHashes.resume) reasons.push("resume_changed");
   if (current.coverLetterHash !== packet.artifactHashes.coverLetter) {
     reasons.push("cover_letter_changed");
+  }
+  reasons.push(...evaluateVaultBindings(packet, current.vaultReferences, now));
+  return reasons;
+}
+
+/** The same exact source/deadline guard protects asynchronous preparation admission. */
+export function evaluateVaultBindings(
+  packet: ApplicationPacket,
+  current: readonly VaultCurrentReference[] | undefined,
+  now: Date,
+): ApprovalInvalidReason[] {
+  const reasons: ApprovalInvalidReason[] = [];
+  for (const field of packet.fields) {
+    const expected = field.vaultReference;
+    if (!expected) continue;
+    const matches = (current ?? []).filter((ref) => ref.fieldKey === field.fieldKey);
+    const live = matches[0];
+    if (
+      matches.length !== 1 ||
+      !live ||
+      live.id !== expected.id ||
+      live.version !== expected.version ||
+      live.context !== expected.context ||
+      live.validUntilEpochMs !== expected.validUntilEpochMs ||
+      !Number.isFinite(now.getTime()) ||
+      !validVaultReference(expected) ||
+      (expected.validUntilEpochMs !== null && now.getTime() >= expected.validUntilEpochMs)
+    ) {
+      if (!reasons.includes("vault_answer_changed")) reasons.push("vault_answer_changed");
+    }
   }
   return reasons;
 }
@@ -313,7 +365,7 @@ export function evaluateApproval(
     reasons.push("packet_hash_mismatch");
   }
   if (now.getTime() >= approval.expiresAt.getTime()) reasons.push("approval_expired");
-  reasons.push(...evaluateBindings(packet, current));
+  reasons.push(...evaluateBindings(packet, current, now));
   return reasons.length === 0 ? { valid: true } : { valid: false, reasons };
 }
 

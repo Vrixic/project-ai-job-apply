@@ -28,6 +28,7 @@ import {
   type CurrentBindings,
   evaluateApproval,
   evaluateBindings,
+  evaluateVaultBindings,
   type FormBinding,
   type PacketApproval,
   type PacketFieldEntry,
@@ -354,7 +355,16 @@ interface ChangeOptions {
 export interface ApplicationStoreOptions {
   definitions: ReadonlyMap<string, FieldDefinition>;
   confidenceThreshold?: number;
+  lockVaultReferences?: VaultReferenceLocker;
 }
+
+import {
+  type VaultAdmissionQuery,
+  VaultBindingsUnavailableError,
+  type VaultCurrentReference,
+  type VaultReference,
+  type VaultReferenceLocker,
+} from "./vault.js";
 
 export class PostgresApplicationStore {
   constructor(
@@ -362,6 +372,37 @@ export class PostgresApplicationStore {
     private readonly clock: () => Date = () => new Date(),
     private readonly options: ApplicationStoreOptions = { definitions: new Map() },
   ) {}
+
+  private async lockVaultReferences(
+    tx: Tx,
+    packet: ApplicationPacket,
+  ): Promise<readonly VaultCurrentReference[]> {
+    const references = packet.fields.flatMap((field) =>
+      field.vaultReference
+        ? [
+            {
+              id: field.vaultReference.id,
+              version: field.vaultReference.version,
+              fieldKey: field.fieldKey,
+              context: field.vaultReference.context,
+            },
+          ]
+        : [],
+    );
+    if (!references.length) return [];
+    if (!this.options.lockVaultReferences) throw new VaultBindingsUnavailableError();
+    const query: VaultAdmissionQuery = async (parts, ...values) =>
+      (tx as unknown as VaultAdmissionQuery)(parts, ...values);
+    try {
+      return await this.options.lockVaultReferences(
+        packet.userId,
+        references,
+        Object.freeze(query),
+      );
+    } catch {
+      throw new VaultBindingsUnavailableError();
+    }
+  }
 
   async ping(): Promise<void> {
     await this.client`SELECT 1`;
@@ -465,12 +506,14 @@ export class PostgresApplicationStore {
       acknowledgedFieldKeys: [...command.request.acknowledgedFieldKeys].sort(),
       current: command.current,
     });
-    return this.commandResult(command, "approve", requestHash, async (tx, app, now) => {
+    return this.commandResult(command, "approve", requestHash, async (tx, app, _now) => {
       nextStatus(app.status, "approved");
       const packet = await this.loadCurrentPacket(tx, app);
       if (!packet) throw new ApplicationIntegrityError("missing current packet");
-      const stale = evaluateBindings(packet, command.current);
-      const approval = approvePacket(packet, command.request, now);
+      const vaultReferences = await this.lockVaultReferences(tx, packet);
+      const admissionAt = this.clock();
+      const stale = evaluateBindings(packet, { ...command.current, vaultReferences }, admissionAt);
+      const approval = approvePacket(packet, command.request, admissionAt);
       if (stale.length > 0) {
         // The packet no longer matches the live job/form/artifacts: it can never be approved.
         throw new StalePacketError(stale);
@@ -484,7 +527,7 @@ export class PostgresApplicationStore {
           ${approval.consentId}, ${[...approval.acknowledgedFieldKeys]}, ${approval.approvedAt},
           ${approval.expiresAt})
       `;
-      return this.change(tx, app, "approved", now, { packetId: packet.id });
+      return this.change(tx, app, "approved", admissionAt, { packetId: packet.id });
     });
   }
 
@@ -565,7 +608,13 @@ export class PostgresApplicationStore {
         if (!packet || !approval) {
           throw new ApplicationIntegrityError("approved application without packet or approval");
         }
-        const validity = evaluateApproval(packet, approval, command.current, now);
+        const vaultReferences = await this.lockVaultReferences(tx, packet);
+        const validity = evaluateApproval(
+          packet,
+          approval,
+          { ...command.current, vaultReferences },
+          this.clock(),
+        );
         if (!validity.valid) {
           // Commit the invalidation so a stale approval can never be reused, then report it.
           const reason = firstReason(validity.reasons);
@@ -654,6 +703,7 @@ export class PostgresApplicationStore {
       const row = await this.lockAttempt(tx, app.id, snapshot.attemptId);
       const packet = await this.loadCurrentPacket(tx, app);
       const approval = await this.loadLiveApproval(tx, app.id);
+      const vaultReferences = packet ? await this.lockVaultReferences(tx, packet) : [];
       const now = this.clock();
       const dispatched = markDispatched(toAttempt(row), now);
       if (
@@ -668,7 +718,12 @@ export class PostgresApplicationStore {
           "submission attempt without matching packet or approval",
         );
       }
-      const validity = evaluateApproval(packet, approval, snapshot.current, now);
+      const validity = evaluateApproval(
+        packet,
+        approval,
+        { ...snapshot.current, vaultReferences },
+        now,
+      );
       if (!validity.valid) {
         // Commit the refusal and release the undispatched attempt's scope atomically. Throw
         // only after commit, otherwise the invalidation/history/outbox would roll back.
@@ -1040,6 +1095,33 @@ export class PostgresApplicationStore {
     return this.readPreparation(this.client, target.owner, target.applicationId, preparationId);
   }
 
+  /** Metadata from the ORIGINAL accepted base packet; never the mutable current packet or values. */
+  async getPreparationVaultReferences(
+    eventId: string,
+    preparationId: string,
+  ): Promise<Array<VaultReference & { fieldKey: string }>> {
+    const target = await this.getPreparationForEvent(eventId, preparationId);
+    await this.client`SELECT identity.require_active_candidate(${target.ownerUserId}::uuid)`;
+    const rows = await this.client<Array<{ fieldKey: string; reference: VaultReference }>>`
+      SELECT field->>'fieldKey' AS "fieldKey", field->'vaultReference' AS reference
+      FROM applications.packets packet
+      CROSS JOIN LATERAL jsonb_array_elements(packet.fields) field
+      WHERE packet.id = ${target.basePacketId}::uuid
+        AND packet.application_id = ${target.applicationId}::uuid
+        AND packet.owner_user_id = ${target.ownerUserId}::uuid
+        AND field ? 'vaultReference'
+    `;
+    return rows.map((row) => ({
+      fieldKey: row.fieldKey,
+      id: row.reference.id,
+      version: row.reference.version,
+      context: row.reference.context,
+      questionHash: row.reference.questionHash,
+      meaningConfirmed: row.reference.meaningConfirmed,
+      validUntilEpochMs: row.reference.validUntilEpochMs,
+    }));
+  }
+
   async claimPreparationGeneration(
     eventId: string,
     preparationId: string,
@@ -1058,8 +1140,36 @@ export class PostgresApplicationStore {
       );
       if (preparation.state === "succeeded" || preparation.state === "failed")
         return { kind: "terminal", preparation };
-      if (preparation.state === "running") return { kind: "already_claimed", preparation };
+      if (preparation.state === "running") {
+        const original = await this.loadCurrentPacket(tx, {
+          ...app,
+          current_packet_id: preparation.basePacketId,
+        });
+        const vaultReferences = original ? await this.lockVaultReferences(tx, original) : undefined;
+        const now = this.clock();
+        if (!original || evaluateVaultBindings(original, vaultReferences, now).length > 0) {
+          await this.failPreparationRow(
+            tx,
+            preparation,
+            "bindings_changed",
+            Number.isFinite(now.getTime()) && now >= preparation.createdAt
+              ? now
+              : preparation.createdAt,
+          );
+          return {
+            kind: "terminal",
+            preparation: await this.readPreparation(tx, target.ownerUserId, app.id, preparationId),
+          };
+        }
+        return { kind: "already_claimed", preparation };
+      }
+      const base = await this.loadCurrentPacket(tx, {
+        ...app,
+        current_packet_id: preparation.basePacketId,
+      });
+      const vaultReferences = base ? await this.lockVaultReferences(tx, base) : undefined;
       const now = this.clock();
+      const vaultChanged = !base || evaluateVaultBindings(base, vaultReferences, now).length > 0;
       const age = now.getTime() - preparation.approvedAt.getTime();
       const errorCode: PreparationFailureCode | null =
         !Number.isFinite(age) || age < 0 || now > preparation.expiresAt
@@ -1069,7 +1179,8 @@ export class PostgresApplicationStore {
               app.status !== "review_required"
             ? "application_changed"
             : preparation.jobContextHash !== current.jobContextHash ||
-                preparation.confirmedFactsHash !== current.confirmedFactsHash
+                preparation.confirmedFactsHash !== current.confirmedFactsHash ||
+                vaultChanged
               ? "bindings_changed"
               : null;
       if (errorCode) {
@@ -1118,14 +1229,21 @@ export class PostgresApplicationStore {
       if (preparation.state === "succeeded" || preparation.state === "failed") return preparation;
       if (preparation.state !== "running")
         throw new ApplicationIntegrityError("generation not claimed");
+      const base = await this.loadCurrentPacket(tx, {
+        ...app,
+        current_packet_id: preparation.basePacketId,
+      });
+      const vaultReferences = base ? await this.lockVaultReferences(tx, base) : undefined;
       const now = this.clock();
+      const vaultChanged = !base || evaluateVaultBindings(base, vaultReferences, now).length > 0;
       const failure =
         Number(app.revision) !== preparation.expectedRevision ||
         app.current_packet_id !== preparation.basePacketId ||
         app.status !== "review_required"
           ? "application_changed"
           : preparation.jobContextHash !== current.jobContextHash ||
-              preparation.confirmedFactsHash !== current.confirmedFactsHash
+              preparation.confirmedFactsHash !== current.confirmedFactsHash ||
+              vaultChanged
             ? "bindings_changed"
             : null;
       if (failure) {
@@ -1142,7 +1260,7 @@ export class PostgresApplicationStore {
         letter.sourceFactIds.some((id) => !/^[a-f0-9-]{36}$/u.test(id))
       )
         throw new PacketInvariantError("Invalid grounded cover-letter binding");
-      const base = (await this.readView(tx, target.ownerUserId, app.id)).currentPacket;
+
       if (!base) throw new ApplicationIntegrityError("preparation packet");
       const updated = await this.writePacket(tx, app, now, {
         jobRevision: base.jobRevision,
@@ -1152,6 +1270,7 @@ export class PostgresApplicationStore {
           ...base.fields
             .filter((field) => field.fieldKey !== "documents.cover_letter")
             .map((field) => ({
+              ...(field.vaultReference ? { vaultReference: { ...field.vaultReference } } : {}),
               fieldKey: field.fieldKey,
               value: field.value,
               origin: field.origin,

@@ -9,6 +9,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 D3-076 starts default-off selected-answer packet binding on exact #545 57d7b057. Same-transaction Profile metadata admission checks under verification; full verifier and accountable/deployed gates remain. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). No activation, frontend change or D1/D3 completion; hosted CI/CD deferred until production launch.
+
 2026-10-04 D3-075 [PR #545](https://github.com/Vrixic/project-ai-job-apply/pull/545) opens on exact #544 8f72e13b. Verified source fb8010b3 unchanged; only delivery documentation follows. Packet selection/hash/version invalidation, candidate review and accountable/deployed acceptance remain. No Applications consumer, deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
 
 2026-10-04 D3-075 clean fb8010b3 passes full maintained verification: 38 typecheck tasks, 39 test tasks, 23 builds; Profile 120 units and unchanged lint. All 46 real Profile SQL cases separately pass, with eight new selected-answer cases; KMS simulated. [Evidence](evidence/d3-vault-selected-read-port-2026-10-04.md). Docker/WSL stopped; only delivery documentation follows. Packet selection/hash/version invalidation, candidate review and accountable/deployed gates remain. No Applications consumer, deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.

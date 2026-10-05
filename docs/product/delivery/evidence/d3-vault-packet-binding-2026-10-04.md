@@ -1,0 +1,28 @@
+# D3-076: selected saved answers in immutable application packets
+
+Status: In progress. Started 2026-10-04 on exact PR #545 `57d7b057ef5bb25cfdd4b66aa81db2c4474da460`, branch `feat/d3-vault-packet-binding`. Local synthetic backend work; not deployed or activated.
+
+## Path and acceptance
+
+Explicit candidate selection and meaning confirmation → Gateway → exact private Profile selected-value read → immutable packet reference and hash → mandatory field review → Profile-owned metadata locks in the Applications admission transaction → approval/start/dispatch refusal on correction, deletion or expiry. Asynchronous preparation binds its original packet and checks references before claim/recovery and final packet creation. Values and metadata are excluded from the Documents generation input.
+
+`RESTRICTED_ANSWER_REUSE_ENABLED` defaults false. Selection requires an observed form, exact version and context, and a question hash; it cannot infer candidate answers or replace a selection with a newer version. KMS runs outside SQL admission locks. The private admission capability reads metadata only and holds the same advisory transaction keys used by all vault writers, in sorted order, until Applications commits or rolls back. It uses the caller's single SQL transaction, not a separate transaction or a cross-owner SQL query authored by Applications. Missing capability or failed metadata read refuses admission.
+
+## Evidence so far
+
+Before the transaction-lock refinement: 147 Applications unit tests and 15 new real Gateway/Profile/Applications PostgreSQL tests passed. The SQL suite exercises authenticated HTTP with a simulated OIDC issuer, local opaque-handle cipher (simulated KMS) and synthetic job catalog; actual SQL ownership, services and packet persistence are used. Two tests advance the clock while approval/dispatch waits for a real application row lock. After the locking change, 23 real SQL cases pass, including correction, remove and removeByField committed during approve/dispatch lock waits, and a writer blocked until an admission rollback. Original 67 Applications SQL tests (including fault injection) and 46 Profile SQL tests pass. Package suites pass: Applications 147 units, Profile 120, Gateway 300, Workflows 1,588; API and Domain pass. Six real preparation workflow tests and five original Gateway SQL tests pass. The missing-admission-capability case passes with no approval. Native opt-in suites pass 22 evidence/starter/recovery cases and 11 isolated Documents/native-actor cases. Their first parallel run hit cluster-wide Jobs role creation/grant isolation checks; an exact single-database fixture resolves this without weakening guards. The maintained logical dump/restore passes with 60 migrations and exact row-set equality for all 84 relations, owned container cleanup true. Formatting passes. Both owned packet/native fixtures are removed; Docker/WSL shutdown is in progress. Full verifier and artifact checks remain pending.
+
+## Rollout and remaining work
+
+Apply Applications migration `0006_vault_approval_binding.sql` before admitting the new invalidation reason. Restore inventory is 60 migrations and 84 relations. Deploy compatible strict schema readers before producers: new optional packet reference objects are rejected by old strict readers despite unchanged legacy packet hashes. Keep the switch false until candidate review UI, least-privilege runtime composition, legal/privacy/security approval and deployed journey checks pass. No live KMS/model/ATS calls, deployment or production data are authorized by this source checkpoint.
+
+Final maintained verification, original integration suites, restore checks, local artifact checks, documentation and review remain. D1 and D3 exit checkboxes remain unchanged. CI/CD is deferred by the owner until production launch.
+
+## Sources and local logs
+
+- [Admission owner API](../../../../backend/services/profile/src/restricted-answer-vault.ts)
+- [Applications guards](../../../../backend/services/applications/src/store.ts)
+- [Real SQL regressions](../../../../backend/gateway/src/applications-vault.integration.test.ts)
+- [Migration 0006](../../../../backend/services/applications/migrations/0006_vault_approval_binding.sql), SHA256 `ecca6ad54d8199f32cb6765a748bdf311b0429dd779a2d1fe468efbcf82dbe1f`
+- Restore manifest SHA256 `6b6c237850f5b2a88a043eb975043a1dfd7145e40968647e9d53fadfce92c611`
+- Ignored local logs: `.tmp/d3-076-admission-gateway-sql-final.log`, `.tmp/d3-076-applications-postgres.log`, `.tmp/d3-076-profile-postgres.log`, `.tmp/d3-076-native-preparation-postgres.log` (first attempt; 22 cases passed), `.tmp/d3-076-native-documents-postgres.log` (correct isolated rerun), `.tmp/d3-076-restore.log`.

@@ -226,3 +226,9 @@ and available document KMS configuration. Withdrawal refuses subsequent reads; n
 or document write is composed. Updated export readers must precede producer activation because
 old strict validators reject the new optional fields. See [D3-072 evidence](../../docs/product/delivery/evidence/d3-cover-letter-export-content-2026-10-04.md).
 No deployment/activation is implied; read IAM, release, privacy and deployed acceptance remain.
+
+Selected saved-answer preparation binds its original base packet's reference metadata and checks
+it before generation/recovery and final packet creation. The native actor composes a KMS-free
+Profile metadata reader and its fixed admission lock method, running locks inside the Applications
+transaction. No saved-answer values or references are sent to Documents generation/recovery.
+This source composition requires reviewed native deployment; nothing is activated here.
