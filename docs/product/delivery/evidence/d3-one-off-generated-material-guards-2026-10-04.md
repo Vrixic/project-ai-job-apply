@@ -14,10 +14,9 @@ The source merge reconciles main's original-provider terminal settlement with th
 
 ## Backend enforcement path
 
-AI helper with original generation purpose â†’ refuse one-off material as a persisted proposal â†’ Applications permits only the exact bound artifact digest in document fields â†’ owner SQL check refuses plaintext/mismatched references â†’ candidate receives fixed value-free validation failure. Ordinary narrative answers and candidate-authored non-document answers retain their separate policies. Tests must prove metadata-only pointers remain usable, direct SQL cannot bypass the document guard, and failed requests leave packet/history/outbox/idempotency unchanged.
+AI helper with original generation purpose → refuse one-off material as a persisted proposal → Applications permits only the exact bound artifact digest in document fields → owner SQL check refuses plaintext/mismatched references → candidate receives fixed value-free validation failure. Ordinary narrative answers and candidate-authored non-document answers retain their separate policies. Tests must prove metadata-only pointers remain usable, direct SQL cannot bypass the document guard, and failed requests leave packet/history/outbox/idempotency unchanged.
 
 Full temporary-memory/provider transport replacement and expiration/admission integration remain necessary; this record does not redefine the end state around persistence guards. Existing saved draft/private S3/provider-slot paths remain contrary to ADR-038 and cannot be activated. No retained synthetic versions are certified erased. No frontend edit, live model/ATS call, hosted CI monitoring or production approval is claimed.
-
 
 ## Local verification checkpoint
 

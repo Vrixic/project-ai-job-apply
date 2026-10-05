@@ -163,7 +163,6 @@ or expiry refuses the old selection with `vault_answer_changed` (preparation use
 Migration `0006_vault_approval_binding.sql` adds the reason to the existing closed approval constraint.
 Strict-reader rollout and candidate review UI precede activation; no live ATS executor is enabled.
 
-
 ## One-off document material persistence guard (ADR-038 / D3-064)
 
 Document fields in v1 packets and account-export packet projections accept only unresolved nulls

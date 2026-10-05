@@ -109,13 +109,13 @@ ledger before serving traffic.
 
 ## Deletion states
 
-1. `requested` â€” authenticate the request and clearly disclose irreversible effects.
-2. `quarantined` â€” block login, new workflows, external effects, and ordinary access.
-3. `active-systems-deleted` â€” delete or irreversibly detach primary records, objects, caches,
+1. `requested` — authenticate the request and clearly disclose irreversible effects.
+2. `quarantined` — block login, new workflows, external effects, and ordinary access.
+3. `active-systems-deleted` — delete or irreversibly detach primary records, objects, caches,
    indexes, and optional analytics.
-4. `subprocessors-pending` â€” reconcile required provider deletion acknowledgements.
-5. `completed` â€” retain only the allowed non-PII completion proof and expiring backup ledger.
-6. `backup-expired` â€” all ordinary backup windows that could contain the deleted data have elapsed.
+4. `subprocessors-pending` — reconcile required provider deletion acknowledgements.
+5. `completed` — retain only the allowed non-PII completion proof and expiring backup ledger.
+6. `backup-expired` — all ordinary backup windows that could contain the deleted data have elapsed.
 
 Confirmed deletion cannot be reversed. Before confirmation, the product provides a clear warning
 and an opportunity to export data or cancel the request. Inaccessible backup copies age out within
@@ -263,7 +263,6 @@ capability. Keys are invocation-local and native Invoke has one attempt. Positiv
 disposal and local deadlines do not prove other writers stopped or authorize object/row purge.
 Reviewed IAM, scheduling, retention, ambiguous abandonment, writer drain and accountable/deployed
 acceptance remain open; no deployment or activation follows from source composition.
-
 
 D3-064 source enforcement now rejects generated cover-letter results as persisted proposals and
 allows document packet fields to contain only exact bound artifact hashes or unresolved nulls.

@@ -794,3 +794,6 @@ timestamp. This does not close standalone verification or deployed value-export 
 - Exit review: Not performed
 - Release/evidence summary: Not available
 - Accepted residual risks: None recorded
+
+
+| 2026-10-04 | D3-064 backend persistence checkpoint: purpose-aware proposal refusal, document hash-only packet/export contracts, exact-bound owner SQL constraint and fail-closed legacy validation. AI285/Applications155/API86/Domain26/restore44/Documents1,174 units; 72 Applications and 317 Documents real-SQL cases across explicit complementary runs; 61-migration/84-relation logical recovery and runtime/publisher/restore guards pass. Full maintained verification pending. Entire memory/expiry/transport/browser/provider scope stays In progress; no deployment, activation or D1/D3 completion. Owner CI/CD deferral retained. | [Evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md) |

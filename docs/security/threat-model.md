@@ -154,15 +154,15 @@ These are required controls; implementation/deployed evidence is pending.
 
 ## Trust boundaries
 
-1. User device â†” public web/API edge
-2. Gateway â†” module-owned PostgreSQL schemas
-3. Transactional database â†” identifier-only outbox/SQS â†” exact-version Lambda durable
-   orchestrator â†” private activity/terminal handlers. Stable execution identities, conditional
+1. User device ↔ public web/API edge
+2. Gateway ↔ module-owned PostgreSQL schemas
+3. Transactional database ↔ identifier-only outbox/SQS ↔ exact-version Lambda durable
+   orchestrator ↔ private activity/terminal handlers. Stable execution identities, conditional
    claims, reconciliation, and terminal recovery prevent duplicate effective execution.
-4. Workers â†” ATS pages, AI providers, messaging providers, and object storage
-5. Browser extension â†” active tab â†” Platform
-6. GitHub Actions â†” isolated AWS accounts
-7. Operations/admin access â†” confidential or restricted data
+4. Workers ↔ ATS pages, AI providers, messaging providers, and object storage
+5. Browser extension ↔ active tab ↔ Platform
+6. GitHub Actions ↔ isolated AWS accounts
+7. Operations/admin access ↔ confidential or restricted data
 
 ## Priority threats and required controls
 
@@ -302,7 +302,6 @@ retention and deployed independent security/privacy evidence remain release gate
 | Candidate reports leak identity or become unbounded free-form content | Owner UUID stays inside Jobs, the public contract accepts one fixed reason only, retained per-owner cap, aggregate review returns counts only | Retention/deletion and accountable support-access policy remain unapproved |
 | Reports automatically suppress legitimate jobs or sources | Reports are immutable evidence only; lifecycle changes require a separate explicit versioned moderation decision behind `jobs:moderate`; the redacted console exposes aggregate counts only | The managed admin grant, alert threshold, deployed workflow, and representative accountable moderation-policy acceptance remain open |
 | A compromised operator resumes a paused source or broadens ingestion | The Jobs-owned exact source/adapter/config pause is immutable; the durable runtime fails closed at schedule/resume, attempt, poll, and per-write boundaries, and provides no resume path | One already issued idempotent write may finish before the next gate check; any resume path still requires separate legal/source/runtime authority and audited deployment evidence |
-
 
 ## D3-064 generated material persistence guard
 

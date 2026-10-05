@@ -6,8 +6,8 @@ another service's tables.
 
 ## Subfolders
 
-- `src/` â€” Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
-- `restore-manifest.v1.json` â€” Canonical Phase 3 seven-owner restore boundary (Applications added
+- `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
+- `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
   after Trust): eleven owned schemas (including the empty-table `jobs_public` projection schema), 84
   regular relations, and 61 checksum-bound migrations (Profile through `0011`; Applications through
   `0007`; Documents through `0009`). The
