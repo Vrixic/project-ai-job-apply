@@ -313,10 +313,57 @@ Logs: `.tmp/d3-restricted-packet-restore-operator.log`,
 `.tmp/d3-restricted-packet-replay-operator.log`,
 `.tmp/d3-restricted-packet-migration-publisher.log`.
 
+## Actual logical restore, private SQL refusal and deletion replay
+
+The maintained `pnpm test:d2-recovery` harness now supplies offline keyed request authority to its
+existing temporary-packet fixture and seeds three immutable restricted snapshots across two
+synthetic candidates, with distinct true/false historical values, original keyed command receipts
+and actual admitted/validated read-audit entries. Source migration fresh/replay passes all seven
+owners. PostgreSQL 16.6 custom-format `pg_dump` and `pg_restore` run inside owned tmpfs; aggregate
+verification and exact sorted full-row equality match all 88 relations across the two databases.
+The current 65-migration/12-schema boundary passes and the source remains unchanged after restored
+behavior tests. Existing D2, provider-lease, response-ledger and temporary-material regressions pass.
+
+Restored restricted checks return all three original chosen values through the actual authorized
+Applications historical reader. Three original command receipts replay with their pinned HMAC
+scheme/key authority without new encryption. The public owner export keeps values masked until the
+private read and strips internal field markers. A generated NOLOGIN metadata role can select masked
+ordinary packet fields but is denied both private tables before and after restore (four refusals).
+No production role grant is introduced. Source and target share cluster roles, so this is a table/
+schema permission refusal check, not cluster-role recovery or a production least-privilege signoff.
+
+Direct unauthorized ciphertext deletion refuses. The exact privacy-authorized Applications port
+removes the selected candidate's ciphertext/read audit while preserving the other candidate's
+records and metadata. The pure owning cipher is simulated offline with test-only process keys;
+there is no KMS call, real candidate value, live provider, cloud identity, persisted host dump,
+cluster-role restore, AWS PITR or RTO/RPO evidence. The harness clears controlled test keys and
+removes its identity-validated owned container before emitting passing aggregate metrics. Fifteen
+container-ownership guard cases pass. Log: `.tmp/d3-restricted-packet-logical-restore.log`.
+
+The actual deletion verifier's Applications count now includes both private relations. Its real
+PostgreSQL integration fixture seeds protected snapshots and read audit for every generated
+candidate. All six existing integration cases pass, including seven/eight-owner historical policy
+replay, idempotent cleanup, preservation of another candidate, collision refusal and a real strict
+portable export through Profile request/operation authorization and the Applications reader.
+A focused final rerun verifies the artifact includes exactly the chosen value and no private
+inventory or protected-field marker (one selected case passed, five unrelated skips). The fixture
+uses an independent Applications pool to preserve its owning SQL column/JSON mapping. Workflow
+build and 27 deletion-store unit cases pass. Logs:
+`.tmp/d3-restricted-packet-deletion-replay-sql.log`,
+`.tmp/d3-restricted-packet-export-pipeline-sql.log`.
+
+The separately owned replay fixture
+`4f16e3af627b1bda4a146a2848ec14715146020cf5a39c41da115e8d46036f49` was verified against its
+exact ID/name/label/tmpfs and removed. Shared volume inventories stayed identical. Docker Desktop
+stopped and WSL reported no running distributions. Scoped Biome retains six pre-existing
+informational template suggestions in the touched replay integration test; no unsafe fixes applied.
+This remains a private local WIP checkpoint, without full maintained-verifier or deployment claims.
+
 ## Next work
 
-Finish isolated SQL role grants and deletion-verifier inventory, legacy migration compatibility
-and whole logical restore acceptance with original ciphertext/keyed replay/audit values.
+Finish legacy migration compatibility and all maintained integration/runtime protection fixtures;
+complete private artifact isolation and the clean full verifier before review. Production SQL/KMS
+role grants, historical key composition and accountable/deployed acceptance remain separate gates.
 Update all maintained integration/runtime fixtures for mandatory protection and complete the clean
 full verifier before review. Existing legacy restricted plaintext must be handled by an explicit
 reviewed transition; do not silently rewrite approved/ambiguous submission evidence. Retain exact

@@ -62,9 +62,11 @@ and recheck exact authority afterward. Workflow assembly copies only authorized 
 values into the strict portable envelope; private inventory/bindings remain outside artifacts.
 Actual Profile metadata admission now verifies selected-answer correction/deletion/expiry read
 races in real SQL, while historical export retains exact original chosen values. The expanded
-65-migration/88-relation/12-schema restore manifest has offline structural/operator evidence. Whole
-logical restore, legacy transition/role/deletion-verifier inventory and maintained complete
-verification remain unfinished. No
+65-migration/88-relation/12-schema boundary passes an actual PostgreSQL logical restore with exact
+full-row equality, original values/keyed replay, private metadata-role read refusal and authorized
+deletion. The deletion verifier includes both private relations and its actual SQL replay cases
+seed restricted snapshots/audit. Legacy transition, production role/key composition, maintained
+protection fixtures and complete verification remain unfinished. No
 production data, live KMS/provider, deployment or activation is claimed. Saved-answer reuse remains
 disabled. See [D3-077 evidence](../product/delivery/evidence/d3-restricted-packet-storage-2026-10-05.md).
 

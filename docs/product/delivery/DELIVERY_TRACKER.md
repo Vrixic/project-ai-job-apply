@@ -3754,3 +3754,14 @@ SQL role/deletion-verifier inventory, legacy transition, maintained protection f
 full verification remain. Owned fixture removed, shared volumes retained, Docker/WSL stopped.
 Private WIP only; no image publication, feature activation or D1/D3 phase completion.
 [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains deferred until launch.
+
+2026-10-05 D3-077 passes actual PostgreSQL 16.6 logical recovery: all 65 migrations replay, exact
+row sets match all 88 relations/12 owned schemas, original restricted values and three keyed
+receipts survive, and source data remains unchanged. Metadata-only SQL role refuses both private
+tables; authorized deletion preserves another candidate. Actual deletion-verifier inventory now
+includes both private tables; six real Workflow replay/export cases and 27 unit cases pass.
+Focused strict artifact assertions pass. Docker/WSL stopped; owned fixtures removed and shared
+volumes retained. Legacy transition, remaining maintained protection fixtures, private artifact
+isolation and clean full verification remain. No publication, activation, deployed key/role acceptance
+or D1/D3 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
+CI/CD remains deferred until production launch.

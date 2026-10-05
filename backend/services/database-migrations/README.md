@@ -65,3 +65,10 @@ recovery. The maintained harness compares three restored packets (expired, confi
 verifies portable ownership redaction, refuses binding removal and expired approval authority,
 and retains settled-attempt duplicate guards. Generated content and memory snapshots are absent.
 Restored metadata never reconstructs lost content; fresh preparation and exact review are required.
+
+The Applications 0009 boundary includes separate restricted packet snapshots and identifier-only
+read audit. Generated logical recovery checks three original values and keyed command replays,
+denies private tables to a metadata-only NOLOGIN role, and exercises exact authorized deletion
+without removing another candidate. Test-only AES/HMAC keys remain in the harness process and are
+cleared afterward. This proves local logical data recovery and permission refusal; production
+SQL/KMS grants, cluster-role recovery and accountable key/retention acceptance remain separate.
