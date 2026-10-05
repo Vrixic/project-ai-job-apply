@@ -78,3 +78,11 @@ missing preparation metadata. Restore exact 0004 export projection plus optional
 all 92 SQL cases and the populated logical restore pass again against a fresh disposable database.
 Current deletion-replay pins/207 contract/697 operator cases pass after checksum refresh. The full
 corrected-source rerun remains pending. Both exact fixtures are removed; Docker/WSL stopped.
+
+Clean export-corrected source `8da0aece` passes the full maintained verifier terminally:
+38 typecheck tasks, 39 workspace test tasks, 23 builds and operational/security/Compose/emitted
+isolation; lint remains zero errors/15 warnings/58 informational findings. The source-bound
+migration operator passes against Apps 0008. Final packaging review moves Gateway's existing
+Domain workspace dependency from development to production and imports the pure scalar entrypoint.
+Offline lockfile refresh downloads no package and changes no external version. Gateway build
+passes; final exact-source verification remains pending after that packaging correction.

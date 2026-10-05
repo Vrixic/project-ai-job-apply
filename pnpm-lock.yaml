@@ -77,6 +77,9 @@ importers:
       '@ai-job-apply/documents-service':
         specifier: workspace:*
         version: link:../services/documents
+      '@ai-job-apply/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@ai-job-apply/jobs-service':
         specifier: workspace:*
         version: link:../services/jobs
@@ -132,9 +135,6 @@ importers:
         specifier: 7.8.2
         version: 7.8.2
     devDependencies:
-      '@ai-job-apply/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
       '@types/aws-lambda':
         specifier: 8.10.163
         version: 8.10.163

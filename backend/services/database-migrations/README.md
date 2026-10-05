@@ -32,7 +32,7 @@ decision-signal delivery, nor an AWS restore.
 ## Generated Phase 2 logical recovery regression
 
 Run `pnpm test:d2-recovery` with Docker already running and the local
-`postgres:16.6-alpine` image available. The command builds the six owners and migration
+`postgres:16.6-alpine` image available. The command builds the seven owners and migration
 orchestrator, checks the disposable-container ownership guards, and uses a uniquely labeled
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.

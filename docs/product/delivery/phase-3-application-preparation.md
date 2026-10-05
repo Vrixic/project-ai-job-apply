@@ -892,3 +892,13 @@ SQL cases, the 63-migration/84-relation populated logical restore, 207 contract 
 replay guards pass again. New exact manifest/pins are recorded in [evidence](evidence/d3-temporary-packet-binding-2026-10-05.md).
 The previous full verifier is stopped, not passed; corrected clean-source full verification remains
 pending. Owned SQL fixture removed and Docker/WSL stopped; no deployment, activation or phase completion.
+
+
+2026-10-05 clean export-corrected packet source `8da0aece` passes the full maintained verifier:
+38 typecheck tasks, 39 workspace test tasks, 23 builds, formatting, unchanged lint and
+operational/security/Compose/compiled isolation. Packaging review identifies Gateway's newly used
+Domain validator must be a production dependency; move the existing workspace dependency from dev
+to runtime and import its pure scalar entrypoint. No external package/version changes or downloads;
+offline lockfile update and Gateway build pass. Final clean-source verification follows this
+packaging correction. [Evidence](evidence/d3-temporary-packet-binding-2026-10-05.md). D3-064 and D1/D3
+remain In progress; no deployment, activation or authored merge. Docker/WSL stopped; CI/CD deferred.

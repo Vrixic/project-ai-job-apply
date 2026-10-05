@@ -24,11 +24,8 @@ import {
   RESUME_TAILORING_REQUEST_KIND,
   type ResumeTailoringResult,
 } from "@ai-job-apply/documents-service";
-import {
-  type GraphFact,
-  type TemporaryMaterialReference,
-  validateTemporaryMaterialReference,
-} from "@ai-job-apply/domain";
+import type { GraphFact, TemporaryMaterialReference } from "@ai-job-apply/domain";
+import { validateTemporaryMaterialReference } from "@ai-job-apply/domain/temporary-material";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
 import { profileFactToGraphFact } from "@ai-job-apply/profile-service";
 import type postgres from "postgres";
