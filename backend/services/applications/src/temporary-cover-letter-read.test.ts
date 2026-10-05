@@ -81,16 +81,20 @@ function fixture() {
     contentBase64: "dGVzdA==",
   };
   const current = vi.fn(async () => ({ ...reference }));
-  const readPreview = vi.fn(async () => ({
-    reference: { ...reference },
-    value: preview,
-    isCurrent: () => true,
-  }));
-  const readFile = vi.fn(async () => ({
-    reference: { ...reference },
-    value: file,
-    isCurrent: () => true,
-  }));
+  const readPreview = vi.fn<NonNullable<ApplicationTemporaryMaterials["coverLetterPreview"]>>(
+    async () => ({
+      reference: { ...reference },
+      value: preview,
+      isCurrent: () => true,
+    }),
+  );
+  const readFile = vi.fn<NonNullable<ApplicationTemporaryMaterials["coverLetterFile"]>>(
+    async () => ({
+      reference: { ...reference },
+      value: file,
+      isCurrent: () => true,
+    }),
+  );
   const materials: ApplicationTemporaryMaterials = {
     current,
     coverLetterPreview: readPreview,
