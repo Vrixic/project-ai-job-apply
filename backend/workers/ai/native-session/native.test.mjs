@@ -21,6 +21,7 @@ for (const mode of [
   "invalid",
   "reload",
   "worker",
+  "transport",
 ]) {
   test(`kernel retires the actual ${mode} content process`, { timeout: 10_000 }, async () => {
     const started = performance.now();
@@ -50,15 +51,27 @@ for (const mode of [
       assert.ok(elapsed < 7_000, `Kernel did not retire ${mode} before parent fallback`);
       assert.equal(diagnostics, "", "No sensitive diagnostic output is allowed");
       assert.ok(!output.includes("I have experience") && !output.includes("synthetic-secret"));
-      if (["idle", "busy", "suspend", "renew", "terminate", "cancel", "multiple"].includes(mode)) {
+      if (
+        [
+          "idle",
+          "busy",
+          "suspend",
+          "renew",
+          "terminate",
+          "cancel",
+          "multiple",
+          "transport",
+        ].includes(mode)
+      ) {
         const value = JSON.parse(output.trim());
         assert.equal(value.ready, true);
         assert.equal(value.providerCalls, 1);
         assert.equal(value.originalExpiry - value.originalCompletion, 1_800_000);
         assert.ok(
-          Date.now() - value.originalCompletion < 2500,
+          Date.now() - value.originalCompletion < (mode === "transport" ? 6000 : 2500),
           "Original kernel deadline exceeded test tolerance",
         );
+        if (mode === "transport") assert.ok(value.transportAssertions >= 27);
       }
       if (mode === "settlement") assert.equal(output, "settlement-pending\n");
       if (mode === "boot") assert.equal(output, "");

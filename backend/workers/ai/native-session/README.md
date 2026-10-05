@@ -33,3 +33,12 @@ conformance remain release requirements; the local build is not a published prod
 Tests use synthetic candidate facts and injected provider/SQL/renderer ports. SDK grounding and
 material-memory reads are real. `fixture.mjs` is test-only, emits scalar proof metadata only and
 must never be a production entrypoint. No real candidate files or credentials are allowed.
+
+The expanded explicit Linux test also exercises the private native HTTPS read factory in the
+same kernel-bounded process. A synthetic trusted certificate/hostname and signed test JWTs cover
+read formats, token/scope/owner checks, strict requests, CORS, packet revocation, pending-call
+admission and actual disconnect. Synthetic TLS keys exist only in bounded test tmpfs. No server
+certificate verification is disabled. Provider/SQL/render/managed OIDC remain simulated; the
+owning scalar proof and HTTPS session are actual source. This is not production routing or an
+authenticated private remote owner adapter. See
+[transport evidence](../../../../docs/product/delivery/evidence/d3-native-memory-transport-2026-10-05.md).

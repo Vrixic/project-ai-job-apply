@@ -74,3 +74,16 @@ and [Node-API](https://nodejs.org/api/n-api.html). Native timer behavior on the 
 runtime, exact image/architecture, task failure/stop and external-copy cleanup must be verified
 before activation. Local process exit covers the tested process, not remote systems or another
 allocation.
+
+## Source transport checkpoint — 2026-10-05
+
+A default-off dedicated HTTPS factory now implements exact OIDC issuer/subject/audience/scope
+with required expiration, fixed session/application/generation reads, TLS 1.3, exact client-origin
+CORS, bounded admission and no-store responses. Private Applications supplies a scalar current
+packet/reference proof that is checked again after source/render awaits; token verification is
+also repeated before sending. Generated content remains in the native process on this path.
+Only a trusted launcher may bind the listener. This does not implement or authorize issuer/
+launcher admission, authenticated remote owner/control adapters, task registry, managed TLS/DNS
+routing, positive managed stop or the complete browser/ATS content path. Existing Gateway/Lambda
+copies remain outside this proof. The proposal remains Proposed; D3-012 and release gates are
+unchanged. [Local source evidence](../product/delivery/evidence/d3-native-memory-transport-2026-10-05.md).

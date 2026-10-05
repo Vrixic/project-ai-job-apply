@@ -3550,3 +3550,11 @@ authored merge or hosted CI/CD work.
 `50a9965a`. Verified implementation remains `304c01bf`; following commits change documentation
 only. ADR-040 stays proposed, and D1/D3 stay In progress. No authored merge, image publication,
 deployment or activation; hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 native HTTPS read source begins on exact #555 `265909a5` after fresh
+main fetch `e48bdf3a`. Default-off same-process TLS/OIDC reads use private scalar Applications
+proof and fixed original expiry; bounded pending calls survive disconnect without early
+admission release. Thirteen owning tests/four native admission/twelve Auth tests pass; final
+clean-source Linux/full verification pending. [Evidence](evidence/d3-native-memory-transport-2026-10-05.md).
+Issuer/private authenticated adapters/registry/managed stop, full content routing and external
+acceptance remain. No deployment/activation or D1/D3 completion; CI/CD deferred until launch.

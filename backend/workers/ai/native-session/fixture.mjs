@@ -70,7 +70,7 @@ const options = {
   provider,
   kernel,
   enabled: () => mode !== "disabled",
-  maximumLifetimeMs: 1500,
+  maximumLifetimeMs: mode === "transport" ? 4500 : 1500,
   bootBudgetMs: mode === "boot" ? 400 : 5000,
   source: {
     load: async () => {
@@ -137,12 +137,18 @@ try {
 }
 if ((await session.generate()).kind !== "in_progress" || calls !== 1)
   throw Error("OriginalRedispatched");
+let transportAssertions;
+if (mode === "transport") {
+  const { exerciseNativeTransport } = await import("./transport-fixture.mjs");
+  transportAssertions = await exerciseNativeTransport(session, generated, ids);
+}
 process.stdout.write(
   `${JSON.stringify({
     ready: true,
     originalCompletion: generated.reference.completedAtMs,
     originalExpiry: generated.reference.expiresAtMs,
     providerCalls: calls,
+    ...(transportAssertions ? { transportAssertions } : {}),
   })}\n`,
 );
 if (mode === "renew") kernel.bindCompletion(Date.now(), 1500);

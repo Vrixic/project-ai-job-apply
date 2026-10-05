@@ -392,3 +392,9 @@ runs the explicit local Linux kernel/session test. It never pulls an image or ca
 providers; network is disabled and only synthetic copied inputs are mounted read-only. Native
 code compiles with warnings treated as errors. Exact owned container/staging cleanup preserves
 other data. See [native session](../backend/workers/ai/native-session/README.md).
+
+The native-memory-session verifier also runs a same-process TLS 1.3 content-read fixture with
+signed test JWTs, owning scalar proof, strict request/CORS checks, packet races and actual socket
+cancellation. It generates only synthetic TLS keys in test tmpfs and validates the exact test
+certificate/hostname. SQL/provider/renderer/managed OIDC remain simulated; no hosted endpoint or
+remote owner authentication is enabled.

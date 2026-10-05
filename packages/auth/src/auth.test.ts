@@ -116,6 +116,19 @@ describe("managed OIDC verifier", () => {
     expect(principal.scopes).toEqual(["profile:read", "profile:write"]);
   });
 
+  it("requires a valid expiration for direct authenticated transports", async () => {
+    const verifier = createOidcVerifier({
+      issuer,
+      audience: "ai-job-apply-api",
+      requireExpiration: true,
+    });
+    await expect(verifier.verify(await issue({}))).resolves.toMatchObject({
+      subject: "candidate-1",
+    });
+    await expect(verifier.verify(await issue({ omitExpiration: true }))).rejects.toThrow();
+    await expect(verifier.verify(await issue({ expiresAt: "-1m" }))).rejects.toThrow();
+  });
+
   it("does not derive recent-authentication evidence from an access token", async () => {
     const verifier = createOidcVerifier({ issuer, audience: "ai-job-apply-api" });
     const authenticatedAt = Math.floor(Date.now() / 1000) - 30;

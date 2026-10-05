@@ -1013,3 +1013,13 @@ authored merge or hosted CI/CD work.
 `50a9965a`. Verified implementation remains `304c01bf`; following commits change documentation
 only. ADR-040 stays proposed, and D1/D3 stay In progress. No authored merge, image publication,
 deployment or activation; hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 extends exact #555 `265909a5` with default-off dedicated HTTPS material
+reads and a private Applications scalar packet/owner proof. Exact OIDC identity/scope/expiration,
+TLS 1.3, no-store, fixed owner/application/generation, repeated packet/source/token checks and
+bounded pending-call/transport admission are implemented. Thirteen owning tests, four native
+admission tests and twelve Auth tests pass; final clean-source Linux/full verification pending.
+[Evidence](evidence/d3-native-memory-transport-2026-10-05.md). No frontend/public schema/SQL
+migration, Gateway content routing, deployment or activation. Issuer/private authenticated
+adapters/registry/managed stop, browser/ATS and D3-012 terms remain. D1/D3 stay In progress;
+hosted CI/CD deferred until production launch.
