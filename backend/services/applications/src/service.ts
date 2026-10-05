@@ -285,6 +285,8 @@ export interface ApplicationsApi {
 
 export interface ApplicationsServiceDependencies {
   store: ApplicationStorePort;
+  /** Exact owning JIT reader; absent until restricted storage/key capabilities are composed. */
+  restrictedPackets?: Pick<PostgresApplicationStore, "readCurrentPacketValues">;
   packets: PacketPreparationSource;
   bindings: LiveBindingsSource;
   jobs: ApplicationJobGate;
@@ -349,7 +351,7 @@ export class ApplicationsService implements ApplicationsApi {
       idempotencyKey,
     });
     if (!result.replayed) this.funnel("created");
-    return toApiApplication(result.view);
+    return this.present(ownerUserId, result.view);
   }
 
   async search(
@@ -363,14 +365,17 @@ export class ApplicationsService implements ApplicationsApi {
       ...(request.jobId ? { canonicalJobId: request.jobId } : {}),
     });
     const last = page.items.at(-1)?.application;
+    const items: Application[] = [];
+    for (const view of page.items) items.push(await this.present(ownerUserId, view));
     return {
-      items: page.items.map((view) => toApiApplication(view)),
+      items,
       ...(page.hasMore && last ? { nextCursor: encodeCursor(last) } : {}),
     };
   }
 
   async get(ownerUserId: string, applicationId: string): Promise<Application> {
-    return toApiApplication(
+    return this.present(
+      ownerUserId,
       await this.dependencies.store.getApplication(ownerUserId, applicationId),
     );
   }
@@ -647,7 +652,7 @@ export class ApplicationsService implements ApplicationsApi {
         }
       }
     }
-    return toApiApplication(result.view);
+    return this.present(ownerUserId, result.view);
   }
 
   async approve(
@@ -687,7 +692,7 @@ export class ApplicationsService implements ApplicationsApi {
         });
       }
     }
-    return toApiApplication(result.view);
+    return this.present(ownerUserId, result.view);
   }
 
   async reopen(
@@ -697,6 +702,7 @@ export class ApplicationsService implements ApplicationsApi {
     idempotencyKey: string,
   ): Promise<Application> {
     return this.command(
+      ownerUserId,
       this.dependencies.store.reopenForEdit({
         ownerUserId,
         applicationId,
@@ -713,6 +719,7 @@ export class ApplicationsService implements ApplicationsApi {
     idempotencyKey: string,
   ): Promise<Application> {
     return this.command(
+      ownerUserId,
       this.dependencies.store.cancel({
         ownerUserId,
         applicationId,
@@ -758,14 +765,14 @@ export class ApplicationsService implements ApplicationsApi {
       ? {
           outcome: "started",
           attemptId: result.attempt.id,
-          application: toApiApplication(result.view),
+          application: await this.present(ownerUserId, result.view),
         }
       : {
           outcome: "approval_invalidated",
           invalidationReasons: [...result.reasons] as NonNullable<
             ApplicationSubmissionStart["invalidationReasons"]
           >,
-          application: toApiApplication(result.view),
+          application: await this.present(ownerUserId, result.view),
         };
   }
 
@@ -804,14 +811,14 @@ export class ApplicationsService implements ApplicationsApi {
       ? {
           outcome: "started",
           attemptId: result.attempt.id,
-          application: toApiApplication(result.view),
+          application: await this.present(ownerUserId, result.view),
         }
       : {
           outcome: "approval_invalidated",
           invalidationReasons: [...result.reasons] as NonNullable<
             ApplicationSubmissionStart["invalidationReasons"]
           >,
-          application: toApiApplication(result.view),
+          application: await this.present(ownerUserId, result.view),
         };
   }
 
@@ -856,7 +863,7 @@ export class ApplicationsService implements ApplicationsApi {
     });
     if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
     await this.discardTerminalMaterials(settled.view);
-    return toApiApplication(settled.view);
+    return this.present(ownerUserId, settled.view);
   }
 
   async reconcile(
@@ -875,7 +882,7 @@ export class ApplicationsService implements ApplicationsApi {
     });
     if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
     await this.discardTerminalMaterials(settled.view);
-    return toApiApplication(settled.view);
+    return this.present(ownerUserId, settled.view);
   }
 
   private funnel(stage: string, extra: { reason?: string } = {}): void {
@@ -896,10 +903,37 @@ export class ApplicationsService implements ApplicationsApi {
     if (view.application.status === "applied") this.funnel("applied");
   }
 
-  private async command(pending: Promise<CommandResult>): Promise<Application> {
+  private async present(ownerUserId: string, view: ApplicationView): Promise<Application> {
+    const fixed = structuredClone(view);
+    if (fixed.application.ownerUserId !== ownerUserId) throw new ApplicationsUnavailableError();
+    const packet = fixed.currentPacket;
+    if (!packet?.restrictedValues) return toApiApplication(fixed);
+    const reader = this.dependencies.restrictedPackets;
+    if (!reader) throw new ApplicationsUnavailableError();
+    let plaintext: RestrictedPacketPlaintext | undefined;
+    try {
+      plaintext = await reader.readCurrentPacketValues({
+        ownerUserId,
+        applicationId: fixed.application.id,
+        packetId: packet.id,
+        packetHash: packet.packetHash,
+        expectedRevision: fixed.application.revision,
+      });
+      return toApiApplication(fixed, plaintext);
+    } catch {
+      throw new ApplicationsUnavailableError();
+    } finally {
+      if (plaintext?.values instanceof Map) plaintext.values.clear();
+    }
+  }
+
+  private async command(
+    ownerUserId: string,
+    pending: Promise<CommandResult>,
+  ): Promise<Application> {
     const result = await pending;
     await this.discardTerminalMaterials(result.view);
-    return toApiApplication(result.view);
+    return this.present(ownerUserId, result.view);
   }
 
   private async discardTerminalMaterials(view: ApplicationView): Promise<void> {

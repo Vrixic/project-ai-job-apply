@@ -192,6 +192,72 @@ describe("restricted packet value boundary", () => {
       expect(f.cipher.encrypt).toHaveBeenCalledTimes(1);
     },
   );
+  async function originalForCarry(f: ReturnType<typeof fixture>) {
+    const original = assemblePacket(
+      packetInputs({
+        fields: [
+          proposal(),
+          proposal({
+            fieldKey: "authorization.us_authorized",
+            value: true,
+            origin: "user_entered",
+            sourceFactIds: [],
+          }),
+        ],
+      }),
+      definitions,
+    );
+    const record = must(await f.codec.prepare(context, PACKET_ID, original.fields));
+    return { record, base: f.codec.bind(original, record) };
+  }
+  it("carries exact original protected metadata without crypto or renewed values", async () => {
+    const f = fixture();
+    const { record, base } = await originalForCarry(f);
+    const candidate = assemblePacket(packetInputs({ version: 2 }), definitions);
+    const next = f.codec.carry(candidate, base);
+    expect(next.restrictedValues).toEqual(base.restrictedValues);
+    expect(next.packetHash).not.toBe(base.packetHash);
+    expect(verifyPacketHash(next)).toBe(true);
+    expect(next.fields.find((field) => field.protectedValue)).toEqual(
+      base.fields.find((field) => field.protectedValue),
+    );
+    expect(f.cipher.encrypt).toHaveBeenCalledTimes(1);
+    expect(f.cipher.decrypt).not.toHaveBeenCalled();
+    expect(f.cipher.fingerprint).not.toHaveBeenCalled();
+    expect(await f.codec.read(context, { ...record, fields: next.fields })).toEqual(
+      new Map([["authorization.us_authorized", true]]),
+    );
+  });
+  it.each(["owner", "job", "version", "overlap", "new restricted value", "base metadata"])(
+    "refuses changed preparation carry-forward: %s",
+    async (kind) => {
+      const f = fixture();
+      const original = await originalForCarry(f);
+      const base = structuredClone(original.base);
+      const candidate = structuredClone(assemblePacket(packetInputs({ version: 2 }), definitions));
+      if (kind === "owner") candidate.userId = FACT_A;
+      if (kind === "job") candidate.jobRevision = HASH_B;
+      if (kind === "version") candidate.version = base.version;
+      if (kind === "overlap" || kind === "new restricted value") {
+        const field = must(base.fields.find((field) => field.protectedValue));
+        candidate.fields = [
+          ...candidate.fields,
+          { ...field, value: kind === "overlap" ? null : false },
+        ];
+        const added = must(candidate.fields.at(-1));
+        delete added.protectedValue;
+      }
+      if (kind === "base metadata") {
+        const field = must(base.fields.find((field) => field.protectedValue));
+        field.confidence = 0.8;
+        base.packetHash = computePacketHash(base);
+      }
+      candidate.packetHash = computePacketHash(candidate);
+      expect(() => f.codec.carry(candidate, base)).toThrow(refused);
+      expect(f.cipher.encrypt).toHaveBeenCalledTimes(1);
+      expect(f.cipher.decrypt).not.toHaveBeenCalled();
+    },
+  );
   it("uses randomized ciphertext identities for identical low-entropy answers", async () => {
     const f = fixture();
     const first = await prepared(f);

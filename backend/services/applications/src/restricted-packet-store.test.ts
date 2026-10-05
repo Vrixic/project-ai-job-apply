@@ -99,6 +99,9 @@ describe("restricted packet store refuses unavailable protection", () => {
           context: { jobContextHash: HASH_A, confirmedFactsHash: HASH_B },
         }),
       ).rejects.toThrow(RestrictedPacketStoreUnavailableError);
+      await expect(
+        store.readCurrentPacketValues({ ...base, packetId: APPLICATION_ID, packetHash: HASH_A }),
+      ).rejects.toThrow(RestrictedPacketStoreUnavailableError);
       expect(query).not.toHaveBeenCalled();
       expect(begin).not.toHaveBeenCalled();
       expect(cipher.encrypt).not.toHaveBeenCalled();

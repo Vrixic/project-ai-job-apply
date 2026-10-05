@@ -2,7 +2,7 @@
 
 Status: In progress. Backend-only private WIP on isolated branch
 `feat/d3-restricted-packet-storage`, started from `2b6f59aa` and now rebased onto merged #559/main
-`18b6b2e2`. Local checkpoint `50a6c8ce` is not published or review-ready.
+`18b6b2e2`. Local WIP checkpoints are not published or review-ready.
 Hosted CI/CD remains deferred until production launch. No feature is activated or deployed.
 
 ## Confirmed gap and required end state
@@ -174,11 +174,60 @@ so whole-boundary restore counts/inventory must include both additions. No autho
 this incomplete restricted slice has not been pushed or submitted for review. Full clean verifier
 remains a requirement after the complete feature and compatible maintained fixtures are ready.
 
+## Candidate-review reads and original preparation carry-forward
+
+The owning read accepts an exact owner/application/packet/hash/revision. It admits the active
+candidate and exact current packet/vault references in a short transaction, reads the original
+immutable envelope and records identifier-only audit admission, commits, then decrypts. A fresh
+transaction independently rechecks active ownership, revision/current packet, exact snapshot and
+current vault versions/expiry before audit validation. Controlled returned maps are cleared on
+refusal. This is point-in-time authorization, not a client response lease. Admission/validation
+stages do not claim the caller displayed or submitted a value.
+
+The same unshipped 0009 migration now includes a second private relation, `packet_read_audit`,
+with exact owner/application/packet FK, append-only/active-candidate/privacy deletion guards and
+closed purpose/stage labels. Its entries contain identifiers, fixed labels and timestamps only;
+no answers, request/MAC hashes, encryption keys or provider/error bodies. Deletion removes audits
+before packets and ciphertext after packets. New structural verification checks both relations and
+six owning triggers; the combined future full boundary requires both private relations in inventory.
+This migration remains unshipped WIP, so its changing checksum is not a production migration edit.
+
+Service responses use the optional exact owning reader when protected fields exist; search reads
+are sequential to respect bounded crypto admission. Projections retain existing strict public API
+shapes, clear controlled source maps after copying immediate values and fail unavailable for absent
+or mismatched reads. Gateway exposes an optional private protection configuration (absent by
+default), wires the owning reader and maps store protection failures to stable value-free 503
+problems. No keys/IAM/configuration/feature activation is supplied by this optional composition.
+
+Preparation completion omits masked proposals from reclassification and synchronously restores
+only the exact admitted original base fields/reference. It preserves review/provenance/policy and
+ciphertext identity, performs no decrypt/re-encrypt, and refuses moved context, overlapping/new
+restricted values, non-advancing versions or modified original metadata. Current base identity is
+independently checked under the actual owning transaction; no renewed vault authority is inferred.
+
+All 14 PostgreSQL 16.6 cases pass with synthetic candidates and offline crypto. Six added cases
+exercise exact separate values/audit/strict owner API, identity/application lock availability during
+decryption, cancellation/quarantine races, foreign owner refusal before decrypt and exact protected
+preparation completion with one encrypted record and no cipher calls during completion. These
+checks do not prove Profile-backed correction/expiry races, historical export, deletion/restore,
+actual managed OIDC/KMS/provider, client final review or production deployment.
+
+All 314 Applications unit tests pass, including seven new carry invariants and unavailable-reader
+no-effect checks. Applications typecheck/build and Gateway typecheck pass; the focused HTTP problem
+mapping case passes (one selected, 99 unrelated skips), using test authentication/fake API failures.
+Logs: `.tmp/d3-restricted-packet-read-sql.log`, `.tmp/d3-restricted-packet-read-typecheck.log`,
+`.tmp/d3-restricted-packet-applications-unit.log`, `.tmp/d3-restricted-packet-applications-build.log`,
+`.tmp/d3-restricted-packet-typecheck.log`, `.tmp/d3-restricted-packet-http.log`.
+The owned tmpfs fixture `eee854cf32bf6903eb68ae963887b1b5dd8d79b811fbc3f8b8598416e59fb5fb` was
+identity/label/tmpfs-validated and removed. Shared Docker volumes stayed identical; Docker Desktop
+stopped and WSL reports no running distributions. No UI/browser or complete-verifier claim is made.
+
 ## Next work
 
-Finish preparation carry-forward, immediate authorized owner reads/service composition, historical
-export enrichment, inventory/role/restore boundary registration, migration compatibility and
-export/deletion/restore tests. Existing legacy restricted plaintext must be handled by an explicit
+Finish Profile-backed selected-answer correction/expiry read acceptance, exact historical export
+enrichment, inventory/role/restore boundary registration, legacy migration compatibility and full
+export/deletion/restore acceptance. Update all maintained integration/runtime fixtures for mandatory
+protection and complete the clean full verifier before review. Existing legacy restricted plaintext must be handled by an explicit
 reviewed transition; do not silently rewrite approved/ambiguous submission evidence. Retain exact
 key authority for supported historical records; key rotation must never silently change replay
 or approval semantics. Complete the whole storage path before requesting review of this slice.

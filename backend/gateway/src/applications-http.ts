@@ -14,6 +14,7 @@ import {
   InvalidApplicationCursorError,
   PacketInvariantError,
   PreparationNotFoundError,
+  RestrictedPacketStoreUnavailableError,
   StalePacketError,
   VaultBindingsUnavailableError,
 } from "@ai-job-apply/applications-service";
@@ -161,7 +162,8 @@ export function projectApplicationsFailure(exception: unknown): ApplicationsFail
   }
   if (
     exception instanceof ApplicationsUnavailableError ||
-    exception instanceof VaultBindingsUnavailableError
+    exception instanceof VaultBindingsUnavailableError ||
+    exception instanceof RestrictedPacketStoreUnavailableError
   ) {
     return {
       status: HttpStatus.SERVICE_UNAVAILABLE,

@@ -3722,3 +3722,14 @@ source is unchanged. No authored PR is open and the incomplete slice is not push
 Combined native/restricted inventory/restore and whole-feature verification remain required.
 [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). D1/D3 remain In progress; no
 activation, deployment or hosted CI/CD work. Docker/WSL remain stopped.
+
+2026-10-05 D3-077 adds audited owning candidate-review JIT reads and exact original protected
+preparation carry-forward. Values remain separate from metadata; active/current scope is rechecked
+after decrypt, original ciphertext/references are retained without crypto under completion SQL.
+Fourteen PostgreSQL 16.6 cases pass with offline crypto, including lock/race/owner/audit/API/carry
+acceptance; 314 Applications units, build/typechecks and focused Gateway stable 503 mapping pass.
+Private read audit is added to unshipped 0009. Exact historical export, full deletion/restore,
+Profile-backed selected-answer races, role/inventory/legacy compatibility and full verifier remain.
+Fixture removed, shared volumes retained and Docker/WSL stopped. No publication/review/activation/
+deployment or phase completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
+D1/D3 remain In progress; saved-answer reuse stays false and CI/CD remains deferred until launch.

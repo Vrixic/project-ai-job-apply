@@ -84,7 +84,8 @@ try {
          (to_regclass('applications.preparation_outbox') IS NOT NULL)::int +
          (to_regclass('applications.preparation_audit') IS NOT NULL)::int +
          (to_regclass('applications.schema_migrations') IS NOT NULL)::int +
-         (to_regclass('applications_restricted.packet_values') IS NOT NULL)::int)::int AS "relationCount",
+         (to_regclass('applications_restricted.packet_values') IS NOT NULL)::int +
+         (to_regclass('applications_restricted.packet_read_audit') IS NOT NULL)::int)::int AS "relationCount",
         (SELECT count(*)::int FROM pg_trigger
           WHERE tgname IN (
             'packets_immutable', 'history_immutable', 'command_receipts_immutable',
@@ -151,9 +152,11 @@ try {
           (tgrelid = 'applications.attempts'::regclass AND tgname = 'attempts_temporary_material_admission'))
         ) AS "temporaryMaterialTriggerCount",
         (SELECT count(*)::int FROM pg_trigger WHERE NOT tgisinternal
-          AND tgrelid = 'applications_restricted.packet_values'::regclass
+          AND tgrelid IN ('applications_restricted.packet_values'::regclass, 'applications_restricted.packet_read_audit'::regclass)
           AND tgenabled = 'O' AND tgname IN ('restricted_packet_values_immutable',
-            'restricted_packet_values_candidate_delete_guard', 'restricted_packet_values_active_candidate')
+            'restricted_packet_values_candidate_delete_guard', 'restricted_packet_values_active_candidate',
+            'restricted_packet_read_audit_immutable', 'restricted_packet_read_audit_candidate_delete_guard',
+            'restricted_packet_read_audit_active_candidate')
         ) AS "restrictedTriggerCount",
         (SELECT count(*)::int FROM pg_constraint WHERE convalidated AND (
           (conrelid = 'applications.packets'::regclass AND conname IN (
@@ -165,7 +168,7 @@ try {
         ) AS "restrictedDeleteBodyCount"
     `;
     if (
-      verification?.relationCount !== 12 ||
+      verification?.relationCount !== 13 ||
       verification.guardTriggerCount !== 20 ||
       verification.supportingIndexCount !== 9 ||
       verification.migrationCount !== migrationVersions.length ||
@@ -176,7 +179,7 @@ try {
       verification.documentFieldHashGuardCount !== 1 ||
       verification.temporaryMaterialConstraintCount !== 1 ||
       verification.temporaryMaterialTriggerCount !== 3 ||
-      verification.restrictedTriggerCount !== 3 ||
+      verification.restrictedTriggerCount !== 6 ||
       verification.restrictedConstraintCount !== 4 ||
       verification.restrictedDeleteBodyCount !== 1
     ) {

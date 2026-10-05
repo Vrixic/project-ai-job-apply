@@ -3,6 +3,7 @@ import {
   type ApplicationCoverLetters,
   type ApplicationJobGate,
   type ApplicationRecord,
+  type ApplicationStoreOptions,
   type ApplicationsApi,
   ApplicationsService,
   ApplicationsUnavailableError,
@@ -35,6 +36,8 @@ import type { ResumeTailoringClient } from "./resume-tailoring-client.js";
 /** The owner APIs the Applications runtime reads through. It never touches another owner's tables. */
 export interface ApplicationsRuntimeOptions {
   client: postgres.Sql;
+  /** Default absent; private exact-key storage capabilities require separate release acceptance. */
+  restrictedPackets?: ApplicationStoreOptions["restrictedPackets"];
   profile: { listProfileFacts(userId: string): Promise<{ facts: ProfileFact[] }> };
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
   tailoring?: ResumeTailoringClient;
@@ -75,6 +78,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
   const clock = options.clock ?? (() => new Date());
   const store = new PostgresApplicationStore(options.client, clock, {
     definitions: options.definitions,
+    ...(options.restrictedPackets ? { restrictedPackets: options.restrictedPackets } : {}),
     ...(options.restrictedAnswerReuseEnabled === true &&
     options.restrictedAnswers?.lockCurrentReferences
       ? {
@@ -298,6 +302,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
 
   return new ApplicationsService({
     store,
+    restrictedPackets: store,
     ...(options.coverLetterPreparationEnabled === true ? { preparations: store } : {}),
     packets,
     bindings,

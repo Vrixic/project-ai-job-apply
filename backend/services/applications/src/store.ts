@@ -21,7 +21,7 @@ import {
 } from "./attempt.js";
 import { canonicalHash } from "./canonical.js";
 import { type CurrentAction, deriveCurrentAction } from "./current-action.js";
-import type { FieldDefinition } from "./field-policy.js";
+import type { FieldDefinition, FieldValue } from "./field-policy.js";
 import {
   type ApplicationPacket,
   type ApprovalInvalidReason,
@@ -60,7 +60,10 @@ import {
   type PreparationTerminalInput,
   preparationExecutionName,
 } from "./preparation-dispatch.js";
-import type { RestrictedPacketCipher } from "./restricted-packet-cipher.js";
+import type {
+  RestrictedPacketCipher,
+  RestrictedPacketPlaintext,
+} from "./restricted-packet-cipher.js";
 import {
   createRestrictedPacketProtection,
   type PreparedRestrictedPacketFields,
@@ -1039,6 +1042,105 @@ export class PostgresApplicationStore {
     return this.client.begin("READ ONLY", (tx) => this.readView(tx, ownerUserId, applicationId));
   }
 
+  /** Candidate review only. Other purposes require their own exact admission capabilities.
+   * Decrypt outside SQL, then independently revalidate active owner/current revision/packet/vault.
+   * This is a checked point-in-time read, not a lease held while a client uses its response. */
+  async readCurrentPacketValues(command: {
+    ownerUserId: string;
+    applicationId: string;
+    packetId: string;
+    packetHash: string;
+    expectedRevision: number;
+  }): Promise<RestrictedPacketPlaintext> {
+    command = structuredClone(command);
+    const { protection } = this.requireRestrictedProtection();
+    const readId = uuidv7();
+    const snapshot = async (stage: "admitted" | "validated") =>
+      this.client.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
+        const app = await this.lockApplication(tx, command.ownerUserId, command.applicationId);
+        if (
+          Number(app.revision) !== command.expectedRevision ||
+          app.current_packet_id !== command.packetId
+        )
+          throw new RestrictedPacketStoreUnavailableError();
+        const packet = await this.loadCurrentPacket(tx, app);
+        if (
+          !packet?.restrictedValues ||
+          packet.id !== command.packetId ||
+          packet.packetHash !== command.packetHash
+        )
+          throw new RestrictedPacketStoreUnavailableError();
+        const references = await this.lockVaultReferences(tx, packet);
+        if (evaluateVaultBindings(packet, references, this.clock()).length)
+          throw new RestrictedPacketStoreUnavailableError();
+        const [row] = await tx<
+          Array<{
+            schema_version: 1;
+            encryption_key_arn: string;
+            encrypted_data_key: Uint8Array;
+            iv: Uint8Array;
+            ciphertext: Uint8Array;
+            authentication_tag: Uint8Array;
+          }>
+        >`
+        SELECT schema_version, encryption_key_arn, encrypted_data_key, iv, ciphertext, authentication_tag
+        FROM applications_restricted.packet_values
+        WHERE id = ${packet.restrictedValues.id} AND owner_user_id = ${command.ownerUserId}
+          AND application_id = ${command.applicationId} AND metadata_sha256 = ${packet.restrictedValues.metadataSha256}
+          AND ciphertext_sha256 = ${packet.restrictedValues.ciphertextSha256}
+      `;
+        if (!row) throw new RestrictedPacketStoreUnavailableError();
+        this.requireRestrictedProtection();
+        await tx`INSERT INTO applications_restricted.packet_read_audit
+        (id, read_id, owner_user_id, application_id, packet_id, purpose, stage, created_at)
+        VALUES (${uuidv7()}, ${readId}, ${command.ownerUserId}, ${command.applicationId}, ${command.packetId},
+          'candidate_review', ${stage}, ${this.clock()})`;
+        return {
+          context: {
+            ownerUserId: command.ownerUserId,
+            applicationId: command.applicationId,
+            jobRevision: packet.jobRevision,
+            form: packet.form,
+          },
+          record: {
+            fields: packet.fields,
+            binding: packet.restrictedValues,
+            envelope: {
+              schemaVersion: row.schema_version,
+              encryptionKeyArn: row.encryption_key_arn,
+              encryptedDataKey: row.encrypted_data_key,
+              iv: row.iv,
+              ciphertext: row.ciphertext,
+              authenticationTag: row.authentication_tag,
+            },
+          },
+        };
+      });
+    let values: ReadonlyMap<string, FieldValue> | undefined;
+    try {
+      const original = await snapshot("admitted");
+      values = await protection.read(original.context, original.record);
+      const current = await snapshot("validated");
+      if (
+        canonicalHash({ fields: current.record.fields, binding: current.record.binding }) !==
+        canonicalHash({ fields: original.record.fields, binding: original.record.binding })
+      )
+        throw new RestrictedPacketStoreUnavailableError();
+      this.requireRestrictedProtection();
+      return {
+        ownerUserId: command.ownerUserId,
+        applicationId: command.applicationId,
+        packetId: command.packetId,
+        packetHash: command.packetHash,
+        values,
+      };
+    } catch {
+      if (values instanceof Map) values.clear();
+      throw new RestrictedPacketStoreUnavailableError();
+    }
+  }
+
   async listApplications(
     ownerUserId: string,
     page: {
@@ -1477,42 +1579,52 @@ export class PostgresApplicationStore {
         await this.failPreparationRow(tx, preparation, "bindings_changed", now);
         return this.readPreparation(tx, target.ownerUserId, app.id, preparationId);
       }
-      const updated = await this.writePacket(tx, app, now, {
-        jobRevision: base.jobRevision,
-        form: base.form,
-        artifactHashes: { ...base.artifactHashes, coverLetter: letter.contentSha256 },
-        ...(base.temporaryMaterials?.length || letter.temporaryMaterial
-          ? {
-              temporaryMaterials: [
-                ...(base.temporaryMaterials ?? []).filter(
-                  (reference) => reference.kind !== "cover_letter",
-                ),
-                ...(letter.temporaryMaterial ? [letter.temporaryMaterial] : []),
-              ],
-            }
-          : {}),
-        fields: [
-          ...base.fields
-            .filter((field) => field.fieldKey !== "documents.cover_letter")
-            .map((field) => ({
-              ...(field.vaultReference ? { vaultReference: { ...field.vaultReference } } : {}),
-              fieldKey: field.fieldKey,
-              value: field.value,
-              origin: field.origin,
-              sourceFactIds: field.sourceFactIds,
-              confidence: field.confidence,
-              sourceConfirmed: !field.reasons.includes("unconfirmed_source"),
-            })),
-          {
-            fieldKey: "documents.cover_letter",
-            value: letter.contentSha256,
-            origin: "generated",
-            sourceFactIds: [...letter.sourceFactIds],
-            sourceConfirmed: true,
-            confidence: letter.confidence,
-          },
-        ],
-      });
+      const updated = await this.writePacket(
+        tx,
+        app,
+        now,
+        {
+          jobRevision: base.jobRevision,
+          form: base.form,
+          artifactHashes: { ...base.artifactHashes, coverLetter: letter.contentSha256 },
+          ...(base.temporaryMaterials?.length || letter.temporaryMaterial
+            ? {
+                temporaryMaterials: [
+                  ...(base.temporaryMaterials ?? []).filter(
+                    (reference) => reference.kind !== "cover_letter",
+                  ),
+                  ...(letter.temporaryMaterial ? [letter.temporaryMaterial] : []),
+                ],
+              }
+            : {}),
+          fields: [
+            ...base.fields
+              .filter(
+                (field) =>
+                  field.fieldKey !== "documents.cover_letter" && field.protectedValue !== true,
+              )
+              .map((field) => ({
+                ...(field.vaultReference ? { vaultReference: { ...field.vaultReference } } : {}),
+                fieldKey: field.fieldKey,
+                value: field.value,
+                origin: field.origin,
+                sourceFactIds: field.sourceFactIds,
+                confidence: field.confidence,
+                sourceConfirmed: !field.reasons.includes("unconfirmed_source"),
+              })),
+            {
+              fieldKey: "documents.cover_letter",
+              value: letter.contentSha256,
+              origin: "generated",
+              sourceFactIds: [...letter.sourceFactIds],
+              sourceConfirmed: true,
+              confidence: letter.confidence,
+            },
+          ],
+        },
+        null,
+        base.restrictedValues ? base : undefined,
+      );
       const packet = (await this.readView(tx, target.ownerUserId, app.id)).currentPacket;
       if (
         !packet?.fields.some(
@@ -1876,6 +1988,7 @@ export class PostgresApplicationStore {
       "jobRevision" | "form" | "fields" | "artifactHashes" | "temporaryMaterials"
     >,
     prepared: PreparedRestrictedPacketFields | null = null,
+    carriedBase?: ApplicationPacket,
   ): Promise<ApplicationRow> {
     nextStatus(app.status, "packet_created");
     const snapshot = structuredClone(inputs);
@@ -1908,6 +2021,21 @@ export class PostgresApplicationStore {
       this.options.definitions,
       this.options.confidenceThreshold,
     );
+    if (carriedBase) {
+      if (
+        prepared ||
+        !original ||
+        original.id !== carriedBase.id ||
+        original.packetHash !== carriedBase.packetHash
+      )
+        throw new RestrictedPacketStoreUnavailableError();
+      const { protection } = this.requireRestrictedProtection();
+      try {
+        packet = protection.carry(packet, original);
+      } catch {
+        throw new RestrictedPacketStoreUnavailableError();
+      }
+    }
     if (prepared) {
       const { protection } = this.requireRestrictedProtection();
       try {

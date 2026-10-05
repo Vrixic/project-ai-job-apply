@@ -103,6 +103,29 @@ ALTER TABLE applications.packets
     REFERENCES applications_restricted.packet_values (id, application_id, owner_user_id, metadata_sha256, ciphertext_sha256)
     ON DELETE RESTRICT;
 
+-- Identifier-only owning audit. It records admission/validation, not a claim that a caller
+-- displayed a value. No answer/body/digest/MAC/provider error is carried into this table.
+CREATE TABLE applications_restricted.packet_read_audit (
+  id uuid PRIMARY KEY,
+  read_id uuid NOT NULL,
+  owner_user_id uuid NOT NULL,
+  application_id uuid NOT NULL,
+  packet_id uuid NOT NULL,
+  purpose text NOT NULL CHECK (purpose IN ('candidate_review', 'candidate_export', 'authorized_submission')),
+  stage text NOT NULL CHECK (stage IN ('admitted', 'validated')),
+  created_at timestamptz NOT NULL,
+  UNIQUE (read_id, stage),
+  FOREIGN KEY (packet_id, application_id, owner_user_id)
+    REFERENCES applications.packets (id, application_id, owner_user_id) ON DELETE RESTRICT
+);
+REVOKE ALL ON applications_restricted.packet_read_audit FROM PUBLIC;
+CREATE TRIGGER restricted_packet_read_audit_immutable BEFORE UPDATE ON applications_restricted.packet_read_audit
+  FOR EACH ROW EXECUTE FUNCTION applications.reject_append_only_mutation();
+CREATE TRIGGER restricted_packet_read_audit_candidate_delete_guard BEFORE DELETE ON applications_restricted.packet_read_audit
+  FOR EACH ROW EXECUTE FUNCTION applications.guard_candidate_delete();
+CREATE TRIGGER restricted_packet_read_audit_active_candidate BEFORE INSERT ON applications_restricted.packet_read_audit
+  FOR EACH ROW EXECUTE FUNCTION applications_restricted.guard_packet_value_insert();
+
 ALTER TABLE applications.command_receipts
   ADD COLUMN request_hash_scheme text NOT NULL DEFAULT 'sha256.v1',
   ADD COLUMN request_key_arn text,
@@ -139,6 +162,7 @@ BEGIN
   DELETE FROM applications.attempts WHERE owner_user_id = candidate_user_id;
   GET DIAGNOSTICS attempts_deleted = ROW_COUNT;
   DELETE FROM applications.approvals WHERE owner_user_id = candidate_user_id;
+  DELETE FROM applications_restricted.packet_read_audit WHERE owner_user_id = candidate_user_id;
   DELETE FROM applications.packets WHERE owner_user_id = candidate_user_id;
   GET DIAGNOSTICS packets_deleted = ROW_COUNT;
   DELETE FROM applications_restricted.packet_values WHERE owner_user_id = candidate_user_id;

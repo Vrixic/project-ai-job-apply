@@ -2,17 +2,19 @@ import { execFile } from "node:child_process";
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { canonicalJson } from "./canonical.js";
 import type { RestrictedPacketCipher } from "./restricted-packet-cipher.js";
+import { ApplicationsService } from "./service.js";
 import {
   ApplicationRevisionConflictError,
   PostgresApplicationStore,
   RestrictedPacketStoreUnavailableError,
 } from "./store.js";
-import { definitions, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
+import { definitions, FACT_A, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const disposable =
@@ -49,6 +51,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
   const sql = postgres(databaseUrl ?? "postgres://invalid", { max: 6, onnotice: () => undefined });
   const aesKey = randomBytes(32);
   const macKey = randomBytes(32);
+  let onDecrypt: (() => Promise<void>) | undefined;
   let onEncrypt: (() => Promise<void>) | undefined;
   const cipher: RestrictedPacketCipher = {
     encrypt: vi.fn(async (scope, bytes) => {
@@ -66,6 +69,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
       };
     }),
     decrypt: vi.fn(async (scope, envelope) => {
+      await onDecrypt?.();
       const aes = createDecipheriv("aes-256-gcm", aesKey, envelope.iv);
       aes.setAAD(Buffer.from(canonicalJson(scope)));
       aes.setAuthTag(Buffer.from(envelope.authenticationTag));
@@ -75,8 +79,16 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
       createHmac("sha256", macKey).update(canonicalJson(input)).digest("hex"),
     ),
   };
+  const ownedDefinitions = new Map(definitions);
+  ownedDefinitions.set("documents.cover_letter", {
+    key: "documents.cover_letter",
+    label: "Synthetic document",
+    valueType: "file",
+    sensitivity: "standard",
+    answerPolicy: "explicit_each_time",
+  });
   const store = new PostgresApplicationStore(sql, undefined, {
-    definitions,
+    definitions: ownedDefinitions,
     restrictedPackets: { cipher, fingerprintKeyArn, enabled: () => true },
   });
   beforeAll(async () => {
@@ -240,7 +252,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
     const command = await application();
     await store.createPacket({ ...command, packet });
     const rotated = new PostgresApplicationStore(sql, undefined, {
-      definitions,
+      definitions: ownedDefinitions,
       restrictedPackets: { cipher, fingerprintKeyArn: encryptionKeyArn, enabled: () => true },
     });
     const calls = vi.mocked(cipher.fingerprint).mock.calls.length;
@@ -248,5 +260,148 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
       RestrictedPacketStoreUnavailableError,
     );
     expect(vi.mocked(cipher.fingerprint).mock.calls.length).toBe(calls);
+  });
+  async function review() {
+    const command = await application();
+    const result = await store.createPacket({ ...command, packet });
+    const current = result.view.currentPacket;
+    if (!current) throw Error("Missing synthetic packet");
+    return {
+      ...command,
+      packetId: current.id,
+      packetHash: current.packetHash,
+      expectedRevision: result.view.application.revision,
+    };
+  }
+  it("reads exact values separately, audits metadata only, and produces the existing strict owner API", async () => {
+    const target = await review();
+    const result = await store.readCurrentPacketValues(target);
+    expect(result.values.get("authorization.us_authorized")).toBe(true);
+    const audits = await sql`SELECT purpose, stage FROM applications_restricted.packet_read_audit
+      WHERE owner_user_id = ${target.ownerUserId} ORDER BY created_at, stage`;
+    expect(audits.map((row) => row.stage)).toEqual(["admitted", "validated"]);
+    expect(audits.every((row) => row.purpose === "candidate_review")).toBe(true);
+    const service = new ApplicationsService({
+      store,
+      restrictedPackets: store,
+      packets: { prepare: async () => packet },
+      bindings: {
+        resolve: async () => ({ jobRevision: HASH_A, formHash: HASH_B, resumeHash: HASH_C }),
+      },
+      jobs: { isActive: async () => true },
+    });
+    const api = await service.get(target.ownerUserId, target.applicationId);
+    const validate = compileComponentValidator("Application");
+    expect(validate(api), JSON.stringify(validate.errors)).toBe(true);
+    expect(
+      api.currentPacket?.fields.find((field) => field.fieldKey === "authorization.us_authorized")
+        ?.value,
+    ).toBe(true);
+    expect(JSON.stringify(api)).not.toContain("restrictedValues");
+    expect(JSON.stringify(api)).not.toContain("protectedValue");
+  });
+  it("releases owner/application locks before decrypting", async () => {
+    const target = await review();
+    let observed = false;
+    onDecrypt = async () => {
+      await sql.begin(async (tx) => {
+        await tx`SELECT id FROM identity.users WHERE id = ${target.ownerUserId} FOR UPDATE NOWAIT`;
+        await tx`SELECT id FROM applications.applications WHERE id = ${target.applicationId} FOR UPDATE NOWAIT`;
+        observed = true;
+      });
+    };
+    try {
+      await store.readCurrentPacketValues(target);
+    } finally {
+      onDecrypt = undefined;
+    }
+    expect(observed).toBe(true);
+  });
+  it("withholds values when an application changes during decrypt", async () => {
+    const target = await review();
+    onDecrypt = async () => {
+      await store.cancel({ ...target, idempotencyKey: idempotencyKey() });
+    };
+    try {
+      await expect(store.readCurrentPacketValues(target)).rejects.toThrow(
+        RestrictedPacketStoreUnavailableError,
+      );
+    } finally {
+      onDecrypt = undefined;
+    }
+    const audits =
+      await sql`SELECT stage FROM applications_restricted.packet_read_audit WHERE owner_user_id = ${target.ownerUserId}`;
+    expect(audits.map((row) => row.stage)).toEqual(["admitted"]);
+  });
+  it("withholds values when the candidate becomes quarantined during decrypt", async () => {
+    const target = await review();
+    onDecrypt = async () => {
+      await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now()
+      WHERE id = ${target.ownerUserId}`;
+    };
+    try {
+      await expect(store.readCurrentPacketValues(target)).rejects.toThrow(
+        RestrictedPacketStoreUnavailableError,
+      );
+    } finally {
+      onDecrypt = undefined;
+    }
+  });
+  it("refuses a foreign owner before decrypting", async () => {
+    const target = await review();
+    const foreign = await application();
+    const calls = vi.mocked(cipher.decrypt).mock.calls.length;
+    await expect(
+      store.readCurrentPacketValues({ ...target, ownerUserId: foreign.ownerUserId }),
+    ).rejects.toThrow(RestrictedPacketStoreUnavailableError);
+    expect(vi.mocked(cipher.decrypt).mock.calls.length).toBe(calls);
+  });
+  it("retains exact protected identity and values through preparation completion without crypto under the write transaction", async () => {
+    const command = await application();
+    const context = { jobContextHash: HASH_A, confirmedFactsHash: HASH_B };
+    const queued = await store.queuePreparation({
+      ...command,
+      packet,
+      context,
+      request: {
+        expectedRevision: 1,
+        coverLetter: {
+          disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+        },
+      },
+    });
+    const [event] = await sql<
+      Array<{ id: string }>
+    >`SELECT id FROM applications.preparation_outbox WHERE preparation_id = ${queued.preparation.id}`;
+    if (!event) throw Error("Missing synthetic event");
+    await store.claimPreparationGeneration(event.id, queued.preparation.id, context);
+    const before = {
+      encrypt: vi.mocked(cipher.encrypt).mock.calls.length,
+      decrypt: vi.mocked(cipher.decrypt).mock.calls.length,
+    };
+    const result = await store.completePreparation(event.id, queued.preparation.id, context, {
+      contentSha256: "d".repeat(64),
+      sourceFactIds: [FACT_A],
+      confidence: 0.95,
+    });
+    expect(result.state).toBe("succeeded");
+    expect(vi.mocked(cipher.encrypt).mock.calls.length).toBe(before.encrypt);
+    expect(vi.mocked(cipher.decrypt).mock.calls.length).toBe(before.decrypt);
+    const view = await store.getApplication(command.ownerUserId, command.applicationId);
+    expect(view.currentPacket?.restrictedValues).toEqual(
+      queued.view.currentPacket?.restrictedValues,
+    );
+    const current = view.currentPacket;
+    if (!current) throw Error("Missing completed synthetic packet");
+    const values = await store.readCurrentPacketValues({
+      ...command,
+      packetId: current.id,
+      packetHash: current.packetHash,
+      expectedRevision: view.application.revision,
+    });
+    expect(values.values.get("authorization.us_authorized")).toBe(true);
+    expect(
+      await sql`SELECT id FROM applications_restricted.packet_values WHERE owner_user_id = ${command.ownerUserId}`,
+    ).toHaveLength(1);
   });
 });
