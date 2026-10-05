@@ -2812,6 +2812,7 @@ class ApplicationsController {
       {
         expectedRevision: body.expectedRevision,
         ...(body.userEntries ? { userEntries: body.userEntries } : {}),
+        ...(body.vaultSelections ? { vaultSelections: body.vaultSelections } : {}),
         ...(body.form ? { form: body.form } : {}),
       },
       commandKey,

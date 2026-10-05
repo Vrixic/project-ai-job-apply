@@ -184,6 +184,40 @@ export class PostgresCoverLetterResponseStore {
     return { reference: ref, state: row.state, response };
   }
 
+  /** Failure eligibility is owned durable proof from the original actor. Generic fences,
+   * deadlines and unclassified old settlements cannot authorize stopping active generation.
+   * Other private writers may still run: this read grants no settlement/quiescence/purge proof.
+   */
+  async readFailed(
+    reference: CoverLetterWorkReference,
+  ): Promise<CoverLetterResponseInventory | null> {
+    return this.guarded(reference, async (ref) => {
+      const [row] = await this.client<ResponseRow[]>`
+        SELECT r.work_id AS "workId", r.document_id AS "documentId",
+          r.request_sha256 AS "requestSha256", r.state, r.response_id AS "responseId",
+          r.response_created_at::text AS "responseCreatedAt", r.terminal_status AS "terminalStatus"
+        FROM documents.cover_letter_provider_responses r
+        JOIN documents.cover_letter_work_authorizations w ON w.id = r.work_id
+          AND w.document_id = r.document_id AND w.user_id = r.user_id
+          AND w.request_sha256 = r.request_sha256
+          AND w.purpose = 'provider_dispatch' AND w.state = 'settled'
+        JOIN documents.cover_letters d ON d.id = r.document_id AND d.user_id = r.user_id
+        WHERE r.work_id = ${ref.id} AND r.document_id = ${ref.documentId}
+          AND r.request_sha256 = ${ref.requestSha256} AND d.status = 'pending'
+          AND w.provider_failure IN ('output_rejected', 'failed', 'cancelled', 'incomplete')
+          AND r.state IN ('acknowledged', 'disposed')
+          AND (r.state <> 'disposed' OR r.terminal_status = CASE
+            WHEN w.provider_failure = 'output_rejected' THEN 'completed'
+            ELSE w.provider_failure END)
+          AND EXISTS (SELECT 1 FROM documents.cover_letter_work_authorizations final
+            WHERE final.document_id = r.document_id AND final.user_id = r.user_id
+              AND final.request_sha256 = r.request_sha256
+              AND final.purpose = 'final_document' AND final.state = 'revoked')`;
+      if (!this.enabled()) throw Error();
+      return row ? this.project(row, ref) : null;
+    });
+  }
+
   /** Successful-generation maintenance only. Immutable ready draft and all three positively
    * settled original phases precede response cleanup. Ledger state is NOT remote quiescence.
    * Quarantine may drain existing responses; no candidate content, lease or renewal is exposed.

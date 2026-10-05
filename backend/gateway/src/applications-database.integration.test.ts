@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import {
   createApplicationsDatabase,
   defaultFieldDefinitions,
+  StalePacketError,
 } from "@ai-job-apply/applications-service";
 import { createDatabase } from "@ai-job-apply/profile-service";
 import { v7 as uuidv7 } from "uuid";
@@ -16,10 +17,14 @@ const execFileAsync = promisify(execFile);
 
 const jobId = "019d04cf-1f80-7000-8000-0000000000e1";
 
-function runtimeFor(client: ReturnType<typeof createApplicationsDatabase>) {
+function runtimeFor(
+  client: ReturnType<typeof createApplicationsDatabase>,
+  state?: { active: boolean; title: string; at: Date },
+) {
   return createApplicationsRuntime({
     client,
     definitions: defaultFieldDefinitions(),
+    clock: () => state?.at ?? new Date(),
     profile: { listProfileFacts: async () => ({ facts: [] }) },
     catalog: {
       async getActiveJob() {
@@ -28,20 +33,23 @@ function runtimeFor(client: ReturnType<typeof createApplicationsDatabase>) {
       async resolveActiveJobSummaries() {
         return {
           catalogRevision: "r1",
-          items: [
-            {
-              requestedJobId: jobId,
-              job: {
-                id: jobId,
-                company: { id: "019d04cf-1f80-7000-8000-0000000000e2", name: "Synthetic Co" },
-                title: "Backend Engineer",
-                locations: ["Remote - US"],
-                firstObservedAt: new Date(),
-                lastVerifiedAt: new Date(),
-                expiresAt: new Date(Date.now() + 86_400_000),
-              },
-            },
-          ],
+          items:
+            state?.active === false
+              ? []
+              : [
+                  {
+                    requestedJobId: jobId,
+                    job: {
+                      id: jobId,
+                      company: { id: "019d04cf-1f80-7000-8000-0000000000e2", name: "Synthetic Co" },
+                      title: state?.title ?? "Backend Engineer",
+                      locations: ["Remote - US"],
+                      firstObservedAt: new Date(),
+                      lastVerifiedAt: new Date(),
+                      expiresAt: new Date(Date.now() + 86_400_000),
+                    },
+                  },
+                ],
         } as never;
       },
     },
@@ -84,4 +92,63 @@ describeWithDatabase("Applications database client boundary", () => {
       runtimeFor(shared.client).create(uuidv7(), jobId, `shared-${uuidv7()}`),
     ).rejects.toMatchObject({ code: "ERR_INVALID_ARG_TYPE" });
   });
+
+  it.each(["changed", "inactive", "expired"] as const)(
+    "refuses queued dispatch through the composed owner runtime when %s",
+    async (condition) => {
+      const state = {
+        active: true,
+        title: "Synthetic Engineer",
+        at: new Date("2026-09-18T12:00:00Z"),
+      };
+      const runtime = runtimeFor(dedicated, state);
+      const owner = uuidv7();
+      const formHash = "a".repeat(64);
+      const created = await runtime.create(owner, jobId, `dispatch-create-${uuidv7()}`);
+      const prepared = await runtime.preparePacket(
+        owner,
+        created.id,
+        {
+          expectedRevision: created.revision,
+          form: { adapterId: "synthetic", variantId: "synthetic-v1", formHash },
+        },
+        `dispatch-packet-${uuidv7()}`,
+      );
+      const packet = prepared.currentPacket;
+      if (!packet) throw Error("SyntheticPacketMissing");
+      const approved = await runtime.approve(
+        owner,
+        created.id,
+        {
+          expectedRevision: prepared.revision,
+          packetHash: packet.packetHash,
+          acknowledgedFieldKeys: [],
+        },
+        `dispatch-approve-${uuidv7()}`,
+      );
+      const start = await runtime.startSubmission(
+        owner,
+        created.id,
+        {
+          expectedRevision: approved.revision,
+          adapterId: "synthetic",
+          adapterVersion: "1.0.0",
+          observedFormHash: formHash,
+        },
+        `dispatch-start-${uuidv7()}`,
+      );
+      if (!start.attemptId) throw Error("SyntheticAttemptMissing");
+      if (condition === "changed") state.title = "Synthetic Changed Role";
+      else if (condition === "inactive") state.active = false;
+      else state.at = new Date(state.at.getTime() + 24 * 60 * 60 * 1000);
+      await expect(
+        runtime.dispatchAttempt(owner, created.id, start.attemptId),
+      ).rejects.toBeInstanceOf(StalePacketError);
+      const view = await runtime.get(owner, created.id);
+      expect(view.status).toBe("review_required");
+      expect(view.currentAction).toBe("review_and_approve");
+      expect(view.attempts[0]?.status).toBe("failed_no_effect");
+      expect(view.attempts[0]?.dispatchedAt).toBeUndefined();
+    },
+  );
 });

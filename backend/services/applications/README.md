@@ -7,6 +7,18 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 
 ## Current D3 slice (source and local verification only)
 
+Submission dispatch rechecks current owner job/artifact bindings and the original packet/approval
+under the application lock. Expiry is evaluated after those SQL reads. A stale queued attempt
+settles as `failed_no_effect`, invalidates approval and returns directly to review with one revision
+and one status outbox event; its two history entries and approval change commit atomically before
+the fixed HTTP conflict. No intermediate approved event or dispatch permission is emitted.
+Concurrent and repeated deliveries cannot dispatch that attempt. A fresh packet and explicit
+approval can start a new attempt. The internal store requires a detached current-binding snapshot;
+it never falls back to the original packet's values. The public dispatch signature is unchanged.
+The endpoint carries the original form context, not a newly observed employer form; the adapter
+must independently validate the destination structure. Owner reads remain point-in-time snapshots,
+not a cross-owner lease. Vault-version invalidation and enabled-ATS/browser acceptance remain open.
+
 ### Cover-letter preparation in progress (2026-10-02)
 
 The unshipped D3-017 slice adds an atomic base packet, short-lived disclosure-bound preparation,
@@ -138,3 +150,38 @@ never mapped. Add a row only after the owner approves it and a test pins it.
 `search` takes an optional `jobId`. The result is this candidate's applications for that job, newest first. The web
 workspace uses `limit: 1` to reopen the live application, treating a cancelled newest one as "none" because a
 cancelled application may be restarted.
+
+## Selected saved answers (default off)
+
+Explicit `vaultSelections` require an observed form, exact answer revision/context, question hash
+and candidate meaning confirmation. The private Profile port never substitutes a newer answer.
+Packet fields bind a closed `vaultReference` in the content hash and always require review.
+Profile-owned metadata admission locks run in the same Applications SQL transaction at approval,
+start, dispatch, generation claim/recovery and final preparation completion. Correction, deletion
+or expiry refuses the old selection with `vault_answer_changed` (preparation uses
+`bindings_changed`). Missing admission capability fails closed; no KMS call occurs under these locks.
+Migration `0006_vault_approval_binding.sql` adds the reason to the existing closed approval constraint.
+Strict-reader rollout and candidate review UI precede activation; no live ATS executor is enabled.
+
+## One-off document material persistence guard (ADR-038 / D3-064)
+
+Document fields in v1 packets and account-export packet projections accept only unresolved nulls
+or canonical SHA-256 artifact digests. Applications also requires each non-null document field to
+match its packet's corresponding resume/cover-letter binding. The AI helper refuses to turn a
+cover-letter result into a persisted proposal, including under an ordinary answer field name.
+Candidate-authored non-document answers retain their separate policy.
+
+Migration `0007_document_field_hashes.sql` validates all existing packet rows and adds the same
+exact-binding SQL guard. This tightens previously accepted document values: an older packet with
+material text cannot pass the new reader contracts or migration. Inventory and explicitly resolve
+incompatible legacy data before rollout; do not rewrite immutable packet/history rows silently,
+waive validation, or treat encryption as compliance with the no-content persistence policy. Apply
+and verify the owner migration before deploying new writers. Rolling code back does not remove
+this forward-only constraint; older writers that persist document text remain incompatible.
+Deletion continues through existing owner-scoped candidate-rights participation; no new relation
+or content backfill is introduced. Restore and deletion-replay validators require the exact current
+61-migration manifest, preserving refusal of older boundaries.
+
+These guards are a first enforcement layer. Temporary-memory storage, the absolute 1,800-second
+lifetime, expiry/review/submission admission, no-store transport and provider approval remain
+D3-064 work. Existing generated draft/S3/provider-slot paths cannot be activated under ADR-038.

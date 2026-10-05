@@ -15,7 +15,7 @@ import type { PostgresCoverLetterResponseStore } from "./cover-letter-response-s
 export function createCoverLetterResponseDisposalHandler(options: {
   functionArn: string;
   responses: Pick<PostgresCoverLetterResponseStore, "read" | "recordDisposal"> &
-    Partial<Pick<PostgresCoverLetterResponseStore, "readCompleted">>;
+    Partial<Pick<PostgresCoverLetterResponseStore, "readCompleted" | "readFailed">>;
   enabled?: () => boolean;
 }) {
   providerControlVersion(options.functionArn);
@@ -51,10 +51,14 @@ export function createCoverLetterResponseDisposalHandler(options: {
       // Older compositions refuse new eligibility reads; ordinary inventory grants no fallback.
       if (input.action === "read_completed" && typeof responses.readCompleted !== "function")
         return unavailable;
+      if (input.action === "read_failed" && typeof responses.readFailed !== "function")
+        return unavailable;
       const inventory =
         input.action === "read_completed"
           ? await responses.readCompleted?.(structuredClone(input.reference))
-          : await responses.read(structuredClone(input.reference));
+          : input.action === "read_failed"
+            ? await responses.readFailed?.(structuredClone(input.reference))
+            : await responses.read(structuredClone(input.reference));
       const output = { ...input, outcome: "read" as const, inventory };
       if (!enabled() || !validateResponseDisposalOutput(output)) return unavailable;
       return structuredClone(output);

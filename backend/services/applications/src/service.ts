@@ -37,7 +37,7 @@ import type {
   PostgresApplicationStore,
   StartAttemptResult,
 } from "./store.js";
-import { ApplicationIntegrityError, StalePacketError } from "./store.js";
+import { ApplicationIntegrityError, AttemptNotFoundError, StalePacketError } from "./store.js";
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -65,6 +65,8 @@ export interface PacketPreparation {
   artifactHashes: ArtifactHashes;
 }
 
+import type { VaultSelection } from "./vault.js";
+
 export interface UserEntry {
   fieldKey: string;
   value: FieldValue;
@@ -79,6 +81,7 @@ export interface PacketPreparationSource {
     ownerUserId: string;
     application: ApplicationRecord;
     userEntries: readonly UserEntry[];
+    vaultSelections?: readonly VaultSelection[];
     /** The form structure the extension observed and mapped against, when known. */
     form: FormBinding | null;
   }): Promise<PacketPreparation>;
@@ -191,6 +194,7 @@ export interface ApplicationsApi {
     request: {
       expectedRevision: number;
       userEntries?: readonly UserEntry[];
+      vaultSelections?: readonly VaultSelection[];
       form?: FormBinding;
     },
     idempotencyKey: string,
@@ -367,6 +371,9 @@ export class ApplicationsService implements ApplicationsApi {
       ownerUserId,
       application: current.application,
       userEntries: command.request.userEntries ?? [],
+      ...(command.request.vaultSelections
+        ? { vaultSelections: command.request.vaultSelections }
+        : {}),
       form: command.request.form ?? null,
     });
     const accepted = await preparations.queuePreparation({ ...command, context, packet });
@@ -481,21 +488,24 @@ export class ApplicationsService implements ApplicationsApi {
     request: {
       expectedRevision: number;
       userEntries?: readonly UserEntry[];
+      vaultSelections?: readonly VaultSelection[];
       form?: FormBinding;
     },
     idempotencyKey: string,
   ): Promise<Application> {
+    const snapshot = structuredClone(request);
     const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const preparation = await this.dependencies.packets.prepare({
       ownerUserId,
       application: current.application,
-      userEntries: request.userEntries ?? [],
-      form: request.form ?? null,
+      userEntries: snapshot.userEntries ?? [],
+      form: snapshot.form ?? null,
+      ...(snapshot.vaultSelections ? { vaultSelections: snapshot.vaultSelections } : {}),
     });
     const result = await this.dependencies.store.createPacket({
       ownerUserId,
       applicationId,
-      expectedRevision: request.expectedRevision,
+      expectedRevision: snapshot.expectedRevision,
       idempotencyKey,
       packet: {
         jobRevision: preparation.jobRevision,
@@ -695,8 +705,23 @@ export class ApplicationsService implements ApplicationsApi {
     applicationId: string,
     attemptId: string,
   ): Promise<ApiApplicationAttempt> {
+    const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    if (!current.attempts.some((attempt) => attempt.id === attemptId))
+      throw new AttemptNotFoundError();
+    const live = await this.dependencies.bindings.resolve({
+      ownerUserId,
+      application: current.application,
+      // The dispatch endpoint carries no new observed form. Its original packet form binding
+      // remains the context; the adapter must separately verify the live destination structure.
+      formHash: current.currentPacket?.form?.formHash ?? null,
+    });
     return toApiAttempt(
-      await this.dependencies.store.dispatchAttempt({ ownerUserId, applicationId, attemptId }),
+      await this.dependencies.store.dispatchAttempt({
+        ownerUserId,
+        applicationId,
+        attemptId,
+        current: live,
+      }),
     );
   }
 
@@ -841,6 +866,7 @@ export function toApiApplication(view: ApplicationView): Application {
             jobRevision: packet.jobRevision,
             ...(packet.form ? { form: { ...packet.form } } : {}),
             fields: packet.fields.map((field) => ({
+              ...(field.vaultReference ? { vaultReference: { ...field.vaultReference } } : {}),
               fieldKey: field.fieldKey,
               value: cloneValue(field.value),
               origin: field.origin,

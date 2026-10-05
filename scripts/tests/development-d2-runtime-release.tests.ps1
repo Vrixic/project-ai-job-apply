@@ -292,7 +292,7 @@ foreach ($owner in @('profile','jobs','documents','matching','billing','trust'))
 Assert-D2RuntimeMigrationInventory $inventory; $passed++
 $modern51 = [ordered]@{}
 foreach ($owner in $inventory.Keys) { $modern51[$owner] = @($inventory[$owner]) }
-$modern51.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses') })
+$modern51.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses', '0009_cover_letter_provider_failure') })
 Assert-D2RuntimeMigrationInventory $modern51; $passed++
 $modern52 = [ordered]@{}
 foreach ($owner in $modern51.Keys) { $modern52[$owner] = @($modern51[$owner]) }
@@ -302,10 +302,24 @@ $modern53 = [ordered]@{}
 foreach ($owner in $modern52.Keys) { $modern53[$owner] = @($modern52[$owner]) }
 $modern53.documents += '0008_cover_letter_provider_responses'
 Assert-D2RuntimeMigrationInventory $modern53; $passed++
+$modern54 = [ordered]@{}
+foreach ($owner in $modern53.Keys) { $modern54[$owner] = @($modern53[$owner]) }
+$modern54.documents += '0009_cover_letter_provider_failure'
+Assert-D2RuntimeMigrationInventory $modern54; $passed++
+foreach ($mutation in @(
+    { param($x) $x.documents = @($x.documents | Where-Object { $_ -cne '0008_cover_letter_provider_responses' }) },
+    { param($x) $x.documents[-1] = '0009_unknown_failure' },
+    { param($x) $x.documents += '0010_unknown_extension' }
+  )) {
+  $badInventory = [ordered]@{}
+  foreach ($owner in $modern54.Keys) { $badInventory[$owner] = @($modern54[$owner] | ForEach-Object { $_ }) }
+  & $mutation $badInventory
+  Assert-Rejected { Assert-D2RuntimeMigrationInventory $badInventory } 'Unknown or mixed failure-proof inventory accepted.'
+}
 $legacy49 = [ordered]@{}
 foreach ($owner in $inventory.Keys) { $legacy49[$owner] = @($inventory[$owner]) }
 $legacy49.profile = @($inventory.profile | Where-Object { $_ -cne '0011_active_candidate_lease' })
-$legacy49.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0006_cover_letters', '0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses') })
+$legacy49.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0006_cover_letters', '0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses', '0009_cover_letter_provider_failure') })
 Assert-D2RuntimeMigrationInventory $legacy49; $passed++
 $legacy48 = [ordered]@{}
 foreach ($owner in $legacy49.Keys) { $legacy48[$owner] = @($legacy49[$owner]) }

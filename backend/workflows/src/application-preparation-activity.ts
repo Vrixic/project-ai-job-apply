@@ -3,6 +3,7 @@ import {
   createPreparationActivity,
   type PreparationActivityStore,
   PreparationNotFoundError,
+  type VaultReader,
 } from "@ai-job-apply/applications-service";
 import {
   type ApplicationPreparationActivityResult,
@@ -29,8 +30,9 @@ const transientStoreCodes = new Set([
 export function createApplicationPreparationActivityHandler(
   store: PreparationActivityStore,
   documents: CoverLetterPreparationPort,
+  vault?: Pick<VaultReader, "readCurrentReference">,
 ) {
-  const advance = createPreparationActivity(store, documents);
+  const advance = createPreparationActivity(store, documents, vault);
   return async (event: unknown): Promise<ApplicationPreparationActivityResult> => {
     if (!validateApplicationPreparationActivityInput(event))
       throw new Error("ApplicationPreparationActivityInputRejected");

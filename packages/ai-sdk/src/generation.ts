@@ -307,7 +307,14 @@ export function toGeneratedProposal(
   sourceConfirmed: true;
   confidence: number;
 } | null {
-  if (result.status !== "needs_review") return null;
+  // ADR-038: cover letters are temporary material, even if relabeled as an ordinary field.
+  if (
+    result.status !== "needs_review" ||
+    result.purpose !== "narrative_answer" ||
+    fieldKey === "documents.cover_letter" ||
+    fieldKey === "documents.resume"
+  )
+    return null;
   return {
     fieldKey,
     value: result.paragraphs.map((paragraph) => paragraph.text).join("\n\n"),

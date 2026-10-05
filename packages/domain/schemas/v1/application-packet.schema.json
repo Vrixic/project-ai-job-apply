@@ -88,9 +88,94 @@
           },
           "requiresReview": {
             "type": "boolean"
+          },
+          "vaultReference": {
+            "type": "object",
+            "required": [
+              "id",
+              "version",
+              "context",
+              "questionHash",
+              "meaningConfirmed",
+              "validUntilEpochMs"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "context": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "questionHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "meaningConfirmed": {
+                "const": true
+              },
+              "validUntilEpochMs": {
+                "type": ["number", "null"]
+              }
+            },
+            "additionalProperties": false
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "required": ["vaultReference"],
+              "properties": {
+                "vaultReference": {}
+              }
+            },
+            "then": {
+              "properties": {
+                "origin": {
+                  "const": "answer_vault"
+                },
+                "requiresReview": {
+                  "const": true
+                },
+                "disposition": {
+                  "const": "review"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["fieldKey"],
+              "properties": {
+                "fieldKey": {
+                  "enum": ["documents.cover_letter", "documents.resume"]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "artifactHashes": {

@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import type {
+  CoverLetterExportReader,
+  CoverLetterExportReference,
+} from "@ai-job-apply/documents-service/cover-letter-export";
 import { validateCandidateDataExportV1 } from "@ai-job-apply/domain";
 import type {
   DatabaseHandle,
@@ -70,6 +74,7 @@ export interface CandidateRightsActivityDependencies {
   /** Profile's own retirement of unreviewed proposals, needed by the resume purge sweep (ADR-034). */
   resumeProposals?: Pick<PostgresResumeProposalWriter, "retireDocumentProposals">;
   restrictedAnswerExport?: RestrictedAnswerExportReader;
+  coverLetterExport?: CoverLetterExportReader;
   identityProvider: CandidateIdentityProvider;
   subprocessors: readonly CandidateSubprocessor[];
   recoveryLedger: CandidateDeletionRecoveryLedger;
@@ -482,6 +487,38 @@ export class PostgresCandidateRightsActivityStore {
       profile.restrictedAnswers = entries;
       if (!validateCandidateDataExportV1(envelope)) {
         throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+      }
+    }
+    const documents = envelope.documents as Record<string, unknown>;
+    if (Array.isArray(documents.coverLetters)) {
+      const letters = documents.coverLetters as Array<Record<string, unknown>>;
+      if (
+        letters.some(
+          (letter) =>
+            Object.hasOwn(letter, "paragraphs") || Object.hasOwn(letter, "reviewRequired"),
+        )
+      )
+        throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+      if (this.dependencies.coverLetterExport) {
+        const exported = [];
+        for (const letter of letters) {
+          if (letter.status !== "ready") {
+            exported.push({ ...letter });
+            continue;
+          }
+          const paragraphs = await this.dependencies.coverLetterExport.readValue(
+            context.userId,
+            structuredClone(letter) as unknown as CoverLetterExportReference,
+          );
+          exported.push({
+            ...letter,
+            paragraphs: structuredClone(paragraphs),
+            reviewRequired: true,
+          });
+        }
+        documents.coverLetters = exported;
+        if (!validateCandidateDataExportV1(envelope))
+          throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
       }
     }
     const body = Buffer.from(`${JSON.stringify(envelope)}\n`, "utf8");

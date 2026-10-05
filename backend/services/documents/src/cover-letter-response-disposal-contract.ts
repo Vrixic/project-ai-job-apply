@@ -16,7 +16,11 @@ type DisposalReceipt = Extract<OpenAiResponseCleanup, { kind: "response_deleted"
 
 /** Separate maintenance-only v1; never carries response content or new dispatch authority. */
 export type CoverLetterResponseDisposalInput =
-  | { schemaVersion: 1; action: "read" | "read_completed"; reference: CoverLetterWorkReference }
+  | {
+      schemaVersion: 1;
+      action: "read" | "read_completed" | "read_failed";
+      reference: CoverLetterWorkReference;
+    }
   | {
       schemaVersion: 1;
       action: "record_disposal";
@@ -27,7 +31,7 @@ export type CoverLetterResponseDisposalInput =
 export type CoverLetterResponseDisposalOutput =
   | {
       schemaVersion: 1;
-      action: "read" | "read_completed";
+      action: "read" | "read_completed" | "read_failed";
       reference: CoverLetterWorkReference;
       outcome: "read" | "unavailable";
       inventory: CoverLetterResponseInventory | null;
@@ -92,7 +96,9 @@ export function validateResponseDisposalInput(
     if (closed(value, ["schemaVersion", "action", "reference"]))
       return (
         value.schemaVersion === 1 &&
-        (value.action === "read" || value.action === "read_completed") &&
+        (value.action === "read" ||
+          value.action === "read_completed" ||
+          value.action === "read_failed") &&
         validateProviderControlReference(value.reference)
       );
     return (
@@ -114,7 +120,9 @@ export function validateResponseDisposalOutput(
     if (closed(value, ["schemaVersion", "action", "reference", "outcome", "inventory"]))
       return (
         value.schemaVersion === 1 &&
-        (value.action === "read" || value.action === "read_completed") &&
+        (value.action === "read" ||
+          value.action === "read_completed" ||
+          value.action === "read_failed") &&
         validateProviderControlReference(value.reference) &&
         ((value.outcome === "unavailable" && value.inventory === null) ||
           (value.outcome === "read" && inventory(value.inventory, value.reference)))

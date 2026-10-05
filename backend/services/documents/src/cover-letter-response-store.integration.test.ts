@@ -6,7 +6,13 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCoverLetterDocument } from "./cover-letter.js";
-import { COVER_LETTER_PROVIDER_MODEL } from "./cover-letter-provider-contract.js";
+import { createCoverLetterCleanupLambda } from "./cover-letter-cleanup-lambda.js";
+import { createCoverLetterResponseMaintenanceLambda } from "./cover-letter-response-maintenance-lambda.js";
+import { isolatedProviderFixture } from "./cover-letter-isolated-provider-test-support.js";
+import {
+  COVER_LETTER_PROVIDER_MODEL,
+  decodeCoverLetterProviderObject,
+} from "./cover-letter-provider-contract.js";
 import { CoverLetterProviderControlClient } from "./cover-letter-provider-control-client.js";
 import { createCoverLetterProviderControlLambda } from "./cover-letter-provider-control-lambda.js";
 import { CoverLetterResponseCaptureClient } from "./cover-letter-response-capture-client.js";
@@ -119,6 +125,11 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     const [original] =
       await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
     if (original?.state === "running") await work.recordSettled(ref);
+    // Synthetic fixture cleanup only: explicitly settle any private writer started by a case.
+    const privateWriters = await sql<
+      CoverLetterWorkReference[]
+    >`SELECT id, document_id AS "documentId", purpose, request_sha256 AS "requestSha256" FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} AND purpose <> 'provider_dispatch' AND state = 'running'`;
+    for (const writer of privateWriters) await work.recordSettled(writer);
     await work.revokeUnclaimed(owner, documentId);
     await sql`DELETE FROM documents.audit_events WHERE user_id = ${owner}`;
     await sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`;
@@ -131,6 +142,362 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await work.claim(ref);
     return store.reserve(ref);
   }
+
+  it.each([
+    "failed",
+    "cancelled",
+    "incomplete",
+    "completed",
+    "active",
+    "legacy",
+    "unknown",
+    "quarantined",
+    "lost_disposal_ack",
+  ] as const)("native internet maintenance and both private SQL bootstraps: %s", async (state) => {
+    const original = state === "completed" ? await successfulDraft() : response();
+    if (state !== "completed") {
+      await reserve();
+      await runningSlots();
+      if (state !== "unknown") await store.recordCreation(ref, original);
+      if (state === "legacy") await work.recordSettled(ref);
+      else if (!["active", "unknown"].includes(state))
+        await work.settleTerminalProviderDispatch(ref, {
+          kind: "terminal_no_content",
+          reference: original,
+          terminalStatus: state === "cancelled" || state === "incomplete" ? state : "failed",
+        });
+    }
+    if (state === "quarantined")
+      await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+    const prefix = "arn:aws:lambda:us-east-2:123456789012:function:";
+    const target = `${prefix}synthetic-maintenance:9`;
+    const disposal = `${prefix}synthetic-disposal:7`;
+    const fence = `${prefix}synthetic-fence:5`;
+    const pools: postgres.Sql[] = [];
+    const createPool = (
+      url: string,
+      settings: { max: 1; idle_timeout: 20; connect_timeout: 10 },
+    ) => {
+      const pool = postgres(url, { ...settings, onnotice: () => undefined });
+      pools.push(pool);
+      return pool;
+    };
+    const privateEnvironment = (name: string, version: string, flag: string) => ({
+      [flag]: "true",
+      AWS_REGION: "us-east-2",
+      PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+      AWS_LAMBDA_FUNCTION_NAME: name,
+      AWS_LAMBDA_FUNCTION_VERSION: version,
+      AWS_SESSION_TOKEN: "synthetic-session-token",
+      DATABASE_SECRET_ID:
+        "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+    });
+    const privateDisposal = createCoverLetterResponseDisposalLambda({
+      environment: () =>
+        privateEnvironment("synthetic-disposal", "7", "COVER_LETTER_RESPONSE_DISPOSAL_ENABLED"),
+      resolveDatabaseUrl: async () => databaseUrl ?? "postgres://invalid",
+      createPool,
+    });
+    const privateFence = createCoverLetterCleanupLambda({
+      environment: () =>
+        privateEnvironment("synthetic-fence", "5", "COVER_LETTER_CLEANUP_CONTROL_ENABLED"),
+      resolveDatabaseUrl: async () => databaseUrl ?? "postgres://invalid",
+      createPool,
+    });
+    const actions: string[] = [];
+    let lost = false;
+    const providerFetch = vi.fn<typeof fetch>(async (_url, options) => {
+      if (options?.method === "DELETE")
+        return Response.json({
+          id: original.responseId,
+          object: "response.deleted",
+          deleted: true,
+        });
+      return Response.json({
+        id: original.responseId,
+        object: "response",
+        created_at: original.createdAt,
+        model: "gpt-6-luna",
+        background: true,
+        store: false,
+        previous_response_id: null,
+        tools: [],
+        status:
+          state === "completed"
+            ? "completed"
+            : state === "cancelled" || state === "incomplete"
+              ? state
+              : "failed",
+      });
+    });
+    const resolve = vi.fn(async () => "synthetic-provider-key");
+    const run = createCoverLetterResponseMaintenanceLambda({
+      environment: () => ({
+        COVER_LETTER_RESPONSE_MAINTENANCE_ENABLED: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: "synthetic-maintenance",
+        AWS_LAMBDA_FUNCTION_VERSION: "9",
+        AWS_SESSION_TOKEN: "synthetic-token",
+        COVER_LETTER_RESPONSE_DISPOSAL_FUNCTION_ARN: disposal,
+        COVER_LETTER_CLEANUP_FUNCTION_ARN: fence,
+        COVER_LETTER_OPENAI_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-key",
+      }),
+      resolveProviderKey: resolve,
+      providerFetch,
+      createLambdaClient: () => ({
+        config: { maxAttempts: async () => 1 },
+        send: async (command) => {
+          const input = JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array));
+          actions.push(input.action);
+          const value =
+            command.input.FunctionName === disposal
+              ? await privateDisposal(input, { invokedFunctionArn: disposal })
+              : command.input.FunctionName === fence
+                ? await privateFence(input, { invokedFunctionArn: fence })
+                : undefined;
+          if (!value) throw Error("SyntheticUnexpectedTarget");
+          if (state === "lost_disposal_ack" && input.action === "record_disposal" && !lost) {
+            lost = true;
+            throw Error("SyntheticCommittedACKLost");
+          }
+          return {
+            StatusCode: 200,
+            ExecutedVersion: command.input.FunctionName === disposal ? "7" : "5",
+            Payload: new TextEncoder().encode(JSON.stringify(value)),
+          };
+        },
+      }),
+    });
+    const input = {
+      schemaVersion: 1,
+      action: state === "completed" ? "reconcile_completed" : "reconcile_failed",
+      reference: ref,
+    };
+    try {
+      const eligible = !["active", "legacy", "unknown"].includes(state);
+      const before =
+        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY id`;
+      expect((await run(input, { invokedFunctionArn: target })).outcome).toBe(
+        eligible && state !== "lost_disposal_ack" ? "response_disposed" : "unresolved",
+      );
+      expect(providerFetch).toHaveBeenCalledTimes(eligible ? 2 : 0);
+      expect(resolve).toHaveBeenCalledTimes(eligible ? 1 : 0);
+      if (!eligible) {
+        expect(actions).toEqual(["read_failed"]);
+        expect(
+          await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY id`,
+        ).toEqual(before);
+      } else {
+        expect((await store.read(ref))?.state).toBe("disposed");
+        if (state === "completed") expect(actions).not.toContain("fence");
+        else {
+          expect(await work.readDrainState(owner, documentId)).toBe("pending");
+          await expect(
+            sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
+          ).rejects.toThrow();
+        }
+        expect((await run(input, { invokedFunctionArn: target })).outcome).toBe(
+          "response_disposed",
+        );
+        expect(providerFetch).toHaveBeenCalledTimes(2);
+      }
+    } finally {
+      await Promise.all(pools.map((pool) => pool.end()));
+    }
+  });
+
+  it.each([
+    "success",
+    "lost_capture_ack",
+    "quarantine",
+    "lost_settle_ack",
+    "failed",
+    "cancelled",
+    "incomplete",
+    "lost_terminal_ack",
+    "quarantine_failed",
+    "running_slots",
+  ] as const)(
+    "connects isolated actor bootstrap to native control/capture PostgreSQL: %s",
+    async (fault) => {
+      const terminalStatus =
+        fault === "cancelled" || fault === "incomplete"
+          ? fault
+          : ["failed", "lost_terminal_ack", "quarantine_failed", "running_slots"].includes(fault)
+            ? "failed"
+            : "completed";
+      const terminal = terminalStatus !== "completed";
+      const extraId = uuidv7();
+      await documents.reserve({
+        id: extraId,
+        ownerUserId: owner,
+        applicationId: uuidv7(),
+        jobRevision: "a".repeat(64),
+        confirmedFactsHash: "b".repeat(64),
+      });
+      const pools: postgres.Sql[] = [];
+      const privateEnv = (name: string, version: string, flag: string) => ({
+        [flag]: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: name,
+        AWS_LAMBDA_FUNCTION_VERSION: version,
+        AWS_SESSION_TOKEN: "synthetic-session-token",
+        DATABASE_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+      });
+      const createPool = (
+        url: string,
+        options: { max: 1; idle_timeout: 20; connect_timeout: 10 },
+      ) => {
+        expect(options.max).toBe(1);
+        const pool = postgres(url, options);
+        pools.push(pool);
+        return pool;
+      };
+      const resolveDatabaseUrl = async () => databaseUrl ?? "postgres://invalid";
+      const control = createCoverLetterProviderControlLambda({
+        environment: () =>
+          privateEnv("synthetic-control", "3", "COVER_LETTER_PROVIDER_CONTROL_ENABLED"),
+        resolveDatabaseUrl,
+        createPool,
+      });
+      const capture = createCoverLetterResponseCaptureLambda({
+        environment: () =>
+          privateEnv("synthetic-capture", "5", "COVER_LETTER_RESPONSE_CAPTURE_ENABLED"),
+        resolveDatabaseUrl,
+        createPool,
+      });
+      let lost = false;
+      const f = await isolatedProviderFixture({
+        documentId: extraId,
+        now: new Date(),
+        terminalStatus,
+        rpc: async (input, target) => {
+          const output = target.endsWith("synthetic-control:3")
+            ? await control(input, { invokedFunctionArn: target })
+            : await capture(input, { invokedFunctionArn: target });
+          if (
+            input.action === "record_creation" &&
+            (fault === "quarantine" || fault === "quarantine_failed")
+          )
+            await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+          if (
+            !lost &&
+            ((fault === "lost_capture_ack" && input.action === "record_creation") ||
+              (fault === "lost_settle_ack" && input.action === "settle") ||
+              (fault === "lost_terminal_ack" && input.action === "settle_terminal"))
+          ) {
+            lost = true;
+            throw Error("SyntheticLostCommittedPrivateACK");
+          }
+          return output;
+        },
+      });
+      const issued = await work.issue({
+        ownerUserId: owner,
+        documentId: extraId,
+        purpose: "provider_dispatch",
+        requestSha256: f.input.request.sha256,
+        consentExpiresAt: f.expiresAt,
+      });
+      const extraRef: CoverLetterWorkReference = {
+        id: issued.authorization.id,
+        documentId: extraId,
+        purpose: "provider_dispatch",
+        requestSha256: f.input.request.sha256,
+      };
+      let slotsReference: CoverLetterWorkReference | undefined;
+      if (fault === "running_slots") {
+        const slots = await work.issue({
+          ownerUserId: owner,
+          documentId: extraId,
+          purpose: "private_slots",
+          requestSha256: f.input.request.sha256,
+          consentExpiresAt: f.expiresAt,
+        });
+        slotsReference = {
+          id: slots.authorization.id,
+          documentId: extraId,
+          purpose: "private_slots",
+          requestSha256: f.input.request.sha256,
+        };
+        await work.claim(slotsReference);
+      }
+      try {
+        expect((await f.call()).outcome).toBe(
+          fault.startsWith("lost_") ? "in_progress" : terminal ? "failed" : "ready",
+        );
+        expect((await f.call()).outcome).toBe(
+          fault === "lost_capture_ack" || terminal ? "in_progress" : "ready",
+        );
+        const [row] =
+          await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${extraRef.id}`;
+        expect(row?.state).toBe(fault === "lost_capture_ack" ? "running" : "settled");
+        const inventory = await store.read(extraRef);
+        expect(inventory?.state).toBe("acknowledged");
+        expect(inventory?.response?.responseId).toBe("resp_syntheticBootstrap1");
+        expect(lost).toBe(fault.startsWith("lost_"));
+        expect(f.modelFetch).toHaveBeenCalledTimes(1);
+        expect(f.createObjectClient).toHaveBeenCalledTimes(1);
+        expect(f.createLambdaClient).toHaveBeenCalledTimes(1);
+        expect(pools).toHaveLength(2);
+        expect((await store.readFailed(extraRef))?.state ?? null).toBe(
+          terminal ? "acknowledged" : null,
+        );
+        if (terminal) {
+          const [proof] =
+            await sql`SELECT provider_failure FROM documents.cover_letter_work_authorizations WHERE id = ${extraRef.id}`;
+          expect(proof?.provider_failure).toBe(terminalStatus);
+          const result = await f.objects.find(extraId, "result");
+          if (!result) throw Error("SyntheticMissingPendingResult");
+          expect(
+            decodeCoverLetterProviderObject(
+              "result",
+              await f.objects.read(extraId, "result", result),
+            ),
+          ).toMatchObject({ state: "pending" });
+          const phases = await sql<
+            Array<{ purpose: string; state: string }>
+          >`SELECT purpose, state FROM documents.cover_letter_work_authorizations WHERE document_id = ${extraId} ORDER BY purpose`;
+          expect(phases.filter((row) => row.purpose !== "provider_dispatch")).toEqual([
+            { purpose: "final_document", state: "revoked" },
+            { purpose: "private_slots", state: fault === "running_slots" ? "running" : "revoked" },
+          ]);
+          if (fault === "running_slots")
+            expect(await work.readDrainState(owner, extraId)).toBe("pending");
+          const actions = f.invoke.mock.calls.map(
+            ([command]) =>
+              JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array)).action,
+          );
+          expect(actions).toEqual(["claim", "reserve", "record_creation", "settle_terminal"]);
+          if (fault !== "quarantine_failed")
+            expect(
+              (await work.claimFinalDocument({ ownerUserId: owner, documentId: extraId })).kind,
+            ).toBe("unavailable");
+        }
+        if (fault === "quarantine" || fault === "quarantine_failed")
+          await expect(
+            work.claimFinalDocument({ ownerUserId: owner, documentId: extraId }),
+          ).rejects.toThrow();
+      } finally {
+        await Promise.all(pools.map((pool) => pool.end()));
+        const inventory = await store.read(extraRef);
+        if (inventory?.state === "acknowledged" && inventory.response)
+          await store.recordDisposal(extraRef, {
+            kind: "response_deleted",
+            reference: inventory.response,
+            terminalStatus,
+          });
+        if (slotsReference) await work.recordSettled(slotsReference); // Synthetic cleanup only.
+        await work.recordSettled(extraRef); // Explicit synthetic fixture cleanup only.
+        await work.revokeUnclaimed(owner, extraId);
+        await sql`DELETE FROM documents.cover_letters WHERE id = ${extraId}`;
+      }
+    },
+  );
 
   it.each([
     "failed",
@@ -1090,6 +1457,327 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     },
   );
 
+  it.each([
+    "active",
+    "generic_fence",
+    "legacy_settled",
+    "successful",
+    "quarantined",
+    "not_dispatched",
+  ] as const)(
+    "refuses misclassified failure cleanup before fencing/provider I/O: %s",
+    async (kind) => {
+      await reserve();
+      if (kind !== "not_dispatched") await store.recordCreation(ref, response());
+      if (kind === "generic_fence") await work.fenceForCleanup(ref);
+      if (kind === "legacy_settled") {
+        await work.recordSettled(ref);
+        await work.fenceForCleanup(ref);
+      }
+      if (kind === "successful") await work.settleProviderDispatch(ref);
+      if (kind === "not_dispatched") await work.settleUndispatchedProviderDispatch(ref);
+      if (kind === "quarantined")
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+      const before =
+        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
+      const fenceForCleanup = vi.fn(work.fenceForCleanup.bind(work));
+      const stopAndDelete = vi.fn(async () => receipt(response()));
+      const reconcile = createCoverLetterResponseReconciler({
+        work: { fenceForCleanup },
+        responses: store,
+        cleanup: { stopAndDelete },
+        enabled: () => true,
+      });
+      expect(await store.readFailed(ref)).toBeNull();
+      expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
+      expect(fenceForCleanup).not.toHaveBeenCalled();
+      expect(stopAndDelete).not.toHaveBeenCalled();
+      expect(
+        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
+      ).toEqual(before);
+    },
+  );
+  it.each(["failed", "cancelled", "incomplete"] as const)(
+    "retains immutable original failure classification and exact ownership: %s",
+    async (status) => {
+      await reserve();
+      const original = response();
+      await store.recordCreation(ref, original);
+      const terminal = {
+        kind: "terminal_no_content" as const,
+        reference: original,
+        terminalStatus: status,
+      };
+      await work.settleTerminalProviderDispatch(ref, terminal);
+      const before =
+        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`;
+      expect((await store.readFailed(ref))?.state).toBe("acknowledged");
+      await work.settleTerminalProviderDispatch(ref, terminal);
+      expect(
+        await sql`SELECT * FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId} ORDER BY purpose`,
+      ).toEqual(before);
+      await expect(
+        work.settleTerminalProviderDispatch(ref, {
+          ...terminal,
+          terminalStatus: status === "failed" ? "cancelled" : "failed",
+        }),
+      ).rejects.toThrow(/^CoverLetterWorkUnavailable$/u);
+      await expect(work.settleRejectedProviderDispatch(ref)).rejects.toThrow(
+        /^CoverLetterWorkUnavailable$/u,
+      );
+      for (const other of [
+        { ...ref, id: uuidv7() },
+        { ...ref, documentId: uuidv7() },
+        { ...ref, requestSha256: "b".repeat(64) },
+      ])
+        expect(await store.readFailed(other)).toBeNull();
+      await expect(
+        sql`UPDATE documents.cover_letter_work_authorizations SET provider_failure = NULL WHERE id = ${ref.id}`,
+      ).rejects.toThrow();
+      await expect(
+        sql`UPDATE documents.cover_letter_work_authorizations SET provider_failure = 'output_rejected' WHERE id = ${ref.id}`,
+      ).rejects.toThrow();
+      await store.recordDisposal(ref, {
+        kind: "response_deleted",
+        reference: original,
+        terminalStatus: status,
+      });
+      expect((await store.readFailed(ref))?.state).toBe("disposed");
+      expect(await store.readCompleted(ref)).toBeNull();
+    },
+  );
+  it("cannot retrofit failure proof on a previous unclassified settlement", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    await work.recordSettled(ref);
+    await work.settleTerminalProviderDispatch(ref, {
+      kind: "terminal_no_content",
+      reference: original,
+      terminalStatus: "failed",
+    });
+    expect(await store.readFailed(ref)).toBeNull();
+    const [row] =
+      await sql`SELECT provider_failure FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+    expect(row?.provider_failure).toBeNull();
+    await expect(
+      sql`UPDATE documents.cover_letter_work_authorizations SET provider_failure = 'failed' WHERE id = ${ref.id}`,
+    ).rejects.toThrow();
+  });
+  it("failure proof cannot be inserted, written before settlement or assigned to another phase", async () => {
+    await expect(
+      sql`UPDATE documents.cover_letter_work_authorizations SET provider_failure = 'failed' WHERE id = ${ref.id}`,
+    ).rejects.toThrow();
+    await reserve();
+    await expect(
+      sql`UPDATE documents.cover_letter_work_authorizations SET provider_failure = 'failed' WHERE id = ${ref.id}`,
+    ).rejects.toThrow();
+    const [binding] = await sql<
+      Array<{ expires: Date }>
+    >`SELECT consent_expires_at AS expires FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+    if (!binding) throw Error("SyntheticMissingConsentBinding");
+    const slots = await work.issue({
+      ownerUserId: owner,
+      documentId,
+      purpose: "private_slots",
+      requestSha256: ref.requestSha256,
+      consentExpiresAt: binding.expires,
+    });
+    const slotsRef = {
+      id: slots.authorization.id,
+      documentId,
+      purpose: "private_slots" as const,
+      requestSha256: ref.requestSha256,
+    };
+    await work.claim(slotsRef);
+    await expect(
+      sql`UPDATE documents.cover_letter_work_authorizations SET state = 'settled', terminal_at = clock_timestamp(), provider_failure = 'failed' WHERE id = ${slotsRef.id}`,
+    ).rejects.toThrow();
+    await work.recordSettled(slotsRef);
+  });
+  it("rejected completed output is eligible only for its original completed disposal", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    await work.settleRejectedProviderDispatch(ref);
+    expect((await store.readFailed(ref))?.state).toBe("acknowledged");
+    const fenceForCleanup = vi.fn(work.fenceForCleanup.bind(work));
+    const reconcile = createCoverLetterResponseReconciler({
+      work: { fenceForCleanup },
+      responses: store,
+      cleanup: {
+        stopAndDelete: async () => ({
+          kind: "response_deleted",
+          reference: original,
+          terminalStatus: "completed",
+        }),
+      },
+      enabled: () => true,
+    });
+    expect(await reconcile(ref, new AbortController().signal)).toEqual({
+      kind: "response_disposed",
+      reference: ref,
+    });
+    expect(fenceForCleanup).toHaveBeenCalledTimes(1);
+    await work.settleRejectedProviderDispatch(ref);
+    expect((await store.readFailed(ref))?.state).toBe("disposed");
+  });
+  it("a disposed terminal status inconsistent with original failure is withheld", async () => {
+    await reserve();
+    const original = response();
+    await store.recordCreation(ref, original);
+    await work.settleTerminalProviderDispatch(ref, {
+      kind: "terminal_no_content",
+      reference: original,
+      terminalStatus: "failed",
+    });
+    await store.recordDisposal(ref, {
+      kind: "response_deleted",
+      reference: original,
+      terminalStatus: "completed",
+    });
+    expect(await store.readFailed(ref)).toBeNull();
+    expect(await store.readCompleted(ref)).toBeNull();
+  });
+
+  it.each([
+    "failed",
+    "cancelled",
+    "incomplete",
+    "output_rejected",
+    "active",
+    "legacy",
+    "unknown",
+    "quarantined",
+    "lost_read_ack",
+    "wrong_target",
+  ] as const)(
+    "connects failure eligibility through native SQL bootstrap/private RPC before maintenance: %s",
+    async (fault) => {
+      await reserve();
+      const original = response();
+      const status: "completed" | "failed" | "cancelled" | "incomplete" =
+        fault === "cancelled" || fault === "incomplete"
+          ? fault
+          : fault === "output_rejected"
+            ? "completed"
+            : "failed";
+      if (fault !== "unknown") await store.recordCreation(ref, original);
+      if (fault === "legacy") await work.recordSettled(ref);
+      else if (fault === "output_rejected") await work.settleRejectedProviderDispatch(ref);
+      else if (fault !== "active" && fault !== "unknown")
+        await work.settleTerminalProviderDispatch(ref, {
+          kind: "terminal_no_content",
+          reference: original,
+          terminalStatus: status === "completed" ? "failed" : status,
+        });
+      if (fault === "quarantined")
+        await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = clock_timestamp() WHERE id = ${owner}`;
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-disposal:7";
+      const pools: postgres.Sql[] = [];
+      const run = createCoverLetterResponseDisposalLambda({
+        environment: () => ({
+          COVER_LETTER_RESPONSE_DISPOSAL_ENABLED: "true",
+          AWS_REGION: "us-east-2",
+          PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+          AWS_LAMBDA_FUNCTION_NAME: "synthetic-disposal",
+          AWS_LAMBDA_FUNCTION_VERSION: "7",
+          AWS_SESSION_TOKEN: "synthetic-session-token",
+          DATABASE_SECRET_ID:
+            "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+        }),
+        resolveDatabaseUrl: async () => databaseUrl ?? "postgres://invalid",
+        createPool: (url, options) => {
+          expect(options.max).toBe(1);
+          const pool = postgres(url, { ...options, onnotice: () => undefined });
+          pools.push(pool);
+          return pool;
+        },
+      });
+      const actions: string[] = [];
+      let lost = false;
+      const client = new CoverLetterResponseDisposalClient(
+        target,
+        {
+          config: { maxAttempts: async () => 1 },
+          send: async (command) => {
+            const input = JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array));
+            actions.push(input.action);
+            const output = await run(input, {
+              invokedFunctionArn: fault === "wrong_target" ? target.replace(":7", ":8") : target,
+            });
+            if (fault === "lost_read_ack" && !lost) {
+              lost = true;
+              throw Error("SyntheticEligibilityLostACK");
+            }
+            return {
+              StatusCode: 200,
+              ExecutedVersion: "7",
+              Payload: new TextEncoder().encode(JSON.stringify(output)),
+            };
+          },
+        },
+        () => true,
+      );
+      const fenceForCleanup = vi.fn(work.fenceForCleanup.bind(work));
+      const stopAndDelete = vi.fn(async () => ({
+        kind: "response_deleted" as const,
+        reference: original,
+        terminalStatus: status,
+      }));
+      const reconcile = createCoverLetterResponseReconciler({
+        work: { fenceForCleanup },
+        responses: client,
+        cleanup: { stopAndDelete },
+        enabled: () => true,
+      });
+      try {
+        const eligible = !["active", "legacy", "unknown", "lost_read_ack", "wrong_target"].includes(
+          fault,
+        );
+        expect(await reconcile(ref, new AbortController().signal)).toEqual(
+          eligible ? { kind: "response_disposed", reference: ref } : { kind: "unresolved" },
+        );
+        expect(actions).toEqual(
+          eligible ? ["read_failed", "record_disposal", "read_failed"] : ["read_failed"],
+        );
+        expect(fenceForCleanup).toHaveBeenCalledTimes(eligible ? 1 : 0);
+        expect(stopAndDelete).toHaveBeenCalledTimes(eligible ? 1 : 0);
+        if (eligible || fault === "lost_read_ack") {
+          expect(await reconcile(ref, new AbortController().signal)).toEqual({
+            kind: "response_disposed",
+            reference: ref,
+          });
+          expect(stopAndDelete).toHaveBeenCalledTimes(1);
+        }
+        expect(pools).toHaveLength(fault === "wrong_target" ? 0 : 1);
+        expect(lost).toBe(fault === "lost_read_ack");
+      } finally {
+        await Promise.all(pools.map((pool) => pool.end()));
+      }
+    },
+  );
+
+  async function runningSlots() {
+    const [binding] = await sql<
+      Array<{ expires: Date }>
+    >`SELECT consent_expires_at AS expires FROM documents.cover_letter_work_authorizations WHERE id = ${ref.id}`;
+    if (!binding) throw Error("SyntheticMissingConsent");
+    const issued = await work.issue({
+      ownerUserId: owner,
+      documentId,
+      purpose: "private_slots",
+      requestSha256: ref.requestSha256,
+      consentExpiresAt: binding.expires,
+    });
+    await work.claim({
+      id: issued.authorization.id,
+      documentId,
+      purpose: "private_slots",
+      requestSha256: ref.requestSha256,
+    });
+  }
+
   function disposalTransport(original: ReturnType<typeof response>, loseDeleteAck = false) {
     const methods: string[] = [];
     let deleted = false;
@@ -1121,17 +1809,23 @@ describe.skipIf(!requested)("original provider response inventory with real Post
             store: false,
             previous_response_id: null,
             tools: [],
-            status: method === "POST" ? "cancelled" : "in_progress",
+            status: "failed",
           }),
         );
       },
     });
     return { cleanup, methods };
   }
-  it("abandoned response disposal follows the permanent fence without settling writers or granting purge", async () => {
+  it("original failed response disposal follows owned failure eligibility and grants no object purge", async () => {
     await reserve();
     const original = response();
     await store.recordCreation(ref, original);
+    await runningSlots();
+    await work.settleTerminalProviderDispatch(ref, {
+      kind: "terminal_no_content",
+      reference: original,
+      terminalStatus: "failed",
+    });
     const transport = disposalTransport(original);
     const reconcile = createCoverLetterResponseReconciler({
       work,
@@ -1143,7 +1837,7 @@ describe.skipIf(!requested)("original provider response inventory with real Post
       kind: "response_disposed",
       reference: ref,
     });
-    expect(transport.methods).toEqual(["GET", "POST", "DELETE"]);
+    expect(transport.methods).toEqual(["GET", "DELETE"]);
     expect((await store.read(ref))?.state).toBe("disposed");
     expect(await work.readDrainState(owner, documentId)).toBe("pending");
     await expect(
@@ -1164,7 +1858,7 @@ describe.skipIf(!requested)("original provider response inventory with real Post
       kind: "response_disposed",
       reference: ref,
     });
-    expect(transport.methods).toHaveLength(3);
+    expect(transport.methods).toHaveLength(2);
     expect(
       await sql`SELECT * FROM documents.cover_letter_provider_responses WHERE work_id = ${ref.id}`,
     ).toEqual(before);
@@ -1173,11 +1867,18 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await reserve();
     const original = response();
     await store.recordCreation(ref, original);
+    await runningSlots();
+    await work.settleTerminalProviderDispatch(ref, {
+      kind: "terminal_no_content",
+      reference: original,
+      terminalStatus: "failed",
+    });
     const transport = disposalTransport(original);
     const lost = createCoverLetterResponseReconciler({
       work,
       responses: {
         read: store.read.bind(store),
+        readFailed: store.readFailed.bind(store),
         recordDisposal: async (binding, positive) => {
           await store.recordDisposal(binding, positive);
           throw Error("SyntheticCommittedSqlDisposalLostACK");
@@ -1192,10 +1893,10 @@ describe.skipIf(!requested)("original provider response inventory with real Post
       kind: "response_disposed",
       reference: ref,
     });
-    expect(transport.methods).toHaveLength(3);
+    expect(transport.methods).toHaveLength(2);
     expect(await work.readDrainState(owner, documentId)).toBe("pending");
   });
-  it("unknown creation identity is permanently fenced but cannot be guessed or disposed", async () => {
+  it("unknown creation identity has no eligibility and cannot be guessed, fenced or disposed", async () => {
     await reserve();
     const transport = disposalTransport(response());
     const reconcile = createCoverLetterResponseReconciler({
@@ -1207,12 +1908,18 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
     expect(transport.methods).toEqual([]);
     expect(await store.read(ref)).toEqual({ reference: ref, state: "reserved", response: null });
-    expect(await work.readDrainState(owner, documentId)).toBe("pending");
+    expect(await work.readDrainState(owner, documentId)).toBe("untracked");
   });
   it("lost remote deletion ACK and later 404 never substitute for positive durable disposal", async () => {
     await reserve();
     const original = response();
     await store.recordCreation(ref, original);
+    await runningSlots();
+    await work.settleTerminalProviderDispatch(ref, {
+      kind: "terminal_no_content",
+      reference: original,
+      terminalStatus: "failed",
+    });
     const transport = disposalTransport(original, true);
     const reconcile = createCoverLetterResponseReconciler({
       work,
@@ -1222,7 +1929,7 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     });
     expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
     expect(await reconcile(ref, new AbortController().signal)).toEqual({ kind: "unresolved" });
-    expect(transport.methods).toEqual(["GET", "POST", "DELETE", "GET"]);
+    expect(transport.methods).toEqual(["GET", "DELETE", "GET"]);
     expect((await store.read(ref))?.state).toBe("acknowledged");
     await expect(
       sql`DELETE FROM documents.cover_letters WHERE id = ${documentId}`,
@@ -1232,6 +1939,12 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await reserve();
     const original = response();
     await store.recordCreation(ref, original);
+    await runningSlots();
+    await work.settleTerminalProviderDispatch(ref, {
+      kind: "terminal_no_content",
+      reference: original,
+      terminalStatus: "failed",
+    });
     await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${owner}`;
     const transport = disposalTransport(original);
     const reconcile = createCoverLetterResponseReconciler({
@@ -1250,6 +1963,12 @@ describe.skipIf(!requested)("original provider response inventory with real Post
     await reserve();
     const original = response();
     await store.recordCreation(ref, original);
+    await runningSlots();
+    await work.settleTerminalProviderDispatch(ref, {
+      kind: "terminal_no_content",
+      reference: original,
+      terminalStatus: "failed",
+    });
     const transport = disposalTransport(original);
     const reconcile = createCoverLetterResponseReconciler({
       work: {
