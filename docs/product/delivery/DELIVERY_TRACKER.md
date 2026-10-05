@@ -3785,3 +3785,14 @@ shared volumes retained, Docker/WSL stopped. Workflow fixtures, legacy transitio
 isolation and clean full verification remain. Private WIP only, with simulated identity/key authority;
 no production activation, deployed acceptance or D1/D3 completion.
 [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 completes offline protection composition in five maintained Workflow fixtures:
+39 targeted PostgreSQL cases pass, with the three evidence cases isolated in a separate cluster to
+preserve Jobs' cross-database reader-grant guard. Workflow build and 1,613 units pass. Applications
+acceptance cleanup now counts all three preparation and both restricted relations; two real SQL
+cases verify nonempty restricted ciphertext/audit deletion and preservation of another candidate.
+Applications build and 314 units pass. Both owned fixtures removed; shared volumes retained and
+Docker/WSL stopped. Native protected metadata carry still needs composition without decryption
+capability, plus legacy transition, artifact isolation and clean full verification. Private WIP only;
+no production activation, deployed acceptance or D1/D3 phase completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.

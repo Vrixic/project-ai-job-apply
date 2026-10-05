@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
+  type ApplicationStoreOptions,
   createApplicationsDatabase,
+  defaultFieldDefinitions,
   PostgresApplicationStore,
 } from "@ai-job-apply/applications-service";
 import { GetDurableExecutionCommand, LambdaClient } from "@aws-sdk/client-lambda";
@@ -13,6 +15,14 @@ import {
   createApplicationPreparationRecoveryLambda,
   createApplicationPreparationRecoveryRuntime,
 } from "./application-preparation-recovery-lambda.js";
+
+const { createSyntheticPacketProtection } = await import(
+  new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+);
+const packetProtection = createSyntheticPacketProtection() as {
+  options: NonNullable<ApplicationStoreOptions["restrictedPackets"]>;
+  destroy(): void;
+};
 
 const requested = process.env.PRIVATE_PREPARATION_RECOVERY_INTEGRATION === "1";
 const url = process.env.PRIVATE_PREPARATION_RECOVERY_TEST_DATABASE_URL ?? "postgres://invalid";
@@ -52,6 +62,7 @@ describe.skipIf(!requested)("native recovery through owning Applications ledger"
   });
   afterEach(() => vi.restoreAllMocks());
   afterAll(async () => {
+    packetProtection.destroy();
     await Promise.all(runtimes.map((runtime) => runtime.close()));
     await sql.end();
   });
@@ -70,7 +81,10 @@ describe.skipIf(!requested)("native recovery through owning Applications ledger"
     "nudge_sdk_retry",
   ] as const)("recovers original owning work: %s", async (fault) => {
     let now = new Date();
-    const store = new PostgresApplicationStore(sql, () => now);
+    const store = new PostgresApplicationStore(sql, () => now, {
+      definitions: defaultFieldDefinitions(),
+      restrictedPackets: packetProtection.options,
+    });
     const owner = uuidv7();
     await sql`INSERT INTO identity.users (id) VALUES (${owner})`;
     const created = await store.createApplication({

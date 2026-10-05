@@ -426,6 +426,48 @@ identical. Docker Desktop stopped and WSL reports no running distributions. This
 local WIP without full maintained-verifier, publication, activation or phase-completion claims.
 Workflow fixtures, legacy transition, artifact isolation and clean full verification remain.
 
+## Maintained Workflow fixtures and exact acceptance cleanup inventory
+
+Five maintained Workflow integration modules now explicitly supply the shared per-module offline
+packet authority to their owning Applications stores, retaining their original synthetic identity
+setup, field policies and native/provider test transports. All 39 targeted PostgreSQL cases pass:
+four preparation/starter/recovery modules pass 36 cases in the initial run; all three owning evidence
+cases pass in a separate cluster. The initial multi-database cluster was deliberately rejected by
+Jobs' public-reader direct-grant guard because the role had CONNECT on another fixture database.
+The final evidence rerun uses an independent generated cluster; no migration or role guard is
+weakened. These cases prove maintained fixture compatibility and ordinary accepted preparation
+behavior, not native protected-value carry or actual cloud/provider execution.
+
+Workflow build and all 1,613 unit cases pass (57 opt-in/database cases skipped in the unit run).
+Logs: `.tmp/d3-restricted-workflow-sql.log` (initial four-module pass plus superseded evidence
+setup failure), `.tmp/d3-restricted-workflow-evidence-sql.log` (final three-case pass),
+`.tmp/d3-restricted-workflow-unit.log`. Scoped Biome passes for all five modules.
+
+The Applications lifecycle acceptance utility's owning inventory now includes its three preparation
+relations and both private packet relations for each exact fixture candidate. Its real PostgreSQL
+fixture now creates a user-entered restricted boolean in every lifecycle packet. Both cleanup/
+contamination cases pass with nonempty protected snapshots and read audit. Explicit checks prove
+exact removal of the target's ciphertext/audit while preserving another candidate's counts and
+original readable applied packet. The utility continues to invoke the authorized owning deletion
+port and refuses contaminated boundaries. Applications build and all 314 units pass.
+Logs: `.tmp/d3-restricted-lifecycle-cleanup-sql.log`, `.tmp/d3-restricted-lifecycle-build.log`,
+`.tmp/d3-restricted-lifecycle-unit.log`.
+
+Owned tmpfs fixture IDs
+`018e72847dae7441268d60d19c76c6c851fd937f7734bda7374358ee48db0c46` and
+`896f250e387ad9a6c33e99d91c7324860ac13915da294f976d1e46182cb672f4` were checked against
+exact IDs/names/labels/tmpfs and absence of mounts, then removed. Shared volume inventories stayed
+identical. Docker Desktop stopped and WSL reports no running distributions. All identities,
+AES/HMAC keys, vault/provider/Lambda/S3/SQS transports and artifacts are synthetic/offline; no AWS,
+managed OIDC, production grants, provider, ATS, deployment or activation evidence is claimed.
+
+Source inspection identifies a remaining integration requirement: protected preparation carry in
+`store.ts` currently obtains its synchronous metadata codec through the configured cipher boundary,
+while the native preparation runtime intentionally has no packet cipher. The ordinary native cases
+above do not cover this path. Complete exact metadata-only carry without granting native/provider
+actors a decryption capability, and verify it through actual native composition and artifact isolation
+before claiming the whole slice complete. Legacy transition and clean full verification remain.
+
 ## Next work
 
 Finish legacy migration compatibility and all maintained integration/runtime protection fixtures;

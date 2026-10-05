@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { ModelGateway } from "@ai-job-apply/ai-sdk";
 import {
+  type ApplicationStoreOptions,
   createApplicationsDatabase,
   type FieldDefinition,
   PostgresApplicationStore,
@@ -42,6 +43,14 @@ import {
   createApplicationPreparationLambda,
   createApplicationPreparationRuntime,
 } from "./application-preparation-lambda.js";
+
+const { createSyntheticPacketProtection } = await import(
+  new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+);
+const packetProtection = createSyntheticPacketProtection() as {
+  options: NonNullable<ApplicationStoreOptions["restrictedPackets"]>;
+  destroy(): void;
+};
 
 const requested = process.env.PRIVATE_PREPARATION_INTEGRATION === "1";
 const databaseUrl = process.env.PRIVATE_PREPARATION_TEST_DATABASE_URL;
@@ -103,6 +112,7 @@ describe.skipIf(!requested)(
     const nativeRuntimes: Array<{ close: () => Promise<void> }> = [];
     afterEach(() => vi.restoreAllMocks());
     afterAll(async () => {
+      packetProtection.destroy();
       await Promise.all(nativeRuntimes.map((runtime) => runtime.close()));
       await LocalDurableTestRunner.teardownTestEnvironment();
       await Promise.all([
@@ -136,6 +146,7 @@ describe.skipIf(!requested)(
         let revealResult = fault !== "delayed_result";
         const applications = new PostgresApplicationStore(applicationsDb, () => now, {
           definitions,
+          restrictedPackets: packetProtection.options,
         });
         const user = await profile.resolveUser(
           {

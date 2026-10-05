@@ -34,7 +34,15 @@ describeWithDatabase("Applications lifecycle acceptance fixture over PostgreSQL"
         return {
           jobRevision: HASH_A,
           form: { adapterId: "synthetic-acceptance", variantId: "v1", formHash: HASH_B },
-          fields: [proposal({ value: "generated-value@example.test" })],
+          fields: [
+            proposal({ value: "generated-value@example.test" }),
+            proposal({
+              fieldKey: "authorization.us_authorized",
+              value: false,
+              origin: "user_entered",
+              sourceFactIds: [],
+            }),
+          ],
           artifactHashes: { resume: HASH_C },
         };
       },
@@ -103,7 +111,7 @@ describeWithDatabase("Applications lifecycle acceptance fixture over PostgreSQL"
       {
         expectedRevision: prepared.revision,
         packetHash: prepared.currentPacket?.packetHash ?? "",
-        acknowledgedFieldKeys: [],
+        acknowledgedFieldKeys: ["authorization.us_authorized"],
       },
       key("approve"),
     );
@@ -156,6 +164,17 @@ describeWithDatabase("Applications lifecycle acceptance fixture over PostgreSQL"
     return row;
   }
 
+  async function protectedPresence(owner: string) {
+    const [row] = await client<{ values: number; audits: number }[]>`
+      SELECT
+        (SELECT count(*)::int FROM applications_restricted.packet_values
+          WHERE owner_user_id = ${owner}) AS values,
+        (SELECT count(*)::int FROM applications_restricted.packet_read_audit
+          WHERE owner_user_id = ${owner}) AS audits
+    `;
+    return row;
+  }
+
   it("prepares exactly two identities, then removes them and the lifecycle data exactly", async () => {
     const fixture = input("prepare");
     expect(await executeApplicationsAcceptance(client, fixture)).toMatchObject({
@@ -169,9 +188,14 @@ describeWithDatabase("Applications lifecycle acceptance fixture over PostgreSQL"
     const applicationId = await appliedApplication(fixture.ownerUserId);
     expect(await presence(fixture)).toEqual({ users: 2, identities: 2, applications: 1 });
 
+    const protectedBefore = await protectedPresence(fixture.ownerUserId);
+    expect(protectedBefore?.values).toBe(1);
+    expect(protectedBefore?.audits).toBeGreaterThan(0);
+
     const survivor = uuidv7();
     await client`INSERT INTO identity.users (id) VALUES (${survivor})`;
     const survivorApplication = await appliedApplication(survivor);
+    const survivorProtectedBefore = await protectedPresence(survivor);
     try {
       const cleanup = { ...fixture, action: "cleanup" as const };
       delete (cleanup as { at?: Date }).at;
@@ -184,6 +208,8 @@ describeWithDatabase("Applications lifecycle acceptance fixture over PostgreSQL"
         applicationsDeleted: 1,
       });
       expect(await presence(fixture)).toEqual({ users: 0, identities: 0, applications: 0 });
+      expect(await protectedPresence(fixture.ownerUserId)).toEqual({ values: 0, audits: 0 });
+      expect(await protectedPresence(survivor)).toEqual(survivorProtectedBefore);
       await expect(service.get(fixture.ownerUserId, applicationId)).rejects.toMatchObject({
         name: "ApplicationNotFoundError",
       });
