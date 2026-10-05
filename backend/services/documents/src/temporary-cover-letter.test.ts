@@ -349,6 +349,73 @@ describe("Documents temporary cover-letter completion and reads", () => {
     );
   });
 
+  it("refuses completion when current evidence changes during verification", async () => {
+    const f = setup();
+    let held: Parameters<Renderer>[0] | undefined;
+    f.render.mockImplementation(async (document, ...args) => {
+      held = document;
+      f.changeEvidence();
+      return syntheticRenderer(document, ...args);
+    });
+    await expect(f.service.complete(f.identity, generation(), NOW)).rejects.toThrow(
+      "TemporaryMaterialUnavailable",
+    );
+    expect(held?.paragraphs).toEqual([]);
+  });
+
+  it("refuses and clears a download when evidence changes during rendering", async () => {
+    const f = setup();
+    const ready = await f.service.complete(f.identity, generation(), NOW);
+    let artifact: ApplicationCoverLetterFile | undefined;
+    f.render.mockImplementation(async (...args) => {
+      artifact = await syntheticRenderer(...args);
+      f.changeEvidence();
+      return artifact;
+    });
+    await expect(f.service.file(ready.reference, "pdf")).rejects.toThrow(
+      "TemporaryMaterialUnavailable",
+    );
+    expect(artifact?.contentBase64).toBe("");
+    await expect(f.service.binding(ready.reference)).rejects.toThrow(
+      "TemporaryMaterialUnavailable",
+    );
+  });
+
+  it("expiry actively clears rendered output while the final context check is stalled", async () => {
+    vi.useFakeTimers();
+    const f = setup();
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      const ready = await f.service.complete(f.identity, generation(), NOW);
+      let artifact: ApplicationCoverLetterFile | undefined;
+      f.render.mockImplementation(async (...args) => {
+        artifact = await syntheticRenderer(...args);
+        return artifact;
+      });
+      f.source.load.mockImplementationOnce(async () => ({ facts: [fact], job }));
+      f.source.load.mockImplementationOnce(async () => {
+        await waiting;
+        return { facts: [fact], job };
+      });
+      const downloading = f.service.file(ready.reference, "pdf");
+      const refused = expect(downloading).rejects.toThrow("TemporaryMaterialUnavailable");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(artifact?.contentBase64).not.toBe("");
+      f.setNow(ready.reference.expiresAtMs);
+      await vi.advanceTimersByTimeAsync(GENERATED_MATERIAL_LIFETIME_MS);
+      expect(artifact?.contentBase64).toBe("");
+      release();
+      await refused;
+    } finally {
+      release();
+      f.store.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it("snapshots generated content and metadata across an asynchronous evidence read", async () => {
     const f = setup();
     const output = generation();

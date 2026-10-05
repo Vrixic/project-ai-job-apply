@@ -56,7 +56,7 @@ and returns fixed errors. DOCX and PDF still pass the production parser before p
 
 ## Verification and remaining work
 
-All 1,228 Documents unit tests pass, including 54 new memory/completion/read cases. Focused
+All 1,231 Documents unit tests pass, including 57 new memory/completion/read cases. Focused
 memory/read/render checks and Documents production build/typecheck pass. Full maintained
 verification remains pending. All 57 general Documents
 real PostgreSQL cases pass against owned tmpfs PostgreSQL 16.14 at loopback port 55448; the 260
@@ -76,3 +76,18 @@ Existing S3 draft/provider-slot creation/recovery/export paths remain contrary t
 cannot activate. Old retained synthetic object versions are not certified erased. No native
 replacement artifact is published or deployed. No UI was changed or exercised, and no human/live
 end-to-end acceptance is claimed. Keep D3-064 and D1/D3 In progress; hosted CI/CD remains deferred.
+
+
+## Async context probe and final source preparation
+
+The first full verifier passes clean `58db6db2` (38 typecheck tasks, 39 test tasks, 23 builds,
+unchanged lint and operational/compiled-isolation checks). A separate actual compiled-service
+probe with simulated original-completion authority/renderer demonstrates a late-context race:
+changed evidence during rendering initially returned a download even though a fresh binding
+read refused it. Completion and file reads now reload current owner context after async rendering
+before publication/return, and clear refused output. The same compiled probe now reports
+`lateReadAllowed: false` and `currentBindingRefused: true`. Three new regressions cover changed
+context during verification/download and active expiry while the final context read is stalled;
+rendered output is cleared before that read returns. All 1,231 Documents units and build pass.
+This remains a point-in-time context check, not cross-owner fact-version serialization or final
+ATS-handoff approval. Full exact-source rerun remains pending the final context fix.

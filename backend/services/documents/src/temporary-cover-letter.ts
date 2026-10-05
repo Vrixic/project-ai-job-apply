@@ -126,7 +126,11 @@ export class TemporaryCoverLetterService {
               this.requireEnabled();
               signal.throwIfAborted();
             }
-            return binding;
+            const current = await this.source.load(reference.ownerUserId, reference.applicationId);
+            this.requireEnabled();
+            signal.throwIfAborted();
+            this.requireContext(draft, current);
+            return coverLetterReadyBinding(draft, current.facts, this.clock());
           }),
         );
         this.requireEnabled();
@@ -208,9 +212,22 @@ export class TemporaryCoverLetterService {
           signal,
         );
         artifact = value;
-        if (signal.aborted) value.contentBase64 = "";
-        signal.throwIfAborted();
-        return { reference: fixed, value };
+        const discard = () => {
+          value.contentBase64 = "";
+        };
+        signal.addEventListener("abort", discard, { once: true });
+        try {
+          if (signal.aborted) discard();
+          signal.throwIfAborted();
+          this.requireContext(
+            document,
+            await this.source.load(fixed.ownerUserId, fixed.applicationId),
+          );
+          signal.throwIfAborted();
+          return { reference: fixed, value };
+        } finally {
+          signal.removeEventListener("abort", discard);
+        }
       });
     } catch {
       if (artifact) artifact.contentBase64 = "";

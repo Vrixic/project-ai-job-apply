@@ -821,3 +821,13 @@ PDF/DOCX and 57 general Documents SQL/1,588 workflow unit cases pass. Full maint
 pending. [Evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md). Native completion/transport,
 resumes, packet admission, lifecycle/browser/provider and deployed acceptance remain; D3-064 and
 D1/D3 stay In progress. No publication, deployment or activation; owner CI/CD deferral retained.
+
+
+2026-10-04 D3-064 memory checkpoint: initial clean 58db6db2 passes full maintained verification
+(38 typecheck tasks, 39 test tasks, 23 builds). A compiled-service synthetic probe exposes late
+context change during rendering; add final context reload and immediate rendered-output cleanup
+while a context read is stalled. All 1,231 Documents units/build and the corrected probe pass;
+full exact-source rerun is pending. [Evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md).
+Native original-completion metadata/transport, resumes, packet/lifecycle/browser/provider and
+accountable/deployed acceptance stay open. No activation, deployment or phase completion;
+Docker/WSL stopped and owner CI/CD deferral retained.
