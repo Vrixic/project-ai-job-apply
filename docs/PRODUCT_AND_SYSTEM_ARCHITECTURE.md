@@ -785,7 +785,19 @@ Each fact has provenance and confidence. Generated claims must link to one or mo
 6. Run factuality, dates, length, grammar, and ATS-format checks.
 7. Render PDF and DOCX.
 8. Compare extracted text from the final rendered file with intended content.
-9. Store a versioned diff and prompt/model metadata.
+9. Show a temporary versioned diff; retain only content hashes and non-content prompt/model metadata.
+
+Generated cover letters and improved/tailored resumes are one-off application materials with an
+absolute 30-minute lifetime from generation completion. Keep their text, candidate edits, diffs,
+and rendered files only in temporary memory; never save them in the database, packet fields,
+object storage, durable workflow history, logs, backups, or persistent browser storage. Clear
+platform copies by expiry (or sooner on cancellation, logout, or completed submission), refuse
+expired reads and submission handoffs, and require fresh review/approval after regeneration.
+Original uploaded resumes keep their separate retention policy. Candidate downloads and copies
+already delivered to an employer are outside platform cleanup. See
+[ADR-038](adr/038-one-off-generated-application-materials.md) and
+[D3-064](product/delivery/phase-3-application-preparation.md) for enforcement work; this is product
+direction, not a claim of deployed expiry.
 
 The generator may emphasize or clarify true experience. It may not invent employers, dates, degrees, skills, metrics, security clearance, or authorization.
 
@@ -1050,7 +1062,7 @@ Set policy before launch:
 - Account/profile: while active; confirmed deletion is non-recoverable, active access ends
   immediately, and inaccessible backup copies age out within the documented window
 - OAuth tokens: revoke and delete immediately on disconnect/account deletion
-- Generated application artifacts: user-controlled retention; default tied to account
+- Generated cover letters and improved/tailored resumes: one-off, maximum 30 minutes from generation completion; no persisted content, including database packet fields ([ADR-038](adr/038-one-off-generated-application-materials.md); enforcement pending D3-064)
 - Raw contributed page snapshots: short operational window, for example 90 days, then delete
 - Public canonical job tombstones: retain minimal non-PII identity/status for dedupe and history
 - Detailed automation logs: short retention, redacted

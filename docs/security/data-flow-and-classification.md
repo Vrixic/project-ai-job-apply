@@ -293,7 +293,8 @@ composition or activation. Never use missing-slot recreation to recover an expir
 |---|---|---|---|
 | Identity mapping and sessions | Identity bounded context; managed OIDC for credentials | Gateway verifier, audited identity operations | Managed-provider security/privacy review |
 | Candidate facts, preferences, answer metadata | Profile bounded context | Candidate, application service through versioned contract | Real-data onboarding approval |
-| Resume and generated documents | Document/application bounded context; encrypted object storage | Candidate, approved renderer/model/ATS workflow only | AI/provider and application delta approval |
+| Original resumes and normalized source documents | Documents bounded context; encrypted object storage | Candidate, approved parser/renderer/model/ATS workflow only | Document/provider and application delta approval |
+| Generated cover letters and improved/tailored resumes | Documents-owned temporary memory; no persisted content, including Applications packet fields; maximum 30 minutes ([ADR-038](../adr/038-one-off-generated-application-materials.md)) | Owning candidate and approved renderer/model/ATS workflow during the window; candidate download/employer copy outside platform cleanup | D3-064 expiry/no-persistence evidence and D3-012 AI/provider approval |
 | Public jobs and provenance | Catalog bounded context | Public clients/search after source policy | Per-source legal approval |
 | Contribution and contributor link | Trust/UGC bounded context | Moderation operations; public catalog excludes identity | UGC/extension approval |
 | Application packet/approval/attempt | Application bounded context | Candidate and authorized workflow/adapter | ATS/application approval |

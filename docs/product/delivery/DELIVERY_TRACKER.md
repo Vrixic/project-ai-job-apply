@@ -2654,6 +2654,13 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
   authoritative Applications-owned technical history through confirmed submission on supported
   ATS sites with measured factuality and field accuracy.
 
+2026-10-04 product-policy update: generated cover letters and improved/tailored resumes are one-off,
+never persisted, and limited to 30 minutes from generation completion under
+[ADR-038](../../adr/038-one-off-generated-application-materials.md). D3-064 is Not started and
+tracks enforcement, prevention of generated content in packet fields, and automated/browser
+cleanup evidence. Deterministic tailoring already avoids persisted content; expiry enforcement
+and deployed cleanup are not claimed. D3 remains In progress.
+
 ## D3.1 - Structured candidate profile
 
 - Status: Not started
