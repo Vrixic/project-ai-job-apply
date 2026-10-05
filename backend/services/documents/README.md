@@ -554,7 +554,8 @@ completion authority and defaults off. The supplied completion timestamp must be
 actor's generation-completion time, not reservation/verification/read/retry time. Missing or
 already-consumed authority refuses reconstruction; no SQL/S3/provider/export capability reaches
 the content store. Metadata-only read replay can use an available exact reference before expiry.
-The native immutable completion authority and private routing/transport still need implementation.
+The original completion authority now has a default-off native SQL/private metadata RPC (below);
+generated-content routing and transport still need implementation.
 
 These modules are source-only and uncomposed. Their returned references must bind future packet
 approval and final ATS handoff; a hash alone cannot identify a regenerated same-text draft.
@@ -564,3 +565,40 @@ clear managed buffers/references but do not prove arbitrary string erasure or re
 quiescence. No restart, renderer failure or cleanup timeout permits restoring a saved draft or
 redispatching an ambiguous submission. Native/provider, resume, packet, lifecycle and browser
 acceptance remain mandatory. See [source evidence](../../../docs/product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).
+
+
+## Native original-completion metadata (D3-064)
+
+`0010_temporary_material_completion.sql` adds only four nullable scalar columns on the existing
+Documents reservation: original work ID, content hash, completion milliseconds and expiry
+milliseconds. Legacy rows remain NULL, without backfill or object-retention approval. The tuple
+is immutable and the expiry is exactly completion plus 1,800,000 milliseconds. First completion
+requires the active owner and matching already-started original provider work, no original failure,
+no previous final writer, a nonfuture original completion and an unexpired fixed lifetime.
+
+`PostgresTemporaryMaterialCompletionStore` serializes Identity -> Documents reservation -> original
+work and admits one original completion. Exact replay reports `already_completed`; conflicting
+hash/time/owner/application/version refuses. This is metadata admission, not content recovery or
+writer settlement. The trusted original generator supplies completion time; SQL cannot independently
+observe a model finishing. New final-document writer grants are refused for these reservations;
+revoked tombstones remain allowed so existing cleanup fencing can complete. Running writers still
+block deletion. No provider response/object inventory is discarded or certified absent here.
+
+Private v1 `claim_original_completion` carries only the closed work/material references and echoes
+all bindings. The client binds one original work, requires a numeric us-east-2 Lambda version,
+status 200/exact ExecutedVersion, canonical bounded UTF-8 JSON, no logs/function errors and one SDK
+attempt. Lost responses return unavailable without refreshing expiry. The lazy native bootstrap
+owns one native-codec SQL connection and stays off under `TEMPORARY_MATERIAL_COMPLETION_ENABLED`.
+Exact target matching does not authenticate its caller; reviewed sender IAM is required before use.
+The emitted control/client exclude content memory, rendering, S3, model generation and work issuance
+or settlement implementations; check with `node --test scripts/tests/temporary-material-completion-bundle.test.mjs`
+after a Documents build. No artifact family, cloud configuration, public route or UI is activated.
+
+Roll out Documents migration 0010 and the current 62-migration/84-relation manifest before this
+control code. Historical release evidence remains bound to its original inventory; old native
+controllers cannot be treated as current restore evidence. Existing NULL reservations retain
+compatibility, but content in historical saved-draft paths still violates ADR-038 and cannot be
+activated. A code rollback cannot renew or remove a recorded completion; memory loss requires new
+preparation and fresh review. Resume integration, memory routing/no-store, packet/ATS expiry,
+client lifecycle, native worker drain and approved provider retention remain open. See
+[local evidence](../../../docs/product/delivery/evidence/d3-original-material-completion-2026-10-04.md).

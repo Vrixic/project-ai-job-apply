@@ -3383,3 +3383,14 @@ hosted CI/CD resumption.
 
 
 2026-10-04 memory replacement source checkpoint opened as [PR #549](https://github.com/Vrixic/project-ai-job-apply/pull/549), based on exact open #548. No authored PR is merged or feature activated. Verified implementation source remains `1df42237`; subsequent commits change delivery records only.
+
+
+2026-10-04 D3-064 native original-completion checkpoint starts on fresh main e48bdf3 plus exact
+open #549 472ff8fa. Default-off private metadata RPC consumes one immutable owner/application/
+version/work/hash/time tuple, without generated content or physical-writer settlement. Documents
+0010 expands current restore evidence to 62 migrations/84 relations; prior receipts stay historical.
+38 new units, 277 ledger + separately executed 57 general SQL cases, logical restore, metadata
+bundle isolation and restore/publisher guards pass. Source-bound full verification remains pending.
+[Evidence](evidence/d3-original-material-completion-2026-10-04.md). Content transport/actor, resume,
+packet/ATS expiry, client/no-store/worker/provider and deployed acceptance remain. Docker/WSL stopped;
+no publication, deployment, activation or D1/D3 completion. Owner defers CI/CD until production launch.

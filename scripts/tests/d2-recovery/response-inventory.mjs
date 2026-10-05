@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { PostgresCoverLetterResponseStore } from "../../../backend/services/documents/dist/src/cover-letter-response-store.js";
 import { PostgresCoverLetterStore } from "../../../backend/services/documents/dist/src/cover-letter-store.js";
 import { PostgresCoverLetterWorkStore } from "../../../backend/services/documents/dist/src/cover-letter-work-store.js";
+import { PostgresTemporaryMaterialCompletionStore } from "../../../backend/services/documents/dist/src/temporary-material-completion-store.js";
 
 const dependency = createRequire(
   new URL("../../../backend/services/documents/package.json", import.meta.url),
@@ -146,5 +147,96 @@ export async function exerciseRestoredResponseInventory(sql, fixtures) {
     populatedResponseRowsRestored: fixtures.length,
     responseReservationReplaysDenied: fixtures.length,
     unresolvedInventoryDeletesRejected,
+  };
+}
+
+/** Original completion tuple survives logical recovery; generated content never enters SQL. */
+export async function seedTemporaryMaterialCompletion(sql, ownerUserId) {
+  const documents = new PostgresCoverLetterStore(sql, {
+    putIfAbsent: async () => {
+      throw Error("SyntheticUnexpectedObjectWrite");
+    },
+    read: async () => {
+      throw Error("SyntheticUnexpectedObjectRead");
+    },
+  });
+  const work = new PostgresCoverLetterWorkStore(sql, () => true);
+  const documentId = uuidv7();
+  const reserved = await documents.reserve({
+    id: documentId,
+    ownerUserId,
+    applicationId: uuidv7(),
+    jobRevision: "b".repeat(64),
+    confirmedFactsHash: "c".repeat(64),
+  });
+  const { authorization } = await work.issue({
+    ownerUserId,
+    documentId,
+    purpose: "provider_dispatch",
+    requestSha256: "a".repeat(64),
+    consentExpiresAt: new Date(Date.now() + 900000),
+  });
+  const reference = {
+    id: authorization.id,
+    documentId,
+    purpose: "provider_dispatch",
+    requestSha256: authorization.requestSha256,
+  };
+  assert.equal((await work.claim(reference)).kind, "claimed");
+  const completedAtMs = Date.now();
+  const material = {
+    schemaVersion: 1,
+    kind: "cover_letter",
+    generationId: documentId,
+    ownerUserId,
+    applicationId: reserved.applicationId,
+    version: reserved.version,
+    contentSha256: "d".repeat(64),
+    completedAtMs,
+    expiresAtMs: completedAtMs + 1800000,
+  };
+  assert.equal(
+    await new PostgresTemporaryMaterialCompletionStore(sql, () => true).claimOriginalCompletion(
+      reference,
+      material,
+    ),
+    "claimed",
+  );
+  return { reference, material };
+}
+
+export async function exerciseRestoredTemporaryMaterialCompletion(sql, { reference, material }) {
+  const completion = new PostgresTemporaryMaterialCompletionStore(sql, () => true);
+  const work = new PostgresCoverLetterWorkStore(sql, () => true);
+  assert.equal(await completion.claimOriginalCompletion(reference, material), "already_completed");
+  assert.equal(
+    await completion.claimOriginalCompletion(reference, {
+      ...material,
+      completedAtMs: material.completedAtMs + 1,
+      expiresAtMs: material.expiresAtMs + 1,
+    }),
+    "unavailable",
+  );
+  await assert.rejects(
+    sql`UPDATE documents.cover_letters SET material_completed_at_ms = material_completed_at_ms + 1, material_expires_at_ms = material_expires_at_ms + 1 WHERE id = ${reference.documentId}`,
+    { code: "55000" },
+  );
+  await assert.rejects(
+    sql`UPDATE documents.cover_letters SET material_work_id = NULL, material_sha256 = NULL, material_completed_at_ms = NULL, material_expires_at_ms = NULL WHERE id = ${reference.documentId}`,
+    { code: "55000" },
+  );
+  assert.equal(await work.fenceForCleanup(reference), "pending");
+  await assert.rejects(
+    sql`DELETE FROM documents.cover_letters WHERE id = ${reference.documentId}`,
+    { code: "55000" },
+  );
+  // Explicit synthetic settlement only; no real writer exists in this fixture.
+  await work.recordSettled(reference);
+  assert.equal(await work.fenceForCleanup(reference), "ledger_terminal");
+  await sql`DELETE FROM documents.cover_letters WHERE id = ${reference.documentId}`;
+  return {
+    temporaryCompletionRowsRestored: 1,
+    temporaryCompletionRenewalsRejected: 3,
+    temporaryCompletionUnsettledDeletesRejected: 1,
   };
 }

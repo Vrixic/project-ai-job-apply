@@ -29,6 +29,9 @@ import {
   type CoverLetterWorkPurpose,
   PostgresCoverLetterWorkStore,
 } from "./cover-letter-work-store.js";
+import { createTemporaryMaterialCompletionLambda } from "./temporary-material-completion-lambda.js";
+import { PostgresTemporaryMaterialCompletionStore } from "./temporary-material-completion-store.js";
+import type { TemporaryMaterialReference } from "./temporary-material-reference.js";
 
 const requested = process.env.COVER_LETTER_WORK_INTEGRATION === "1";
 const databaseUrl = process.env.COVER_LETTER_WORK_TEST_DATABASE_URL;
@@ -111,6 +114,194 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
   afterAll(async () => {
     await sql.end();
     await finalControl.end();
+  });
+
+  async function originalMaterial(claim = true) {
+    const authorization = (
+      await work.issue({
+        ownerUserId,
+        documentId,
+        purpose: "provider_dispatch",
+        requestSha256,
+        consentExpiresAt,
+      })
+    ).authorization;
+    const reference = {
+      id: authorization.id,
+      documentId,
+      purpose: "provider_dispatch" as const,
+      requestSha256,
+    };
+    if (claim) await work.claim(reference);
+    const completedAtMs = Date.now();
+    const material: TemporaryMaterialReference = {
+      schemaVersion: 1,
+      kind: "cover_letter",
+      generationId: documentId,
+      ownerUserId,
+      applicationId: reserved.applicationId,
+      version: reserved.version,
+      contentSha256: "d".repeat(64),
+      completedAtMs,
+      expiresAtMs: completedAtMs + 1_800_000,
+    };
+    return { reference, material };
+  }
+
+  it("consumes original completion once concurrently without settling the physical writer", async () => {
+    const { reference, material } = await originalMaterial();
+    const completion = new PostgresTemporaryMaterialCompletionStore(sql, () => true);
+    const outcomes = await Promise.all(
+      Array.from({ length: 8 }, () => completion.claimOriginalCompletion(reference, material)),
+    );
+    expect(outcomes.filter((outcome) => outcome === "claimed")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome === "already_completed")).toHaveLength(7);
+    const [row] =
+      await sql`SELECT state, terminal_at FROM documents.cover_letter_work_authorizations WHERE id = ${reference.id}`;
+    expect(row).toMatchObject({ state: "running", terminal_at: null });
+    expect(await work.fenceForCleanup(reference)).toBe("pending");
+  });
+
+  it.each([
+    "owner",
+    "application",
+    "version",
+    "document",
+    "work",
+    "request",
+    "future",
+    "before_start",
+    "expired",
+    "disabled",
+    "quarantined",
+    "issued",
+  ])("refuses invalid native original completion and retains no tuple: %s", async (fault) => {
+    const { reference, material } = await originalMaterial(fault !== "issued");
+    if (fault === "owner") material.ownerUserId = uuidv7();
+    if (fault === "application") material.applicationId = uuidv7();
+    if (fault === "version") material.version += 1;
+    if (fault === "document") material.generationId = uuidv7();
+    if (fault === "work") reference.id = uuidv7();
+    if (fault === "request") reference.requestSha256 = "f".repeat(64);
+    if (fault === "future") material.completedAtMs += 60_000;
+    if (fault === "before_start") material.completedAtMs -= 60_000;
+    if (fault === "expired") material.completedAtMs -= 1_800_001;
+    material.expiresAtMs = material.completedAtMs + 1_800_000;
+    if (fault === "quarantined")
+      await sql`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${ownerUserId}`;
+    const completion = new PostgresTemporaryMaterialCompletionStore(
+      sql,
+      () => fault !== "disabled",
+    );
+    expect(await completion.claimOriginalCompletion(reference, material)).toBe("unavailable");
+    const [row] =
+      await sql`SELECT material_work_id, material_sha256, material_completed_at_ms, material_expires_at_ms FROM documents.cover_letters WHERE id = ${documentId}`;
+    expect(Object.values(row ?? {})).toEqual([null, null, null, null]);
+  });
+
+  it("restored/replayed metadata cannot renew, change content or reconstruct a new claim", async () => {
+    const { reference, material } = await originalMaterial();
+    const completion = new PostgresTemporaryMaterialCompletionStore(sql, () => true);
+    expect(await completion.claimOriginalCompletion(reference, material)).toBe("claimed");
+    for (const replacement of [
+      { ...material, contentSha256: "e".repeat(64) },
+      {
+        ...material,
+        completedAtMs: material.completedAtMs + 1,
+        expiresAtMs: material.expiresAtMs + 1,
+      },
+    ]) {
+      expect(await completion.claimOriginalCompletion(reference, replacement)).toBe("unavailable");
+    }
+    for (const mutation of [
+      sql`UPDATE documents.cover_letters SET material_completed_at_ms = material_completed_at_ms + 1, material_expires_at_ms = material_expires_at_ms + 1 WHERE id = ${documentId}`,
+      sql`UPDATE documents.cover_letters SET material_sha256 = ${"e".repeat(64)} WHERE id = ${documentId}`,
+      sql`UPDATE documents.cover_letters SET material_work_id = NULL, material_sha256 = NULL, material_completed_at_ms = NULL, material_expires_at_ms = NULL WHERE id = ${documentId}`,
+    ])
+      await expect(mutation).rejects.toMatchObject({ code: "55000" });
+    expect(
+      await new PostgresTemporaryMaterialCompletionStore(sql, () => true).claimOriginalCompletion(
+        reference,
+        material,
+      ),
+    ).toBe("already_completed");
+  });
+
+  it("blocks old saved-object final work but preserves original settlement and purge fencing", async () => {
+    const { reference, material } = await originalMaterial();
+    const completion = new PostgresTemporaryMaterialCompletionStore(sql, () => true);
+    expect(await completion.claimOriginalCompletion(reference, material)).toBe("claimed");
+    await work.recordSettled(reference);
+    await expect(issue("final_document")).rejects.toThrow("CoverLetterWorkUnavailable");
+    expect(await work.fenceForCleanup(reference)).toBe("ledger_terminal");
+    const rows =
+      await sql`SELECT purpose, state FROM documents.cover_letter_work_authorizations WHERE document_id = ${documentId}`;
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { purpose: "provider_dispatch", state: "settled" },
+        { purpose: "private_slots", state: "revoked" },
+        { purpose: "final_document", state: "revoked" },
+      ]),
+    );
+    expect(rows).toHaveLength(3);
+  });
+
+  it("refuses original completion when a legacy final writer already exists", async () => {
+    const { reference, material } = await originalMaterial();
+    await work.recordSettled(reference);
+    await issue("final_document");
+    expect(
+      await new PostgresTemporaryMaterialCompletionStore(sql, () => true).claimOriginalCompletion(
+        reference,
+        material,
+      ),
+    ).toBe("unavailable");
+  });
+
+  it("connects the native bootstrap to max-one PostgreSQL completion without a renderer or object port", async () => {
+    const { reference, material } = await originalMaterial();
+    const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-completion:3";
+    const env = {
+      TEMPORARY_MATERIAL_COMPLETION_ENABLED: "true",
+      AWS_REGION: "us-east-2",
+      PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+      AWS_LAMBDA_FUNCTION_NAME: "synthetic-completion",
+      AWS_LAMBDA_FUNCTION_VERSION: "3",
+      AWS_SESSION_TOKEN: "synthetic-session",
+      DATABASE_SECRET_ID:
+        "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-ABCDEF",
+    };
+    let pool: postgres.Sql | undefined;
+    const createPool = vi.fn(
+      (url: string, options: { max: 1; idle_timeout: 20; connect_timeout: 10 }) => {
+        pool = postgres(url, options);
+        return pool;
+      },
+    );
+    const resolve = vi.fn(async () => databaseUrl as string);
+    const run = createTemporaryMaterialCompletionLambda({
+      environment: () => env,
+      resolveDatabaseUrl: resolve,
+      createPool,
+    });
+    const input = {
+      schemaVersion: 1,
+      action: "claim_original_completion",
+      work: reference,
+      material,
+    };
+    try {
+      expect((await run(input, { invokedFunctionArn: target })).outcome).toBe("claimed");
+      expect((await run(input, { invokedFunctionArn: target })).outcome).toBe("already_completed");
+      expect(createPool).toHaveBeenCalledWith(databaseUrl, {
+        max: 1,
+        idle_timeout: 20,
+        connect_timeout: 10,
+      });
+      expect(resolve).toHaveBeenCalledOnce();
+    } finally {
+      await pool?.end();
+    }
   });
 
   async function issue(purpose: CoverLetterWorkPurpose = "private_slots") {
