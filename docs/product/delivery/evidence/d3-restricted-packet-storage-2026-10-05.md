@@ -549,6 +549,22 @@ ID/name/label/tmpfs and absence of mounts before removal. Shared volumes stayed 
 Desktop stopped and WSL reports no running distributions. Scoped Biome/build checks pass. The clean
 full maintained verifier follows this committed evidence; it has not yet been claimed passing.
 
+## Full-verifier attempt and current migration fixture correction
+
+The full maintained verifier on frozen clean `1571cf9c` passed generation, skill/infrastructure/
+toolchain checks, operator/replay/role guards, D2 release/configuration/retirement, candidate-rights
+export/session fixtures, contribution intake and artifact binding. It stopped at the current
+migration-operator test because that test still expected the Applications 0008 success message
+while the exact committed current driver correctly reports 0009. This is a failed full-verifier
+attempt, not a passing whole-repository claim. Log:
+`.tmp/d3-restricted-packet-full-verification.log`.
+
+Only the current expected Applications aggregate marker changes to
+`0009_restricted_packet_values`; production operators, SQL, historical logs/receipts, event counts
+and permission/source-binding guards stay intact. The complete focused migration-operator path,
+baseline, schema-8 two-receipt adversarial and schema-7 round-trip tests pass afterward.
+Log: `.tmp/d3-restricted-migration-operator.log`. A new clean full-verifier run follows this commit.
+
 ## Next work
 
 Finish legacy migration compatibility and all maintained integration/runtime protection fixtures;

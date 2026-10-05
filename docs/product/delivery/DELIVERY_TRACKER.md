@@ -3822,3 +3822,10 @@ migration. Owned fixture removed; shared volumes retained and Docker/WSL stopped
 verification follows; production inventory/disposition, key/role composition and accountable
 acceptance remain. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
 CI/CD deferred until launch; no deployment/activation or D1/D3 completion.
+
+2026-10-05 D3-077 full verifier on clean `1571cf9c` stops at a stale current Applications 0008
+migration-log expectation after the preceding guards pass. Only the test's current expected marker
+advances to 0009; historical/source/permission checks remain. Focused operator baseline and
+schema-7/schema-8 adversarial tests pass; full clean rerun follows. No whole-verifier success,
+deployment/activation or phase completion claim.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
