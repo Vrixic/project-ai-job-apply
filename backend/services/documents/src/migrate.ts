@@ -19,6 +19,7 @@ const migrationVersions = [
   "0008_cover_letter_provider_responses",
   "0009_cover_letter_provider_failure",
   "0010_temporary_material_completion",
+  "0011_native_material_allocations",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -68,6 +69,7 @@ try {
         materialColumnCount: number;
         materialConstraintCount: number;
         materialTriggerCount: number;
+        nativeTriggerCount: number;
       }>
     >`
       SELECT
@@ -80,6 +82,8 @@ try {
           (to_regclass('documents.cover_letters') IS NOT NULL)::int +
           (to_regclass('documents.cover_letter_work_authorizations') IS NOT NULL)::int +
           (to_regclass('documents.cover_letter_provider_responses') IS NOT NULL)::int +
+          (to_regclass('documents.native_material_admission') IS NOT NULL)::int +
+          (to_regclass('documents.native_material_allocations') IS NOT NULL)::int +
           (to_regclass('documents.schema_migrations') IS NOT NULL)::int
         )::int AS "tableCount",
         (
@@ -118,10 +122,14 @@ try {
           WHERE NOT tgisinternal AND (
             (tgrelid = 'documents.cover_letters'::regclass AND tgname = 'cover_letters_temporary_material_protect') OR
             (tgrelid = 'documents.cover_letter_work_authorizations'::regclass AND tgname = 'cover_letter_work_temporary_material_protect'))
-        ) AS "materialTriggerCount"
+        ) AS "materialTriggerCount",
+        (SELECT count(*)::int FROM pg_trigger WHERE NOT tgisinternal AND tgname IN (
+          'native_material_admission_guard', 'native_material_allocation_guard',
+          'cover_letters_native_retirement_guard', 'cover_letter_native_claim_guard'
+        )) AS "nativeTriggerCount"
     `;
     if (
-      verification?.tableCount !== 9 ||
+      verification?.tableCount !== 11 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.triggerCount !== 2 ||
       verification.workTriggerCount !== 1 ||
@@ -129,7 +137,8 @@ try {
       verification.failureTriggerCount !== 1 ||
       verification.materialColumnCount !== 4 ||
       verification.materialConstraintCount !== 1 ||
-      verification.materialTriggerCount !== 2
+      verification.materialTriggerCount !== 2 ||
+      verification.nativeTriggerCount !== 4
     ) {
       throw new Error("Documents migration verification failed");
     }

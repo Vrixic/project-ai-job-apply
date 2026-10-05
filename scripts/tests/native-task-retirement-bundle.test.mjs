@@ -26,7 +26,10 @@ test("native retirement emits only its control owner and refuses default-off bun
   const owners = inputs.filter(
     (name) => name.startsWith("backend/") || name.startsWith("packages/"),
   );
-  assert.deepEqual(owners, ["backend/services/documents/dist/src/native-task-retirement.js"]);
+  assert.deepEqual(owners.sort(), [
+    "backend/services/documents/dist/src/native-task-allocation.js",
+    "backend/services/documents/dist/src/native-task-retirement.js",
+  ]);
   for (const capability of [
     "postgres",
     "client-s3",
@@ -59,3 +62,80 @@ test("native retirement emits only its control owner and refuses default-off bun
   assert.deepEqual(Object.keys(client), ["retire"]);
   await assert.rejects(client.retire(allocation), /^Error: NativeTaskRetirementUnavailable$/u);
 });
+
+for (const [entrypoint, ownerFiles, requiredSdk] of [
+  ["native-material-registry", ["native-material-registry", "native-task-allocation"], false],
+  [
+    "native-material-disposal",
+    ["native-material-disposal", "native-task-allocation", "native-task-retirement"],
+    true,
+  ],
+]) {
+  test(`${entrypoint} preserves owning capability isolation and bundled default-off refusal`, async () => {
+    const result = await build({
+      absWorkingDir: repositoryRoot,
+      entryPoints: [`backend/services/documents/dist/src/${entrypoint}.js`],
+      bundle: true,
+      platform: "node",
+      target: "node24",
+      format: "cjs",
+      write: false,
+      metafile: true,
+    });
+    const inputs = Object.values(result.metafile.outputs).flatMap((output) =>
+      Object.entries(output.inputs)
+        .filter(([, entry]) => entry.bytesInOutput > 0)
+        .map(([name]) => name.replaceAll("\\", "/")),
+    );
+    assert.deepEqual(
+      inputs.filter((name) => name.startsWith("backend/") || name.startsWith("packages/")).sort(),
+      ownerFiles.map((name) => `backend/services/documents/dist/src/${name}.js`).sort(),
+    );
+    for (const forbidden of [
+      "postgres",
+      "client-s3",
+      "client-lambda",
+      "client-secrets-manager",
+      "pdfjs",
+      "yazl",
+    ])
+      assert.ok(
+        !inputs.some((name) => name.includes(forbidden)),
+        `Unexpected dependency: ${forbidden}`,
+      );
+    assert.equal(
+      inputs.some((name) => name.includes("@aws-sdk/client-ecs")),
+      requiredSdk,
+    );
+    const module = { exports: {} };
+    new Function("module", "exports", "require", result.outputFiles[0].text)(
+      module,
+      module.exports,
+      createRequire(path.join(repositoryRoot, "package.json")),
+    );
+    const owner = "019d04cf-1f80-7000-8000-000000000102";
+    const application = "019d04cf-1f80-7000-8000-000000000103";
+    const unexpected = () => {
+      throw Error("UnexpectedBundledEffect");
+    };
+    if (entrypoint === "native-material-registry") {
+      const registry = new module.exports.PostgresNativeMaterialRegistry({ begin: unexpected });
+      await assert.rejects(
+        registry.sealApplication(owner, application),
+        /^Error: NativeMaterialRegistryUnavailable$/u,
+      );
+    } else {
+      const client = module.exports.createNativeMaterialDisposal({
+        registry: {
+          sealApplication: unexpected,
+          recordRetirement: unexpected,
+          confirmApplicationDisposed: unexpected,
+        },
+      });
+      await assert.rejects(
+        client.discardApplication(owner, application),
+        /^Error: NativeMaterialDisposalUnavailable$/u,
+      );
+    }
+  });
+}

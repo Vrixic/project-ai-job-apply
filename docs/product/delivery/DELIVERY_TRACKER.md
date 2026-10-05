@@ -3637,3 +3637,12 @@ deployment/activation or authored main merge. Docker/WSL stopped; hosted CI/CD d
 `ba58619c` is unchanged; subsequent commits change delivery documentation only. Two authored PRs
 are open. No authored main merge, cloud task operation, deployment or activation. D1/D3 stay
 In progress; hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 starts Documents-owned native launch registry and durable disposal on existing
+PR #558/#557. Same-transaction Applications admission, durable unknown launch retention, sealed
+startup/fresh epochs and positive exact task receipts are source-only/default-off. Nineteen real
+registry SQL cases, 136 work-ledger SQL cases, 59 focused Documents cases and actual 64-migration/
+86-relation logical restore pass; ECS is simulated. Full clean-source verification is pending.
+[Evidence](evidence/d3-native-material-registry-2026-10-05.md). No frontend/cloud call/publication/
+deployment/activation or phase completion. Launcher/private RPC/IAM/image/routing/managed task/
+client/ATS/provider/accountable gates remain; hosted CI/CD deferred until production launch.

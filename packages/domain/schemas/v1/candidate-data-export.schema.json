@@ -126,6 +126,20 @@
           "items": {
             "$ref": "#/$defs/coverLetter"
           }
+        },
+        "nativeMaterialAdmissions": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/nativeMaterialAdmission"
+          }
+        },
+        "nativeMaterialAllocations": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/nativeMaterialAllocation"
+          }
         }
       },
       "additionalProperties": false
@@ -2341,6 +2355,72 @@
         },
         "occurredAt": {
           "$ref": "#/$defs/dateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "nativeMaterialAdmission": {
+      "type": "object",
+      "required": ["applicationId", "epochId", "createdAt"],
+      "properties": {
+        "applicationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "epochId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sealedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "nativeMaterialAllocation": {
+      "type": "object",
+      "required": ["id", "applicationId", "generationId", "epochId", "state", "createdAt"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "applicationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "generationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "epochId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "state": {
+          "type": "string",
+          "enum": ["pending", "bound", "retired"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "boundAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "stoppedAtEpochMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "observedAtEpochMs": {
+          "type": "integer",
+          "minimum": 1
         }
       },
       "additionalProperties": false

@@ -39,6 +39,14 @@
     "./cover-letter-export": {
       "types": "./dist/src/cover-letter-export.d.ts",
       "default": "./dist/src/cover-letter-export.js"
+    },
+    "./native-material-registry": {
+      "types": "./dist/src/native-material-registry.d.ts",
+      "default": "./dist/src/native-material-registry.js"
+    },
+    "./native-material-disposal": {
+      "types": "./dist/src/native-material-disposal.d.ts",
+      "default": "./dist/src/native-material-disposal.js"
     }
   },
   "scripts": {

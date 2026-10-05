@@ -110,3 +110,15 @@ managed task conformance and full application-wide disposal remain gates. There 
 content, SQL, launch/list or provider-settlement capability on this path. This source does not
 authorize a cloud call, deployment, activation or physical all-copy purge. The proposal stays
 Proposed. [Local evidence](../product/delivery/evidence/d3-native-task-retirement-2026-10-05.md).
+
+## Owning allocation checkpoint — 2026-10-05
+
+Default-off Documents metadata now records original launch intent before any future RunTask and
+can durably bind a late actual launch capture. Applications supplies owner/status locking in the
+same transaction. Sealing blocks new original work claims; fresh generation requires an explicit
+previous epoch and a grant issued after sealing. Durable exact-task proof plus a final sealed-epoch
+check supplies native-task disposal acknowledgement, with no SQL lock over AWS or provider-work
+settlement. Pending unknown launches remain unresolved and block deletion/fresh generation.
+Private launcher/RPC/IAM/image/routing/managed-task and complete client/ATS/provider/accountable
+gates remain. This checkpoint is source-only and does not enable a runtime, certify all-copy purge
+or accept this proposal. [Evidence](../product/delivery/evidence/d3-native-material-registry-2026-10-05.md).

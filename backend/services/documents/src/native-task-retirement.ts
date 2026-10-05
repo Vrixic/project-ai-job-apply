@@ -1,32 +1,15 @@
 import { DescribeTasksCommand, ECSClient, StopTaskCommand, type Task } from "@aws-sdk/client-ecs";
 
-/** Private immutable launcher/registry binding, never obtained from a candidate request.
- * This client does not issue allocations or certify that the registry is complete/sealed. */
-export interface NativeTaskAllocation {
-  allocationId: string;
-  ownerUserId: string;
-  applicationId: string;
-  generationId: string;
-  clusterArn: string;
-  taskArn: string;
-  taskDefinitionArn: string;
-  containerName: string;
-}
+import {
+  type NativeTaskAllocation,
+  type NativeTaskRetirementReceipt,
+  nativeTaskAllocationRegion,
+} from "./native-task-allocation.js";
 
-/** Evidence for exactly this task, not provider settlement or all-copy candidate purge. */
-export interface NativeTaskRetirementReceipt {
-  schemaVersion: 1;
-  kind: "native_task_stopped";
-  allocationId: string;
-  ownerUserId: string;
-  applicationId: string;
-  generationId: string;
-  clusterArn: string;
-  taskArn: string;
-  taskDefinitionArn: string;
-  stoppedAtEpochMs: number;
-  observedAtEpochMs: number;
-}
+export type {
+  NativeTaskAllocation,
+  NativeTaskRetirementReceipt,
+} from "./native-task-allocation.js";
 
 interface TaskClient {
   send(
@@ -35,38 +18,7 @@ interface TaskClient {
   ): Promise<unknown>;
 }
 
-const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
 const unavailable = () => Error("NativeTaskRetirementUnavailable");
-
-function bindingRegion(allocation: NativeTaskAllocation): string {
-  const cluster =
-    /^arn:aws:ecs:([a-z]{2}-[a-z]+-\d):([0-9]{12}):cluster\/([A-Za-z0-9_-]{1,255})$/u.exec(
-      allocation.clusterArn,
-    );
-  if (
-    !cluster ||
-    ![
-      allocation.allocationId,
-      allocation.ownerUserId,
-      allocation.applicationId,
-      allocation.generationId,
-    ].every((id) => typeof id === "string" && uuid.test(id)) ||
-    !/^[A-Za-z0-9_-]{1,255}$/u.test(allocation.containerName)
-  )
-    throw unavailable();
-  const [, region, account, name] = cluster;
-  const taskPrefix = `arn:aws:ecs:${region}:${account}:task/${name}/`;
-  if (
-    !allocation.taskArn.startsWith(taskPrefix) ||
-    !/^[a-f0-9]{32}$/u.test(allocation.taskArn.slice(taskPrefix.length)) ||
-    !allocation.taskDefinitionArn.startsWith(`arn:aws:ecs:${region}:${account}:task-definition/`) ||
-    !/^[A-Za-z0-9_-]{1,255}:[1-9][0-9]{0,9}$/u.test(
-      allocation.taskDefinitionArn.split("task-definition/")[1] ?? "",
-    )
-  )
-    throw unavailable();
-  return region as string;
-}
 
 function describedTask(value: unknown, allocation: NativeTaskAllocation): Task {
   if (!value || typeof value !== "object") throw unavailable();
@@ -110,7 +62,7 @@ export function createNativeTaskRetirement(options: {
   testClient?: TaskClient;
 }) {
   const allocation = Object.freeze(structuredClone(options.allocation));
-  const region = bindingRegion(allocation);
+  const region = nativeTaskAllocationRegion(allocation);
   const enabled = options.enabled ?? (() => false);
   const observations = options.maximumObservations ?? 3;
   const timeout = options.timeoutMs ?? 10_000;
