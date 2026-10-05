@@ -7,6 +7,18 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 
 ## Current D3 slice (source and local verification only)
 
+Submission dispatch rechecks current owner job/artifact bindings and the original packet/approval
+under the application lock. Expiry is evaluated after those SQL reads. A stale queued attempt
+settles as `failed_no_effect`, invalidates approval and returns directly to review with one revision
+and one status outbox event; its two history entries and approval change commit atomically before
+the fixed HTTP conflict. No intermediate approved event or dispatch permission is emitted.
+Concurrent and repeated deliveries cannot dispatch that attempt. A fresh packet and explicit
+approval can start a new attempt. The internal store requires a detached current-binding snapshot;
+it never falls back to the original packet's values. The public dispatch signature is unchanged.
+The endpoint carries the original form context, not a newly observed employer form; the adapter
+must independently validate the destination structure. Owner reads remain point-in-time snapshots,
+not a cross-owner lease. Vault-version invalidation and enabled-ATS/browser acceptance remain open.
+
 ### Cover-letter preparation in progress (2026-10-02)
 
 The unshipped D3-017 slice adds an atomic base packet, short-lived disclosure-bound preparation,
@@ -138,3 +150,15 @@ never mapped. Add a row only after the owner approves it and a test pins it.
 `search` takes an optional `jobId`. The result is this candidate's applications for that job, newest first. The web
 workspace uses `limit: 1` to reopen the live application, treating a cancelled newest one as "none" because a
 cancelled application may be restarted.
+
+## Selected saved answers (default off)
+
+Explicit `vaultSelections` require an observed form, exact answer revision/context, question hash
+and candidate meaning confirmation. The private Profile port never substitutes a newer answer.
+Packet fields bind a closed `vaultReference` in the content hash and always require review.
+Profile-owned metadata admission locks run in the same Applications SQL transaction at approval,
+start, dispatch, generation claim/recovery and final preparation completion. Correction, deletion
+or expiry refuses the old selection with `vault_answer_changed` (preparation uses
+`bindings_changed`). Missing admission capability fails closed; no KMS call occurs under these locks.
+Migration `0006_vault_approval_binding.sql` adds the reason to the existing closed approval constraint.
+Strict-reader rollout and candidate review UI precede activation; no live ATS executor is enabled.

@@ -26,6 +26,10 @@
         {
           "version": "0005_preparation_dispatch",
           "checksum": "a3dab88e3dc5ce170678444d5202085593786851d14d11a2ffd0320ae3fd0f29"
+        },
+        {
+          "version": "0006_vault_approval_binding",
+          "checksum": "ecca6ad54d8199f32cb6765a748bdf311b0429dd779a2d1fe468efbcf82dbe1f"
         }
       ],
       "relations": [
@@ -100,6 +104,10 @@
         {
           "version": "0008_cover_letter_provider_responses",
           "checksum": "54511777975b6806c84824f3aaa4301fe436a3763391d7c4527b70ebbbb2d73f"
+        },
+        {
+          "version": "0009_cover_letter_provider_failure",
+          "checksum": "6c265ffe62f961d2b7b7e4df17d3ec87c574680f886e5522843a881aee1c9306"
         }
       ],
       "relations": [

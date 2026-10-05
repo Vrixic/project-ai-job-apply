@@ -125,6 +125,16 @@ export class CoverLetterResponseDisposalClient {
     return output.inventory;
   }
 
+  /** Original-failure eligibility only; never ordinary inventory fallback. */
+  async readFailed(
+    reference: Parameters<PostgresCoverLetterResponseStore["readFailed"]>[0],
+  ): ReturnType<PostgresCoverLetterResponseStore["readFailed"]> {
+    const output = await this.call({ schemaVersion: 1, action: "read_failed", reference });
+    if (output.action !== "read_failed" || output.outcome !== "read")
+      throw new CoverLetterResponseDisposalError();
+    return output.inventory;
+  }
+
   async recordDisposal(
     reference: Parameters<PostgresCoverLetterResponseStore["recordDisposal"]>[0],
     cleanup: Parameters<PostgresCoverLetterResponseStore["recordDisposal"]>[1],

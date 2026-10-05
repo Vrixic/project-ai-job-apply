@@ -1,11 +1,12 @@
+import { createNativeCoverLetterExportReader } from "@ai-job-apply/documents-service/cover-letter-export";
 import type { DatabaseHandle, ProfileStore } from "@ai-job-apply/profile-service";
 import {
   createDatabase,
   errorCodeFromUnknown,
   loadCandidateRightsPolicy,
   PostgresProfileStore,
-  PostgresResumeProposalWriter,
   PostgresRestrictedAnswerExportReader,
+  PostgresResumeProposalWriter,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
 import type { Handler } from "aws-lambda";
@@ -25,12 +26,12 @@ import {
 } from "./candidate-rights-durable.js";
 import { AwsCandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
 import { resolveCandidateRightsAuth0Secret } from "./candidate-rights-secret.js";
-import { restrictedAnswerExportCipherFromEnvironment } from "./restricted-answer-export-cipher.js";
 import {
   type ProfileReadinessActivityInputV1,
   type ProfileReadinessActivityResultV1,
   validateProfileReadinessActivityInput,
 } from "./profile-readiness-durable.js";
+import { restrictedAnswerExportCipherFromEnvironment } from "./restricted-answer-export-cipher.js";
 
 type ReadinessActivityStore = Pick<
   ProfileStore,
@@ -241,6 +242,7 @@ export function createCandidateRightsMaintenanceHandler(
 }
 
 let runtimeDatabase: DatabaseHandle | undefined;
+let runtimeDatabaseUrl: string | undefined;
 let runtimeStore: PostgresProfileStore | undefined;
 let runtimeCandidateRightsStore: PostgresCandidateRightsActivityStore | undefined;
 
@@ -256,6 +258,7 @@ async function getRuntimeDatabase(): Promise<DatabaseHandle> {
       { ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}) },
     );
     runtimeDatabase = createDatabase(databaseUrl, { maxConnections: 1 });
+    runtimeDatabaseUrl = databaseUrl;
   }
   return runtimeDatabase;
 }
@@ -284,12 +287,27 @@ async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRights
     process.env.CANDIDATE_RIGHTS_AUTH0_SECRET_ID,
     { ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}) },
   );
+  const database = await getRuntimeDatabase();
+  const coverLetterExportEnabled = process.env.COVER_LETTER_EXPORT_ENABLED === "true";
+  const documentKmsKeyArn = process.env.PLATFORM_KMS_KEY_ARN;
+  if (coverLetterExportEnabled && (!runtimeDatabaseUrl || !documentKmsKeyArn))
+    throw new Error("CandidateRightsRuntimeConfigurationIncomplete");
   runtimeCandidateRightsStore = new PostgresCandidateRightsActivityStore({
-    database: await getRuntimeDatabase(),
+    database,
     policy,
     artifactStore: new AwsCandidateExportArtifactStore(exportBucket, exportKmsKeyArn),
     documentObjectStore: new AwsCandidateDocumentObjectStore(documentBucket),
     resumeProposals: new PostgresResumeProposalWriter(),
+    ...(coverLetterExportEnabled && runtimeDatabaseUrl && documentKmsKeyArn
+      ? {
+          coverLetterExport: createNativeCoverLetterExportReader(
+            runtimeDatabaseUrl,
+            documentBucket,
+            documentKmsKeyArn,
+            () => process.env.COVER_LETTER_EXPORT_ENABLED === "true",
+          ).reader,
+        }
+      : {}),
     ...(restrictedAnswerCipher
       ? {
           restrictedAnswerExport: new PostgresRestrictedAnswerExportReader(

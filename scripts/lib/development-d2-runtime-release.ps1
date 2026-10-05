@@ -283,6 +283,8 @@ function Assert-D2RuntimeMigrationInventory {
       $expected.documents += '|0007_cover_letter_work_authorizations'
     } elseif (($Inventory['documents'] -join '|') -ceq ($expected.documents + '|0007_cover_letter_work_authorizations|0008_cover_letter_provider_responses')) {
       $expected.documents += '|0007_cover_letter_work_authorizations|0008_cover_letter_provider_responses'
+    } elseif (($Inventory['documents'] -join '|') -ceq ($expected.documents + '|0007_cover_letter_work_authorizations|0008_cover_letter_provider_responses|0009_cover_letter_provider_failure')) {
+      $expected.documents += '|0007_cover_letter_work_authorizations|0008_cover_letter_provider_responses|0009_cover_letter_provider_failure'
     }
     $expected.trust += '|0005_development_test_removal'
   } elseif (($Inventory['trust'] -join '|') -ceq ($expected.trust + '|0005_development_test_removal')) {

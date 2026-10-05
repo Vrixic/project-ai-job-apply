@@ -173,3 +173,62 @@ operator. The old direct-URL/per-marker replay path is removed. See the
 and [Phase 2 record](../../docs/product/delivery/phase-2-extension-and-community.md#d2-038--isolated-deletion-recovery)
 for exact implementation, deployment and acceptance status. Local tests do not imply IAM activation
 or cloud replay acceptance.
+
+`application-preparation-documents.ts` now supplies a default-off source composition from the
+existing Applications activity to owned evidence, controlled initialization, one isolated Invoke
+and original draft recovery. Recovery receives no initializer/Invoke capability; original consent
+is detached and never refreshed. An independent candidate-lease pool avoids nested-query deadlock
+while preserving each owner's supported codecs. 39 focused and seven real PostgreSQL cases pass,
+including durable SDK execution and consent-expired recovery without another dispatch. See
+[local evidence](../../docs/product/delivery/evidence/d3-private-preparation-port-2026-10-04.md).
+Native bootstrap/artifacts, IAM/scheduling, retention/drain and accountable/deployed gates remain;
+no production activity or provider is activated by this factory.
+
+Native `application-preparation-lambda.ts` lazily binds the existing strict metadata contract to
+managed database credentials, qualified numeric provider Invoke and native owner clients.
+It defaults off, refuses warm configuration drift and gives separate bounded pools to candidate
+leases, owner reads and Documents work. `build:lambda:preparation` emits a separate local
+private-activity artifact family; both emitted port/activity checks exclude provider implementations.
+See [source evidence](../../docs/product/delivery/evidence/d3-preparation-activity-bootstrap-2026-10-04.md).
+Nothing is deployed or activated; caller IAM, native durable/dispatcher/recovery bootstrap,
+retention/drain and accountable/deployed acceptance remain.
+
+`application-preparation-durable-lambda.ts` qualifies numeric same-account target/activity
+configuration and activation outside deterministic SDK workflow code. Warm drift refuses
+retargeting; private/provider settings refuse before SDK state handling. The existing metadata
+contracts and retry/compensation definitions remain unchanged. `build:lambda:preparation-durable`
+creates a separate local orchestration-only family. See [D3-069 source evidence](../../docs/product/delivery/evidence/d3-preparation-durable-bootstrap-2026-10-04.md).
+Native dispatcher/recovery/release, IAM/scheduling, retention/drain and accountable/deployed
+acceptance remain; nothing is deployed or activated.
+
+`application-preparation-starter-lambda.ts` supplies a default-off native SQS entrypoint with
+qualified managed-secret setup, one Applications SQL connection and one-attempt durable Invoke.
+Original ledger bindings survive retries; the compact retained-version list permits only exact
+versions of the same durable function and never retargets accepted work. Warm drift refuses.
+`build:lambda:preparation-starter` creates a separate local artifact; no deployment is implied.
+See [D3-070 evidence](../../docs/product/delivery/evidence/d3-preparation-starter-bootstrap-2026-10-04.md).
+Native terminal recovery, release/IAM/scheduling/retention/drain and accountable acceptance remain.
+
+`application-preparation-recovery-lambda.ts` exports separate terminal and scheduled entrypoints
+from a default-off native artifact. Terminal configuration has no queue/nudge settings; scheduled
+recovery keeps original metadata settlement active with new nudges disabled. Exact retained
+versions and strict envelopes precede managed-secret setup; metadata reads exclude execution data.
+No durable Invoke, model/private activity or document writer is composed. The pure pending-error
+module preserves the existing starter export. `build:lambda:preparation-recovery` packages both
+handlers locally; their separate caller/metadata/queue IAM and scheduling still require release.
+See [D3-071 evidence](../../docs/product/delivery/evidence/d3-preparation-recovery-bootstrap-2026-10-04.md).
+Nothing is deployed or activated; retention/drain and accountable/deployed acceptance remain.
+
+Candidate export can enrich ready cover letters with verified saved paragraphs/review metadata
+through the Documents owner. Pending entries and legacy exports remain metadata-only. Native
+privacy activity composes the separate read pool only for exact `COVER_LETTER_EXPORT_ENABLED=true`
+and available document KMS configuration. Withdrawal refuses subsequent reads; no model/provider
+or document write is composed. Updated export readers must precede producer activation because
+old strict validators reject the new optional fields. See [D3-072 evidence](../../docs/product/delivery/evidence/d3-cover-letter-export-content-2026-10-04.md).
+No deployment/activation is implied; read IAM, release, privacy and deployed acceptance remain.
+
+Selected saved-answer preparation binds its original base packet's reference metadata and checks
+it before generation/recovery and final packet creation. The native actor composes a KMS-free
+Profile metadata reader and its fixed admission lock method, running locks inside the Applications
+transaction. No saved-answer values or references are sent to Documents generation/recovery.
+This source composition requires reviewed native deployment; nothing is activated here.

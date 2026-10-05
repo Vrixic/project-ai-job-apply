@@ -23,7 +23,10 @@ export interface PreparationRecord {
   updatedAt: Date;
 }
 
+import type { VaultCurrentReference } from "./vault.js";
+
 export interface PreparationContext {
+  vaultReferences?: readonly VaultCurrentReference[];
   jobContextHash: string;
   confirmedFactsHash: string;
 }

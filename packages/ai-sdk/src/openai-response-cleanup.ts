@@ -1,13 +1,17 @@
+import {
+  type OpenAiBackgroundResponseReference,
+  validateOpenAiBackgroundResponseReference,
+} from "./provider-background-contract.js";
+
+export {
+  type OpenAiBackgroundResponseReference,
+  validateOpenAiBackgroundResponseReference,
+} from "./provider-background-contract.js";
+
 /** Private provider-response cleanup only. References must come from owned, durably captured
  * original creation acknowledgements, never candidate input. No creation/generation capability.
  * A response deletion receipt is not platform quiescence or abuse-monitoring deletion proof.
  */
-export interface OpenAiBackgroundResponseReference {
-  schemaVersion: 1;
-  responseId: string;
-  createdAt: number;
-}
-
 export type OpenAiResponseCleanup =
   | { kind: "unresolved" }
   | {
@@ -23,35 +27,6 @@ type TerminalStatus = (typeof terminal)[number];
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-export function validateOpenAiBackgroundResponseReference(
-  value: unknown,
-): value is OpenAiBackgroundResponseReference {
-  if (!record(value) || ![Object.prototype, null].includes(Object.getPrototypeOf(value)))
-    return false;
-  const keys = Reflect.ownKeys(value);
-  if (
-    keys.length !== 3 ||
-    !keys.every((key) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      return (
-        typeof key === "string" &&
-        ["schemaVersion", "responseId", "createdAt"].includes(key) &&
-        descriptor?.enumerable === true &&
-        Object.hasOwn(descriptor, "value")
-      );
-    })
-  )
-    return false;
-  return (
-    value.schemaVersion === 1 &&
-    typeof value.responseId === "string" &&
-    /^resp_[a-zA-Z0-9]{1,128}$/u.test(value.responseId) &&
-    typeof value.createdAt === "number" &&
-    Number.isSafeInteger(value.createdAt) &&
-    value.createdAt > 0
-  );
 }
 
 async function bounded<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {

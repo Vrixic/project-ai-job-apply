@@ -275,6 +275,9 @@ const preparation: PreparationRecord = {
 };
 function activityFixture() {
   const store = {
+    getPreparationVaultReferences: vi.fn<PreparationActivityStore["getPreparationVaultReferences"]>(
+      async () => [],
+    ),
     getPreparationForEvent: vi.fn(async () => preparation),
     claimPreparationGeneration: vi.fn<PreparationActivityStore["claimPreparationGeneration"]>(
       async () => ({ kind: "claimed", preparation }),

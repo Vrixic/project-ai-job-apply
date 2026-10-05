@@ -343,3 +343,46 @@ Both are included in maintained infrastructure and full repository verification.
 Use portable Terraform `1.16.2`, temporary IAM Identity Center credentials, environment-specific encrypted
 state, immutable artifacts, refresh-backed saved plans, and explicit checksum approval for every
 material cloud change. Never replay historical cutover commands or reconstruct a retired runtime.
+
+`build-isolated-provider-lambda.mjs` builds the source-only isolated cover-letter provider into
+`backend/services/documents/dist/isolated-provider-lambda` and verifies the actual bundled
+default-off/closed-envelope refusal. The package command builds its dependencies first.
+`tests/isolated-provider-bundle.test.mjs` checks the compiled dependency graph for absence of
+SQL/private persistence/rendering/disposal/test fixtures and is part of the full verifier.
+This is local packaging only; existing publisher families are unchanged and no provider
+publication, deployment, role grant or activation is authorized by the builder.
+
+- `build-response-maintenance-lambda.mjs` builds the source-only internet-maintenance Lambda
+  into `backend/services/documents/dist/response-maintenance-lambda`, separate from private SQL
+  controls and isolated generation. Actual bundle smoke checks default-off/extra-content refusal;
+  `tests/response-maintenance-bundle.test.mjs` verifies emitted capability isolation. Set exact
+  clean `ARTIFACT_SOURCE_SHA` for committed provenance. No publisher or runtime activation is
+  introduced. Reviewed IAM, scheduling, retention and original writer drain remain prerequisites.
+
+`build-application-preparation-lambda.mjs` builds the separate source-bound private preparation
+activity family under Workflow dist/preparation-lambda. It checks the actual bundled default-off
+refusal and strict extra-content rejection with zero fetches. No publisher, deployment or activation
+is added; see [D3-068 evidence](../docs/product/delivery/evidence/d3-preparation-activity-bootstrap-2026-10-04.md).
+
+`build-application-preparation-durable-lambda.mjs` emits a separate native orchestration family
+under Workflow dist/preparation-durable-lambda and probes actual bundled default-off/wrong-version
+refusals before SDK state access with zero fetches. The maintained
+`preparation-durable-bundle.test.mjs` checks emitted owning/AI/SQL/private-runtime isolation.
+No publisher/deployment is added; see [D3-069](../docs/product/delivery/evidence/d3-preparation-durable-bootstrap-2026-10-04.md).
+
+`build-application-preparation-starter-lambda.mjs` emits the separate source-bound native SQS
+starter under Workflow dist/preparation-starter-lambda. Actual default-off/wrong-version/invalid
+input probes perform zero fetches. `preparation-starter-bundle.test.mjs` positively requires owning
+dispatch code and excludes emitted private/document/provider/terminal recovery actors.
+No publisher/deployment is added; see [D3-070 evidence](../docs/product/delivery/evidence/d3-preparation-starter-bootstrap-2026-10-04.md).
+
+`build-application-preparation-recovery-lambda.mjs` creates a separate source-bound native family
+under Workflow dist/preparation-recovery-lambda, exporting index.terminalHandler and
+index.reconcileHandler. Actual default-off, wrong-version and invalid-input probes run with zero
+fetches. `preparation-recovery-bundle.test.mjs` positively requires owning recovery and excludes
+emitted starter/Invoke/private/provider actors. No publisher/deployment is added; see
+[D3-071 evidence](../docs/product/delivery/evidence/d3-preparation-recovery-bootstrap-2026-10-04.md).
+
+`tests/cover-letter-export-bundle.test.mjs` checks the compiled owned export reader/codec and
+excludes generation/work/provider/Invoke actors. It is part of the maintained verifier.
+See [D3-072 evidence](../docs/product/delivery/evidence/d3-cover-letter-export-content-2026-10-04.md); no deployment is implied.

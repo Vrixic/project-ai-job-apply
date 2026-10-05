@@ -1,5 +1,5 @@
-import type postgres from "postgres";
 import { restrictedAnswerExportFieldKeys } from "@ai-job-apply/domain";
+import type postgres from "postgres";
 import type { RestrictedAnswerCipher } from "./restricted-answer-vault.js";
 
 export interface RestrictedAnswerExportReference {
@@ -29,10 +29,13 @@ export class PostgresRestrictedAnswerExportReader implements RestrictedAnswerExp
   ) {}
 
   async readValue(userId: string, reference: RestrictedAnswerExportReference): Promise<string> {
-    if (!restrictedAnswerExportFieldKeys.includes(reference.fieldKey)) {
+    // Pin scalar metadata before any asynchronous owner or KMS read. The caller may retain
+    // and mutate its reference; both SQL snapshots and decryption must name the original entry.
+    const { id, version, fieldKey, context: savedContext } = reference;
+    if (!restrictedAnswerExportFieldKeys.includes(fieldKey)) {
       throw new Error("RestrictedAnswerExportFieldRejected");
     }
-    const context = reference.context ?? "";
+    const context = savedContext ?? "";
     const [row] = await this.client<
       Array<{ ciphertext: Buffer; kmsKeyId: string; encryptionAlgorithm: "SYMMETRIC_DEFAULT" }>
     >`
@@ -42,15 +45,15 @@ export class PostgresRestrictedAnswerExportReader implements RestrictedAnswerExp
         SELECT * FROM profile.restricted_answer_versions
         WHERE answer_id = answer.id ORDER BY version DESC LIMIT 1
       ) AS version ON true
-      WHERE answer.user_id = ${userId}::uuid AND answer.id = ${reference.id}::uuid
-        AND answer.field_key = ${reference.fieldKey}
+      WHERE answer.user_id = ${userId}::uuid AND answer.id = ${id}::uuid
+        AND answer.field_key = ${fieldKey}
         AND coalesce(answer.context, '') = ${context}
-        AND version.version = ${reference.version} AND version.state = 'active'
+        AND version.version = ${version} AND version.state = 'active'
     `;
     if (!row) throw new RestrictedAnswerExportSnapshotChanged();
     const value = await this.cipher.decrypt({
       userId,
-      fieldKey: reference.fieldKey,
+      fieldKey,
       context,
       ciphertext: {
         ciphertext: new Uint8Array(row.ciphertext),
@@ -73,10 +76,10 @@ export class PostgresRestrictedAnswerExportReader implements RestrictedAnswerExp
           SELECT version, state FROM profile.restricted_answer_versions
           WHERE answer_id = answer.id ORDER BY version DESC LIMIT 1
         ) AS version ON true
-        WHERE answer.user_id = ${userId}::uuid AND answer.id = ${reference.id}::uuid
-          AND answer.field_key = ${reference.fieldKey}
+        WHERE answer.user_id = ${userId}::uuid AND answer.id = ${id}::uuid
+          AND answer.field_key = ${fieldKey}
           AND coalesce(answer.context, '') = ${context}
-          AND version.version = ${reference.version} AND version.state = 'active'
+          AND version.version = ${version} AND version.state = 'active'
       ) AS current
     `;
     if (current?.current !== true) throw new RestrictedAnswerExportSnapshotChanged();

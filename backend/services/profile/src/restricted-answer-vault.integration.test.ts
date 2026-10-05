@@ -28,6 +28,89 @@ describeWithDatabase("PostgresRestrictedAnswerVaultStore", () => {
   const cipher = new FakeRestrictedAnswerCipher();
   const store = new PostgresRestrictedAnswerVaultStore(database.client, cipher);
 
+  it.each(["unchanged", "corrected", "deleted"] as const)(
+    "export keeps the original %s answer binding when a caller retargets during decryption",
+    async (outcome) => {
+      const userId = await createUser(database.client);
+      const command = {
+        userId,
+        fieldKey: "authorization.us_authorized",
+        context: "us",
+        expectedVersion: 0,
+        valueType: "boolean" as const,
+        value: "false",
+        sensitivity: "restricted" as const,
+        sourceReference: "synthetic.export-reference",
+        confirmedAt: new Date("2020-01-01T00:00:00Z"),
+        expiresAt: new Date("2020-01-02T00:00:00Z"),
+        idempotencyKey: `export-reference-${userId}`,
+        traceId: "synthetic.export-reference",
+      };
+      const original = await store.save(command);
+      const neighbourCommand = {
+        ...command,
+        fieldKey: "authorization.sponsorship_required",
+        context: "us",
+        value: "true",
+        idempotencyKey: `export-neighbour-${userId}`,
+      };
+      const neighbour = await store.save(neighbourCommand);
+      const neighbourCurrent = await store.save({
+        ...neighbourCommand,
+        expectedVersion: 1,
+        idempotencyKey: `export-neighbour-corrected-${userId}`,
+      });
+      const reference = { ...original, fieldKey: command.fieldKey, context: command.context };
+      let decryptCalls = 0;
+      const reader = new PostgresRestrictedAnswerExportReader(database.client, {
+        decrypt: async (input) => {
+          decryptCalls++;
+          expect(input).toMatchObject({
+            userId,
+            fieldKey: command.fieldKey,
+            context: command.context,
+          });
+          const value = await cipher.decrypt(input);
+          if (outcome === "corrected") {
+            await store.save({
+              ...command,
+              expectedVersion: 1,
+              value: "true",
+              idempotencyKey: `export-original-corrected-${userId}`,
+            });
+          } else if (outcome === "deleted") {
+            await store.remove({
+              userId,
+              id: original.id,
+              expectedVersion: 1,
+              traceId: command.traceId,
+            });
+          }
+          // The neighbouring entry is live and has a different ID, version and field.
+          // The old implementation could validate it while returning original plaintext.
+          Object.assign(reference, {
+            ...neighbourCurrent,
+            fieldKey: neighbourCommand.fieldKey,
+            context: "ca",
+          });
+          return value;
+        },
+      });
+      const result = reader.readValue(userId, reference);
+      if (outcome === "unchanged") await expect(result).resolves.toBe("false");
+      else await expect(result).rejects.toThrow("RestrictedAnswerExportSnapshotChanged");
+      expect(decryptCalls).toBe(1);
+      expect(neighbourCurrent).toEqual({ id: neighbour.id, version: 2 });
+      expect(
+        await new PostgresRestrictedAnswerExportReader(database.client, cipher).readValue(userId, {
+          ...neighbourCurrent,
+          fieldKey: neighbourCommand.fieldKey,
+          context: neighbourCommand.context,
+        }),
+      ).toBe("true");
+    },
+  );
+
   it.each(["before", "during"] as const)(
     "withholds reuse when the owner is quarantined %s decryption",
     async (timing) => {

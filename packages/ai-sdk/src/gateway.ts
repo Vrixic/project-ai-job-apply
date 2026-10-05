@@ -1,7 +1,14 @@
 import {
   type OpenAiBackgroundResponseReference,
+  type ProviderBackgroundTerminal,
   validateOpenAiBackgroundResponseReference,
-} from "./openai-response-cleanup.js";
+  validateProviderBackgroundTerminal,
+} from "./provider-background-contract.js";
+
+export {
+  type ProviderBackgroundTerminal,
+  validateProviderBackgroundTerminal,
+} from "./provider-background-contract.js";
 
 /**
  * The only approved path to a model provider. It enforces, before any candidate data leaves the
@@ -54,12 +61,6 @@ export interface ModelProvider {
     request: ProviderRequest,
     capture: BackgroundResponseCapture,
   ): Promise<{ text: string } | ProviderBackgroundTerminal>;
-}
-
-export interface ProviderBackgroundTerminal {
-  kind: "terminal_no_content";
-  reference: OpenAiBackgroundResponseReference;
-  terminalStatus: "failed" | "cancelled" | "incomplete";
 }
 
 export interface BackgroundResponseCapture {
@@ -153,33 +154,6 @@ export type ModelGatewayBackgroundCompletion =
 function completionOnly(completion: ModelGatewayBackgroundCompletion): ModelGatewayCompletion {
   if (completion.kind === "terminal_no_content") throw new ModelGatewayError("PROVIDER_FAILED");
   return completion;
-}
-
-export function validateProviderBackgroundTerminal(
-  value: unknown,
-): value is ProviderBackgroundTerminal {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  if (![Object.prototype, null].includes(Object.getPrototypeOf(value))) return false;
-  const keys = Reflect.ownKeys(value);
-  if (
-    keys.length !== 3 ||
-    !keys.every((key) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      return (
-        typeof key === "string" &&
-        ["kind", "reference", "terminalStatus"].includes(key) &&
-        descriptor?.enumerable === true &&
-        Object.hasOwn(descriptor, "value")
-      );
-    })
-  )
-    return false;
-  const receipt = value as ProviderBackgroundTerminal;
-  return (
-    receipt.kind === "terminal_no_content" &&
-    ["failed", "cancelled", "incomplete"].includes(receipt.terminalStatus) &&
-    validateOpenAiBackgroundResponseReference(receipt.reference)
-  );
 }
 
 export class ModelGateway {

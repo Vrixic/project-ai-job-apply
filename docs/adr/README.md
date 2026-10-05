@@ -47,6 +47,8 @@ Records important technical decisions, their context, alternatives, consequences
 
 - [ADR-037: Precreated cover-letter provider slots](037-precreated-cover-letter-provider-slots.md) (proposed; conditional transport only, privacy/runtime prerequisites unfinished)
 
+- [ADR-039: Transactional vault reference admission](039-transactional-vault-reference-admission.md) (proposed; default-off synthetic implementation)
+
 Use `000-template.md` for future decisions.
 
 ADRs are immutable historical records after acceptance. A new ADR supersedes an old one instead of rewriting history.

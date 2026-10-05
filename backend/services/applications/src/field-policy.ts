@@ -1,3 +1,5 @@
+import type { VaultReference } from "./vault.js";
+
 export type FieldSensitivity = "standard" | "confidential" | "restricted";
 export type FieldAnswerPolicy =
   | "deterministic"
@@ -47,6 +49,7 @@ export type ReviewReason =
 export type FieldDisposition = "auto" | "review" | "user_action";
 
 export interface ProposedField {
+  vaultReference?: VaultReference;
   fieldKey: string;
   value: FieldValue;
   origin: FieldOrigin;
@@ -120,7 +123,7 @@ export function classifyField(
 
   const disposition: FieldDisposition = userAction
     ? "user_action"
-    : reasons.size
+    : reasons.size || proposal.origin === "answer_vault"
       ? "review"
       : "auto";
   return { disposition, reasons: [...reasons].sort(), usable: disposition !== "user_action" };

@@ -39,6 +39,7 @@ export function createCoverLetterResponseDisposalLambda(
       return {
         read: responses.read.bind(responses),
         readCompleted: responses.readCompleted.bind(responses),
+        readFailed: responses.readFailed.bind(responses),
         recordDisposal: responses.recordDisposal.bind(responses),
       };
     });

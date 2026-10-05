@@ -25,7 +25,11 @@
     "start": "node dist/src/start.js",
     "test": "vitest run --exclude=dist/** --passWithNoTests",
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:lambda:preparation": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-application-preparation-lambda.mjs",
+    "build:lambda:preparation-durable": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-application-preparation-durable-lambda.mjs",
+    "build:lambda:preparation-starter": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-application-preparation-starter-lambda.mjs",
+    "build:lambda:preparation-recovery": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-application-preparation-recovery-lambda.mjs"
   },
   "dependencies": {
     "@ai-job-apply/ai-sdk": "workspace:*",

@@ -512,3 +512,57 @@ guard regressions. This is source policy evidence, not independent review or AWS
 UUID/owner/request/version bindings remain handler responsibilities because IAM path wildcards
 can cross slashes. Complete role/bucket/KMS/private caller review, deployed S3 adversarial
 evidence, retention and original writer drain still precede composition or activation.
+
+## Source-only isolated provider bootstrap (2026-10-04)
+
+D3-064 adds a source-only, default-off entrypoint that qualifies the numeric invoked target,
+region/account, distinct numeric private control/capture targets, bucket/KMS and managed
+provider-secret ARN before I/O. Database settings and plaintext API-key environment values
+are refused. One bounded fixed-extension read supplies a per-invocation provider key; completed
+invocations do not retain it. Native object/Invoke clients have one attempt and ignore
+configured endpoint overrides. The actor receives the existing transition-only facade, work
+control/capture clients and background gateway. Target matching does not authenticate callers.
+
+Seventy focused and 1,049 Documents unit cases, 266 PostgreSQL cases (four new native-bootstrap
+cases) and full maintained verification pass with simulated external transports/authentication.
+A compiled bundle check excludes SQL/private persistence, rendering, initialization, cleanup,
+disposal and test fixtures. A separate local builder does not change publisher families.
+This source bootstrap does not deploy or activate the actor, satisfy IAM enforcement, prove
+original writer quiescence or settle ambiguous external requests. Reviewed private caller/
+secret/bucket/KMS/provider role, maintenance/retention, real-provider evaluation, accountable
+approval and deployed evidence remain prerequisites to production composition/activation.
+The ADR remains Proposed.
+
+
+Source-only D3-065 checkpoint (2026-10-04): failed-response maintenance requires owned immutable
+original-failure proof before any cleanup fence. Migration `0009` adds nullable fixed metadata
+only on original provider running-to-settled transitions; old rows remain unclassified. Original
+rejection/non-dispatch settlement is now atomic with future fencing, preserving running writers.
+The private v1 disposal boundary adds exact-echo `read_failed`; missing owning ports refuse.
+This does not classify ambiguous abandonment, certify quiescence, choose retention periods or
+activate the proposed runtime. Migrate before updated functions; old code tolerates NULL and
+cannot obtain eligibility from an ordinary read. Existing purge/identity protections remain.
+
+Source-only D3-066 (2026-10-04) connects a separate default-off internet maintenance Lambda to
+owned failed/completed eligibility and private fence/disposal controls. Caller selectors never
+classify work. Successful cleanup has no fence/cancel capability; missing/unknown/legacy proof
+prevents downstream effects. The actual emitted artifact excludes SQL, S3, rendering and model
+creation code. Target matching is not authentication, and no publication/runtime IAM/scheduler
+or activation is introduced. Retention, abandonment, original writer drain and accountable/
+deployed acceptance remain prerequisites; this ADR remains Proposed.
+
+Source-only D3-067 (2026-10-04) supplies the private Applications preparation port into owned
+evidence, controlled initialization, original isolated Invoke and independent draft recovery.
+Retry recovery has no initializer/Invoke capability and never renews original disclosure. Owner
+codecs and independent candidate-lease/persistence pools remain mandatory. Seven connected SQL
+cases include durable SDK execution, original-result recovery after consent expiry and lost ACKs
+without new dispatch; external transports/authentication are simulated. Native bootstrap/artifacts,
+IAM/scheduling, retention/abandonment/drain and accountable/deployed acceptance remain open.
+Nothing is deployed or activated; this ADR remains Proposed.
+
+Source-only D3-068 adds a default-off native private preparation activity with qualified target
+and managed database-secret setup, independent owner/lease/work pools and fixed S3/Invoke
+clients. Unchanged background metadata validators move to a pure module so the actual private
+bundle excludes ModelGateway/provider/cleanup implementations. Eleven SQL cases include four
+native compositions with simulated cloud/model transports. Native release/IAM/scheduling,
+retention/abandonment/drain and accountable/deployed acceptance remain; the ADR stays Proposed.

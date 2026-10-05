@@ -21,6 +21,74 @@ async function exportDefinition(name: string) {
 }
 
 describe("domain schema registry", () => {
+  it("preserves optional selected-answer provenance in portable packet fields with mandatory review", async () => {
+    const validate = await exportDefinition("applicationsPacketField");
+    const id = "019d04cf-1f80-7000-8000-000000000001";
+    const field = {
+      fieldKey: "authorization.us_authorized",
+      value: false,
+      origin: "answer_vault",
+      sourceFactIds: [id],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["restricted_answer"],
+      requiresReview: true,
+      vaultReference: {
+        id,
+        version: 1,
+        context: "us",
+        questionHash: "a".repeat(64),
+        meaningConfirmed: true,
+        validUntilEpochMs: null,
+      },
+    };
+    expect(validate(field)).toBe(true);
+    for (const patch of [
+      { requiresReview: false },
+      { disposition: "auto" },
+      { origin: "confirmed_fact" },
+    ]) {
+      expect(validate({ ...field, ...patch })).toBe(false);
+    }
+    expect(
+      validate({ ...field, vaultReference: { ...field.vaultReference, value: "private" } }),
+    ).toBe(false);
+  });
+
+  it("allows optional bounded saved paragraphs only with mandatory review metadata", async () => {
+    const validate = await exportDefinition("coverLetter");
+    const ready = {
+      id: "019d04cf-1f80-7000-8000-000000000070",
+      applicationId: "019d04cf-1f80-7000-8000-000000000071",
+      version: 1,
+      status: "ready",
+      jobRevision: "a".repeat(64),
+      confirmedFactsHash: "b".repeat(64),
+      contentSha256: "c".repeat(64),
+      model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+      promptVersion: "1.0.0",
+      createdAt: "2026-10-04T12:00:00Z",
+    };
+    const content = {
+      paragraphs: [{ text: "I build synthetic systems.", factIds: [ready.id] }],
+      reviewRequired: true,
+    };
+    expect(validate(ready)).toBe(true);
+    expect(validate({ ...ready, ...content })).toBe(true);
+    for (const extra of [
+      { paragraphs: content.paragraphs },
+      { reviewRequired: true },
+      { ...content, reviewRequired: false },
+      { ...content, paragraphs: [] },
+      { ...content, paragraphs: Array.from({ length: 7 }, () => content.paragraphs[0]) },
+      { ...content, paragraphs: [{ text: "x".repeat(1201), factIds: [ready.id] }] },
+      { ...content, paragraphs: [{ text: "synthetic", factIds: [ready.id, ready.id] }] },
+      { ...content, paragraphs: [{ ...content.paragraphs[0], objectKey: "private-key" }] },
+    ])
+      expect(validate({ ...ready, ...extra })).toBe(false);
+    const { contentSha256: _hash, model: _model, promptVersion: _prompt, ...pending } = ready;
+    expect(validate({ ...pending, status: "pending", ...content })).toBe(false);
+  });
   it("exports cover-letter metadata without candidate text or object capabilities", async () => {
     const validate = await exportDefinition("coverLetter");
     const pending = {

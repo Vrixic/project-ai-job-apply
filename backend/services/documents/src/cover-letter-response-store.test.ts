@@ -124,3 +124,30 @@ describe("successful response eligibility refuses before database access", () =>
     expect(sql).not.toHaveBeenCalled();
   });
 });
+
+describe("failed response eligibility refuses before database access", () => {
+  it("defaults off", async () => {
+    const sql = vi.fn();
+    const store = new PostgresCoverLetterResponseStore(sql as unknown as postgres.Sql);
+    await expect(store.readFailed(ref)).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+    expect(sql).not.toHaveBeenCalled();
+  });
+  it.each(["id", "documentId", "requestSha256"] as const)("rejects malformed %s", async (key) => {
+    const sql = vi.fn();
+    const store = new PostgresCoverLetterResponseStore(sql as unknown as postgres.Sql, () => true);
+    await expect(store.readFailed({ ...ref, [key]: "synthetic invalid" })).rejects.toThrow(
+      /^CoverLetterResponseUnavailable$/u,
+    );
+    expect(sql).not.toHaveBeenCalled();
+  });
+  it("refuses accessor-bearing identity", async () => {
+    const sql = vi.fn();
+    const getter = vi.fn(() => ref.id);
+    const input = { ...ref };
+    Object.defineProperty(input, "id", { get: getter, enumerable: true });
+    const store = new PostgresCoverLetterResponseStore(sql as unknown as postgres.Sql, () => true);
+    await expect(store.readFailed(input)).rejects.toThrow(/^CoverLetterResponseUnavailable$/u);
+    expect(getter).not.toHaveBeenCalled();
+    expect(sql).not.toHaveBeenCalled();
+  });
+});
