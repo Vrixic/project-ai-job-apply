@@ -91,3 +91,9 @@ transport decision. No public endpoint, model/cloud call, image publication, dep
 stop certificate or phase exit is claimed. The remaining issuer/launcher/authenticated transport/
 task registry/managed stop/content routing, provider/client/ATS/accountable gates remain open.
 Hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 native kernel/session source is reviewable in
+[PR #555](https://github.com/Vrixic/project-ai-job-apply/pull/555), based on exact #554
+`50a9965a`. Verified implementation remains `304c01bf`; following commits change documentation
+only. ADR-040 stays proposed, and D1/D3 stay In progress. No authored merge, image publication,
+deployment or activation; hosted CI/CD remains deferred until production launch.

@@ -1007,3 +1007,9 @@ Owned test container/staging cleanup completed; Docker/WSL stopped. Proposed ADR
 issuer/launcher/authenticated transport/task registry/managed stop/content routing, provider,
 client/ATS/accountable gates remain open. D1/D3 stay In progress; no activation, deployment,
 authored merge or hosted CI/CD work.
+
+2026-10-05 D3-079 native kernel/session source is reviewable in
+[PR #555](https://github.com/Vrixic/project-ai-job-apply/pull/555), based on exact #554
+`50a9965a`. Verified implementation remains `304c01bf`; following commits change documentation
+only. ADR-040 stays proposed, and D1/D3 stay In progress. No authored merge, image publication,
+deployment or activation; hosted CI/CD remains deferred until production launch.
