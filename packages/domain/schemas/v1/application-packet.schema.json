@@ -132,7 +132,9 @@
           {
             "if": {
               "required": ["vaultReference"],
-              "properties": { "vaultReference": {} }
+              "properties": {
+                "vaultReference": {}
+              }
             },
             "then": {
               "properties": {
@@ -144,6 +146,31 @@
                 },
                 "disposition": {
                   "const": "review"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["fieldKey"],
+              "properties": {
+                "fieldKey": {
+                  "enum": ["documents.cover_letter", "documents.resume"]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  ]
                 }
               }
             }

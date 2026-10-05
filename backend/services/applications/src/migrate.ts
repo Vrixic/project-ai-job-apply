@@ -13,6 +13,7 @@ const migrationVersions = [
   "0004_packet_preparation",
   "0005_preparation_dispatch",
   "0006_vault_approval_binding",
+  "0007_document_field_hashes",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -61,6 +62,7 @@ try {
         candidateRightsSecurityDefinerCount: number;
         candidateRightsPublicExecuteViolationCount: number;
         candidateDeletionGuardBodyCount: number;
+        documentFieldHashGuardCount: number;
       }[]
     >`
       SELECT
@@ -122,7 +124,16 @@ try {
           WHERE procedure.oid = to_regprocedure('applications.guard_candidate_delete()')
             AND pg_get_functiondef(procedure.oid)
               LIKE '%privacy.current_candidate_deletion_authorized%'
-        ) AS "candidateDeletionGuardBodyCount"
+        ) AS "candidateDeletionGuardBodyCount",
+        (SELECT count(*)::int FROM pg_constraint
+          WHERE conrelid = 'applications.packets'::regclass
+            AND conname = 'packets_document_field_hashes_ck' AND contype = 'c' AND convalidated
+            AND pg_get_constraintdef(oid) LIKE '%jsonb_path_query_array%'
+            AND pg_get_constraintdef(oid) LIKE '%documents.cover_letter%'
+            AND pg_get_constraintdef(oid) LIKE '%documents.resume%'
+            AND pg_get_constraintdef(oid) LIKE '%jsonb_build_array(cover_letter_hash)%'
+            AND pg_get_constraintdef(oid) LIKE '%jsonb_build_array(resume_hash)%'
+        ) AS "documentFieldHashGuardCount"
     `;
     if (
       verification?.relationCount !== 11 ||
@@ -132,7 +143,8 @@ try {
       verification.candidateRightsFunctionCount !== 3 ||
       verification.candidateRightsSecurityDefinerCount !== 2 ||
       verification.candidateRightsPublicExecuteViolationCount !== 0 ||
-      verification.candidateDeletionGuardBodyCount !== 1
+      verification.candidateDeletionGuardBodyCount !== 1 ||
+      verification.documentFieldHashGuardCount !== 1
     ) {
       throw new Error(
         `Applications migration verification failed: ${JSON.stringify(verification)}`,

@@ -18,17 +18,34 @@
     "audit"
   ],
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "format": { "const": "candidate-data-export-v1" },
-    "exportId": { "$ref": "#/$defs/uuid" },
-    "policyVersion": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
-    "generatedAt": { "$ref": "#/$defs/dateTime" },
+    "schemaVersion": {
+      "const": 1
+    },
+    "format": {
+      "const": "candidate-data-export-v1"
+    },
+    "exportId": {
+      "$ref": "#/$defs/uuid"
+    },
+    "policyVersion": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "generatedAt": {
+      "$ref": "#/$defs/dateTime"
+    },
     "candidate": {
       "type": "object",
       "required": ["createdAt", "connectedAccounts"],
       "properties": {
-        "email": { "type": "string", "format": "email", "maxLength": 320 },
-        "createdAt": { "$ref": "#/$defs/dateTime" },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 320
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
         "connectedAccounts": {
           "type": "array",
           "maxItems": 16,
@@ -36,9 +53,17 @@
             "type": "object",
             "required": ["provider", "linkedAt", "lastSeenAt"],
             "properties": {
-              "provider": { "type": "string", "minLength": 1, "maxLength": 64 },
-              "linkedAt": { "$ref": "#/$defs/dateTime" },
-              "lastSeenAt": { "$ref": "#/$defs/dateTime" }
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "linkedAt": {
+                "$ref": "#/$defs/dateTime"
+              },
+              "lastSeenAt": {
+                "$ref": "#/$defs/dateTime"
+              }
             },
             "additionalProperties": false
           }
@@ -50,17 +75,36 @@
       "type": "object",
       "required": ["preferences", "facts"],
       "properties": {
-        "preferences": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/preferences" }] },
-        "facts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/profileFact" } },
+        "preferences": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/preferences"
+            }
+          ]
+        },
+        "facts": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/profileFact"
+          }
+        },
         "restrictedAnswers": {
           "type": "array",
           "maxItems": 10000,
-          "items": { "$ref": "#/$defs/restrictedAnswerMetadata" }
+          "items": {
+            "$ref": "#/$defs/restrictedAnswerMetadata"
+          }
         },
         "contributionConsents": {
           "type": "array",
           "maxItems": 10000,
-          "items": { "$ref": "#/$defs/contributionConsent" }
+          "items": {
+            "$ref": "#/$defs/contributionConsent"
+          }
         }
       },
       "additionalProperties": false
@@ -69,11 +113,19 @@
       "type": "object",
       "required": ["resumes"],
       "properties": {
-        "resumes": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/resume" } },
+        "resumes": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/resume"
+          }
+        },
         "coverLetters": {
           "type": "array",
           "maxItems": 10000,
-          "items": { "$ref": "#/$defs/coverLetter" }
+          "items": {
+            "$ref": "#/$defs/coverLetter"
+          }
         }
       },
       "additionalProperties": false
@@ -82,11 +134,19 @@
       "type": "object",
       "required": ["reports"],
       "properties": {
-        "reports": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/jobReport" } },
+        "reports": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/jobReport"
+          }
+        },
         "contributions": {
           "type": "array",
           "maxItems": 10000,
-          "items": { "$ref": "#/$defs/jobContribution" }
+          "items": {
+            "$ref": "#/$defs/jobContribution"
+          }
         }
       },
       "additionalProperties": false
@@ -98,12 +158,16 @@
         "savedJobs": {
           "type": "array",
           "maxItems": 10000,
-          "items": { "$ref": "#/$defs/savedJob" }
+          "items": {
+            "$ref": "#/$defs/savedJob"
+          }
         },
         "privateSavedPageCaptures": {
           "type": "array",
           "maxItems": 10000,
-          "items": { "$ref": "#/$defs/privateSavedPageCapture" }
+          "items": {
+            "$ref": "#/$defs/privateSavedPageCapture"
+          }
         }
       },
       "additionalProperties": false
@@ -111,28 +175,40 @@
     "billing": {
       "type": "object",
       "required": ["entitlement"],
-      "properties": { "entitlement": { "$ref": "#/$defs/entitlement" } },
+      "properties": {
+        "entitlement": {
+          "$ref": "#/$defs/entitlement"
+        }
+      },
       "additionalProperties": false
     },
     "trust": {
       "type": "object",
       "required": ["schemaVersion", "cases", "caseEvents", "contributorReputationEvidence"],
       "properties": {
-        "schemaVersion": { "const": 1 },
+        "schemaVersion": {
+          "const": 1
+        },
         "cases": {
           "type": "array",
           "maxItems": 10000,
-          "items": { "$ref": "#/$defs/trustCase" }
+          "items": {
+            "$ref": "#/$defs/trustCase"
+          }
         },
         "caseEvents": {
           "type": "array",
           "maxItems": 100000,
-          "items": { "$ref": "#/$defs/trustCaseEvent" }
+          "items": {
+            "$ref": "#/$defs/trustCaseEvent"
+          }
         },
         "contributorReputationEvidence": {
           "type": "array",
           "maxItems": 100000,
-          "items": { "$ref": "#/$defs/trustContributorReputationEvidence" }
+          "items": {
+            "$ref": "#/$defs/trustContributorReputationEvidence"
+          }
         }
       },
       "additionalProperties": false
@@ -144,33 +220,47 @@
         "preparations": {
           "type": "array",
           "maxItems": 100000,
-          "items": { "$ref": "#/$defs/applicationPreparation" }
+          "items": {
+            "$ref": "#/$defs/applicationPreparation"
+          }
         },
-        "schemaVersion": { "const": 1 },
+        "schemaVersion": {
+          "const": 1
+        },
         "applications": {
           "type": "array",
           "maxItems": 10000,
-          "items": { "$ref": "#/$defs/applicationsApplication" }
+          "items": {
+            "$ref": "#/$defs/applicationsApplication"
+          }
         },
         "packets": {
           "type": "array",
           "maxItems": 100000,
-          "items": { "$ref": "#/$defs/applicationsPacket" }
+          "items": {
+            "$ref": "#/$defs/applicationsPacket"
+          }
         },
         "approvals": {
           "type": "array",
           "maxItems": 100000,
-          "items": { "$ref": "#/$defs/applicationsApproval" }
+          "items": {
+            "$ref": "#/$defs/applicationsApproval"
+          }
         },
         "attempts": {
           "type": "array",
           "maxItems": 100000,
-          "items": { "$ref": "#/$defs/applicationsAttempt" }
+          "items": {
+            "$ref": "#/$defs/applicationsAttempt"
+          }
         },
         "history": {
           "type": "array",
           "maxItems": 100000,
-          "items": { "$ref": "#/$defs/applicationsHistoryEntry" }
+          "items": {
+            "$ref": "#/$defs/applicationsHistoryEntry"
+          }
         }
       },
       "additionalProperties": false
@@ -179,7 +269,13 @@
       "type": "object",
       "required": ["events"],
       "properties": {
-        "events": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/auditEvent" } }
+        "events": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/auditEvent"
+          }
+        }
       },
       "additionalProperties": false
     }
@@ -204,19 +300,45 @@
         "updatedAt"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "applicationId": { "$ref": "#/$defs/uuid" },
-        "basePacketId": { "$ref": "#/$defs/uuid" },
-        "state": { "enum": ["queued", "running", "succeeded", "failed"] },
-        "noticeVersion": { "const": "openai-cover-letter.v1" },
-        "purpose": { "const": "cover_letter" },
-        "provider": { "const": "openai" },
-        "model": { "const": "gpt-6-luna" },
-        "categories": { "const": ["profile_facts", "job_posting"] },
-        "approvedAt": { "$ref": "#/$defs/dateTime" },
-        "expiresAt": { "$ref": "#/$defs/dateTime" },
-        "generationClaimedAt": { "$ref": "#/$defs/dateTime" },
-        "resultPacketId": { "$ref": "#/$defs/uuid" },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "applicationId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "basePacketId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "state": {
+          "enum": ["queued", "running", "succeeded", "failed"]
+        },
+        "noticeVersion": {
+          "const": "openai-cover-letter.v1"
+        },
+        "purpose": {
+          "const": "cover_letter"
+        },
+        "provider": {
+          "const": "openai"
+        },
+        "model": {
+          "const": "gpt-6-luna"
+        },
+        "categories": {
+          "const": ["profile_facts", "job_posting"]
+        },
+        "approvedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "generationClaimedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "resultPacketId": {
+          "$ref": "#/$defs/uuid"
+        },
         "errorCode": {
           "enum": [
             "disclosure_expired",
@@ -228,8 +350,12 @@
             "application_changed"
           ]
         },
-        "createdAt": { "$ref": "#/$defs/dateTime" },
-        "updatedAt": { "$ref": "#/$defs/dateTime" }
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -295,7 +421,11 @@
             "required": ["state"]
           },
           "then": {
-            "properties": { "replacementConsentId": { "$ref": "#/$defs/uuid" } },
+            "properties": {
+              "replacementConsentId": {
+                "$ref": "#/$defs/uuid"
+              }
+            },
             "required": ["replacementConsentId"]
           },
           "else": {
@@ -625,9 +755,20 @@
           "additionalProperties": false,
           "allOf": [
             {
-              "if": { "properties": { "state": { "const": "applied" } }, "required": ["state"] },
+              "if": {
+                "properties": {
+                  "state": {
+                    "const": "applied"
+                  }
+                },
+                "required": ["state"]
+              },
               "then": {
-                "properties": { "jobId": { "$ref": "#/$defs/uuid" } },
+                "properties": {
+                  "jobId": {
+                    "$ref": "#/$defs/uuid"
+                  }
+                },
                 "required": ["jobId"]
               }
             }
@@ -839,8 +980,14 @@
         }
       ]
     },
-    "uuid": { "type": "string", "format": "uuid" },
-    "dateTime": { "type": "string", "format": "date-time" },
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
     "preferences": {
       "type": "object",
       "required": [
@@ -852,32 +999,57 @@
         "updatedAt"
       ],
       "properties": {
-        "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
         "targetRoles": {
           "type": "array",
           "maxItems": 20,
-          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
         },
         "locations": {
           "type": "array",
           "maxItems": 20,
-          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          }
         },
         "workModes": {
           "type": "array",
           "maxItems": 3,
           "uniqueItems": true,
-          "items": { "enum": ["remote", "hybrid", "on_site"] }
+          "items": {
+            "enum": ["remote", "hybrid", "on_site"]
+          }
         },
         "employmentTypes": {
           "type": "array",
           "maxItems": 4,
           "uniqueItems": true,
-          "items": { "enum": ["full_time", "part_time", "contract", "internship"] }
+          "items": {
+            "enum": ["full_time", "part_time", "contract", "internship"]
+          }
         },
-        "salaryMinimum": { "type": "integer", "minimum": 0, "maximum": 10000000 },
-        "salaryCurrency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-        "updatedAt": { "$ref": "#/$defs/dateTime" }
+        "salaryMinimum": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000
+        },
+        "salaryCurrency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -894,25 +1066,71 @@
         "createdAt"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "fieldKey": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "context": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
-        "valueType": { "enum": ["string", "text", "boolean", "date", "decimal", "enum"] },
-        "sensitivity": { "enum": ["confidential", "restricted"] },
-        "state": { "enum": ["active", "deleted"] },
-        "value": { "type": "string", "minLength": 1, "maxLength": 3900 },
-        "confirmedAt": { "$ref": "#/$defs/dateTime" },
-        "expiresAt": { "$ref": "#/$defs/dateTime" },
-        "createdAt": { "$ref": "#/$defs/dateTime" }
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "fieldKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "context": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "valueType": {
+          "enum": ["string", "text", "boolean", "date", "decimal", "enum"]
+        },
+        "sensitivity": {
+          "enum": ["confidential", "restricted"]
+        },
+        "state": {
+          "enum": ["active", "deleted"]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 3900
+        },
+        "confirmedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "state": { "const": "deleted" } }, "required": ["state"] },
-          "then": { "properties": { "value": false } }
+          "if": {
+            "properties": {
+              "state": {
+                "const": "deleted"
+              }
+            },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "value": false
+            }
+          }
         },
         {
-          "if": { "properties": { "value": {} }, "required": ["value"] },
+          "if": {
+            "properties": {
+              "value": {}
+            },
+            "required": ["value"]
+          },
           "then": {
             "properties": {
               "fieldKey": {
@@ -949,8 +1167,14 @@
         "updatedAt"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
         "kind": {
           "enum": [
             "identity",
@@ -962,23 +1186,59 @@
             "preference"
           ]
         },
-        "key": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
         "value": {
           "oneOf": [
-            { "type": "string", "maxLength": 10000 },
-            { "type": "number" },
-            { "type": "boolean" },
-            { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 1000 } }
+            {
+              "type": "string",
+              "maxLength": 10000
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            }
           ]
         },
-        "verification": { "enum": ["proposed", "confirmed", "rejected"] },
-        "availability": { "enum": ["available", "invalidated"] },
-        "sensitivity": { "enum": ["standard", "confidential", "restricted"] },
-        "sourceType": { "enum": ["user", "resume", "import", "derived"] },
-        "effectiveFrom": { "type": "string", "format": "date" },
-        "effectiveTo": { "type": "string", "format": "date" },
-        "createdAt": { "$ref": "#/$defs/dateTime" },
-        "updatedAt": { "$ref": "#/$defs/dateTime" }
+        "verification": {
+          "enum": ["proposed", "confirmed", "rejected"]
+        },
+        "availability": {
+          "enum": ["available", "invalidated"]
+        },
+        "sensitivity": {
+          "enum": ["standard", "confidential", "restricted"]
+        },
+        "sourceType": {
+          "enum": ["user", "resume", "import", "derived"]
+        },
+        "effectiveFrom": {
+          "type": "string",
+          "format": "date"
+        },
+        "effectiveTo": {
+          "type": "string",
+          "format": "date"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -994,21 +1254,50 @@
         "createdAt"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "applicationId": { "$ref": "#/$defs/uuid" },
-        "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
-        "status": { "enum": ["pending", "ready"] },
-        "jobRevision": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "confirmedFactsHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "contentSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "promptVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "applicationId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "status": {
+          "enum": ["pending", "ready"]
+        },
+        "jobRevision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "confirmedFactsHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "contentSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "promptVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
         "model": {
           "type": "object",
           "required": ["provider", "model", "version"],
           "properties": {
-            "provider": { "const": "openai" },
-            "model": { "const": "gpt-6-luna" },
-            "version": { "const": "gpt-6-luna" }
+            "provider": {
+              "const": "openai"
+            },
+            "model": {
+              "const": "gpt-6-luna"
+            },
+            "version": {
+              "const": "gpt-6-luna"
+            }
           },
           "additionalProperties": false
         },
@@ -1020,28 +1309,52 @@
             "type": "object",
             "required": ["text", "factIds"],
             "properties": {
-              "text": { "type": "string", "minLength": 1, "maxLength": 1200 },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1200
+              },
               "factIds": {
                 "type": "array",
                 "minItems": 1,
                 "maxItems": 40,
                 "uniqueItems": true,
-                "items": { "$ref": "#/$defs/uuid" }
+                "items": {
+                  "$ref": "#/$defs/uuid"
+                }
               }
             },
             "additionalProperties": false
           }
         },
-        "reviewRequired": { "const": true },
-        "createdAt": { "$ref": "#/$defs/dateTime" }
+        "reviewRequired": {
+          "const": true
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false,
-      "dependentRequired": { "paragraphs": ["reviewRequired"], "reviewRequired": ["paragraphs"] },
+      "dependentRequired": {
+        "paragraphs": ["reviewRequired"],
+        "reviewRequired": ["paragraphs"]
+      },
       "allOf": [
         {
-          "if": { "properties": { "status": { "const": "ready" } }, "required": ["status"] },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "ready"
+              }
+            },
+            "required": ["status"]
+          },
           "then": {
-            "properties": { "contentSha256": {}, "model": {}, "promptVersion": {} },
+            "properties": {
+              "contentSha256": {},
+              "model": {},
+              "promptVersion": {}
+            },
             "required": ["contentSha256", "model", "promptVersion"]
           },
           "else": {
@@ -1069,24 +1382,53 @@
         "updatedAt"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "fileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
         "mediaType": {
           "enum": [
             "application/pdf",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           ]
         },
-        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 10485760 },
-        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10485760
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "status": {
           "enum": ["awaiting_upload", "scanning", "parsing", "parsed", "rejected", "failed"]
         },
-        "failureCode": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "pageCount": { "type": "integer", "minimum": 1, "maximum": 1000 },
-        "characterCount": { "type": "integer", "minimum": 0, "maximum": 5000000 },
-        "createdAt": { "$ref": "#/$defs/dateTime" },
-        "updatedAt": { "$ref": "#/$defs/dateTime" }
+        "failureCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "pageCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "characterCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000000
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -1094,9 +1436,15 @@
       "type": "object",
       "required": ["id", "requestedJobId", "canonicalJobId", "reason", "createdAt"],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "requestedJobId": { "$ref": "#/$defs/uuid" },
-        "canonicalJobId": { "$ref": "#/$defs/uuid" },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestedJobId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "canonicalJobId": {
+          "$ref": "#/$defs/uuid"
+        },
         "reason": {
           "enum": [
             "job_closed",
@@ -1107,7 +1455,9 @@
             "other_catalog_issue"
           ]
         },
-        "createdAt": { "$ref": "#/$defs/dateTime" }
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -1115,17 +1465,37 @@
       "type": "object",
       "required": ["id", "requestedJobId", "canonicalJobIdAtSave", "savedAt"],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "requestedJobId": { "$ref": "#/$defs/uuid" },
-        "canonicalJobIdAtSave": { "$ref": "#/$defs/uuid" },
-        "titleAtSave": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "companyNameAtSave": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestedJobId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "canonicalJobIdAtSave": {
+          "$ref": "#/$defs/uuid"
+        },
+        "titleAtSave": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "companyNameAtSave": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
         "locationsAtSave": {
           "type": "array",
           "maxItems": 20,
-          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          }
         },
-        "savedAt": { "$ref": "#/$defs/dateTime" }
+        "savedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -1133,11 +1503,23 @@
       "type": "object",
       "required": ["plan", "version", "effectiveAt"],
       "properties": {
-        "plan": { "enum": ["free", "pro"] },
-        "version": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
-        "effectiveAt": { "$ref": "#/$defs/dateTime" },
-        "accessThrough": { "$ref": "#/$defs/dateTime" },
-        "graceThrough": { "$ref": "#/$defs/dateTime" }
+        "plan": {
+          "enum": ["free", "pro"]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "effectiveAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "accessThrough": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "graceThrough": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -1163,34 +1545,88 @@
         "updatedAt"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "contributionId": { "$ref": "#/$defs/uuid" },
-        "policyVersion": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$" },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "contributionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "policyVersion": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+        },
         "appealWindowMilliseconds": {
           "type": "integer",
           "minimum": 1,
           "maximum": 31536000000
         },
-        "state": { "$ref": "#/$defs/trustCaseState" },
-        "version": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
-        "appealCount": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "state": {
+          "$ref": "#/$defs/trustCaseState"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "appealCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
         "adverseState": {
-          "oneOf": [{ "type": "null" }, { "enum": ["rejected", "taken_down"] }]
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": ["rejected", "taken_down"]
+            }
+          ]
         },
         "adverseDecisionAt": {
-          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/dateTime" }]
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/dateTime"
+            }
+          ]
         },
         "appealDeadlineAt": {
-          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/dateTime" }]
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/dateTime"
+            }
+          ]
         },
-        "pendingAppealEvidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
-        "independentEvidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
-        "lastAction": { "$ref": "#/$defs/trustAction" },
-        "lastActorKind": { "$ref": "#/$defs/trustActorKind" },
-        "lastReasonCode": { "$ref": "#/$defs/trustReasonCode" },
-        "lastEvidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
-        "createdAt": { "$ref": "#/$defs/dateTime" },
-        "updatedAt": { "$ref": "#/$defs/dateTime" }
+        "pendingAppealEvidenceDigestSha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "independentEvidenceDigestSha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "lastAction": {
+          "$ref": "#/$defs/trustAction"
+        },
+        "lastActorKind": {
+          "$ref": "#/$defs/trustActorKind"
+        },
+        "lastReasonCode": {
+          "$ref": "#/$defs/trustReasonCode"
+        },
+        "lastEvidenceDigestSha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -1210,21 +1646,55 @@
         "occurredAt"
       ],
       "properties": {
-        "eventId": { "$ref": "#/$defs/uuid" },
-        "caseId": { "$ref": "#/$defs/uuid" },
-        "caseVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
-        "contributionId": { "$ref": "#/$defs/uuid" },
-        "policyVersion": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$" },
-        "priorState": {
-          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/trustCaseState" }]
+        "eventId": {
+          "$ref": "#/$defs/uuid"
         },
-        "resultingState": { "$ref": "#/$defs/trustCaseState" },
-        "action": { "$ref": "#/$defs/trustAction" },
-        "actorKind": { "$ref": "#/$defs/trustActorKind" },
-        "reasonCode": { "$ref": "#/$defs/trustReasonCode" },
-        "evidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
-        "independentEvidenceDigestSha256": { "$ref": "#/$defs/nullableSha256" },
-        "occurredAt": { "$ref": "#/$defs/dateTime" }
+        "caseId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "caseVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "contributionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "policyVersion": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,99}$"
+        },
+        "priorState": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/trustCaseState"
+            }
+          ]
+        },
+        "resultingState": {
+          "$ref": "#/$defs/trustCaseState"
+        },
+        "action": {
+          "$ref": "#/$defs/trustAction"
+        },
+        "actorKind": {
+          "$ref": "#/$defs/trustActorKind"
+        },
+        "reasonCode": {
+          "$ref": "#/$defs/trustReasonCode"
+        },
+        "evidenceDigestSha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "independentEvidenceDigestSha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -1240,10 +1710,20 @@
         "occurredAt"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "caseId": { "$ref": "#/$defs/uuid" },
-        "caseVersion": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
-        "contributionId": { "$ref": "#/$defs/uuid" },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "caseId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "caseVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "contributionId": {
+          "$ref": "#/$defs/uuid"
+        },
         "signalCode": {
           "enum": [
             "contributor_submission_verified",
@@ -1252,8 +1732,12 @@
             "adverse_decision_reversed"
           ]
         },
-        "referenceDigestSha256": { "$ref": "#/$defs/sha256" },
-        "occurredAt": { "$ref": "#/$defs/dateTime" }
+        "referenceDigestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -1272,7 +1756,9 @@
         "appeal_reversed"
       ]
     },
-    "trustActorKind": { "enum": ["system", "reviewer", "contributor"] },
+    "trustActorKind": {
+      "enum": ["system", "reviewer", "contributor"]
+    },
     "trustReasonCode": {
       "enum": [
         "queued_for_review",
@@ -1307,13 +1793,29 @@
       "type": "object",
       "required": ["id", "canonicalJobId", "status", "revision", "createdAt", "updatedAt"],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "canonicalJobId": { "$ref": "#/$defs/uuid" },
-        "status": { "$ref": "#/$defs/applicationsStatus" },
-        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "currentPacketId": { "$ref": "#/$defs/uuid" },
-        "createdAt": { "$ref": "#/$defs/dateTime" },
-        "updatedAt": { "$ref": "#/$defs/dateTime" }
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "canonicalJobId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "status": {
+          "$ref": "#/$defs/applicationsStatus"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "currentPacketId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
@@ -1451,7 +1953,9 @@
         {
           "if": {
             "required": ["vaultReference"],
-            "properties": { "vaultReference": {} }
+            "properties": {
+              "vaultReference": {}
+            }
           },
           "then": {
             "properties": {
@@ -1463,6 +1967,31 @@
               },
               "disposition": {
                 "const": "review"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["fieldKey"],
+            "properties": {
+              "fieldKey": {
+                "enum": ["documents.cover_letter", "documents.resume"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                ]
               }
             }
           }
@@ -1481,21 +2010,51 @@
         "fields"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "applicationId": { "$ref": "#/$defs/uuid" },
-        "version": { "type": "integer", "minimum": 1, "maximum": 100000 },
-        "packetHash": { "$ref": "#/$defs/sha256" },
-        "jobRevision": { "$ref": "#/$defs/sha256" },
-        "formAdapterId": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "formVariantId": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "formHash": { "$ref": "#/$defs/sha256" },
-        "resumeHash": { "$ref": "#/$defs/sha256" },
-        "coverLetterHash": { "$ref": "#/$defs/sha256" },
-        "createdAt": { "$ref": "#/$defs/dateTime" },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "applicationId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "packetHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "jobRevision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "formAdapterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "formVariantId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "formHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "resumeHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "coverLetterHash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
         "fields": {
           "type": "array",
           "maxItems": 200,
-          "items": { "$ref": "#/$defs/applicationsPacketField" }
+          "items": {
+            "$ref": "#/$defs/applicationsPacketField"
+          }
         }
       },
       "additionalProperties": false
@@ -1512,18 +2071,36 @@
         "expiresAt"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "packetId": { "$ref": "#/$defs/uuid" },
-        "applicationId": { "$ref": "#/$defs/uuid" },
-        "packetHash": { "$ref": "#/$defs/sha256" },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "packetId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "applicationId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "packetHash": {
+          "$ref": "#/$defs/sha256"
+        },
         "acknowledgedFieldKeys": {
           "type": "array",
           "maxItems": 200,
-          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
         },
-        "approvedAt": { "$ref": "#/$defs/dateTime" },
-        "expiresAt": { "$ref": "#/$defs/dateTime" },
-        "invalidatedAt": { "$ref": "#/$defs/dateTime" },
+        "approvedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "invalidatedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
         "invalidationReason": {
           "enum": [
             "packet_hash_mismatch",
@@ -1554,10 +2131,20 @@
         "startedAt"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/uuid" },
-        "applicationId": { "$ref": "#/$defs/uuid" },
-        "packetId": { "$ref": "#/$defs/uuid" },
-        "sequence": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "applicationId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "packetId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
         "status": {
           "enum": [
             "started",
@@ -1571,16 +2158,36 @@
             "reconciled_not_submitted"
           ]
         },
-        "adapterId": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "adapterVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "startedAt": { "$ref": "#/$defs/dateTime" },
-        "dispatchedAt": { "$ref": "#/$defs/dateTime" },
-        "resolvedAt": { "$ref": "#/$defs/dateTime" },
+        "adapterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "adapterVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "startedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "dispatchedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "resolvedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
         "evidenceKind": {
           "enum": ["provider_confirmation_page", "provider_api_response", "user_attested"]
         },
-        "evidenceObservedAt": { "$ref": "#/$defs/dateTime" },
-        "evidenceProviderReference": { "type": "string", "minLength": 1, "maxLength": 200 }
+        "evidenceObservedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "evidenceProviderReference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
       },
       "additionalProperties": false
     },
@@ -1588,8 +2195,14 @@
       "type": "object",
       "required": ["applicationId", "seq", "kind", "toStatus", "occurredAt"],
       "properties": {
-        "applicationId": { "$ref": "#/$defs/uuid" },
-        "seq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "applicationId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
         "kind": {
           "enum": [
             "application_created",
@@ -1608,18 +2221,41 @@
             "application_cancelled"
           ]
         },
-        "fromStatus": { "$ref": "#/$defs/applicationsStatus" },
-        "toStatus": { "$ref": "#/$defs/applicationsStatus" },
-        "packetId": { "$ref": "#/$defs/uuid" },
-        "attemptId": { "$ref": "#/$defs/uuid" },
-        "reasonCode": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
-        "occurredAt": { "$ref": "#/$defs/dateTime" }
+        "fromStatus": {
+          "$ref": "#/$defs/applicationsStatus"
+        },
+        "toStatus": {
+          "$ref": "#/$defs/applicationsStatus"
+        },
+        "packetId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "attemptId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "reasonCode": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     },
-    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
     "nullableSha256": {
-      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/sha256"
+        }
+      ]
     },
     "auditEvent": {
       "type": "object",
@@ -1637,10 +2273,22 @@
             "applications"
           ]
         },
-        "action": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "resourceType": { "type": "string", "minLength": 1, "maxLength": 120 },
-        "resourceId": { "$ref": "#/$defs/uuid" },
-        "occurredAt": { "$ref": "#/$defs/dateTime" }
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "resourceType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "resourceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/dateTime"
+        }
       },
       "additionalProperties": false
     }

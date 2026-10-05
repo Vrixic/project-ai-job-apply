@@ -10,10 +10,37 @@ Generated cover letters and improved/tailored resumes exist only in bounded temp
 
 Main's accepted ADR-038 remains unchanged. The unaccepted vault-admission proposal formerly numbered 038 moves to [ADR-039](../../../adr/039-transactional-vault-reference-admission.md). The open stack's isolated-provider bootstrap formerly labeled D3-064 is now D3-078 in the current task register; historical logs retain their original identifiers and are interpreted with this mapping. Owner D3-064 names the new retention policy. D3-077 restricted candidate-authored packet-value protection is a separate unfinished task.
 
-The source merge reconciles main's original-provider terminal settlement with the later immutable failure-proof path. A duplicate method from the merge is removed; the proof-recording method and unchanged pure metadata validators are retained. Workflows/dependency production build passes. Full maintained and transactional tests remain pending; previous #547 results do not verify this combined source.
+The source merge reconciles main's original-provider terminal settlement with the later immutable failure-proof path. A duplicate method from the merge is removed; the proof-recording method and unchanged pure metadata validators are retained. Workflows/dependency production build passes. Combined-source transactional results appear below; full maintained verification remains pending. Previous #547 results alone do not verify this combined source.
 
 ## Backend enforcement path
 
-AI helper with original generation purpose → refuse one-off material as a persisted proposal → Applications permits only the exact bound artifact digest in document fields → owner SQL check refuses plaintext/mismatched references → candidate receives fixed value-free validation failure. Ordinary narrative answers and candidate-authored non-document answers retain their separate policies. Tests must prove metadata-only pointers remain usable, direct SQL cannot bypass the document guard, and failed requests leave packet/history/outbox/idempotency unchanged.
+AI helper with original generation purpose â†’ refuse one-off material as a persisted proposal â†’ Applications permits only the exact bound artifact digest in document fields â†’ owner SQL check refuses plaintext/mismatched references â†’ candidate receives fixed value-free validation failure. Ordinary narrative answers and candidate-authored non-document answers retain their separate policies. Tests must prove metadata-only pointers remain usable, direct SQL cannot bypass the document guard, and failed requests leave packet/history/outbox/idempotency unchanged.
 
 Full temporary-memory/provider transport replacement and expiration/admission integration remain necessary; this record does not redefine the end state around persistence guards. Existing saved draft/private S3/provider-slot paths remain contrary to ADR-038 and cannot be activated. No retained synthetic versions are certified erased. No frontend edit, live model/ATS call, hosted CI monitoring or production approval is claimed.
+
+
+## Local verification checkpoint
+
+Synthetic Windows/Node 24/pnpm 10 build; no live provider, ATS, AWS, or candidate data. AI SDK
+285, Applications 155, API contracts 86, Domain 26 and restore verifier 44 unit tests pass.
+All 1,174 Documents units pass on the reconciled merge. Applications real PostgreSQL 16.14
+suite passes all 72 tests, including five new persistence/rollback/legacy-migration cases.
+Documents real PostgreSQL runs pass 57 general cases and 260 explicit work/response-ledger cases
+in separate invocations; each invocation's complementary suite skips are recorded, not counted
+as executed. The latter verifies the merged immutable original-failure and settlement path.
+Object/provider/KMS behavior remains simulated in relevant tests.
+
+Production dependency builds and workflow typecheck pass. Runtime inventory smoke passes 157
+checks for the 61-migration boundary. Publisher guards, PS7 restore guards and deletion replay
+(697 checks) pass after stale source count assertions are corrected. Real generated-synthetic
+logical dump/restore verifies all 61 migrations and exact full-row sets for 84 relations, including
+restored immutable failure proof and unresolved disposal refusals; owned tmpfs recovery container
+is removed. This is local logical recovery, not RDS PITR or deployed recovery acceptance.
+Current manifest SHA: `3009222c2bf092df2cdcf9171d643960b4382d10758a9f8cd9ea497ae66b2def`.
+
+Applications 0007 is forward-only and tightens v1 document values. Read/write consumers and
+portable packet projections refuse former plaintext/URL values; hash/null metadata remains
+supported. Inventory and explicitly resolve any incompatible legacy rows before applying the
+validated migration and deploying writers. Rollback cannot re-enable plaintext writers.
+Second contract generation succeeds; full maintained verification is pending this checkpoint.
+No UI was changed/exercised and no live authenticated end-to-end acceptance is claimed.

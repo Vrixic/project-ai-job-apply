@@ -2187,7 +2187,7 @@ export interface components {
                 meaningConfirmed: true;
                 validUntilEpochMs: number | null;
             };
-        } & unknown;
+        } & (unknown & unknown);
         ApplicationFormBinding: {
             adapterId: string;
             variantId: string;

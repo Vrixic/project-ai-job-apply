@@ -79,7 +79,7 @@ describeWithDatabase("D3-014 Applications candidate rights ownership", () => {
     const first = await execFileAsync(process.execPath, [executable], { env });
     const replay = await execFileAsync(process.execPath, [executable], { env });
     const expected =
-      "Applications migrations through 0006_vault_approval_binding applied and verified.";
+      "Applications migrations through 0007_document_field_hashes applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
   });

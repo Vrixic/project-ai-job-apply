@@ -151,6 +151,23 @@ export function assemblePacket(
     ) {
       throw new PacketInvariantError("Invalid selected-answer provenance");
     }
+    // These fields retain only the exact bound artifact digest, never document material.
+    if (
+      proposal.value !== null &&
+      (proposal.fieldKey === "documents.cover_letter" || proposal.fieldKey === "documents.resume")
+    ) {
+      const expected =
+        proposal.fieldKey === "documents.cover_letter"
+          ? inputs.artifactHashes.coverLetter
+          : inputs.artifactHashes.resume;
+      if (
+        typeof proposal.value !== "string" ||
+        !expected ||
+        proposal.value !== expected ||
+        !SHA256.test(proposal.value)
+      )
+        throw new PacketInvariantError("Document fields must reference their bound artifact hash");
+    }
     const definition = definitions.get(proposal.fieldKey);
     const classification = classifyField(definition, proposal, confidenceThreshold);
     const reasons: ReviewReason[] = [...classification.reasons];

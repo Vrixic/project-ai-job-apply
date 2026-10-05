@@ -162,3 +162,27 @@ or expiry refuses the old selection with `vault_answer_changed` (preparation use
 `bindings_changed`). Missing admission capability fails closed; no KMS call occurs under these locks.
 Migration `0006_vault_approval_binding.sql` adds the reason to the existing closed approval constraint.
 Strict-reader rollout and candidate review UI precede activation; no live ATS executor is enabled.
+
+
+## One-off document material persistence guard (ADR-038 / D3-064)
+
+Document fields in v1 packets and account-export packet projections accept only unresolved nulls
+or canonical SHA-256 artifact digests. Applications also requires each non-null document field to
+match its packet's corresponding resume/cover-letter binding. The AI helper refuses to turn a
+cover-letter result into a persisted proposal, including under an ordinary answer field name.
+Candidate-authored non-document answers retain their separate policy.
+
+Migration `0007_document_field_hashes.sql` validates all existing packet rows and adds the same
+exact-binding SQL guard. This tightens previously accepted document values: an older packet with
+material text cannot pass the new reader contracts or migration. Inventory and explicitly resolve
+incompatible legacy data before rollout; do not rewrite immutable packet/history rows silently,
+waive validation, or treat encryption as compliance with the no-content persistence policy. Apply
+and verify the owner migration before deploying new writers. Rolling code back does not remove
+this forward-only constraint; older writers that persist document text remain incompatible.
+Deletion continues through existing owner-scoped candidate-rights participation; no new relation
+or content backfill is introduced. Restore and deletion-replay validators require the exact current
+61-migration manifest, preserving refusal of older boundaries.
+
+These guards are a first enforcement layer. Temporary-memory storage, the absolute 1,800-second
+lifetime, expiry/review/submission admission, no-store transport and provider approval remain
+D3-064 work. Existing generated draft/S3/provider-slot paths cannot be activated under ADR-038.

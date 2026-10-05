@@ -83,6 +83,32 @@ describe("Applications OpenAPI contract", () => {
     ).toBe(false);
   });
 
+  it("never carries document material in a packet field", () => {
+    const validate = compileComponentValidator("ApplicationPacketField");
+    const field = {
+      fieldKey: "documents.cover_letter",
+      value: hash,
+      origin: "generated",
+      sourceFactIds: [randomUUID()],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["generated_content"],
+      requiresReview: true,
+    };
+    for (const fieldKey of ["documents.cover_letter", "documents.resume"]) {
+      expect(validate({ ...field, fieldKey })).toBe(true);
+      expect(validate({ ...field, fieldKey, value: null })).toBe(true);
+      for (const value of [
+        "Synthetic forbidden material",
+        "https://example.test/material",
+        "A".repeat(64),
+        [hash],
+        true,
+      ])
+        expect(validate({ ...field, fieldKey, value })).toBe(false);
+    }
+  });
+
   it("guards every route with an exact applications scope and no-store responses", () => {
     const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
       path.startsWith("/applications"),

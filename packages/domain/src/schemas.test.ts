@@ -953,3 +953,29 @@ describe("domain schema registry", () => {
     ).toBe(false);
   });
 });
+
+describe("portable one-off document metadata", () => {
+  it("exports only hashes or unresolved null document values", async () => {
+    const validate = await exportDefinition("applicationsPacketField");
+    const field = {
+      fieldKey: "documents.cover_letter",
+      value: "a".repeat(64),
+      origin: "generated",
+      sourceFactIds: ["019d04cf-1f80-7000-8000-000000000064"],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["generated_content"],
+      requiresReview: true,
+    };
+    expect(validate(field)).toBe(true);
+    expect(validate({ ...field, value: null })).toBe(true);
+    expect(validate({ ...field, value: "Synthetic forbidden letter material" })).toBe(false);
+    expect(
+      validate({
+        ...field,
+        fieldKey: "documents.resume",
+        value: "Synthetic forbidden resume material",
+      }),
+    ).toBe(false);
+  });
+});

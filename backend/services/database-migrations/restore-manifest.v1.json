@@ -30,6 +30,10 @@
         {
           "version": "0006_vault_approval_binding",
           "checksum": "ecca6ad54d8199f32cb6765a748bdf311b0429dd779a2d1fe468efbcf82dbe1f"
+        },
+        {
+          "version": "0007_document_field_hashes",
+          "checksum": "6df701682868c319b2c98cb9a65da83f4bfbdd8b3145fcf11b5f54aba8ae019c"
         }
       ],
       "relations": [
