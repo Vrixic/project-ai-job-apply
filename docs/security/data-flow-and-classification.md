@@ -604,3 +604,16 @@ The current source still persists selected scalar values in Applications packet 
 vault's separate key/storage boundary. D3-077 must protect packet-value persistence and owner
 reads before the switch can be enabled. Default-off synthetic selection/admission tests do not
 satisfy that storage requirement or authorize representative data.
+
+
+D3-064 now adds a source-only Documents memory replacement for generated cover-letter completion
+and reads. Exact generation metadata binds a non-renewable 1,800-second window; bounded buffers,
+staged publication, idle cleanup, cancellation scopes and post-async checks refuse late content.
+Original completion authority is mandatory but simulated in these tests; native immutable metadata
+admission/RPC remains unfinished. No SQL/S3/provider/export or reconstruction capability exists
+on the new content store. Production PDF verification uses separate scratch bytes so verification
+does not detach the download; transient cover-letter renderer buffers/references are cleared.
+This is managed memory/content-boundary evidence, not arbitrary string erasure, remote writer
+quiescence, HTTP/browser cleanup, packet/ATS admission or approved provider-retention evidence.
+Existing persisted generated-content paths remain ineligible for activation under ADR-038.
+[Evidence](../product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).

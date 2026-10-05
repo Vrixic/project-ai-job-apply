@@ -35,6 +35,8 @@ export async function verifyRenderedResume(
   const expectedText = squash(expected.map((block) => block.text).join(" "));
   const issues: RenderIssueCode[] = [];
   let renderedText = "";
+  // PDF.js may transfer/detach its input. Verification must not consume the download buffer.
+  const parserBytes = Uint8Array.from(rendered.bytes);
   try {
     const parsed = await parseResume({
       documentId: "00000000-0000-7000-8000-000000000000",
@@ -43,11 +45,15 @@ export async function verifyRenderedResume(
       mediaType: rendered.mediaType,
       sourceSha256: rendered.sha256,
       createdAt: "2026-01-01T00:00:00.000Z",
-      bytes: rendered.bytes,
+      bytes: parserBytes,
     });
     renderedText = squash(parsed.blocks.map((block) => block.text).join(" "));
+    for (const block of parsed.blocks) block.text = "";
   } catch {
     issues.push("unparseable");
+  } finally {
+    // A detached PDF parser buffer already belongs to the parser's destroyed task.
+    if (parserBytes.byteLength) parserBytes.fill(0);
   }
   if (issues.length === 0 && renderedText !== expectedText) {
     issues.push("content_mismatch");

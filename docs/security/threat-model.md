@@ -310,3 +310,16 @@ retention and deployed independent security/privacy evidence remain release gate
 | Generated letter text reaches packet JSON despite a separate artifact hash | AI proposal helper rejects cover-letter purpose and document-field targets; Applications requires canonical exact bound digests for both document fields, for every origin | Arbitrary caller-supplied content in unrelated answer fields is not semantically detected; ordinary candidate-authored answers have separate policies |
 | A direct SQL writer bypasses application validation | Validated owner constraint admits only exact document artifact digests or unresolved nulls; migration rejects incompatible existing rows without rewriting | Explicit legacy-data disposition, reviewed migration/runtime rollout, and current-source restore identity are required |
 | Hash-only packets are mistaken for completed one-off retention | ADR-038 and D3-064 remain In progress; saved S3/provider-slot generation paths cannot activate | Temporary-memory lifetime, idle cleanup, expiry/approval/submission checks, no-store transport, browser cleanup and approved provider retention remain unfinished |
+
+
+D3-064 now adds a source-only Documents memory replacement for generated cover-letter completion
+and reads. Exact generation metadata binds a non-renewable 1,800-second window; bounded buffers,
+staged publication, idle cleanup, cancellation scopes and post-async checks refuse late content.
+Original completion authority is mandatory but simulated in these tests; native immutable metadata
+admission/RPC remains unfinished. No SQL/S3/provider/export or reconstruction capability exists
+on the new content store. Production PDF verification uses separate scratch bytes so verification
+does not detach the download; transient cover-letter renderer buffers/references are cleared.
+This is managed memory/content-boundary evidence, not arbitrary string erasure, remote writer
+quiescence, HTTP/browser cleanup, packet/ATS admission or approved provider-retention evidence.
+Existing persisted generated-content paths remain ineligible for activation under ADR-038.
+[Evidence](../product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).

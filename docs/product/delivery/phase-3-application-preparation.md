@@ -810,3 +810,14 @@ D1/D3 stay In progress. Docker/WSL stopped; hosted CI/CD deferred until producti
 
 
 2026-10-04 source checkpoint opened for review as [PR #548](https://github.com/Vrixic/project-ai-job-apply/pull/548), based on exact open #547. No authored PR was merged. Verified implementation source remains `6f8a7746`; later commits contain delivery records only. D3-064 and D1/D3 remain In progress.
+
+
+2026-10-04 D3-064 backend memory replacement starts from fresh main e48bdf3 plus exact #548
+ccc89cc3. New Documents bounded content store/read service stages verification before publication,
+binds exact owner/application/generation/completion references, discards idle/active managed
+copies, and rejects late reads/rendering without sliding expiry. Required original-completion
+authority remains simulated/uncomposed. Fix PDF verification detaching download bytes; production
+PDF/DOCX and 57 general Documents SQL/1,588 workflow unit cases pass. Full maintained verification
+pending. [Evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md). Native completion/transport,
+resumes, packet admission, lifecycle/browser/provider and deployed acceptance remain; D3-064 and
+D1/D3 stay In progress. No publication, deployment or activation; owner CI/CD deferral retained.

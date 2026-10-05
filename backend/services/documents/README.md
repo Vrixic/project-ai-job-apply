@@ -532,3 +532,35 @@ text/citations. It never selects a latest same-hash draft or regenerates missing
 The native factory exposes a frozen read port, owns one Date/JSON pool and fixed one-attempt S3.
 It defaults off, rechecks activation around reads, and never exports object/work/provider identities.
 See [D3-072 evidence](../../../docs/product/delivery/evidence/d3-cover-letter-export-content-2026-10-04.md).
+
+
+## One-off generated material memory replacement (D3-064)
+
+Accepted ADR-038 supersedes the saved generated-content behavior described in historical source
+sections above. Those S3 draft/provider-slot creation, saved-result recovery and content-export
+paths cannot activate under the new policy. Original uploaded/normalized resumes retain their
+separate policy.
+
+`temporary-materials.ts` owns bounded process-local encoded bytes and active copies, with exact
+owner/application/generation/hash/completion references, non-renewable 1,800-second deadlines,
+idle timers, cancellation scopes, staged publication and post-async expiry checks. Limits are
+16 MiB managed buffers, 128 entries, 2 MiB per material and 16 borrows; only lower limits are
+accepted. Generic material kinds include cover letters and tailored resumes; the typed resume
+content integration remains unfinished.
+
+`temporary-cover-letter.ts` replaces generated cover-letter finalization, preview, file and
+binding reads with memory-only ports and both production format checks. It requires original
+completion authority and defaults off. The supplied completion timestamp must be the original
+actor's generation-completion time, not reservation/verification/read/retry time. Missing or
+already-consumed authority refuses reconstruction; no SQL/S3/provider/export capability reaches
+the content store. Metadata-only read replay can use an available exact reference before expiry.
+The native immutable completion authority and private routing/transport still need implementation.
+
+These modules are source-only and uncomposed. Their returned references must bind future packet
+approval and final ATS handoff; a hash alone cannot identify a regenerated same-text draft.
+Content-bearing HTTP responses must be no-store, and clients/actor owners must release their
+copies at expiry or sooner on logout, cancellation and confirmed submission. Timers and aborts
+clear managed buffers/references but do not prove arbitrary string erasure or remote/native worker
+quiescence. No restart, renderer failure or cleanup timeout permits restoring a saved draft or
+redispatching an ambiguous submission. Native/provider, resume, packet, lifecycle and browser
+acceptance remain mandatory. See [source evidence](../../../docs/product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).

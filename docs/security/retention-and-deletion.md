@@ -271,3 +271,16 @@ material rows block validated migration rather than being silently rewritten or 
 prevents one persistence path; it does not establish the memory deadline, provider no-retention
 terms, browser cleanup, or disposal of any pre-existing object versions. Those remain required
 before activation under accepted ADR-038.
+
+
+D3-064 now adds a source-only Documents memory replacement for generated cover-letter completion
+and reads. Exact generation metadata binds a non-renewable 1,800-second window; bounded buffers,
+staged publication, idle cleanup, cancellation scopes and post-async checks refuse late content.
+Original completion authority is mandatory but simulated in these tests; native immutable metadata
+admission/RPC remains unfinished. No SQL/S3/provider/export or reconstruction capability exists
+on the new content store. Production PDF verification uses separate scratch bytes so verification
+does not detach the download; transient cover-letter renderer buffers/references are cleared.
+This is managed memory/content-boundary evidence, not arbitrary string erasure, remote writer
+quiescence, HTTP/browser cleanup, packet/ATS admission or approved provider-retention evidence.
+Existing persisted generated-content paths remain ineligible for activation under ADR-038.
+[Evidence](../product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).
