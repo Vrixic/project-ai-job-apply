@@ -135,3 +135,10 @@ The focused authorization branch incorporates that identical baseline ancestry w
 its source tree. This keeps the new route/client/Lambda correction review separate from the
 already-reviewed stack. No authored merge to main, deployment, activation or CI/CD work occurs.
 D3-079/D3-064 and D1/D3 stay In progress behind the remaining gates above.
+
+2026-10-05 D3-079 focused scalar authorization source is reviewable in
+[PR #557](https://github.com/Vrixic/project-ai-job-apply/pull/557) on
+[PR #556](https://github.com/Vrixic/project-ai-job-apply/pull/556), the exact previously reviewed
+backend consolidation. Tested implementation `a5c29ef7` is unchanged; subsequent commits record
+delivery evidence only. Two authored PRs are open. D1/D3 stay In progress; no authored main merge,
+deployment or activation, and hosted CI/CD deferred until production launch.
