@@ -126,6 +126,7 @@ export async function exerciseRestoredTemporaryPackets(sql, fixtures) {
     assert.deepEqual(await store.getApplication(ownerUserId, applicationId), original);
     const [exported] =
       await sql`SELECT applications.export_candidate_data(${ownerUserId}::uuid) AS data`;
+    assert.equal(Array.isArray(exported.data.applications.preparations), true);
     const portable = exported.data.applications.packets.find(
       (item) => item.id === packet.id,
     ).temporaryMaterials;

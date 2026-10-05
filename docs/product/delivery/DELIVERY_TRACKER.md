@@ -3421,3 +3421,13 @@ migrations/84 relations. Applications179 units/92 SQL, Gateway40 SQL including s
 HTTP, API87/Domain27/Documents1,269/migration46 units and populated logical restore pass; full exact-source verification pending. [Evidence](evidence/d3-temporary-packet-binding-2026-10-05.md).
 Content/actor/resume/preview/file/client/worker/provider and deployed gates remain; D3-064 and D1/D3
 stay In progress. No publication, deployment or activation. Owner CI/CD deferral retained.
+
+
+2026-10-05 export-compatibility review finds initial packet source 5f1d0018 copied the older
+Applications 0002 export function, omitting 0004 preparation-consent metadata. Stop its full
+verifier before changing source. A new real SQL assertion reproduces the missing projection;
+restore the exact 0004 function plus only optional scalar material metadata. All 92 Applications
+SQL cases, the 63-migration/84-relation populated logical restore, 207 contract cases and 697
+replay guards pass again. New exact manifest/pins are recorded in [evidence](evidence/d3-temporary-packet-binding-2026-10-05.md).
+The previous full verifier is stopped, not passed; corrected clean-source full verification remains
+pending. Owned SQL fixture removed and Docker/WSL stopped; no deployment, activation or phase completion.

@@ -263,6 +263,16 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
           ).toMatchObject({ value: HASH_C, requiresReview: true });
           expect(view.approval).toBeNull();
           expect(await store.completePreparation(event, id, context, letter)).toEqual(completed);
+          const [exported] =
+            await client`SELECT applications.export_candidate_data(${owner}::uuid) AS data`;
+          expect(exported?.data.applications.preparations).toEqual([
+            expect.objectContaining({
+              id,
+              state: "succeeded",
+              noticeVersion: "openai-cover-letter.v1",
+              resultPacketId: completed.resultPacketId,
+            }),
+          ]);
           const [eventRow] =
             await client`SELECT payload FROM applications.preparation_outbox WHERE id = ${event}`;
           expect(eventRow?.payload).toEqual({ preparationId: id });

@@ -159,6 +159,20 @@ AS $$
   SELECT jsonb_build_object(
     'applications', jsonb_build_object(
       'schemaVersion', 1,
+      'preparations', COALESCE((
+        SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+          'id', preparation.id, 'applicationId', preparation.application_id,
+          'basePacketId', preparation.base_packet_id, 'state', preparation.state,
+          'noticeVersion', preparation.notice_version, 'purpose', preparation.purpose,
+          'provider', preparation.provider, 'model', preparation.model, 'categories', preparation.categories,
+          'approvedAt', preparation.approved_at, 'expiresAt', preparation.expires_at,
+          'generationClaimedAt', preparation.generation_claimed_at,
+          'resultPacketId', preparation.result_packet_id, 'errorCode', preparation.error_code,
+          'createdAt', preparation.created_at, 'updatedAt', preparation.updated_at
+        )) ORDER BY preparation.created_at, preparation.id)
+        FROM applications.packet_preparations preparation
+        WHERE preparation.owner_user_id = candidate_user_id
+      ), '[]'::jsonb),
       'applications', COALESCE((
         SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
           'id', application.id, 'canonicalJobId', application.canonical_job_id,
