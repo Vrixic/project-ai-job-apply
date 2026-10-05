@@ -94,13 +94,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(84);
+    expect(expectedRelations(source)).toHaveLength(86);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(63);
+    ).toBe(64);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -252,8 +252,8 @@ describe("read-only aggregate restore verification", () => {
         "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
       ownerCount: 7,
-      relationCount: 84,
-      migrationCount: 63,
+      relationCount: 86,
+      migrationCount: 64,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -427,6 +427,8 @@ describe("read-only aggregate restore verification", () => {
                   "documents.cover_letters",
                   "documents.cover_letter_work_authorizations",
                   "documents.cover_letter_provider_responses",
+                  "documents.native_material_admission",
+                  "documents.native_material_allocations",
                   ...(migrationCount === 52
                     ? [
                         "applications.packet_preparations",
@@ -447,6 +449,7 @@ describe("read-only aggregate restore verification", () => {
                   "0008_cover_letter_provider_responses",
                   "0009_cover_letter_provider_failure",
                   "0010_temporary_material_completion",
+                  "0011_native_material_allocations",
                   "0008_temporary_material_bindings",
                   ...(migrationCount === 52 ? [] : ["0010_restricted_answer_vault"]),
                   "0011_active_candidate_lease",
@@ -479,7 +482,7 @@ describe("read-only aggregate restore verification", () => {
     },
   );
 
-  it.each([62, 61, 60, 59, 58])(
+  it.each([63, 62, 61, 60, 59, 58])(
     "retains the prior %s-migration boundary only against its exact historical manifest",
     async (migrationCount) => {
       const current = loadCurrentRestoreManifest();
@@ -487,9 +490,13 @@ describe("read-only aggregate restore verification", () => {
         ...current.manifest,
         contributors: current.manifest.contributors.map((contributor) => ({
           ...contributor,
+          relations: contributor.relations.filter(
+            (relation) => !relation.startsWith("documents.native_material_"),
+          ),
           migrations: contributor.migrations.filter(
             (migration) =>
-              migration.version !== "0008_temporary_material_bindings" &&
+              migration.version !== "0011_native_material_allocations" &&
+              (migrationCount >= 63 || migration.version !== "0008_temporary_material_bindings") &&
               (migrationCount >= 62 ||
                 migration.version !== "0010_temporary_material_completion") &&
               (migrationCount >= 61 || migration.version !== "0007_document_field_hashes") &&
@@ -512,7 +519,9 @@ describe("read-only aggregate restore verification", () => {
         relationCount: 84,
         migrationCount,
       });
-      await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(/migration/iu);
+      await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
+        /(migration|relation)/iu,
+      );
     },
   );
 
@@ -528,13 +537,16 @@ describe("read-only aggregate restore verification", () => {
               "0008_cover_letter_provider_responses",
               "0009_cover_letter_provider_failure",
               "0010_temporary_material_completion",
+              "0011_native_material_allocations",
               "0008_temporary_material_bindings",
               "0006_vault_approval_binding",
               "0007_document_field_hashes",
             ].includes(migration.version),
         ),
         relations: contributor.relations.filter(
-          (relation) => relation !== "documents.cover_letter_provider_responses",
+          (relation) =>
+            relation !== "documents.cover_letter_provider_responses" &&
+            !relation.startsWith("documents.native_material_"),
         ),
       })),
     });

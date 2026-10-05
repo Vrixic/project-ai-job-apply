@@ -3611,3 +3611,64 @@ deployment or activation, and hosted CI/CD deferred until production launch.
 implementation `a5c29ef7` remains unchanged apart from delivery documentation. One authored PR
 remains open. No authored main merge, deployment or activation; D1/D3 remain In progress and
 hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 starts exact native task-retirement source on fresh main `9478f068` plus
+explicit #557 `eb3879b6`. Default-off signed fixed-region ECS client returns a scalar receipt only
+from positively described exact task/container STOPPED state; stop ACK, missing task, timeout and
+abort are not authority. 48 focused cases and actual emitted isolation/default-off guard pass;
+AWS transport is simulated. Full clean-source verifier pending.
+[Evidence](evidence/d3-native-task-retirement-2026-10-05.md). Registry/sealed launcher, private
+adapters/IAM, image/routing, actual managed stop, full client/ATS/provider/accountable gates remain.
+No frontend/cloud call/deployment/activation or phase completion. Docker/WSL stopped; CI/CD deferred.
+
+2026-10-05 D3-079 clean `ba58619c` passes full maintained verification: 38 typecheck tasks,
+39 test tasks and 23 builds; unchanged lint and operational/security/Compose/scope/isolation
+guards, including actual emitted retirement default-off refusal. Documents 1,376, Gateway 318
+and Workflows 1,588 tests pass. All 48 new retirement cases pass with simulated AWS transport;
+installed signed SDK behavior is exercised offline. No managed task is launched or stopped.
+[Evidence](evidence/d3-native-task-retirement-2026-10-05.md). Only delivery documentation follows.
+Registry/sealed launch admission, private adapters/IAM, reviewed image/routing, actual managed
+stop and full client/ATS/provider/accountable acceptance remain. D1/D3 stay In progress; no
+deployment/activation or authored main merge. Docker/WSL stopped; hosted CI/CD deferred until launch.
+
+2026-10-05 D3-079 exact task-retirement source is reviewable in
+[PR #558](https://github.com/Vrixic/project-ai-job-apply/pull/558), stacked on exact
+[PR #557](https://github.com/Vrixic/project-ai-job-apply/pull/557) `eb3879b6`. Tested implementation
+`ba58619c` is unchanged; subsequent commits change delivery documentation only. Two authored PRs
+are open. No authored main merge, cloud task operation, deployment or activation. D1/D3 stay
+In progress; hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 starts Documents-owned native launch registry and durable disposal on existing
+PR #558/#557. Same-transaction Applications admission, durable unknown launch retention, sealed
+startup/fresh epochs and positive exact task receipts are source-only/default-off. Nineteen real
+registry SQL cases, 136 work-ledger SQL cases, 59 focused Documents cases and actual 64-migration/
+86-relation logical restore pass; ECS is simulated. Full clean-source verification is pending.
+[Evidence](evidence/d3-native-material-registry-2026-10-05.md). No frontend/cloud call/publication/
+deployment/activation or phase completion. Launcher/private RPC/IAM/image/routing/managed task/
+client/ATS/provider/accountable gates remain; hosted CI/CD deferred until production launch.
+
+2026-10-05 #557 independently merges to main `2b6f59aa`, whose complete tree equals #557
+`eb3879b6`. #558 merges to its feature-branch base rather than main; the native registry follow-up
+therefore includes the reviewed retirement source. Identical current-main ancestry changes no
+files; no authored main merge occurs. Initial registry full verifier `3e932407` stops on a stale
+synthetic replay digest, now regenerated; 697 replay/908 role-guard assertions and 60 focused
+Documents cases pass. Clean full rerun pending. Docker/WSL stopped; owned tmpfs fixture removed.
+[Evidence](evidence/d3-native-material-registry-2026-10-05.md). D1/D3 stay In progress; no cloud
+call/deployment/activation or hosted CI/CD work.
+
+2026-10-05 D3-079 clean `dda86480` passes the full maintained verifier: 38 typecheck tasks,
+39 test tasks, 23 builds, unchanged lint and security/operational/Compose/scope/emitted refusal
+checks. Documents 1,388, Gateway 318 (85 opt-in skips), Workflows 1,588 (57 skips), Domain 27 and
+migration/restore 47 tests pass. Separate 19 registry/136 work-ledger real SQL cases and actual
+64-migration/86-relation logical restore pass with ECS simulated. Only delivery documentation
+follows the tested implementation. [Evidence](evidence/d3-native-material-registry-2026-10-05.md).
+Docker/WSL stopped; fixture removed and shared volumes retained. Private launcher/RPC/IAM/image/
+routing/managed-task/client/ATS/provider/accountable gates remain. No publication/deployment/
+activation or authored main merge; D1/D3 remain In progress and CI/CD deferred until launch.
+
+2026-10-05 D3-079 owning native registry/disposal source is reviewable in
+[PR #559](https://github.com/Vrixic/project-ai-job-apply/pull/559) against current main `2b6f59aa`.
+Tested implementation `dda86480` is unchanged; subsequent commits record delivery evidence only.
+#558's reviewed retirement source is included because its independent merge targeted the former
+feature-branch base. One authored PR is open. D1/D3 stay In progress; no authored main merge,
+cloud task operation, publication/deployment/activation or hosted CI/CD work.

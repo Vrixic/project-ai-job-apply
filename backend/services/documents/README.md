@@ -668,3 +668,21 @@ strict original metadata and clears bounded response bytes. The native listener 
 verified token and emits direct existing preview/file JSON. The independent Gateway capability
 stays default-off; no generated body enters this metadata control path. See
 [authorization evidence](../../../docs/product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).
+
+The private `./native-task-retirement` entrypoint runs only in a trusted control process. It pins
+one immutable owner/application/generation/allocation and task, sends at most one signed ECS stop
+request and requires a fresh exact task/container STOPPED description before a scalar receipt.
+Timeout, abort, missing tasks and stop replies are not proof. It defaults off and has no generated
+content, SQL, launch/list or provider-settlement port. Complete registry/sealed launch admission,
+IAM and real managed-task conformance remain prerequisites for application-wide disposal. See
+[retirement evidence](../../../docs/product/delivery/evidence/d3-native-task-retirement-2026-10-05.md).
+
+The private `./native-material-registry` and `./native-material-disposal` sources add durable
+pending/bound/retired allocation metadata and sealed original launch admission. Applications
+supplies same-transaction owner/status locking. Unknown launch remains unresolved; late capture
+can bind after sealing. New generation requires an explicit fresh epoch and original work issued
+after sealing. Disposal commits the seal, awaits exact ECS proof outside SQL, persists that proof,
+then confirms the current sealed epoch. No task receipt settles provider work. Migration 0011,
+optional technical export and restore boundaries preserve deletion blockers and revoked cleanup
+fences. The private launcher/RPC/IAM/image/routing/managed-task and full client/ATS/provider gates
+remain; nothing is activated. [Registry evidence](../../../docs/product/delivery/evidence/d3-native-material-registry-2026-10-05.md).

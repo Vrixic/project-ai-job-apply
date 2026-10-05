@@ -50,3 +50,9 @@ preview/file responses are validated against existing public schemas; production
 injection is refused. Separate real PostgreSQL/Gateway HTTP cases cover actual authenticated
 metadata ownership and original completion. These proofs do not establish deployed end-to-end
 routing, an enabled client or positive AWS task retirement.
+
+The separate Documents `./native-task-retirement` control client can observe one trusted bound ECS
+task's terminal state, without content or local process acknowledgement. Its scalar receipt is not
+application-wide disposal or remote-provider settlement. It is source-only/default-off; owning
+registry/sealed admission, managed IAM and actual AWS task conformance are not implemented. See
+[retirement evidence](../../../../docs/product/delivery/evidence/d3-native-task-retirement-2026-10-05.md).

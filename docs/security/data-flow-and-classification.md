@@ -694,3 +694,12 @@ flag is not composed. Private launch/control adapters, registry/managed routing/
 full client/ATS copy lifecycle and D3-012 terms remain gates. Local real SQL/Gateway and Linux/TLS
 proof have different simulated external boundaries; no deployed/UI/all-copy purge claim follows.
 [Evidence](../product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).
+
+The proposed native task-retirement control path uses only trusted immutable allocation scope
+UUIDs and exact ECS task/cluster/task-definition/container metadata. Production pins signed
+regional HTTPS and one SDK attempt with no diagnostic logger. StopTask replies, disappearance,
+timeouts and local process responses are not terminal authority. Only a fresh exact stopped
+task/container description yields a scalar receipt. No generated body or provider completion
+passes through it. The missing owning registry must seal admission and account for every bound
+allocation before application-wide disposal can be acknowledged. IAM, managed-task conformance,
+launch/routing and all-copy/client cleanup remain separate activation requirements.

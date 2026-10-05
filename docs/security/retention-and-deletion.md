@@ -284,3 +284,16 @@ This is managed memory/content-boundary evidence, not arbitrary string erasure, 
 quiescence, HTTP/browser cleanup, packet/ATS admission or approved provider-retention evidence.
 Existing persisted generated-content paths remain ineligible for activation under ADR-038.
 [Evidence](../product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).
+
+## Native task metadata checkpoint — 2026-10-05
+
+The default-off Documents owning registry stores scalar launch/retirement metadata only. Pending
+launch is an unknown effect, retained through cancellation/quarantine and restore; it cannot be
+purged or treated as missing merely because a launch acknowledgement was lost. A late fulfilled
+capture can bind after sealing, for later exact task retirement. Sealing fences new original work
+claims; an explicit fresh epoch cannot open until every old task is positively retired and original
+work was issued after the seal. Durable STOPPED task proof never settles running provider work or
+certifies candidate-wide/all-copy deletion. Existing authorized privacy deletion and writer checks
+still apply. Optional portability metadata excludes deployment ARNs, work grants, request hashes
+and candidate content. Private launcher/managed IAM/RPCs and actual host/client/ATS/provider
+conformance remain release gates. [Local evidence](../product/delivery/evidence/d3-native-material-registry-2026-10-05.md).

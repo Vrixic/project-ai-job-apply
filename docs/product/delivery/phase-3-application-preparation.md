@@ -32,7 +32,7 @@ or phase-exit acceptance is claimed.
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
-| D3-079 | Supply the native one-candidate material-session runtime, authenticated transport and positive process/task retirement. | In progress | Vrij Patel; engineering | D3-064; D3-012 | Started 2026-10-05 on exact #554. Default-off session/core kernel source; local child-process evidence only. [Evidence](evidence/d3-native-memory-session-2026-10-05.md), [proposed ADR-040](../../adr/040-native-temporary-material-processes.md). [Native HTTPS source](evidence/d3-native-memory-transport-2026-10-05.md) is locally verified at aed4b391. [Scalar Gateway/native client source](evidence/d3-native-read-authorization-2026-10-05.md) is locally verified at a5c29ef7, including Lambda routing. Native image, authenticated launcher/private adapters/registry, managed routing/positive stop and full content routing remain gates. No live provider/deployment or phase completion. |
+| D3-079 | Supply the native one-candidate material-session runtime, authenticated transport and positive process/task retirement. | In progress | Vrij Patel; engineering | D3-064; D3-012 | Started 2026-10-05 on exact #554. Default-off session/core kernel source; local child-process evidence only. [Evidence](evidence/d3-native-memory-session-2026-10-05.md), [proposed ADR-040](../../adr/040-native-temporary-material-processes.md). [Native HTTPS source](evidence/d3-native-memory-transport-2026-10-05.md) is locally verified at aed4b391. [Scalar Gateway/native client source](evidence/d3-native-read-authorization-2026-10-05.md) is locally verified at a5c29ef7, including Lambda routing. [Exact task retirement source](evidence/d3-native-task-retirement-2026-10-05.md) is locally verified at ba58619c with offline AWS transport. [Owning launch registry/disposal source](evidence/d3-native-material-registry-2026-10-05.md) is locally verified at dda86480 with full verifier, 19 real SQL cases and logical restore. Native image, authenticated launcher/private adapters/registry composition, managed routing/actual stop conformance and full content routing remain gates. No live provider/deployment or phase completion. |
 | D3-064 | Enforce one-off generated cover-letter and improved/tailored-resume lifetimes without persisted content. | In progress | Vrij Patel; engineering | D3-003; D3-004; D3-005; D3-012 | Started 2026-10-04 on fresh main e48bdf3 plus exact #547 25f0ca05. Backend persistence guards begin first; full temporary-memory/provider/expiry lifecycle remains. [Persistence evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md); [memory replacement evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md); [native completion evidence](evidence/d3-original-material-completion-2026-10-04.md); [packet binding evidence](evidence/d3-temporary-packet-binding-2026-10-05.md); [temporary read evidence](evidence/d3-temporary-material-reads-2026-10-05.md); [held copy/disposal evidence](evidence/d3-held-temporary-content-2026-10-05.md); [original actor evidence](evidence/d3-original-memory-generation-2026-10-05.md). Owner policy accepted 2026-10-04 in [ADR-038](../../adr/038-one-off-generated-application-materials.md). Maximum 1,800 seconds from generation completion; no sliding extension, database/packet-field copies, stored files, durable payloads, or persistent browser copies. Add owner/application-bound temporary content, no-store responses, idle/error/logout/cancel/submission cleanup, expiry checks and approval invalidation before ATS handoff; retain hashes/technical state only and preserve ambiguous-submission safety. Verify no generated content enters packet/idempotency/history/export records, boundary-time expiry, regeneration with fresh approval, restart loss, renderer failure, and actual idle-browser cleanup. D3-012 must verify provider retention/training terms. Current deterministic tailoring avoids content persistence. Locally verified proposal/packet/schema/SQL guards refuse persisted generated document material. Managed-memory expiry, exact-reference reads, native immutable completion metadata/private RPC, and packet identity/expiry admission are locally verified in default-off source; the full content/actor/client/packet/provider lifecycle is not evidenced. Revise the current source-only encrypted saved-draft/provider-slot persistence and export/read consumers before activation, preserving positive remote-settlement and writer fencing. Hosted browser acceptance remains human-only after agent automated/browser checks. |
 | D3-077 | Protect restricted packet values with their required separate encryption/storage boundary before saved-answer reuse activation. | Not started | Vrij Patel; engineering | D3-076; D3-012 | Discovered 2026-10-04: existing Applications packet JSON stores field values, including selected restricted answers, outside the vault key boundary. Architecture 12.3 and ADR-010 require separate keys/storage and just-in-time access. Default-off D3-076 proves selection/admission semantics only; its switch must stay false until this protection, retention/export/deletion tests and accountable review pass. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). |
 | D3-076 | Bind explicitly selected saved answers to immutable packets and serialize version checks with candidate corrections at approval, start, dispatch and preparation admission. | In progress | Vrij Patel; engineering | D3-075; D3-005; D3-012 | Started 2026-10-04 on exact #545 57d7b057. Default-off backend selection, mandatory review, hash metadata, stale-version refusal and migration 0006 implemented locally. Same-transaction Profile metadata locking passes 23 real SQL regressions; original 67 Applications and 46 Profile cases plus 39 preparation/native and five Gateway cases pass. Full verifier passes on clean 21594bc4: 38 typechecks, 39 test tasks, 23 builds; unchanged lint. Native artifact builds twice byte-identically and refuses default-off work. Docker/WSL stopped. D3-077 restricted packet-value protection, UI, review and deployed/accountable acceptance remain required; reuse stays false. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). No activation, frontend change or phase completion; CI/CD deferred until production launch. |
@@ -1076,3 +1076,64 @@ deployment or activation, and hosted CI/CD deferred until production launch.
 implementation `a5c29ef7` remains unchanged apart from delivery documentation. One authored PR
 remains open. No authored main merge, deployment or activation; D1/D3 remain In progress and
 hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 starts exact native task-retirement source on fresh main `9478f068` plus
+explicit #557 `eb3879b6`. Default-off signed fixed-region ECS client returns a scalar receipt only
+from positively described exact task/container STOPPED state; stop ACK, missing task, timeout and
+abort are not authority. 48 focused cases and actual emitted isolation/default-off guard pass;
+AWS transport is simulated. Full clean-source verifier pending.
+[Evidence](evidence/d3-native-task-retirement-2026-10-05.md). Registry/sealed launcher, private
+adapters/IAM, image/routing, actual managed stop, full client/ATS/provider/accountable gates remain.
+No frontend/cloud call/deployment/activation or phase completion. Docker/WSL stopped; CI/CD deferred.
+
+2026-10-05 D3-079 clean `ba58619c` passes full maintained verification: 38 typecheck tasks,
+39 test tasks and 23 builds; unchanged lint and operational/security/Compose/scope/isolation
+guards, including actual emitted retirement default-off refusal. Documents 1,376, Gateway 318
+and Workflows 1,588 tests pass. All 48 new retirement cases pass with simulated AWS transport;
+installed signed SDK behavior is exercised offline. No managed task is launched or stopped.
+[Evidence](evidence/d3-native-task-retirement-2026-10-05.md). Only delivery documentation follows.
+Registry/sealed launch admission, private adapters/IAM, reviewed image/routing, actual managed
+stop and full client/ATS/provider/accountable acceptance remain. D1/D3 stay In progress; no
+deployment/activation or authored main merge. Docker/WSL stopped; hosted CI/CD deferred until launch.
+
+2026-10-05 D3-079 exact task-retirement source is reviewable in
+[PR #558](https://github.com/Vrixic/project-ai-job-apply/pull/558), stacked on exact
+[PR #557](https://github.com/Vrixic/project-ai-job-apply/pull/557) `eb3879b6`. Tested implementation
+`ba58619c` is unchanged; subsequent commits change delivery documentation only. Two authored PRs
+are open. No authored main merge, cloud task operation, deployment or activation. D1/D3 stay
+In progress; hosted CI/CD remains deferred until production launch.
+
+2026-10-05 D3-079 starts Documents-owned native launch registry and durable disposal on existing
+PR #558/#557. Same-transaction Applications admission, durable unknown launch retention, sealed
+startup/fresh epochs and positive exact task receipts are source-only/default-off. Nineteen real
+registry SQL cases, 136 work-ledger SQL cases, 59 focused Documents cases and actual 64-migration/
+86-relation logical restore pass; ECS is simulated. Full clean-source verification is pending.
+[Evidence](evidence/d3-native-material-registry-2026-10-05.md). No frontend/cloud call/publication/
+deployment/activation or phase completion. Launcher/private RPC/IAM/image/routing/managed task/
+client/ATS/provider/accountable gates remain; hosted CI/CD deferred until production launch.
+
+2026-10-05 #557 independently merges to main `2b6f59aa`, whose complete tree equals #557
+`eb3879b6`. #558 merges to its feature-branch base rather than main; the native registry follow-up
+therefore includes the reviewed retirement source. Identical current-main ancestry changes no
+files; no authored main merge occurs. Initial registry full verifier `3e932407` stops on a stale
+synthetic replay digest, now regenerated; 697 replay/908 role-guard assertions and 60 focused
+Documents cases pass. Clean full rerun pending. Docker/WSL stopped; owned tmpfs fixture removed.
+[Evidence](evidence/d3-native-material-registry-2026-10-05.md). D1/D3 stay In progress; no cloud
+call/deployment/activation or hosted CI/CD work.
+
+2026-10-05 D3-079 clean `dda86480` passes the full maintained verifier: 38 typecheck tasks,
+39 test tasks, 23 builds, unchanged lint and security/operational/Compose/scope/emitted refusal
+checks. Documents 1,388, Gateway 318 (85 opt-in skips), Workflows 1,588 (57 skips), Domain 27 and
+migration/restore 47 tests pass. Separate 19 registry/136 work-ledger real SQL cases and actual
+64-migration/86-relation logical restore pass with ECS simulated. Only delivery documentation
+follows the tested implementation. [Evidence](evidence/d3-native-material-registry-2026-10-05.md).
+Docker/WSL stopped; fixture removed and shared volumes retained. Private launcher/RPC/IAM/image/
+routing/managed-task/client/ATS/provider/accountable gates remain. No publication/deployment/
+activation or authored main merge; D1/D3 remain In progress and CI/CD deferred until launch.
+
+2026-10-05 D3-079 owning native registry/disposal source is reviewable in
+[PR #559](https://github.com/Vrixic/project-ai-job-apply/pull/559) against current main `2b6f59aa`.
+Tested implementation `dda86480` is unchanged; subsequent commits record delivery evidence only.
+#558's reviewed retirement source is included because its independent merge targeted the former
+feature-branch base. One authored PR is open. D1/D3 stay In progress; no authored main merge,
+cloud task operation, publication/deployment/activation or hosted CI/CD work.

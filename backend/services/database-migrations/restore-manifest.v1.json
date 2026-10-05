@@ -120,6 +120,10 @@
         {
           "version": "0010_temporary_material_completion",
           "checksum": "f7571e0562d9bc1ac4c5ec9aeaeb2cdcedcdda98c2f3aaf5f489833895c70a2d"
+        },
+        {
+          "version": "0011_native_material_allocations",
+          "checksum": "49e05898aa8785ebe846891688e9e4225fd20ddfb13a1c0296d11d9d663bc1df"
         }
       ],
       "relations": [
@@ -128,6 +132,8 @@
         "documents.cover_letter_work_authorizations",
         "documents.cover_letters",
         "documents.idempotency_keys",
+        "documents.native_material_admission",
+        "documents.native_material_allocations",
         "documents.processing_dispositions",
         "documents.processing_receipts",
         "documents.resume_documents",

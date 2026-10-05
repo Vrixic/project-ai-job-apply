@@ -689,6 +689,52 @@ describe("domain schema registry", () => {
 
     expect(validate(exported)).toBe(true);
     expect(validateCandidateDataExportV1(exported)).toBe(true);
+    const nativeAdmission = {
+      applicationId: exported.exportId,
+      epochId: exported.exportId,
+      createdAt: exported.generatedAt,
+      sealedAt: exported.generatedAt,
+    };
+    const nativeAllocation = {
+      id: exported.exportId,
+      applicationId: exported.exportId,
+      generationId: exported.exportId,
+      epochId: exported.exportId,
+      state: "retired",
+      createdAt: exported.generatedAt,
+      boundAt: exported.generatedAt,
+      stoppedAtEpochMs: 1,
+      observedAtEpochMs: 2,
+    };
+    const withNative = (
+      allocation: object = nativeAllocation,
+      admission: object = nativeAdmission,
+    ) => ({
+      ...exported,
+      documents: {
+        ...exported.documents,
+        nativeMaterialAdmissions: [admission],
+        nativeMaterialAllocations: [allocation],
+      },
+    });
+    expect(validateCandidateDataExportV1(withNative())).toBe(true);
+    for (const forbidden of ["taskArn", "clusterArn", "workId", "requestSha256", "paragraphs"])
+      expect(
+        validateCandidateDataExportV1(
+          withNative({ ...nativeAllocation, [forbidden]: "synthetic" }),
+        ),
+      ).toBe(false);
+    expect(
+      validateCandidateDataExportV1(withNative({ ...nativeAllocation, state: "missing" })),
+    ).toBe(false);
+    expect(
+      validateCandidateDataExportV1(withNative({ ...nativeAllocation, stoppedAtEpochMs: 0 })),
+    ).toBe(false);
+    expect(
+      validateCandidateDataExportV1(
+        withNative(nativeAllocation, { ...nativeAdmission, createdAt: "invalid" }),
+      ),
+    ).toBe(false);
     const trustCase = {
       id: "019d04cf-1f80-7000-8000-000000000050",
       contributionId: "019d04cf-1f80-7000-8000-000000000051",
