@@ -40,7 +40,7 @@ const record = {
 const wire = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 const error = /^CoverLetterResponseDisposalUnavailable$/u;
 
-function fixture(timeoutMs = 10_000, completedEligibility = false) {
+function fixture(timeoutMs = 10_000, completedEligibility = false, failedEligibility = false) {
   let enabled = true;
   let inventory: CoverLetterResponseInventory | null = {
     reference,
@@ -48,7 +48,9 @@ function fixture(timeoutMs = 10_000, completedEligibility = false) {
     response,
   };
   const readCompleted = vi.fn(async () => structuredClone(inventory));
+  const readFailed = vi.fn(async () => structuredClone(inventory));
   const responses = {
+    ...(failedEligibility ? { readFailed } : {}),
     ...(completedEligibility ? { readCompleted } : {}),
     read: vi.fn(async () => structuredClone(inventory)),
     recordDisposal: vi.fn(async () => {
@@ -72,6 +74,7 @@ function fixture(timeoutMs = 10_000, completedEligibility = false) {
   const maxAttempts = vi.fn(async () => 1);
   const transport = { send, config: { maxAttempts } };
   return {
+    readFailed,
     readCompleted,
     responses,
     handler,
@@ -132,6 +135,7 @@ describe("private original-response disposal RPC", () => {
       "constructor",
       "read",
       "readCompleted",
+      "readFailed",
       "recordDisposal",
     ]);
   });
@@ -326,8 +330,8 @@ describe("private original-response disposal RPC", () => {
       () => new CoverLetterResponseDisposalClient(arn.replace(":7", ":live"), f.transport),
     ).toThrow(error);
   });
-  it("composes abandoned response reconciliation through maintenance-only RPC without settling work", async () => {
-    const f = fixture();
+  it("composes classified failure reconciliation through maintenance-only RPC without settling work", async () => {
+    const f = fixture(10_000, false, true);
     const fenceForCleanup = vi.fn(async () => "pending" as const);
     const stopAndDelete = vi.fn(async () => cleanup);
     const reconcile = createCoverLetterResponseReconciler({
@@ -585,5 +589,106 @@ describe("private completed-response eligibility RPC compatibility", () => {
     } finally {
       sdk.destroy();
     }
+  });
+});
+
+describe("private original-failure eligibility RPC", () => {
+  it("reads only owned original failure proof with exact read_failed echo", async () => {
+    const f = fixture(10_000, false, true);
+    expect(await f.client.readFailed(reference)).toEqual({
+      reference,
+      state: "acknowledged",
+      response,
+    });
+    expect(f.readFailed).toHaveBeenCalledExactlyOnceWith(reference);
+    expect(f.responses.read).not.toHaveBeenCalled();
+    expect(f.readCompleted).not.toHaveBeenCalled();
+    expect(f.responses.recordDisposal).not.toHaveBeenCalled();
+    const command = f.send.mock.calls[0]?.[0];
+    expect(JSON.parse(new TextDecoder().decode(command?.input.Payload as Uint8Array))).toEqual({
+      schemaVersion: 1,
+      action: "read_failed",
+      reference,
+    });
+  });
+  it("old composition refuses read_failed without ordinary-inventory fallback", async () => {
+    const f = fixture();
+    await expect(f.client.readFailed(reference)).rejects.toThrow(error);
+    expect(f.responses.read).not.toHaveBeenCalled();
+    expect(f.readCompleted).not.toHaveBeenCalled();
+    expect(f.send).toHaveBeenCalledTimes(1);
+  });
+  it("missing failure proof stays null and is not disposal", async () => {
+    const f = fixture(10_000, false, true);
+    f.setInventory(null);
+    expect(await f.client.readFailed(reference)).toBeNull();
+    expect(f.responses.recordDisposal).not.toHaveBeenCalled();
+  });
+  it.each(["read", "read_completed"] as const)(
+    "refuses a substituted %s echo without repeating Invoke",
+    async (action) => {
+      const f = fixture(10_000, false, true);
+      f.send.mockResolvedValue({
+        StatusCode: 200,
+        ExecutedVersion: "7",
+        Payload: wire({ schemaVersion: 1, action, reference, outcome: "read", inventory: null }),
+      });
+      await expect(f.client.readFailed(reference)).rejects.toThrow(error);
+      expect(f.send).toHaveBeenCalledTimes(1);
+      expect(f.responses.read).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["id", "documentId", "requestSha256"] as const)(
+    "refuses changed %s ownership echo",
+    async (key) => {
+      const f = fixture(10_000, false, true);
+      f.send.mockResolvedValue({
+        StatusCode: 200,
+        ExecutedVersion: "7",
+        Payload: wire({
+          schemaVersion: 1,
+          action: "read_failed",
+          reference: {
+            ...reference,
+            [key]:
+              key === "requestSha256" ? "b".repeat(64) : "019a4000-0000-7000-8000-000000000009",
+          },
+          outcome: "read",
+          inventory: null,
+        }),
+      });
+      await expect(f.client.readFailed(reference)).rejects.toThrow(error);
+      expect(f.send).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("default-off and wrong-target handlers withhold failure eligibility before owned read", async () => {
+    const f = fixture(10_000, false, true);
+    const input = { schemaVersion: 1, action: "read_failed", reference };
+    const handler = createCoverLetterResponseDisposalHandler({
+      functionArn: arn,
+      responses: f.responses,
+    });
+    expect((await handler(input, { invokedFunctionArn: arn })).outcome).toBe("unavailable");
+    expect((await f.handler(input, { invokedFunctionArn: arn.replace(":7", ":8") })).outcome).toBe(
+      "unavailable",
+    );
+    expect(f.readFailed).not.toHaveBeenCalled();
+    expect(f.responses.read).not.toHaveBeenCalled();
+  });
+  it("lost failure eligibility ACK never falls back or retries", async () => {
+    const f = fixture(10, false, true);
+    f.send.mockImplementation(() => new Promise(() => undefined));
+    await expect(f.client.readFailed(reference)).rejects.toThrow(error);
+    expect(f.send).toHaveBeenCalledTimes(1);
+    expect(f.responses.read).not.toHaveBeenCalled();
+  });
+  it("eligibility activation withdrawn during read yields no receipt", async () => {
+    const f = fixture(10_000, false, true);
+    f.readFailed.mockImplementationOnce(async () => {
+      f.disable();
+      return { reference, state: "acknowledged", response };
+    });
+    await expect(f.client.readFailed(reference)).rejects.toThrow(error);
+    expect(f.responses.read).not.toHaveBeenCalled();
   });
 });

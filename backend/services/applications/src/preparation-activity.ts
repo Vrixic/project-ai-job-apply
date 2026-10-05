@@ -6,9 +6,12 @@ import type {
 } from "./preparation.js";
 import type { PostgresApplicationStore } from "./store.js";
 
+import type { VaultReader } from "./vault.js";
+
 export type PreparationActivityStore = Pick<
   PostgresApplicationStore,
   | "getPreparationForEvent"
+  | "getPreparationVaultReferences"
   | "claimPreparationGeneration"
   | "completePreparation"
   | "failPreparation"
@@ -47,14 +50,27 @@ export interface PreparationActivityResult {
 export function createPreparationActivity(
   store: PreparationActivityStore,
   documents: CoverLetterPreparationPort,
+  vault?: Pick<VaultReader, "readCurrentReference">,
 ) {
   return async (eventId: string, preparationId: string): Promise<PreparationActivityResult> => {
     const completed: PreparationActivityResult = { preparationId, outcome: "completed" };
     const target = await store.getPreparationForEvent(eventId, preparationId);
     if (target.state === "succeeded" || target.state === "failed") return completed;
+    async function currentContext(preparation: PreparationRecord): Promise<PreparationContext> {
+      const references = await store.getPreparationVaultReferences(eventId, preparationId);
+      const vaultReferences: NonNullable<PreparationContext["vaultReferences"]>[number][] = [];
+      if (references.length && !vault) throw new Error("SavedAnswerContextUnavailable");
+      for (const reference of references) {
+        if (!vault) throw new Error("SavedAnswerContextUnavailable");
+        const current = await vault.readCurrentReference(preparation.ownerUserId, reference);
+        if (current) vaultReferences.push(current);
+      }
+      const context = await documents.context(preparation);
+      return { ...context, ...(references.length ? { vaultReferences } : {}) };
+    }
     let context: PreparationContext;
     try {
-      context = await documents.context(target);
+      context = await currentContext(target);
     } catch {
       return { preparationId, outcome: "retryable_failure", errorCode: "context_unavailable" };
     }
@@ -103,7 +119,7 @@ export function createPreparationActivity(
       sourceFactIds: [...letter.sourceFactIds],
     };
     try {
-      context = await documents.context(claim.preparation);
+      context = await currentContext(claim.preparation);
     } catch {
       return { preparationId, outcome: "retryable_failure", errorCode: "context_unavailable" };
     }

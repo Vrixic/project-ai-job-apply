@@ -177,6 +177,14 @@ const applications =
     ? createApplicationsRuntime({
         client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
         profile: store,
+        restrictedAnswerReuseEnabled: process.env.RESTRICTED_ANSWER_REUSE_ENABLED === "true",
+        restrictedAnswers: Object.freeze({
+          lockCurrentReferences:
+            restrictedAnswerVault.lockCurrentReferences.bind(restrictedAnswerVault),
+          readSelectedValue: restrictedAnswerVault.readSelectedValue.bind(restrictedAnswerVault),
+          readCurrentReference:
+            restrictedAnswerVault.readCurrentReference.bind(restrictedAnswerVault),
+        }),
         ...(process.env.DOCUMENT_TAILORING_FUNCTION_ARN
           ? {
               tailoring: new LambdaResumeTailoringClient(

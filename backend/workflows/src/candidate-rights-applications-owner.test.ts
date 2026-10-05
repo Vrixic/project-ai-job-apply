@@ -73,6 +73,8 @@ function harness(
   applicationsData?: unknown,
   restrictedAnswers?: unknown,
   restrictedAnswerExport?: CandidateRightsActivityDependencies["restrictedAnswerExport"],
+  coverLetters?: unknown,
+  coverLetterExport?: CandidateRightsActivityDependencies["coverLetterExport"],
 ) {
   const queries: string[] = [];
   const stored: { body?: Buffer } = {};
@@ -102,6 +104,8 @@ function harness(
       if (text.includes("profile.export_candidate_data") && restrictedAnswers !== undefined) {
         Object.assign(data.profile ?? {}, { restrictedAnswers });
       }
+      if (text.includes("documents.export_candidate_data") && coverLetters !== undefined)
+        Object.assign(data.documents ?? {}, { coverLetters });
       return [{ data }];
     }
     if (text.includes("FROM profile.candidate_data_exports")) return [exportRow];
@@ -133,6 +137,7 @@ function harness(
       }),
     },
     restrictedAnswerExport,
+    coverLetterExport,
     documentObjectStore: {
       deleteAllVersionsAndMarkers: vi.fn(async () => ({ exactInventoryEmpty: true })),
     },
@@ -165,6 +170,118 @@ const restrictedAnswer = {
   confirmedAt: AT,
   createdAt: AT,
 };
+
+const letter = {
+  id: "019c2b89-79b2-7000-8000-0000000000c1",
+  applicationId: OPERATION,
+  version: 1,
+  status: "ready",
+  jobRevision: "a".repeat(64),
+  confirmedFactsHash: "b".repeat(64),
+  contentSha256: "c".repeat(64),
+  promptVersion: "1.0.0",
+  createdAt: AT,
+  model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+};
+const paragraphs = [{ text: "I build reliable synthetic systems.", factIds: [REQUEST] }];
+describe("cover-letter portable content composition", () => {
+  it("retains metadata-only compatibility with the reader absent", async () => {
+    const run = harness(WITH_APPLICATIONS, undefined, undefined, undefined, [letter]);
+    await run.store.assembleExport(input("export_assemble"));
+    expect(JSON.parse(run.stored.body?.toString("utf8") ?? "{}").documents.coverLetters).toEqual([
+      letter,
+    ]);
+  });
+  it("enriches only ready saved letters through the exact owner reader", async () => {
+    const pending = {
+      id: REQUEST,
+      applicationId: OPERATION,
+      version: 2,
+      status: "pending",
+      jobRevision: letter.jobRevision,
+      confirmedFactsHash: letter.confirmedFactsHash,
+      createdAt: AT,
+    };
+    const reader = { readValue: vi.fn(async () => paragraphs) };
+    const run = harness(
+      WITH_APPLICATIONS,
+      undefined,
+      undefined,
+      undefined,
+      [letter, pending],
+      reader,
+    );
+    await run.store.assembleExport(input("export_assemble"));
+    expect(reader.readValue).toHaveBeenCalledExactlyOnceWith(USER, letter);
+    const exported = JSON.parse(run.stored.body?.toString("utf8") ?? "{}");
+    expect(exported.documents.coverLetters).toEqual([
+      { ...letter, paragraphs, reviewRequired: true },
+      pending,
+    ]);
+    expect(validateCandidateDataExportV1(exported)).toBe(true);
+    expect(JSON.stringify(exported)).not.toContain("objectKey");
+  });
+  it("detaches the metadata passed to the read port", async () => {
+    const reader = {
+      readValue: vi.fn(async (_owner: string, value: { version: number }) => {
+        value.version = 99;
+        return paragraphs;
+      }),
+    };
+    const run = harness(WITH_APPLICATIONS, undefined, undefined, undefined, [letter], reader);
+    await run.store.assembleExport(input("export_assemble"));
+    expect(
+      JSON.parse(run.stored.body?.toString("utf8") ?? "{}").documents.coverLetters[0].version,
+    ).toBe(1);
+  });
+  it("fails the export without writing an artifact when the saved read fails", async () => {
+    const reader = { readValue: vi.fn().mockRejectedValue(Error("synthetic-missing-object")) };
+    const run = harness(WITH_APPLICATIONS, undefined, undefined, undefined, [letter], reader);
+    await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow();
+    expect(run.stored.body).toBeUndefined();
+  });
+  it.each(
+    [
+      [],
+      [{ text: "synthetic", factIds: [] }],
+      [{ ...paragraphs[0], text: "x".repeat(1201) }],
+      [{ ...paragraphs[0], objectKey: "synthetic-private-key" }],
+    ].map((value) => ({ value })),
+  )("refuses invalid returned portable paragraphs %#", async ({ value }) => {
+    const reader = { readValue: vi.fn().mockResolvedValue(value) };
+    const run = harness(WITH_APPLICATIONS, undefined, undefined, undefined, [letter], reader);
+    await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+      "CandidateExportSchemaRejected",
+    );
+    expect(run.stored.body).toBeUndefined();
+  });
+  it.each(["paragraphs", "reviewRequired"])(
+    "refuses raw owner-export %s before the read port",
+    async (key) => {
+      const reader = { readValue: vi.fn().mockResolvedValue(paragraphs) };
+      const run = harness(
+        WITH_APPLICATIONS,
+        undefined,
+        undefined,
+        undefined,
+        [
+          {
+            ...letter,
+            paragraphs,
+            reviewRequired: true,
+            [key]: key === "paragraphs" ? paragraphs : true,
+          },
+        ],
+        reader,
+      );
+      await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+        "CandidateExportSchemaRejected",
+      );
+      expect(reader.readValue).not.toHaveBeenCalled();
+      expect(run.stored.body).toBeUndefined();
+    },
+  );
+});
 
 describe("Restricted Answer Vault portable metadata compatibility", () => {
   it("exports the exact active and expired values, but never decrypts tombstones", async () => {

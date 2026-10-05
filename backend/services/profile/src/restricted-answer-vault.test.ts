@@ -104,7 +104,13 @@ describe("restricted answer reuse read", () => {
       value: "synthetic-saved-value",
     });
     expect(queries).toHaveLength(2);
-    expect(queries[0]?.values).toEqual(["synthetic-owner", "authorization.us_authorized", "us"]);
+    expect(queries[0]?.values).toEqual([
+      "synthetic-owner",
+      "authorization.us_authorized",
+      "us",
+      null,
+      null,
+    ]);
     expect(queries[1]?.values).toEqual([
       "synthetic-owner",
       "synthetic-entry",

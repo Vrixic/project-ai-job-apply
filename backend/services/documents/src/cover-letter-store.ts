@@ -27,6 +27,25 @@ export interface CoverLetterMetadata {
   createdAt: Date;
 }
 
+export type CoverLetterExportReference = Pick<
+  CoverLetterDocument,
+  | "id"
+  | "applicationId"
+  | "version"
+  | "jobRevision"
+  | "confirmedFactsHash"
+  | "contentSha256"
+  | "promptVersion"
+  | "model"
+  | "createdAt"
+>;
+export interface CoverLetterExportReader {
+  readValue(
+    ownerUserId: string,
+    reference: CoverLetterExportReference,
+  ): Promise<CoverLetterDocument["paragraphs"]>;
+}
+
 /** Conditional immutable writes and exact-version bounded reads behind the Documents boundary. */
 export interface CoverLetterObjectStore {
   putIfAbsent(input: {
@@ -75,6 +94,37 @@ export class PostgresCoverLetterReadStore implements CoverLetterReadStore {
     private readonly client: postgres.Sql,
     private readonly objects: Pick<CoverLetterObjectStore, "read">,
   ) {}
+
+  /** Portability reads the exact saved identity, including historical same-hash drafts. */
+  async readValue(
+    ownerUserId: string,
+    value: CoverLetterExportReference,
+  ): Promise<CoverLetterDocument["paragraphs"]> {
+    const reference = structuredClone(value);
+    return this.client.begin(async (transaction) => {
+      await transaction`SELECT identity.require_active_candidate(${ownerUserId}::uuid)`;
+      const row = await find(transaction, ownerUserId, reference.id);
+      if (
+        row?.status !== "ready" ||
+        row.applicationId !== reference.applicationId ||
+        row.version !== reference.version ||
+        row.jobRevision !== reference.jobRevision ||
+        row.confirmedFactsHash !== reference.confirmedFactsHash ||
+        row.contentSha256 !== reference.contentSha256 ||
+        row.promptVersion !== reference.promptVersion ||
+        row.createdAt.getTime() !== Date.parse(reference.createdAt)
+      )
+        throw new CoverLetterIntegrityError();
+      const document = await readReady(this.objects, row);
+      if (
+        document.model.provider !== reference.model.provider ||
+        document.model.model !== reference.model.model ||
+        document.model.version !== reference.model.version
+      )
+        throw new CoverLetterIntegrityError();
+      return structuredClone(document.paragraphs);
+    }) as Promise<CoverLetterDocument["paragraphs"]>;
+  }
 
   async withReadLease<T>(
     ownerUserId: string,

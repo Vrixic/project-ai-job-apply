@@ -23,7 +23,13 @@ export async function seedResponseInventory(sql, ownerUserId) {
   const work = new PostgresCoverLetterWorkStore(sql, () => true);
   const responses = new PostgresCoverLetterResponseStore(sql, () => true);
   const fixtures = [];
-  for (const state of ["reserved", "acknowledged", "disposed"]) {
+  for (const [state, failure] of [
+    ["reserved", null],
+    ["acknowledged", null],
+    ["disposed", null],
+    ["acknowledged", "failed"],
+    ["disposed", "failed"],
+  ]) {
     const documentId = uuidv7();
     await documents.reserve({
       id: documentId,
@@ -53,13 +59,19 @@ export async function seedResponseInventory(sql, ownerUserId) {
       createdAt: Math.floor(Date.now() / 1000),
     };
     if (state !== "reserved") await responses.recordCreation(reference, response);
+    if (failure)
+      await work.settleTerminalProviderDispatch(reference, {
+        kind: "terminal_no_content",
+        reference: response,
+        terminalStatus: failure,
+      });
     if (state === "disposed")
       await responses.recordDisposal(reference, {
         kind: "response_deleted",
         reference: response,
-        terminalStatus: "cancelled",
+        terminalStatus: failure ?? "cancelled",
       });
-    fixtures.push({ reference, snapshot: await responses.read(reference), response });
+    fixtures.push({ reference, snapshot: await responses.read(reference), response, failure });
   }
   return fixtures;
 }
@@ -68,7 +80,9 @@ export async function exerciseRestoredResponseInventory(sql, fixtures) {
   const responses = new PostgresCoverLetterResponseStore(sql, () => true);
   const work = new PostgresCoverLetterWorkStore(sql, () => true);
   let unresolvedInventoryDeletesRejected = 0;
-  for (const { reference, snapshot, response } of fixtures) {
+  let failureProofRowsRestored = 0;
+  let failureProofMutationsRejected = 0;
+  for (const { reference, snapshot, response, failure } of fixtures) {
     assert.deepEqual(await responses.read(reference), snapshot);
     assert.equal((await responses.reserve(reference)).kind, "already_reserved");
     if (snapshot.state === "reserved") {
@@ -76,7 +90,7 @@ export async function exerciseRestoredResponseInventory(sql, fixtures) {
         responses.recordDisposal(reference, {
           kind: "response_deleted",
           reference: response,
-          terminalStatus: "cancelled",
+          terminalStatus: failure ?? "cancelled",
         }),
         { message: "CoverLetterResponseUnavailable" },
       );
@@ -93,13 +107,28 @@ export async function exerciseRestoredResponseInventory(sql, fixtures) {
         await responses.recordDisposal(reference, {
           kind: "response_deleted",
           reference: response,
-          terminalStatus: "cancelled",
+          terminalStatus: failure ?? "cancelled",
         });
     }
     assert.deepEqual(await responses.read(reference), snapshot);
     const [original] =
       await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${reference.id}`;
-    assert.equal(original.state, "running");
+    assert.equal(original.state, failure ? "settled" : "running");
+    assert.deepEqual(await responses.readFailed(reference), failure ? snapshot : null);
+    const [proof] =
+      await sql`SELECT provider_failure AS failure FROM documents.cover_letter_work_authorizations WHERE id = ${reference.id}`;
+    assert.equal(proof.failure, failure);
+    if (failure) {
+      failureProofRowsRestored++;
+      await assert.rejects(
+        sql`UPDATE documents.cover_letter_work_authorizations SET provider_failure = NULL WHERE id = ${reference.id}`,
+        { code: "55000" },
+      );
+      await assert.rejects(work.settleRejectedProviderDispatch(reference), {
+        message: "CoverLetterWorkUnavailable",
+      });
+      failureProofMutationsRejected++;
+    }
     // All work here is synthetic ledger-only: explicit test settlement cannot stand in for a
     // real provider's positive stopping evidence. Retention still protects unresolved rows.
     await work.recordSettled(reference);
@@ -112,6 +141,8 @@ export async function exerciseRestoredResponseInventory(sql, fixtures) {
     }
   }
   return {
+    failureProofRowsRestored,
+    failureProofMutationsRejected,
     populatedResponseRowsRestored: fixtures.length,
     responseReservationReplaysDenied: fixtures.length,
     unresolvedInventoryDeletesRejected,

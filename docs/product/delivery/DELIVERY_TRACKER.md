@@ -9,6 +9,150 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-04 owner D3-064 starts one-off generated-material enforcement on fresh main e48bdf3 plus exact #547 25f0ca05. Accepted ADR-038/#546 controls retention; the pending vault proposal is ADR-039 and historical isolated-bootstrap task is now D3-078. First backend path prevents material text entering packet persistence; full temporary-memory, 30-minute expiry, browser/provider and deployed acceptance remain. [Evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md). Encryption D3-077 remains open. No D1/D3 completion or activation; CI/CD deferred until production launch.
+
+
+2026-10-04 D3-076 [PR #547](https://github.com/Vrixic/project-ai-job-apply/pull/547) opens on exact #545 57d7b057. Verified source 21594bc4 unchanged; only delivery documentation follows. D3-077 restricted packet storage, selection/review UI and accountable/deployed acceptance remain; reuse stays false. No D1/D3 completion; CI/CD deferred until production launch.
+
+2026-10-04 D3-076 clean 21594bc4 passes full maintained verification: 38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint. 180 real Applications/Profile/Gateway/preparation/native SQL cases and 60-migration/84-relation logical restore pass separately; external transports simulated. Actual native preparation artifact is byte-identical across two local builds and passes refusal/isolation checks. Docker/WSL stopped; only delivery documentation follows. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). D3-077 protected packet storage, UI and accountable/deployed gates remain; reuse stays false. No D1/D3 completion; CI/CD deferred until launch.
+
+2026-10-04 D3-077 records the concrete restricted-packet storage gap: existing Applications JSON field values sit outside the vault separate-key boundary. Required backend protection remains Not started and blocks saved-answer reuse activation. D3-076 stays source-only/default-off; D1/D3 exits unchanged. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md).
+
+2026-10-04 D3-076 starts default-off selected-answer packet binding on exact #545 57d7b057. Same-transaction Profile metadata admission checks under verification; full verifier and accountable/deployed gates remain. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). No activation, frontend change or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-075 [PR #545](https://github.com/Vrixic/project-ai-job-apply/pull/545) opens on exact #544 8f72e13b. Verified source fb8010b3 unchanged; only delivery documentation follows. Packet selection/hash/version invalidation, candidate review and accountable/deployed acceptance remain. No Applications consumer, deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-075 clean fb8010b3 passes full maintained verification: 38 typecheck tasks, 39 test tasks, 23 builds; Profile 120 units and unchanged lint. All 46 real Profile SQL cases separately pass, with eight new selected-answer cases; KMS simulated. [Evidence](evidence/d3-vault-selected-read-port-2026-10-04.md). Docker/WSL stopped; only delivery documentation follows. Packet selection/hash/version invalidation, candidate review and accountable/deployed gates remain. No Applications consumer, deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-075 starts exact selected-answer private Profile reads on fresh main bde17d9 plus exact #544 8f72e13b. 48 focused units and 46 real Profile SQL cases pass (eight new); KMS simulated. [Evidence](evidence/d3-vault-selected-read-port-2026-10-04.md). Full verifier pending. Packet selection/hash/version invalidation, candidate review, key activation and accountable/deployed gates remain. No Applications consumer, deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-074 [PR #544](https://github.com/Vrixic/project-ai-job-apply/pull/544) opens on exact #543 3ee4d2c1. Verified source adf46c8a unchanged; only delivery documentation follows. Review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-074 clean adf46c8a passes full maintained verification: 38 typecheck tasks, 39 test tasks, 23 builds; Applications 120 units, Gateway 298 with 15 opt-in skips and Workflows 1,588 with 57 opt-in skips; unchanged lint. Separate 67 Applications and five Gateway real SQL cases pass. [Evidence](evidence/d3-pre-dispatch-approval-recheck-2026-10-04.md). Docker/WSL stopped; only delivery documentation follows. Review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-074 starts pre-dispatch approval rechecking on fresh main bde17d9 plus exact #543 3ee4d2c1. Five real SQL reproductions establish the stale-dispatch gap. 120 Applications units, 67 Applications SQL, five Gateway SQL and authenticated HTTP/projection checks pass after the fix; build/typecheck/formatting pass. [Evidence](evidence/d3-pre-dispatch-approval-recheck-2026-10-04.md). Full verifier pending; review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-073 [PR #543](https://github.com/Vrixic/project-ai-job-apply/pull/543) opens on exact #542 bf50b565. Verified source 03c6d294 unchanged; delivery documentation only follows. Review/merge and a compatible deployed export release remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-073 clean 03c6d294 passes full verification: 38 typecheck tasks, 39 test tasks, 23 builds; Profile 96 units; unchanged lint. Seven export units and 26 real PostgreSQL cases pass, including three reference-retargeting races. [Evidence](evidence/d3-vault-export-reference-snapshot-2026-10-04.md). Docker/WSL stopped; review/merge and compatible deployed export release remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-073 starts original restricted-answer export-reference snapshotting on fresh main bde17d9 plus exact #542 bf50b565. Seven export units and 26 real PostgreSQL vault cases pass; Profile typecheck/build/formatting pass. [Evidence](evidence/d3-vault-export-reference-snapshot-2026-10-04.md). Full verifier pending. No deployment/activation or D1/D3 completion; Applications reuse and accountable/deployed gates remain. Hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-072 [PR #542](https://github.com/Vrixic/project-ai-job-apply/pull/542) opens on exact #541 9918aeec. Verified source/artifacts 22a4568e unchanged; only delivery documentation follows. Review/merge and release/accountable gates remain; no publication/deployment/activation or phase completion. Hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-072 clean 22a4568e passes full maintained verification: 38 typechecks, 39 test tasks, 23 builds; 1,174 Documents/1,588 Workflow units and unchanged lint. Seven real PostgreSQL cases and two unpublished existing core artifacts pass integrity and actual activity refusal probes. [Evidence](evidence/d3-cover-letter-export-content-2026-10-04.md). Docker/WSL stopped. Export activation stays off; read IAM/reader-first release/privacy/drain/restore/accountable gates remain. No publication/deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-072 starts saved cover-letter content export from fresh main bde17d9 plus exact #541 9918aeec. Default-off exact owner/ID/version/object reads preserve old metadata exports and same-hash history. 79 Documents, 47 Workflow privacy, 24 Domain, 83 API, 20 event and seven real PostgreSQL cases pass; typecheck/build/formatting/read isolation pass. [Evidence](evidence/d3-cover-letter-export-content-2026-10-04.md). Full verifier/core artifacts pending; release/IAM/retention/drain/restore/accountable gates remain. No deployment/activation or D1/D3 completion; Docker/WSL stopped. Hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-071 [PR #541](https://github.com/Vrixic/project-ai-job-apply/pull/541) opens on exact #540 14371d70. Verified source/artifact 38b3891f unchanged; delivery records only follow. Review/merge and release/accountable gates remain; no publication/deployment/activation or phase completion. Hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-071 clean 38b3891f passes full maintained verification: 38 typechecks, 39 test tasks, 23 builds; 1,578 Workflow units and unchanged lint. 82 focused and twelve real PostgreSQL cases plus one unpublished source-bound recovery artifact pass actual bundled refusals and independent archive/bundle/SBOM integrity (31 components). [Evidence](evidence/d3-preparation-recovery-bootstrap-2026-10-04.md). Docker/WSL stopped; release/IAM/scheduling/retention/drain/accountable gates remain. D1/D3 stay In progress; no publication/deployment/activation. Hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-071 starts native terminal/scheduled preparation recovery from fresh main bde17d9 plus exact #540 14371d70. 82 focused (39 new), twelve real PostgreSQL cases, typecheck/build and emitted actor isolation pass. Original metadata independently verifies settlement; nudges remain separately gated. [Evidence](evidence/d3-preparation-recovery-bootstrap-2026-10-04.md). Full verifier/artifact pending. Release/IAM/scheduling/retention/drain/accountable gates remain; no deployment/activation or D1/D3 completion. Docker/WSL stopped; hosted CI/CD stays deferred until production launch.
+
+2026-10-04 D3-070 [PR #540](https://github.com/Vrixic/project-ai-job-apply/pull/540) opens on exact #539 212e6e2. Verified source/artifact 893e5cfe unchanged; only delivery documentation follows. Review/merge and terminal recovery/release/accountable gates remain; no publication/deployment/activation or phase completion. Hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-070 clean 893e5cfe passes full maintained verification: 38 typechecks, 39 test tasks, 23 builds; 1,539 Workflow units and unchanged lint. 48 focused and seven real PostgreSQL cases plus one unpublished source-bound artifact pass actual refusal and independent archive/bundle/SBOM integrity (31 components). [Evidence](evidence/d3-preparation-starter-bootstrap-2026-10-04.md). Docker/WSL stopped. Terminal recovery/release/IAM/scheduling/retention/drain/accountable gates remain; D1/D3 stay In progress. No publication/deployment/activation; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-070 starts native preparation starter on fresh main bde17d9 plus exact #539 212e6e2. 48 focused, seven real PostgreSQL cases, typecheck/build and emitted actor isolation pass. Original dispatch versions/consent survive lost acknowledgements; quarantine and unretained versions refuse Invoke. [Evidence](evidence/d3-preparation-starter-bootstrap-2026-10-04.md). Full verifier/artifact pending; terminal recovery/release/IAM/scheduling/retention/drain/accountable gates remain. No deployment/activation or D1/D3 completion; hosted CI/CD deferred until production launch.
+
+2026-10-04 D3-069 [PR #539](https://github.com/Vrixic/project-ai-job-apply/pull/539) opens on exact #538 c493a7ef. Verified source/artifact 6986b2b unchanged; delivery documentation only follows. Review/merge and remaining native release/accountable gates remain; no publication/deployment/activation or phase completion. Hosted CI/CD stays deferred until production launch.
+
+2026-10-04 D3-069 clean `6986b2b` passes full maintained verification: 38 typechecks, 39 test tasks, 23 builds; 1,503 Workflow units and unchanged lint. 49 focused cases plus one unpublished source-bound native durable artifact pass actual default-off/wrong-version refusals before SDK state access and independent archive/bundle/SBOM integrity (27 components). [Evidence](evidence/d3-preparation-durable-bootstrap-2026-10-04.md). Native dispatch/recovery/release, IAM/scheduling/retention/drain/accountable gates remain; D1/D3 stay In progress. No publication/deployment/activation; hosted CI/CD stays deferred.
+
+2026-10-04 D3-069 starts default-off native preparation durable bootstrap from fresh main bde17d9 plus exact open #538 c493a7ef. Qualified numeric activity/target configuration stays outside deterministic SDK workflow code, with no private/provider capability. 49 focused cases (31 native, five installed SDK runner cases), typecheck/build and emitted orchestration isolation pass. [Evidence](evidence/d3-preparation-durable-bootstrap-2026-10-04.md). Full verifier/artifact checks pending; native dispatch/recovery/release and IAM/scheduling/retention/drain/accountable gates remain. No deployment/activation or D1/D3 completion; hosted CI/CD stays deferred.
+
+2026-10-04 D3-068 [PR #538](https://github.com/Vrixic/project-ai-job-apply/pull/538) opens on exact #537 b516611. Verified source/artifact a7fb9ba is unchanged; only delivery documentation follows. Review/merge and remaining native release/accountable gates remain. No publication/deployment/activation or phase completion; hosted CI/CD stays deferred until production launch.
+
+2026-10-04 D3-068 exact clean `a7fb9ba` passes full maintained verification: 38 typechecks, 39 test tasks, 23 builds; 1,472 Workflow and 1,160 Documents units, unchanged lint. 81 focused and 11 fresh PostgreSQL cases cover corrected native configuration. One unpublished local artifact passes source/archive/bundle/SBOM integrity (41 components) and actual bundled refusals with zero fetches. [Evidence](evidence/d3-preparation-activity-bootstrap-2026-10-04.md). Docker/WSL stopped. Remaining native durable/dispatch/recovery/release, IAM/scheduling/retention/drain/accountable gates stay open; D1/D3 stay In progress. No publication/deployment/activation; hosted CI/CD stays deferred.
+
+2026-10-04 D3-068 pre-review correction aligns private activity/native tests with existing CANDIDATE_DOCUMENT_BUCKET/PLATFORM_KMS_KEY_ARN configuration. Corrected exact-source artifact and full rerun supersede initial e1f00b5 evidence before handoff. [Evidence](evidence/d3-preparation-activity-bootstrap-2026-10-04.md). No deployment/activation or phase completion.
+
+2026-10-04 D3-068 starts native default-off private preparation bootstrap from fresh main bde17d9 plus exact open #537 b516611. Qualified managed-secret setup, independent owner/native Documents pools and fixed one-attempt object/Invoke clients connect the tested port. 81 focused, five persistence units, 283 AI SDK units and 11 PostgreSQL cases (four native) plus both emitted isolation checks pass. Unchanged metadata validators move into pure contracts. [Evidence](evidence/d3-preparation-activity-bootstrap-2026-10-04.md). Full verifier/artifact checks pending; release/IAM/scheduling/retention/drain/accountable gates remain. No deployment/activation or D1/D3 completion; hosted CI/CD stays deferred.
+
+2026-10-04 D3-067 [PR #537](https://github.com/Vrixic/project-ai-job-apply/pull/537) opens on exact #536 dependency 2a69030. Verified source 869f0fc is unchanged; only delivery records follow. Review/merge, native bootstrap and release/accountable acceptance remain. No deployment/activation or phase completion; hosted CI/CD stays deferred.
+
+2026-10-04 D3-067 final clean source `869f0fc` passes full maintained verification: 38 typecheck tasks, 39 test tasks, 23 builds; 1,434 Workflow units and unchanged lint. 43 focused and seven real PostgreSQL cases cover frozen capabilities and a private_slots-only initializer ledger guard. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). Native runtime/release/accountable acceptance remain; D1/D3 stay In progress. Docker/WSL stopped. No deployment/activation; hosted CI/CD remains deferred until production launch.
+
+2026-10-04 D3-067 purpose guard: initializer ledger methods accept only private_slots and refuse provider/final-document work before SQL. 43 focused and seven fresh PostgreSQL cases plus build/typecheck/emitted isolation pass; clean-source full rerun pending. Docker/WSL stopped. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). No deployment/activation or phase completion.
+
+2026-10-04 D3-067 facade checkpoint: first full verifier passes at `3861c69` (38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint). Tighten constructor runtime capabilities with exact frozen owner/lease/work/initialization/recovery facades. 41 focused and seven fresh PostgreSQL cases plus build/typecheck/emitted isolation pass again; final full verifier pending. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). No publication/deployment/activation or phase completion.
+
+2026-10-04 D3-067 starts from fresh main `bde17d9` with exact open #536 source
+`2a69030` as an explicit dependency. A default-off private Applications→Documents port now
+connects owned evidence, independently pooled candidate leases, controlled slot initialization,
+one isolated Invoke and original draft recovery to the existing preparation activity.
+Retry recovery has no initializer/Invoke capability. 39 focused cases and seven real PostgreSQL
+cases pass, including one durable SDK run, post-disclosure recovery, lost acknowledgements and
+quarantine. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). Full verification pending;
+native activity bootstrap/artifacts, IAM/scheduling, retention/abandonment/writer drain and
+accountable/deployed acceptance remain. No deployment/activation or D1/D3 completion.
+Hosted CI/CD stays deferred until production launch.
+
+2026-10-04 D3-066 [PR #536](https://github.com/Vrixic/project-ai-job-apply/pull/536) opens on #535 for reviewed native response maintenance. Locally verified source/artifact a63233a remains unpublished and disabled; review/merge and release gates remain.
+
+2026-10-04 D3-066 exact-source verification completes at `a63233a`: full maintained
+verifier passes 38 typecheck tasks, 39 test tasks and 23 builds, including all 1,155 Documents
+units, unchanged lint baseline and both emitted-bundle isolation checks. 141 real PostgreSQL
+response-inventory cases include nine new native maintenance/private SQL composition cases.
+The source-bound local maintenance artifact and independent integrity/default-off checks pass,
+unpublished. [Evidence](evidence/d3-response-maintenance-bootstrap-2026-10-04.md). Review/merge, IAM/scheduling, retention,
+abandonment/writer drain and accountable/deployed acceptance remain; no phase completion,
+deployment or activation. Hosted CI/CD remains deferred until production launch.
+
+2026-10-04 D3-066 starts from fresh main `bde17d9` with exact open #535 head
+`0c91183` as an explicit source dependency. A default-off internet maintenance Lambda now
+connects separate owned failed/completed reads to private fence/disposal controls and the
+existing provider cleanup adapter. No caller classification or provider identity is accepted.
+49 focused cases and 141 real PostgreSQL response-inventory cases (nine new native-composition
+cases) pass. The actual emitted bundle excludes SQL, S3, rendering and model creation code.
+[Evidence](evidence/d3-response-maintenance-bootstrap-2026-10-04.md). Full verification and
+clean-source artifact binding remain pending. IAM, scheduling, retention, ambiguous abandonment,
+writer drain and accountable/deployed acceptance remain. No deployment/activation or D1/D3
+completion; hosted CI/CD stays deferred until production launch.
+
+2026-10-04 D3-065 exact-source verification complete at `e071d9e`: full maintained verifier
+passes 38 typecheck tasks, 39 test tasks and 23 builds, with unchanged public contracts and
+lint baseline. All 1,106 Documents units, 308 real PostgreSQL cases, 1,412 workflow units and
+42 restore units pass. The 59-migration restore replay preserves both immutable failure proofs
+across 84 exact relations. Local migration image/runtime smoke and five clean-source artifact
+sets pass, unpublished. [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md). Review/merge, migration-before-code/current-source restore
+release, IAM/scheduling, abandonment/writer drain, retention and accountable/deployed acceptance
+remain. D1/D3 stay In progress; no deployment/activation or hosted CI/CD resumption.
+
+2026-10-04 D3-065 starts from fresh main `bde17d9` with exact open #534 head `10f196b`
+as an explicit source dependency. Failed-response maintenance now requires Documents-owned
+immutable original-failure proof before fencing or provider effects. Nullable forward migration
+0009 performs no backfill; original closure is atomic, and private v1 `read_failed` defaults off.
+174 focused/1,106 Documents unit cases, 308 real PostgreSQL cases, 42 restore units and 153
+runtime smoke cases pass. Full verifier, whole-boundary restore and local image remain pending.
+[Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md). Ambiguous abandonment, writer drain and accountable/deployed gates remain;
+no publication/deployment/activation or D1/D3 completion. CI/CD stays deferred until production launch.
+
+2026-10-04 D3-063/D3-064 integration checkpoint: locally integrate exact open #533 head
+`1abc7e7` into #534 as `8aba600`. Both full test blocks are retained. Correct an initial
+conflict-script error by restoring complete tracker/phase records from both original heads;
+independent line-set verification proves every original line is retained. Six new connected
+native-bootstrap cases cover terminal statuses, quarantine, lost committed terminal ACK and
+another running writer. All 285 PostgreSQL cases, 1,084 Documents units and 283 AI SDK units
+pass. Combined full verification passes 38 typecheck tasks, 39 test tasks, 23 builds and the
+compiled bundle isolation check, with unchanged public contracts/formatting/lint baseline.
+Five exact-clean-source artifact sets build from `f23accd`; all archive/bundle/manifest/SBOM
+checks and actual bundled default-off refusals pass, unpublished.
+No GitHub merge, publication/deployment/activation or phase completion. CI/CD stays deferred.
+
+
+2026-10-04 D3-064 starts independently from fresh main `bde17d9` while locally verified
+[PR #533](https://github.com/Vrixic/project-ai-job-apply/pull/533) is open. Add a source-only
+isolated provider bootstrap for the existing background actor, exact private control/capture
+targets and managed provider key. No database/plaintext-key fallback, provider object creation
+or disposal capability. Local verification passes: 70 focused and 1,049 Documents units, 266 real PostgreSQL cases
+and full maintained verification (38 typecheck tasks, 39 test tasks, 23 builds plus the added
+compiled dependency isolation check). [Evidence](evidence/d3-isolated-provider-bootstrap-source-validation-2026-10-04.md).
+One isolated artifact set builds from clean `c7382cd`; bundled refusal and independent
+archive/manifest/bundle/SBOM integrity pass, unpublished. IAM, writer drain, retention and
+deployed acceptance still block activation. Hosted CI/CD remains deferred until production launch.
+
 2026-10-04 D3-063 begins from fresh merged main `bde17d9`, whose full tree matches
 verified #532 source `0c0b332`. Original failed/cancelled/incomplete background responses
 currently leave running work despite positive original terminal metadata. Add a separate
@@ -2656,7 +2800,7 @@ are stopped; the saved overnight handoff precedes the user-authorized Windows sh
 
 2026-10-04 product-policy update: generated cover letters and improved/tailored resumes are one-off,
 never persisted, and limited to 30 minutes from generation completion under
-[ADR-038](../../adr/038-one-off-generated-application-materials.md). D3-064 is Not started and
+[ADR-038](../../adr/038-one-off-generated-application-materials.md). D3-064 is In progress (started 2026-10-04) and
 tracks enforcement, prevention of generated content in packet fields, and automated/browser
 cleanup evidence. Deterministic tailoring already avoids persisted content; expiry enforcement
 and deployed cleanup are not claimed. D3 remains In progress.
@@ -3145,6 +3289,14 @@ Append only material cross-delivery events.
 | 2026-09-10 | D2 | Exact `9b608ac` matching artifacts, reviewed preparation and Create pass. Its single Inspect reports fixed `store_preflight` / `CompletionCollision` after initial SQL reads; precise predicate/incorrect value and retry-bug causality remain unknown. No validated inspection, Replay or historical mutation runs. Maintained Cleanup `88848` removes the exact executor after full drain, preserving immutable/local artifacts and the same verified private RDS copy with `320`/`20` permissions. D2-052/R20 track conditional exact-version historical correction authority; future-writer Gateway/core releases and final recovery/cleanup remain. Phase 2 is not complete. | [Historical completion blocker](phase-2-extension-and-community.md#d2-052--historical-completion-consistency) |
 | 2026-09-11 | D2 | Gateway `423d63b` and core `2ff32ef` are deployed/verified; core `14` is resumed at Platform `328` with zero drift. D2-051 is Complete for code/deployment, with generated concurrency and real already-terminal SQL evidence explicitly distinguished from a real concurrent lock race. Same-copy Prepare `4799`, Create `50475` and DiagnoseCompletion `36727` prove agreeing persisted completion evidence versus the tag and three acknowledged/unclaimed dispatches, with no writes. Repair `45914` / `a9336e` reserves stable attempt `1` after its first writer/retirement pass, then refuses the second metadata read before Put. Exact `00fadf` preimage/tag readback is unchanged; a later successful read-only repetition neither proves the earlier cause nor renews authority. Preserve the journal; new D2-053/R21 gate further writing. Disable `8510` and full-drain Cleanup `27423` confirm exact executor absence, retaining its artifact; the same PITR and `328`/`20` permissions remain. No historical mutation or Replay; Phase 2 remains In progress. | [Current diagnosis](phase-2-extension-and-community.md#d2-052--historical-completion-consistency), [completed writer deployment](phase-2-extension-and-community.md#d2-051--deletion-retry-timestamps), [pre-dispatch blocker](phase-2-extension-and-community.md#risks-and-blockers) |
 
+| 2026-10-04 | D3 | Start D3-065 and implement original-failure eligibility before response maintenance, preserving the owning ledger and existing identity/purge guards. Local focused/unit/real-SQL and runtime smoke pass; whole-boundary restore/image/full verification remain. Open #533/#534 are explicit dependencies, not merged. No deployment/activation or phase completion; owner CI/CD deferral remains. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
+
+| 2026-10-04 | D3 | D3-065 source 60bc469 passes Documents unit/real-SQL, restored immutable failure proof, local image/runtime smoke and five unpublished source-bound artifact checks. Full verifier discovers stale private restore identity; synchronize TypeScript/PowerShell SHA and synthetic fixture with 59-migration manifest. All 1,412 workflow units and both guard hosts pass; exact-source full rerun/final artifacts remain. Docker/WSL stopped. No publication/deployment/activation, CI/CD resumption or phase completion. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
+
+| 2026-10-04 | D3 | D3-065 exact clean e071d9e passes full maintained verification (38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint/public contracts), local SQL/restore, both operator guard hosts and five unpublished source-bound artifact sets. New links resolve and original history is retained. Runtime/migration/current-source restore rollout, IAM, scheduling, ambiguous abandonment/drain and accountable/deployed acceptance remain; D1/D3 stay In progress. Docker/WSL stopped. Owner CI/CD deferral retained; no publication/deployment/activation or phase completion. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
+
+| 2026-10-04 | D3 | D3-065 review packet [PR #535](https://github.com/Vrixic/project-ai-job-apply/pull/535) opens at ad83be9 against #534 (itself based on #533), preserving explicit dependency order. Tested source e071d9e and all local evidence remain unchanged; this entry is documentation only. Owner review/merge, rollout and external/runtime acceptance remain; no hosted CI monitoring, deployment/activation or D1/D3 completion. | [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md), [Phase 3 tasks](phase-3-application-preparation.md) |
+
 ## Cross-delivery decisions and changes
 
 | Date | Decision or change | Reason | Affected deliveries | Evidence |
@@ -3181,3 +3333,53 @@ Append only material cross-delivery events.
 | PR-006 | Closed | AWS made the staging regional Lambda concurrency quota effective at `1000`, above the guarded minimum. The exact staging gateway and workflow dark deployments, zero-drift verification, and authenticated gateway acceptance passed with bounded reserved concurrency. | D0-016 / SR-006 | Platform engineering; AWS Support | Execute the controlled staging cutover; request no further capacity without measured demand. |
 | PR-007 | Closed | Staging gateway reserved concurrency `5` is deployed. The fixed workload passed 500/500 public requests and 25/25 durable workflows with zero Lambda throttles and clean aggregate capacity evidence. | D0-016 / SR-006 | Platform engineering | Preserve the measured ceiling; request no additional capacity without evidence. |
 | PR-008 | Closed | The merged serverless workload inspector replayed the exact accepted staging window and passed runtime, capacity, queue/DLQ, alarm, privacy-log, idle-ECS, dispatch, trigger, and zero-drift boundaries without AWS mutation. | D0-016 / SR-006 | Platform engineering | Reuse the corrected gate for development cutover and final two-environment acceptance. |
+
+
+| 2026-10-04 | D3-064 backend persistence checkpoint: purpose-aware proposal refusal, document hash-only packet/export contracts, exact-bound owner SQL constraint and fail-closed legacy validation. AI285/Applications155/API86/Domain26/restore44/Documents1,174 units; 72 Applications and 317 Documents real-SQL cases across explicit complementary runs; 61-migration/84-relation logical recovery and runtime/publisher/restore guards pass. Full maintained verification pending. Entire memory/expiry/transport/browser/provider scope stays In progress; no deployment, activation or D1/D3 completion. Owner CI/CD deferral retained. | [Evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md) |
+
+
+2026-10-04 D3-064 exact clean source `6f8a7746` passes full maintained verification: 38 typecheck
+tasks, 39 workspace test tasks, 23 builds and operational/security/Compose/compiled-isolation
+checks, with unchanged lint baseline. Local persistence, 72 Applications/317 Documents SQL,
+61-migration/84-relation logical restore and current-source guard evidence is recorded in
+[the checkpoint](evidence/d3-one-off-generated-material-guards-2026-10-04.md). Temporary-memory,
+expiry/admission, transport/provider and browser scope remains In progress; no D1/D3 completion,
+publication, deployment or activation. Docker/WSL stopped. Owner CI/CD deferral retained.
+
+
+2026-10-04 source checkpoint opened for review as [PR #548](https://github.com/Vrixic/project-ai-job-apply/pull/548), based on exact open #547. No authored PR was merged. Verified implementation source remains `6f8a7746`; later commits contain delivery records only. D3-064 and D1/D3 remain In progress.
+
+
+2026-10-04 D3-064 backend memory replacement starts from fresh main e48bdf3 plus exact #548
+ccc89cc3. New Documents bounded content store/read service stages verification before publication,
+binds exact owner/application/generation/completion references, discards idle/active managed
+copies, and rejects late reads/rendering without sliding expiry. Required original-completion
+authority remains simulated/uncomposed. Fix PDF verification detaching download bytes; production
+PDF/DOCX and 57 general Documents SQL/1,588 workflow unit cases pass. Full maintained verification
+pending. [Evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md). Native completion/transport,
+resumes, packet admission, lifecycle/browser/provider and deployed acceptance remain; D3-064 and
+D1/D3 stay In progress. No publication, deployment or activation; owner CI/CD deferral retained.
+
+
+2026-10-04 D3-064 memory checkpoint: initial clean 58db6db2 passes full maintained verification
+(38 typecheck tasks, 39 test tasks, 23 builds). A compiled-service synthetic probe exposes late
+context change during rendering; add final context reload and immediate rendered-output cleanup
+while a context read is stalled. All 1,231 Documents units/build and the corrected probe pass;
+full exact-source rerun is pending. [Evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md).
+Native original-completion metadata/transport, resumes, packet/lifecycle/browser/provider and
+accountable/deployed acceptance stay open. No activation, deployment or phase completion;
+Docker/WSL stopped and owner CI/CD deferral retained.
+
+
+2026-10-04 D3-064 exact clean memory source `1df42237` passes full maintained verification
+(38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint and operational/compiled isolation).
+All 1,231 Documents units and the compiled late-context probe pass. Simulated completion-authority
+and separately executed 57 general Documents PostgreSQL cases are distinguished in
+[the evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md). Native immutable completion
+metadata/RPC, resume integration, packet expiry/admission, no-store/lifecycle/client, worker drain
+and provider/deployed acceptance remain required. D3-064 and D1/D3 stay In progress; eight D1 and
+thirteen D3 exits remain unchecked. Docker/WSL stopped; no publication, deployment, activation or
+hosted CI/CD resumption.
+
+
+2026-10-04 memory replacement source checkpoint opened as [PR #549](https://github.com/Vrixic/project-ai-job-apply/pull/549), based on exact open #548. No authored PR is merged or feature activated. Verified implementation source remains `1df42237`; subsequent commits change delivery records only.

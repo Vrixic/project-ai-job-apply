@@ -223,7 +223,9 @@ export async function coverLetterFile(
   applicationId: string,
   packetHash: string,
   format: "pdf" | "docx",
+  signal?: AbortSignal,
 ): Promise<ApplicationCoverLetterFile> {
+  if (signal?.aborted) throw new CoverLetterRenderError();
   const preview = coverLetterPreview(document, ownerUserId, applicationId, packetHash);
   if (!preview.matchesPacket) throw new CoverLetterIntegrityError();
   const blocks: RenderBlock[] = document.paragraphs.map(({ text }, index) => ({
@@ -231,11 +233,23 @@ export async function coverLetterFile(
     nodeId: `paragraph-${index}`,
     text,
   }));
+  let renderedBytes: Uint8Array | undefined;
+  const discard = () => {
+    if (renderedBytes?.byteLength) renderedBytes.fill(0);
+    for (const block of blocks) block.text = "";
+    if (preview.status === "ready") {
+      for (const paragraph of preview.paragraphs) paragraph.text = "";
+    }
+  };
+  signal?.addEventListener("abort", discard, { once: true });
   try {
     if (format !== "pdf" && format !== "docx") throw new CoverLetterRenderError();
     const rendered = format === "docx" ? await renderDocx(blocks) : renderPdf(blocks);
+    renderedBytes = rendered.bytes;
+    signal?.throwIfAborted();
     if (rendered.bytes.byteLength > 300_000 || !(await verifyRenderedResume(rendered, blocks)).ok)
       throw new CoverLetterRenderError();
+    signal?.throwIfAborted();
     return {
       format,
       mediaType: rendered.mediaType,
@@ -248,5 +262,8 @@ export async function coverLetterFile(
   } catch {
     // No candidate text, parser diagnostic, or raw exception crosses this boundary.
     throw new CoverLetterRenderError();
+  } finally {
+    signal?.removeEventListener("abort", discard);
+    discard();
   }
 }

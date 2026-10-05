@@ -163,3 +163,7 @@ D3-012 still blocks live provider use.
 The source-only background adapter and disposal receipts above do not establish the required
 30-minute maximum for all provider copies; reviewed provider terms and end-to-end evidence remain
 necessary before activation under this policy.
+
+`provider-background-contract.ts` holds unchanged pure captured-response/original-terminal
+metadata validators. Existing gateway and response-cleanup exports remain compatible reexports.
+Private ledger composition can retain validation without emitting model or cleanup implementations.

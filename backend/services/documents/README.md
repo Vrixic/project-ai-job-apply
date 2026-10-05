@@ -445,3 +445,122 @@ exact numeric version under reviewed maintenance-only IAM. Ordinary read/disposa
 their existing protocol. Missing eligibility remains null, never completion or purge authority.
 No migration/backfill is needed. This is local/source compatibility evidence; cloud publication,
 runtime/IAM, maintained scheduling, writer drain and deployed/accountable acceptance remain.
+
+## Source-only isolated provider Lambda bootstrap
+
+`src/cover-letter-isolated-provider-lambda.ts` supplies a separate default-off entrypoint for
+the existing background actor. `COVER_LETTER_ISOLATED_PROVIDER_ENABLED` and
+`COVER_LETTER_BACKGROUND_PROVIDER_ENABLED` must both be exactly `true`. Configuration checks
+the qualified invoked numeric version, `us-east-2`/account, three distinct function identities,
+exact same-account control/capture versions, the candidate-document bucket, a same-account
+KMS key and a qualified provider secret before I/O. Target matching is not caller authentication.
+
+`DATABASE_URL`, `DATABASE_SECRET_ID` and `OPENAI_API_KEY` are rejected, including empty configured
+values. The fixed localhost Lambda extension endpoint reads a bounded plain-string provider
+key with one attempt, a three-second deadline and a 4,096-byte response limit. Errors contain
+no secret/transport diagnostic. Concurrent setup coalesces secret reads; completed invocations
+do not retain keys. The extension owns its managed cache/rotation. No environment key fallback
+or Profile/database dependency is imported.
+
+Native S3 and Lambda clients use one attempt and ignore configured endpoint overrides. The
+actor receives only the frozen find/read/conditional-transition facade plus exact-version
+work-control and creation-capture clients; it cannot initialize objects, renew work or dispose
+responses through those ports. Actual creation/deletion denial still requires reviewed IAM.
+Completed results preserve the original one-dispatch/capture/provenance protocol; ambiguous
+ACKs remain unresolved and replay cannot call the model again.
+
+Required environment identifiers: `CANDIDATE_DOCUMENT_BUCKET`, `PLATFORM_KMS_KEY_ARN`,
+`COVER_LETTER_OPENAI_SECRET_ID`, `COVER_LETTER_PROVIDER_CONTROL_FUNCTION_ARN` and
+`COVER_LETTER_RESPONSE_CAPTURE_FUNCTION_ARN`, plus the established Lambda region/account/name/
+version/session context. Secret values are never configuration inputs. No environment/runtime
+resource is wired by this source change. Pair a reviewed actor with compatible numeric private
+handler versions. The combined D3-063/D3-064 source routes original failed/cancelled/incomplete
+observations through the separate terminal settlement action; replay cannot redispatch.
+
+`pnpm --filter @ai-job-apply/documents-service build:lambda:isolated-provider` builds one artifact set
+(four local files) in its separate output directory. It smoke-tests the actual
+bundled default-off/closed-envelope behavior. The full verifier also checks that the bundle
+excludes SQL, private persistence, rendering, test fixtures and disposal capability. Existing
+private-control/document publication families are unchanged; no isolated-provider publisher is
+introduced. Reviewed role/bucket/KMS/secret/private-caller IAM, original writer drain, maintenance
+and transient retention, real-provider evaluation, accountable review and deployed acceptance
+remain prerequisites to deployment/activation.
+
+
+Source-only D3-065 requires Documents-owned original-failure eligibility before failed-response
+maintenance can fence work or call the provider. Migration `0009` records only fixed failure
+reasons selected by the existing original actor's settlement methods, atomically with future
+phase fencing. `readFailed` requires a pending owned document, exact captured response, settled
+original failure and revoked final authority. Generic fences, old NULL settlements, successful
+work, unknown response identities and non-dispatch receipts cannot qualify. Disposed receipts
+must retain the original terminal status (completed for rejected completed output).
+
+The separate private v1 disposal RPC adds `read_failed` with exact action/reference echoes; old
+compositions refuse without ordinary-inventory fallback. The native default-off bootstrap binds
+the owned read. Reconciliation converges through the same eligibility read, preserves ambiguous
+acknowledgements, and settles no other writer. Ambiguous abandoned operations still need a
+separate owning abandonment decision/drain protocol; caller labels and elapsed time grant none.
+Migration-before-code, reviewed IAM, maintained scheduling, retention, writer drain and deployed
+acceptance remain prerequisites. No public API, frontend, provider call or activation changes.
+
+## Source-only native response maintenance (D3-066)
+
+`cover-letter-response-maintenance-lambda.ts` connects owning private `read_failed`/
+`read_completed`, failed-only cleanup fencing and positive disposal persistence to the
+existing fixed-provider cleanup adapter. Both selectors default off; selectors never classify
+work. Missing/unknown/unclassified proof refuses before fence, managed-key read or provider
+effects. Successful cleanup has no fence/cancel capability. Numeric same-account distinct
+targets and managed-secret identity are qualified before I/O; one-attempt native clients
+ignore configured endpoint overrides. Keys remain local to each invocation. The new bounded
+`CoverLetterCleanupClient` sends the existing private v1 fence contract with exact echo/version
+validation. Local deadlines and disposed receipts never settle another writer or authorize purge.
+
+`build:lambda:response-maintenance` emits a separate internet-maintenance artifact family and
+checks its actual exported default-off handler. The emitted bundle guard excludes SQL, S3,
+rendering and generation code. Reviewed IAM, maintained scheduling, retention/abandonment/drain
+and accountable/deployed acceptance remain open. Nothing is deployed or activated. See
+[local evidence](../../../docs/product/delivery/evidence/d3-response-maintenance-bootstrap-2026-10-04.md).
+
+`createCoverLetterPersistence` in the private runtime export owns three separate raw one-connection
+pools for document persistence, work and candidate leases. Final-document settlement refuses
+other purposes before SQL; the lease receives only its frozen lease method. Native codec and
+connected activity evidence is in [D3-068](../../../docs/product/delivery/evidence/d3-preparation-activity-bootstrap-2026-10-04.md).
+
+The dedicated `cover-letter-export` entrypoint reads exact saved IDs/versions under an active
+candidate lease, checks metadata and pinned object/canonical hashes, and returns only paragraph
+text/citations. It never selects a latest same-hash draft or regenerates missing bytes.
+The native factory exposes a frozen read port, owns one Date/JSON pool and fixed one-attempt S3.
+It defaults off, rechecks activation around reads, and never exports object/work/provider identities.
+See [D3-072 evidence](../../../docs/product/delivery/evidence/d3-cover-letter-export-content-2026-10-04.md).
+
+
+## One-off generated material memory replacement (D3-064)
+
+Accepted ADR-038 supersedes the saved generated-content behavior described in historical source
+sections above. Those S3 draft/provider-slot creation, saved-result recovery and content-export
+paths cannot activate under the new policy. Original uploaded/normalized resumes retain their
+separate policy.
+
+`temporary-materials.ts` owns bounded process-local encoded bytes and active copies, with exact
+owner/application/generation/hash/completion references, non-renewable 1,800-second deadlines,
+idle timers, cancellation scopes, staged publication and post-async expiry checks. Limits are
+16 MiB managed buffers, 128 entries, 2 MiB per material and 16 borrows; only lower limits are
+accepted. Generic material kinds include cover letters and tailored resumes; the typed resume
+content integration remains unfinished.
+
+`temporary-cover-letter.ts` replaces generated cover-letter finalization, preview, file and
+binding reads with memory-only ports and both production format checks. It requires original
+completion authority and defaults off. The supplied completion timestamp must be the original
+actor's generation-completion time, not reservation/verification/read/retry time. Missing or
+already-consumed authority refuses reconstruction; no SQL/S3/provider/export capability reaches
+the content store. Metadata-only read replay can use an available exact reference before expiry.
+The native immutable completion authority and private routing/transport still need implementation.
+
+These modules are source-only and uncomposed. Their returned references must bind future packet
+approval and final ATS handoff; a hash alone cannot identify a regenerated same-text draft.
+Content-bearing HTTP responses must be no-store, and clients/actor owners must release their
+copies at expiry or sooner on logout, cancellation and confirmed submission. Timers and aborts
+clear managed buffers/references but do not prove arbitrary string erasure or remote/native worker
+quiescence. No restart, renderer failure or cleanup timeout permits restoring a saved draft or
+redispatching an ambiguous submission. Native/provider, resume, packet, lifecycle and browser
+acceptance remain mandatory. See [source evidence](../../../docs/product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).

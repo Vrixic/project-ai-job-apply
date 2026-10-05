@@ -50,7 +50,7 @@ describeWithDatabase("PostgresDocumentStore", () => {
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Documents migrations through 0008_cover_letter_provider_responses applied and verified.",
+      "Documents migrations through 0009_cover_letter_provider_failure applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });
