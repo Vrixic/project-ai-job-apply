@@ -3585,3 +3585,15 @@ Linux process cases (28 HTTPS checks; external ports simulated). Final clean-sou
 pending. [Evidence](evidence/d3-native-read-authorization-2026-10-05.md). Private launch/adapters/
 registry/managed routing/stop, full content/client/ATS/provider/accountable gates remain; no
 frontend, deployment/activation or D1/D3 completion. CI/CD deferred until production launch.
+
+2026-10-05 D3-079 corrected clean `a5c29ef7` passes full maintained verification: 38 typecheck
+tasks, 39 test tasks and 23 builds; unchanged lint and operational/security/Compose/bundle guards.
+The initial full run caught a missing Lambda route; strict authenticated scalar forwarding and
+113 adapter tests now pass. API 96, Documents 1,328, Gateway 318 and Workflows 1,588 tests pass.
+Separate final PostgreSQL/Linux proofs pass 28/16 cases with external ports simulated.
+[Evidence](evidence/d3-native-read-authorization-2026-10-05.md). Docker/WSL stopped; only delivery
+documentation follows. [PR #556](https://github.com/Vrixic/project-ai-job-apply/pull/556) promotes
+the exact previously reviewed #555 tree to main; focused authorization review follows on that
+base. Private launch/adapters/registry/managed routing/positive stop and complete client/ATS/
+provider/accountable acceptance remain. D1/D3 stay In progress; no deployment/activation or
+authored main merge. Hosted CI/CD deferred until production launch.

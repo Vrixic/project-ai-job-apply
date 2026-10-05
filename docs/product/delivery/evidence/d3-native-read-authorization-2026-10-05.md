@@ -107,3 +107,31 @@ The final frozen `ecb31c8f` SQL and Linux runs separately passed 28 and 16 cases
 routing correction changes only the Lambda adapter/tests and this evidence, so those distinct
 owner/native proofs remain evidence for unchanged implementations. Exact owned fixture cleanup
 completed, Docker Desktop and WSL stopped; no shared volumes removed.
+
+## Final local verification and review base
+
+Clean corrected source `a5c29ef737c30ec1dd5b10e551e7214a9cefc1c4` passes
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks and 23 builds; formatting,
+operational/security guards, emitted bundle isolation and Compose validation pass. Lint remains
+zero errors, 15 existing warnings and 58 informational notes. API 96, SDK 293, Applications 224,
+Documents 1,328, Gateway 318 and Workflows 1,588 tests pass. Gateway's 66 and Workflows' 57
+opt-in skips are explicitly not new SQL/deployed evidence. Log/receipt:
+`.tmp/d3-native-authz-verify-corrected.log` / `.tmp/d3-native-authz-verify-corrected.exit` (0).
+The first resumed full run failed as recorded above; the corrected terminal run supersedes it.
+
+The maintained build ran locally on Windows with Node 24.12.0, pnpm 10.24.0 and Terraform 1.16.2.
+The separate final SQL run used local PostgreSQL 16.6; the Linux process run used existing pinned
+Node 24.21.0/GCC Linux AMD64 image
+`sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4`,
+network disabled and bounded tmpfs. Synthetic identity/provider ports remain distinct from live
+managed identity/provider behavior. No browser journey is claimed for the uncomposed native UI.
+No implementation changed during the corrected full run; only delivery documentation follows.
+All verifier handles are terminal. Docker Desktop/WSL remain stopped.
+
+The previously reviewed backend stack was topic-merged rather than main-integrated.
+[PR #556](https://github.com/Vrixic/project-ai-job-apply/pull/556) presents exact merged #555
+`01624a0c` to main; its entire tree equals reviewed #555 `8edcc3df`, and it has no frontend diff.
+The focused authorization branch incorporates that identical baseline ancestry without changing
+its source tree. This keeps the new route/client/Lambda correction review separate from the
+already-reviewed stack. No authored merge to main, deployment, activation or CI/CD work occurs.
+D3-079/D3-064 and D1/D3 stay In progress behind the remaining gates above.
