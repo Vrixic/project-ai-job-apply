@@ -9,7 +9,18 @@ import {
 import { createDatabase } from "@ai-job-apply/profile-service";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApplicationsRuntime } from "./applications-runtime.js";
+import {
+  type ApplicationsRuntimeOptions,
+  createApplicationsRuntime,
+} from "./applications-runtime.js";
+
+const { createSyntheticPacketProtection } = await import(
+  new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+);
+const packetProtection = createSyntheticPacketProtection() as {
+  options: NonNullable<ApplicationsRuntimeOptions["restrictedPackets"]>;
+  destroy(): void;
+};
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -24,6 +35,7 @@ function runtimeFor(
   return createApplicationsRuntime({
     client,
     definitions: defaultFieldDefinitions(),
+    restrictedPackets: packetProtection.options,
     clock: () => state?.at ?? new Date(),
     profile: { listProfileFacts: async () => ({ facts: [] }) },
     catalog: {
@@ -74,6 +86,7 @@ describeWithDatabase("Applications database client boundary", () => {
   }, 60_000);
 
   afterAll(async () => {
+    packetProtection.destroy();
     await shared.client.end({ timeout: 5 });
     await dedicated.end({ timeout: 5 });
   });
@@ -103,6 +116,7 @@ describeWithDatabase("Applications database client boundary", () => {
       };
       const runtime = runtimeFor(dedicated, state);
       const owner = uuidv7();
+      await dedicated`INSERT INTO identity.users (id) VALUES (${owner}::uuid)`;
       const formHash = "a".repeat(64);
       const created = await runtime.create(owner, jobId, `dispatch-create-${uuidv7()}`);
       const prepared = await runtime.preparePacket(

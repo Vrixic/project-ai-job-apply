@@ -3775,3 +3775,13 @@ changes. Owned fixture removed, shared volumes retained, Docker/WSL stopped. Gat
 fixture compatibility, legacy transition, artifact isolation and clean full verification remain.
 Private WIP only; no deployment/activation or phase completion.
 [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 updates three maintained Gateway SQL fixtures with explicit offline packet
+protection and active synthetic identities. All 56 targeted cases pass across initial database/
+temporary-material checks and the final 23-case vault rerun. Stale candidate value reads refuse;
+actual owning metadata confirms committed invalidation and no-effect dispatch state. Gateway build
+and 348 unit cases pass (85 database cases skipped in the unit run). Owned fixture removed,
+shared volumes retained, Docker/WSL stopped. Workflow fixtures, legacy transition, artifact
+isolation and clean full verification remain. Private WIP only, with simulated identity/key authority;
+no production activation, deployed acceptance or D1/D3 completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.

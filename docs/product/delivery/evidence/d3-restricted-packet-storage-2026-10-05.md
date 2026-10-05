@@ -394,6 +394,38 @@ WSL reports no running distributions. No frontend, public contract, production a
 verification claim. Gateway/Workflow maintained protection fixtures, legacy transition and complete
 clean verification remain unfinished; this checkpoint is private WIP.
 
+## Maintained Gateway SQL fixture compatibility
+
+Three maintained Gateway integration modules now explicitly compose offline packet protection.
+All store/runtime instances within each module share the same test authority, preserving original
+keyed replay and packet decryption. Database/temporary-material fixtures seed active synthetic
+candidate identities; the vault fixture retains its real Profile-owned identity and metadata ports.
+The production composition/default-off switches and public contracts remain unchanged.
+
+All 56 targeted PostgreSQL cases pass: the database and temporary-material modules passed in the
+initial three-module run (33 cases); the affected vault module passed its final focused rerun
+(23 cases). Initial stale-value projection expectations failed and were corrected to assert the
+owning candidate reader's availability refusal after correction/deletion/expiry. The tests separately
+inspect the actual metadata store to prove immutable original version, masked value, committed
+approval invalidation, failed-no-effect attempts and absence of dispatch. A removed admission port
+still permits a valid candidate read through its independently configured original owning reader.
+No production read guard is relaxed to accommodate fixtures.
+
+The Gateway package build and all 348 unit cases pass; 85 integration cases are skipped without
+DATABASE_URL in the unit run. Scoped Biome and git diff whitespace checks pass. Logs:
+`.tmp/d3-restricted-gateway-sql.log` (initial run, with superseded vault expectation failures),
+`.tmp/d3-restricted-gateway-vault-sql.log` (final 23-case pass),
+`.tmp/d3-restricted-gateway-build.log`, `.tmp/d3-restricted-gateway-unit.log`.
+Evidence uses PostgreSQL 16.6, generated candidates, offline AES/HMAC and simulated OIDC/vault
+cipher authority, not live managed identity, AWS KMS, provider or ATS acceptance.
+
+Owned tmpfs PostgreSQL fixture
+`947486a0ad5a55d796153bfdba7e652083b1a21a627090a8621b4d24faae0283` was checked against its
+exact ID/name/label/tmpfs and absence of mounts before removal. Shared volume inventories stayed
+identical. Docker Desktop stopped and WSL reports no running distributions. This remains private
+local WIP without full maintained-verifier, publication, activation or phase-completion claims.
+Workflow fixtures, legacy transition, artifact isolation and clean full verification remain.
+
 ## Next work
 
 Finish legacy migration compatibility and all maintained integration/runtime protection fixtures;
