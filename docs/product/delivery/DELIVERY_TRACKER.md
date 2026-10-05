@@ -3558,3 +3558,14 @@ admission release. Thirteen owning tests/four native admission/twelve Auth tests
 clean-source Linux/full verification pending. [Evidence](evidence/d3-native-memory-transport-2026-10-05.md).
 Issuer/private authenticated adapters/registry/managed stop, full content routing and external
 acceptance remain. No deployment/activation or D1/D3 completion; CI/CD deferred until launch.
+
+2026-10-05 D3-079 clean `aed4b391` passes full maintained verification: 38 typecheck tasks,
+39 test tasks and 23 builds, operational/security/Compose and emitted isolation; unchanged
+lint baseline. Auth 12, Applications 224 and Documents 1,307 units pass. The separate final Linux
+run passes 16 actual process cases, including 27 same-process TLS/signed-token read checks and
+observed original-deadline SIGKILL; provider/SQL/renderer/managed identity are synthetic in that
+fixture. Exact owned cleanup completes; Docker/WSL stopped and all handles terminal. Only
+documentation follows. [Evidence](evidence/d3-native-memory-transport-2026-10-05.md).
+Issuer/private authenticated adapters/registry/managed routing/positive stop, complete content
+routing and client/ATS/provider/accountable gates remain. No deployment/activation or D1/D3
+completion; hosted CI/CD deferred until production launch.

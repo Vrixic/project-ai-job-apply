@@ -73,3 +73,30 @@ claimed. Confirmed/ambiguous submission evidence and duplicate guards are unchan
 
 D1/D3 exit criteria remain unchecked. Hosted CI/CD remains deferred until production launch.
 The proposal in ADR-040 remains unaccepted and does not authorize deployment or a new hostname.
+
+## Final clean-source verification
+
+Clean `aed4b39193fb262ed10a731dd8e15c85e1cd1957` passes the full maintained
+`scripts/verify-phase0.ps1`, terminal exit 0: 38 typecheck tasks, 39 test tasks and 23 builds,
+plus operational/security/Compose and emitted dependency isolation. Auth 12, Applications 224,
+Documents 1,307, Gateway 307 and Workflows 1,588 units pass. Gateway's 61 and Workflows' 57
+opt-in skips are not new native SQL/provider evidence. Lint remains zero errors, 15 baseline
+warnings and 58 infos. Full local log/receipt:
+`.tmp/d3-native-transport-verify.log` / `.tmp/d3-native-transport-verify.exit` (0).
+
+The final exact-source Linux run passes 16 actual child-process cases, including 27 same-process
+HTTPS checks and observed native SIGKILL after those reads at the shortened original deadline.
+There is no parent-fallback retirement in passing evidence. Original public metadata still uses
+completion + 1,800,000 ms. Real TLS/certificate/hostname verification, real signed test JWTs,
+actual session/SDK/memory and owning scalar helper are exercised; model, SQL view, renderer and
+managed OIDC are synthetic. Log/receipt: `.tmp/d3-native-transport-final.log` /
+`.tmp/d3-native-transport-final.exit` (0). The exact owned container/staging cleanup completes.
+Docker Desktop and WSL are stopped; no running distribution. All tool handles are terminal.
+No source changed during verification; subsequent changes are delivery/README documentation only.
+
+Implementation: [native HTTPS](../../../../backend/services/documents/src/native-memory-transport.ts),
+[owning scalar read](../../../../backend/services/applications/src/native-material-read.ts),
+[connected synthetic HTTPS fixture](../../../../backend/workers/ai/native-session/transport-fixture.mjs).
+[Prior native kernel evidence](d3-native-memory-session-2026-10-05.md) remains separate.
+No browser/UI, live private RPC, Auth0/provider/ATS/AWS task, deployment, activation or phase
+completion is claimed. D3-079/D3-064 and D1/D3 remain In progress, with remaining gates above.

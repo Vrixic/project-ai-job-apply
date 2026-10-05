@@ -1,6 +1,6 @@
 # Native temporary material process
 
-Source/local evidence only; no launcher, listener, cloud deployment or production activation.
+Source/local evidence only; no production launcher, bound endpoint, cloud deployment or activation.
 See [proposed ADR-040](../../../../docs/adr/040-native-temporary-material-processes.md).
 
 `kernel-deadline.c` is a Linux Node-API module for a dedicated material-bearing process. Load it
