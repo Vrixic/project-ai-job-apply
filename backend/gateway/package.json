@@ -43,6 +43,7 @@
     "rxjs": "7.8.2"
   },
   "devDependencies": {
+    "@ai-job-apply/ai-sdk": "workspace:*",
     "@types/aws-lambda": "8.10.163",
     "tsx": "4.23.13",
     "uuid": "14.0.2"

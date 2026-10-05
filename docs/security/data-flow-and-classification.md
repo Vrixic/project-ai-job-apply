@@ -630,3 +630,21 @@ No schema/event/content persistence or public transport change is introduced. Na
 receipts, worker drain, client lifecycle, ATS and D3-012 retention approval still block activation.
 [Source evidence](../product/delivery/evidence/d3-held-temporary-content-2026-10-05.md) does not certify
 all-copy physical expiry, remote settlement or deployed candidate acceptance.
+
+## D3-064 original memory-only generation source delta — 2026-10-05
+
+Private owner evidence → bounded canonical request in memory → consume preissued native grant →
+foreground SDK with `store:false`, `background:false`, `stream:false` → original completion clock
+and grounding → positive scalar provider settlement → scalar native original completion →
+managed temporary material. The replacement actor has no object or SQL capability and returns
+only fixed statuses, identifiers, hashes/citations and expiry metadata. Generated paragraphs
+actively clear on original expiry/cancellation while control acknowledgement waits. Native
+completion/render admission uses the same cancellation signal and clears cancelled staged or
+just-published content. The Gateway SDK import added for connected acceptance is test-only.
+
+The new SDK path awaits the actual original promise through timeout; late fulfillment discards
+content and authorizes only its original provider-phase closure. Unknown rejection/abort/deadline
+never proves remote settlement, retention compliance, host drain or physical purge. One actor
+admits one pending original promise; process-wide host admission, authenticated private issuer/
+transport, physical expiry/shutdown and D3-012 provider terms remain activation gates. Default-off
+source and simulated model/OIDC evidence do not expose generated material to real candidates.

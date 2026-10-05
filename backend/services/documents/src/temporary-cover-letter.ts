@@ -119,20 +119,29 @@ export class TemporaryCoverLetterService {
     identity: Identity,
     generated: GenerationResult,
     completedAtMs: number,
+    signal?: AbortSignal,
   ): Promise<{ reference: Readonly<TemporaryMaterialReference>; letter: CoverLetterReadyBinding }> {
     try {
-      return await this.completeDraft(identity, generated, completedAtMs);
+      return await this.completeDraft(identity, generated, completedAtMs, signal);
     } catch {
       throw new TemporaryMaterialUnavailable();
     }
+  }
+
+  /** Original actor's cancellation cleanup after a just-published completion. No renewal,
+   * terminal application fence or remote-settlement authority. */
+  discardCompletion(reference: Readonly<TemporaryMaterialReference>): void {
+    this.materials.discard({ ...reference });
   }
 
   private async completeDraft(
     identity: Identity,
     generated: GenerationResult,
     completedAtMs: number,
+    requestSignal?: AbortSignal,
   ): Promise<{ reference: Readonly<TemporaryMaterialReference>; letter: CoverLetterReadyBinding }> {
     this.requireEnabled();
+    requestSignal?.throwIfAborted();
     // No asynchronous evidence read or rendering may move completion time or reset the window.
     const document = createCoverLetterDocument(
       structuredClone(identity),
@@ -155,7 +164,10 @@ export class TemporaryCoverLetterService {
     try {
       const admission = this.materials.stage(reference, bytes);
       bytes.fill(0);
+      const discard = () => admission.discard();
+      requestSignal?.addEventListener("abort", discard, { once: true });
       try {
+        requestSignal?.throwIfAborted();
         if ((await this.completion?.claimOriginalCompletion(admission.reference)) !== "claimed")
           throw new TemporaryMaterialUnavailable();
         this.requireEnabled();
@@ -190,11 +202,14 @@ export class TemporaryCoverLetterService {
           }),
         );
         this.requireEnabled();
+        requestSignal?.throwIfAborted();
         admission.publish();
         return { reference: admission.reference, letter };
       } catch {
         admission.discard();
         throw new TemporaryMaterialUnavailable();
+      } finally {
+        requestSignal?.removeEventListener("abort", discard);
       }
     } catch {
       throw new TemporaryMaterialUnavailable();

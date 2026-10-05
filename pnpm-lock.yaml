@@ -135,6 +135,9 @@ importers:
         specifier: 7.8.2
         version: 7.8.2
     devDependencies:
+      '@ai-job-apply/ai-sdk':
+        specifier: workspace:*
+        version: link:../../packages/ai-sdk
       '@types/aws-lambda':
         specifier: 8.10.163
         version: 8.10.163

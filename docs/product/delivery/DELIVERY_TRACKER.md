@@ -3503,3 +3503,11 @@ ATS gates remain. D1/D3 stay In progress; no activation/deployment; CI/CD deferr
 [PR #553](https://github.com/Vrixic/project-ai-job-apply/pull/553), based on exact open #552.
 Verified implementation remains `56335f55`; following commits change delivery documentation
 only. D1/D3 and D3-064 stay In progress; no authored merge, publication, deployment or activation.
+
+2026-10-05 D3-064 original memory-only generation starts on fresh main `e48bdf3a` and exact
+#553 `467b48eb`. Default-off actor consumes existing authority and invokes the real foreground
+SDK once; original timestamp precedes asynchronous settlement/rendering, with no provider slots,
+generated objects or saved recovery. 291 AI units, 47 focused Documents cases and 23 connected
+native SQL/HTTP cases pass; final source SQL rerun/full verifier remain pending. [Evidence](evidence/d3-original-memory-generation-2026-10-05.md).
+Native session host/issuer/transport/drain, resume/client/provider/ATS and accountable gates remain.
+D1/D3 stay In progress; no activation/deployment/authored merge; hosted CI/CD deferred until launch.

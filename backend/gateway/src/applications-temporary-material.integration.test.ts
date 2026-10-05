@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { ModelGateway, OpenAiLunaProvider } from "@ai-job-apply/ai-sdk";
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import {
   ApplicationsUnavailableError,
@@ -14,9 +15,11 @@ import {
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
 import {
   CoverLetterReadService,
+  OriginalCoverLetterGenerationActor,
   PostgresCoverLetterStore,
   PostgresCoverLetterWorkStore,
   PostgresTemporaryMaterialCompletionStore,
+  prepareOriginalCoverLetterRequest,
   TemporaryCoverLetterService,
   TemporaryMaterialStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
@@ -324,7 +327,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
     "cleanup_outage_retry",
     "network_abort",
   ])(
-    "serves or refuses %s through native original completion, real memory/render and authenticated HTTP",
+    "serves or refuses %s through original SDK dispatch, native completion, real memory/render and authenticated HTTP",
     async (mode) => {
       const issuer = await createTestTokenIssuer();
       const subject = `synthetic-temporary-reader-${uuidv7()}`;
@@ -381,13 +384,29 @@ const key = () => `temporary-packet-${uuidv7()}`;
         confirmedFactsHash: context.confirmedFactsHash,
       };
       await documents.reserve(identity);
+      const generationIdentity = {
+        id: generationId,
+        ownerUserId: f.owner,
+        applicationId: f.applicationId,
+        jobContextHash: context.jobContextHash,
+        confirmedFactsHash: context.confirmedFactsHash,
+        noticeVersion: "openai-cover-letter.v1",
+        approvedAt: new Date(),
+        expiresAt: new Date(),
+      };
+      generationIdentity.expiresAt = new Date(generationIdentity.approvedAt.getTime() + 900_000);
+      const prepared = prepareOriginalCoverLetterRequest(generationIdentity, {
+        ...evidence,
+        now: new Date(),
+      });
+      if (!prepared) throw Error("SyntheticOriginalRequestMissing");
       const work = new PostgresCoverLetterWorkStore(database, () => true);
       const issued = await work.issue({
         ownerUserId: f.owner,
         documentId: generationId,
         purpose: "provider_dispatch",
-        requestSha256: "d".repeat(64),
-        consentExpiresAt: new Date(Date.now() + 900_000),
+        requestSha256: prepared.requestSha256,
+        consentExpiresAt: generationIdentity.expiresAt,
       });
       const original = {
         id: issued.authorization.id,
@@ -395,7 +414,6 @@ const key = () => `temporary-packet-${uuidv7()}`;
         purpose: "provider_dispatch" as const,
         requestSha256: issued.authorization.requestSha256,
       };
-      expect(await work.claim(original)).toEqual({ kind: "claimed" });
       const completion = new PostgresTemporaryMaterialCompletionStore(database, () => true);
       const memory = new TemporaryMaterialStore({
         wallNow: () => at.getTime(),
@@ -415,21 +433,60 @@ const key = () => `temporary-packet-${uuidv7()}`;
       let app: Awaited<ReturnType<typeof createGatewayApplication>> | undefined;
       try {
         at = new Date();
-        const completed = await temporary.complete(
-          identity,
-          {
-            status: "needs_review",
-            purpose: "cover_letter",
-            reviewRequired: true,
-            paragraphs: [{ text, factIds: [factId] }],
-            findings: [],
-            sourceFactIds: [factId],
-            confidence: 1,
-            promptVersion: "cover_letter.v1",
-            model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
-          },
-          at.getTime(),
+        const modelTransport = vi.fn<typeof fetch>(
+          async () =>
+            new Response(
+              JSON.stringify({
+                status: "completed",
+                output: [
+                  {
+                    type: "message",
+                    role: "assistant",
+                    status: "completed",
+                    content: [
+                      {
+                        type: "output_text",
+                        text: JSON.stringify({ paragraphs: [{ text, factIds: [factId] }] }),
+                      },
+                    ],
+                  },
+                ],
+              }),
+            ),
         );
+        const provider = new OpenAiLunaProvider({
+          enabled: () => true,
+          apiKey: () => "synthetic",
+          fetch: modelTransport,
+        });
+        const gateway = new ModelGateway(provider, {
+          enabled: () => true,
+          clock: () => {
+            at = new Date();
+            return at;
+          },
+        });
+        const actor = new OriginalCoverLetterGenerationActor(
+          source,
+          gateway,
+          work,
+          temporary,
+          () => true,
+          () => new Date(),
+        );
+        const completed = await actor.generate(generationIdentity);
+        expect(completed.kind).toBe("ready");
+        if (completed.kind !== "ready") throw Error("SyntheticOriginalCompletionMissing");
+        expect(await actor.generate(generationIdentity)).toEqual({ kind: "in_progress" });
+        expect(modelTransport).toHaveBeenCalledOnce();
+        expect(JSON.parse(modelTransport.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+          store: false,
+          stream: false,
+          background: false,
+        });
+        const [settled] =
+          await database`SELECT state FROM documents.cover_letter_work_authorizations WHERE id = ${original.id}`;
+        expect(settled?.state).toBe("settled");
         const bound = await store.createPacket({
           ownerUserId: f.owner,
           applicationId: f.applicationId,

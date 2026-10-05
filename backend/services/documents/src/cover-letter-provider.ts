@@ -8,3 +8,4 @@ export * from "./cover-letter-response-capture-client.js";
 export * from "./cover-letter-response-capture-contract.js";
 export * from "./cover-letter-response-disposal-client.js";
 export * from "./cover-letter-response-disposal-contract.js";
+export * from "./original-cover-letter-generation.js";

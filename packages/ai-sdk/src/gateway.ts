@@ -115,6 +115,14 @@ export interface GatewayResult {
   outputCharacters: number;
 }
 
+/** Original foreground actor receipt. The timeout requests cancellation but this port keeps
+ * awaiting the actual provider promise; an abort alone is never completion evidence. A host
+ * must bound admission and physically retire an actor whose provider never acknowledges. */
+export type OriginalModelGatewayCompletion =
+  | Extract<ModelGatewayCompletion, { kind: "not_dispatched" }>
+  | (Exclude<ModelGatewayCompletion, { kind: "not_dispatched" }> & { completedAtMs: number })
+  | { kind: "completed_discarded"; completedAtMs: number; model: ModelIdentity };
+
 /** Internal original lifecycle receipts, never inferred from caught errors or deadlines.
  * `not_dispatched` comes only from gateway-local pre-provider refusal; completed receipts
  * require original provider fulfillment. Neither is candidate approval or quiescence proof.
@@ -198,6 +206,32 @@ export class ModelGateway {
     return completionOnly(await this.generateLifecycle(request, disclosure, true));
   }
 
+  /** No background request, recovery or second dispatch. Late original fulfillment closes
+   * only the foreground provider phase and returns no content. */
+  async generateOriginalWithCompletion(
+    request: GatewayRequest,
+    disclosure: DataDisclosureApproval | undefined,
+  ): Promise<OriginalModelGatewayCompletion> {
+    const original: { completedAtMs?: number; timedOut?: boolean } = {};
+    const completion = completionOnly(
+      await this.generateLifecycle(request, disclosure, true, undefined, false, original),
+    );
+    if (completion.kind === "not_dispatched") return completion;
+    const completedAtMs = original.completedAtMs;
+    if (
+      typeof completedAtMs !== "number" ||
+      !Number.isSafeInteger(completedAtMs) ||
+      completedAtMs < 0
+    )
+      throw new ModelGatewayError("PROVIDER_FAILED");
+    if (original.timedOut) {
+      const model = completion.kind === "completed" ? completion.result.model : completion.model;
+      if (completion.kind === "completed") completion.result.value = undefined;
+      return { kind: "completed_discarded", completedAtMs, model };
+    }
+    return { ...completion, completedAtMs };
+  }
+
   /** Opt-in private actor path. Never falls back to foreground generation. */
   async generateWithBackgroundCapture(
     request: GatewayRequest,
@@ -264,6 +298,7 @@ export class ModelGateway {
     nonDispatchReceipts: boolean,
     backgroundCapture?: BackgroundResponseCapture,
     terminalReceipts = false,
+    original?: { completedAtMs?: number; timedOut?: boolean },
   ): Promise<ModelGatewayBackgroundCompletion> {
     const capture = () => ({
       model: structuredClone(this.provider.identity),
@@ -362,14 +397,21 @@ export class ModelGateway {
           ? this.provider.completeForLifecycle(providerRequest)
           : this.provider.complete(providerRequest);
       };
-      const result = await Promise.race([
-        dispatch(),
-        new Promise<never>((_, reject) => {
-          controller.signal.addEventListener("abort", () =>
-            reject(new ModelGatewayError("PROVIDER_TIMEOUT")),
-          );
-        }),
-      ]);
+      const result = original
+        ? await dispatch()
+        : await Promise.race([
+            dispatch(),
+            new Promise<never>((_, reject) => {
+              controller.signal.addEventListener("abort", () =>
+                reject(new ModelGatewayError("PROVIDER_TIMEOUT")),
+              );
+            }),
+          ]);
+      if (original) {
+        // Capture before decoding/grounding or any control-plane/rendering await.
+        original.completedAtMs = this.clock().getTime();
+        original.timedOut = controller.signal.aborted;
+      }
       if (backgroundCapture && !captureAcknowledged) throw new ModelGatewayError("PROVIDER_FAILED");
       if ("kind" in result) {
         if (

@@ -633,3 +633,13 @@ and capacity exhaustion closes memory. `discarded` is local copy/fence acknowled
 provider, remote writer or physical native-host purge certificate. Host/transport/client/ATS and
 provider gates remain. Earlier source evidence described an availability-only guard; this extension
 adds a held borrow, with no durable/public capability or production composition.
+
+The default-off `OriginalCoverLetterGenerationActor` replaces stored provider slots for original
+cover-letter generation: private owner evidence, memory-only canonical request identity, consume
+an existing native grant, one foreground SDK call, positive scalar settlement, then original
+completion into bounded memory. It exposes no issue/renew/object/SQL/recovery capability. Generated
+paragraphs actively expire while control acknowledgements wait; cancellation during completion
+or just after publication discards the exact material. A pending original provider promise keeps
+this actor's admission occupied even after SDK timeout. The private issuer, process-wide bounded
+session host, authenticated ports and physical drain are still uncomposed; no activation or
+provider-retention/all-copy purge claim follows. [Local evidence](../../../docs/product/delivery/evidence/d3-original-memory-generation-2026-10-05.md).
