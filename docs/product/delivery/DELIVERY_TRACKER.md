@@ -3620,3 +3620,13 @@ AWS transport is simulated. Full clean-source verifier pending.
 [Evidence](evidence/d3-native-task-retirement-2026-10-05.md). Registry/sealed launcher, private
 adapters/IAM, image/routing, actual managed stop, full client/ATS/provider/accountable gates remain.
 No frontend/cloud call/deployment/activation or phase completion. Docker/WSL stopped; CI/CD deferred.
+
+2026-10-05 D3-079 clean `ba58619c` passes full maintained verification: 38 typecheck tasks,
+39 test tasks and 23 builds; unchanged lint and operational/security/Compose/scope/isolation
+guards, including actual emitted retirement default-off refusal. Documents 1,376, Gateway 318
+and Workflows 1,588 tests pass. All 48 new retirement cases pass with simulated AWS transport;
+installed signed SDK behavior is exercised offline. No managed task is launched or stopped.
+[Evidence](evidence/d3-native-task-retirement-2026-10-05.md). Only delivery documentation follows.
+Registry/sealed launch admission, private adapters/IAM, reviewed image/routing, actual managed
+stop and full client/ATS/provider/accountable acceptance remain. D1/D3 stay In progress; no
+deployment/activation or authored main merge. Docker/WSL stopped; hosted CI/CD deferred until launch.

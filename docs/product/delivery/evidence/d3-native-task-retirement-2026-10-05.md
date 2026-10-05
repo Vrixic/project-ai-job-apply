@@ -75,3 +75,22 @@ real managed-task stop conformance and full client/logout/idle/ATS lifecycles re
 provider/retention/diagnostic/entity/region and accountable acceptance remain mandatory. ADR-040
 stays Proposed. No cloud call, publication, deployment, activation, actual process/AWS death claim,
 application-disposal certificate or phase completion. Hosted CI/CD remains deferred until launch.
+
+## Final maintained verification
+
+Clean source `ba58619cf0e7d449edc873f2ce6ad56631ee8b45` passes
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks and 23 builds, operational/security
+guards, formatting, all emitted isolation guards (including the new retirement guard), Compose
+and product scope. Lint remains zero errors, 15 existing warnings and 58 informational notes.
+Documents 1,376, API 96, Applications 224, Gateway 318, SDK 293 and Workflows 1,588 tests pass.
+Gateway's 66 and Workflows' 57 opt-in skips are not managed-task/SQL evidence.
+Log/receipt: `.tmp/d3-native-task-retirement-verify.log` /
+`.tmp/d3-native-task-retirement-verify.exit` (0).
+
+The maintained build and 48 focused cases ran locally on Windows/Node 24.12.0, pnpm 10.24.0
+and Terraform 1.16.2. AWS responses/HTTP handling are simulated; installed SDK serialization,
+SigV4 signing and timestamp decoding are actual. The actual compiled artifact's default-off
+refusal/isolation is exercised. No new native process, SQL or AWS runtime proof is claimed.
+No implementation changed during the full verifier. Subsequent changes are delivery documentation
+only. Docker Desktop and WSL remain stopped; verifier handles are terminal. D3-079/D3-064 and
+D1/D3 stay In progress behind the remaining gates above. CI/CD remains deferred until launch.
