@@ -102,3 +102,7 @@ No live OIDC, model, ATS, AWS, candidate artifact, UI/browser or deployed accept
 Only delivery documentation follows the verified implementation commit. D3-064 and D1/D3 remain
 In progress with eight/thirteen unchecked phase exits. Owned fixtures are removed and Docker/WSL
 stopped. Hosted CI/CD remains deferred until production launch; no authored merge or activation.
+
+The source checkpoint is open as [PR #551](https://github.com/Vrixic/project-ai-job-apply/pull/551),
+stacked on exact open #550. Verified implementation remains `f91d2312`; later commits change
+only delivery records. No authored merge, publication, deployment, activation or phase completion.
