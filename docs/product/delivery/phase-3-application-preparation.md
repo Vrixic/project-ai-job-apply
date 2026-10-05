@@ -938,3 +938,8 @@ owner-contract mock typing fixes it. Separate SQL/HTTP evidence remains 91 Appli
 Docker/WSL stopped. Native actor/session/held content leases/resume/client/provider/ATS gates
 remain; all-copy cleanup and deployed/browser acceptance are not certified. D1/D3 stay In progress,
 with no activation or deployment and hosted CI/CD deferred until production launch.
+
+2026-10-05 D3-064 temporary cover-letter owner reads are reviewable in
+[PR #552](https://github.com/Vrixic/project-ai-job-apply/pull/552), based on exact open #551.
+Verified implementation remains `9da00ff8`; following commits change documentation only.
+D1/D3 and D3-064 remain In progress; no authored merge, deployment or activation.

@@ -65,3 +65,9 @@ No phase exit or removed development-panel manual step is reopened or marked com
 The synchronous `isCurrent` callback checks live memory availability; it is not a held borrowed
 content lease, an atomic remote cancellation fence or a native transport-disposal receipt.
 Bounded outgoing-copy authority and all-copy native/client disposal remain activation gates.
+
+## Reviewable source
+
+[PR #552](https://github.com/Vrixic/project-ai-job-apply/pull/552) is open, based on exact
+open #551. Verified implementation is `9da00ff8`; subsequent commits update documentation
+only. No authored merge, artifact publication, deployment or producer activation occurs.
