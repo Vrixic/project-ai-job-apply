@@ -951,3 +951,12 @@ native completion, real memory/render and real loopback HTTP abort; identity/mod
 fixtures are simulated. [Evidence](evidence/d3-held-temporary-content-2026-10-05.md). Full
 verifier pending; native host/transport/physical disposal, resume/client/provider/ATS gates
 remain. D1/D3 stay In progress; no activation/deployment; hosted CI/CD deferred until launch.
+
+2026-10-05 D3-064 clean `56335f55` passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 builds and operational/security/emitted-isolation checks; unchanged lint
+(0 errors, 15 warnings, 58 infos). Applications 211 and Documents 1,283 units pass. Separate
+real SQL/HTTP evidence remains 91 Applications cases (one opt-in skip) and 51 Gateway cases,
+including real loopback abort and terminal/idempotent disposal. [Evidence](evidence/d3-held-temporary-content-2026-10-05.md).
+Only documentation follows. Docker/WSL stopped. Managed-copy acknowledgement is not remote
+settlement/physical native-host purge; native actor/session/transport/drain/resume/client/provider/
+ATS gates remain. D1/D3 stay In progress; no activation/deployment; CI/CD deferred until launch.

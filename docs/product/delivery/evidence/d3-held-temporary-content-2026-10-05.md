@@ -42,7 +42,7 @@ Restore inventory remains 63 migrations, seven owners and 84 relations; no recov
 
 - Applications 211 units pass; nine added lifecycle/release/disposal cases.
 - Documents two focused files: 71 pass, including 13 new held-copy/reservation/idle-expiry/terminal
-  fence/abort/revalidation cases. Full Documents and repository verification is pending.
+  fence/abort/revalidation cases. Full verification passes all 1,283 Documents units.
 - Gateway two focused files: 101 pass, three opt-in skips; two new successful-send/serialization-
   failure release checks. Existing caller assertions now include the internal abort signal.
 - Real PostgreSQL Applications: 91 pass, one unrelated opt-in skip, eight files.
@@ -55,10 +55,18 @@ Restore inventory remains 63 migrations, seven owners and 84 relations; no recov
   attempt and refused redispatch. Managed output is cleared on disconnect and pool capacity is
   recovered. Known revoked lease is checked before cleared-body validation; it returns stale 409,
   not a misleading malformed-body availability error.
-- Relevant builds/typechecks, repeat generation and changed-file formatting pass. Full verifier pending.
+- Clean `56335f55c36843f080c25cb0112eddbc11b2c4a3` passes the full maintained verifier:
+  38 typecheck tasks, 39 workspace test tasks and 23 builds, plus operational/security/Compose
+  and emitted dependency/isolation checks. Lint remains zero errors, 15 warnings, 58 infos.
+  Gateway default suite: 307 pass, 61 opt-in skips; skips are not counted as SQL/remote evidence.
+  Local receipt `.tmp/d3-held-content-verify.log`, terminal exit `0`.
+- Relevant builds/typechecks, repeat generation and changed-file formatting pass.
+- Focused checks initially caught detached-buffer release, internal signal assertion and revoked-
+  lease classification regressions; each was corrected and rerun. Real loopback connection setup
+  uses the actual listener URL. Earlier failed focused runs are not passing evidence.
 - Owned tmpfs fixture `03c10a851017c2fc5f8310c7559d477e391bd7a6f466ad67d66e291b984babe5`
-  was inspected and removed by exact ID. Shared volumes retained; Docker Desktop/WSL shutdown
-  has been requested and is being verified before handoff.
+  was inspected and removed by exact ID. Shared volumes retained; Docker Desktop and WSL are
+  stopped, with no running WSL distribution. All verification sessions are terminal.
 
 ## Limits and remaining gates
 
