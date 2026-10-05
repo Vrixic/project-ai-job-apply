@@ -505,6 +505,17 @@ identical. Docker Desktop stopped and WSL reports no running distributions. No l
 OIDC, AWS/provider/ATS invocation, production SQL/IAM authority, deployment or activation is claimed.
 Legacy transition, broader artifact checks and clean full verification remain; private WIP only.
 
+
+The native preparation artifact builds twice from clean committed source
+`950860a547746a01f23a2430c119200197fe187c`. All five emitted files are byte-identical, including
+the archive and companion provenance/SBOM/metadata. Each build executes the bundled default-off
+refusal, closed-input rejection and zero-fetch checks. Logs:
+`.tmp/d3-native-restricted-carry-artifact-first.log`,
+`.tmp/d3-native-restricted-carry-artifact-second.log`,
+`.tmp/d3-native-restricted-carry-artifact-hashes.txt`. Nothing is published or deployed. This proves
+that exact local artifact; production key/role composition, legacy transition, broader artifact
+verification and the full maintained verifier remain separate unfinished requirements.
+
 ## Next work
 
 Finish legacy migration compatibility and all maintained integration/runtime protection fixtures;

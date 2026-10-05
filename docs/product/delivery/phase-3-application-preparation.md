@@ -1272,3 +1272,9 @@ packet crypto/test authority from their respective actors. Owned fixture removed
 retained and Docker/WSL stopped. Legacy transition, broader artifact checks and clean full verifier
 remain. No deployment/activation or D1/D3 completion.
 [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 native preparation artifact builds twice from clean
+`950860a547746a01f23a2430c119200197fe187c`; all five emitted files are byte-identical. Both
+bundled checks refuse default-off work/extra payloads with zero fetch. No publication or deployment;
+legacy transition, broader artifact verification, full verifier and accountable acceptance remain.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
