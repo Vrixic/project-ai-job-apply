@@ -4,7 +4,7 @@
 - Start: 2026-08-11
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-10-04
+- Last updated: 2026-10-06
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d1--useful-web-product-and-canonical-job-catalog)
 
 ## Objective
@@ -781,6 +781,16 @@ crawler policy only after those gates pass.
 | 2026-10-03 | PR #511 security checkpoint: centralized dependency audit fails locally and hosted; fresh registry output reports mobile-only unpatched high node-forge plus newly recorded braces `GHSA-vfj7-8cjw-p6xm`. Existing exact image-size remediation remains, without policy waiver. Pinned static analysis remains 65 blocking findings/140 rules/1,053 files and no changed pin/fixture-file findings. Catalog invariants and preview pass; other hosted jobs pending. No frontend dependency/scanner policy edits or deployment. D1's security exit gate remains open. | D1-011; D3-012; D3-040 | [CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37096988784), [scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37096988789), [braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) |
 
 | 2026-10-03 | PR #511 merged as `3f142c1`; exact merged-main quality/catalog/PostgreSQL integration/both containers pass. Profile passes 29 PostgreSQL cases; Documents passes 50 and skips 66 opt-in ledger cases. Audit and 65 scanner findings remain blocking. Owner-approved source-only D3-041 fixes the stale publisher SQL arrays and binds every exact name/checksum to the existing 57-migration manifest. Both PowerShell hosts pass 149 executable smoke cases, and the exact updated smoke passes on the unchanged retained diagnostic image under hardened networkless restrictions. Full maintained verification passes, including cached workspace tasks; lint remains at 15 baseline warnings/58 infos, and database opt-ins remain unclaimed. No new build, publisher receipt, scan, database migration, API/frontend/Terraform, publication, deployment or apply. D1 remains In progress behind deployed and external exit gates. | D1-002; D3-040; D3-041 | [Publisher](../../../scripts/publish-development-migration-image.ps1), [smoke tests](../../../scripts/tests/development-migration-runtime-smoke.test.mjs), [merged-main CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479546), [scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479543) |
+
+
+2026-10-06 working development flow: clean `1a559af2` passes the maintained full verifier
+(38 typecheck, 39 test, 23 build tasks; unchanged lint). The initial run's occupied localhost:3000
+conflict is resolved by stopping only isolated web; all 101 session cases then pass unchanged.
+Owner managed sign-in/search/Profile/save/reload results remain corroborated by actual BFF status
+observations. Enabled development scan mapping/rules and locally parser-verified generated PDF
+prepare the next resume-import check; preference writes and deployed upload/scan/parse remain open.
+[Evidence](evidence/d1-working-development-flow-2026-10-06.md). D1/D3 remain In progress; no
+frontend source/cloud activation, production or CI/CD work. PC stays on; Docker/WSL stopped.
 
 ## Decisions and scope changes
 

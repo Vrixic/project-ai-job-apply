@@ -8,7 +8,7 @@ process-only launcher starts successfully. Preference writes, resume import and 
 acceptance are still open. [Evidence](evidence/d1-working-development-flow-2026-10-06.md).
 D1/D3 remain In progress; backend-only, no cloud state change or hosted CI/CD, PC stays on.
 
-Last updated: 2026-10-05
+Last updated: 2026-10-06
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -3980,3 +3980,12 @@ Verified combined implementation `97cc9c52` is unchanged; subsequent commits rec
 evidence only. Native image/authenticated adapters/issuer/event routing/managed task/client/ATS/
 provider/accountable gates remain. D1/D3 stay In progress; no authored main merge, deployment,
 activation or hosted CI/CD work. Docker/WSL are stopped and shared volumes retained.
+
+2026-10-06 working development flow: clean `1a559af2` passes the maintained full verifier
+(38 typecheck, 39 test, 23 build tasks; unchanged lint). The initial run's occupied localhost:3000
+conflict is resolved by stopping only isolated web; all 101 session cases then pass unchanged.
+Owner managed sign-in/search/Profile/save/reload results remain corroborated by actual BFF status
+observations. Enabled development scan mapping/rules and locally parser-verified generated PDF
+prepare the next resume-import check; preference writes and deployed upload/scan/parse remain open.
+[Evidence](evidence/d1-working-development-flow-2026-10-06.md). D1/D3 remain In progress; no
+frontend source/cloud activation, production or CI/CD work. PC stays on; Docker/WSL stopped.

@@ -57,7 +57,8 @@ both AWS environments accepted the steady-state serverless runtime.
   changes only in the child process; identity settings stay intact. `-CheckOnly` verifies local
   configuration and matching live/ready releases without starting web. No deployment or Docker
   start is performed. Use regular Chrome for Google sign-in; keep the configured localhost
-  callback and port aligned.
+  callback and port aligned. Stop local web before the full verifier: its session fixtures also
+  use localhost:3000. Restart afterward; the launcher preserves the identity configuration.
 - `start-local.ps1` — Starts PostgreSQL, Redis, and the OpenTelemetry collector. Workflow execution
   uses the local Lambda durable adapter; no external workflow service is required.
 - `configure-auth0-local.ps1` — Writes ignored local Auth0 web settings with compatibility-safe

@@ -34,9 +34,31 @@ keeps the registered localhost callback/port aligned, and overrides the API targ
 web process. It neither rewrites identity files nor deploys, starts Docker or opens an automated
 browser. `-CheckOnly` passes against the live development API; four unsafe origins refuse and
 the identity file's before/after digest is unchanged. The launcher starts actual local Next.js successfully against the verified API; the maintained
-full verifier remains pending before handoff.
+full verifier passes for committed source `1a559af2`.
 
 Preference write/read, resume import and the remaining
 deployed/public/moderation/rights/final acceptance requirements are not claimed from these checks.
 No D1 exit criterion or phase completion is asserted. Hosted CI/CD stays deferred until production
 launch. Docker/WSL remain stopped and the PC remains on.
+
+## Full verification and next flow step
+
+Committed source `1a559af2` passes `scripts/verify-phase0.ps1`: 38 typecheck tasks,
+39 test tasks, 23 production builds and the maintained operator/security/isolation checks.
+Lint remains zero errors, 15 warnings and 58 infos. Log: `.tmp/d1-working-flow-full-final.log`.
+The first run failed because our running web server occupied localhost:3000, which the session
+fixtures deliberately bind exclusively. After stopping only the isolated server, all 101 session
+checks and the full unchanged-source rerun pass. No sign-in guard or timeout is weakened.
+Stop local web before running the full verifier; restart afterward with the maintained launcher.
+
+Read-only AWS inspection confirms the document processor's qualified development queue mapping
+is Enabled and scan-result/reconciler rules are enabled. Parser/processor aliases are unweighted
+versions 7/12. No cloud activation or state change is performed. The generated-only 625-byte PDF
+at `.tmp/d1-working-flow-synthetic-resume.pdf` passes the existing compiled local parser with one
+normalized block. The first local invocation supplied a Node Buffer; using the parser's actual
+Uint8Array input resolves that harness error without changing the parser or safety checks.
+No deployed upload/scan/parse result is claimed from this local fixture check.
+
+Remaining preference-write and resume-import flow acceptance continues after restoring local web.
+The generated-synthetic-only document boundary and real-resume approval gates stay in force.
+No phase exit, production release or hosted CI/CD acceptance is asserted.
