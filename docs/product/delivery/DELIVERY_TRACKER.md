@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-05
+Last updated: 2026-10-06
 Program status: In progress
 Program start: 2026-07-27
 Program completion: Not completed
@@ -4051,3 +4051,11 @@ owning work-claim guard is unchanged; input equality does not replace authentica
 or artifact/managed composition is claimed for this private factory. Image/entrypoint/evidence/
 private admission/IAM/routing/client/ATS/provider/accountable gates remain. D1/D3 stay In progress;
 no authored main merge, publication/deployment/activation or CI/CD work. Docker/WSL are stopped.
+
+2026-10-06 D3-079 allocation-bound native scalar controls are reviewable in draft
+[PR #565](https://github.com/Vrixic/project-ai-job-apply/pull/565), stacked on exact open
+#564 `bd23437c`. Verified implementation `4b6ba6d8` is unchanged; later commits record delivery
+and review evidence only. Two authored draft PRs are open. Native image/entrypoint/evidence/
+private admission/IAM/routing/client/ATS/provider/accountable gates remain; D1/D3 stay In progress.
+No authored main merge, publication/deployment/activation or hosted CI/CD work. Exact owned Linux
+fixture/staging cleanup completed, shared volumes retained and Docker/WSL stopped.

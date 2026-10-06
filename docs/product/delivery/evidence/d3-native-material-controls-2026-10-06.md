@@ -95,3 +95,7 @@ complete client/ATS lifecycle and D3-012/accountable/deployed acceptance remain 
 No SQL migration, API/event/domain schema, dependency version or frontend change. ADR-040 remains
 Proposed; no source/control switch, publication or deployment is activated. D1/D3 stay In progress
 and hosted CI/CD stays owner-deferred until production launch.
+
+Review: draft [PR #565](https://github.com/Vrixic/project-ai-job-apply/pull/565) is stacked
+on exact open #564. Implementation `4b6ba6d8` is unchanged by later delivery-only records.
+No phase-completion, native production image, IAM or deployment claim.
