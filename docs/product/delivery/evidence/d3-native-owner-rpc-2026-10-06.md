@@ -97,3 +97,21 @@ The owned PostgreSQL tmpfs fixture is removed and the Linux verifier removes its
 container. Shared volumes are retained. Docker Desktop's engine and WSL are stopped; PC stays on.
 PR #564/#565 remain OPEN at their existing exact heads; no third PR or main merge is performed. No actual ECS credentials, AWS verification, live model, deployment,
 managed authentication conformance or phase completion is claimed. PC stays on.
+
+
+## Corrected-source verification
+
+The builder now uses the same fixed flag-name convention as the existing maintained builders.
+No task proof, owner, SQL, client or runtime semantics change. Corrected clean committed source
+`64df6d7a1c8513d2d05fd50d0c16d50ac79a1186` passes the maintained full verifier: 38 typecheck,
+39 test and 23 build tasks, operator/security/isolation/Compose/scope checks, zero lint errors
+and restored baseline 15 warnings/58 infos. The original corrected-source session exits zero;
+the tracked tree stays unchanged throughout. Log: `.tmp/d3-native-owner-full-final.log`.
+The earlier `576f0ac9` run's 17 warnings are retained above; they were not an unchanged baseline.
+
+Two receiver builds on corrected source again reproduce identical bytes: 363,457 bytes,
+SHA-256 `c97ffe4d8a51cc564bd75daf00c5614ab94587ec81548734bbf7d2af63f4af06`.
+The updated manifest binds source `64df6d7a`, Node.js 24/x86_64, `index.handler` and 32 SBOM
+components. The source-bound release metadata accounts for the changed bytes versus the prior
+source; the same-source repeats match. Logs: `.tmp/d3-native-owner-artifact-final.log`,
+`.tmp/d3-native-owner-artifact-final-repeat.log`. Nothing is published/deployed/activated.
