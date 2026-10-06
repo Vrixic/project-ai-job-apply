@@ -51,3 +51,8 @@ Lint remains zero errors, 15 warnings and 58 infos. Log: `.tmp/d1-migration-imag
 No tracked source was edited during that run. The isolated local web server was stopped before
 session fixtures bound port 3000. Docker Desktop and WSL were stopped after the image smoke;
 the PC remains on. Hosted publication, scan, migration and runtime rollout remain unclaimed.
+
+After verification, the maintained local launcher restored web against the live development
+API. Local root returns 200; unauthenticated Resume returns its expected 307 sign-in redirect.
+Only the two inspected Next-generated development import changes were restored. These readiness
+checks add no authenticated resume/preference acceptance or cloud state change.
