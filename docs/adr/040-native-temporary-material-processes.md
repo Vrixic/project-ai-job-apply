@@ -3,6 +3,12 @@
 Status: Proposed; default-off source and local kernel evidence only
 Date: 2026-10-05
 
+2026-10-06 source checkpoint: the private cover-letter runtime connects a fixed admitted original
+allocation, scalar controls, actual memory renderers and HTTPS server. Local Linux evidence covers
+real PDF/DOCX reads and process retirement with synthetic remote ports. Trusted bootstrap still
+owns approved source/admission/provider adapters, listener binding, image/TLS/IAM/routing and
+managed conformance; this proposal remains Proposed. [Evidence](../product/delivery/evidence/d3-native-runtime-composition-2026-10-06.md).
+
 ## Context
 
 [ADR-038](038-one-off-generated-application-materials.md) limits generated material to bounded

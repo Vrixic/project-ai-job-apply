@@ -61,6 +61,9 @@ export async function parsePdf(bytes: Uint8Array): Promise<ParsedTextBlock[]> {
     const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const loadingTask = getDocument({
       data: bytes,
+      // Document diagnostics can contain source-derived names/content. Keep the existing
+      // stable reason-code boundary; never emit pdfjs per-document warnings or traces.
+      verbosity: 0,
       useSystemFonts: false,
       disableFontFace: true,
       useWorkerFetch: false,

@@ -1,0 +1,80 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+test("native content composition emits real render/control/HTTPS without persistent or task authority", async () => {
+  const result = await build({
+    absWorkingDir: root,
+    entryPoints: ["backend/services/documents/dist/src/native-cover-letter-runtime.js"],
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "cjs",
+    write: false,
+    metafile: true,
+  });
+  const inputs = Object.values(result.metafile.outputs).flatMap((output) =>
+    Object.entries(output.inputs)
+      .filter(([, entry]) => entry.bytesInOutput > 0)
+      .map(([name]) => name.replaceAll("\\", "/")),
+  );
+  for (const forbidden of [
+    "postgres",
+    "client-s3",
+    "client-ecs",
+    "client-kms",
+    "client-secrets-manager",
+    "cover-letter-objects",
+    "cover-letter-store",
+    "native-material-registry.js",
+    "native-task-launch.js",
+    "native-task-retirement.js",
+    "backend/workflows",
+    "backend/services/profile",
+    "backend/services/applications",
+    "backend/services/jobs",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected native content authority: ${forbidden}`,
+    );
+  for (const required of [
+    "native-cover-letter-runtime.js",
+    "native-memory-session.js",
+    "native-memory-transport.js",
+    "native-material-controls.js",
+    "original-cover-letter-generation.js",
+    "render/verify.js",
+    "render/render.js",
+    "parsing/pdf.js",
+    "@aws-sdk/client-lambda",
+    "pdfjs-dist",
+    "yazl",
+  ])
+    assert.ok(
+      inputs.some((name) => name.includes(required)),
+      `Missing actual runtime component: ${required}`,
+    );
+  const module = { exports: {} };
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    createRequire(path.join(root, "package.json")),
+  );
+  let effects = 0;
+  const options = Object.defineProperty({}, "binding", {
+    get() {
+      effects++;
+      throw Error("UnexpectedNativeContent");
+    },
+  });
+  await assert.rejects(
+    module.exports.createNativeCoverLetterRuntime(options),
+    /^Error: NativeCoverLetterRuntimeUnavailable$/u,
+  );
+  assert.equal(effects, 0);
+});

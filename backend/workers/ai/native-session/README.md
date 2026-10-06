@@ -3,6 +3,16 @@
 Source/local evidence only; no production launcher, bound endpoint, cloud deployment or activation.
 See [proposed ADR-040](../../../../docs/adr/040-native-temporary-material-processes.md).
 
+Documents' private `./native-cover-letter-runtime` now connects a fixed admitted allocation,
+original scalar controls, memory-only generation, actual in-process PDF/DOCX rendering and the
+authenticated HTTPS server. The trusted launcher still owns binding the listener and supplying
+approved source/admission/provider/TLS adapters. It returns immutable non-content metadata and a
+termination request, with no raw session reader or death acknowledgement. Defaults remain off.
+The Linux verifier includes connected real-file reads and actual kernel retirement. Its existing
+compiler image lacks optional raster canvas support: only two exact source-only startup warnings
+are accepted; unknown or document-derived diagnostics fail. Per-document PDF verbosity is zero.
+This is not the reviewed production native image or managed routing/adapter conformance.
+
 `kernel-deadline.c` is a Linux Node-API module for a dedicated material-bearing process. Load it
 only after private launch admission and the default-off switch have passed. Loading it immediately
 arms a 60-second boot expiry and disables core dumps/dumpability. Its three scalar capabilities

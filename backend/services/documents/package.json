@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-cover-letter-runtime": {
+      "types": "./dist/src/native-cover-letter-runtime.d.ts",
+      "default": "./dist/src/native-cover-letter-runtime.js"
+    },
     "./native-task-retirement": {
       "types": "./dist/src/native-task-retirement.d.ts",
       "default": "./dist/src/native-task-retirement.js"

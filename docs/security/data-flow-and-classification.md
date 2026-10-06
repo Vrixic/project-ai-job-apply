@@ -1,5 +1,14 @@
 # Data Flow and Classification
 
+2026-10-06 native cover-letter composition checkpoint (source-only/default-off): fixed original
+private admission precedes kernel loading; admission surrounds source-evidence awaits and repeats
+before exposing the unbound authenticated HTTPS server. Original controls carry scalar metadata;
+generated material and actual PDF/DOCX verification remain inside the kernel-bounded process.
+Per-document PDF diagnostics are disabled. Source/admission/provider/TLS adapters and trusted
+listener/image/IAM/routing/managed/client conformance remain activation requirements, not evidence
+of authenticated deployment. Termination is a request, never provider settlement or death/purge
+acknowledgement. [Local evidence](../product/delivery/evidence/d3-native-runtime-composition-2026-10-06.md).
+
 ## Source-only private maintenance-fence bootstrap (2026-10-03)
 
 Original owned work references -> closed unchanged cleanup RPC -> independent default-off

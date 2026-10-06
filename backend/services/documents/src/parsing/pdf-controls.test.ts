@@ -62,6 +62,7 @@ describe("PDF post-parse security controls", () => {
     ]);
     expect(mockedGetDocument).toHaveBeenCalledWith(
       expect.objectContaining({
+        verbosity: 0,
         useSystemFonts: false,
         disableFontFace: true,
         useWorkerFetch: false,

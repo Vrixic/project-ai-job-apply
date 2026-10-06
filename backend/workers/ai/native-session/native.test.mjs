@@ -23,6 +23,10 @@ for (const mode of [
   "worker",
   "transport",
   "controls",
+  "runtime",
+  "runtime-terminate",
+  "runtime-revoked",
+  "runtime-controls-failure",
 ]) {
   test(`kernel retires the actual ${mode} content process`, { timeout: 10_000 }, async () => {
     const started = performance.now();
@@ -50,7 +54,19 @@ for (const mode of [
       assert.equal(code, null, diagnostics);
       assert.equal(signal, "SIGKILL", diagnostics);
       assert.ok(elapsed < 7_000, `Kernel did not retire ${mode} before parent fallback`);
-      assert.equal(diagnostics, "", "No sensitive diagnostic output is allowed");
+      // This existing compiler image lacks optional raster-canvas dependencies. PDF text
+      // verification does not draw a canvas. Accept only these exact source-only startup
+      // diagnostics; any document warning, exception or arbitrary output still fails.
+      const startup =
+        'Warning: Cannot load "@napi-rs/canvas" package: "Error: Cannot find module \'@napi-rs/canvas\'\nRequire stack:\n- /native/fixture.mjs".\nWarning: Cannot polyfill `Path2D`, rendering may be broken.\n';
+      const remainingDiagnostics = mode.startsWith("runtime")
+        ? diagnostics.replace(startup, "")
+        : diagnostics;
+      assert.equal(
+        remainingDiagnostics,
+        "",
+        "No content-derived or unrecognized diagnostics are allowed",
+      );
       assert.ok(!output.includes("I have experience") && !output.includes("synthetic-secret"));
       if (
         [
@@ -63,6 +79,8 @@ for (const mode of [
           "multiple",
           "transport",
           "controls",
+          "runtime",
+          "runtime-terminate",
         ].includes(mode)
       ) {
         const value = JSON.parse(output.trim());
@@ -70,11 +88,16 @@ for (const mode of [
         assert.equal(value.providerCalls, 1);
         assert.equal(value.originalExpiry - value.originalCompletion, 1_800_000);
         assert.ok(
-          Date.now() - value.originalCompletion < (mode === "transport" ? 6000 : 2500),
+          Date.now() - value.originalCompletion <
+            (mode === "transport" || mode.startsWith("runtime") ? 6000 : 2500),
           "Original kernel deadline exceeded test tolerance",
         );
         if (mode === "transport") assert.ok(value.transportAssertions >= 28);
         if (mode === "controls") assert.equal(value.controlInvocations, 3);
+        if (mode.startsWith("runtime")) {
+          assert.equal(value.controlInvocations, 3);
+          assert.equal(value.actualFiles, 2);
+        }
       }
       if (mode === "settlement") assert.equal(output, "settlement-pending\n");
       if (mode === "boot") assert.equal(output, "");

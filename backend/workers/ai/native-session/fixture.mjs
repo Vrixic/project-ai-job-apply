@@ -13,6 +13,10 @@ import { createTemporaryMaterialCompletionHandler } from "../../../services/docu
 const require = createRequire(import.meta.url);
 const mode = process.argv[2];
 const kernelPath = process.argv[3];
+if (mode.startsWith("runtime")) {
+  const { exerciseNativeRuntime } = await import("./runtime-fixture.mjs");
+  await exerciseNativeRuntime(mode, kernelPath);
+}
 const kernel = require(kernelPath);
 if (!/Max core file size\s+0\s+0\s+bytes/u.test(readFileSync("/proc/self/limits", "utf8")))
   throw Error("SyntheticCoreGuardMissing");

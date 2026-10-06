@@ -1,5 +1,11 @@
 # Documents Service
 
+The private `./native-cover-letter-runtime` connects one admitted native original allocation to
+scalar work/completion ports, the actual memory actor/renderers and authenticated HTTPS reads.
+Defaults remain off; trusted launch, owner/provider/TLS adapters, native image/routing and managed
+retirement conformance remain release gates. It exposes non-content metadata and its server,
+without exporting the raw session reader or claiming death/provider settlement on termination.
+
 Owns immutable source resumes, normalized resume trees, tailored versions, cover letters,
 rendering state, version diffs, and artifact metadata.
 

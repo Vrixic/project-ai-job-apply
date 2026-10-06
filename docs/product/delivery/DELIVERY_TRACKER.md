@@ -1,5 +1,12 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 native cover-letter composition connects admitted original controls, memory
+generation, real PDF/DOCX rendering and authenticated HTTPS source. All 21 local Linux process
+scenarios, 72 focused checks and emitted isolation/default-off proof pass. Full combined-source
+verification remains pending; native image/bootstrap/adapters/routing/managed/provider/client
+acceptance remain open. [Evidence](evidence/d3-native-runtime-composition-2026-10-06.md).
+D1/D3 remain In progress; no deployment/activation, third PR or hosted CI/CD. PC stays on.
+
 2026-10-06 D1-013 starts the migration-image boundary repair: the Docker/publisher smoke still
 expected 66 migrations/88 relations after Jobs raised the accepted boundary to 69/92.
 The corrected executable smoke passes 173 cases and is now included in local full verification.

@@ -44,6 +44,7 @@ Invoke-CheckedCommand "Preparation starter actor isolation" { node --test script
 Invoke-CheckedCommand "Preparation recovery actor isolation" { node --test scripts/tests/preparation-recovery-bundle.test.mjs }
 Invoke-CheckedCommand "Cover-letter export read isolation" { node --test scripts/tests/cover-letter-export-bundle.test.mjs }
 Invoke-CheckedCommand "Native task retirement control isolation" { node --test scripts/tests/native-task-retirement-bundle.test.mjs }
+Invoke-CheckedCommand "Native content runtime composition isolation" { node --test scripts/tests/native-cover-letter-runtime-bundle.test.mjs }
 Invoke-CheckedCommand "Native launch control composition isolation" { node --test scripts/tests/native-launch-control-bundle.test.mjs }
 Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }
 
