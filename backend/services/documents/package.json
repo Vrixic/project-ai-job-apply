@@ -63,6 +63,10 @@
     "./native-material-controls": {
       "types": "./dist/src/native-material-controls.d.ts",
       "default": "./dist/src/native-material-controls.js"
+    },
+    "./native-evidence-binding": {
+      "types": "./dist/src/native-evidence-binding.d.ts",
+      "default": "./dist/src/native-evidence-binding.js"
     }
   },
   "scripts": {

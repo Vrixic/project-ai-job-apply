@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createApplicationsDatabase } from "@ai-job-apply/applications-service";
+import { lockNativeMaterialApplicationAdmission } from "@ai-job-apply/applications-service/native-material-runtime";
 import {
   PostgresCoverLetterStore,
   PostgresCoverLetterWorkStore,
@@ -89,7 +90,9 @@ describe.runIf(requested)(
       await Promise.all(runtimes.map((runtime) => runtime.close()));
       await sql.end();
     });
-    async function original(): Promise<Extract<NativeLaunchControlInput, { action: "launch" }>> {
+    async function original(
+      consentLifetimeMs = 900_000,
+    ): Promise<Extract<NativeLaunchControlInput, { action: "launch" }>> {
       const owner = uuidv7();
       const application = uuidv7();
       const document = uuidv7();
@@ -109,7 +112,7 @@ describe.runIf(requested)(
           documentId: document,
           purpose: "provider_dispatch",
           requestSha256: "c".repeat(64),
-          consentExpiresAt: new Date(Date.now() + 900_000),
+          consentExpiresAt: new Date(Date.now() + consentLifetimeMs),
         })
       ).authorization;
       if (!grant) throw Error("SyntheticOriginalGrantMissing");
@@ -246,6 +249,152 @@ describe.runIf(requested)(
         await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id=${request.original.id}`;
       expect(row?.state).toBe("issued");
     }
+    const evidenceRegistry = () =>
+      new PostgresNativeMaterialRegistry(sql, () => true, lockNativeMaterialApplicationAdmission);
+    it("admits exact bound evidence metadata and releases owning locks without consuming provider work", async () => {
+      const request = await original();
+      const captured = await fixture().client.launch(request);
+      const binding = { ...captured, original: request.original };
+      const registry = evidenceRegistry();
+      await expect(registry.checkEvidenceAdmission(binding)).resolves.toBeUndefined();
+      const independent = createApplicationsDatabase(url as string, { maxConnections: 1 });
+      try {
+        await independent.begin(async (tx) => {
+          await tx`SELECT id FROM applications.applications WHERE id=${request.applicationId} FOR UPDATE NOWAIT`;
+          await tx`SELECT id FROM documents.native_material_allocations WHERE id=${captured.scope.allocationId} FOR UPDATE NOWAIT`;
+          await tx`SELECT epoch_id FROM documents.native_material_admission WHERE epoch_id=${captured.scope.epochId} FOR UPDATE NOWAIT`;
+        });
+      } finally {
+        await independent.end();
+      }
+      await unchangedWork(request);
+    });
+    it.each(["scope", "task", "deployment", "work", "hash"])(
+      "refuses foreign evidence %s without consuming work",
+      async (fault) => {
+        const request = await original();
+        const captured = await fixture().client.launch(request);
+        const binding = structuredClone({ ...captured, original: request.original });
+        if (fault === "scope") binding.scope.epochId = uuidv7();
+        if (fault === "task")
+          binding.allocation.taskArn = binding.allocation.taskArn.replace(
+            /.$/u,
+            binding.allocation.taskArn.endsWith("a") ? "b" : "a",
+          );
+        if (fault === "deployment")
+          binding.allocation.taskDefinitionArn = binding.allocation.taskDefinitionArn.replace(
+            ":7",
+            ":8",
+          );
+        if (fault === "work") binding.original.id = uuidv7();
+        if (fault === "hash") binding.original.requestSha256 = "d".repeat(64);
+        await expect(evidenceRegistry().checkEvidenceAdmission(binding)).rejects.toThrow(
+          "NativeMaterialRegistryUnavailable",
+        );
+        await unchangedWork(request);
+      },
+    );
+    it("does not reuse recovery-after-seal permission as evidence admission", async () => {
+      const request = await original();
+      const f = fixture();
+      const captured = await f.client.launch(request);
+      const binding = { ...captured, original: request.original };
+      const registry = evidenceRegistry();
+      await registry.sealApplication(request.ownerUserId, request.applicationId);
+      await expect(registry.checkEvidenceAdmission(binding)).rejects.toThrow(
+        "NativeMaterialRegistryUnavailable",
+      );
+      await expect(
+        f.client.recover({
+          schemaVersion: 1,
+          action: "recover",
+          scope: captured.scope,
+          taskArn: captured.allocation.taskArn,
+        }),
+      ).resolves.toEqual(captured);
+      await unchangedWork(request);
+    });
+    it.each(["quarantine", "terminal"])("refuses evidence after owning %s", async (fault) => {
+      const request = await original();
+      const captured = await fixture().client.launch(request);
+      if (fault === "terminal")
+        await sql`UPDATE applications.applications SET status='cancelled',revision=revision+1,updated_at=clock_timestamp() WHERE id=${request.applicationId}`;
+      else
+        await sql`UPDATE identity.users SET account_state='quarantined', quarantined_at=clock_timestamp() WHERE id=${request.ownerUserId}`;
+      await expect(
+        evidenceRegistry().checkEvidenceAdmission({ ...captured, original: request.original }),
+      ).rejects.toThrow("NativeMaterialRegistryUnavailable");
+      await unchangedWork(request);
+    });
+    it("refuses original pending allocation before positive task binding", async () => {
+      const request = await original();
+      const registry = evidenceRegistry();
+      const intent = await registry.admit({
+        ownerUserId: request.ownerUserId,
+        applicationId: request.applicationId,
+        original: request.original,
+        previousEpochId: null,
+        deployment: {
+          clusterArn: config.clusterArn,
+          taskDefinitionArn: config.taskDefinitionArn,
+          containerName: config.containerName,
+        },
+      });
+      const scope = {
+        allocationId: intent.allocationId,
+        ownerUserId: intent.ownerUserId,
+        applicationId: intent.applicationId,
+        generationId: intent.generationId,
+        epochId: intent.epochId,
+      };
+      const allocation = {
+        allocationId: intent.allocationId,
+        ownerUserId: intent.ownerUserId,
+        applicationId: intent.applicationId,
+        generationId: intent.generationId,
+        clusterArn: config.clusterArn,
+        taskDefinitionArn: config.taskDefinitionArn,
+        containerName: config.containerName,
+        taskArn: `arn:aws:ecs:us-east-2:123456789012:task/native/${intent.allocationId.replaceAll("-", "")}`,
+      };
+      await expect(
+        registry.checkEvidenceAdmission({ scope, allocation, original: request.original }),
+      ).rejects.toThrow("NativeMaterialRegistryUnavailable");
+      await unchangedWork(request);
+    });
+    it("rejects expired unclaimed work without extending its admission", async () => {
+      const request = await original(2_000);
+      const captured = await fixture().client.launch(request);
+      const registry = evidenceRegistry();
+      const binding = { ...captured, original: request.original };
+      await registry.checkEvidenceAdmission(binding);
+      await new Promise((resolve) => setTimeout(resolve, 2_100));
+      await expect(registry.checkEvidenceAdmission(binding)).rejects.toThrow(
+        "NativeMaterialRegistryUnavailable",
+      );
+      await unchangedWork(request);
+    });
+    it("does not deadlock evidence admission with the original owning provider claim", async () => {
+      const request = await original();
+      const captured = await fixture().client.launch(request);
+      const registry = evidenceRegistry();
+      const result = await Promise.all([
+        registry.checkEvidenceAdmission({ ...captured, original: request.original }),
+        work.claim(request.original),
+      ]);
+      expect(result[1]).toEqual({ kind: "claimed" });
+      await registry.checkEvidenceAdmission({ ...captured, original: request.original });
+      await work.settleProviderDispatch(request.original);
+      await registry.checkEvidenceAdmission({ ...captured, original: request.original });
+    });
+    it("rejects revoked work while allocation metadata remains bound", async () => {
+      const request = await original();
+      const captured = await fixture().client.launch(request);
+      await work.revokeUnclaimed(request.ownerUserId, request.original.documentId);
+      await expect(
+        evidenceRegistry().checkEvidenceAdmission({ ...captured, original: request.original }),
+      ).rejects.toThrow("NativeMaterialRegistryUnavailable");
+    });
     it("connects exact sender/receiver/owning SQL and replays the same task without a second RunTask", async () => {
       const request = await original();
       const f = fixture();

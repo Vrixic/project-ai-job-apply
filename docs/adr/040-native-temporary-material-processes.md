@@ -177,3 +177,11 @@ full clean verification and seventeen actual Linux/kernel scenarios leave authen
 private task admission, managed image/bootstrap/IAM/provider/client/ATS/accountable acceptance
 unfinished. This proposal remains Proposed and no activation or new deployment is authorized.
 [Evidence](../product/delivery/evidence/d3-native-material-controls-2026-10-06.md).
+
+## Native owner evidence admission checkpoint — 2026-10-06
+
+Default-off source now wraps original lease-bound owner evidence with short exact owning native
+admission checks and fixed context comparison. Locks are released before owner reads and original
+work authority is unchanged. Local units and PostgreSQL admission proof do not authenticate callers
+or establish managed evidence composition. This proposal remains Proposed; all release gates remain.
+[Evidence](../product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).

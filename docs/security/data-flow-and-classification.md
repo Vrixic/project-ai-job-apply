@@ -755,3 +755,13 @@ Transport holds one active send until actual settlement; kernel host retirement 
 from remote provider/work outcomes. The trusted input/task binding is not IAM authentication.
 Per-task/private admission, managed sender/receiver IAM and content runtime remain release gates;
 all flags stay off. [Local evidence](../product/delivery/evidence/d3-native-material-controls-2026-10-06.md).
+
+## Native original owner evidence admission (2026-10-06)
+
+Trusted fixed allocation/work/context -> short owning native admission -> lease-bound owner APIs
+(excluding restricted facts) -> original context comparison -> repeat owning admission -> detached
+original evidence. SQL locks end before content reads; no grant/renewal/body persistence follows.
+Active identity/application and current bound/unsealed exact task gates differ from recovery after
+seal. Point-in-time metadata checks do not authenticate callers or prove task liveness/retirement.
+Private task transport/IAM and managed bootstrap remain gates; activation stays off.
+[Local evidence](../product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).

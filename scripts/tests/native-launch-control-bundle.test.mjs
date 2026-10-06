@@ -160,6 +160,7 @@ test("emitted launcher supplies only owning admission/registry/ECS/managed-secre
     [
       "backend/services/applications/dist/src/database.js",
       "backend/services/applications/dist/src/native-material-admission.js",
+      "backend/services/documents/dist/src/native-evidence-binding.js",
       "backend/services/documents/dist/src/native-launch-control-contract.js",
       "backend/services/documents/dist/src/native-material-registry.js",
       "backend/services/documents/dist/src/native-task-allocation.js",

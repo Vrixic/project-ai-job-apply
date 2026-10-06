@@ -4059,3 +4059,13 @@ and review evidence only. Two authored draft PRs are open. Native image/entrypoi
 private admission/IAM/routing/client/ATS/provider/accountable gates remain; D1/D3 stay In progress.
 No authored main merge, publication/deployment/activation or hosted CI/CD work. Exact owned Linux
 fixture/staging cleanup completed, shared volumes retained and Docker/WSL stopped.
+
+2026-10-06 D3-079 adds default-off original native owner-evidence admission on fresh main
+`88f8ae84` plus exact #565 `b8bbd0c3`. Short owning SQL checks surround lease-bound owner
+reads, compare fixed original context and release locks before evidence awaits. 38 focused units,
+23 actual PostgreSQL launcher/evidence cases, owner/workflow builds/typechecks and four emitted
+bundle checks pass. No work issue/renew/consumption, body/model/listener, schema or frontend change.
+[Evidence](evidence/d3-native-evidence-admission-2026-10-06.md). Full clean verification remains
+before review. Authenticated private task transport/bootstrap/IAM, managed task/client/ATS/provider/
+accountable gates remain; D1/D3 stay In progress. Owned SQL fixture removed, volumes unchanged,
+Docker/WSL stopped; PC stays on. No deployment/activation or hosted CI/CD work.

@@ -686,3 +686,8 @@ then confirms the current sealed epoch. No task receipt settles provider work. M
 optional technical export and restore boundaries preserve deletion blockers and revoked cleanup
 fences. The private launcher/RPC/IAM/image/routing/managed-task and full client/ATS/provider gates
 remain; nothing is activated. [Registry evidence](../../../docs/product/delivery/evidence/d3-native-material-registry-2026-10-05.md).
+
+The private `./native-evidence-binding` validator and registry `checkEvidenceAdmission` pin
+original task/work/current unsealed admission before owner evidence reads. Admission locks end
+before reading facts/job; it never consumes work or proves task liveness. Existing original
+work-claim guards remain final authority. See [evidence](../../../docs/product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
