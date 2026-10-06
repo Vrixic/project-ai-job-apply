@@ -9,6 +9,12 @@
 
 ## Objective
 
+2026-10-06 D3-079 connects original native task startup: own ECS metadata -> authenticated stored
+approval -> trusted ports -> kernel/content runtime. All 72 focused, 27 Linux and five emitted
+checks pass; full clean-source verification is pending. [Evidence](evidence/d3-native-task-bootstrap-2026-10-06.md).
+Executable image/real image configuration/managed/client/provider acceptance remain. D1/D3 stay
+In progress; no deployment, activation, third PR or CI/CD work. Docker/WSL stopped; PC on.
+
 2026-10-06 D3-079 adds authenticated original preparation bootstrap metadata: Applications reads
 the stored approval/context and Documents checks the exact original work consent. All 41 RPC,
 27 preparation SQL, 24 native-owner SQL and seven emitted isolation checks pass; full clean-source

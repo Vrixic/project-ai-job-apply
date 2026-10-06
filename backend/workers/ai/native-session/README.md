@@ -83,3 +83,8 @@ and existing private handlers to the actual native actor/session and observes ke
 Ports still require reviewed IAM/per-task admission and production owner/provider/bootstrap;
 local bindings or process death certify neither remote settlement nor all-copy purge. See
 [local evidence](../../../../docs/product/delivery/evidence/d3-native-material-controls-2026-10-06.md).
+# Native task startup checkpoint — 2026-10-06
+
+The maintained Linux fixture now connects actual task bootstrap metadata/signed approval to
+the kernel/content runtime, with delayed binding, revocation and pre-content refusal coverage.
+Transport/provider/owning replies remain synthetic. See [startup evidence](../../../../docs/product/delivery/evidence/d3-native-task-bootstrap-2026-10-06.md).

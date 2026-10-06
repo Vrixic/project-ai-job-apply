@@ -9,7 +9,10 @@ import { compileComponentValidator } from "../../../../packages/api-contracts/sr
 import { createTestTokenIssuer } from "../../../../packages/auth/src/testing.ts";
 import { createCoverLetterProviderControlHandler } from "../../../services/documents/src/cover-letter-provider-control-handler.ts";
 import { createNativeCoverLetterRuntime } from "../../../services/documents/src/native-cover-letter-runtime.ts";
+import { nativeOwnerJson } from "../../../services/documents/src/native-owner-rpc-contract.ts";
+import { createNativeOwnerRpcHandler } from "../../../services/documents/src/native-owner-rpc-handler.ts";
 import { createNativeReadAuthorizationClient } from "../../../services/documents/src/native-read-authorization-client.ts";
+import { startNativeMaterialTask } from "../../../services/documents/src/native-task-bootstrap.ts";
 import { prepareOriginalCoverLetterRequest } from "../../../services/documents/src/original-cover-letter-generation.ts";
 import { createTemporaryMaterialCompletionHandler } from "../../../services/documents/src/temporary-material-completion-handler.ts";
 
@@ -74,9 +77,11 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
   let providerCalls = 0,
     controlInvocations = 0,
     admissions = 0;
+  const bootstrapMode = mode.startsWith("runtime-bootstrap");
   const workTarget = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-original-work:9";
-  const completionTarget =
-    "arn:aws:lambda:us-east-2:123456789012:function:synthetic-original-completion:7";
+  const completionTarget = bootstrapMode
+    ? workTarget
+    : "arn:aws:lambda:us-east-2:123456789012:function:synthetic-original-completion:7";
   const workHandler = createCoverLetterProviderControlHandler({
     functionArn: workTarget,
     enabled: () => true,
@@ -178,7 +183,162 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
       }),
     },
   };
-  const runtime = await createNativeCoverLetterRuntime(options);
+  let permitted = true;
+  let metadataReads = 0,
+    portLoads = 0;
+  const self = {
+    DockerId: `${"a".repeat(32)}-1234567890`,
+    Name: "material",
+    Type: "NORMAL",
+    Image: "synthetic-pinned-image",
+    ImageID: `sha256:${"b".repeat(64)}`,
+    DesiredStatus: "RUNNING",
+    KnownStatus: "RUNNING",
+    Labels: {
+      "com.amazonaws.ecs.task-arn": allocation.taskArn,
+      "com.amazonaws.ecs.cluster": allocation.clusterArn,
+      "com.amazonaws.ecs.container-name": "material",
+      "com.amazonaws.ecs.task-definition-family": "native",
+      "com.amazonaws.ecs.task-definition-version": "3",
+    },
+  };
+  const receiver = createNativeOwnerRpcHandler({
+    targetArn: workTarget,
+    taskRoleArn: "arn:aws:iam::123456789012:role/native-task",
+    deployment: allocation,
+    enabled: () => true,
+    testFetch: async () =>
+      new Response(
+        `<GetCallerIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><GetCallerIdentityResult><Arn>arn:aws:sts::123456789012:assumed-role/native-task/${"a".repeat(32)}</Arn><Account>123456789012</Account><UserId>AROAABCDEFGHIJKLMNOP:${"a".repeat(32)}</UserId></GetCallerIdentityResult><ResponseMetadata><RequestId>synthetic</RequestId></ResponseMetadata></GetCallerIdentityResponse>`,
+        { headers: { "content-type": "text/xml" } },
+      ),
+    owners: async () => ({
+      checkAdmission: async (fixed) => {
+        assert.deepEqual(fixed, binding);
+        admissions++;
+        if (mode === "runtime-bootstrap-admission-refused") throw Error("SyntheticUnbound");
+        if (mode === "runtime-bootstrap-delayed" && admissions === 1)
+          throw Error("SyntheticPendingBind");
+        if (mode === "runtime-bootstrap-revoked" && admissions >= 10)
+          throw Error("SyntheticRevoked");
+      },
+      bootstrap: async () => ({
+        ...identity,
+        approvedAt: identity.approvedAt.toISOString(),
+        expiresAt: identity.expiresAt.toISOString(),
+      }),
+      evidence: () => ({ load: async () => ({ facts: structuredClone(facts), job: { ...job } }) }),
+      work: async (input, context) => {
+        controlInvocations++;
+        return workHandler(input, context);
+      },
+      completion: async (input, context) => {
+        controlInvocations++;
+        return completionHandler(input, context);
+      },
+    }),
+  });
+  const bootstrapOptions = {
+    deployment: allocation,
+    ownerFunctionArn: workTarget,
+    enabled: () => permitted,
+    maximumLifetimeMs: options.maximumLifetimeMs,
+    bootBudgetMs: options.bootBudgetMs,
+    environment: () => ({
+      ECS_CONTAINER_METADATA_URI_V4: "http://169.254.170.2/v4/synthetic",
+      NATIVE_MATERIAL_ALLOCATION_ID: ids[5],
+      NATIVE_MATERIAL_OWNER_USER_ID: ids[0],
+      NATIVE_MATERIAL_APPLICATION_ID: ids[1],
+      NATIVE_MATERIAL_GENERATION_ID: ids[2],
+      NATIVE_MATERIAL_EPOCH_ID: ids[4],
+      NATIVE_MATERIAL_WORK_ID: ids[4],
+      NATIVE_MATERIAL_REQUEST_SHA256: original.requestSha256,
+    }),
+    testFetch: async (url) => {
+      metadataReads++;
+      return new Response(
+        JSON.stringify(
+          String(url).endsWith("/task")
+            ? {
+                Cluster: allocation.clusterArn,
+                TaskARN: allocation.taskArn,
+                Family: "native",
+                Revision: "3",
+                LaunchType: "FARGATE",
+                KnownStatus: "RUNNING",
+                DesiredStatus: "RUNNING",
+                Containers: [self],
+              }
+            : self,
+        ),
+        { headers: { "content-type": "application/json" } },
+      );
+    },
+    testCredentials: {
+      accessKeyId: `ASIA${"A".repeat(16)}`,
+      secretAccessKey: "synthetic-only-test-signing-secret",
+      sessionToken: "synthetic-only-session",
+    },
+    testClient: {
+      send: async (command) => {
+        const raw = JSON.parse(new TextDecoder().decode(command.input.Payload));
+        assert.ok(raw.proof && raw.binding && raw.request);
+        const output = await receiver(raw, { invokedFunctionArn: workTarget });
+        return {
+          StatusCode: 200,
+          ExecutedVersion: "9",
+          Payload: new TextEncoder().encode(nativeOwnerJson(output)),
+        };
+      },
+    },
+    loadPorts: async () => {
+      portLoads++;
+      assert.equal(metadataReads, 2);
+      assert.equal(providerCalls, 0);
+      if (mode === "runtime-bootstrap-ports-revoked") permitted = false;
+      return {
+        provider: options.provider,
+        transport: options.transport,
+        loadKernel: options.loadKernel,
+      };
+    },
+  };
+  if (mode === "runtime-bootstrap-expired") {
+    identity.approvedAt = new Date(Date.now() - 900_001);
+    identity.expiresAt = new Date(identity.approvedAt.getTime() + 900_000);
+  }
+  if (
+    [
+      "runtime-bootstrap-expired",
+      "runtime-bootstrap-admission-refused",
+      "runtime-bootstrap-ports-revoked",
+    ].includes(mode)
+  ) {
+    await assert.rejects(
+      startNativeMaterialTask(bootstrapOptions),
+      /NativeTaskBootstrapUnavailable/u,
+    );
+    assert.equal(providerCalls, 0);
+    assert.equal(controlInvocations, 0);
+    assert.equal(metadataReads, 2);
+    assert.equal(portLoads, mode === "runtime-bootstrap-ports-revoked" ? 1 : 0);
+    process.stdout.write(
+      `${JSON.stringify({ bootstrapRefused: true, providerCalls, controlInvocations, metadataReads, portLoads })}\n`,
+    );
+    return;
+  }
+  const runtime = bootstrapMode
+    ? await startNativeMaterialTask(bootstrapOptions)
+    : await createNativeCoverLetterRuntime(options);
+  if (bootstrapMode) {
+    assert.equal(metadataReads, 2);
+    assert.equal(portLoads, 1);
+    await assert.rejects(
+      startNativeMaterialTask(bootstrapOptions),
+      /NativeTaskBootstrapUnavailable/u,
+    );
+    assert.equal(portLoads, 1);
+  }
   reference = runtime.reference;
   assert.equal(providerCalls, 1);
   assert.equal(controlInvocations, 3);

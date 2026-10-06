@@ -27,6 +27,9 @@ for (const mode of [
   "runtime-terminate",
   "runtime-revoked",
   "runtime-controls-failure",
+  "runtime-bootstrap",
+  "runtime-bootstrap-delayed",
+  "runtime-bootstrap-revoked",
 ]) {
   test(`kernel retires the actual ${mode} content process`, { timeout: 10_000 }, async () => {
     const started = performance.now();
@@ -81,6 +84,8 @@ for (const mode of [
           "controls",
           "runtime",
           "runtime-terminate",
+          "runtime-bootstrap",
+          "runtime-bootstrap-delayed",
         ].includes(mode)
       ) {
         const value = JSON.parse(output.trim());
@@ -101,6 +106,48 @@ for (const mode of [
       }
       if (mode === "settlement") assert.equal(output, "settlement-pending\n");
       if (mode === "boot") assert.equal(output, "");
+    } finally {
+      clearTimeout(fallback);
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }
+  });
+}
+
+for (const mode of [
+  "runtime-bootstrap-expired",
+  "runtime-bootstrap-admission-refused",
+  "runtime-bootstrap-ports-revoked",
+]) {
+  test(`bootstrap refuses ${mode} before content admission`, { timeout: 30_000 }, async () => {
+    const child = spawn(
+      process.execPath,
+      [`${root}/fixture.mjs`, mode, `${root}/kernel-deadline.node`],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const exit = once(child, "exit");
+    let output = "",
+      diagnostics = "";
+    child.stdout.setEncoding("utf8").on("data", (data) => {
+      output += data;
+    });
+    child.stderr.setEncoding("utf8").on("data", (data) => {
+      diagnostics += data;
+    });
+    const fallback = setTimeout(() => child.kill("SIGKILL"), 27_000);
+    try {
+      const [code, signal] = await exit;
+      assert.equal(code, 0, diagnostics);
+      assert.equal(signal, null);
+      const startup =
+        'Warning: Cannot load "@napi-rs/canvas" package: "Error: Cannot find module \'@napi-rs/canvas\'\nRequire stack:\n- /native/fixture.mjs".\nWarning: Cannot polyfill `Path2D`, rendering may be broken.\n';
+      assert.equal(diagnostics.replace(startup, ""), "");
+      assert.deepEqual(JSON.parse(output.trim()), {
+        bootstrapRefused: true,
+        providerCalls: 0,
+        controlInvocations: 0,
+        metadataReads: 2,
+        portLoads: mode === "runtime-bootstrap-ports-revoked" ? 1 : 0,
+      });
     } finally {
       clearTimeout(fallback);
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");

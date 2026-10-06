@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-task-bootstrap": {
+      "types": "./dist/src/native-task-bootstrap.d.ts",
+      "default": "./dist/src/native-task-bootstrap.js"
+    },
+    "./native-task-metadata": {
+      "types": "./dist/src/native-task-metadata.d.ts",
+      "default": "./dist/src/native-task-metadata.js"
+    },
     "./native-task-caller-client": {
       "types": "./dist/src/native-task-caller-client.d.ts",
       "default": "./dist/src/native-task-caller-client.js"

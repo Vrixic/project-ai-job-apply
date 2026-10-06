@@ -1,5 +1,11 @@
 # Documents Service
 
+Private `./native-task-bootstrap` binds the task's own ECS container/task metadata, reads its
+original approval over signed owner RPC and starts the existing kernel/content runtime after
+admission. It waits only for the original launcher's task bind and exposes no work issuer or
+renewal. Image-owned provider/TLS/kernel configuration and executable image remain required.
+See [startup evidence](../../../docs/product/delivery/evidence/d3-native-task-bootstrap-2026-10-06.md).
+
 Private native owner RPC additionally reads the original claimed preparation's approval/context
 through Applications and checks Documents' exact original work expiry. The strict eight-scalar
 reply grants no renewal or work creation capability. See [bootstrap evidence](../../../docs/product/delivery/evidence/d3-native-approved-bootstrap-2026-10-06.md).
