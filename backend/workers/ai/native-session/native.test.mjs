@@ -22,6 +22,7 @@ for (const mode of [
   "reload",
   "worker",
   "transport",
+  "controls",
 ]) {
   test(`kernel retires the actual ${mode} content process`, { timeout: 10_000 }, async () => {
     const started = performance.now();
@@ -61,6 +62,7 @@ for (const mode of [
           "cancel",
           "multiple",
           "transport",
+          "controls",
         ].includes(mode)
       ) {
         const value = JSON.parse(output.trim());
@@ -72,6 +74,7 @@ for (const mode of [
           "Original kernel deadline exceeded test tolerance",
         );
         if (mode === "transport") assert.ok(value.transportAssertions >= 28);
+        if (mode === "controls") assert.equal(value.controlInvocations, 3);
       }
       if (mode === "settlement") assert.equal(output, "settlement-pending\n");
       if (mode === "boot") assert.equal(output, "");

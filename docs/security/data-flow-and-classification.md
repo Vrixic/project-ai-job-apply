@@ -743,3 +743,15 @@ Event/source equality does not authenticate senders. Reviewed service resource p
 version/configuration retention, durable retry/DLQ routing and actual managed event serialization
 remain gates. No generated body/model/database credentials enter this receiver; activation stays
 off. [Local evidence](../product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
+
+
+## Allocation-bound native scalar controls (2026-10-06)
+
+Dedicated content process -> fixed original claim/settlement/completion metadata -> signed numeric
+owning controls. The adapter cannot issue/renew work, select another owner/document, settle a
+background terminal phase, launch/stop tasks or certify purge. Only acknowledged normal original
+provider settlement permits one completion attempt; unknown/late replies never authorize replay.
+Transport holds one active send until actual settlement; kernel host retirement is independent
+from remote provider/work outcomes. The trusted input/task binding is not IAM authentication.
+Per-task/private admission, managed sender/receiver IAM and content runtime remain release gates;
+all flags stay off. [Local evidence](../product/delivery/evidence/d3-native-material-controls-2026-10-06.md).

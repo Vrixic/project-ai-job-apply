@@ -59,6 +59,10 @@
     "./native-task-allocation": {
       "types": "./dist/src/native-task-allocation.d.ts",
       "default": "./dist/src/native-task-allocation.js"
+    },
+    "./native-material-controls": {
+      "types": "./dist/src/native-material-controls.d.ts",
+      "default": "./dist/src/native-material-controls.js"
     }
   },
   "scripts": {

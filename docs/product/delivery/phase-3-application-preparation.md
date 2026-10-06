@@ -1495,3 +1495,14 @@ implementation `0ee4c377` and exact combined tree `82ea96c9` are unchanged by la
 records. One authored draft PR is open. Managed event/routing/IAM/retry/DLQ/native task and
 client/ATS/provider/accountable gates remain; D1/D3 stay In progress. No authored main merge,
 artifact publication, deployment, activation or hosted CI/CD work. Docker/WSL remain stopped.
+
+2026-10-06 D3-079 starts allocation-bound native scalar work/completion adapters on fresh
+main `88f8ae84` plus exact open #564 `bd23437c`. One original claim/settlement/completion,
+fixed signed numeric transport and retained pending-call admission expose no issuer or other
+phase/task authority. 50 new/108 regression cases and four emitted isolation checks pass;
+all 17 actual Linux kernel scenarios pass, including connected scalar controls and one provider
+call before observed SIGKILL. SQL/provider/render/transport ports are synthetic; not managed
+acceptance. [Evidence](evidence/d3-native-material-controls-2026-10-06.md). Full clean verification
+remains before review; image/entrypoint/private admission/IAM/routing/client/ATS/provider/accountable
+gates remain. Owned fixture removed, shared volumes retained and Docker/WSL stopped. No frontend,
+SQL schema, deployment or activation; D1/D3 stay In progress and CI/CD stays deferred.

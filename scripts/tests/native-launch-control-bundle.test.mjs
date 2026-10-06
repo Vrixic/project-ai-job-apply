@@ -57,6 +57,62 @@ async function emitted(entry) {
   );
   return { inputs, bundle: module.exports };
 }
+test("emitted native material controls expose only bound original scalar work/completion", async () => {
+  const { inputs, bundle } = await emitted(
+    "backend/services/documents/dist/src/native-material-controls.js",
+  );
+  assert.deepEqual(
+    inputs.filter((name) => name.startsWith("backend/") || name.startsWith("packages/")).sort(),
+    [
+      "backend/services/documents/dist/src/native-material-controls.js",
+      "backend/services/documents/dist/src/native-task-allocation.js",
+      "backend/services/documents/dist/src/native-launch-control-contract.js",
+      "packages/domain/dist/temporary-material.js",
+    ].sort(),
+  );
+  for (const forbidden of [
+    "postgres",
+    "client-ecs",
+    "client-s3",
+    "client-kms",
+    "client-secrets-manager",
+    "ai-sdk",
+    "pdfjs",
+    "yazl",
+    "durable-execution",
+    "event-contracts",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected native material control capability: ${forbidden}`,
+    );
+  assert.ok(inputs.some((name) => name.includes("@aws-sdk/client-lambda")));
+  const ports = bundle.createNativeMaterialControls({
+    allocation: {
+      allocationId: recover.scope.allocationId,
+      ownerUserId: recover.scope.ownerUserId,
+      applicationId: recover.scope.applicationId,
+      generationId: recover.scope.generationId,
+      clusterArn: "arn:aws:ecs:us-east-2:123456789012:cluster/native",
+      taskArn: recover.taskArn,
+      taskDefinitionArn: "arn:aws:ecs:us-east-2:123456789012:task-definition/native:3",
+      containerName: "material",
+    },
+    original: { ...input.original },
+    consentExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    workFunctionArn: target,
+    completionFunctionArn: target.replace("private-native-launch", "private-original-completion"),
+  });
+  assert.deepEqual(Object.keys(ports), ["work", "completion"]);
+  assert.deepEqual(
+    await ports.work.claimProviderDispatch({
+      documentId: input.original.documentId,
+      requestSha256: input.original.requestSha256,
+      consentExpiresAt: new Date(),
+    }),
+    { kind: "unavailable" },
+  );
+});
 test("emitted native task event receiver carries only scalar Lambda recovery capability", async () => {
   const { inputs, bundle } = await emitted(
     "backend/workflows/dist/src/native-material-task-event-lambda.js",
