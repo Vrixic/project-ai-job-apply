@@ -9,6 +9,7 @@ import { validateTemporaryMaterialReference } from "./temporary-material-referen
 export type NativeOwnerRequest =
   | { action: "admit" }
   | { action: "bootstrap" }
+  | { action: "principal"; issuer: string }
   | { action: "evidence"; jobContextHash: string; confirmedFactsHash: string }
   | {
       action: "work";
@@ -107,6 +108,8 @@ export function validateNativeOwnerRequest(
   try {
     if (nativeOwnerClosed(value, ["action"]))
       return value.action === "admit" || value.action === "bootstrap";
+    if (nativeOwnerClosed(value, ["action", "issuer"]))
+      return value.action === "principal" && validNativePrincipalIssuer(value.issuer);
     if (nativeOwnerClosed(value, ["action", "jobContextHash", "confirmedFactsHash"]))
       return (
         value.action === "evidence" && hash(value.jobContextHash) && hash(value.confirmedFactsHash)
@@ -300,6 +303,8 @@ export function validateNativeOwnerRpcOutput(
     if (request.action === "admit")
       return nativeOwnerClosed(value.result, ["admitted"]) && value.result.admitted === true;
     if (request.action === "bootstrap") return validateNativeOwnerBootstrap(value.result, binding);
+    if (request.action === "principal")
+      return validateNativeOwnerPrincipal(value.result, request.issuer);
     if (request.action === "evidence") return validateNativeOwnerEvidence(value.result);
     if (request.action === "work") {
       const result = value.result;
@@ -345,6 +350,35 @@ export interface NativeOwnerBootstrap {
   noticeVersion: "openai-cover-letter.v1";
   approvedAt: string;
   expiresAt: string;
+}
+
+export function validNativePrincipalIssuer(value: unknown): value is string {
+  try {
+    if (typeof value !== "string" || value.length > 512) return false;
+    const issuer = new URL(value);
+    return (
+      issuer.protocol === "https:" &&
+      !issuer.username &&
+      !issuer.password &&
+      !issuer.search &&
+      !issuer.hash &&
+      issuer.href === value
+    );
+  } catch {
+    return false;
+  }
+}
+export function validateNativeOwnerPrincipal(
+  value: unknown,
+  issuer: string,
+): value is { issuer: string; subject: string } {
+  return (
+    nativeOwnerClosed(value, ["issuer", "subject"]) &&
+    value.issuer === issuer &&
+    validNativePrincipalIssuer(value.issuer) &&
+    typeof value.subject === "string" &&
+    /^[\x21-\x7e]{1,512}$/u.test(value.subject)
+  );
 }
 /** Approval comes from the owning persisted preparation, never from task launch overrides. */
 export function validateNativeOwnerBootstrap(

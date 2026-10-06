@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-principal": {
+      "types": "./dist/src/native-principal.d.ts",
+      "default": "./dist/src/native-principal.js"
+    },
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"

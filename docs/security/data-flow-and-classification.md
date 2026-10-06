@@ -810,3 +810,13 @@ Active identity/application and current bound/unsealed exact task gates differ f
 seal. Point-in-time metadata checks do not authenticate callers or prove task liveness/retirement.
 Private task transport/IAM and managed bootstrap remain gates; activation stays off.
 [Local evidence](../product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
+
+## Native image port checkpoint — 2026-10-06
+
+The image reads only exact-version provider/TLS secrets with ECS task credentials. Secret values,
+TLS private key and original principal stay in dedicated process memory; no environment secret,
+SQL/object/task-control authority, logs or candidate content forwarding is added. Profile's owning
+active-candidate projection refuses missing/ambiguous subjects and is surrounded by authenticated
+original work admission. Direct reads reverify managed OIDC and normal Gateway scalar authorization.
+The default image is disabled; managed release/IAM/TLS/routing/provider acceptance remains open.
+See [local evidence](../product/delivery/evidence/d3-native-image-runtime-2026-10-06.md).

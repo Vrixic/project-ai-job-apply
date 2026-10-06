@@ -701,6 +701,22 @@ describe.runIf(requested)(
       expect(resolve).not.toHaveBeenCalled();
       await remote.checkAdmission(binding);
       expect(resolve).toHaveBeenCalledOnce();
+      const principalIssuer = "https://native-principal.synthetic.invalid/";
+      await expect(remote.principal(principalIssuer)).rejects.toThrow("NativeOwnerRpcUnavailable");
+      const principalSubject = `synthetic-candidate-${request.ownerUserId}`;
+      await sql`INSERT INTO identity.external_identities (issuer,subject,user_id)
+        VALUES (${principalIssuer},${principalSubject},${request.ownerUserId})`;
+      expect(await remote.principal(principalIssuer)).toEqual({
+        issuer: principalIssuer,
+        subject: principalSubject,
+      });
+      await expect(remote.principal("https://other.synthetic.invalid/")).rejects.toThrow(
+        "NativeOwnerRpcUnavailable",
+      );
+      await sql`INSERT INTO identity.external_identities (issuer,subject,user_id)
+        VALUES (${principalIssuer},${`${principalSubject}-ambiguous`},${request.ownerUserId})`;
+      await expect(remote.principal(principalIssuer)).rejects.toThrow("NativeOwnerRpcUnavailable");
+      await sql`DELETE FROM identity.external_identities WHERE issuer=${principalIssuer} AND subject=${`${principalSubject}-ambiguous`}`;
       const bootstrap = await remote.bootstrap();
       expect(bootstrap).toMatchObject({
         id: request.original.documentId,

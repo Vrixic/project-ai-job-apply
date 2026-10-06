@@ -25,6 +25,7 @@ import {
   PostgresProfileStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
+import { readNativePrincipal } from "@ai-job-apply/profile-service/native-principal";
 import { createNativeOwnedCoverLetterEvidenceSource } from "./native-material-evidence.js";
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -127,6 +128,23 @@ export function createNativeOwnerRpcRuntime(
   const checkAdmission = registry.checkEvidenceAdmission.bind(registry);
   return Object.freeze({
     checkAdmission,
+    principal: async (binding: Parameters<typeof checkAdmission>[0], issuer: string) => {
+      const original = await readNativePreparationBootstrap(
+        applicationPool,
+        binding.scope,
+        enabled,
+      );
+      await controls.checkBootstrap(binding, original);
+      const principal = await readNativePrincipal(
+        profilePool.client,
+        binding.scope.ownerUserId,
+        issuer,
+        enabled,
+      );
+      await readNativePreparationBootstrap(applicationPool, binding.scope, enabled);
+      await controls.checkBootstrap(binding, original);
+      return principal;
+    },
     bootstrap: async (binding: Parameters<typeof checkAdmission>[0]) => {
       const identity = await readNativePreparationBootstrap(
         applicationPool,

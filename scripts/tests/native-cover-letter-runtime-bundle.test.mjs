@@ -6,6 +6,67 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+test("native image contains actual provider and pinned-secret clients without owner persistence or task authority", async () => {
+  const result = await build({
+    absWorkingDir: root,
+    entryPoints: ["backend/services/documents/dist/src/native-image-runtime.js"],
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "cjs",
+    write: false,
+    metafile: true,
+  });
+  const inputs = Object.values(result.metafile.outputs).flatMap((output) =>
+    Object.entries(output.inputs)
+      .filter(([, entry]) => entry.bytesInOutput > 0)
+      .map(([name]) => name.replaceAll("\\", "/")),
+  );
+  for (const forbidden of [
+    "postgres",
+    "client-s3",
+    "client-ecs",
+    "client-kms",
+    "backend/workflows",
+    "backend/services/profile",
+    "backend/services/applications",
+    "backend/services/jobs",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected image authority: ${forbidden}`,
+    );
+  for (const required of [
+    "client-secrets-manager",
+    "native-task-bootstrap.js",
+    "native-owner-rpc-client.js",
+    "openai.js",
+    "native-memory-transport.js",
+    "render/render.js",
+    "pdfjs-dist",
+  ])
+    assert.ok(
+      inputs.some((name) => name.includes(required)),
+      `Missing real image component: ${required}`,
+    );
+  const module = { exports: {} };
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    createRequire(path.join(root, "package.json")),
+  );
+  let effects = 0;
+  await assert.rejects(
+    module.exports.startNativeImage({
+      configuration: {},
+      loadKernel: () => {
+        effects++;
+      },
+    }),
+    /^Error: NativeImageConfigurationUnavailable$/u,
+  );
+  assert.equal(effects, 0);
+});
 test("native content composition emits real render/control/HTTPS without persistent or task authority", async () => {
   const result = await build({
     absWorkingDir: root,

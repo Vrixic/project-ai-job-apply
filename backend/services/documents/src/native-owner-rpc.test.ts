@@ -118,6 +118,10 @@ function fixture(defaultOff = false) {
   const owners = vi.fn(async () => ({
     checkAdmission,
     bootstrap,
+    principal: async (_binding: Readonly<NativeEvidenceBinding>, issuer: string) => ({
+      issuer,
+      subject: "synthetic-candidate",
+    }),
     evidence: () => ({ load }),
     work,
     completion,
@@ -190,6 +194,29 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe("authenticated original native owner RPC", () => {
+  it("authenticates principal projection and surrounds it with original admission checks", async () => {
+    const f = fixture();
+    await expect(f.client.principal("https://synthetic-issuer.invalid/")).resolves.toEqual({
+      issuer: "https://synthetic-issuer.invalid/",
+      subject: "synthetic-candidate",
+    });
+    expect(f.sent[0]?.request).toEqual({
+      action: "principal",
+      issuer: "https://synthetic-issuer.invalid/",
+    });
+    expect(f.checkAdmission).toHaveBeenCalledTimes(2);
+    expect(f.bootstrap).not.toHaveBeenCalled();
+    expect(f.load).not.toHaveBeenCalled();
+    expect(f.work).not.toHaveBeenCalled();
+  });
+  it.each(["http://issuer.invalid/", "https://issuer.invalid", "https://issuer.invalid/?x=1"])(
+    "refuses unsafe principal issuer before invocation %s",
+    async (issuer) => {
+      const f = fixture();
+      await expect(f.client.principal(issuer)).rejects.toThrow();
+      expect(f.send).not.toHaveBeenCalled();
+    },
+  );
   it("authenticates and loads the stored scalar approval before task Date conversion", async () => {
     const f = fixture();
     const result = await f.client.bootstrap();

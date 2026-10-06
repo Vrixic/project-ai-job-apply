@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "enabled": false,
+  "providerEnabled": false,
+  "deployment": {
+    "clusterArn": "arn:aws:ecs:us-east-2:123456789012:cluster/native-disabled",
+    "taskDefinitionArn": "arn:aws:ecs:us-east-2:123456789012:task-definition/native-disabled:1",
+    "containerName": "material"
+  },
+  "ownerFunctionArn": "arn:aws:lambda:us-east-2:123456789012:function:native-disabled:1",
+  "providerSecret": {
+    "arn": "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-disabled/provider-Abc123",
+    "versionId": "12345678-1234-1234-1234-123456789012"
+  },
+  "tlsSecret": {
+    "arn": "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-disabled/tls-Abc123",
+    "versionId": "12345678-1234-1234-1234-123456789012"
+  },
+  "apiOrigin": "https://api.synthetic.invalid",
+  "issuer": "https://issuer.synthetic.invalid/",
+  "audience": "ai-job-apply-api",
+  "origin": "https://app.synthetic.invalid",
+  "baseHost": "material.synthetic.invalid",
+  "port": 8443
+}

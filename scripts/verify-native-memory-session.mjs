@@ -70,7 +70,7 @@ try {
       "sh",
       args[2],
       "-c",
-      'node -e \'if(process.versions.node.split(".")[0] !== "24") process.exit(1)\' && gcc -std=c11 -O2 -Wall -Wextra -Werror -shared -fPIC -I/usr/local/include/node /input/kernel-deadline.c -o /native/kernel-deadline.node -lrt -lm && openssl req -x509 -newkey rsa:2048 -nodes -keyout /native/key.pem -out /native/cert.pem -days 1 -subj /CN=material.test.invalid -addext subjectAltName=DNS:material.test.invalid 2>/dev/null && cp /input/fixture.mjs /native/fixture.mjs && NODE_ENV=test node --test --test-concurrency=1 /input/native.test.mjs',
+      'node -e \'if(process.versions.node.split(".")[0] !== "24") process.exit(1)\' && gcc -std=c11 -O2 -Wall -Wextra -Werror -shared -fPIC -I/usr/local/include/node /input/kernel-deadline.c -o /native/kernel-deadline.node -lrt -lm && openssl req -x509 -newkey rsa:2048 -nodes -keyout /native/key.pem -out /native/cert.pem -days 1 -subj /CN=material.test.invalid -addext subjectAltName=DNS:material.test.invalid,DNS:*.material.test.invalid 2>/dev/null && cp /input/fixture.mjs /native/fixture.mjs && NODE_ENV=test node --test --test-concurrency=1 /input/native.test.mjs',
     ],
     { cwd: root, stdio: "inherit", timeout: 120_000 },
   );

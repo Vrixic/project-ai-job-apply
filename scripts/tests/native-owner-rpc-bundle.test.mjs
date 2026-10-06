@@ -99,7 +99,11 @@ test("emitted task RPC carries only fixed signing/Lambda and strict metadata", a
       `Missing actual signing/RPC source: ${name}`,
     );
   const client = exports.createNativeOwnerRpcClient({ binding, targetArn: target });
-  assert.deepEqual(Object.keys(client), ["run", "bootstrap", "checkAdmission"]);
+  assert.deepEqual(Object.keys(client), ["run", "principal", "bootstrap", "checkAdmission"]);
+  await assert.rejects(
+    client.principal("https://synthetic.invalid/"),
+    /^Error: NativeOwnerRpcUnavailable$/u,
+  );
   await assert.rejects(client.bootstrap(), /^Error: NativeOwnerRpcUnavailable$/u);
   await assert.rejects(client.checkAdmission(binding), /^Error: NativeOwnerRpcUnavailable$/u);
 });

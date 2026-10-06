@@ -30,6 +30,7 @@ for (const mode of [
   "runtime-bootstrap",
   "runtime-bootstrap-delayed",
   "runtime-bootstrap-revoked",
+  "runtime-image",
 ]) {
   test(`kernel retires the actual ${mode} content process`, { timeout: 10_000 }, async () => {
     const started = performance.now();
@@ -86,6 +87,7 @@ for (const mode of [
           "runtime-terminate",
           "runtime-bootstrap",
           "runtime-bootstrap-delayed",
+          "runtime-image",
         ].includes(mode)
       ) {
         const value = JSON.parse(output.trim());
@@ -114,6 +116,8 @@ for (const mode of [
 }
 
 for (const mode of [
+  "runtime-image-secret-refused",
+  "runtime-image-tls-refused",
   "runtime-bootstrap-expired",
   "runtime-bootstrap-admission-refused",
   "runtime-bootstrap-ports-revoked",
@@ -141,13 +145,21 @@ for (const mode of [
       const startup =
         'Warning: Cannot load "@napi-rs/canvas" package: "Error: Cannot find module \'@napi-rs/canvas\'\nRequire stack:\n- /native/fixture.mjs".\nWarning: Cannot polyfill `Path2D`, rendering may be broken.\n';
       assert.equal(diagnostics.replace(startup, ""), "");
-      assert.deepEqual(JSON.parse(output.trim()), {
-        bootstrapRefused: true,
-        providerCalls: 0,
-        controlInvocations: 0,
-        metadataReads: 2,
-        portLoads: mode === "runtime-bootstrap-ports-revoked" ? 1 : 0,
-      });
+      if (mode.startsWith("runtime-image")) {
+        assert.deepEqual(JSON.parse(output.trim()), {
+          imageRefused: true,
+          secretReads: 2,
+          providerCalls: 0,
+          controlInvocations: 0,
+        });
+      } else
+        assert.deepEqual(JSON.parse(output.trim()), {
+          bootstrapRefused: true,
+          providerCalls: 0,
+          controlInvocations: 0,
+          metadataReads: 2,
+          portLoads: mode === "runtime-bootstrap-ports-revoked" ? 1 : 0,
+        });
     } finally {
       clearTimeout(fallback);
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");

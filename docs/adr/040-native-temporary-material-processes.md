@@ -3,6 +3,11 @@
 Status: Proposed; default-off source and local kernel evidence only
 Date: 2026-10-05
 
+2026-10-06 executable image checkpoint: dedicated Node/kernel entrypoint and actual pinned-secret,
+provider/TLS/read-authorization ports now exist locally. Profile owns the authenticated original
+principal projection. Managed publication, IAM/routing/provider/client/accountable approval stay open;
+this ADR remains Proposed. [Evidence](../product/delivery/evidence/d3-native-image-runtime-2026-10-06.md).
+
 2026-10-06 startup source checkpoint: the private task factory binds ECS self metadata to original
 launch scalars, waits only for the original owning bind, reads stored approval over signed RPC
 and starts the kernel/content runtime after trusted ports/admission. Local Linux scenarios cover

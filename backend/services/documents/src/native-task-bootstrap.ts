@@ -15,7 +15,10 @@ type Options = {
   environment?: () => Readonly<Record<string, string | undefined>>;
   enabled?: () => boolean;
   /** Image-owned provider/TLS/kernel configuration; never supplied by candidate requests. */
-  loadPorts(): Promise<Ports>;
+  loadPorts(context: {
+    binding: Parameters<typeof createNativeOwnerRpcClient>[0]["binding"];
+    identity: NativeCoverLetterRuntimeOptions["identity"];
+  }): Promise<Ports>;
   testFetch?: typeof fetch;
   testClient?: Parameters<typeof createNativeOwnerRpcClient>[0]["testClient"];
   testCredentials?: Parameters<typeof createNativeOwnerRpcClient>[0]["testCredentials"];
@@ -84,7 +87,7 @@ export async function startNativeMaterialTask(options: Options) {
     if (!enabled() || Date.now() >= deadline) throw unavailable();
     const identity = await rpc.bootstrap();
     if (!enabled()) throw unavailable();
-    const ports = await loadPorts();
+    const ports = await loadPorts({ binding, identity: structuredClone(identity) });
     const provider = ports.provider;
     const loadKernel = ports.loadKernel;
     const transport = {

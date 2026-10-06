@@ -1,0 +1,45 @@
+# Native material image
+
+Local implementation only; deployment, task IAM, endpoint routing, provider acceptance and
+accountable release approval remain open. ADR-040 stays Proposed. This image runs one original
+cover-letter generation and authenticated direct reads; it is not a shared worker or Lambda.
+
+`Dockerfile.native-material` builds Linux/AMD64 Node 24, the actual Linux Node-API deadline,
+Documents' isolated runtime and its real provider/Secrets Manager clients. It includes the Linux
+canvas native dependency needed by PDF verification. No owning SQL, S3, ECS or KMS client enters
+the emitted runtime. The entrypoint/user/working directory match the existing launcher contract.
+Use the reviewed task definition's read-only filesystem, dropped capabilities, zero core limit,
+no log driver/sidecar/mounts and bounded memory/process limits. Local tests do not approve task IAM.
+
+The default build embeds `configuration.disabled.json`, containing synthetic identifiers and both
+activation switches off. An enabled release needs a separately reviewed configuration file under
+`backend/`, passed as `NATIVE_CONFIGURATION` during its build. The strict closed configuration has
+only deployment/function identifiers, two distinct secret ARNs with exact version IDs, trusted
+origins/issuer/audience/base hostname and port 8443. No subject, provider key, private certificate,
+database URL or candidate artifact belongs in it. Do not commit real secret values or candidate data.
+
+The process derives its original binding from ECS metadata, authenticates stored approval and
+admission, obtains the exact owner's unambiguous issuer/subject from Profile via signed owner RPC,
+then reads both pinned secret versions using ECS task credentials. It rejects mismatched secret
+ARN/version, binary replies, incorrect certificate/key/host/expiry and workstation credentials.
+The provider is the existing foreground OpenAI client with store/background/stream disabled.
+The TLS secret is JSON with exactly `key` and `cert` PEM strings; the certificate must cover
+`<allocation UUID>.<baseHost>` and remain valid through the bounded material lifetime. Routing/DNS
+and real TLS/provider/IAM acceptance are managed release requirements, not implemented by this image.
+
+`main.mjs` verifies image-owned bundle/configuration/kernel hashes, loads the kernel only after
+original admission, and binds HTTPS to 0.0.0.0:8443. It accepts no extra command arguments or runtime
+secret/configuration override. Startup diagnostics are fixed and contain no secret/candidate values.
+The manifest records the supplied source SHA; release tooling must independently ensure a clean
+matching source checkout and approved image digest. The manifest alone is not a signature, task
+attestation, remote work settlement or process-death receipt. Local feature builds are unpublished.
+
+Build from a clean source tree with the exact Git SHA:
+
+```powershell
+docker build --platform linux/amd64 --file Dockerfile.native-material --build-arg SOURCE_SHA=<40-character-SHA> --tag ai-job-apply-native-material-local:<SHA> .
+```
+
+For generated-only local positive proof, the maintained native Linux verifier connects these actual
+ports to synthetic AWS/provider/identity responses, real rendering/HTTPS and actual kernel retirement.
+Production rejects those test seams. No real account or model request is used by that test.

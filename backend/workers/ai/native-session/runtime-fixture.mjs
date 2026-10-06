@@ -9,6 +9,7 @@ import { compileComponentValidator } from "../../../../packages/api-contracts/sr
 import { createTestTokenIssuer } from "../../../../packages/auth/src/testing.ts";
 import { createCoverLetterProviderControlHandler } from "../../../services/documents/src/cover-letter-provider-control-handler.ts";
 import { createNativeCoverLetterRuntime } from "../../../services/documents/src/native-cover-letter-runtime.ts";
+import { startNativeImage } from "../../../services/documents/src/native-image-runtime.ts";
 import { nativeOwnerJson } from "../../../services/documents/src/native-owner-rpc-contract.ts";
 import { createNativeOwnerRpcHandler } from "../../../services/documents/src/native-owner-rpc-handler.ts";
 import { createNativeReadAuthorizationClient } from "../../../services/documents/src/native-read-authorization-client.ts";
@@ -77,7 +78,8 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
   let providerCalls = 0,
     controlInvocations = 0,
     admissions = 0;
-  const bootstrapMode = mode.startsWith("runtime-bootstrap");
+  const imageMode = mode.startsWith("runtime-image");
+  const bootstrapMode = mode.startsWith("runtime-bootstrap") || imageMode;
   const workTarget = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-original-work:9";
   const completionTarget = bootstrapMode
     ? workTarget
@@ -227,6 +229,10 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
         approvedAt: identity.approvedAt.toISOString(),
         expiresAt: identity.expiresAt.toISOString(),
       }),
+      principal: async (_binding, requestedIssuer) => ({
+        issuer: requestedIssuer,
+        subject: "synthetic-candidate",
+      }),
       evidence: () => ({ load: async () => ({ facts: structuredClone(facts), job: { ...job } }) }),
       work: async (input, context) => {
         controlInvocations++;
@@ -327,17 +333,135 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
     );
     return;
   }
-  const runtime = bootstrapMode
-    ? await startNativeMaterialTask(bootstrapOptions)
-    : await createNativeCoverLetterRuntime(options);
+  const imageHost = `${ids[5]}.material.test.invalid`;
+  const secretReference = (name) => ({
+    arn: `arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic/${name}-Abc123`,
+    versionId: "12345678-1234-1234-1234-123456789012",
+  });
+  const imageConfiguration = {
+    schemaVersion: 1,
+    enabled: true,
+    providerEnabled: true,
+    deployment: {
+      clusterArn: allocation.clusterArn,
+      taskDefinitionArn: allocation.taskDefinitionArn,
+      containerName: allocation.containerName,
+    },
+    ownerFunctionArn: workTarget,
+    providerSecret: secretReference("provider"),
+    tlsSecret: secretReference("tls"),
+    apiOrigin: "https://api.test.invalid",
+    issuer: options.transport.identity.issuer,
+    audience: options.transport.identity.audience,
+    origin: options.transport.origin,
+    baseHost: "material.test.invalid",
+    port: 8443,
+  };
+  let secretReads = 0;
+  const imageOptions = {
+    configuration: imageConfiguration,
+    loadKernel: options.loadKernel,
+    maximumLifetimeMs: options.maximumLifetimeMs,
+    testCredentials: bootstrapOptions.testCredentials,
+    testMetadataFetch: bootstrapOptions.testFetch,
+    testRpcClient: bootstrapOptions.testClient,
+    testSecretClient: {
+      send: async (command) => {
+        secretReads++;
+        assert.equal(command.input.VersionId, imageConfiguration.providerSecret.versionId);
+        assert.equal(providerCalls, 0);
+        const tls = command.input.SecretId === imageConfiguration.tlsSecret.arn;
+        return {
+          $metadata: {},
+          ARN: command.input.SecretId,
+          VersionId:
+            mode === "runtime-image-secret-refused" ? "f".repeat(32) : command.input.VersionId,
+          SecretString: tls
+            ? JSON.stringify({
+                key: readFileSync("/native/key.pem", "utf8"),
+                cert: certificate.toString(),
+              })
+            : "synthetic-provider-key-never-real",
+        };
+      },
+    },
+    testModelFetch: async (url, init) => {
+      providerCalls++;
+      assert.equal(String(url), "https://api.openai.com/v1/responses");
+      assert.equal(init.method, "POST");
+      const request = JSON.parse(init.body);
+      assert.equal(request.store, false);
+      assert.equal(request.background, false);
+      assert.equal(request.stream, false);
+      assert.equal(request.model, "gpt-6-luna");
+      return new Response(
+        JSON.stringify({
+          status: "completed",
+          output: [
+            {
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({
+                    paragraphs: [{ text: "I have experience with TypeScript.", factIds: [ids[3]] }],
+                  }),
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    },
+    testAuthorizationFetch: async (url, init) => {
+      const claims = await issuer.verifier.verify(
+        init.headers.authorization.replace(/^Bearer /u, ""),
+      );
+      assert.equal(claims.subject, "synthetic-candidate");
+      assert.equal(
+        String(url),
+        `https://api.test.invalid/v1/applications/${ids[1]}/cover-letter/authorization?generationId=${ids[2]}`,
+      );
+      const { ownerUserId: _owner, applicationId: _app, ...metadata } = reference;
+      return new Response(
+        JSON.stringify({
+          schemaVersion: 1,
+          packetId: ids[4],
+          packetHash: "b".repeat(64),
+          temporaryMaterial: metadata,
+        }),
+        { headers: { "content-type": "application/json", "cache-control": "no-store" } },
+      );
+    },
+    testVerifier: issuer.verifier,
+  };
+  if (mode === "runtime-image-tls-refused") imageConfiguration.baseHost = "wrong.test.invalid";
+  if (imageMode) Object.assign(process.env, bootstrapOptions.environment());
+  if (["runtime-image-secret-refused", "runtime-image-tls-refused"].includes(mode)) {
+    await assert.rejects(startNativeImage(imageOptions), /NativeImageConfigurationUnavailable/u);
+    assert.equal(secretReads, 2);
+    assert.equal(providerCalls, 0);
+    assert.equal(controlInvocations, 0);
+    process.stdout.write(
+      `${JSON.stringify({ imageRefused: true, secretReads, providerCalls, controlInvocations })}\n`,
+    );
+    return;
+  }
+  const runtime = imageMode
+    ? await startNativeImage(imageOptions)
+    : bootstrapMode
+      ? await startNativeMaterialTask(bootstrapOptions)
+      : await createNativeCoverLetterRuntime(options);
   if (bootstrapMode) {
     assert.equal(metadataReads, 2);
-    assert.equal(portLoads, 1);
+    assert.equal(portLoads, imageMode ? 0 : 1);
     await assert.rejects(
       startNativeMaterialTask(bootstrapOptions),
       /NativeTaskBootstrapUnavailable/u,
     );
-    assert.equal(portLoads, 1);
+    assert.equal(portLoads, imageMode ? 0 : 1);
   }
   reference = runtime.reference;
   assert.equal(providerCalls, 1);
@@ -359,11 +483,11 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
           hostname: "127.0.0.1",
           port: runtime.server.address().port,
           path: `/v1/applications/${ids[1]}/cover-letter${suffix}`,
-          servername: "material.test.invalid",
+          servername: imageMode ? imageHost : "material.test.invalid",
           ca: certificate,
           minVersion: "TLSv1.3",
           headers: {
-            host: "material.test.invalid",
+            host: imageMode ? `${imageHost}:8443` : "material.test.invalid",
             authorization: `Bearer ${token}`,
             origin: "https://candidate.test.invalid",
           },

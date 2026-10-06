@@ -9,6 +9,7 @@ import {
   nativeOwnerRequestDigest,
   nativeOwnerRpcUnavailable,
   validateNativeOwnerBootstrap,
+  validateNativeOwnerPrincipal,
   validateNativeOwnerRpcOutput,
 } from "./native-owner-rpc-contract.js";
 import { createNativeTaskCallerClient } from "./native-task-caller-client.js";
@@ -141,6 +142,11 @@ export function createNativeOwnerRpcClient(options: {
   }
   return Object.freeze({
     run,
+    async principal(issuer: string) {
+      const result = await run({ action: "principal", issuer });
+      if (!validateNativeOwnerPrincipal(result, issuer)) throw nativeOwnerRpcUnavailable();
+      return { ...result };
+    },
     async bootstrap() {
       const result = await run({ action: "bootstrap" });
       if (!validateNativeOwnerBootstrap(result, binding)) throw nativeOwnerRpcUnavailable();

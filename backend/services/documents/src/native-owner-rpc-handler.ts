@@ -18,6 +18,10 @@ import type { createTemporaryMaterialCompletionHandler } from "./temporary-mater
 export interface NativeOwnerRpcOwners {
   checkAdmission(binding: Readonly<NativeEvidenceBinding>): Promise<void>;
   bootstrap?(binding: Readonly<NativeEvidenceBinding>): Promise<NativeOwnerBootstrap>;
+  principal?(
+    binding: Readonly<NativeEvidenceBinding>,
+    issuer: string,
+  ): Promise<{ issuer: string; subject: string }>;
   evidence(
     binding: Readonly<NativeEvidenceBinding>,
     context: { jobContextHash: string; confirmedFactsHash: string },
@@ -99,6 +103,9 @@ export function createNativeOwnerRpcHandler(options: {
       else if (request.action === "bootstrap") {
         if (!owner.bootstrap) return unavailable;
         result = await owner.bootstrap(binding);
+      } else if (request.action === "principal") {
+        if (!owner.principal) return unavailable;
+        result = await owner.principal(binding, request.issuer);
       } else if (request.action === "evidence")
         result = await owner
           .evidence(binding, {
