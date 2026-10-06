@@ -158,6 +158,11 @@ describe.skipIf(!requested)(
       const [clock] = await sql<
         Array<{ at: string }>
       >`SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS at`;
+      // The synthetic stopped timestamp is from PostgreSQL, while the real observer uses the
+      // host clock. Wait for the host to reach it; do not fake clocks or relax future-time checks.
+      for (let attempt = 0; Date.now() < Number(clock?.at) && attempt < 20; attempt++)
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      if (Date.now() < Number(clock?.at)) throw Error("SyntheticStoppedClockUnavailable");
       const send = vi.fn(async () => ({
         tasks: [
           {
@@ -645,7 +650,11 @@ describe.skipIf(!requested)(
       securityGroups: ["sg-12345678901234567"],
       assignPublicIp: "ENABLED" as const,
     };
-    function awsLaunchReply(command: unknown, original: NativeMaterialIntent) {
+    function awsLaunchReply(
+      command: unknown,
+      original: NativeMaterialIntent,
+      launchOriginal: { id: string; requestSha256: string },
+    ) {
       if (command instanceof DescribeTaskDefinitionCommand)
         return {
           taskDefinition: {
@@ -687,6 +696,22 @@ describe.skipIf(!requested)(
             enableExecuteCommand: false,
             lastStatus: "PENDING",
             containers: [{ name: deployment.containerName, taskArn: actual.taskArn }],
+            overrides: {
+              containerOverrides: [
+                {
+                  name: deployment.containerName,
+                  environment: [
+                    { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: original.allocationId },
+                    { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: original.ownerUserId },
+                    { name: "NATIVE_MATERIAL_APPLICATION_ID", value: original.applicationId },
+                    { name: "NATIVE_MATERIAL_GENERATION_ID", value: original.generationId },
+                    { name: "NATIVE_MATERIAL_EPOCH_ID", value: original.epochId },
+                    { name: "NATIVE_MATERIAL_WORK_ID", value: launchOriginal.id },
+                    { name: "NATIVE_MATERIAL_REQUEST_SHA256", value: launchOriginal.requestSha256 },
+                  ],
+                },
+              ],
+            },
           },
         ],
         failures: [],
@@ -715,7 +740,7 @@ describe.skipIf(!requested)(
             await tx`SELECT id FROM documents.cover_letter_work_authorizations WHERE id=${f.grant.id} FOR UPDATE NOWAIT`;
           });
         }
-        return awsLaunchReply(command, original);
+        return awsLaunchReply(command, original, f.original);
       });
       try {
         const attempts = await Promise.allSettled([
@@ -741,7 +766,7 @@ describe.skipIf(!requested)(
       const original = await registry.admit(f.input);
       const send = vi.spyOn(ECSClient.prototype, "send").mockImplementation(async (command) => {
         if (command instanceof RunTaskCommand) throw Error("SyntheticLostLaunchAck");
-        return awsLaunchReply(command, original);
+        return awsLaunchReply(command, original, f.original);
       });
       try {
         await expect(launcher().launch(launchScope(original))).rejects.toThrow(
@@ -782,7 +807,7 @@ describe.skipIf(!requested)(
             resolve = r;
           });
         }
-        return awsLaunchReply(command, original);
+        return awsLaunchReply(command, original, f.original);
       });
       try {
         const pending = launcher().launch(launchScope(original));
@@ -792,12 +817,50 @@ describe.skipIf(!requested)(
           await registry.confirmApplicationDisposed(f.owner, f.application, seal.epochId),
         ).toBe(false);
         if (!resolve) throw Error("SyntheticLaunchNotHeld");
-        resolve(awsLaunchReply(undefined, original));
+        resolve(awsLaunchReply(undefined, original, f.original));
         await expect(pending).resolves.toEqual(allocation(original));
         await expect(work.claim(f.original)).rejects.toThrow("CoverLetterWorkUnavailable");
         expect(
           await registry.confirmApplicationDisposed(f.owner, f.application, seal.epochId),
         ).toBe(false);
+        expect(send.mock.calls.filter(([c]) => c instanceof RunTaskCommand)).toHaveLength(1);
+      } finally {
+        send.mockRestore();
+      }
+    });
+
+    it("refuses a same-allocation task carrying another work grant without binding or settlement", async () => {
+      const f = await fixture();
+      const original = await registry.admit(f.input);
+      const send = vi.spyOn(ECSClient.prototype, "send").mockImplementation(async (command) => {
+        if (command instanceof RunTaskCommand) throw Error("SyntheticLostAck");
+        const reply = awsLaunchReply(command, original, f.original);
+        if (command instanceof DescribeTasksCommand && "tasks" in reply) {
+          const task = reply.tasks[0];
+          const override = task?.overrides.containerOverrides[0];
+          const grant = override?.environment.find(
+            (entry) => entry.name === "NATIVE_MATERIAL_WORK_ID",
+          );
+          if (!grant) throw Error("MissingSyntheticOverride");
+          grant.value = uuidv7();
+        }
+        return reply;
+      });
+      try {
+        await expect(launcher().launch(launchScope(original))).rejects.toThrow(
+          "NativeTaskLaunchUnavailable",
+        );
+        const before =
+          await sql`SELECT * FROM documents.native_material_allocations WHERE id=${original.allocationId}`;
+        await expect(
+          launcher().recover(launchScope(original), allocation(original).taskArn),
+        ).rejects.toThrow("NativeTaskLaunchUnavailable");
+        expect(
+          await sql`SELECT * FROM documents.native_material_allocations WHERE id=${original.allocationId}`,
+        ).toEqual(before);
+        const [grant] =
+          await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id=${f.grant.id}`;
+        expect(grant?.state).toBe("issued");
         expect(send.mock.calls.filter(([c]) => c instanceof RunTaskCommand)).toHaveLength(1);
       } finally {
         send.mockRestore();

@@ -229,14 +229,65 @@ function taskDefinition(value: unknown, config: NativeTaskLaunchConfiguration) {
   )
     throw unavailable();
 }
+function originalEnvironment(
+  fixed: NativeMaterialLaunchScope,
+  original: NativeMaterialLaunchRecord["original"],
+) {
+  return [
+    { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: fixed.allocationId },
+    { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: fixed.ownerUserId },
+    { name: "NATIVE_MATERIAL_APPLICATION_ID", value: fixed.applicationId },
+    { name: "NATIVE_MATERIAL_GENERATION_ID", value: fixed.generationId },
+    { name: "NATIVE_MATERIAL_EPOCH_ID", value: fixed.epochId },
+    { name: "NATIVE_MATERIAL_WORK_ID", value: original.id },
+    { name: "NATIVE_MATERIAL_REQUEST_SHA256", value: original.requestSha256 },
+  ];
+}
 function actualTask(
   value: unknown,
   fixed: NativeMaterialLaunchScope,
   config: NativeTaskLaunchConfiguration,
+  original: NativeMaterialLaunchRecord["original"],
   expectedTaskArn?: string,
 ): NativeTaskAllocation {
   const r = value as { tasks?: Task[]; failures?: unknown[] } | null;
   const t = r?.tasks?.[0];
+  const overrides = t?.overrides;
+  const container = overrides?.containerOverrides?.[0];
+  const expected = originalEnvironment(fixed, original);
+  const environment = container?.environment;
+  if (
+    !overrides ||
+    !Array.isArray(overrides.containerOverrides) ||
+    overrides.containerOverrides.length !== 1 ||
+    !container ||
+    container.name !== config.containerName ||
+    !Array.isArray(environment) ||
+    environment.length !== expected.length ||
+    new Set(environment.map((entry) => entry?.name)).size !== expected.length ||
+    !environment.every(
+      (entry) =>
+        entry &&
+        typeof entry.name === "string" &&
+        typeof entry.value === "string" &&
+        Object.keys(entry).every((key) => key === "name" || key === "value") &&
+        expected.some((wanted) => wanted.name === entry.name && wanted.value === entry.value),
+    ) ||
+    (container.command?.length ?? 0) !== 0 ||
+    (container.environmentFiles?.length ?? 0) !== 0 ||
+    (container.resourceRequirements?.length ?? 0) !== 0 ||
+    (container.cpu !== undefined && container.cpu !== 0) ||
+    (container.memory !== undefined && container.memory !== 0) ||
+    (container.memoryReservation !== undefined && container.memoryReservation !== 0) ||
+    (overrides.cpu !== undefined && overrides.cpu !== config.cpu) ||
+    (overrides.memory !== undefined && overrides.memory !== config.memory) ||
+    (overrides.taskRoleArn !== undefined && overrides.taskRoleArn !== config.taskRoleArn) ||
+    (overrides.executionRoleArn !== undefined &&
+      overrides.executionRoleArn !== config.executionRoleArn) ||
+    (overrides.inferenceAcceleratorOverrides?.length ?? 0) !== 0 ||
+    overrides.ephemeralStorage !== undefined
+  )
+    throw unavailable();
   if (
     !r ||
     !Array.isArray(r.tasks) ||
@@ -416,18 +467,7 @@ export function createNativeTaskLaunch(options: {
               containerOverrides: [
                 {
                   name: config.containerName,
-                  environment: [
-                    { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: fixed.allocationId },
-                    { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: fixed.ownerUserId },
-                    { name: "NATIVE_MATERIAL_APPLICATION_ID", value: fixed.applicationId },
-                    { name: "NATIVE_MATERIAL_GENERATION_ID", value: fixed.generationId },
-                    { name: "NATIVE_MATERIAL_EPOCH_ID", value: fixed.epochId },
-                    { name: "NATIVE_MATERIAL_WORK_ID", value: record.original.id },
-                    {
-                      name: "NATIVE_MATERIAL_REQUEST_SHA256",
-                      value: record.original.requestSha256,
-                    },
-                  ],
+                  environment: originalEnvironment(fixed, record.original),
                 },
               ],
             },
@@ -435,7 +475,7 @@ export function createNativeTaskLaunch(options: {
         );
         // An actually fulfilled late launch must be captured even after timeout/withdrawal.
         // The owning registry keeps capture authority independent of new-launch activation.
-        const allocation = actualTask(response, fixed, config);
+        const allocation = actualTask(response, fixed, config, record.original);
         const bound = await registry.bindTask(allocation);
         if (!bound.allocation || bound.allocation.taskArn !== allocation.taskArn)
           throw unavailable();
@@ -451,7 +491,7 @@ export function createNativeTaskLaunch(options: {
         new DescribeTasksCommand({ cluster: config.clusterArn, tasks: [taskArn as string] }),
       );
       permitted();
-      const allocation = actualTask(response, fixed, config, taskArn);
+      const allocation = actualTask(response, fixed, config, record.original, taskArn);
       const bound = await registry.bindTask(allocation);
       if (!bound.allocation || bound.allocation.taskArn !== allocation.taskArn) throw unavailable();
       permitted();

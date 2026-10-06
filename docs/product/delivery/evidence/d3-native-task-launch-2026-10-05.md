@@ -52,17 +52,17 @@ owned loopback tmpfs fixtures; synthetic identities/grants/descriptors only. ECS
 simulated (actual production SDK classes/commands in the connected cases), not live AWS or managed
 authentication/provider/browser/ATS acceptance.
 
-- 42 launcher tests and 60 existing retirement/disposal tests pass (102 total). They cover explicit
+- 50 launcher tests and 60 existing retirement/disposal tests pass (110 total). They cover explicit
   default-off/refusal, immutable configuration and non-evaluated accessors, exact task envelope,
   positive original recovery, independent launch shutdown, lost claim/launch/bind ACKs, 48-hour
-  replay, late capture and pending-call admission. Log: `.tmp/d3-native-launch-unit.log`.
-- All 39 real Gateway/registry PostgreSQL cases pass: 19 original plus 20 launch cases. Eight
+  replay, late capture and pending-call admission. Log: `.tmp/d3-native-launch-unit-final.log`.
+- All 40 real Gateway/registry PostgreSQL cases pass: 19 original plus 21 launch cases. Eight
   competing owning claims grant one attempt. Concurrent factory calls issue one RunTask; independent
   `FOR UPDATE NOWAIT` queries acquire Applications/admission/allocation/grant locks inside the AWS
   hook, proving committed claim and no SQL lock across AWS. Exact scope/config immutability,
   sealing, quarantine, terminal application, expired/revoked original grant, late capture and
   positive recovery pass. Existing export/deletion/retirement assertions remain intact. Log:
-  `.tmp/d3-native-launch-sql-final.log`.
+  `.tmp/d3-native-launch-override-sql-final.log`.
 - All 136 existing Documents work-ledger SQL cases pass with migration 0012, preserving provider
   and writer settlement/fencing semantics. Log: `.tmp/d3-native-launch-work-sql.log`.
 - Actual PostgreSQL logical dump/restore passes 65 migrations, 11 schemas and exact equality of all
@@ -78,13 +78,13 @@ authentication/provider/browser/ATS acceptance.
   `.tmp/d3-native-launch-deletion-restore.log`.
 - Four actual emitted bundle isolation/default-off checks pass; the new launcher emits only its
   Documents control owner plus pure allocation validation and ECS, without SQL, model, renderer,
-  objects, Lambda Invoke or secret-manager capability. Log: `.tmp/d3-native-launch-bundle.log`.
+  objects, Lambda Invoke or secret-manager capability. Log: `.tmp/d3-native-launch-bundle-final.log`.
 
 The first connected run exposes two synthetic observer clock races and a terminal fixture missing
 its required Applications revision increment. Existing retirement cases pass independently. The
 fixture now waits for the real DB clock to reach a positive synthetic observer timestamp before
 persisting; production future-receipt refusal is unchanged. Terminal fixture advances its revision.
-The final full 39-case run passes without removing assertions or relaxing runtime guards.
+The final full 40-case run passes without removing assertions or relaxing runtime guards.
 
 Owned SQL fixture `733fb2f5197e03722bb02dea39e21c925f3b82537bbca1fa2c8554a36fa029fd` is removed
 after exact ID/name/label/image/tmpfs/no-bind-or-named-mount checks. The recovery harness removes
@@ -99,3 +99,26 @@ client/ATS disposal remain unfinished. Unknown launch requires positive exact ev
 silently become absent. D3-012 and all provider/retention/accountable/deployed acceptance remain.
 ADR-040 stays Proposed. No frontend changes, live cloud/provider call, publication, deployment,
 activation, merge or phase completion. CI/CD remains owner-deferred until production launch.
+
+## Recovery binding correction and full-verifier retry
+
+The first full verifier on clean `0a487eec` stopped at the D2 runtime migration allowlist,
+which did not yet recognize Documents 0012. Its exact allowlist and historical fixtures now
+include the current boundary; unknown, missing and duplicate migrations still refuse.
+All 264 focused runtime guard assertions pass. The current migration operator success marker
+also advances to 0012, preserving the historical 0005 contract. Its operator/baseline
+and schema-7/schema-8 adversarial checks pass (`.tmp/d3-native-launch-migration-operator.log`).
+
+A separate emitted-source probe reproduced accepting a task with a foreign original owner override.
+Recovery and fulfilled launch capture now require all seven exact original environment values,
+no command/environment-file override, and matching roles and resource limits. Eight new unit
+refusal cases and one real SQL wrong-work-grant case pass; the refused allocation stays pending
+and its provider grant remains issued. The final synthetic observer waits for the actual host and
+DB clocks on both sides of observation; production future-time guards are unchanged.
+
+Final logs: `.tmp/d3-native-launch-unit-final.log` (110),
+`.tmp/d3-native-launch-override-sql-final.log` (40),
+`.tmp/d3-native-launch-d2-runtime-guard.log` (264).
+Second owned tmpfs fixture `106726d6fe03039a4581e2d3c607d5cfa4fd67dc1aebc8c8e59b7cb07a323599`
+is removed after exact identity/image/label/mount checks. Shared volume inventories match;
+Docker Desktop and WSL are stopped. Full verification of the corrected clean commit remains pending.

@@ -716,3 +716,8 @@ retirement. Positive exact-task recovery can drain sealed/quarantined scope inde
 launch activation; provider work stays unresolved. Managed image/native deadline, authenticated
 issuer/private adapters, task-state routing, reviewed IAM/TLS and actual runtime conformance remain
 unproved. No deployment or activation. See [source evidence](../product/delivery/evidence/d3-native-task-launch-2026-10-05.md).
+
+Positive native task capture also binds the observed task environment to all seven original
+allocation/owner/application/generation/epoch/work/hash values. Extra/missing values and command,
+role or resource retargeting refuse capture; refusal leaves pending launch and provider settlement
+independent. This is local source evidence with simulated ECS, not deployed authentication.

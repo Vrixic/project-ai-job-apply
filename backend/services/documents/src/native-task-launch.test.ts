@@ -83,6 +83,22 @@ function task() {
         enableExecuteCommand: false,
         lastStatus: "PENDING",
         containers: [{ name: configuration.containerName, taskArn }],
+        overrides: {
+          containerOverrides: [
+            {
+              name: configuration.containerName,
+              environment: [
+                { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: scope.allocationId },
+                { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: scope.ownerUserId },
+                { name: "NATIVE_MATERIAL_APPLICATION_ID", value: scope.applicationId },
+                { name: "NATIVE_MATERIAL_GENERATION_ID", value: scope.generationId },
+                { name: "NATIVE_MATERIAL_EPOCH_ID", value: scope.epochId },
+                { name: "NATIVE_MATERIAL_WORK_ID", value: id("6") },
+                { name: "NATIVE_MATERIAL_REQUEST_SHA256", value: "b".repeat(64) },
+              ],
+            },
+          ],
+        },
       },
     ],
     failures: [],
@@ -299,6 +315,42 @@ describe("private one-attempt native ECS launch", () => {
     expect(f.send.mock.calls.filter(([c]) => c instanceof RunTaskCommand)).toHaveLength(0);
     expect(f.record.intent.state).toBe("pending");
   });
+  it.each(["owner", "work", "epoch", "extra", "missing", "command", "role", "memory"])(
+    "refuses mismatched observed %s overrides before capture",
+    async (kind) => {
+      const f = fixture();
+      const launch = createNativeTaskLaunch(f.options);
+      f.send
+        .mockImplementationOnce(async () => definition())
+        .mockRejectedValueOnce(Error("SyntheticLostAck"));
+      await expect(launch.launch(scope)).rejects.toThrow("NativeTaskLaunchUnavailable");
+      f.send.mockImplementation(async () => {
+        const r = task();
+        const overrides = required(r.tasks[0]).overrides;
+        const c = required(overrides.containerOverrides[0]);
+        if (kind === "owner")
+          required(c.environment.find((e) => e.name === "NATIVE_MATERIAL_OWNER_USER_ID")).value =
+            id("99");
+        if (kind === "work")
+          required(c.environment.find((e) => e.name === "NATIVE_MATERIAL_WORK_ID")).value =
+            id("99");
+        if (kind === "epoch")
+          required(c.environment.find((e) => e.name === "NATIVE_MATERIAL_EPOCH_ID")).value =
+            id("99");
+        if (kind === "extra") c.environment.push({ name: "UNEXPECTED", value: "synthetic" });
+        if (kind === "missing") c.environment.pop();
+        if (kind === "command") Object.assign(c, { command: ["shell"] });
+        if (kind === "role")
+          Object.assign(overrides, { taskRoleArn: "arn:aws:iam::123456789012:role/foreign" });
+        if (kind === "memory") Object.assign(overrides, { memory: "4096" });
+        return r;
+      });
+      await expect(launch.recover(scope, taskArn)).rejects.toThrow("NativeTaskLaunchUnavailable");
+      expect(f.registry.bindTask).not.toHaveBeenCalled();
+      expect(f.record.intent.state).toBe("pending");
+      expect(f.send.mock.calls.filter(([c]) => c instanceof RunTaskCommand)).toHaveLength(1);
+    },
+  );
   it.each([
     "mutable image",
     "exec",

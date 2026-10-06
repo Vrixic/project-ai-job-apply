@@ -1149,3 +1149,12 @@ Owned fixtures removed, shared volumes retained and Docker/WSL stopped. Full cle
 verification remains before source review. [Evidence](evidence/d3-native-task-launch-2026-10-05.md).
 Native image/authenticated adapters/routing/task conformance/client/ATS/accountable/deployed gates
 remain. D1/D3 stay In progress; no activation/deployment and CI/CD remains deferred until launch.
+
+2026-10-05 D3-079 recovery now binds actual task overrides to all seven original scalar values
+and exact command/role/resource limits. 110 focused and 40 real SQL cases pass; ECS is simulated.
+The first full verifier on `0a487eec` stopped at the stale Documents migration allowlist; its
+current/historical refusal tests now pass 264 assertions. Actual observer clock waits preserve
+production future-time guards. The second owned fixture is removed, volumes retained and
+Docker/WSL stopped. Corrected clean full verification remains pending.
+[Evidence](evidence/d3-native-task-launch-2026-10-05.md). D1/D3 stay In progress;
+CI/CD is owner-deferred until production launch, with no cloud activation or deployment.

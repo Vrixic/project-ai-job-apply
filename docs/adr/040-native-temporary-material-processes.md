@@ -137,3 +137,8 @@ Local SQL, emitted isolation and logical restore evidence do not implement or au
 native image, authenticated private adapters/launcher, TLS routing, IAM or managed conformance.
 This proposal remains Proposed and all activation/accountable/provider gates remain open.
 [Evidence](../product/delivery/evidence/d3-native-task-launch-2026-10-05.md).
+
+2026-10-05 source correction: fulfilled launch and positive recovery additionally validate all
+seven original allocation/work environment overrides and refuse command, role or resource
+retargeting. Local simulated ECS checks and real SQL refusal evidence do not activate this
+Proposed decision or certify managed runtime conformance.
