@@ -35,8 +35,7 @@ are rewritten. Public candidate report API and client source are unchanged.
 - Two contract generation passes leave generated public API contracts unchanged.
 
 All SQL uses generated-only data in an owned temporary PostgreSQL 16.6 tmpfs fixture. No raw
-candidate artifacts or browser credentials are read or retained. Full clean-source verification
-is pending. Hosted export acceptance, maintenance release, privileged audit/alert retention and
+candidate artifacts or browser credentials are read or retained. Full clean-source verification is recorded below. Hosted export acceptance, maintenance release, privileged audit/alert retention and
 accountable rights review remain open. CI/CD stays deferred until production launch; the PC
 remains on. No cloud state change, third PR, real-data approval or D1/D3 completion is claimed.
 
@@ -48,7 +47,7 @@ test-harness allowance, isolating acquired-byte accounting from host scheduling.
 five-second request deadline, 16 MB byte limit and separate header/body/cancellation deadline
 tests are unchanged. Timer cleanup is asserted. All 586 ingestion unit tests pass after this
 test-only correction. Log: `.tmp/d1-report-export-ingestion-clock.log`.
-Jobs SQL and export schema are unchanged by the correction; clean-source full rerun is pending.
+Jobs SQL and export schema are unchanged by the correction; full rerun remained pending at that checkpoint.
 
 The rerun at `a3fc9211` passes ingestion, then exposes a separate Documents late-launch fixture
 using a real 10 ms deadline while polling for fake RunTask dispatch. Under full-suite scheduling,
@@ -59,3 +58,17 @@ positive task capture before timeout refusal and no surviving timer. Production 
 its deadline are unchanged. All 1,438 Documents unit tests pass; log:
 `.tmp/d1-report-export-native-clock.log`. The original rerun handle is terminal before this edit.
 The final clean-source full run follows this second test-only correction.
+
+## Full acceptance
+
+Clean committed source `07cf51b903558d82912d7b0f84eec01ce614c335` passes the full maintained
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 builds, formatting,
+operational/security/isolation/bundle guards, Compose and scope checks. Lint remains zero errors,
+15 warnings and 58 infos. Log: `.tmp/d1-report-export-full-final-2.log`. The original final handle
+completes with exit zero, without tracked edits during verification. The unchanged Jobs SQL and
+schema retain the 119 real SQL, historical upgrade and restore evidence above. Only delivery
+documentation follows the verified source.
+
+The owned tmpfs fixture is removed and Docker Desktop/WSL are stopped; the PC remains on.
+The feature branch is published without a third PR while #564/#565 remain open. No cloud release,
+hosted cleanup activation, deployed export acceptance or D1/D3 completion is claimed.

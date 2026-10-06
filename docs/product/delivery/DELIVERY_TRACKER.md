@@ -2,7 +2,8 @@
 
 2026-10-06 D1-012 candidate exports now include retained reports' exact linked review status
 without operator/case/neighbor data. All 119 Jobs SQL tests and historical 26 → 27 replay pass;
-local logical restore matches 69 migrations/92 relations. Full source verification is pending.
+local logical restore matches 69 migrations/92 relations. Source 07cf51b9 passes full verification
+(38 typechecks, 39 test tasks, 23 builds).
 [Evidence](evidence/d1-report-export-status-2026-10-06.md). Hosted acceptance and audit/alert
 retention remain open; D1/D3 remain In progress.
 
