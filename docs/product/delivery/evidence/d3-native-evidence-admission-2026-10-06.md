@@ -1,6 +1,6 @@
 # D3 native original owner evidence admission — 2026-10-06
 
-Status: default-off source, focused local verification; D3-079 and D1/D3 remain In progress.
+Status: default-off source, full local verification; D3-079 and D1/D3 remain In progress.
 Starts on fresh main `88f8ae84` plus exact #565 `b8bbd0c3`, isolated backend worktree.
 
 ## Implemented boundary
@@ -73,3 +73,20 @@ Units connect the real owner source to simulated owner APIs; SQL tests exercise 
 separately. They do not prove a deployed end-to-end native evidence service. ADR-040/041 remain
 Proposed. All activation flags remain off, no cloud deployment/publication/main merge occurs,
 hosted CI/CD stays deferred to production launch, and D1/D3 remain In progress.
+
+## Full verified checkpoint
+
+Clean committed source `34d13ab6` passes the full maintained `scripts/verify-phase0.ps1`:
+38 typecheck tasks, 39 test tasks, 23 production build tasks, formatting, zero lint errors
+with the existing 15 warnings/58 infos, all operator/security/contract/scope checks and all
+eight native emitted bundle checks. Log: `.tmp/d3-native-evidence-full-final.log`.
+The separate 38 owner-evidence units and 23 actual PostgreSQL cases remain the focused proof;
+opt-in PostgreSQL cases are not silently treated as part of ordinary unit verification.
+Later delivery-only records do not change this verified source. No deployed/native task or
+private caller authentication acceptance follows.
+
+On 2026-10-06 the owner directs larger implementation-first batches toward a working launch:
+implement the complete flow, exercise it, fix concrete failures, then add focused regression
+coverage. Further optional D3 hardening is deferred while the working D1 candidate flow takes
+priority. Truthful facts, privacy and submission safeguards remain required; all phase/release
+statuses continue to reflect actual evidence. Hosted CI/CD remains deferred; PC stays on.

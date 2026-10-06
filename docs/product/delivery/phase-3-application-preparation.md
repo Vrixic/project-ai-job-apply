@@ -1534,3 +1534,18 @@ bundle checks pass. No work issue/renew/consumption, body/model/listener, schema
 before review. Authenticated private task transport/bootstrap/IAM, managed task/client/ATS/provider/
 accountable gates remain; D1/D3 stay In progress. Owned SQL fixture removed, volumes unchanged,
 Docker/WSL stopped; PC stays on. No deployment/activation or hosted CI/CD work.
+
+2026-10-06 D3-079 clean `34d13ab6` passes full maintained verification: 38 typecheck,
+39 test and 23 build tasks, unchanged lint baseline and all eight native emitted bundle checks.
+The initial full run caught the standalone registry's added pure validators; exact-file assertion
+correction changes no source guard or capability exclusion. Separate 38 owner-evidence units and
+23 real PostgreSQL cases pass. [Evidence](evidence/d3-native-evidence-admission-2026-10-06.md).
+Authenticated task transport/managed bootstrap/client/ATS/provider/accountable gates remain.
+D1/D3 stay In progress; no deployment/activation/main merge or CI/CD work. Docker/WSL stopped,
+owned fixture removed, shared volumes unchanged and PC stays on.
+
+2026-10-06 owner prioritizes a working launch over further product perfection. Implement larger
+complete-flow batches first, exercise the actual flow, fix failures, then add focused regression
+coverage. Targeted checks run during implementation and the maintained verifier runs at batch
+handoff. Prioritize the D1 candidate flow and concrete blockers over optional D3 hardening;
+preserve truthfulness/privacy/submission safeguards and honest deployment/acceptance status.

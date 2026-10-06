@@ -771,6 +771,14 @@ crawler policy only after those gates pass.
 
 | 2026-10-03 | PR #511 merged as `3f142c1`; exact merged-main quality/catalog/PostgreSQL integration/both containers pass. Profile passes 29 PostgreSQL cases; Documents passes 50 and skips 66 opt-in ledger cases. Audit and 65 scanner findings remain blocking. Owner-approved source-only D3-041 fixes the stale publisher SQL arrays and binds every exact name/checksum to the existing 57-migration manifest. Both PowerShell hosts pass 149 executable smoke cases, and the exact updated smoke passes on the unchanged retained diagnostic image under hardened networkless restrictions. Full maintained verification passes, including cached workspace tasks; lint remains at 15 baseline warnings/58 infos, and database opt-ins remain unclaimed. No new build, publisher receipt, scan, database migration, API/frontend/Terraform, publication, deployment or apply. D1 remains In progress behind deployed and external exit gates. | D1-002; D3-040; D3-041 | [Publisher](../../../scripts/publish-development-migration-image.ps1), [smoke tests](../../../scripts/tests/development-migration-runtime-smoke.test.mjs), [merged-main CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479546), [scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479543) |
 
+2026-10-06 owner directs an implementation-first route to a working launch: implement complete
+candidate-flow batches, exercise them end to end, fix concrete failures, then add focused
+regression coverage. Prioritize functional D1 composition over optional hardening or feature
+expansion. Targeted checks during implementation and the maintained verifier at batch handoff
+remain; real-data/privacy/authentication and publication safeguards remain required. Hosted
+CI/CD stays deferred until production launch. Backend work stays isolated from frontend work.
+D1 remains In progress until the working flow and its required release acceptance are evidenced.
+
 ## Decisions and scope changes
 
 2026-10-02 current hosted CI remains a completion gate. Main `1f376b6` quality passes, but its
