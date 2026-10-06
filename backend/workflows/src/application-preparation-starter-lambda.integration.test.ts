@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
+  type ApplicationStoreOptions,
   createApplicationsDatabase,
+  defaultFieldDefinitions,
   PostgresApplicationStore,
 } from "@ai-job-apply/applications-service";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
@@ -12,6 +14,14 @@ import {
   createApplicationPreparationStarterLambda,
   createApplicationPreparationStarterRuntime,
 } from "./application-preparation-starter-lambda.js";
+
+const { createSyntheticPacketProtection } = await import(
+  new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+);
+const packetProtection = createSyntheticPacketProtection() as {
+  options: NonNullable<ApplicationStoreOptions["restrictedPackets"]>;
+  destroy(): void;
+};
 
 const requested = process.env.PRIVATE_PREPARATION_STARTER_INTEGRATION === "1";
 const url = process.env.PRIVATE_PREPARATION_STARTER_TEST_DATABASE_URL ?? "postgres://invalid";
@@ -48,6 +58,7 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
   }, 90000);
   afterEach(() => vi.restoreAllMocks());
   afterAll(async () => {
+    packetProtection.destroy();
     await Promise.all(runtimes.map((runtime) => runtime.close()));
     await sql.end();
   });
@@ -61,7 +72,10 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
     "sdk_retry_config",
   ] as const)("preserves original accepted binding: %s", async (fault) => {
     let now = new Date();
-    const store = new PostgresApplicationStore(sql, () => now);
+    const store = new PostgresApplicationStore(sql, () => now, {
+      definitions: defaultFieldDefinitions(),
+      restrictedPackets: packetProtection.options,
+    });
     const owner = uuidv7();
     await sql`INSERT INTO identity.users (id) VALUES (${owner})`;
     const created = await store.createApplication({

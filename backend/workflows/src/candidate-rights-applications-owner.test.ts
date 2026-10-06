@@ -75,6 +75,7 @@ function harness(
   restrictedAnswerExport?: CandidateRightsActivityDependencies["restrictedAnswerExport"],
   coverLetters?: unknown,
   coverLetterExport?: CandidateRightsActivityDependencies["coverLetterExport"],
+  restrictedPacketExport?: CandidateRightsActivityDependencies["restrictedPacketExport"],
 ) {
   const queries: string[] = [];
   const stored: { body?: Buffer } = {};
@@ -138,6 +139,7 @@ function harness(
     },
     restrictedAnswerExport,
     coverLetterExport,
+    restrictedPacketExport,
     documentObjectStore: {
       deleteAllVersionsAndMarkers: vi.fn(async () => ({ exactInventoryEmpty: true })),
     },
@@ -184,6 +186,123 @@ const letter = {
   model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
 };
 const paragraphs = [{ text: "I build reliable synthetic systems.", factIds: [REQUEST] }];
+describe("restricted packet portable artifact composition", () => {
+  const fieldKey = "authorization.us_authorized";
+  const packet = {
+    id: REQUEST,
+    applicationId: OPERATION,
+    version: 1,
+    packetHash: "a".repeat(64),
+    jobRevision: "b".repeat(64),
+    createdAt: AT,
+    fields: [
+      {
+        fieldKey,
+        value: null,
+        origin: "user_entered",
+        sourceFactIds: [],
+        confidence: 1,
+        disposition: "review",
+        reasons: ["restricted_answer", "never_infer"],
+        requiresReview: true,
+      },
+    ],
+  };
+  const reference = {
+    applicationId: packet.applicationId,
+    packetId: packet.id,
+    packetHash: packet.packetHash,
+    fieldKeys: [fieldKey],
+  };
+  const ownerData = () => ({
+    applications: { ...applicationsSection, packets: [structuredClone(packet)] },
+    restrictedPacketReferences: { schemaVersion: 1, packets: [reference] },
+    audit: { events: [] },
+  });
+  const values = () => ({
+    ownerUserId: USER,
+    applicationId: packet.applicationId,
+    packetId: packet.id,
+    packetHash: packet.packetHash,
+    values: new Map([[fieldKey, true]]),
+  });
+  it("writes only exact authorized values into the strict portable artifact", async () => {
+    const result = values();
+    const reader = { readExportPacketValues: vi.fn(async () => result) };
+    const data = ownerData();
+    const run = harness(
+      WITH_APPLICATIONS,
+      data,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      reader,
+    );
+    await run.store.assembleExport(input("export_assemble"));
+    expect(reader.readExportPacketValues).toHaveBeenCalledExactlyOnceWith({
+      ownerUserId: USER,
+      exportId: REQUEST,
+      operationId: OPERATION,
+      policyVersion: "d3-development-synthetic-v1",
+      applicationId: packet.applicationId,
+      packetId: packet.id,
+      packetHash: packet.packetHash,
+    });
+    const artifact = JSON.parse(run.stored.body?.toString("utf8") ?? "{}");
+    expect(validateCandidateDataExportV1(artifact)).toBe(true);
+    expect(artifact.applications.packets[0].fields[0].value).toBe(true);
+    expect(artifact).not.toHaveProperty("restrictedPacketReferences");
+    expect(artifact.applications.packets[0]).not.toHaveProperty("restrictedValues");
+    expect(artifact.applications.packets[0].fields[0]).not.toHaveProperty("protectedValue");
+    expect(data.applications.packets[0]?.fields[0]?.value).toBeNull();
+    expect(result.values.size).toBe(0);
+  });
+  it("writes no artifact without the required private reader", async () => {
+    const run = harness(WITH_APPLICATIONS, ownerData());
+    await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+      "RestrictedPacketExportRejected",
+    );
+    expect(run.stored.body).toBeUndefined();
+  });
+  it("refuses a malformed private inventory before reading or writing", async () => {
+    const data = ownerData();
+    data.restrictedPacketReferences.packets[0] = { ...reference, packetHash: "c".repeat(64) };
+    const reader = { readExportPacketValues: vi.fn(async () => values()) };
+    const run = harness(
+      WITH_APPLICATIONS,
+      data,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      reader,
+    );
+    await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+      "RestrictedPacketExportRejected",
+    );
+    expect(reader.readExportPacketValues).not.toHaveBeenCalled();
+    expect(run.stored.body).toBeUndefined();
+  });
+  it("clears a foreign reader result and writes no partial artifact", async () => {
+    const result = { ...values(), ownerUserId: OPERATION };
+    const reader = { readExportPacketValues: vi.fn(async () => result) };
+    const run = harness(
+      WITH_APPLICATIONS,
+      ownerData(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      reader,
+    );
+    await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+      "RestrictedPacketExportRejected",
+    );
+    expect(result.values.size).toBe(0);
+    expect(run.stored.body).toBeUndefined();
+  });
+});
 describe("cover-letter portable content composition", () => {
   it("retains metadata-only compatibility with the reader absent", async () => {
     const run = harness(WITH_APPLICATIONS, undefined, undefined, undefined, [letter]);

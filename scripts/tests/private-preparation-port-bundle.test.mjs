@@ -22,6 +22,19 @@ for (const entry of ["application-preparation-documents", "application-preparati
         .filter(([, entry]) => entry.bytesInOutput > 0)
         .map(([name]) => name.replaceAll("\\", "/")),
     );
+    for (const forbidden of [
+      "restricted-packet-kms-cipher.js",
+      "restricted-packet-integration-support.js",
+      "restricted-packets.mjs",
+    ])
+      assert.ok(
+        !inputs.some((name) => name.endsWith(forbidden)),
+        `Unexpected packet crypto/test authority: ${forbidden}`,
+      );
+    assert.ok(
+      !inputs.some((name) => /@aws-sdk(?:\+|\/)client-kms/u.test(name)),
+      "Native preparation must not emit a KMS client",
+    );
     for (const module of [
       "application-preparation-evidence.js",
       "cover-letter-preparation.js",

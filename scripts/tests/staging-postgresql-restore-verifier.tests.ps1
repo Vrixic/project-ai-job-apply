@@ -110,9 +110,9 @@ if (
     "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1" -or
   [int]$boundary.OwnerCount -ne 7 -or
   (@($boundary.OwnerNames) -join ",") -cne "applications,billing,documents,jobs,matching,profile,trust" -or
-  [int]$boundary.SchemaCount -ne 11 -or
-  [int]$boundary.RelationCount -ne 84 -or
-  [int]$boundary.MigrationCount -ne 63 -or
+  [int]$boundary.SchemaCount -ne 12 -or
+  [int]$boundary.RelationCount -ne 88 -or
+  [int]$boundary.MigrationCount -ne 65 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."

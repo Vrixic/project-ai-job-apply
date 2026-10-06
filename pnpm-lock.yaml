@@ -159,12 +159,19 @@ importers:
       '@ai-job-apply/event-contracts':
         specifier: workspace:*
         version: link:../../../packages/event-contracts
+      '@aws-sdk/client-kms':
+        specifier: 3.1133.0
+        version: 3.1133.0
       postgres:
         specifier: 3.4.9
         version: 3.4.9
       uuid:
         specifier: 14.0.2
         version: 14.0.2
+    devDependencies:
+      '@ai-job-apply/profile-service':
+        specifier: workspace:*
+        version: link:../profile
 
   backend/services/billing:
     dependencies:

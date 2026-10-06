@@ -8,13 +8,16 @@ import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ConfirmationEvidence } from "./attempt.js";
 import { MAX_APPROVAL_AGE_MS } from "./packet.js";
+import {
+  createFixtureApplication,
+  createIntegrationApplicationStore,
+} from "./restricted-packet-integration-support.js";
 import { toApiApplication } from "./service.js";
 import {
   ApplicationAlreadyExistsError,
   ApplicationIdempotencyConflictError,
   ApplicationNotFoundError,
   ApplicationRevisionConflictError,
-  PostgresApplicationStore,
   StalePacketError,
 } from "./store.js";
 import { definitions, FACT_A, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
@@ -43,7 +46,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     onnotice: () => undefined,
   });
   let now = new Date("2026-09-18T12:00:00.000Z");
-  const store = new PostgresApplicationStore(client, () => now, { definitions });
+  const store = createIntegrationApplicationStore(client, () => now, { definitions });
   const evidence: ConfirmationEvidence = {
     kind: "provider_confirmation_page",
     observedAt: new Date("2026-09-18T12:00:05.000Z"),
@@ -65,7 +68,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const first = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const replay = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const expected =
-      "Applications migrations through 0008_temporary_material_bindings applied and verified.";
+      "Applications migrations through 0009_restricted_packet_values applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
     await store.ping();
@@ -77,7 +80,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
 
   async function prepared(options: { restricted?: boolean } = {}) {
     const ownerUserId = uuidv7();
-    const created = await store.createApplication({
+    const created = await createFixtureApplication(store, client, {
       ownerUserId,
       canonicalJobId: uuidv7(),
       idempotencyKey: key("create"),
@@ -147,7 +150,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     async function materialPacket(completedAtMs = Date.now() - 1) {
       now = new Date(completedAtMs + 1);
       const ownerUserId = uuidv7();
-      const created = await store.createApplication({
+      const created = await createFixtureApplication(store, client, {
         ownerUserId,
         canonicalJobId: uuidv7(),
         idempotencyKey: key("material-create"),
@@ -602,7 +605,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const context = await approved();
     const start = await started(context);
     let localNow = new Date(now);
-    const queuedStore = new PostgresApplicationStore(client, () => localNow, { definitions });
+    const queuedStore = createIntegrationApplicationStore(client, () => localNow, { definitions });
     let unlock: () => void = () => undefined;
     let ready: () => void = () => undefined;
     const held = new Promise<void>((resolve) => {
@@ -692,20 +695,36 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const ownerUserId = uuidv7();
     const canonicalJobId = uuidv7();
     const idempotencyKey = key("create");
-    const first = await store.createApplication({ ownerUserId, canonicalJobId, idempotencyKey });
+    const first = await createFixtureApplication(store, client, {
+      ownerUserId,
+      canonicalJobId,
+      idempotencyKey,
+    });
     expect(first.replayed).toBe(false);
     expect(first.view.application.status).toBe("preparing");
     expect(first.view.currentAction).toBe("prepare_packet");
 
-    const replay = await store.createApplication({ ownerUserId, canonicalJobId, idempotencyKey });
+    const replay = await createFixtureApplication(store, client, {
+      ownerUserId,
+      canonicalJobId,
+      idempotencyKey,
+    });
     expect(replay.replayed).toBe(true);
     expect(replay.view.application.id).toBe(first.view.application.id);
 
     await expect(
-      store.createApplication({ ownerUserId, canonicalJobId: uuidv7(), idempotencyKey }),
+      createFixtureApplication(store, client, {
+        ownerUserId,
+        canonicalJobId: uuidv7(),
+        idempotencyKey,
+      }),
     ).rejects.toThrow(ApplicationIdempotencyConflictError);
     await expect(
-      store.createApplication({ ownerUserId, canonicalJobId, idempotencyKey: key("second") }),
+      createFixtureApplication(store, client, {
+        ownerUserId,
+        canonicalJobId,
+        idempotencyKey: key("second"),
+      }),
     ).rejects.toThrow(ApplicationAlreadyExistsError);
 
     // Another candidate can neither read nor mutate it, and cannot tell it exists.
@@ -1252,7 +1271,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const list = await store.listApplications(context.ownerUserId);
     expect(list.items.map((item) => item.currentAction)).toEqual(["none"]);
     // A cancelled application does not block starting again for the same job.
-    const again = await store.createApplication({
+    const again = await createFixtureApplication(store, client, {
       ownerUserId: context.ownerUserId,
       canonicalJobId: cancelled.view.application.canonicalJobId,
       idempotencyKey: key("again"),
@@ -1285,7 +1304,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
   describe("manual submission (D3-018)", () => {
     async function approvedManual() {
       const ownerUserId = uuidv7();
-      const created = await store.createApplication({
+      const created = await createFixtureApplication(store, client, {
         ownerUserId,
         canonicalJobId: uuidv7(),
         idempotencyKey: key("create"),

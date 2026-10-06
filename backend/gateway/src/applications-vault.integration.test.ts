@@ -24,7 +24,18 @@ import {
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createGatewayApplication } from "./application.js";
-import { createApplicationsRuntime } from "./applications-runtime.js";
+import {
+  type ApplicationsRuntimeOptions,
+  createApplicationsRuntime,
+} from "./applications-runtime.js";
+
+const { createSyntheticPacketProtection } = await import(
+  new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+);
+const packetProtection = createSyntheticPacketProtection() as {
+  options: NonNullable<ApplicationsRuntimeOptions["restrictedPackets"]>;
+  destroy(): void;
+};
 
 const databaseUrl = process.env.DATABASE_URL;
 const suite = databaseUrl ? describe : describe.skip;
@@ -106,6 +117,7 @@ suite("Applications selected vault owner composition", () => {
       profile: realProfile,
       catalog,
       definitions: defaultFieldDefinitions(),
+      restrictedPackets: packetProtection.options,
       restrictedAnswerReuseEnabled: enabled,
       restrictedAnswers: {
         ...(admissionEnabled
@@ -142,6 +154,7 @@ suite("Applications selected vault owner composition", () => {
     }
   });
   afterAll(async () => {
+    packetProtection.destroy();
     await appDb.end({ timeout: 5 });
     await profileDb.client.end({ timeout: 5 });
   });
@@ -178,6 +191,21 @@ suite("Applications selected vault owner composition", () => {
     const prepared = await api.preparePacket(owner, app.id, request, key());
     return { owner, command, api, app: prepared, selection, request };
   }
+  async function refusedCandidateMetadata(f: Awaited<ReturnType<typeof fixture>>) {
+    // A stale selected answer cannot be projected through the candidate value-read port.
+    await expect(f.api.get(f.owner, f.app.id)).rejects.toBeInstanceOf(ApplicationsUnavailableError);
+    const store = new PostgresApplicationStore(appDb, () => state.at, {
+      definitions: defaultFieldDefinitions(),
+      restrictedPackets: packetProtection.options,
+      lockVaultReferences: vault.lockCurrentReferences.bind(vault),
+    });
+    const view = await store.getApplication(f.owner, f.app.id);
+    expect(
+      view.currentPacket?.fields.find((field) => field.fieldKey === fieldKey)?.value,
+    ).toBeNull();
+    return { ...view.application, ...view };
+  }
+
   async function approve(f: Awaited<ReturnType<typeof fixture>>) {
     return f.api.approve(
       f.owner,
@@ -265,10 +293,10 @@ suite("Applications selected vault owner composition", () => {
     const f = await fixture();
     await vault.save({ ...f.command, expectedVersion: 1, idempotencyKey: key() });
     await expect(approve(f)).rejects.toMatchObject({ reasons: ["vault_answer_changed"] });
-    const view = await f.api.get(f.owner, f.app.id);
+    const view = await refusedCandidateMetadata(f);
     expect(view.status).toBe("review_required");
     expect(view.currentPacket?.fields[0]?.vaultReference?.version).toBe(1);
-    expect(view).not.toHaveProperty("approval");
+    expect(view.approval).toBeNull();
   });
 
   it("commits truthful approval invalidation when the selected revision is deleted before start", async () => {
@@ -292,11 +320,8 @@ suite("Applications selected vault owner composition", () => {
         },
         key(),
       ),
-    ).resolves.toMatchObject({
-      outcome: "approval_invalidated",
-      invalidationReasons: ["vault_answer_changed"],
-    });
-    expect((await f.api.get(f.owner, f.app.id)).status).toBe("review_required");
+    ).rejects.toBeInstanceOf(ApplicationsUnavailableError);
+    expect((await refusedCandidateMetadata(f)).status).toBe("review_required");
     const [approval] = await appDb<
       Array<{ reason: string }>
     >`SELECT invalidation_reason AS reason FROM applications.approvals WHERE application_id = ${f.app.id}::uuid`;
@@ -327,7 +352,7 @@ suite("Applications selected vault owner composition", () => {
       await expect(
         f.api.dispatchAttempt(f.owner, f.app.id, started.attemptId ?? ""),
       ).rejects.toMatchObject({ reasons: ["vault_answer_changed"] });
-      const view = await f.api.get(f.owner, f.app.id);
+      const view = await refusedCandidateMetadata(f);
       expect(view.status).toBe("review_required");
       expect(view.attempts[0]).toMatchObject({ status: "failed_no_effect" });
       expect(view.attempts[0]).not.toHaveProperty("dispatchedAt");
@@ -378,6 +403,7 @@ suite("Applications selected vault owner composition", () => {
     if (!event) throw new Error("MissingSyntheticPreparationEvent");
     const store = new PostgresApplicationStore(appDb, () => state.at, {
       definitions: defaultFieldDefinitions(),
+      restrictedPackets: packetProtection.options,
       lockVaultReferences: vault.lockCurrentReferences.bind(vault),
     });
     const current = await vault.readCurrentReference(f.owner, f.selection);
@@ -524,6 +550,7 @@ suite("Applications selected vault owner composition", () => {
       if (!event) throw new Error("MissingSyntheticEvent");
       const store = new PostgresApplicationStore(appDb, () => state.at, {
         definitions: defaultFieldDefinitions(),
+        restrictedPackets: packetProtection.options,
         lockVaultReferences: vault.lockCurrentReferences.bind(vault),
       });
       const current = await vault.readCurrentReference(f.owner, f.selection);
@@ -586,6 +613,7 @@ suite("Applications selected vault owner composition", () => {
     if (!event) throw new Error("MissingSyntheticEvent");
     const store = new PostgresApplicationStore(appDb, () => state.at, {
       definitions: defaultFieldDefinitions(),
+      restrictedPackets: packetProtection.options,
       lockVaultReferences: vault.lockCurrentReferences.bind(vault),
     });
     const current = await vault.readCurrentReference(f.owner, f.selection);
@@ -693,7 +721,7 @@ suite("Applications selected vault owner composition", () => {
         await blocker;
       }
       expect(await settled).toEqual({ accepted: false, reasons: ["vault_answer_changed"] });
-      const view = await f.api.get(f.owner, f.app.id);
+      const view = await refusedCandidateMetadata(f);
       expect(view.status).toBe("review_required");
       expect(view.attempts.some((attempt) => attempt.dispatchedAt)).toBe(false);
     },

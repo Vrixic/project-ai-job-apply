@@ -34,7 +34,7 @@ or phase-exit acceptance is claimed.
 |---|---|---|---|---|---|
 | D3-079 | Supply the native one-candidate material-session runtime, authenticated transport and positive process/task retirement. | In progress | Vrij Patel; engineering | D3-064; D3-012 | Started 2026-10-05 on exact #554. Default-off session/core kernel source; local child-process evidence only. [Evidence](evidence/d3-native-memory-session-2026-10-05.md), [proposed ADR-040](../../adr/040-native-temporary-material-processes.md). [Native HTTPS source](evidence/d3-native-memory-transport-2026-10-05.md) is locally verified at aed4b391. [Scalar Gateway/native client source](evidence/d3-native-read-authorization-2026-10-05.md) is locally verified at a5c29ef7, including Lambda routing. [Exact task retirement source](evidence/d3-native-task-retirement-2026-10-05.md) is locally verified at ba58619c with offline AWS transport. [Owning launch registry/disposal source](evidence/d3-native-material-registry-2026-10-05.md) is locally verified at dda86480 with full verifier, 19 real SQL cases and logical restore. Native image, authenticated launcher/private adapters/registry composition, managed routing/actual stop conformance and full content routing remain gates. No live provider/deployment or phase completion. |
 | D3-064 | Enforce one-off generated cover-letter and improved/tailored-resume lifetimes without persisted content. | In progress | Vrij Patel; engineering | D3-003; D3-004; D3-005; D3-012 | Started 2026-10-04 on fresh main e48bdf3 plus exact #547 25f0ca05. Backend persistence guards begin first; full temporary-memory/provider/expiry lifecycle remains. [Persistence evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md); [memory replacement evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md); [native completion evidence](evidence/d3-original-material-completion-2026-10-04.md); [packet binding evidence](evidence/d3-temporary-packet-binding-2026-10-05.md); [temporary read evidence](evidence/d3-temporary-material-reads-2026-10-05.md); [held copy/disposal evidence](evidence/d3-held-temporary-content-2026-10-05.md); [original actor evidence](evidence/d3-original-memory-generation-2026-10-05.md). Owner policy accepted 2026-10-04 in [ADR-038](../../adr/038-one-off-generated-application-materials.md). Maximum 1,800 seconds from generation completion; no sliding extension, database/packet-field copies, stored files, durable payloads, or persistent browser copies. Add owner/application-bound temporary content, no-store responses, idle/error/logout/cancel/submission cleanup, expiry checks and approval invalidation before ATS handoff; retain hashes/technical state only and preserve ambiguous-submission safety. Verify no generated content enters packet/idempotency/history/export records, boundary-time expiry, regeneration with fresh approval, restart loss, renderer failure, and actual idle-browser cleanup. D3-012 must verify provider retention/training terms. Current deterministic tailoring avoids content persistence. Locally verified proposal/packet/schema/SQL guards refuse persisted generated document material. Managed-memory expiry, exact-reference reads, native immutable completion metadata/private RPC, and packet identity/expiry admission are locally verified in default-off source; the full content/actor/client/packet/provider lifecycle is not evidenced. Revise the current source-only encrypted saved-draft/provider-slot persistence and export/read consumers before activation, preserving positive remote-settlement and writer fencing. Hosted browser acceptance remains human-only after agent automated/browser checks. |
-| D3-077 | Protect restricted packet values with their required separate encryption/storage boundary before saved-answer reuse activation. | Not started | Vrij Patel; engineering | D3-076; D3-012 | Discovered 2026-10-04: existing Applications packet JSON stores field values, including selected restricted answers, outside the vault key boundary. Architecture 12.3 and ADR-010 require separate keys/storage and just-in-time access. Default-off D3-076 proves selection/admission semantics only; its switch must stay false until this protection, retention/export/deletion tests and accountable review pass. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). |
+| D3-077 | Protect restricted packet values with their required separate encryption/storage boundary before saved-answer reuse activation. | In progress | Vrij Patel; engineering | D3-076; D3-012 | Started 2026-10-05 on fresh main 2b6f59aa. Private WIP has packet commitments/keyed receipts, atomic ciphertext, audited candidate-review reads and original preparation carry-forward; 314 units and 27 owned PostgreSQL cases pass with offline crypto; exact historical export, privacy deletion and Profile-backed correction/deletion/expiry races have focused evidence. Expanded logical restore, metadata-only SQL role refusal and actual deletion-verifier inventory/replay pass locally. All 92 maintained Applications and 56 targeted Gateway SQL cases now pass with explicit offline protection. All 39 targeted Workflow SQL cases pass; exact lifecycle cleanup includes restricted ciphertext/audit. Native protected carry now passes all 11 isolated preparation SQL cases without cipher authority, with five emitted isolation checks. Eight real legacy migration refusal/rollback and compatible ordinary-transition cases pass. Clean 61b2719f passes full verification (38 typechecks/39 test tasks/23 builds; unchanged lint). Default-off Gateway/export authority now composes privately; 377 Applications/318 Gateway/1,613 Workflow units, three builds and three SQL composition cases pass. Bounded historical-key runtime and two-epoch logical restore pass locally. Clean a6da6b3f passes full verification and four source-bound artifact families build twice byte-identically. Thirty concurrent key-transition SQL cases pass (33 runtime cases total) with bounded original-key recheck. Current clean b5a7a2cf passes full verification; four artifact families/20 files build twice identically and retain their hashes afterward. The actual-adapter SQL recheck and corrected test-spy facade pass. Draft [PR #561](https://github.com/Vrixic/project-ai-job-apply/pull/561) is open; source review, prohibited legacy inventory/disposition, production role/key and accountable acceptance remain unfinished. [Storage evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). Discovered 2026-10-04: existing Applications packet JSON stores field values, including selected restricted answers, outside the vault key boundary. Architecture 12.3 and ADR-010 require separate keys/storage and just-in-time access. Default-off D3-076 proves selection/admission semantics only; its switch must stay false until this protection, retention/export/deletion tests and accountable review pass. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). |
 | D3-076 | Bind explicitly selected saved answers to immutable packets and serialize version checks with candidate corrections at approval, start, dispatch and preparation admission. | In progress | Vrij Patel; engineering | D3-075; D3-005; D3-012 | Started 2026-10-04 on exact #545 57d7b057. Default-off backend selection, mandatory review, hash metadata, stale-version refusal and migration 0006 implemented locally. Same-transaction Profile metadata locking passes 23 real SQL regressions; original 67 Applications and 46 Profile cases plus 39 preparation/native and five Gateway cases pass. Full verifier passes on clean 21594bc4: 38 typechecks, 39 test tasks, 23 builds; unchanged lint. Native artifact builds twice byte-identically and refuses default-off work. Docker/WSL stopped. D3-077 restricted packet-value protection, UI, review and deployed/accountable acceptance remain required; reuse stays false. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). No activation, frontend change or phase completion; CI/CD deferred until production launch. |
 | D3-075 | Bind private Profile reads to a candidate-selected answer revision and expose a value-free current-reference deadline for packet admission. | In progress | Vrij Patel; engineering | D3-074; D3-001; D3-005; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact #544 8f72e13b. Exact selected reads never refresh to a newer revision; metadata checks require latest active owner/field/context/version and expiry without KMS. 48 focused units and all 46 Profile SQL cases pass (eight new SQL cases); build/scoped format pass. [Evidence](evidence/d3-vault-selected-read-port-2026-10-04.md). Full verifier passes on clean fb8010b3: 38 typechecks, 39 test tasks, 23 builds; Profile 120 units, unchanged lint. Docker/WSL stopped; packet/API selection and hash/version invalidation, review UI, key activation and accountable/deployed acceptance remain. No Applications consumer, deployment/activation or phase exit. |
 | D3-074 | Recheck approval and current owner bindings before issuing a submission dispatch receipt. | In progress | Vrij Patel; engineering | D3-073; D3-005; D3-009; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact #543 3ee4d2c1. Five real SQL regressions reproduce stale dispatch; source now refuses under lock and commits no-effect settlement, approval invalidation, two history entries and one review status event without intermediate approval. 120 Applications units, 67 Applications SQL, five Gateway SQL and sanitized authenticated HTTP tests pass; build/typecheck/formatting pass. [Evidence](evidence/d3-pre-dispatch-approval-recheck-2026-10-04.md). Full verifier passes on clean adf46c8a: 38 typechecks, 39 test tasks, 23 builds; unchanged lint. Docker/WSL stopped; review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or phase completion. |
@@ -1137,3 +1137,250 @@ Tested implementation `dda86480` is unchanged; subsequent commits record deliver
 #558's reviewed retirement source is included because its independent merge targeted the former
 feature-branch base. One authored PR is open. D1/D3 stay In progress; no authored main merge,
 cloud task operation, publication/deployment/activation or hosted CI/CD work.
+
+2026-10-05 D3-077 starts protected restricted packet storage on fresh main `2b6f59aa`, isolated
+backend branch `feat/d3-restricted-packet-storage`. Ordinary packet/receipt hashes also require
+protection against low-entropy answer enumeration. An uncomposed default-off envelope cipher and
+keyed request port pass 30 offline cases, including actual signed SDK serialization and fixed
+normal-client endpoint/one-attempt checks. Applications build/Gateway typecheck and scoped lint
+pass; no KMS/network/cloud call, Docker, SQL, migration or activation occurs. Storage/commitment/
+receipt/preparation/read/export/deletion/restore wiring and full verifier remain required.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). D1/D3 remain In progress; saved-answer
+reuse stays false and CI/CD remains deferred until production launch.
+
+2026-10-05 D3-077 adds the private owning metadata codec: restricted/selected vault values are
+masked in returned storage fields; exact immediate values use a separate map. Value-free
+commitments bind original context, provenance and snapshotted field policy. Strict shapes and
+canonical decode refuse unmodelled bodies, accessors, duplicates, tampering and malformed UTF-8.
+All 268 Applications unit tests and 30 Gateway cipher tests pass locally with synthetic inputs and
+offline transports; Applications typecheck and six-file Biome checks pass. Source remains
+uncommitted/uncomposed; SQL, packet hashing, keyed receipts, export/deletion/restore and complete
+verification remain unfinished. No activation, deployment, human review or D1/D3 completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). Hosted CI/CD remains deferred until
+production launch; Docker/WSL were not started.
+
+2026-10-05 D3-077 adds private packet.v2 ciphertext commitments, exact pre-lock prepare-result
+binding and guarded immediate public projection. Original unprotected v1 hash is preserved;
+protected plaintext/invalid markers and foreign or missing immediate read maps refuse. Mandatory
+review and direct candidate action remain enforced. All 304 Applications unit tests pass, along
+with Applications typecheck/build, Gateway typecheck and ten-file Biome checks. [ADR-041](../../adr/041-restricted-packet-values-and-keyed-replay.md)
+records the proposed technical boundary without acceptance. SQL, owning asynchronous reads,
+keyed receipts, preparation carry-forward, export/deletion/restore and full verification remain
+unfinished. Source is uncommitted/uncomposed; no activation, deployment or phase completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains deferred until launch.
+
+2026-10-05 D3-077 wires pre-lock envelope preparation/keyed receipts and atomic protected packet
+writes. Forward 0009 adds separate immutable ciphertext, exact packet references, active-candidate
+lease and privacy-authorized deletion; legacy restricted plaintext/unkeyed packet receipts block
+migration rather than being rewritten. Eight owned PostgreSQL 16.6 cases pass with synthetic data
+and offline crypto, including replay, no locks during encryption, rollback and duplicate safety.
+Applications typecheck/build and 307 units pass. The tmpfs fixture was removed, shared volume
+inventory retained, Docker Desktop stopped and WSL shut down. #559 merged to exact-tree main
+18b6b2e2. Preparation carry-forward, owning reads/composition, export/deletion/restore acceptance,
+role/inventory and maintained full verification remain unfinished. No review/activation/deployment
+or D1/D3 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains
+deferred until production launch.
+
+2026-10-05 private D3-077 WIP 50a6c8ce rebases onto merged #559/main 18b6b2e2. Both appended
+history conflicts retain all existing entries; Git confirms the SQL-tested Applications boundary
+source is unchanged. No authored PR is open and the incomplete slice is not pushed/review-ready.
+Combined native/restricted inventory/restore and whole-feature verification remain required.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). D1/D3 remain In progress; no
+activation, deployment or hosted CI/CD work. Docker/WSL remain stopped.
+
+2026-10-05 D3-077 adds audited owning candidate-review JIT reads and exact original protected
+preparation carry-forward. Values remain separate from metadata; active/current scope is rechecked
+after decrypt, original ciphertext/references are retained without crypto under completion SQL.
+Fourteen PostgreSQL 16.6 cases pass with offline crypto, including lock/race/owner/audit/API/carry
+acceptance; 314 Applications units, build/typechecks and focused Gateway stable 503 mapping pass.
+Private read audit is added to unshipped 0009. Exact historical export, full deletion/restore,
+Profile-backed selected-answer races, role/inventory/legacy compatibility and full verifier remain.
+Fixture removed, shared volumes retained and Docker/WSL stopped. No publication/review/activation/
+deployment or phase completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
+D1/D3 remain In progress; saved-answer reuse stays false and CI/CD remains deferred until launch.
+
+2026-10-05 D3-077 adds Profile-owned exact export admission, audited historical packet reads and
+strict portable artifact enrichment. All 19 real PostgreSQL cases pass with offline crypto,
+including historical true/false originals, request failure during decrypt and exact privacy deletion
+that preserves another candidate. Applications 314 units, Profile seven admission cases and 44
+focused Workflow cases pass; actual activity tests prove private references stay outside artifacts
+and failures write no partial object. Docker/WSL stopped; owned fixture removed and shared volumes
+retained. Whole restore, selected-answer races, maintained fixtures/inventory/role/legacy acceptance
+and clean full verification remain outstanding. Private WIP; no PR, activation, cloud deployment or
+phase completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains
+deferred until production launch.
+
+2026-10-05 D3-077 verifies actual Profile-backed correction/deletion/expiry packet-read races and
+original historical export after saved-source changes: all 27 real PostgreSQL cases pass with
+simulated crypto. Private restore inventory expands to 65 migrations/88 relations/12 schemas;
+48 migration/restore units retain prior release boundaries, and 231 Workflow contract/policy cases,
+staging restore guards and 697 deletion replay operator checks pass offline. Whole logical restore,
+SQL role/deletion-verifier inventory, legacy transition, maintained protection fixtures and clean
+full verification remain. Owned fixture removed, shared volumes retained, Docker/WSL stopped.
+Private WIP only; no image publication, feature activation or D1/D3 phase completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD remains deferred until launch.
+
+2026-10-05 D3-077 passes actual PostgreSQL 16.6 logical recovery: all 65 migrations replay, exact
+row sets match all 88 relations/12 owned schemas, original restricted values and three keyed
+receipts survive, and source data remains unchanged. Metadata-only SQL role refuses both private
+tables; authorized deletion preserves another candidate. Actual deletion-verifier inventory now
+includes both private tables; six real Workflow replay/export cases and 27 unit cases pass.
+Focused strict artifact assertions pass. Docker/WSL stopped; owned fixtures removed and shared
+volumes retained. Legacy transition, remaining maintained protection fixtures, private artifact
+isolation and clean full verification remain. No publication, activation, deployed key/role acceptance
+or D1/D3 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
+CI/CD remains deferred until production launch.
+
+2026-10-05 D3-077 updates eight maintained Applications SQL fixtures to explicitly supply offline
+packet protection, active candidate identities and owning service projections. All 92 maintained
+PostgreSQL cases, 314 units and the Applications build pass. The separate 27 restricted-storage
+cases are skipped under this fixture identity and retain their earlier separate evidence. Historical
+document refusal guards remain validated after synthetic rollback; no production guard/default
+changes. Owned fixture removed, shared volumes retained, Docker/WSL stopped. Gateway/Workflow
+fixture compatibility, legacy transition, artifact isolation and clean full verification remain.
+Private WIP only; no deployment/activation or phase completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 updates three maintained Gateway SQL fixtures with explicit offline packet
+protection and active synthetic identities. All 56 targeted cases pass across initial database/
+temporary-material checks and the final 23-case vault rerun. Stale candidate value reads refuse;
+actual owning metadata confirms committed invalidation and no-effect dispatch state. Gateway build
+and 348 unit cases pass (85 database cases skipped in the unit run). Owned fixture removed,
+shared volumes retained, Docker/WSL stopped. Workflow fixtures, legacy transition, artifact
+isolation and clean full verification remain. Private WIP only, with simulated identity/key authority;
+no production activation, deployed acceptance or D1/D3 completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 completes offline protection composition in five maintained Workflow fixtures:
+39 targeted PostgreSQL cases pass, with the three evidence cases isolated in a separate cluster to
+preserve Jobs' cross-database reader-grant guard. Workflow build and 1,613 units pass. Applications
+acceptance cleanup now counts all three preparation and both restricted relations; two real SQL
+cases verify nonempty restricted ciphertext/audit deletion and preservation of another candidate.
+Applications build and 314 units pass. Both owned fixtures removed; shared volumes retained and
+Docker/WSL stopped. Native protected metadata carry still needs composition without decryption
+capability, plus legacy transition, artifact isolation and clean full verification. Private WIP only;
+no production activation, deployed acceptance or D1/D3 phase completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 separates exact protected metadata carry from cipher authority. All 11 isolated
+Documents preparation SQL cases now seed a restricted chosen answer, including actual native
+composition without a packet cipher. Successful finalization preserves the original single
+ciphertext/binding, masked review metadata, zero preparation read audit/decrypt and a later exact
+authorized candidate read. All 27 restricted storage SQL regressions, 314 Applications units,
+1,613 Workflow units and both builds pass. Five native/provider emitted isolation checks exclude
+packet crypto/test authority from their respective actors. Owned fixture removed; shared volumes
+retained and Docker/WSL stopped. Legacy transition, broader artifact checks and clean full verifier
+remain. No deployment/activation or D1/D3 completion.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 native preparation artifact builds twice from clean
+`950860a547746a01f23a2430c119200197fe187c`; all five emitted files are byte-identical. Both
+bundled checks refuse default-off work/extra payloads with zero fetch. No publication or deployment;
+legacy transition, broader artifact verification, full verifier and accountable acceptance remain.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 verifies eight real historical migration cases: exact old eight-migration
+approved/ambiguous evidence and receipts survive all six refusal categories unchanged; compatible
+ordinary evidence migrates without rehash; the actual current driver rolls back its whole
+transaction on committed legacy restricted data. No SQL/checksum/guard change or prohibited legacy
+migration. Owned fixture removed; shared volumes retained and Docker/WSL stopped. Full maintained
+verification follows; production inventory/disposition, key/role composition and accountable
+acceptance remain. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
+CI/CD deferred until launch; no deployment/activation or D1/D3 completion.
+
+2026-10-05 D3-077 full verifier on clean `1571cf9c` stops at a stale current Applications 0008
+migration-log expectation after the preceding guards pass. Only the test's current expected marker
+advances to 0009; historical/source/permission checks remain. Focused operator baseline and
+schema-7/schema-8 adversarial tests pass; full clean rerun follows. No whole-verifier success,
+deployment/activation or phase completion claim.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). CI/CD deferred until launch.
+
+2026-10-05 D3-077 full maintained verifier passes on clean frozen
+`61b2719ff148600f7cded3c8217a00b8a8e766d7`: 38 typecheck tasks, 39 test tasks, 23 builds,
+formatting, operator/security guards, native/provider/export isolation, Compose and scope checks.
+Lint stays 0 errors/15 warnings/58 infos. The source/worktree stayed unchanged and Docker/WSL
+remain stopped. Production Gateway entry points and the candidate export activity still need
+private default-off packet authority composition; real legacy inventory/disposition, key/role and
+accountable/deployed acceptance remain. Private WIP only, no review/publication/activation or D1/D3
+completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
+CI/CD remains deferred until production launch.
+
+2026-10-05 D3-077 composes independently default-off packet authority in both Gateway entrypoints
+and the candidate export activity through a private Applications subpath. The export facade refuses
+data-key/MAC effects and uses an independent owning pool plus exact Profile request/operation/policy
+authorization. All 360 Applications/318 Gateway/1,613 Workflow units, three builds, five emitted
+isolation cases and two actual SQL composition cases pass with simulated KMS. The 30 crypto cases
+moved from Gateway to Applications intact. Owned fixture removed; shared volumes retained and
+Docker/WSL stopped. Historical-key authority and a new clean full verifier remain; production
+key/role/legacy disposition and accountable acceptance stay separate. No deployment, activation,
+publication or D1/D3 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
+CI/CD deferred until production launch.
+
+
+2026-10-05 D3-077 private bounded historical-key composition passes 377 Applications units and three
+actual PostgreSQL runtime cases (KMS SDK transport simulated). Original key/receipt/value authority
+survives explicit rotation; new writes use active keys and unsupported history refuses before KMS.
+Owned tmpfs fixture removed, shared volumes preserved, Docker/WSL stopped. All three builds, 318 Gateway/1,613 Workflow units
+and five emitted isolation cases pass; current entrypoint artifacts and fresh full verifier remain; release/retention/accountable/deployed gates
+remain. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). No activation or D1/D3 completion;
+CI/CD remains deferred until production launch.
+
+
+2026-10-05 D3-077 actual logical restore now exercises the private KMS adapter (only SDK transport
+simulated) with packets and receipts from two key pairs. All 88 relation row sets/65 migrations/
+12 schemas, three original values/replays and exact unchanged receipts pass; removing old MAC
+authority refuses before KMS. Source unchanged, generated fixture removed and shared volumes
+preserved. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). Current artifacts and clean
+full verifier, production key/role/legacy/accountable/deployed gates remain. No activation, frontend
+work, publication or D1/D3 completion; CI/CD deferred until production launch.
+
+
+2026-10-05 D3-077 clean frozen a6da6b3f passes the full maintained verifier: 38 typecheck tasks,
+39 test tasks, 23 builds; unchanged lint baseline. Four source-bound artifact families/20 files
+build twice byte-identically, with independent archive/manifest/SBOM/digest integrity and actual
+bundled refusal checks. Docker/WSL stopped; no publication/deployment/activation. Only delivery
+documentation follows verified source. Concurrent old/new first-use replay still needs transition
+evidence before whole-slice review; real legacy/key/role/retention/accountable/client/ATS/deployed
+gates remain. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). D1/D3 stay In progress;
+CI/CD remains deferred until production launch.
+
+
+2026-10-05 D3-077 reproduces and fixes concurrent first-use replay across old/new writer keys.
+Thirty new actual SQL races (33 runtime cases total) preserve original receipts, avoid duplicate
+packets/preparations/events and prove transaction rollback before original-key MAC. Changed requests
+still conflict; unsupported authority refuses before further KMS. Existing 27 restricted-storage
+SQL cases and 377 Applications/318 Gateway/1,613 Workflow units, all three builds and five emitted
+isolation cases pass. Owned fixture removed, shared volumes
+preserved and Docker/WSL stopped. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). New
+emitted artifact and clean full verification remain before whole-slice review; D1/D3 stay In progress.
+No frontend change, publication, deployment or activation; CI/CD remains deferred until launch.
+
+
+2026-10-05 D3-077 whole-change SQL recheck passes current actual-adapter Applications 92 and
+Gateway 56 cases, then discovers eleven preparation tests cannot spy on the frozen adapter. A
+mutable test-only method facade preserves the actual frozen production adapter and its controls.
+All 39 targeted Workflow cases and actual two-key/65-migration/88-relation logical restore pass;
+no assertion/permission weakening. Owned fixtures removed and shared volumes preserved; Docker/WSL
+shutdown follows the last related step. Four artifact families/20 files from clean 437d59ce build
+twice identically, but current artifact/full verification remains after the facade correction.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). No frontend change, cloud publication,
+deployment/activation or D1/D3 closure; CI/CD remains deferred until launch.
+
+
+2026-10-05 D3-077 clean frozen b5a7a2cf passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 builds and unchanged lint. Four current source-bound artifact families/20 files
+build twice byte-identically, pass independent integrity/bundled refusal checks and retain exact
+hashes after verification. Current actual-adapter SQL, concurrent original-key races and two-epoch
+logical restore evidence are complete locally. Backend source is prepared for draft review; only
+delivery/ADR evidence follows the verified executable source. All release, real legacy/key/role/
+retention/accountable/client/ATS/deployed gates remain; switches stay false. Docker/WSL stopped.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). No cloud publication, deployment,
+activation or D1/D3 completion; CI/CD remains deferred until production launch.
+
+
+2026-10-05 D3-077 backend source opens as draft [PR #561](https://github.com/Vrixic/project-ai-job-apply/pull/561)
+on exact main 18b6b2e2. Verified executable source remains b5a7a2cf; subsequent commits contain only
+delivery/ADR evidence. No merge, artifact publication, deployment or activation. ADR-041 remains
+Proposed; saved-answer reuse and both private switches stay false. Review and all real legacy/key/
+role/retention/accountable/client/ATS/deployed gates remain. D1/D3 and D3-077 stay In progress;
+CI/CD remains owner-deferred until production launch.

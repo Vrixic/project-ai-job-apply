@@ -5,8 +5,11 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { InMemoryMetricSink } from "./metrics.js";
-import { ApplicationsService } from "./service.js";
-import { PostgresApplicationStore } from "./store.js";
+import {
+  createFixtureServiceApplication,
+  createIntegrationApplicationStore,
+  createIntegrationApplicationsService,
+} from "./restricted-packet-integration-support.js";
 import { definitions, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -21,8 +24,8 @@ describeWithDatabase("Applications measurement over PostgreSQL", () => {
   });
   const sink = new InMemoryMetricSink();
   const jobId = uuidv7();
-  const service = new ApplicationsService({
-    store: new PostgresApplicationStore(client, () => new Date(), { definitions }),
+  const service = createIntegrationApplicationsService({
+    store: createIntegrationApplicationStore(client, () => new Date(), { definitions }),
     packets: {
       async prepare({ userEntries }) {
         return {
@@ -55,6 +58,11 @@ describeWithDatabase("Applications measurement over PostgreSQL", () => {
   });
 
   beforeAll(async () => {
+    await execFileAsync(
+      process.execPath,
+      [fileURLToPath(new URL("../../profile/dist/src/migrate.js", import.meta.url))],
+      { env: { ...process.env, DATABASE_URL: databaseUrl } },
+    );
     const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
     await execFileAsync(process.execPath, [migrationExecutable], {
       env: { ...process.env, DATABASE_URL: databaseUrl },
@@ -67,7 +75,13 @@ describeWithDatabase("Applications measurement over PostgreSQL", () => {
 
   it("emits versioned funnel, correction, and attempt metrics without candidate values", async () => {
     const owner = uuidv7();
-    const created = await service.create(owner, jobId, key("create"));
+    const created = await createFixtureServiceApplication(
+      service,
+      client,
+      owner,
+      jobId,
+      key("create"),
+    );
     const first = await service.preparePacket(
       owner,
       created.id,

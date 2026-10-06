@@ -6,14 +6,17 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  createFixtureServiceApplication,
+  createIntegrationApplicationStore,
+  createIntegrationApplicationsService,
+} from "./restricted-packet-integration-support.js";
+import {
   type ApplicationJobGate,
   ApplicationJobUnavailableError,
-  ApplicationsService,
   InvalidApplicationCursorError,
   type LiveBindingsSource,
   type PacketPreparationSource,
 } from "./service.js";
-import { PostgresApplicationStore } from "./store.js";
 import { definitions, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -33,7 +36,7 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
   });
   const activeJobs = new Set<string>();
   let liveJobRevision = HASH_A;
-  const store = new PostgresApplicationStore(client, () => new Date(), { definitions });
+  const store = createIntegrationApplicationStore(client, () => new Date(), { definitions });
   const packets: PacketPreparationSource = {
     async prepare({ userEntries }) {
       return {
@@ -60,9 +63,14 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
     },
   };
   const jobs: ApplicationJobGate = { isActive: async (jobId) => activeJobs.has(jobId) };
-  const service = new ApplicationsService({ store, packets, bindings, jobs });
+  const service = createIntegrationApplicationsService({ store, packets, bindings, jobs });
 
   beforeAll(async () => {
+    await execFileAsync(
+      process.execPath,
+      [fileURLToPath(new URL("../../profile/dist/src/migrate.js", import.meta.url))],
+      { env: { ...process.env, DATABASE_URL: databaseUrl } },
+    );
     const migrationExecutable = fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url));
     await execFileAsync(process.execPath, [migrationExecutable], {
       env: { ...process.env, DATABASE_URL: databaseUrl },
@@ -80,14 +88,20 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
   }
 
   it("refuses to start an application for a job that is not active", async () => {
-    await expect(service.create(uuidv7(), uuidv7(), key("create"))).rejects.toThrow(
-      ApplicationJobUnavailableError,
-    );
+    await expect(
+      createFixtureServiceApplication(service, client, uuidv7(), uuidv7(), key("create")),
+    ).rejects.toThrow(ApplicationJobUnavailableError);
   });
 
   it("drives prepare, approve, submit, and confirm through contract-valid responses", async () => {
     const owner = uuidv7();
-    const created = await service.create(owner, newJob(), key("create"));
+    const created = await createFixtureServiceApplication(
+      service,
+      client,
+      owner,
+      newJob(),
+      key("create"),
+    );
     expect(validateApplication(created)).toBe(true);
 
     const prepared = await service.preparePacket(
@@ -183,7 +197,7 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
   });
 
   it("records a hand-completed submission through takeover and candidate attestation", async () => {
-    const manualService = new ApplicationsService({
+    const manualService = createIntegrationApplicationsService({
       store,
       jobs,
       bindings,
@@ -209,7 +223,13 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
       },
     });
     const owner = uuidv7();
-    const created = await manualService.create(owner, newJob(), key("manual-create"));
+    const created = await createFixtureServiceApplication(
+      manualService,
+      client,
+      owner,
+      newJob(),
+      key("manual-create"),
+    );
     const prepared = await manualService.preparePacket(
       owner,
       created.id,
@@ -271,7 +291,13 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
 
   it("does not submit when the live form no longer matches the approved packet", async () => {
     const owner = uuidv7();
-    const created = await service.create(owner, newJob(), key("create"));
+    const created = await createFixtureServiceApplication(
+      service,
+      client,
+      owner,
+      newJob(),
+      key("create"),
+    );
     const prepared = await service.preparePacket(
       owner,
       created.id,
@@ -313,8 +339,14 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
     const owner = uuidv7();
     const jobA = newJob();
     const jobB = newJob();
-    const first = await service.create(owner, jobA, key("filter-a1"));
-    await service.create(owner, jobB, key("filter-b1"));
+    const first = await createFixtureServiceApplication(
+      service,
+      client,
+      owner,
+      jobA,
+      key("filter-a1"),
+    );
+    await createFixtureServiceApplication(service, client, owner, jobB, key("filter-b1"));
     const onlyA = await service.search(owner, { jobId: jobA });
     expect(validatePage(onlyA)).toBe(true);
     expect(onlyA.items.map((item) => item.id)).toEqual([first.id]);
@@ -325,7 +357,13 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
 
     // After a cancellation the candidate may start again; the newest application comes first.
     await service.cancel(owner, first.id, first.revision, key("filter-cancel"));
-    const restarted = await service.create(owner, jobA, key("filter-a2"));
+    const restarted = await createFixtureServiceApplication(
+      service,
+      client,
+      owner,
+      jobA,
+      key("filter-a2"),
+    );
     const both = await service.search(owner, { jobId: jobA });
     expect(both.items.map((item) => item.id)).toEqual([restarted.id, first.id]);
     expect(both.items[0]?.status).not.toBe("cancelled");
@@ -335,7 +373,13 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
   it("pages owner applications with a strict cursor and never leaks another owner", async () => {
     const owner = uuidv7();
     for (let index = 0; index < 3; index += 1) {
-      await service.create(owner, newJob(), key(`create-${index}`));
+      await createFixtureServiceApplication(
+        service,
+        client,
+        owner,
+        newJob(),
+        key(`create-${index}`),
+      );
     }
     const first = await service.search(owner, { limit: 2 });
     expect(validatePage(first)).toBe(true);

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { RestrictedPacketExportReader } from "@ai-job-apply/applications-service";
 import type {
   CoverLetterExportReader,
   CoverLetterExportReference,
@@ -16,6 +17,7 @@ import {
   validateCandidateRightsActivityInput,
 } from "./candidate-rights-durable.js";
 import type { CandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
+import { enrichRestrictedPacketExport } from "./restricted-packet-export.js";
 
 export interface CandidateExportArtifact {
   objectKey: string;
@@ -74,6 +76,7 @@ export interface CandidateRightsActivityDependencies {
   /** Profile's own retirement of unreviewed proposals, needed by the resume purge sweep (ADR-034). */
   resumeProposals?: Pick<PostgresResumeProposalWriter, "retireDocumentProposals">;
   restrictedAnswerExport?: RestrictedAnswerExportReader;
+  restrictedPacketExport?: RestrictedPacketExportReader;
   coverLetterExport?: CoverLetterExportReader;
   identityProvider: CandidateIdentityProvider;
   subprocessors: readonly CandidateSubprocessor[];
@@ -102,6 +105,7 @@ interface OwnerExport {
   billing?: unknown;
   trust?: unknown;
   applications?: unknown;
+  restrictedPacketReferences?: unknown;
   audit?: { events?: unknown[] };
 }
 
@@ -455,6 +459,23 @@ export class PostgresCandidateRightsActivityStore {
     );
     if (!validateCandidateDataExportV1(envelope)) {
       throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+    }
+    if (this.includesApplications) {
+      envelope.applications = await enrichRestrictedPacketExport({
+        applications: envelope.applications as Record<string, unknown>,
+        inventory: applicationsRows[0]?.data.restrictedPacketReferences,
+        scope: {
+          ownerUserId: context.userId,
+          exportId: input.resourceId,
+          operationId: input.operationId,
+          policyVersion: input.policyVersion,
+        },
+        ...(this.dependencies.restrictedPacketExport
+          ? { reader: this.dependencies.restrictedPacketExport }
+          : {}),
+      });
+      if (!validateCandidateDataExportV1(envelope))
+        throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
     }
     const exportProfile = envelope.profile as Record<string, unknown>;
     if (

@@ -181,7 +181,7 @@ function Get-D1RestoreManifestBoundary {
   $expectedManifestId = "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1"
   $expectedOwners = @("applications", "billing", "documents", "jobs", "matching", "profile", "trust")
   $expectedSchemas = @(
-    "applications", "billing", "documents", "identity", "jobs", "jobs_public",
+    "applications", "applications_restricted", "billing", "documents", "identity", "jobs", "jobs_public",
     "matching", "platform", "privacy", "profile", "trust"
   )
   $path = [IO.Path]::GetFullPath((Join-Path $root `
@@ -242,11 +242,15 @@ function Get-D1RestoreManifestBoundary {
     ) {
       throw "The restore relation identity is invalid."
     }
+    $orderedSchemas = [string[]]@($schemas)
+    $orderedRelations = [string[]]@($relations)
+    [Array]::Sort($orderedSchemas, [StringComparer]::Ordinal)
+    [Array]::Sort($orderedRelations, [StringComparer]::Ordinal)
     if (
       (@($schemas | Select-Object -Unique)).Count -ne $schemas.Count -or
-      ($schemas -join "`n") -cne ((@($schemas | Sort-Object)) -join "`n") -or
+      ($schemas -join "`n") -cne ($orderedSchemas -join "`n") -or
       (@($relations | Select-Object -Unique)).Count -ne $relations.Count -or
-      ($relations -join "`n") -cne ((@($relations | Sort-Object)) -join "`n") -or
+      ($relations -join "`n") -cne ($orderedRelations -join "`n") -or
       @($relations | Where-Object {
         [string]$_ -ceq [string]$contributor.migrationLedger
       }).Count -ne 1
@@ -275,8 +279,10 @@ function Get-D1RestoreManifestBoundary {
     $relationCount += $relations.Count
     $migrationCount += $migrations.Count
   }
-  $sortedOwners = @($owners | Sort-Object)
-  $sortedSchemas = @($schemaNames | Sort-Object)
+  $sortedOwners = [string[]]@($owners)
+  $sortedSchemas = [string[]]@($schemaNames)
+  [Array]::Sort($sortedOwners, [StringComparer]::Ordinal)
+  [Array]::Sort($sortedSchemas, [StringComparer]::Ordinal)
   if (
     (@($owners | Select-Object -Unique)).Count -ne $owners.Count -or
     ($owners -join "`n") -cne ($sortedOwners -join "`n") -or
@@ -286,9 +292,9 @@ function Get-D1RestoreManifestBoundary {
     (@($relationNames | Select-Object -Unique)).Count -ne $relationNames.Count -or
     (@($migrationIdentities | Select-Object -Unique)).Count -ne $migrationIdentities.Count -or
     $contributors.Count -ne 7 -or
-    $schemaNames.Count -ne 11 -or
-    $relationCount -ne 84 -or
-    $migrationCount -ne 63
+    $schemaNames.Count -ne 12 -or
+    $relationCount -ne 88 -or
+    $migrationCount -ne 65
   ) {
     throw "The restore manifest does not match the exact Phase 3 contributor boundary."
   }

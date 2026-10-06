@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalJson, NonCanonicalValueError } from "./canonical.js";
 import { classifyField } from "./field-policy.js";
 import {
+  type ApplicationPacket,
   ApprovalRefusedError,
   approvePacket,
   assemblePacket,
@@ -15,11 +16,13 @@ import {
 import {
   CONSENT_ID,
   definitions,
+  FACT_A,
   FACT_B,
   HASH_A,
   HASH_B,
   HASH_C,
   NOW,
+  PACKET_ID,
   packetInputs,
   proposal,
 } from "./test-support.js";
@@ -299,5 +302,145 @@ describe("approval", () => {
     expect(reasonsFor({}, new Date(NOW.getTime() + MAX_APPROVAL_AGE_MS))).toEqual([
       "approval_expired",
     ]);
+  });
+});
+
+describe("protected packet commitments", () => {
+  function protectedPacket(): ApplicationPacket {
+    const original = assemblePacket(
+      packetInputs({
+        fields: [
+          proposal(),
+          proposal({
+            fieldKey: "authorization.us_authorized",
+            value: true,
+            origin: "user_entered",
+            sourceFactIds: [],
+          }),
+        ],
+      }),
+      definitions,
+    );
+    const content = {
+      ...original,
+      fields: original.fields.map((field) =>
+        field.fieldKey === "authorization.us_authorized"
+          ? { ...field, value: null, protectedValue: true as const }
+          : field,
+      ),
+      restrictedValues: { id: PACKET_ID, metadataSha256: HASH_A, ciphertextSha256: HASH_B },
+    };
+    return { ...content, packetHash: computePacketHash(content) };
+  }
+  it("preserves the exact published v1 hash when no protection is present", () => {
+    expect(assemblePacket(packetInputs(), definitions).packetHash).toBe(
+      "e08e896f541f9f8331223464041cd2b7a7efe51ba4e128f6e2085df59d2b0c33",
+    );
+  });
+  it("binds ciphertext/protection identity and policy without ever hashing answer values", () => {
+    const packet = protectedPacket();
+    expect(verifyPacketHash(packet)).toBe(true);
+    const binding = packet.restrictedValues;
+    if (!binding) throw Error("Missing restricted binding fixture");
+    for (const restrictedValues of [
+      { ...binding, id: FACT_A },
+      { ...binding, metadataSha256: HASH_C },
+      { ...binding, ciphertextSha256: HASH_C },
+    ]) {
+      const changed = { ...packet, restrictedValues };
+      expect(computePacketHash(changed)).not.toBe(packet.packetHash);
+      expect(verifyPacketHash(changed)).toBe(false);
+    }
+    const tampered = structuredClone(packet);
+    const field = tampered.fields.find((entry) => entry.protectedValue);
+    if (!field) throw Error("Missing protected fixture");
+    field.reasons = ["restricted_answer"];
+    expect(verifyPacketHash(tampered)).toBe(false);
+  });
+  it("requires explicit acknowledgement of opaque protected fields during approval", () => {
+    const packet = protectedPacket();
+    expect(() =>
+      approvePacket(
+        packet,
+        { packetHash: packet.packetHash, consentId: CONSENT_ID, acknowledgedFieldKeys: [] },
+        NOW,
+      ),
+    ).toThrow(expect.objectContaining({ code: "UNACKNOWLEDGED_FIELD" }));
+    expect(
+      approvePacket(
+        packet,
+        {
+          packetHash: packet.packetHash,
+          consentId: CONSENT_ID,
+          acknowledgedFieldKeys: ["authorization.us_authorized"],
+        },
+        NOW,
+      ).packetHash,
+    ).toBe(packet.packetHash);
+  });
+  it.each([
+    "plaintext",
+    "missing binding",
+    "empty binding",
+    "false marker",
+    "auto",
+    "user action",
+    "no review",
+    "extra body",
+    "invalid digest",
+    "document",
+  ])(
+    "refuses inconsistent protected packet: %s even if a caller tries to recompute its hash",
+    (kind) => {
+      const packet = structuredClone(protectedPacket());
+      const field = packet.fields.find((entry) => entry.protectedValue);
+      if (!field) throw Error("Missing protected fixture");
+      if (kind === "plaintext") field.value = false;
+      if (kind === "missing binding") delete packet.restrictedValues;
+      if (kind === "empty binding") delete field.protectedValue;
+      if (kind === "false marker") Object.assign(field, { protectedValue: false });
+      if (kind === "auto") field.disposition = "auto";
+      if (kind === "user action") field.disposition = "user_action";
+      if (kind === "no review") field.requiresReview = false;
+      if (kind === "extra body") Object.assign(packet.restrictedValues ?? {}, { answer: true });
+      if (kind === "invalid digest")
+        Object.assign(packet.restrictedValues ?? {}, { ciphertextSha256: "invalid" });
+      if (kind === "document") field.fieldKey = "documents.cover_letter";
+      expect(verifyPacketHash(packet)).toBe(false);
+      expect(() => computePacketHash(packet)).toThrow(PacketInvariantError);
+      expect(() =>
+        approvePacket(
+          packet,
+          {
+            packetHash: packet.packetHash,
+            consentId: CONSENT_ID,
+            acknowledgedFieldKeys: [field.fieldKey],
+          },
+          NOW,
+        ),
+      ).toThrow(expect.objectContaining({ code: "PACKET_TAMPERED" }));
+    },
+  );
+  it("cannot turn a mandatory empty direct action into a resolved protected field", () => {
+    const packet = protectedPacket();
+    const direct = assemblePacket(
+      packetInputs({
+        fields: [proposal({ fieldKey: "attestation.truthful", value: true, origin: "derived" })],
+      }),
+      definitions,
+    ).fields;
+    const content = { ...packet, fields: [...packet.fields, ...direct] };
+    const withDirect = { ...content, packetHash: computePacketHash(content) };
+    expect(() =>
+      approvePacket(
+        withDirect,
+        {
+          packetHash: withDirect.packetHash,
+          consentId: CONSENT_ID,
+          acknowledgedFieldKeys: ["authorization.us_authorized", "attestation.truthful"],
+        },
+        NOW,
+      ),
+    ).toThrow(expect.objectContaining({ code: "UNRESOLVED_FIELD" }));
   });
 });

@@ -136,7 +136,12 @@ async function ownedCounts(
        (SELECT count(*)::int FROM applications.attempts WHERE owner_user_id = ${input.ownerUserId}) +
        (SELECT count(*)::int FROM applications.history WHERE owner_user_id = ${input.ownerUserId}) +
        (SELECT count(*)::int FROM applications.command_receipts WHERE owner_user_id = ${input.ownerUserId}) +
-       (SELECT count(*)::int FROM applications.outbox WHERE owner_user_id = ${input.ownerUserId})
+       (SELECT count(*)::int FROM applications.outbox WHERE owner_user_id = ${input.ownerUserId}) +
+       (SELECT count(*)::int FROM applications.packet_preparations WHERE owner_user_id = ${input.ownerUserId}) +
+       (SELECT count(*)::int FROM applications.preparation_outbox WHERE owner_user_id = ${input.ownerUserId}) +
+       (SELECT count(*)::int FROM applications.preparation_audit WHERE owner_user_id = ${input.ownerUserId}) +
+       (SELECT count(*)::int FROM applications_restricted.packet_values WHERE owner_user_id = ${input.ownerUserId}) +
+       (SELECT count(*)::int FROM applications_restricted.packet_read_audit WHERE owner_user_id = ${input.ownerUserId})
       )::int AS "ownerApplicationRows",
       ((SELECT count(*)::int FROM applications.applications WHERE owner_user_id = ${input.otherUserId}) +
        (SELECT count(*)::int FROM applications.packets WHERE owner_user_id = ${input.otherUserId}) +
@@ -144,7 +149,12 @@ async function ownedCounts(
        (SELECT count(*)::int FROM applications.attempts WHERE owner_user_id = ${input.otherUserId}) +
        (SELECT count(*)::int FROM applications.history WHERE owner_user_id = ${input.otherUserId}) +
        (SELECT count(*)::int FROM applications.command_receipts WHERE owner_user_id = ${input.otherUserId}) +
-       (SELECT count(*)::int FROM applications.outbox WHERE owner_user_id = ${input.otherUserId})
+       (SELECT count(*)::int FROM applications.outbox WHERE owner_user_id = ${input.otherUserId}) +
+       (SELECT count(*)::int FROM applications.packet_preparations WHERE owner_user_id = ${input.otherUserId}) +
+       (SELECT count(*)::int FROM applications.preparation_outbox WHERE owner_user_id = ${input.otherUserId}) +
+       (SELECT count(*)::int FROM applications.preparation_audit WHERE owner_user_id = ${input.otherUserId}) +
+       (SELECT count(*)::int FROM applications_restricted.packet_values WHERE owner_user_id = ${input.otherUserId}) +
+       (SELECT count(*)::int FROM applications_restricted.packet_read_audit WHERE owner_user_id = ${input.otherUserId})
       )::int AS "otherApplicationRows",
       ((SELECT count(*)::int FROM profile.job_preferences WHERE user_id = ANY(${userIds}::uuid[])) +
        (SELECT count(*)::int FROM profile.profile_facts WHERE user_id = ANY(${userIds}::uuid[])) +

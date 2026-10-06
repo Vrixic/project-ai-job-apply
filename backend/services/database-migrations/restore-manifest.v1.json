@@ -4,7 +4,7 @@
   "contributors": [
     {
       "owner": "applications",
-      "schemas": ["applications"],
+      "schemas": ["applications", "applications_restricted"],
       "migrationLedger": "applications.schema_migrations",
       "migrations": [
         {
@@ -38,6 +38,10 @@
         {
           "version": "0008_temporary_material_bindings",
           "checksum": "f4b9457cebbff06138be285d8c8098b87856a4b8272465ab48bf2330a09324aa"
+        },
+        {
+          "version": "0009_restricted_packet_values",
+          "checksum": "b8b8b19d90366c48e93ea511c458ba5607a6111c6cb83bb70956c820218bc26e"
         }
       ],
       "relations": [
@@ -51,7 +55,9 @@
         "applications.packets",
         "applications.preparation_audit",
         "applications.preparation_outbox",
-        "applications.schema_migrations"
+        "applications.schema_migrations",
+        "applications_restricted.packet_read_audit",
+        "applications_restricted.packet_values"
       ]
     },
     {

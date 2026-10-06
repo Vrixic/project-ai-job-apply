@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
+  type ApplicationStoreOptions,
   createApplicationsDatabase,
+  defaultFieldDefinitions,
   PostgresApplicationStore,
 } from "@ai-job-apply/applications-service";
 import { PostgresCoverLetterStore } from "@ai-job-apply/documents-service/cover-letter-runtime";
@@ -11,6 +13,14 @@ import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-serv
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createOwnedCoverLetterEvidenceSource } from "./application-preparation-evidence.js";
+
+const { createSyntheticPacketProtection } = await import(
+  new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+);
+const packetProtection = createSyntheticPacketProtection() as {
+  options: NonNullable<ApplicationStoreOptions["restrictedPackets"]>;
+  destroy(): void;
+};
 
 const requested = process.env.OWNED_EVIDENCE_INTEGRATION === "1";
 const databaseUrl = process.env.OWNED_EVIDENCE_TEST_DATABASE_URL;
@@ -66,7 +76,10 @@ describe.skipIf(!requested)(
       catalog = new PostgresJobCatalog(jobsDatabase, {
         searchCursorKeys: { active: { id: "synthetic-v1", key: Buffer.alloc(32, 1) } },
       });
-      applications = new PostgresApplicationStore(applicationsDatabase, () => at);
+      applications = new PostgresApplicationStore(applicationsDatabase, () => at, {
+        definitions: defaultFieldDefinitions(),
+        restrictedPackets: packetProtection.options,
+      });
       documents = new PostgresCoverLetterStore(leaseDatabase.client, {
         putIfAbsent: async () => {
           throw Error("SyntheticUnexpectedObjectWrite");
@@ -85,6 +98,7 @@ describe.skipIf(!requested)(
       });
     }, 90_000);
     afterAll(async () => {
+      packetProtection.destroy();
       await database?.client.end();
       await leaseDatabase?.client.end();
       await jobsDatabase?.end();

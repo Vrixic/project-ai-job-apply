@@ -26,9 +26,16 @@ import {
   seedResponseInventory,
   seedTemporaryMaterialCompletion,
 } from "./response-inventory.mjs";
-
+import {
+  createSyntheticPacketProtection,
+  exerciseRestoredRestrictedPackets,
+  seedRestrictedPackets,
+} from "./restricted-packets.mjs";
 import { exerciseRestoredTemporaryPackets, seedTemporaryPackets } from "./temporary-packets.mjs";
 
+// Isolated synthetic runner: production-injected KMS transports remain forbidden.
+process.env.NODE_ENV = "test";
+const protection = createSyntheticPacketProtection();
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 const execute = promisify(execFile);
 // Inherit OS process-launch paths only, never database, cloud, Auth0, provider or
@@ -191,9 +198,9 @@ try {
   const targetUrl = `postgres://ai_job_apply:${password}@127.0.0.1:${port}/d2_target`;
   const source = loadCurrentRestoreManifest();
   assert.equal(source.manifest.contributors.length, 7);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 11);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 84);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 63);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 12);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 88);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 65);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
@@ -237,7 +244,13 @@ try {
   const materialFixture = await seedTemporaryMaterialCompletion(sourceStore, fixtures.ownerUserId);
   const sourceApplications = createApplicationsDatabase(sourceUrl, { maxConnections: 2 });
   clients.push(sourceApplications);
-  const packetFixtures = await seedTemporaryPackets(sourceApplications, fixtures.ownerUserId);
+  const packetFixtures = await seedTemporaryPackets(
+    sourceApplications,
+    fixtures.ownerUserId,
+    protection.options,
+  );
+  stage = "seed-generated-restricted-packets";
+  const restrictedFixtures = await seedRestrictedPackets(sourceApplications, protection);
   stage = "source-aggregate-and-row-snapshot";
   const sourceAggregate = await verifyRestoreDatabase(sourceReader, source);
   const sourceRows = await exactRows(sourceReader, source.manifest);
@@ -299,7 +312,17 @@ try {
   );
   const targetApplications = createApplicationsDatabase(targetUrl, { maxConnections: 2 });
   clients.push(targetApplications);
-  const packetBehavior = await exerciseRestoredTemporaryPackets(targetApplications, packetFixtures);
+  const packetBehavior = await exerciseRestoredTemporaryPackets(
+    targetApplications,
+    packetFixtures,
+    protection.options,
+  );
+  stage = "restored-restricted-packet-behavior";
+  const restrictedBehavior = await exerciseRestoredRestrictedPackets(
+    targetApplications,
+    protection,
+    restrictedFixtures,
+  );
   stage = "restored-d2-behavior";
   const behavior = await exerciseRestoredD2(targetStore, targetProfile, fixtures, (value) => {
     stage = value;
@@ -308,10 +331,10 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 63,
+    migrationCount: 65,
     ownerCount: 7,
-    schemaCount: 11,
-    exactRelationRowSetsMatched: 84,
+    schemaCount: 12,
+    exactRelationRowSetsMatched: 88,
     nonemptyD2RelationsMatched: requiredNonemptyD2Relations.length,
     aggregateVerifierMatched: true,
     sourceUnchanged: true,
@@ -319,6 +342,7 @@ try {
     ...responseBehavior,
     ...materialBehavior,
     ...packetBehavior,
+    ...restrictedBehavior,
     ...behavior,
   };
 } catch (error) {
@@ -330,12 +354,13 @@ try {
       : "FAILED";
   const location =
     typeof error?.stack === "string"
-      ? /((?:fixtures|response-inventory|temporary-packets|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
+      ? /((?:fixtures|response-inventory|temporary-packets|restricted-packets|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
           error.stack,
         )?.[1]
       : undefined;
   failure = { stage, code, ...(location ? { testLocation: location } : {}) };
 } finally {
+  protection.destroy();
   const closed = await Promise.allSettled(clients.map((client) => client.end({ timeout: 5 })));
   if (closed.some((item) => item.status === "rejected"))
     failure ??= { stage: "database-client-cleanup", code: "FAILED" };
