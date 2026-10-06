@@ -3693,3 +3693,9 @@ production future-time guards. The second owned fixture is removed, volumes reta
 Docker/WSL stopped. Corrected clean full verification remains pending.
 [Evidence](evidence/d3-native-task-launch-2026-10-05.md). D1/D3 stay In progress;
 CI/CD is owner-deferred until production launch, with no cloud activation or deployment.
+
+2026-10-05 D3-079 clean `a2600fb5` passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 builds and operational/security/Compose/emitted checks. Main independently
+merges #561 as `5305829d`; combined 66-migration/88-relation/12-schema reconciliation and
+verification remain before review. [Evidence](evidence/d3-native-task-launch-2026-10-05.md).
+D1/D3 stay In progress; no deployment/activation, and CI/CD stays deferred until launch.

@@ -1,6 +1,6 @@
 # D3 native task launch claims and positive recovery — 2026-10-05
 
-Status: private source checkpoint, default-off; full clean committed verification pending.
+Status: private source checkpoint, default-off; clean `a2600fb5` fully verified locally.
 D3-079 and D1/D3 remain In progress. Base: exact main `18b6b2e2` (#559), isolated backend worktree.
 Restricted-packet draft PR #561 is independent and is not included in this branch.
 
@@ -92,7 +92,7 @@ its separately verified fixture. Shared volume inventories match; Docker Desktop
 
 ## Remaining work and release boundary
 
-Build/verify current committed source before source review. The immutable native image/entrypoint,
+Current standalone source passes full local verification; integration with merged #561 remains. The immutable native image/entrypoint,
 authenticated issuer/launcher and private evidence/work/completion/registry adapters, durable task
 state-event routing/lost-ACK capture, managed TLS/DNS routing, IAM/task conformance and complete
 client/ATS disposal remain unfinished. Unknown launch requires positive exact evidence; it does not
@@ -121,4 +121,10 @@ Final logs: `.tmp/d3-native-launch-unit-final.log` (110),
 `.tmp/d3-native-launch-d2-runtime-guard.log` (264).
 Second owned tmpfs fixture `106726d6fe03039a4581e2d3c607d5cfa4fd67dc1aebc8c8e59b7cb07a323599`
 is removed after exact identity/image/label/mount checks. Shared volume inventories match;
-Docker Desktop and WSL are stopped. Full verification of the corrected clean commit remains pending.
+Docker Desktop and WSL are stopped. Corrected clean `a2600fb5` passes full verification. Log: `.tmp/d3-native-launch-full-final.log`.
+
+Clean `a2600fb5e651266be1a367816d59d37c3fa7fc45` passes the complete maintained verifier:
+38 typecheck tasks, 39 test tasks and 23 builds, formatting, operational/security, Compose,
+product scope and emitted isolation/default-off checks. Main independently advances to
+`5305829d` with #561 while verification runs. This certifies the standalone 65/86/11 boundary;
+combined 66-migration/88-relation/12-schema acceptance remains pending reconciliation.
