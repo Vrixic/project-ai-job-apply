@@ -13,13 +13,14 @@ import {
 } from "./native-memory-transport.js";
 
 export interface NativeCoverLetterRuntimeOptions {
+  documentVersion: number;
   binding: NativeEvidenceBinding;
   identity: CoverLetterPreparationIdentity;
   source: CoverLetterEvidenceSource;
   provider: ModelProvider;
   controls: Omit<
     Parameters<typeof createNativeMaterialControls>[0],
-    "allocation" | "original" | "consentExpiresAt" | "enabled"
+    "allocation" | "original" | "consentExpiresAt" | "enabled" | "documentVersion"
   >;
   transport: Omit<NativeMemoryTransportOptions, "session" | "reference" | "enabled" | "tls"> & {
     tls: { key: string | Buffer; cert: string | Buffer };
@@ -45,7 +46,11 @@ export async function createNativeCoverLetterRuntime(options: NativeCoverLetterR
   if (!enabled() || process.platform !== "linux" || !isMainThread || started) throw unavailable();
   const binding = nativeEvidenceBinding(options.binding);
   const identity = structuredClone(options.identity);
+  const documentVersion = options.documentVersion;
   if (
+    !Number.isSafeInteger(documentVersion) ||
+    documentVersion < 1 ||
+    documentVersion > 2_147_483_647 ||
     identity.id !== binding.scope.generationId ||
     identity.ownerUserId !== binding.scope.ownerUserId ||
     identity.applicationId !== binding.scope.applicationId ||
@@ -104,12 +109,14 @@ export async function createNativeCoverLetterRuntime(options: NativeCoverLetterR
     kernel = loadKernel();
     const controls = createNativeMaterialControls({
       ...controlsOptions,
+      documentVersion,
       allocation: binding.allocation,
       original: binding.original,
       consentExpiresAt: identity.expiresAt.toISOString(),
       enabled,
     });
     session = createNativeMemorySession({
+      documentVersion,
       ...limits,
       identity,
       kernel,

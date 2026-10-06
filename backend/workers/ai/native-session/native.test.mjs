@@ -31,6 +31,7 @@ for (const mode of [
   "runtime-bootstrap-delayed",
   "runtime-bootstrap-revoked",
   "runtime-image",
+  "runtime-image-version-two",
 ]) {
   test(`kernel retires the actual ${mode} content process`, { timeout: 10_000 }, async () => {
     const started = performance.now();
@@ -88,6 +89,7 @@ for (const mode of [
           "runtime-bootstrap",
           "runtime-bootstrap-delayed",
           "runtime-image",
+          "runtime-image-version-two",
         ].includes(mode)
       ) {
         const value = JSON.parse(output.trim());

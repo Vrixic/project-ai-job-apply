@@ -55,6 +55,7 @@ export function createNativeMaterialControls(options: {
   allocation: NativeTaskAllocation;
   original: CoverLetterWorkReference;
   consentExpiresAt: string;
+  documentVersion?: number;
   workFunctionArn: string;
   completionFunctionArn: string;
   enabled?: () => boolean;
@@ -76,8 +77,12 @@ export function createNativeMaterialControls(options: {
   const timeout = options.timeoutMs ?? 10_000;
   const injected = options.testClient;
   const enabled = options.enabled ?? (() => false);
+  const documentVersion = options.documentVersion === undefined ? 1 : options.documentVersion;
   try {
     if (
+      !Number.isSafeInteger(documentVersion) ||
+      documentVersion < 1 ||
+      documentVersion > 2_147_483_647 ||
       !closed(options.allocation, [
         "allocationId",
         "ownerUserId",
@@ -336,7 +341,7 @@ export function createNativeMaterialControls(options: {
             raw.ownerUserId !== allocation.ownerUserId ||
             raw.applicationId !== allocation.applicationId ||
             raw.generationId !== allocation.generationId ||
-            raw.version !== 1 ||
+            raw.version !== documentVersion ||
             raw.completedAtMs > now ||
             raw.expiresAtMs <= now
           )

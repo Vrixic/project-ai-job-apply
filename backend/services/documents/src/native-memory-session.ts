@@ -22,6 +22,7 @@ export interface KernelMemoryDeadline {
 }
 
 export interface NativeMemorySessionOptions {
+  documentVersion: number;
   identity: CoverLetterPreparationIdentity;
   source: CoverLetterEvidenceSource;
   provider: ModelProvider;
@@ -47,8 +48,12 @@ export function createNativeMemorySession(options: NativeMemorySessionOptions) {
   if (process.platform !== "linux" || !isMainThread || allocated)
     throw Error("NativeMemorySessionUnavailable");
   const lifetime = options.maximumLifetimeMs ?? GENERATED_MATERIAL_LIFETIME_MS;
+  const documentVersion = options.documentVersion;
   const bootBudget = options.bootBudgetMs ?? 50_000;
   if (
+    !Number.isSafeInteger(documentVersion) ||
+    documentVersion < 1 ||
+    documentVersion > 2_147_483_647 ||
     !Number.isSafeInteger(lifetime) ||
     lifetime < 1 ||
     lifetime > GENERATED_MATERIAL_LIFETIME_MS ||
@@ -81,6 +86,8 @@ export function createNativeMemorySession(options: NativeMemorySessionOptions) {
     options.work,
     temporary,
     enabled,
+    () => new Date(),
+    documentVersion,
   );
   const reader = temporary.reader();
   const scoped = (owner: string, application: string) => {

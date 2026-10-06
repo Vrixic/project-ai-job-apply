@@ -101,7 +101,9 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
   const token = await issuer.issue("synthetic-candidate", { scope: "applications:read" });
   const certificate = readFileSync("/native/cert.pem");
   let reference;
+  const documentVersion = mode === "runtime-image-version-two" ? 2 : 1;
   const options = {
+    documentVersion,
     binding,
     identity,
     enabled: () => true,
@@ -225,6 +227,7 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
           throw Error("SyntheticRevoked");
       },
       bootstrap: async () => ({
+        documentVersion,
         ...identity,
         approvedAt: identity.approvedAt.toISOString(),
         expiresAt: identity.expiresAt.toISOString(),
@@ -464,6 +467,7 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
     assert.equal(portLoads, imageMode ? 0 : 1);
   }
   reference = runtime.reference;
+  assert.equal(reference.version, documentVersion);
   assert.equal(providerCalls, 1);
   assert.equal(controlInvocations, 3);
   assert.equal(Object.hasOwn(runtime, "reader"), false);

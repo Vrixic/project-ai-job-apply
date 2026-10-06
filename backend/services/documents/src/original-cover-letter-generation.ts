@@ -109,6 +109,7 @@ export class OriginalCoverLetterGenerationActor {
     >,
     private readonly enabled: () => boolean = () => false,
     private readonly clock: () => Date = () => new Date(),
+    private readonly documentVersion: number = 1,
   ) {}
 
   async generate(
@@ -116,7 +117,13 @@ export class OriginalCoverLetterGenerationActor {
     signal?: AbortSignal,
   ): Promise<OriginalCoverLetterGenerationOutcome> {
     if (this.#active) return { kind: "in_progress" };
-    if (!this.enabled() || signal?.aborted)
+    if (
+      !this.enabled() ||
+      signal?.aborted ||
+      !Number.isSafeInteger(this.documentVersion) ||
+      this.documentVersion < 1 ||
+      this.documentVersion > 2_147_483_647
+    )
       return { kind: "failed", errorCode: "generation_unavailable" };
     this.#active = true;
     let evidence: Awaited<ReturnType<CoverLetterEvidenceSource["load"]>> | undefined;
@@ -226,7 +233,7 @@ export class OriginalCoverLetterGenerationActor {
           id: identity.id,
           ownerUserId: identity.ownerUserId,
           applicationId: identity.applicationId,
-          version: 1,
+          version: this.documentVersion,
           jobRevision: identity.jobContextHash,
           confirmedFactsHash: identity.confirmedFactsHash,
         },

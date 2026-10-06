@@ -1,5 +1,10 @@
 # Native material image
 
+The authenticated startup now requires the original Documents row version. The nine-scalar
+bootstrap and native actor/controls preserve version 2 and later explicit generations. Pin the
+matching numeric owner receiver; older eight-scalar replies refuse without a version fallback.
+See [version evidence](../../../../docs/product/delivery/evidence/d3-native-document-version-2026-10-06.md).
+
 Local implementation only; deployment, task IAM, endpoint routing, provider acceptance and
 accountable release approval remain open. ADR-040 stays Proposed. This image runs one original
 cover-letter generation and authenticated direct reads; it is not a shared worker or Lambda.

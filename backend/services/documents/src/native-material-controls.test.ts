@@ -97,6 +97,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("one native allocation scalar control capabilities", () => {
+  it("pins original version two and refuses version one without consuming completion", async () => {
+    const f = fixture();
+    const options = { ...f.options, documentVersion: 2 };
+    const ports = createNativeMaterialControls(options);
+    options.documentVersion = 3;
+    expect(await ports.work.claimProviderDispatch(f.claim)).toMatchObject({ kind: "claimed" });
+    await ports.work.settleProviderDispatch(original);
+    expect(await ports.completion.claimOriginalCompletion(material())).toBe("unavailable");
+    expect(f.completionStore.claimOriginalCompletion).not.toHaveBeenCalled();
+    expect(await ports.completion.claimOriginalCompletion({ ...material(), version: 2 })).toBe(
+      "claimed",
+    );
+    expect(f.completionStore.claimOriginalCompletion).toHaveBeenCalledOnce();
+  });
+  it.each([0, -1, 1.5, NaN, 2_147_483_648])(
+    "refuses invalid pinned version %s before control effects",
+    (documentVersion) => {
+      const f = fixture();
+      expect(() => createNativeMaterialControls({ ...f.options, documentVersion })).toThrow(
+        "NativeMaterialControlsUnavailable",
+      );
+      expect(f.send).not.toHaveBeenCalled();
+    },
+  );
   it("exposes only frozen original work and completion ports", () => {
     const { ports } = fixture();
     expect(Object.keys(ports)).toEqual(["work", "completion"]);

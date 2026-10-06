@@ -77,6 +77,7 @@ const provider = {
   },
 };
 const options = {
+  documentVersion: 1,
   identity,
   provider,
   kernel,

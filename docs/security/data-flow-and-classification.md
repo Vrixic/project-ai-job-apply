@@ -820,3 +820,13 @@ active-candidate projection refuses missing/ambiguous subjects and is surrounded
 original work admission. Direct reads reverify managed OIDC and normal Gateway scalar authorization.
 The default image is disabled; managed release/IAM/TLS/routing/provider acceptance remains open.
 See [local evidence](../product/delivery/evidence/d3-native-image-runtime-2026-10-06.md).
+
+## Native original document version — 2026-10-06
+
+The private owning bootstrap now includes Documents' original row version alongside the eight
+Applications approval/context scalars. It is rechecked before reply and pinned in native actor,
+controls, completion and direct-read references; a missing or wrong version cannot fall back to 1.
+The strict nine-scalar reply requires a coordinated exact numeric receiver/image rollout. This
+adds no body, token, fact value, storage, grant renewal or provider authority. Real SQL retains
+original owner/document/work/version comparison; actual managed acceptance remains open.
+See [version evidence](../product/delivery/evidence/d3-native-document-version-2026-10-06.md).

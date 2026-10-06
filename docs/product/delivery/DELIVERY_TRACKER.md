@@ -1,5 +1,11 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 fixes native second-generation version handling: startup reads Documents' exact
+original version and carries it through memory generation and completion, with strict mismatched/
+missing-version refusal. All 183 focused checks pass; final SQL/Linux/full verification is in progress.
+[Evidence](evidence/d3-native-document-version-2026-10-06.md). No deployment/activation, main merge,
+third PR or CI/CD work; D1/D3 remain In progress and PC stays on.
+
 2026-10-06 D3-079 implements and locally verifies the dedicated native image with actual foreground
 provider, exact-version secret/TLS ports and authenticated owning principal projection. All 126
 focused checks, 24 real SQL cases, 30 Linux scenarios and six emitted checks pass. Clean source

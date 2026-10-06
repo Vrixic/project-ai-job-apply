@@ -176,6 +176,14 @@ describe.runIf(requested)(
       } else
         await sql`INSERT INTO applications.applications (id,owner_user_id,canonical_job_id,status,created_at,updated_at)
       VALUES (${application},${owner},${seeded?.jobId ?? uuidv7()},'preparing',clock_timestamp(),clock_timestamp())`;
+      if (prepare)
+        await documents.reserve({
+          id: uuidv7(),
+          ownerUserId: owner,
+          applicationId: application,
+          jobRevision: seeded?.context.jobContextHash ?? "a".repeat(64),
+          confirmedFactsHash: seeded?.context.confirmedFactsHash ?? "b".repeat(64),
+        });
       await documents.reserve({
         id: document,
         ownerUserId: owner,
@@ -719,6 +727,7 @@ describe.runIf(requested)(
       await sql`DELETE FROM identity.external_identities WHERE issuer=${principalIssuer} AND subject=${`${principalSubject}-ambiguous`}`;
       const bootstrap = await remote.bootstrap();
       expect(bootstrap).toMatchObject({
+        documentVersion: 2,
         id: request.original.documentId,
         ownerUserId: request.ownerUserId,
         applicationId: request.applicationId,
@@ -742,6 +751,9 @@ describe.runIf(requested)(
         approvedAt: bootstrap.approvedAt.toISOString(),
         expiresAt: bootstrap.expiresAt.toISOString(),
       };
+      await expect(
+        documentControls.checkBootstrap(binding, { ...storedBootstrap, documentVersion: 1 }),
+      ).rejects.toThrow("NativeOwnerRpcUnavailable");
       await documentControls.checkBootstrap(binding, storedBootstrap);
       await expect(
         documentControls.checkBootstrap(binding, {
@@ -786,6 +798,7 @@ describe.runIf(requested)(
       const controls = createNativeMaterialControls({
         allocation: binding.allocation,
         original: binding.original,
+        documentVersion: bootstrap.documentVersion,
         consentExpiresAt: grant.consent.toISOString(),
         workFunctionArn: rpcTarget,
         completionFunctionArn: rpcTarget,
@@ -802,6 +815,28 @@ describe.runIf(requested)(
       ).toEqual({ kind: "claimed", reference: binding.original });
       await controls.work.settleProviderDispatch(binding.original);
       const completedAtMs = Date.now();
+      await expect(
+        remote.run({
+          action: "completion",
+          input: {
+            schemaVersion: 1,
+            action: "claim_original_completion",
+            work: binding.original,
+            material: {
+              schemaVersion: 1,
+              kind: "cover_letter",
+              ownerUserId: request.ownerUserId,
+              applicationId: request.applicationId,
+              generationId: request.original.documentId,
+              version: 1,
+              contentSha256: "d".repeat(64),
+              completedAtMs,
+              expiresAtMs: completedAtMs + 1_800_000,
+            },
+          },
+        }),
+      ).rejects.toThrow("NativeOwnerRpcUnavailable");
+
       expect(
         await controls.completion.claimOriginalCompletion({
           schemaVersion: 1,
@@ -809,7 +844,7 @@ describe.runIf(requested)(
           ownerUserId: request.ownerUserId,
           applicationId: request.applicationId,
           generationId: request.original.documentId,
-          version: 1,
+          version: bootstrap.documentVersion,
           contentSha256: "d".repeat(64),
           completedAtMs,
           expiresAtMs: completedAtMs + 1_800_000,

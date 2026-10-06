@@ -106,6 +106,7 @@ function fixture(defaultOff = false) {
   });
   const approvedAt = new Date(Date.now() - 1000);
   const bootstrap = vi.fn(async () => ({
+    documentVersion: 1,
     id: id(4),
     ownerUserId: id(2),
     applicationId: id(3),
@@ -194,6 +195,21 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe("authenticated original native owner RPC", () => {
+  it("preserves the owning document version in the authenticated bootstrap", async () => {
+    const f = fixture();
+    const stored = await f.bootstrap();
+    f.bootstrap.mockResolvedValueOnce({ ...stored, documentVersion: 2 });
+    expect((await f.client.bootstrap()).documentVersion).toBe(2);
+  });
+  it.each([undefined, null, "2", 0, -1, 1.5, 2_147_483_648])(
+    "refuses missing or invalid original document version %s",
+    async (documentVersion) => {
+      const f = fixture();
+      const stored = await f.bootstrap();
+      f.bootstrap.mockResolvedValueOnce({ ...stored, documentVersion } as unknown as typeof stored);
+      await expect(f.client.bootstrap()).rejects.toThrow("NativeOwnerRpcUnavailable");
+    },
+  );
   it("authenticates principal projection and surrounds it with original admission checks", async () => {
     const f = fixture();
     await expect(f.client.principal("https://synthetic-issuer.invalid/")).resolves.toEqual({

@@ -36,7 +36,13 @@ afterEach(() => {
 });
 
 function setup(
-  options: { enabled?: boolean; gatewayEnabled?: boolean; text?: string; timeoutMs?: number } = {},
+  options: {
+    documentVersion?: number;
+    enabled?: boolean;
+    gatewayEnabled?: boolean;
+    text?: string;
+    timeoutMs?: number;
+  } = {},
 ) {
   let now = NOW;
   let enabled = options.enabled ?? true;
@@ -128,6 +134,7 @@ function setup(
     temporary,
     () => enabled,
     () => new Date(now),
+    options.documentVersion ?? 1,
   );
   return {
     actor,
@@ -150,6 +157,31 @@ function setup(
 }
 
 describe("original memory-only cover-letter generation actor", () => {
+  it("uses the owning Documents version for a second explicit generation", async () => {
+    const f = setup({ documentVersion: 2 });
+    const generated = await f.actor.generate(f.identity);
+    expect(generated.kind).toBe("ready");
+    if (generated.kind !== "ready") throw Error("SyntheticGenerationMissing");
+    expect(generated.reference.version).toBe(2);
+    expect(f.authority.claimOriginalCompletion).toHaveBeenCalledExactlyOnceWith(
+      generated.reference,
+    );
+    const preview = await f.temporary.preview({ ...generated.reference });
+    expect(preview.value).toMatchObject({ version: 2 });
+    preview.release();
+  });
+  it.each([0, -1, 1.5, NaN, 2_147_483_648])(
+    "refuses invalid owning version %s before provider work",
+    async (documentVersion) => {
+      const f = setup({ documentVersion });
+      expect(await f.actor.generate(f.identity)).toEqual({
+        kind: "failed",
+        errorCode: "generation_unavailable",
+      });
+      expect(f.transport).not.toHaveBeenCalled();
+      expect(f.work.claimProviderDispatch).not.toHaveBeenCalled();
+    },
+  );
   it("runs actual SDK grounding and production PDF/DOCX verification without returning content", async () => {
     const f = setup();
     const generated = await f.actor.generate(f.identity);

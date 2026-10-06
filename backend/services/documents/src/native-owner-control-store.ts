@@ -27,11 +27,25 @@ export function createNativeOwnerControlStore(
   const work = new PostgresCoverLetterWorkStore(controls, enabled);
   const completion = new PostgresTemporaryMaterialCompletionStore(controls, enabled);
   return Object.freeze({
-    async checkBootstrap(raw: Readonly<NativeEvidenceBinding>, identity: NativeOwnerBootstrap) {
+    async checkBootstrap(
+      raw: Readonly<NativeEvidenceBinding>,
+      identity: Omit<NativeOwnerBootstrap, "documentVersion"> & { documentVersion?: number },
+    ) {
       const binding = nativeEvidenceBinding(raw);
-      if (!enabled() || !validateNativeOwnerBootstrap(identity, binding))
+      if (
+        !enabled() ||
+        !validateNativeOwnerBootstrap(
+          {
+            ...identity,
+            documentVersion: identity.documentVersion === undefined ? 1 : identity.documentVersion,
+          },
+          binding,
+        )
+      )
         throw Error("NativeOwnerRpcUnavailable");
-      const [row] = await controls`SELECT d.id FROM documents.cover_letters d
+      const [row] = await controls<
+        Array<{ id: string; version: number }>
+      >`SELECT d.id, d.version FROM documents.cover_letters d
         JOIN documents.cover_letter_work_authorizations w ON w.document_id=d.id AND w.user_id=d.user_id
         WHERE d.id=${binding.scope.generationId} AND d.user_id=${binding.scope.ownerUserId}
           AND d.application_id=${binding.scope.applicationId} AND d.status='pending'
@@ -41,7 +55,15 @@ export function createNativeOwnerControlStore(
           AND w.request_sha256=${binding.original.requestSha256}
           AND w.consent_expires_at=${identity.expiresAt}::timestamptz
           AND w.consent_expires_at > clock_timestamp()`;
-      if (!enabled() || !row) throw Error("NativeOwnerRpcUnavailable");
+      if (
+        !enabled() ||
+        !row ||
+        !Number.isSafeInteger(row.version) ||
+        row.version < 1 ||
+        (identity.documentVersion !== undefined && identity.documentVersion !== row.version)
+      )
+        throw Error("NativeOwnerRpcUnavailable");
+      return row.version;
     },
     async checkEvidenceContext(
       raw: Readonly<NativeEvidenceBinding>,

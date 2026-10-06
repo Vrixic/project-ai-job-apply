@@ -151,14 +151,16 @@ export function createNativeOwnerRpcRuntime(
         binding.scope,
         enabled,
       );
-      await controls.checkBootstrap(binding, identity);
+      const documentVersion = await controls.checkBootstrap(binding, identity);
       const rechecked = await readNativePreparationBootstrap(
         applicationPool,
         binding.scope,
         enabled,
       );
       if (JSON.stringify(identity) !== JSON.stringify(rechecked)) throw nativeOwnerRpcUnavailable();
-      return identity;
+      const result = { ...identity, documentVersion };
+      await controls.checkBootstrap(binding, result);
+      return result;
     },
     evidence: (
       binding: Parameters<typeof checkAdmission>[0],

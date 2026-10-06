@@ -155,8 +155,7 @@ export function validateNativeOwnerRequest(
         value.input.material.kind === "cover_letter" &&
         value.input.material.ownerUserId === binding.scope.ownerUserId &&
         value.input.material.applicationId === binding.scope.applicationId &&
-        value.input.material.generationId === binding.scope.generationId &&
-        value.input.material.version === 1
+        value.input.material.generationId === binding.scope.generationId
       );
     return false;
   } catch {
@@ -342,6 +341,7 @@ export function validateNativeOwnerRpcOutput(
 }
 
 export interface NativeOwnerBootstrap {
+  documentVersion: number;
   id: string;
   ownerUserId: string;
   applicationId: string;
@@ -388,6 +388,7 @@ export function validateNativeOwnerBootstrap(
   try {
     if (
       !nativeOwnerClosed(value, [
+        "documentVersion",
         "id",
         "ownerUserId",
         "applicationId",
@@ -400,6 +401,9 @@ export function validateNativeOwnerBootstrap(
     )
       return false;
     if (
+      !Number.isSafeInteger(value.documentVersion) ||
+      (value.documentVersion as number) < 1 ||
+      (value.documentVersion as number) > 2_147_483_647 ||
       value.id !== binding.scope.generationId ||
       value.ownerUserId !== binding.scope.ownerUserId ||
       value.applicationId !== binding.scope.applicationId ||

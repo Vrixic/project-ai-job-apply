@@ -106,6 +106,7 @@ export async function startNativeMaterialTask(options: Options) {
     if (!enabled() || Date.now() >= identity.expiresAt.getTime()) throw unavailable();
     const evidence = createNativeOwnerEvidenceClient({ ...rpcOptions, context: identity });
     runtime = await start({
+      documentVersion: identity.documentVersion,
       ...limits,
       binding,
       identity,
