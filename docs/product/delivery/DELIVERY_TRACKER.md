@@ -1,5 +1,11 @@
 # Delivery Tracker
 
+2026-10-06 D1-013 starts the migration-image boundary repair: the Docker/publisher smoke still
+expected 66 migrations/88 relations after Jobs raised the accepted boundary to 69/92.
+The corrected executable smoke passes 173 cases and is now included in local full verification.
+Cold actual-image and full source checks remain pending.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md). D1/D3 remain In progress.
+
 2026-10-06 D1-012 candidate exports now include retained reports' exact linked review status
 without operator/case/neighbor data. All 119 Jobs SQL tests and historical 26 → 27 replay pass;
 local logical restore matches 69 migrations/92 relations. Source 07cf51b9 passes full verification
