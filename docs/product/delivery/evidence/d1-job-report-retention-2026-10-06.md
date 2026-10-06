@@ -1,6 +1,6 @@
 # D1 candidate-report retention — 2026-10-06
 
-Status: locally verified owning lifecycle; full repository verification pending. D1/D3 remain
+Status: locally verified owning lifecycle; full repository verification passed. D1/D3 remain
 In progress. Backend-only branch `feat/d1-report-retention` starts from the working-development
 connection batch on freshly fetched main `88f8ae84`; no cloud mutation or hosted CI/CD work.
 
@@ -67,3 +67,18 @@ corrected its harness's transformed column names. No implementation safety guard
 cleanup; test-only clock aging temporarily bypasses the immutable-report update guard inside one
 local transaction and restores it before exercising retention. No production data, auth, transport
 or cloud acceptance is claimed.
+
+## Corrected-source acceptance
+
+Clean committed source `f553da221f7bad3f16f5dc9e23dc9990f4ddc50a` passes the full maintained
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 builds, operational/security/
+isolation/bundle checks, formatting, Compose and scope validation. Lint remains zero errors,
+15 warnings and 58 infos. The original rerun handle completes with exit zero; no tracked source
+changes occur during verification. Log: `.tmp/d1-retention-full-final.log`. All 207 focused restore
+contract checks and 697 cross-runtime replay guards pass after the exact manifest-pin correction.
+The unchanged Jobs SQL retains its 109-case and historical upgrade/restore evidence above.
+
+Only delivery documentation follows this verified source. The owned tmpfs fixture is removed;
+Docker/WSL are stopped and the PC stays on. The live development API passes the maintained
+launcher health check before local web restoration. No hosted cleanup task, cloud release,
+third PR, production acceptance or D1/D3 completion is claimed.

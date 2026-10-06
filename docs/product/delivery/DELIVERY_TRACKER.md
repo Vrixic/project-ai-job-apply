@@ -1,8 +1,9 @@
 # Delivery Tracker
 
 2026-10-06 D1-012 candidate-report retention now has an owning implementation and real PostgreSQL
-upgrade/restore evidence: 109 Jobs checks and 67 migrations/90 relations pass. Full verifier, hosted
-maintenance release and remaining case/control/audit/alert policy work stay open.
+upgrade/restore evidence: 109 Jobs checks and 67 migrations/90 relations pass. Corrected source
+f553da22 passes full verification (38 typechecks, 39 test tasks, 23 builds). Hosted maintenance
+release and remaining case/control/audit/alert policy work stay open.
 [Evidence](evidence/d1-job-report-retention-2026-10-06.md). D1/D3 remain In progress.
 
 2026-10-06 D1 working-flow checkpoint: live development Gateway version 86 passes health and
