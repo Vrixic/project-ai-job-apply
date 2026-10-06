@@ -164,3 +164,16 @@ synthetic events and emitted capability/source-bound artifact proof leave manage
 IAM, retained original versions, retries/DLQ and task conformance unfinished. This proposal remains
 Proposed and deployment/activation/accountable gates remain.
 [Evidence](../product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
+
+
+## Allocation-bound scalar control checkpoint — 2026-10-06
+
+A default-off adapter now supplies the native original actor only fixed claim/settlement/completion
+ports. Normal signed regional numeric Lambda transport binds the original task/work/consent;
+unknown acknowledgements never retry, and active transport stays admitted until actual settlement.
+Existing owning SQL requires bound/current unsealed native admission before a provider claim.
+Local original-task equality is not caller authentication. Fifty cases, actual emitted isolation,
+full clean verification and seventeen actual Linux/kernel scenarios leave authenticated evidence/
+private task admission, managed image/bootstrap/IAM/provider/client/ATS/accountable acceptance
+unfinished. This proposal remains Proposed and no activation or new deployment is authorized.
+[Evidence](../product/delivery/evidence/d3-native-material-controls-2026-10-06.md).

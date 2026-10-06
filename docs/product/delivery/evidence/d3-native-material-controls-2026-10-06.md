@@ -1,6 +1,6 @@
 # D3 allocation-bound native scalar controls — 2026-10-06
 
-Status: default-off source and local process evidence; D3-079 and D1/D3 remain In progress.
+Status: default-off locally verified source and process evidence; D3-079 and D1/D3 remain In progress.
 Starts from fresh main `88f8ae84` plus exact open #564 `bd23437c`, isolated backend worktree.
 
 ## Implemented boundary
@@ -72,7 +72,24 @@ and WSL are stopped after the final needed Docker step.
 
 ## Remaining gates
 
-Full maintained verification on clean committed frozen HEAD remains before review. Native image/
+Clean committed `4b6ba6d8` passes the full maintained verifier: 38 typecheck tasks,
+39 workspace test tasks, 23 production build tasks and all operational/security/emitted isolation
+checks. The 50 adapter cases also pass within the full run; lint stays at the existing zero-error,
+15-warning, 58-info baseline. Log: `.tmp/d3-native-material-controls-full.log`. Later delivery-only
+commits leave the verified implementation unchanged. The first typecheck correctly rejected the
+default-off test's explicit undefined optional flag; omitting that flag fixes the test without
+loosening the production type. No timeout, assertion or runtime guard is relaxed.
+
+The existing owning `guard_native_material_provider_claim` trigger in Documents 0011 requires
+the exact allocation/work/owner to be bound under the current unsealed epoch before an issued
+native provider grant can become running, locking admission through that original transaction.
+This adapter preserves that guard; its local immutable input is not a substitute for it. Source
+inspection confirms this existing boundary, not a new connected SQL run. Authenticated caller/
+per-task admission and managed enforcement remain release gates.
+
+No standalone deployable artifact is asserted for this pure private factory. Actual emitted CJS
+isolation is tested; native image/entrypoint integrity and managed composition remain required.
+ Native image/
 entrypoint, authenticated owner/evidence/private task admission, managed IAM/TLS/routing/provider,
 complete client/ATS lifecycle and D3-012/accountable/deployed acceptance remain unfinished.
 No SQL migration, API/event/domain schema, dependency version or frontend change. ADR-040 remains

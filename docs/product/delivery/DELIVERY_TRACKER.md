@@ -4041,3 +4041,13 @@ acceptance. [Evidence](evidence/d3-native-material-controls-2026-10-06.md). Full
 remains before review; image/entrypoint/private admission/IAM/routing/client/ATS/provider/accountable
 gates remain. Owned fixture removed, shared volumes retained and Docker/WSL stopped. No frontend,
 SQL schema, deployment or activation; D1/D3 stay In progress and CI/CD stays deferred.
+
+2026-10-06 D3-079 clean `4b6ba6d8` passes the full maintained verifier: 38 typecheck,
+39 test and 23 build tasks, unchanged lint baseline and all four emitted isolation checks.
+50 adapter cases pass inside the full run; the separate 108 focused regressions and all
+17 actual Linux/kernel scenarios remain local evidence. Existing Documents 0011 bound/unsealed
+owning work-claim guard is unchanged; input equality does not replace authenticated task admission.
+[Evidence](evidence/d3-native-material-controls-2026-10-06.md). No standalone production image
+or artifact/managed composition is claimed for this private factory. Image/entrypoint/evidence/
+private admission/IAM/routing/client/ATS/provider/accountable gates remain. D1/D3 stay In progress;
+no authored main merge, publication/deployment/activation or CI/CD work. Docker/WSL are stopped.
