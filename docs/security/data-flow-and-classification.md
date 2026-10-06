@@ -1,5 +1,14 @@
 # Data Flow and Classification
 
+2026-10-06 private native bootstrap (source-only/default-off): authenticated original task request
+-> owning Applications active-candidate/preparation read -> stored approval/context scalars
+-> Documents original-work expiry/context check -> owning preparation recheck -> strict bound
+eight-scalar response. Approval timestamps are never reconstructed from launch overrides or
+renewed. No candidate body or new write capability crosses the bootstrap read. Current packet,
+revision, claimed state and database-time freshness must still match; this does not supply
+continuous admission, live provider permission or managed image trust.
+[Evidence](../product/delivery/evidence/d3-native-approved-bootstrap-2026-10-06.md).
+
 2026-10-06 authenticated native owner RPC (source-only/default-off): fixed task/recipient/operation
 proof -> AWS identity verification -> lazy managed-secret owner composition -> exact native
 admission -> original approved context/consent -> owner facts/job APIs or original scalar

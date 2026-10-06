@@ -44,7 +44,25 @@ unchanged. This metadata read is not provider permission renewal or continuous a
   The first composed preparation fixture omitted required field definitions; the fixture now
   uses the owning defaults. Production constraints and controls were not weakened.
 
-Full clean committed-source verification is pending. No deployment, activation, new PR, main
+Full clean committed-source verification passes at `97938b7395baf5ed0b08d4164114993126cce262`:
+38 typecheck tasks, 39 test tasks, 23 builds, operator/security/isolation/Compose/scope checks.
+The original verifier session exits zero with the tracked tree unchanged. Lint remains zero
+errors, 15 warnings and 58 infos. Log: `.tmp/d3-native-bootstrap-full.log`.
+Two local receiver builds reproduce identical ZIP bytes: 364,511 bytes, SHA-256
+`b2b36f7b4d3ba48f0308652efb4d020983712c83bbce59f34e9eb7abdf614321`.
+The manifest binds exact source `97938b73`, Node.js 24/x86_64, `index.handler` and 32 components.
+Logs: `.tmp/d3-native-bootstrap-artifact.log`, `.tmp/d3-native-bootstrap-artifact-repeat.log`.
+Nothing is published or deployed.
+
+The owned PostgreSQL fixture used tmpfs with no volume mounts; its exact container is removed.
+Docker Desktop engine and WSL are stopped, shared volumes retained and the PC stays on.
+The maintained local web launcher is restored against the unchanged live development API:
+home returns 200 and anonymous Resume 307, with redirects neither followed nor retained.
+No new signed-in browser acceptance is claimed. Only its two generated Next type imports are
+restored; frontend source is preserved. Verified source is prepared on the feature branch;
+no third PR or main merge is performed.
+
+No deployment, activation, new PR, main
 merge or phase completion is claimed. Trusted ECS self-metadata, the executable native bootstrap/
 image, provider/TLS adapters, managed IAM/routing and actual client/ATS/provider/accountable
 acceptance remain. Existing generated-synthetic development triggers remain unchanged.

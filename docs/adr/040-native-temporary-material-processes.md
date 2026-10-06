@@ -3,6 +3,12 @@
 Status: Proposed; default-off source and local kernel evidence only
 Date: 2026-10-05
 
+2026-10-06 original approval source checkpoint: the authenticated owner RPC reads the immutable
+Applications preparation's original approval/context and verifies Documents' exact work expiry.
+No renewal or work creation is exposed. Real local PostgreSQL and signed synthetic transport
+checks pass; ECS self-metadata/executable image and managed/provider/client gates remain. This
+proposal stays Proposed. [Evidence](../product/delivery/evidence/d3-native-approved-bootstrap-2026-10-06.md).
+
 2026-10-06 authentication source checkpoint: a short SDK-signed fixed regional STS identity proof
 binds original allocation, numeric recipient and request digest. Only fixed ECS task credentials
 are used. The receiver must authenticate the signature with AWS and match reviewed role/original
