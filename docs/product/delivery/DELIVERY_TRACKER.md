@@ -3,7 +3,9 @@
 2026-10-06 D3-079 connects authenticated private native owner RPC source: proof authentication
 before lazy owner initialization, original reviewed evidence/consent checks, owning admission,
 original work controls and scalar completion. All 140 focused checks, 24 real PostgreSQL cases, eight emitted checks and 21 Linux scenarios pass;
-full clean-source evidence follows. [Evidence](evidence/d3-native-owner-rpc-2026-10-06.md).
+full clean-source verification passes at `576f0ac9` (38 typecheck/39 test/23 build tasks).
+The separate receiver artifact reproduces identically; nothing is deployed.
+[Evidence](evidence/d3-native-owner-rpc-2026-10-06.md).
 Native image/bootstrap/IAM/routing/managed/client/provider/accountable acceptance remain; D1/D3
 stay In progress. No deployment/activation, third PR or CI/CD work; PC stays on.
 

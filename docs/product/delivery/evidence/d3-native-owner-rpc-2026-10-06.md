@@ -1,6 +1,6 @@
 # D3 authenticated native owner RPC — 2026-10-06
 
-Status: source/local verification in progress. D1/D3 remain In progress; no deployment or activation.
+Status: source/local verification passed. D1/D3 remain In progress; no deployment or activation.
 
 The native runtime needs usable authenticated admission, evidence and original scalar controls.
 The new private RPC envelope version one requires original allocation/work binding, a closed
@@ -75,6 +75,23 @@ Linux process/kernel scenarios pass with retained local image
 These scenarios use actual source composition/TLS/render/process retirement and synthetic remote
 ports; they do not certify a production image or managed authentication.
 Logs: `.tmp/d3-native-owner-bundles-final.log`, `.tmp/d3-native-owner-linux.log`.
-Documents/Workflow typechecks and dependency-closure builds pass. Full clean committed verification
-follows. No actual ECS credentials, AWS verification, live model, deployment,
+Documents/Workflow typechecks and dependency-closure builds pass. Full verification passes on
+clean committed source `576f0ac986306c8a23f27f5f6a9312303a709adf`: 38 typecheck tasks,
+39 test tasks and 23 builds, plus maintained operator/security/isolation/Compose/scope checks.
+The original verifier session exits zero with the tracked tree unchanged. Lint remains zero
+errors, 15 warnings and 58 informational notes. Cached unaffected tasks are included in these
+totals. Log: `.tmp/d3-native-owner-full.log`.
+
+The new maintained source-bound builder emits a separate Node.js 24/x86_64 receiver artifact
+with default-off/no-network bundled refusal checks. Two builds on the same clean source have
+identical ZIP bytes: 363,458 bytes, SHA-256
+`cf96d7e142d6875fbc1f6c792d9c3588a8ec5c9437938fd38e4835d24cbf0c83`.
+Its manifest names exact source `576f0ac9`, `index.handler` and 32 SBOM components. Local ZIP,
+checksum, manifest, SBOM and readable bundle exist under
+`backend/workflows/dist/native-owner-rpc-lambda/`; nothing is published or deployed.
+Logs: `.tmp/d3-native-owner-artifact.log`, `.tmp/d3-native-owner-artifact-repeat.log`.
+
+The owned PostgreSQL tmpfs fixture is removed and the Linux verifier removes its own staging/
+container. Shared volumes are retained. Docker Desktop's engine and WSL are stopped; PC stays on.
+PR #564/#565 remain OPEN at their existing exact heads; no third PR or main merge is performed. No actual ECS credentials, AWS verification, live model, deployment,
 managed authentication conformance or phase completion is claimed. PC stays on.
