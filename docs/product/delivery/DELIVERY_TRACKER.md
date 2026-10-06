@@ -4003,3 +4003,11 @@ verification and review links only. Two authored draft PRs are open. D1/D3 remai
 native image/private adapters/routing/managed-task/client/ATS/provider/accountable gates remain.
 No authored main merge, artifact publication, deployment, activation or hosted CI/CD work.
 Owned fixture is removed, shared volumes retained and Docker/WSL stopped.
+
+2026-10-06 D3-079 starts default-off private ECS task-state recovery on exact #563 source.
+Events supply hints only; existing signed positive recovery independently verifies the original
+owning claim and exact task before capture. 49 synthetic transport units, owner/workflow builds,
+typecheck and three emitted isolation checks pass. No SQL mutation/schema change or Docker need.
+[Evidence](evidence/d3-native-task-event-recovery-2026-10-06.md). Full clean/artifact verification
+remains before updated review; managed event/rule/IAM/retry/DLQ/original-version/task acceptance
+remain. D1/D3 stay In progress, no deployment/activation and CI/CD stays deferred.

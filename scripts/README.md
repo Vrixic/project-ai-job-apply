@@ -409,3 +409,9 @@ private launcher artifact under `backend/workflows/dist/native-launch-lambda`. I
 maintained clean-source builder and actual bundled refusal checks. It creates no publication,
 deployment or activation. `native-launch-control-bundle.test.mjs` verifies sender/receiver emitted
 capabilities and is included in the maintained full verifier.
+
+
+`build-native-material-task-event-lambda.mjs` builds the separate private task-event recovery
+artifact at `backend/workflows/dist/native-task-event-lambda` with bundled default-off refusal.
+Set `ARTIFACT_SOURCE_SHA` to the committed source for source-bound evidence. It publishes nothing
+and supplies no EventBridge rule, IAM permission, queue/retry/DLQ routing or activation.

@@ -57,6 +57,44 @@ async function emitted(entry) {
   );
   return { inputs, bundle: module.exports };
 }
+test("emitted native task event receiver carries only scalar Lambda recovery capability", async () => {
+  const { inputs, bundle } = await emitted(
+    "backend/workflows/dist/src/native-material-task-event-lambda.js",
+  );
+  assert.deepEqual(
+    inputs.filter((name) => name.startsWith("backend/") || name.startsWith("packages/")).sort(),
+    [
+      "backend/services/documents/dist/src/native-launch-control-client.js",
+      "backend/services/documents/dist/src/native-launch-control-contract.js",
+      "backend/services/documents/dist/src/native-task-allocation.js",
+      "backend/workflows/dist/src/native-material-task-event-lambda.js",
+    ].sort(),
+  );
+  for (const forbidden of [
+    "postgres",
+    "client-ecs",
+    "client-s3",
+    "client-kms",
+    "client-secrets-manager",
+    "ai-sdk",
+    "pdfjs",
+    "yazl",
+    "durable-execution",
+    "event-contracts",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected task event capability: ${forbidden}`,
+    );
+  assert.ok(inputs.some((name) => name.includes("@aws-sdk/client-lambda")));
+  await assert.rejects(
+    bundle.createNativeMaterialTaskEventLambda({ environment: () => ({}) })(
+      { source: "aws.ecs" },
+      { invokedFunctionArn: target },
+    ),
+    /NativeMaterialTaskEventUnavailable/u,
+  );
+});
 test("emitted launcher supplies only owning admission/registry/ECS/managed-secret capabilities", async () => {
   const { inputs, bundle } = await emitted(
     "backend/workflows/dist/src/native-material-launch-lambda.js",

@@ -239,3 +239,12 @@ sender uses signed fixed-region numeric Lambda invocation; recovery remains inde
 new-launch shutdown. Build the unpublished artifact with `pnpm build:lambda:native-launch`
 from this workspace. Sender IAM, native image/private adapters/routing/task conformance remain
 release gates. See [evidence](../../docs/product/delivery/evidence/d3-native-launch-control-2026-10-06.md).
+
+
+The private `native-material-task-event-lambda` receives bounded ECS task-state hints and calls
+only positive original launch recovery. It defaults off, pins its numeric receiver/target and
+original deployment metadata, and cannot launch, stop, settle work or certify retirement.
+Build an unpublished source-bound artifact with `ARTIFACT_SOURCE_SHA=<committed SHA>` and
+`pnpm --filter @ai-job-apply/workflows build:lambda:native-task-event`. Reviewed event routing,
+IAM, original-version retention, retries/DLQ and managed task conformance remain gates; see
+[local evidence](../../docs/product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
