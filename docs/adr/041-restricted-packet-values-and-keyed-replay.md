@@ -111,3 +111,13 @@ prepared MAC results pin original authority; supported key changes recheck once 
 while changed payloads conflict and unknown keys refuse without another MAC. Original receipts,
 packet/preparation/event counts and no SQL lock during crypto are verified. New artifact/full
 verification remains required; no release/accountable gate or activation closes.
+
+Clean frozen b5a7a2cf now passes the full maintained verifier (38 typecheck tasks, 39 test tasks,
+23 builds; unchanged lint). Four current artifact families/20 objects build twice byte-identically,
+pass independent integrity/bundled refusal checks and retain exact hashes after verification.
+The actual-adapter maintained SQL recheck passes 92 Applications, 56 Gateway and 39 targeted Workflow
+cases; a mutable test-only facade enables spies without unfreezing production crypto. Current
+logical restore preserves both key epochs and all 88 relation row sets. This supersedes the source
+verification gap above, not the release/accountable gates. Migration refusal and availability
+impact on ordinary packet/preparation commands require explicit rollout review. ADR-041 remains
+Proposed; writer/export and saved-answer reuse switches stay disabled.

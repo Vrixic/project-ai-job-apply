@@ -2,7 +2,7 @@
 
 Status: In progress. Backend-only private WIP on isolated branch
 `feat/d3-restricted-packet-storage`, started from `2b6f59aa` and now rebased onto merged #559/main
-`18b6b2e2`. Local WIP checkpoints are not published or review-ready.
+`18b6b2e2`. The backend slice is locally verified and prepared for draft source review; release and accountable gates remain open.
 Hosted CI/CD remains deferred until production launch. No feature is activated or deployed.
 
 ## Confirmed gap and required end state
@@ -852,10 +852,42 @@ This precedes the test-only facade correction, so build current source-bound art
 clean full verification after committing that correction before whole-slice review. All release,
 real legacy/key/role/retention/accountable/client/ATS/deployed gates remain separate and unclosed.
 
+## Final frozen-source verification and retained artifacts
+
+Clean frozen source `b5a7a2cf7214e9149498e9d33b530bc9d1e803d3` passes the complete maintained
+`scripts/verify-phase0.ps1` with terminal exit 0: 38 typecheck tasks, 39 workspace test tasks and
+23 builds; formatting, security/operational guards, emitted capability isolation and Compose
+configuration checks pass. Lint remains zero errors, 15 warnings and 58 informational notes.
+Log: `.tmp/d3-fixture-final-full-verification.log`. HEAD and tracked cleanliness are asserted
+before and after the run. Only delivery/ADR evidence follows this verified executable source.
+
+All four actual artifact families build twice from this same clean source. All 20 emitted files
+are byte-identical; independent ZIP/index, source/runtime manifest, digest/sidecar and SBOM
+integrity checks pass. All 20 retained hashes remain unchanged after the full verifier. Logs:
+`.tmp/d3-fixture-final-artifact-first.log`, `.tmp/d3-fixture-final-artifact-second.log`,
+`.tmp/d3-fixture-final-artifact-verified-hashes.json` and
+`.tmp/d3-fixture-final-artifact-probe.log`. Actual bundled Profile malformed-input and missing
+maintenance-authority probes refuse with zero fetch calls; native preparation remains default-off
+and contains no KMS capability. Gateway and Profile activity carry the separately gated KMS adapter.
+
+| Artifact family | ZIP SHA-256 | Bytes | SBOM components |
+|---|---|---:|---:|
+| Gateway | e77884efb2bda6639920f2c78264262367835c80ad9761225960e7a3624c91d8 | 1573786 | 153 |
+| Profile durable | 66e6e70152347ebd7447558ecedf84868866f3b7877fc7346f81b9d797584047 | 325546 | 27 |
+| Profile activity | ad00dd2d24688fed960f526d153da481d37fe9efaeacce51427a69943b0b8ceb | 634910 | 105 |
+| Native preparation | 7322659dec8e47f35f3b3ea8b74fc3390b886e43fe00cd22bc566df4068627c3 | 1432292 | 41 |
+
+These are local unpublished artifacts, not deployed acceptance. Actual PostgreSQL evidence above
+uses synthetic identity and simulated external transports. No actual UI, managed authentication,
+live KMS/provider/ATS, production least privilege or PITR verification is claimed. Owned fixtures
+are removed, shared volumes retained and Docker Desktop/WSL stopped. Source review can proceed;
+D3-077 and D1/D3 remain In progress. CI/CD remains owner-deferred until production launch.
+
 ## Next work
 
-Verify current committed artifacts and rerun clean full verification after the concurrent
-original-key replay fix and shared test-spy facade correction before whole-slice review. Production
-SQL/KMS role grants, real legacy inventory/disposition, accountable/client/ATS/deployed acceptance
-remain separate gates. Never silently purge or rehash approved/ambiguous legacy evidence. Keep
-reuse and both private composition switches disabled throughout.
+Review the concrete backend source and proposed ADR-041. Production SQL/KMS role grants, real
+legacy inventory/disposition, key retention and accountable/client/ATS/deployed acceptance remain
+separate gates. Migration 0009 refuses incompatible legacy records; packet creation/preparation,
+including ordinary fields, requires enabled protection and valid key authority. Plan and verify
+reader-first rollout before activation. Never silently purge or rehash approved/ambiguous legacy
+evidence. Keep reuse and both private composition switches disabled throughout.

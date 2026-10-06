@@ -3900,3 +3900,14 @@ shutdown follows the last related step. Four artifact families/20 files from cle
 twice identically, but current artifact/full verification remains after the facade correction.
 [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). No frontend change, cloud publication,
 deployment/activation or D1/D3 closure; CI/CD remains deferred until launch.
+
+
+2026-10-05 D3-077 clean frozen b5a7a2cf passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 builds and unchanged lint. Four current source-bound artifact families/20 files
+build twice byte-identically, pass independent integrity/bundled refusal checks and retain exact
+hashes after verification. Current actual-adapter SQL, concurrent original-key races and two-epoch
+logical restore evidence are complete locally. Backend source is prepared for draft review; only
+delivery/ADR evidence follows the verified executable source. All release, real legacy/key/role/
+retention/accountable/client/ATS/deployed gates remain; switches stay false. Docker/WSL stopped.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). No cloud publication, deployment,
+activation or D1/D3 completion; CI/CD remains deferred until production launch.
