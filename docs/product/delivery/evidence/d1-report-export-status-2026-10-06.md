@@ -49,3 +49,13 @@ five-second request deadline, 16 MB byte limit and separate header/body/cancella
 tests are unchanged. Timer cleanup is asserted. All 586 ingestion unit tests pass after this
 test-only correction. Log: `.tmp/d1-report-export-ingestion-clock.log`.
 Jobs SQL and export schema are unchanged by the correction; clean-source full rerun is pending.
+
+The rerun at `a3fc9211` passes ingestion, then exposes a separate Documents late-launch fixture
+using a real 10 ms deadline while polling for fake RunTask dispatch. Under full-suite scheduling,
+the deadline could expire before dispatch, so the intended fulfilled-late-response scenario never
+started. That fixture now waits on an explicit dispatch promise under logical time, then advances
+past the timeout and fulfills the original task. It verifies one RunTask, retained admission,
+positive task capture before timeout refusal and no surviving timer. Production launch code and
+its deadline are unchanged. All 1,438 Documents unit tests pass; log:
+`.tmp/d1-report-export-native-clock.log`. The original rerun handle is terminal before this edit.
+The final clean-source full run follows this second test-only correction.

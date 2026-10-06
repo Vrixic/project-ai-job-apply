@@ -168,7 +168,10 @@ function fixture() {
     },
   };
 }
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 describe("private one-attempt native ECS launch", () => {
   it("defaults off before any registry/AWS effect", async () => {
     const f = fixture();
@@ -267,25 +270,34 @@ describe("private one-attempt native ECS launch", () => {
     expect(f.send.mock.calls.filter(([c]) => c instanceof RunTaskCommand)).toHaveLength(1);
   });
   it("captures a fulfilled late RunTask before returning timeout refusal and retains call admission", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
     const f = fixture();
     let resolve!: (value: ReturnType<typeof task>) => void;
+    let started!: () => void;
+    const dispatched = new Promise<void>((r) => {
+      started = r;
+    });
     f.send.mockImplementation(async (c) =>
       c instanceof RunTaskCommand
         ? new Promise<ReturnType<typeof task>>((r) => {
             resolve = r;
+            started();
           })
         : definition(),
     );
     const launch = createNativeTaskLaunch({ ...f.options, timeoutMs: 10 });
     const pending = launch.launch(scope);
     const assertion = expect(pending).rejects.toThrow("NativeTaskLaunchUnavailable");
-    await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
-    await new Promise((r) => setTimeout(r, 20));
+    await dispatched;
+    expect(resolve).toBeTypeOf("function");
+    await vi.advanceTimersByTimeAsync(20);
     await expect(launch.launch(scope)).rejects.toThrow("NativeTaskLaunchUnavailable");
     expect(f.registry.claimLaunch).toHaveBeenCalledTimes(1);
     resolve(task());
     await assertion;
     expect(f.record.intent.state).toBe("bound");
+    expect(f.send.mock.calls.filter(([c]) => c instanceof RunTaskCommand)).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
   it("captures an actually fulfilled task after withdrawal without granting new work", async () => {
     const f = fixture();
