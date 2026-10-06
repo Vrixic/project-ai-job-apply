@@ -20,13 +20,13 @@ import {
   requiredNonemptyD2Relations,
   seedD2RecoveryFixtures,
 } from "./fixtures.mjs";
+import { exerciseRestoredNativeLaunches, seedNativeLaunches } from "./native-launches.mjs";
 import {
   exerciseRestoredResponseInventory,
   exerciseRestoredTemporaryMaterialCompletion,
   seedResponseInventory,
   seedTemporaryMaterialCompletion,
 } from "./response-inventory.mjs";
-
 import { exerciseRestoredTemporaryPackets, seedTemporaryPackets } from "./temporary-packets.mjs";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
@@ -192,8 +192,8 @@ try {
   const source = loadCurrentRestoreManifest();
   assert.equal(source.manifest.contributors.length, 7);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 11);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 84);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 63);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 86);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 65);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
@@ -238,6 +238,7 @@ try {
   const sourceApplications = createApplicationsDatabase(sourceUrl, { maxConnections: 2 });
   clients.push(sourceApplications);
   const packetFixtures = await seedTemporaryPackets(sourceApplications, fixtures.ownerUserId);
+  const nativeFixtures = await seedNativeLaunches(sourceApplications, fixtures.ownerUserId);
   stage = "source-aggregate-and-row-snapshot";
   const sourceAggregate = await verifyRestoreDatabase(sourceReader, source);
   const sourceRows = await exactRows(sourceReader, source.manifest);
@@ -300,6 +301,7 @@ try {
   const targetApplications = createApplicationsDatabase(targetUrl, { maxConnections: 2 });
   clients.push(targetApplications);
   const packetBehavior = await exerciseRestoredTemporaryPackets(targetApplications, packetFixtures);
+  const nativeBehavior = await exerciseRestoredNativeLaunches(targetApplications, nativeFixtures);
   stage = "restored-d2-behavior";
   const behavior = await exerciseRestoredD2(targetStore, targetProfile, fixtures, (value) => {
     stage = value;
@@ -308,10 +310,10 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 63,
+    migrationCount: 65,
     ownerCount: 7,
     schemaCount: 11,
-    exactRelationRowSetsMatched: 84,
+    exactRelationRowSetsMatched: 86,
     nonemptyD2RelationsMatched: requiredNonemptyD2Relations.length,
     aggregateVerifierMatched: true,
     sourceUnchanged: true,
@@ -319,6 +321,7 @@ try {
     ...responseBehavior,
     ...materialBehavior,
     ...packetBehavior,
+    ...nativeBehavior,
     ...behavior,
   };
 } catch (error) {
@@ -330,7 +333,7 @@ try {
       : "FAILED";
   const location =
     typeof error?.stack === "string"
-      ? /((?:fixtures|response-inventory|temporary-packets|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
+      ? /((?:fixtures|response-inventory|temporary-packets|native-launches|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
           error.stack,
         )?.[1]
       : undefined;

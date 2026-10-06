@@ -56,3 +56,10 @@ task's terminal state, without content or local process acknowledgement. Its sca
 application-wide disposal or remote-provider settlement. It is source-only/default-off; owning
 registry/sealed admission, managed IAM and actual AWS task conformance are not implemented. See
 [retirement evidence](../../../../docs/product/delivery/evidence/d3-native-task-retirement-2026-10-05.md).
+
+
+Documents' private `./native-task-launch` control verifies the signed exact task definition before
+one persisted claim/RunTask. Positive original task observation can capture lost-ACK launches
+without reissuing RunTask or settling work. Both controls default off; managed image/entrypoint,
+authenticated issuer/private adapters, durable task-event routing and actual task conformance
+remain required. See [source evidence](../../../../docs/product/delivery/evidence/d3-native-task-launch-2026-10-05.md).

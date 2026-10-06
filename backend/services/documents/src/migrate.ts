@@ -20,6 +20,7 @@ const migrationVersions = [
   "0009_cover_letter_provider_failure",
   "0010_temporary_material_completion",
   "0011_native_material_allocations",
+  "0012_native_material_launch_claim",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -70,6 +71,8 @@ try {
         materialConstraintCount: number;
         materialTriggerCount: number;
         nativeTriggerCount: number;
+        launchColumnCount: number;
+        launchConstraintCount: number;
       }>
     >`
       SELECT
@@ -125,8 +128,12 @@ try {
         ) AS "materialTriggerCount",
         (SELECT count(*)::int FROM pg_trigger WHERE NOT tgisinternal AND tgname IN (
           'native_material_admission_guard', 'native_material_allocation_guard',
-          'cover_letters_native_retirement_guard', 'cover_letter_native_claim_guard'
-        )) AS "nativeTriggerCount"
+          'cover_letters_native_retirement_guard', 'cover_letter_native_claim_guard', 'native_material_launch_claim_guard'
+        )) AS "nativeTriggerCount",
+        (SELECT count(*)::int FROM information_schema.columns WHERE table_schema = 'documents'
+          AND table_name = 'native_material_allocations' AND column_name IN ('launch_claimed_at', 'launch_configuration_sha256')) AS "launchColumnCount",
+        (SELECT count(*)::int FROM pg_constraint WHERE conrelid = 'documents.native_material_allocations'::regclass
+          AND conname = 'native_material_launch_claim_ck' AND convalidated) AS "launchConstraintCount"
     `;
     if (
       verification?.tableCount !== 11 ||
@@ -138,7 +145,9 @@ try {
       verification.materialColumnCount !== 4 ||
       verification.materialConstraintCount !== 1 ||
       verification.materialTriggerCount !== 2 ||
-      verification.nativeTriggerCount !== 4
+      verification.nativeTriggerCount !== 5 ||
+      verification.launchColumnCount !== 2 ||
+      verification.launchConstraintCount !== 1
     ) {
       throw new Error("Documents migration verification failed");
     }

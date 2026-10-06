@@ -124,6 +124,10 @@
         {
           "version": "0011_native_material_allocations",
           "checksum": "49e05898aa8785ebe846891688e9e4225fd20ddfb13a1c0296d11d9d663bc1df"
+        },
+        {
+          "version": "0012_native_material_launch_claim",
+          "checksum": "95c163f5f4b8a58aaf43ac62b96ab0efae1f4497216e91717451f4ebcaa6966b"
         }
       ],
       "relations": [

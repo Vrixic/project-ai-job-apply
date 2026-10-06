@@ -100,7 +100,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(64);
+    ).toBe(65);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -253,7 +253,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 7,
       relationCount: 86,
-      migrationCount: 64,
+      migrationCount: 65,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -450,6 +450,7 @@ describe("read-only aggregate restore verification", () => {
                   "0009_cover_letter_provider_failure",
                   "0010_temporary_material_completion",
                   "0011_native_material_allocations",
+                  "0012_native_material_launch_claim",
                   "0008_temporary_material_bindings",
                   ...(migrationCount === 52 ? [] : ["0010_restricted_answer_vault"]),
                   "0011_active_candidate_lease",
@@ -496,6 +497,7 @@ describe("read-only aggregate restore verification", () => {
           migrations: contributor.migrations.filter(
             (migration) =>
               migration.version !== "0011_native_material_allocations" &&
+              migration.version !== "0012_native_material_launch_claim" &&
               (migrationCount >= 63 || migration.version !== "0008_temporary_material_bindings") &&
               (migrationCount >= 62 ||
                 migration.version !== "0010_temporary_material_completion") &&
@@ -538,6 +540,7 @@ describe("read-only aggregate restore verification", () => {
               "0009_cover_letter_provider_failure",
               "0010_temporary_material_completion",
               "0011_native_material_allocations",
+              "0012_native_material_launch_claim",
               "0008_temporary_material_bindings",
               "0006_vault_approval_binding",
               "0007_document_field_hashes",

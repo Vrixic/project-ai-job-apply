@@ -3672,3 +3672,15 @@ Tested implementation `dda86480` is unchanged; subsequent commits record deliver
 #558's reviewed retirement source is included because its independent merge targeted the former
 feature-branch base. One authored PR is open. D1/D3 stay In progress; no authored main merge,
 cloud task operation, publication/deployment/activation or hosted CI/CD work.
+
+
+2026-10-05 D3-079 starts one-attempt native launch control on fresh main 18b6b2e2. Documents 0012
+pins an irreversible launch claim before RunTask; exact task-definition/image/envelope checks,
+late fulfilled capture and positive original-task recovery preserve unknown launch and independent
+provider settlement. 102 focused cases, all 39 registry/Gateway and 136 Documents work SQL cases,
+65-migration/86-relation logical restore, 24 restore units, 165 runtime smoke checks and 697/908
+restore/recovery guards pass locally. ECS transports are simulated; no live task or provider.
+Owned fixtures removed, shared volumes retained and Docker/WSL stopped. Full clean committed
+verification remains before source review. [Evidence](evidence/d3-native-task-launch-2026-10-05.md).
+Native image/authenticated adapters/routing/task conformance/client/ATS/accountable/deployed gates
+remain. D1/D3 stay In progress; no activation/deployment and CI/CD remains deferred until launch.

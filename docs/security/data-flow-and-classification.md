@@ -703,3 +703,16 @@ task/container description yields a scalar receipt. No generated body or provide
 passes through it. The missing owning registry must seal admission and account for every bound
 allocation before application-wide disposal can be acknowledged. IAM, managed-task conformance,
 launch/routing and all-copy/client cleanup remain separate activation requirements.
+
+
+## Source-only native one-attempt launch control (2026-10-05)
+
+Trusted original allocation -> signed fixed task-definition envelope verification -> Applications
+same-transaction owner/status admission and Documents immutable launch claim -> one signed ECS
+RunTask -> exact fulfilled task capture. Private claims contain operational IDs, original grant
+binding and static configuration hash only; no generated content, candidate facts or credentials.
+No SQL lock spans AWS. Lost acknowledgements/absence/time do not grant another task or prove
+retirement. Positive exact-task recovery can drain sealed/quarantined scope independently of new
+launch activation; provider work stays unresolved. Managed image/native deadline, authenticated
+issuer/private adapters, task-state routing, reviewed IAM/TLS and actual runtime conformance remain
+unproved. No deployment or activation. See [source evidence](../product/delivery/evidence/d3-native-task-launch-2026-10-05.md).

@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "@ai-job-apply/ai-sdk": "workspace:*",
+    "@aws-sdk/client-ecs": "3.1133.0",
     "@types/aws-lambda": "8.10.163",
     "tsx": "4.23.13",
     "uuid": "14.0.2"

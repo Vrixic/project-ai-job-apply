@@ -28,7 +28,7 @@ const migrations = manifest.contributors.flatMap((contributor) =>
     relative: `${contributor.owner}/migrations/${migration.version}.sql`,
   })),
 );
-assert.equal(migrations.length, 63);
+assert.equal(migrations.length, 65);
 assert.deepEqual(manifest.contributors.map((x) => x.owner).sort(), [...owners].sort());
 
 function fixture(context) {
@@ -96,7 +96,7 @@ function fixture(context) {
   return { root, write, run, accept };
 }
 
-test("accepts current 63-migration inventory using the production runtime smoke", (context) => {
+test("accepts current 65-migration inventory using the production runtime smoke", (context) => {
   fixture(context);
 });
 
