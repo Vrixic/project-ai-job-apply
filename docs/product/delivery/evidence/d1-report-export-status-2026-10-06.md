@@ -72,3 +72,9 @@ documentation follows the verified source.
 The owned tmpfs fixture is removed and Docker Desktop/WSL are stopped; the PC remains on.
 The feature branch is published without a third PR while #564/#565 remain open. No cloud release,
 hosted cleanup activation, deployed export acceptance or D1/D3 completion is claimed.
+
+The maintained local launcher reconnects to the healthy live development API after verification.
+Local root returns 200; anonymous Resume returns the expected 307 sign-in redirect. These are
+readiness checks, not authenticated export or resume-import acceptance. The launcher-generated
+two Next type-path changes are restored; no frontend source change is retained. Local web stays
+available for the pending generated-synthetic resume flow.
