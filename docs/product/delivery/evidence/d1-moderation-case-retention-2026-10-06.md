@@ -65,5 +65,9 @@ either original verifier handle. Only delivery documentation follows the verifie
 
 The owned tmpfs PostgreSQL fixture is removed; Docker Desktop and WSL are stopped. The PC remains
 on. Local web was stopped before the full run to release port 3000 for session fixtures. The
+maintained launcher then reconnects to the healthy live development API; local root returns 200
+and anonymous Resume returns the expected 307 sign-in redirect. These are readiness checks,
+not authenticated resume-import acceptance. Its generated Next type-path change is restored.
+The
 branch is published without a third PR while #564/#565 remain open. No hosted CI/CD, cloud release,
 cleanup activation, production acceptance or D1/D3 completion is claimed.
