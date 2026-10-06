@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { coverLetterContext, ModelGateway, type ModelProvider } from "@ai-job-apply/ai-sdk";
 import {
+  type ApplicationStoreOptions,
   type CoverLetterPreparationPort,
   createApplicationsDatabase,
   type FieldDefinition,
@@ -32,6 +33,14 @@ import {
   createPreparationTerminalHandler,
 } from "./application-preparation-recovery.js";
 
+const { createSyntheticPacketProtection } = await import(
+  new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+);
+const packetProtection = createSyntheticPacketProtection() as {
+  options: NonNullable<ApplicationStoreOptions["restrictedPackets"]>;
+  destroy(): void;
+};
+
 const databaseUrl = process.env.DATABASE_URL;
 const execute = promisify(execFile);
 const activityArn =
@@ -58,7 +67,10 @@ const START = new Date("2026-10-02T12:00:00Z");
         },
       ],
     ]);
-    const applications = new PostgresApplicationStore(client, () => now, { definitions });
+    const applications = new PostgresApplicationStore(client, () => now, {
+      definitions,
+      restrictedPackets: packetProtection.options,
+    });
     const controlClient = createApplicationsDatabase(databaseUrl ?? "postgres://invalid", {
       maxConnections: 1,
     });
@@ -116,6 +128,7 @@ const START = new Date("2026-10-02T12:00:00Z");
       await LocalDurableTestRunner.setupTestEnvironment({ skipTime: false });
     }, 30_000);
     afterAll(async () => {
+      packetProtection.destroy();
       await LocalDurableTestRunner.teardownTestEnvironment();
       await client.end();
       await controlClient.end();

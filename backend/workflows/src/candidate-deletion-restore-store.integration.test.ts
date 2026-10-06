@@ -2,10 +2,17 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import {
+  type ApplicationStoreOptions,
+  createApplicationsDatabase,
+  defaultFieldDefinitions,
+  PostgresApplicationStore,
+} from "@ai-job-apply/applications-service";
 import { validateCandidateDataExportV1 } from "@ai-job-apply/domain";
 import { createJobCatalogDatabase } from "@ai-job-apply/jobs-service";
 import {
   type CandidateDeletionConfirmationJournalEntry,
+  createBuildingCandidateExportAuthorizer,
   createDatabase,
   type DatabaseHandle,
   PostgresProfileStore,
@@ -71,6 +78,9 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
   let raw: ReturnType<typeof createJobCatalogDatabase>;
   let store: PostgresCandidateDeletionRestoreStore;
   let seedD2: (client: unknown, profile: unknown) => Promise<{ ownerUserId: string }>;
+  let restrictedPackets: ApplicationStoreOptions["restrictedPackets"];
+  let applicationsSql: ReturnType<typeof createApplicationsDatabase>;
+  let releaseProtection: (() => void) | undefined;
 
   beforeAll(async () => {
     // Root/operator creates the exact isolated local database. This test neither starts
@@ -99,9 +109,18 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
       new URL("../../../scripts/tests/d2-recovery/fixtures.mjs", import.meta.url).href
     );
     seedD2 = fixtures.seedD2RecoveryFixtures;
+    const { createSyntheticPacketProtection } = await import(
+      new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+    );
+    const protection = createSyntheticPacketProtection();
+    restrictedPackets = protection.options;
+    releaseProtection = protection.destroy;
+    applicationsSql = createApplicationsDatabase(databaseUrl as string, { maxConnections: 2 });
   }, 90_000);
 
   afterAll(async () => {
+    releaseProtection?.();
+    await applicationsSql?.end();
     await raw?.end();
     await database?.client.end();
   });
@@ -132,6 +151,47 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         (id, application_id, owner_user_id, seq, kind, to_status, occurred_at)
       VALUES (${uuidv7()}, ${applicationId}, ${userId}, 1, 'application_created', 'preparing', now())
     `;
+    const packets = new PostgresApplicationStore(applicationsSql, undefined, {
+      definitions: defaultFieldDefinitions(),
+      ...(restrictedPackets ? { restrictedPackets } : {}),
+    });
+    const created = await packets.createApplication({
+      ownerUserId: userId,
+      canonicalJobId: uuidv7(),
+      idempotencyKey: uuidv7(),
+    });
+    const protectedPacket = await packets.createPacket({
+      ownerUserId: userId,
+      applicationId: created.view.application.id,
+      expectedRevision: created.view.application.revision,
+      idempotencyKey: uuidv7(),
+      packet: {
+        jobRevision: "a".repeat(64),
+        form: null,
+        artifactHashes: {},
+        fields: [
+          {
+            fieldKey: "authorization.us_authorized",
+            value: true,
+            origin: "user_entered",
+            sourceFactIds: [],
+            sourceConfirmed: true,
+            confidence: 1,
+          },
+        ],
+      },
+    });
+    const current = protectedPacket.view.currentPacket;
+    if (!current) throw Error("Missing generated protected packet");
+    const values = await packets.readCurrentPacketValues({
+      ownerUserId: userId,
+      applicationId: created.view.application.id,
+      expectedRevision: protectedPacket.view.application.revision,
+      packetId: current.id,
+      packetHash: current.packetHash,
+    });
+    expect(values.values.get("authorization.us_authorized")).toBe(true);
+    if (values.values instanceof Map) values.values.clear();
     const policy = ACCEPTED_CANDIDATE_DELETION_POLICIES[policyIndex];
     if (!policy) throw new Error("Synthetic historical policy missing");
     const confirmedAt = new Date();
@@ -172,7 +232,9 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         (SELECT count(*)::int FROM matching.private_saved_page_captures WHERE owner_user_id = ${userId}) AS matching,
         (SELECT count(*)::int FROM billing.entitlement_accounts WHERE user_id = ${userId}) AS billing,
         (SELECT count(*)::int FROM trust.contribution_cases WHERE contributor_user_id = ${userId}) AS trust,
-        (SELECT count(*)::int FROM applications.applications WHERE owner_user_id = ${userId}) AS applications
+        ((SELECT count(*)::int FROM applications.applications WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications_restricted.packet_values WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications_restricted.packet_read_audit WHERE owner_user_id = ${userId})) AS applications
     `;
     if (!row) throw new Error("Synthetic owner inventory missing");
     return row;
@@ -561,6 +623,14 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         database,
         policy,
         clock: () => generatedAt,
+        restrictedPacketExport: new PostgresApplicationStore(applicationsSql, () => generatedAt, {
+          definitions: defaultFieldDefinitions(),
+          ...(restrictedPackets ? { restrictedPackets } : {}),
+          authorizeRestrictedPacketExport: createBuildingCandidateExportAuthorizer({
+            policy,
+            enabled: () => true,
+          }),
+        }),
         // The real activity composes all six SQL exports and runs the shared validator before
         // this in-memory sink. Nothing is uploaded, persisted on the host, or logged.
         artifactStore: {
@@ -595,6 +665,17 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
       const serialized = Buffer.from(written[0] ?? []).toString("utf8");
       const envelope = JSON.parse(serialized) as Record<string, unknown>;
       expect(validateCandidateDataExportV1(envelope)).toBe(true);
+      const applicationSection = envelope.applications as {
+        packets: Array<{ fields: Array<{ fieldKey: string; value: unknown }> }>;
+      };
+      expect(
+        applicationSection.packets
+          .flatMap((packet) => packet.fields)
+          .filter((field) => field.fieldKey === "authorization.us_authorized")
+          .map((field) => field.value),
+      ).toEqual([true]);
+      expect(serialized).not.toContain("restrictedPacketReferences");
+      expect(serialized).not.toContain("protectedValue");
       const exported = envelope as unknown as {
         candidate: { connectedAccounts: unknown[] };
         profile: { contributionConsents: Record<string, unknown>[] };

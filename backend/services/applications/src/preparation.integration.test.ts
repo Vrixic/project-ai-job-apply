@@ -8,12 +8,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FieldDefinition } from "./field-policy.js";
 import { PreparationNotFoundError, type PreparationRequest } from "./preparation.js";
 import { PreparationDispatchError, type PreparationTerminalInput } from "./preparation-dispatch.js";
-import { ApplicationsService, toApiPreparation } from "./service.js";
+import {
+  createFixtureApplication,
+  createIntegrationApplicationStore,
+  createIntegrationApplicationsService,
+} from "./restricted-packet-integration-support.js";
+import { toApiPreparation } from "./service.js";
 import {
   ApplicationIdempotencyConflictError,
   ApplicationNotFoundError,
   ApplicationRevisionConflictError,
-  PostgresApplicationStore,
 } from "./store.js";
 import { definitions, FACT_A, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
 
@@ -36,7 +40,7 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
     sensitivity: "confidential",
     answerPolicy: "explicit_each_time",
   } satisfies FieldDefinition);
-  const store = new PostgresApplicationStore(client, () => now, { definitions: fields });
+  const store = createIntegrationApplicationStore(client, () => now, { definitions: fields });
 
   beforeAll(async () => {
     for (const path of ["../../profile/dist/src/migrate.js", "../dist/src/migrate.js"]) {
@@ -62,7 +66,7 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
     now = new Date(startTime);
     const owner = uuidv7();
     await client`INSERT INTO identity.users (id) VALUES (${owner})`;
-    const created = await store.createApplication({
+    const created = await createFixtureApplication(store, client, {
       ownerUserId: owner,
       canonicalJobId: uuidv7(),
       idempotencyKey: `create-${uuidv7()}`,
@@ -314,7 +318,7 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
       const input = command(owner, app);
       let contextReads = 0;
       let packetReads = 0;
-      const service = new ApplicationsService({
+      const service = createIntegrationApplicationsService({
         store,
         preparations: store,
         packets: {

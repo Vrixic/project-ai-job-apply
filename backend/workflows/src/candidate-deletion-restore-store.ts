@@ -276,7 +276,9 @@ const ownerCountsQuery = `SELECT jsonb_build_object(
     (SELECT count(*) FROM applications.attempts WHERE owner_user_id = $1::uuid) +
     (SELECT count(*) FROM applications.history WHERE owner_user_id = $1::uuid) +
     (SELECT count(*) FROM applications.command_receipts WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.outbox WHERE owner_user_id = $1::uuid)
+    (SELECT count(*) FROM applications.outbox WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications_restricted.packet_values WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications_restricted.packet_read_audit WHERE owner_user_id = $1::uuid)
 ) AS "ownerCounts"`;
 
 /** Construct only after the executor authenticates a quiesced, isolated restore target. */

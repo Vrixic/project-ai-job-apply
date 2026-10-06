@@ -3,6 +3,7 @@ import {
   createApplicationsDatabase,
   defaultFieldDefinitions,
 } from "@ai-job-apply/applications-service";
+import { restrictedPacketWriterFromEnvironment } from "@ai-job-apply/applications-service/restricted-packet-runtime";
 import { createOidcIdTokenVerifier, createOidcVerifier } from "@ai-job-apply/auth";
 import {
   BillingEntitlementService,
@@ -172,11 +173,13 @@ const candidateDataExportDownloads =
 
 // Applications stay dark unless explicitly enabled for local development. The database must already
 // have the Applications migration applied.
+const packetProtection = restrictedPacketWriterFromEnvironment(process.env);
 const applications =
   process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
         client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
         profile: store,
+        ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
         restrictedAnswerReuseEnabled: process.env.RESTRICTED_ANSWER_REUSE_ENABLED === "true",
         restrictedAnswers: Object.freeze({
           lockCurrentReferences:

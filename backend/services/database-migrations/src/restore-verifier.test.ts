@@ -94,13 +94,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(86);
+    expect(expectedRelations(source)).toHaveLength(88);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(65);
+    ).toBe(66);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -252,8 +252,8 @@ describe("read-only aggregate restore verification", () => {
         "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
       ownerCount: 7,
-      relationCount: 86,
-      migrationCount: 65,
+      relationCount: 88,
+      migrationCount: 66,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -421,12 +421,15 @@ describe("read-only aggregate restore verification", () => {
           .filter((contributor) => migrationCount === 52 || contributor.owner !== "applications")
           .map((contributor) => ({
             ...contributor,
+            schemas: contributor.schemas.filter((schema) => schema !== "applications_restricted"),
             relations: contributor.relations.filter(
               (relation) =>
                 ![
                   "documents.cover_letters",
                   "documents.cover_letter_work_authorizations",
                   "documents.cover_letter_provider_responses",
+                  "applications_restricted.packet_read_audit",
+                  "applications_restricted.packet_values",
                   "documents.native_material_admission",
                   "documents.native_material_allocations",
                   ...(migrationCount === 52
@@ -452,6 +455,7 @@ describe("read-only aggregate restore verification", () => {
                   "0011_native_material_allocations",
                   "0012_native_material_launch_claim",
                   "0008_temporary_material_bindings",
+                  "0009_restricted_packet_values",
                   ...(migrationCount === 52 ? [] : ["0010_restricted_answer_vault"]),
                   "0011_active_candidate_lease",
                 ].includes(migration.version),
@@ -483,6 +487,77 @@ describe("read-only aggregate restore verification", () => {
     },
   );
 
+  it.each(["0009_restricted_packet_values", "0012_native_material_launch_claim"])(
+    "requires both independent 65-migration boundaries: missing %s refuses current acceptance",
+    async (missing) => {
+      const current = loadCurrentRestoreManifest();
+      const restrictedAbsent = missing === "0009_restricted_packet_values";
+      const manifest = parseRestoreManifest({
+        ...current.manifest,
+        contributors: current.manifest.contributors.map((contributor) => ({
+          ...contributor,
+          schemas: contributor.schemas.filter(
+            (schema) => !restrictedAbsent || schema !== "applications_restricted",
+          ),
+          relations: contributor.relations.filter(
+            (relation) => !restrictedAbsent || !relation.startsWith("applications_restricted."),
+          ),
+          migrations: contributor.migrations.filter((migration) => migration.version !== missing),
+        })),
+      });
+      const historical = {
+        manifest,
+        sha256: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
+      };
+      const client: RestoreSqlClient = {
+        async begin(_options, work) {
+          return work(successfulExecutor(historical));
+        },
+      };
+      await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
+        ownerCount: 7,
+        relationCount: restrictedAbsent ? 86 : 88,
+        migrationCount: 65,
+      });
+      await expect(verifyRestoreDatabase(client, current)).rejects.toThrow();
+    },
+  );
+
+  it("keeps the prior native 64-migration boundary separate from restricted packet storage", async () => {
+    const current = loadCurrentRestoreManifest();
+    const manifest = parseRestoreManifest({
+      ...current.manifest,
+      contributors: current.manifest.contributors.map((contributor) => ({
+        ...contributor,
+        schemas: contributor.schemas.filter((schema) => schema !== "applications_restricted"),
+        relations: contributor.relations.filter(
+          (relation) => !relation.startsWith("applications_restricted."),
+        ),
+        migrations: contributor.migrations.filter(
+          (migration) =>
+            migration.version !== "0009_restricted_packet_values" &&
+            migration.version !== "0012_native_material_launch_claim",
+        ),
+      })),
+    });
+    const historical = {
+      manifest,
+      sha256: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
+    };
+    const client: RestoreSqlClient = {
+      async begin(_options, work) {
+        return work(successfulExecutor(historical));
+      },
+    };
+    await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
+      ownerCount: 7,
+      relationCount: 86,
+      migrationCount: 64,
+    });
+    await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
+      "Restore schema boundary mismatch",
+    );
+  });
   it.each([63, 62, 61, 60, 59, 58])(
     "retains the prior %s-migration boundary only against its exact historical manifest",
     async (migrationCount) => {
@@ -491,11 +566,15 @@ describe("read-only aggregate restore verification", () => {
         ...current.manifest,
         contributors: current.manifest.contributors.map((contributor) => ({
           ...contributor,
+          schemas: contributor.schemas.filter((schema) => schema !== "applications_restricted"),
           relations: contributor.relations.filter(
-            (relation) => !relation.startsWith("documents.native_material_"),
+            (relation) =>
+              !relation.startsWith("applications_restricted.") &&
+              !relation.startsWith("documents.native_material_"),
           ),
           migrations: contributor.migrations.filter(
             (migration) =>
+              migration.version !== "0009_restricted_packet_values" &&
               migration.version !== "0011_native_material_allocations" &&
               migration.version !== "0012_native_material_launch_claim" &&
               (migrationCount >= 63 || migration.version !== "0008_temporary_material_bindings") &&
@@ -522,7 +601,7 @@ describe("read-only aggregate restore verification", () => {
         migrationCount,
       });
       await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
-        /(migration|relation)/iu,
+        /(migration|relation|schema)/iu,
       );
     },
   );
@@ -533,6 +612,7 @@ describe("read-only aggregate restore verification", () => {
       ...current.manifest,
       contributors: current.manifest.contributors.map((contributor) => ({
         ...contributor,
+        schemas: contributor.schemas.filter((schema) => schema !== "applications_restricted"),
         migrations: contributor.migrations.filter(
           (migration) =>
             ![
@@ -542,6 +622,7 @@ describe("read-only aggregate restore verification", () => {
               "0011_native_material_allocations",
               "0012_native_material_launch_claim",
               "0008_temporary_material_bindings",
+              "0009_restricted_packet_values",
               "0006_vault_approval_binding",
               "0007_document_field_hashes",
             ].includes(migration.version),
@@ -549,6 +630,7 @@ describe("read-only aggregate restore verification", () => {
         relations: contributor.relations.filter(
           (relation) =>
             relation !== "documents.cover_letter_provider_responses" &&
+            !relation.startsWith("applications_restricted.") &&
             !relation.startsWith("documents.native_material_"),
         ),
       })),

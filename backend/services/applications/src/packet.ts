@@ -10,10 +10,12 @@ import {
   type ProposedField,
   type ReviewReason,
 } from "./field-policy.js";
+import type { RestrictedPacketBinding } from "./restricted-packet-cipher.js";
 import { temporaryMaterialReasons, validPacketTemporaryMaterials } from "./temporary-material.js";
 import { type VaultCurrentReference, type VaultReference, validVaultReference } from "./vault.js";
 
 export const PACKET_HASH_SCHEMA = "application-packet.v1";
+export const PROTECTED_PACKET_HASH_SCHEMA = "application-packet.v2";
 /** Approval never outlives this window even if nothing else changed. */
 export const MAX_APPROVAL_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -32,6 +34,8 @@ export interface ArtifactHashes {
 }
 
 export interface PacketFieldEntry {
+  /** Private stored metadata: the exact nonnull value lives in the bound restricted record. */
+  protectedValue?: true;
   vaultReference?: VaultReference;
   fieldKey: string;
   value: FieldValue;
@@ -44,6 +48,8 @@ export interface PacketFieldEntry {
 }
 
 export interface PacketContent {
+  /** Private immutable restricted snapshot; excluded from public API projections. */
+  restrictedValues?: RestrictedPacketBinding;
   temporaryMaterials?: readonly TemporaryMaterialReference[];
   userId: string;
   applicationId: string;
@@ -233,8 +239,11 @@ export function assemblePacket(
 /** Binds packet content and exact original material identities/deadlines. Packet ID, creation
  * timestamp and approval state remain excluded; absence preserves the existing v1 hash. */
 export function computePacketHash(content: PacketContent): string {
+  if (!validRestrictedPacketBinding(content))
+    throw new PacketInvariantError("Invalid restricted packet binding");
   return canonicalHash({
-    schema: PACKET_HASH_SCHEMA,
+    schema: content.restrictedValues ? PROTECTED_PACKET_HASH_SCHEMA : PACKET_HASH_SCHEMA,
+    ...(content.restrictedValues ? { restrictedValues: content.restrictedValues } : {}),
     userId: content.userId,
     applicationId: content.applicationId,
     canonicalJobId: content.canonicalJobId,
@@ -242,6 +251,7 @@ export function computePacketHash(content: PacketContent): string {
     jobRevision: content.jobRevision,
     form: content.form,
     fields: content.fields.map((field) => ({
+      ...(field.protectedValue === true ? { protectedValue: true } : {}),
       ...(field.vaultReference ? { vaultReference: field.vaultReference } : {}),
       fieldKey: field.fieldKey,
       value: field.value,
@@ -263,9 +273,55 @@ export function computePacketHash(content: PacketContent): string {
   });
 }
 
+/** This validates metadata consistency only. The owning restricted store separately verifies
+ * exact record/provenance/ciphertext identity; no KMS/decryption runs during approval/admission. */
+export function validRestrictedPacketBinding(content: PacketContent): boolean {
+  const protectedFields = content.fields.filter((field) => Object.hasOwn(field, "protectedValue"));
+  const binding = content.restrictedValues;
+  if (binding === undefined) return protectedFields.length === 0;
+  if (
+    !binding ||
+    typeof binding !== "object" ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(binding))
+  )
+    return false;
+  const descriptors = Object.getOwnPropertyDescriptors(binding);
+  if (
+    Reflect.ownKeys(binding).length !== 3 ||
+    !["id", "metadataSha256", "ciphertextSha256"].every((key) => {
+      const property = descriptors[key];
+      return property?.enumerable && "value" in property && typeof property.value === "string";
+    })
+  )
+    return false;
+  if (
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
+      binding.id,
+    ) ||
+    !SHA256.test(binding.metadataSha256) ||
+    !SHA256.test(binding.ciphertextSha256) ||
+    !protectedFields.length ||
+    new Set(protectedFields.map((field) => field.fieldKey)).size !== protectedFields.length
+  )
+    return false;
+  return protectedFields.every(
+    (field) =>
+      field.protectedValue === true &&
+      field.value === null &&
+      field.requiresReview === true &&
+      field.disposition === "review" &&
+      field.fieldKey !== "documents.resume" &&
+      field.fieldKey !== "documents.cover_letter",
+  );
+}
+
 export function verifyPacketHash(packet: ApplicationPacket): boolean {
-  if (!validPacketTemporaryMaterials(packet.temporaryMaterials, packet)) return false;
-  return computePacketHash(packet) === packet.packetHash;
+  try {
+    if (!validPacketTemporaryMaterials(packet.temporaryMaterials, packet)) return false;
+    return computePacketHash(packet) === packet.packetHash;
+  } catch {
+    return false;
+  }
 }
 
 export interface ApprovalRequest {

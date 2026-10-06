@@ -5,8 +5,11 @@ import { validateCandidateDataExportV1 } from "@ai-job-apply/domain";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ApplicationsService } from "./service.js";
-import { PostgresApplicationStore } from "./store.js";
+import {
+  createFixtureServiceApplication,
+  createIntegrationApplicationStore,
+  createIntegrationApplicationsService,
+} from "./restricted-packet-integration-support.js";
 import { definitions, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -37,8 +40,8 @@ describeWithDatabase("D3-014 Applications candidate rights ownership", () => {
     onnotice: () => undefined,
   });
   const secret = "synthetic-private-answer@example.test";
-  const service = new ApplicationsService({
-    store: new PostgresApplicationStore(client, () => new Date(), { definitions }),
+  const service = createIntegrationApplicationsService({
+    store: createIntegrationApplicationStore(client, () => new Date(), { definitions }),
     packets: {
       async prepare() {
         return {
@@ -79,7 +82,7 @@ describeWithDatabase("D3-014 Applications candidate rights ownership", () => {
     const first = await execFileAsync(process.execPath, [executable], { env });
     const replay = await execFileAsync(process.execPath, [executable], { env });
     const expected =
-      "Applications migrations through 0008_temporary_material_bindings applied and verified.";
+      "Applications migrations through 0009_restricted_packet_values applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
   });
@@ -89,7 +92,13 @@ describeWithDatabase("D3-014 Applications candidate rights ownership", () => {
   });
 
   async function appliedApplication(owner: string) {
-    const created = await service.create(owner, uuidv7(), key("create"));
+    const created = await createFixtureServiceApplication(
+      service,
+      client,
+      owner,
+      uuidv7(),
+      key("create"),
+    );
     const prepared = await service.preparePacket(
       owner,
       created.id,
@@ -157,7 +166,7 @@ describeWithDatabase("D3-014 Applications candidate rights ownership", () => {
     const requestId = uuidv7();
     const confirmedAt = new Date(Date.now() - 1_000);
     const backupExpiresAt = new Date(confirmedAt.getTime() + 35 * 24 * 60 * 60 * 1_000);
-    await client`INSERT INTO identity.users (id) VALUES (${userId})`;
+    await client`INSERT INTO identity.users (id) VALUES (${userId}) ON CONFLICT (id) DO NOTHING`;
     await client`
       INSERT INTO platform.operations (id, user_id, kind, state)
       VALUES (${operationId}, ${userId}, 'account_deletion', 'queued')

@@ -8,9 +8,9 @@ another service's tables.
 
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
-  after Trust): eleven owned schemas (including the empty-table `jobs_public` projection schema), 86
-  regular relations, and 65 checksum-bound migrations (Profile through `0011`; Applications through
-  `0008`; Documents through `0012`). The
+  after Trust): twelve owned schemas (including the empty-table `jobs_public` projection schema and separate
+  `applications_restricted` storage), 88 regular relations, and 66 checksum-bound migrations
+  (Profile through `0011`; Applications through `0009`; Documents through `0012`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
   purges Applications data (run 2026-09-18 against an isolated local cluster).
 
@@ -42,7 +42,7 @@ seven-owner boundary while retaining its D2-focused generated-data and behavior 
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through
 the existing stores. A real custom-format `pg_dump` and `pg_restore` run inside tmpfs only.
-The source/target aggregate verifier results and exact sorted full-row JSON for all 86 relations
+The source/target aggregate verifier results and exact sorted full-row JSON for all 88 relations
 must match; 18 Phase 2 relations must contain generated data. Restored behavioral checks cover
 owner isolation, current/revoked/cancelled consent, lease immutability and concurrent renewal,
 stale-lease refusal, and idempotent publication. No rows or dump files are retained on the host.
@@ -65,6 +65,13 @@ recovery. The maintained harness compares three restored packets (expired, confi
 verifies portable ownership redaction, refuses binding removal and expired approval authority,
 and retains settled-attempt duplicate guards. Generated content and memory snapshots are absent.
 Restored metadata never reconstructs lost content; fresh preparation and exact review are required.
+
+The Applications 0009 boundary includes separate restricted packet snapshots and identifier-only
+read audit. Generated logical recovery checks three original values and keyed command replays,
+denies private tables to a metadata-only NOLOGIN role, and exercises exact authorized deletion
+without removing another candidate. Test-only AES/HMAC keys remain in the harness process and are
+cleared afterward. This proves local logical data recovery and permission refusal; production
+SQL/KMS grants, cluster-role recovery and accountable key/retention acceptance remain separate.
 
 
 Documents 0012 preserves irreversible original launch claims through logical recovery. The current

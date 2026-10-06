@@ -2304,3 +2304,9 @@ export class ProfileFactTransitionConflictError extends Error {
     this.name = "ProfileFactTransitionConflictError";
   }
 }
+
+export {
+  type CandidateExportAdmissionQuery,
+  type CandidateExportAdmissionScope,
+  createBuildingCandidateExportAuthorizer,
+} from "./candidate-export-admission.js";

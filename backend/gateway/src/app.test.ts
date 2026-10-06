@@ -10,6 +10,7 @@ import {
   ApprovalRefusedError,
   AttemptRefusedError,
   PreparationNotFoundError,
+  RestrictedPacketStoreUnavailableError,
   StalePacketError,
 } from "@ai-job-apply/applications-service";
 import "reflect-metadata";
@@ -4415,6 +4416,7 @@ describe("Applications routes", () => {
       ],
       [new AttemptRefusedError("AMBIGUOUS_UNRECONCILED"), 409, "application_attempt_refused"],
       [new ApplicationsUnavailableError(), 503, "applications_unavailable"],
+      [new RestrictedPacketStoreUnavailableError(), 503, "applications_unavailable"],
     ] as const) {
       failure = error;
       const response = await cancel();

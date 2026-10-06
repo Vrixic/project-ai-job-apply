@@ -14,13 +14,14 @@ const key = () => `restore-material-${uuidv7()}`;
 const hash = "c".repeat(64);
 
 /** Scalar metadata and technical submission states only; no material, provider or ATS access. */
-export async function seedTemporaryPackets(sql, ownerUserId) {
+export async function seedTemporaryPackets(sql, ownerUserId, restrictedPackets) {
   const fixtures = [];
   for (const outcome of ["expired", "confirmed", "ambiguous"]) {
     const completedAtMs = Date.now() - (outcome === "expired" ? 1_800_001 : 1);
     const at = new Date(completedAtMs + 1);
     const store = new PostgresApplicationStore(sql, () => at, {
       definitions: defaultFieldDefinitions(),
+      restrictedPackets,
     });
     const created = await store.createApplication({
       ownerUserId,
@@ -117,11 +118,12 @@ export async function seedTemporaryPackets(sql, ownerUserId) {
   return fixtures;
 }
 
-export async function exerciseRestoredTemporaryPackets(sql, fixtures) {
+export async function exerciseRestoredTemporaryPackets(sql, fixtures, restrictedPackets) {
   for (const fixture of fixtures) {
     const { ownerUserId, applicationId, packet, reference, current, original, outcome } = fixture;
     const store = new PostgresApplicationStore(sql, () => new Date(reference.expiresAtMs), {
       definitions: defaultFieldDefinitions(),
+      restrictedPackets,
     });
     assert.deepEqual(await store.getApplication(ownerUserId, applicationId), original);
     const [exported] =

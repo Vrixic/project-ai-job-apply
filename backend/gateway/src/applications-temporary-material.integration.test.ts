@@ -23,8 +23,8 @@ import {
   TemporaryCoverLetterService,
   TemporaryMaterialStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
-import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import { createNativeReadAuthorizationClient } from "@ai-job-apply/documents-service/native-read-authorization-client";
+import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
@@ -34,6 +34,14 @@ import {
   type ApplicationsRuntimeOptions,
   createApplicationsRuntime,
 } from "./applications-runtime.js";
+
+const { createSyntheticPacketProtection } = await import(
+  new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+);
+const packetProtection = createSyntheticPacketProtection() as {
+  options: NonNullable<ApplicationsRuntimeOptions["restrictedPackets"]>;
+  destroy(): void;
+};
 
 const databaseUrl = process.env.DATABASE_URL;
 const execute = promisify(execFile);
@@ -51,7 +59,10 @@ const key = () => `temporary-packet-${uuidv7()}`;
   const profile = new PostgresProfileStore(profileDatabase);
   let at = new Date();
   const definitions = defaultFieldDefinitions();
-  const store = new PostgresApplicationStore(database, () => at, { definitions });
+  const store = new PostgresApplicationStore(database, () => at, {
+    definitions,
+    restrictedPackets: packetProtection.options,
+  });
   const catalog = {
     getActiveJob: async () => null,
     resolveActiveJobSummaries: async () =>
@@ -88,6 +99,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
       profile,
       catalog,
       definitions,
+      restrictedPackets: packetProtection.options,
       clock: () => at,
       nativeReadAuthorizationsEnabled: () => authorizeNativeReads,
       ...(memory ? { temporaryMaterials: memory } : {}),
@@ -116,6 +128,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
     }
   }, 60_000);
   afterAll(async () => {
+    packetProtection.destroy();
     await database.end({ timeout: 5 });
     await profileDatabase.client.end({ timeout: 5 });
   });
@@ -126,11 +139,13 @@ const key = () => `temporary-packet-${uuidv7()}`;
     existing?: { id: string; revision: number },
   ) {
     at = new Date();
+    await database`INSERT INTO identity.users (id) VALUES (${owner}::uuid) ON CONFLICT DO NOTHING`;
     const noProvider = createApplicationsRuntime({
       client: database,
       profile,
       catalog,
       definitions,
+      restrictedPackets: packetProtection.options,
       clock: () => at,
     });
     const created = existing ?? (await noProvider.create(owner, jobId, key()));

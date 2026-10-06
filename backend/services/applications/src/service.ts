@@ -4,7 +4,6 @@ import type {
   Application,
   ApplicationCoverLetterFile,
   ApplicationCoverLetterPreview,
-  ApplicationTemporaryMaterialAuthorization,
   ApplicationHistoryPage,
   ApplicationPacketPreparation,
   ApplicationPage,
@@ -12,6 +11,7 @@ import type {
   ApplicationResumePreview,
   ApplicationSubmissionResultRequest,
   ApplicationSubmissionStart,
+  ApplicationTemporaryMaterialAuthorization,
   ReconcileApplicationAttemptRequest,
 } from "@ai-job-apply/api-contracts";
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
@@ -28,8 +28,15 @@ import {
   safeRecord,
   versionToken,
 } from "./metrics.js";
-import type { ArtifactHashes, CurrentBindings, FormBinding } from "./packet.js";
+import { authorizeNativeMaterialRead } from "./native-material-read.js";
+import {
+  type ArtifactHashes,
+  type CurrentBindings,
+  type FormBinding,
+  verifyPacketHash,
+} from "./packet.js";
 import type { PreparationContext, PreparationRecord, PreparationRequest } from "./preparation.js";
+import type { RestrictedPacketPlaintext } from "./restricted-packet-cipher.js";
 import { type ResumePreviewSource, tailoredFileName, withPacketMatch } from "./resume-preview.js";
 import type {
   ApplicationRecord,
@@ -45,7 +52,6 @@ import {
   readBoundTemporaryCoverLetter,
 } from "./temporary-cover-letter-read.js";
 import { temporaryMaterialReasons } from "./temporary-material.js";
-import { authorizeNativeMaterialRead } from "./native-material-read.js";
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -279,6 +285,8 @@ export interface ApplicationsApi {
 
 export interface ApplicationsServiceDependencies {
   store: ApplicationStorePort;
+  /** Exact owning JIT reader; absent until restricted storage/key capabilities are composed. */
+  restrictedPackets?: Pick<PostgresApplicationStore, "readCurrentPacketValues">;
   packets: PacketPreparationSource;
   bindings: LiveBindingsSource;
   jobs: ApplicationJobGate;
@@ -343,7 +351,7 @@ export class ApplicationsService implements ApplicationsApi {
       idempotencyKey,
     });
     if (!result.replayed) this.funnel("created");
-    return toApiApplication(result.view);
+    return this.present(ownerUserId, result.view);
   }
 
   async search(
@@ -357,14 +365,17 @@ export class ApplicationsService implements ApplicationsApi {
       ...(request.jobId ? { canonicalJobId: request.jobId } : {}),
     });
     const last = page.items.at(-1)?.application;
+    const items: Application[] = [];
+    for (const view of page.items) items.push(await this.present(ownerUserId, view));
     return {
-      items: page.items.map(toApiApplication),
+      items,
       ...(page.hasMore && last ? { nextCursor: encodeCursor(last) } : {}),
     };
   }
 
   async get(ownerUserId: string, applicationId: string): Promise<Application> {
-    return toApiApplication(
+    return this.present(
+      ownerUserId,
       await this.dependencies.store.getApplication(ownerUserId, applicationId),
     );
   }
@@ -641,7 +652,7 @@ export class ApplicationsService implements ApplicationsApi {
         }
       }
     }
-    return toApiApplication(result.view);
+    return this.present(ownerUserId, result.view);
   }
 
   async approve(
@@ -681,7 +692,7 @@ export class ApplicationsService implements ApplicationsApi {
         });
       }
     }
-    return toApiApplication(result.view);
+    return this.present(ownerUserId, result.view);
   }
 
   async reopen(
@@ -691,6 +702,7 @@ export class ApplicationsService implements ApplicationsApi {
     idempotencyKey: string,
   ): Promise<Application> {
     return this.command(
+      ownerUserId,
       this.dependencies.store.reopenForEdit({
         ownerUserId,
         applicationId,
@@ -707,6 +719,7 @@ export class ApplicationsService implements ApplicationsApi {
     idempotencyKey: string,
   ): Promise<Application> {
     return this.command(
+      ownerUserId,
       this.dependencies.store.cancel({
         ownerUserId,
         applicationId,
@@ -752,14 +765,14 @@ export class ApplicationsService implements ApplicationsApi {
       ? {
           outcome: "started",
           attemptId: result.attempt.id,
-          application: toApiApplication(result.view),
+          application: await this.present(ownerUserId, result.view),
         }
       : {
           outcome: "approval_invalidated",
           invalidationReasons: [...result.reasons] as NonNullable<
             ApplicationSubmissionStart["invalidationReasons"]
           >,
-          application: toApiApplication(result.view),
+          application: await this.present(ownerUserId, result.view),
         };
   }
 
@@ -798,14 +811,14 @@ export class ApplicationsService implements ApplicationsApi {
       ? {
           outcome: "started",
           attemptId: result.attempt.id,
-          application: toApiApplication(result.view),
+          application: await this.present(ownerUserId, result.view),
         }
       : {
           outcome: "approval_invalidated",
           invalidationReasons: [...result.reasons] as NonNullable<
             ApplicationSubmissionStart["invalidationReasons"]
           >,
-          application: toApiApplication(result.view),
+          application: await this.present(ownerUserId, result.view),
         };
   }
 
@@ -850,7 +863,7 @@ export class ApplicationsService implements ApplicationsApi {
     });
     if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
     await this.discardTerminalMaterials(settled.view);
-    return toApiApplication(settled.view);
+    return this.present(ownerUserId, settled.view);
   }
 
   async reconcile(
@@ -869,7 +882,7 @@ export class ApplicationsService implements ApplicationsApi {
     });
     if (!settled.replayed) this.attemptSettled(settled.view, attemptId);
     await this.discardTerminalMaterials(settled.view);
-    return toApiApplication(settled.view);
+    return this.present(ownerUserId, settled.view);
   }
 
   private funnel(stage: string, extra: { reason?: string } = {}): void {
@@ -890,10 +903,37 @@ export class ApplicationsService implements ApplicationsApi {
     if (view.application.status === "applied") this.funnel("applied");
   }
 
-  private async command(pending: Promise<CommandResult>): Promise<Application> {
+  private async present(ownerUserId: string, view: ApplicationView): Promise<Application> {
+    const fixed = structuredClone(view);
+    if (fixed.application.ownerUserId !== ownerUserId) throw new ApplicationsUnavailableError();
+    const packet = fixed.currentPacket;
+    if (!packet?.restrictedValues) return toApiApplication(fixed);
+    const reader = this.dependencies.restrictedPackets;
+    if (!reader) throw new ApplicationsUnavailableError();
+    let plaintext: RestrictedPacketPlaintext | undefined;
+    try {
+      plaintext = await reader.readCurrentPacketValues({
+        ownerUserId,
+        applicationId: fixed.application.id,
+        packetId: packet.id,
+        packetHash: packet.packetHash,
+        expectedRevision: fixed.application.revision,
+      });
+      return toApiApplication(fixed, plaintext);
+    } catch {
+      throw new ApplicationsUnavailableError();
+    } finally {
+      if (plaintext?.values instanceof Map) plaintext.values.clear();
+    }
+  }
+
+  private async command(
+    ownerUserId: string,
+    pending: Promise<CommandResult>,
+  ): Promise<Application> {
     const result = await pending;
     await this.discardTerminalMaterials(result.view);
-    return toApiApplication(result.view);
+    return this.present(ownerUserId, result.view);
   }
 
   private async discardTerminalMaterials(view: ApplicationView): Promise<void> {
@@ -979,9 +1019,50 @@ function toApiAttempt(attempt: AttemptRecord): ApiApplicationAttempt {
   };
 }
 
-export function toApiApplication(view: ApplicationView): Application {
+/** Public projection accepts only an exact immediate owning read. Unwired protected reads
+ * fail unavailable rather than rendering a saved answer as null or exposing storage metadata. */
+export function toApiApplication(
+  view: ApplicationView,
+  plaintext?: RestrictedPacketPlaintext,
+): Application {
   const packet = view.currentPacket;
   const approval = view.approval;
+  const protectedFields = packet?.fields.filter((field) => field.protectedValue === true) ?? [];
+  if (protectedFields.length) {
+    if (
+      !packet ||
+      !verifyPacketHash(packet) ||
+      !plaintext ||
+      packet.userId !== view.application.ownerUserId ||
+      packet.applicationId !== view.application.id ||
+      view.application.currentPacketId !== packet.id ||
+      plaintext.ownerUserId !== packet.userId ||
+      plaintext.applicationId !== packet.applicationId ||
+      plaintext.packetId !== packet.id ||
+      plaintext.packetHash !== packet.packetHash ||
+      plaintext.values.size !== protectedFields.length ||
+      protectedFields.some((field) => !plaintext.values.has(field.fieldKey))
+    )
+      throw new ApplicationsUnavailableError();
+    for (const field of protectedFields) {
+      const value = plaintext.values.get(field.fieldKey);
+      if (
+        !(
+          typeof value === "string" ||
+          typeof value === "boolean" ||
+          (typeof value === "number" && Number.isFinite(value)) ||
+          (Array.isArray(value) &&
+            value.every(
+              (item) =>
+                typeof item === "string" ||
+                typeof item === "boolean" ||
+                (typeof item === "number" && Number.isFinite(item)),
+            ))
+        )
+      )
+        throw new ApplicationsUnavailableError();
+    }
+  } else if (plaintext) throw new ApplicationsUnavailableError();
   return {
     id: view.application.id,
     canonicalJobId: view.application.canonicalJobId,
@@ -999,7 +1080,11 @@ export function toApiApplication(view: ApplicationView): Application {
             fields: packet.fields.map((field) => ({
               ...(field.vaultReference ? { vaultReference: { ...field.vaultReference } } : {}),
               fieldKey: field.fieldKey,
-              value: cloneValue(field.value),
+              value: cloneValue(
+                field.protectedValue === true
+                  ? (plaintext?.values.get(field.fieldKey) as FieldValue)
+                  : field.value,
+              ),
               origin: field.origin,
               sourceFactIds: [...field.sourceFactIds],
               confidence: field.confidence,

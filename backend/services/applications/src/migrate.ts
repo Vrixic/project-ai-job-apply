@@ -15,6 +15,7 @@ const migrationVersions = [
   "0006_vault_approval_binding",
   "0007_document_field_hashes",
   "0008_temporary_material_bindings",
+  "0009_restricted_packet_values",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -66,6 +67,9 @@ try {
         documentFieldHashGuardCount: number;
         temporaryMaterialConstraintCount: number;
         temporaryMaterialTriggerCount: number;
+        restrictedTriggerCount: number;
+        restrictedConstraintCount: number;
+        restrictedDeleteBodyCount: number;
       }[]
     >`
       SELECT
@@ -79,7 +83,9 @@ try {
          (to_regclass('applications.packet_preparations') IS NOT NULL)::int +
          (to_regclass('applications.preparation_outbox') IS NOT NULL)::int +
          (to_regclass('applications.preparation_audit') IS NOT NULL)::int +
-         (to_regclass('applications.schema_migrations') IS NOT NULL)::int)::int AS "relationCount",
+         (to_regclass('applications.schema_migrations') IS NOT NULL)::int +
+         (to_regclass('applications_restricted.packet_values') IS NOT NULL)::int +
+         (to_regclass('applications_restricted.packet_read_audit') IS NOT NULL)::int)::int AS "relationCount",
         (SELECT count(*)::int FROM pg_trigger
           WHERE tgname IN (
             'packets_immutable', 'history_immutable', 'command_receipts_immutable',
@@ -144,10 +150,25 @@ try {
           (tgrelid = 'applications.packets'::regclass AND tgname = 'packets_temporary_material_edit') OR
           (tgrelid = 'applications.approvals'::regclass AND tgname = 'approvals_temporary_material_admission') OR
           (tgrelid = 'applications.attempts'::regclass AND tgname = 'attempts_temporary_material_admission'))
-        ) AS "temporaryMaterialTriggerCount"
+        ) AS "temporaryMaterialTriggerCount",
+        (SELECT count(*)::int FROM pg_trigger WHERE NOT tgisinternal
+          AND tgrelid IN ('applications_restricted.packet_values'::regclass, 'applications_restricted.packet_read_audit'::regclass)
+          AND tgenabled = 'O' AND tgname IN ('restricted_packet_values_immutable',
+            'restricted_packet_values_candidate_delete_guard', 'restricted_packet_values_active_candidate',
+            'restricted_packet_read_audit_immutable', 'restricted_packet_read_audit_candidate_delete_guard',
+            'restricted_packet_read_audit_active_candidate')
+        ) AS "restrictedTriggerCount",
+        (SELECT count(*)::int FROM pg_constraint WHERE convalidated AND (
+          (conrelid = 'applications.packets'::regclass AND conname IN (
+            'packets_restricted_binding_ck', 'packets_restricted_fields_ck', 'packets_restricted_value_fk')) OR
+          (conrelid = 'applications.command_receipts'::regclass AND conname = 'command_receipts_hash_authority_ck'))
+        ) AS "restrictedConstraintCount",
+        (SELECT count(*)::int FROM pg_proc WHERE oid = to_regprocedure('applications.delete_candidate_data(uuid,uuid)')
+          AND prosecdef AND pg_get_functiondef(oid) LIKE '%DELETE FROM applications_restricted.packet_values%'
+        ) AS "restrictedDeleteBodyCount"
     `;
     if (
-      verification?.relationCount !== 11 ||
+      verification?.relationCount !== 13 ||
       verification.guardTriggerCount !== 20 ||
       verification.supportingIndexCount !== 9 ||
       verification.migrationCount !== migrationVersions.length ||
@@ -157,7 +178,10 @@ try {
       verification.candidateDeletionGuardBodyCount !== 1 ||
       verification.documentFieldHashGuardCount !== 1 ||
       verification.temporaryMaterialConstraintCount !== 1 ||
-      verification.temporaryMaterialTriggerCount !== 3
+      verification.temporaryMaterialTriggerCount !== 3 ||
+      verification.restrictedTriggerCount !== 6 ||
+      verification.restrictedConstraintCount !== 4 ||
+      verification.restrictedDeleteBodyCount !== 1
     ) {
       throw new Error(
         `Applications migration verification failed: ${JSON.stringify(verification)}`,

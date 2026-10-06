@@ -2,7 +2,8 @@
 
 Status: private source checkpoint, default-off; clean `a2600fb5` fully verified locally.
 D3-079 and D1/D3 remain In progress. Base: exact main `18b6b2e2` (#559), isolated backend worktree.
-Restricted-packet draft PR #561 is independent and is not included in this branch.
+Initial standalone source excludes restricted-packet PR #561. Its independent main merge is
+now integrated; the combined evidence is recorded below.
 
 ## Implemented path
 
@@ -92,7 +93,7 @@ its separately verified fixture. Shared volume inventories match; Docker Desktop
 
 ## Remaining work and release boundary
 
-Current standalone source passes full local verification; integration with merged #561 remains. The immutable native image/entrypoint,
+Current standalone source passes full local verification; full clean combined verification remains. The immutable native image/entrypoint,
 authenticated issuer/launcher and private evidence/work/completion/registry adapters, durable task
 state-event routing/lost-ACK capture, managed TLS/DNS routing, IAM/task conformance and complete
 client/ATS disposal remain unfinished. Unknown launch requires positive exact evidence; it does not
@@ -128,3 +129,30 @@ Clean `a2600fb5e651266be1a367816d59d37c3fa7fc45` passes the complete maintained 
 product scope and emitted isolation/default-off checks. Main independently advances to
 `5305829d` with #561 while verification runs. This certifies the standalone 65/86/11 boundary;
 combined 66-migration/88-relation/12-schema acceptance remains pending reconciliation.
+
+## Combined main integration
+
+Main `5305829d` independently merges #561. This branch integrates that source and preserves both
+append-only delivery histories. The combined manifest is 66 migrations, 88 relations, 12 schemas;
+SHA256 `ddc35cb77abf0b775066dd38849c486a982c9caa71a502411c774141208c79bb`.
+All SQL checksums and cross-runtime restore/configuration/inspection pins agree. Current image
+and publisher exact entrypoint inventories include Documents 0011/0012 and Applications 0009.
+Historical native-64 and both independent-65 manifests remain exact historical boundaries;
+neither verifies the current combined source. Fifty migration/restore tests pass.
+
+Combined local logs:
+- `.tmp/d3-native-launch-combined-restore-unit.log`: 50 pass.
+- `.tmp/d3-native-launch-combined-runtime-smoke.log`: 167 pass.
+- `.tmp/d3-native-launch-combined-deletion-restore.log`: 697 replay and 908 role guards pass.
+- `.tmp/d3-native-launch-combined-sql.log`: all 40 registry/Gateway PostgreSQL cases pass.
+- `.tmp/d3-native-launch-combined-logical-restore.log`: actual 66/88/12 source-target aggregate
+  and all full relation row sets match; three restricted snapshots/two key epochs and original
+  keyed receipts/private-role/deletion cases pass alongside three pending/bound/retired native
+  claim records. Zero launch reissues; pending unknown remains unresolved and grants unsettled.
+  Terminal `passed: true`, `cleanupSucceeded: true`.
+
+Owned combined SQL fixture `688968963b8ba6db416b49cba68043e0301661d7ae74ecddbca9887d98f32327`
+is removed after exact identity/image/label/tmpfs/mount checks. The logical restore harness removes
+its own fixture. Shared volumes match; Docker Desktop/WSL are stopped. ECS and KMS transport
+remain simulated; no deployed authentication/task/provider or phase acceptance is claimed.
+Full clean combined verification remains pending.
