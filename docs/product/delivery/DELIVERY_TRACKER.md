@@ -3,7 +3,8 @@
 2026-10-06 D3-079 adds default-off exact native-task caller authentication: SDK-signed original/
 recipient/request context, fixed ECS credentials and strict regional STS verification. All 57 new
 cases, 91 control regressions and two emitted isolation/default-off checks pass. Full clean-source
-verification remains; RPC/image/bootstrap/IAM/managed/client/provider acceptance remain open.
+verification passes at `bffe650b` (38 typecheck/39 test/23 build tasks); RPC/image/bootstrap/IAM/
+managed/client/provider acceptance remain open.
 [Evidence](evidence/d3-native-task-caller-proof-2026-10-06.md). D1/D3 remain In progress.
 No deployment/activation, third PR or hosted CI/CD; Docker/WSL stopped and PC on.
 

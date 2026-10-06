@@ -64,7 +64,15 @@ Neither includes domain-owner runtimes, SQL, object storage, Lambda/task/secret/
 generation or rendering. Log: `.tmp/d3-native-caller-bundle.log`. This check is added to the
 maintained full verifier. Dependency pins and public API/domain/event schemas are unchanged.
 
-Full clean committed-source verification follows. No actual ECS credentials, AWS identity call,
+Full verification passes for clean committed source
+`bffe650bd23e3304ff38f488b877c4dc8deaf3a9`: 38 typecheck tasks, 39 test tasks and
+23 production builds, plus maintained operator/security/isolation, Compose and scope checks.
+The original verifier session exited zero; the tracked tree stayed unchanged during verification.
+Lint remains zero errors, 15 warnings and 58 informational notes.
+Log: `.tmp/d3-native-caller-full.log`. Cached unaffected tasks are included in these totals;
+this is local source evidence, not deployment or a new cold image build.
+
+No actual ECS credentials, AWS identity call,
 managed role trust, authenticated evidence/control RPC composition, native image/bootstrap,
 TLS/routing, client/ATS/provider/accountable acceptance or phase completion is claimed.
 No Terraform/IAM or frontend change, publication/deployment/activation, third PR or hosted CI/CD.
