@@ -684,11 +684,35 @@ The exact owned tmpfs fixture `2976c60c6231f20d37655405af83f4510323f214e656faa2b
 was checked against ID/name/label/tmpfs/no mounts and removed. Shared volume inventories are equal;
 Docker Desktop stopped and WSL has no running distributions. No deployment or activation occurred.
 
+## Logical restore across two key authorities
+
+The maintained `pnpm test:d2-recovery` fixture now uses the actual private Applications KMS
+adapter instead of an independent AES/HMAC implementation. Only the SDK transport is simulated,
+with separate controlled process keys for two exact encryption/MAC pairs and exact wrapped-key
+identity checks. The isolated synthetic runner explicitly selects test mode; production transport
+injection remains refused. Source packets/receipts include both epochs, while restored readers
+use the new active pair with explicitly retained original authority. Keys/maps are cleared.
+
+Actual PostgreSQL 16.6 logical dump/restore passes all 65 migrations, 12 schemas and exact equality
+of all 88 relation row sets. Three original chosen values and three original keyed replays pass
+through the actual adapter. Replay checks original key selection and exact unchanged receipt rows,
+with no data-key generation. Two missing-old-key replay attempts refuse before MAC transport.
+Both original encryption/MAC authorities are exercised. Metadata-role private reads still refuse
+four times, privacy deletion removes the exact doomed owner and preserves the other owner, and
+all temporary-document/response/D2 recovery evidence remains. Source row sets stay unchanged.
+Log: `.tmp/d3-rotated-packet-logical-restore.log`; terminal `passed: true`, `cleanupSucceeded: true`.
+All 15 generated container-ownership refusal checks pass before the fixture starts. The runner
+checks exact generated container ID/name/nonce label, image, loopback ports, tmpfs and no bind/named
+mounts before cleanup. No fixture remains and shared volume inventories are unchanged. This is
+local logical recovery with simulated KMS; live key permissions/retention, PITR, cluster-role
+restoration, RTO/RPO and accountable release acceptance are not certified. Current-source artifact
+and full maintained verification still remain before whole-slice review. No publication, deployment,
+activation or frontend changes.
+
 ## Next work
 
-Verify native/model isolation and current entrypoint artifacts after the bounded historical-key
-composition, extend rotated-key restore/replay evidence as required, and rerun clean full
-verification before whole-slice review. Production
+Verify current entrypoint artifacts and rerun clean full verification after the bounded
+historical-key composition and actual logical restore before whole-slice review. Production
 SQL/KMS role grants, real legacy inventory/disposition, accountable/client/ATS/deployed acceptance
 remain separate gates. Never silently purge or rehash approved/ambiguous legacy evidence. Keep
 reuse and both private composition switches disabled throughout.

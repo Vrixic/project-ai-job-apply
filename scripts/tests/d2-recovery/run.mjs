@@ -33,6 +33,8 @@ import {
 } from "./restricted-packets.mjs";
 import { exerciseRestoredTemporaryPackets, seedTemporaryPackets } from "./temporary-packets.mjs";
 
+// Isolated synthetic runner: production-injected KMS transports remain forbidden.
+process.env.NODE_ENV = "test";
 const protection = createSyntheticPacketProtection();
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 const execute = promisify(execFile);

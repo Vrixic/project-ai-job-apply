@@ -3859,3 +3859,12 @@ Owned tmpfs fixture removed, shared volumes preserved, Docker/WSL stopped. All t
 and five emitted isolation cases pass; current entrypoint artifacts and fresh full verifier remain; release/retention/accountable/deployed gates
 remain. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). No activation or D1/D3 completion;
 CI/CD remains deferred until production launch.
+
+
+2026-10-05 D3-077 actual logical restore now exercises the private KMS adapter (only SDK transport
+simulated) with packets and receipts from two key pairs. All 88 relation row sets/65 migrations/
+12 schemas, three original values/replays and exact unchanged receipts pass; removing old MAC
+authority refuses before KMS. Source unchanged, generated fixture removed and shared volumes
+preserved. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). Current artifacts and clean
+full verifier, production key/role/legacy/accountable/deployed gates remain. No activation, frontend
+work, publication or D1/D3 completion; CI/CD deferred until production launch.

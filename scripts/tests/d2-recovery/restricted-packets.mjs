@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID } from "node:crypto";
-import { canonicalJson } from "../../../backend/services/applications/dist/src/canonical.js";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+import { createRestrictedPacketKmsCipher } from "../../../backend/services/applications/dist/src/restricted-packet-runtime.js";
+
+const dependency = createRequire(
+  new URL("../../../backend/services/applications/package.json", import.meta.url),
+);
+const { DecryptCommand, GenerateDataKeyCommand, GenerateMacCommand } = await import(
+  pathToFileURL(dependency.resolve("@aws-sdk/client-kms")).href
+);
+
 import {
   defaultFieldDefinitions,
   PostgresApplicationStore,
@@ -15,49 +25,90 @@ const encryptionKeyArn =
   "arn:aws:kms:us-east-1:111111111111:key/11111111-1111-4111-8111-111111111111";
 const fingerprintKeyArn =
   "arn:aws:kms:us-east-1:111111111111:key/22222222-2222-4222-8222-222222222222";
+const nextEncryptionKeyArn = encryptionKeyArn.replaceAll(
+  "11111111-1111-4111-8111-111111111111",
+  "33333333-3333-4333-8333-333333333333",
+);
+const nextFingerprintKeyArn = fingerprintKeyArn.replaceAll(
+  "22222222-2222-4222-8222-222222222222",
+  "44444444-4444-4444-8444-444444444444",
+);
 const key = () => `synthetic-restricted-restore-${randomUUID()}`;
 
 /** Offline test authority shared only across this process's generated source/restore fixture. */
 export function createSyntheticPacketProtection() {
-  const aesKey = randomBytes(32);
-  const macKey = randomBytes(32);
-  const metrics = { encryptions: 0 };
-  const options = {
-    fingerprintKeyArn,
-    enabled: () => true,
-    cipher: {
-      async encrypt(scope, bytes) {
+  assert.equal(process.env.NODE_ENV, "test");
+  const keys = new Map([
+    [encryptionKeyArn, randomBytes(32)],
+    [fingerprintKeyArn, randomBytes(32)],
+    [nextEncryptionKeyArn, randomBytes(32)],
+    [nextFingerprintKeyArn, randomBytes(32)],
+  ]);
+  const wrapped = new Map();
+  const metrics = { encryptions: 0, decryptKeys: [], macKeys: [] };
+  const testClient = {
+    async send(command) {
+      const arn = command.input.KeyId;
+      const material = keys.get(arn);
+      assert.ok(material);
+      if (command instanceof GenerateDataKeyCommand) {
+        assert.ok([encryptionKeyArn, nextEncryptionKeyArn].includes(arn));
+        assert.equal(command.input.KeySpec, "AES_256");
+        const blob = randomBytes(40);
+        wrapped.set(blob.toString("hex"), arn);
         metrics.encryptions++;
-        const iv = randomBytes(12);
-        const aes = createCipheriv("aes-256-gcm", aesKey, iv);
-        aes.setAAD(Buffer.from(canonicalJson(scope)));
+        return { KeyId: arn, Plaintext: Buffer.from(material), CiphertextBlob: blob };
+      }
+      if (command instanceof DecryptCommand) {
+        assert.equal(wrapped.get(Buffer.from(command.input.CiphertextBlob).toString("hex")), arn);
+        assert.equal(command.input.EncryptionAlgorithm, "SYMMETRIC_DEFAULT");
+        assert.equal(command.input.EncryptionContext.purpose, "restricted-application-packet.v1");
+        metrics.decryptKeys.push(arn);
         return {
-          schemaVersion: 1,
-          encryptionKeyArn,
-          encryptedDataKey: randomBytes(40),
-          iv,
-          ciphertext: Buffer.concat([aes.update(bytes), aes.final()]),
-          authenticationTag: aes.getAuthTag(),
+          KeyId: arn,
+          EncryptionAlgorithm: "SYMMETRIC_DEFAULT",
+          Plaintext: Buffer.from(material),
         };
-      },
-      async decrypt(scope, envelope) {
-        assert.equal(envelope.encryptionKeyArn, encryptionKeyArn);
-        const aes = createDecipheriv("aes-256-gcm", aesKey, envelope.iv);
-        aes.setAAD(Buffer.from(canonicalJson(scope)));
-        aes.setAuthTag(Buffer.from(envelope.authenticationTag));
-        return Buffer.concat([aes.update(envelope.ciphertext), aes.final()]);
-      },
-      async fingerprint(input) {
-        return createHmac("sha256", macKey).update(canonicalJson(input)).digest("hex");
-      },
+      }
+      assert.ok(command instanceof GenerateMacCommand);
+      assert.ok([fingerprintKeyArn, nextFingerprintKeyArn].includes(arn));
+      assert.equal(command.input.MacAlgorithm, "HMAC_SHA_256");
+      metrics.macKeys.push(arn);
+      return {
+        KeyId: arn,
+        MacAlgorithm: "HMAC_SHA_256",
+        Mac: createHmac("sha256", material).update(command.input.Message).digest(),
+      };
     },
   };
+  const optionsFor = (rotated, admitHistory = true) => {
+    const pair = rotated
+      ? { encryptionKeyArn: nextEncryptionKeyArn, fingerprintKeyArn: nextFingerprintKeyArn }
+      : { encryptionKeyArn, fingerprintKeyArn };
+    const historicalKeys = rotated && admitHistory ? [{ encryptionKeyArn, fingerprintKeyArn }] : [];
+    return {
+      fingerprintKeyArn: pair.fingerprintKeyArn,
+      historicalFingerprintKeyArns: historicalKeys.map((pair) => pair.fingerprintKeyArn),
+      enabled: () => true,
+      cipher: createRestrictedPacketKmsCipher({
+        ...pair,
+        historicalKeys,
+        enabled: () => true,
+        testClient,
+      }),
+    };
+  };
   return {
-    options,
+    options: optionsFor(false),
+    restoreOptions: optionsFor(true),
+    withdrawnOptions: optionsFor(true, false),
     metrics,
     destroy() {
-      aesKey.fill(0);
-      macKey.fill(0);
+      for (const material of keys.values()) material.fill(0);
+      keys.clear();
+      wrapped.clear();
+      metrics.decryptKeys.length = 0;
+      metrics.macKeys.length = 0;
     },
   };
 }
@@ -65,7 +116,7 @@ export function createSyntheticPacketProtection() {
 function store(sql, protection, exportEnabled = false) {
   return new PostgresApplicationStore(sql, undefined, {
     definitions: defaultFieldDefinitions(),
-    restrictedPackets: protection.options,
+    restrictedPackets: exportEnabled ? protection.restoreOptions : protection.options,
     ...(exportEnabled
       ? {
           authorizeRestrictedPacketExport: createBuildingCandidateExportAuthorizer({
@@ -112,6 +163,10 @@ async function assertMetadataRole(sql, create = false) {
 
 export async function seedRestrictedPackets(sql, protection) {
   const writer = store(sql, protection);
+  const rotatedWriter = new PostgresApplicationStore(sql, undefined, {
+    definitions: defaultFieldDefinitions(),
+    restrictedPackets: protection.restoreOptions,
+  });
   const fixtures = [];
   for (const chosen of [[true, false], [true]]) {
     const ownerUserId = randomUUID();
@@ -123,6 +178,7 @@ export async function seedRestrictedPackets(sql, protection) {
     });
     let revision = created.view.application.revision;
     const commands = [];
+    const fingerprintKeys = [];
     for (const value of chosen) {
       const command = {
         ownerUserId,
@@ -145,12 +201,14 @@ export async function seedRestrictedPackets(sql, protection) {
           ],
         },
       };
-      const result = await writer.createPacket(command);
+      const rotated = commands.length > 0;
+      const result = await (rotated ? rotatedWriter : writer).createPacket(command);
+      fingerprintKeys.push(rotated ? nextFingerprintKeyArn : fingerprintKeyArn);
       revision = result.view.application.revision;
       commands.push(command);
     }
     const original = await writer.getApplication(ownerUserId, created.view.application.id);
-    const result = await writer.readCurrentPacketValues({
+    const result = await rotatedWriter.readCurrentPacketValues({
       ownerUserId,
       applicationId: original.application.id,
       expectedRevision: original.application.revision,
@@ -159,7 +217,7 @@ export async function seedRestrictedPackets(sql, protection) {
     });
     assert.equal(result.values.get(fieldKey), chosen.at(-1));
     result.values.clear();
-    fixtures.push({ ownerUserId, commands, original, chosen });
+    fixtures.push({ ownerUserId, commands, fingerprintKeys, original, chosen });
   }
   await assertMetadataRole(sql, true);
   return fixtures;
@@ -174,8 +232,25 @@ export async function exerciseRestoredRestrictedPackets(sql, protection, fixture
       fixture.original,
     );
     const encryptedBefore = protection.metrics.encryptions;
-    for (const command of fixture.commands)
+    const originalReceipts =
+      await sql`SELECT * FROM applications.command_receipts WHERE owner_user_id=${fixture.ownerUserId} ORDER BY idempotency_key`;
+    for (const [index, command] of fixture.commands.entries()) {
       assert.equal((await reader.createPacket(command)).replayed, true);
+      assert.equal(protection.metrics.macKeys.at(-1), fixture.fingerprintKeys[index]);
+    }
+    assert.deepEqual(
+      await sql`SELECT * FROM applications.command_receipts WHERE owner_user_id=${fixture.ownerUserId} ORDER BY idempotency_key`,
+      originalReceipts,
+    );
+    const unsupported = new PostgresApplicationStore(sql, undefined, {
+      definitions: defaultFieldDefinitions(),
+      restrictedPackets: protection.withdrawnOptions,
+    });
+    const before = protection.metrics.macKeys.length;
+    await assert.rejects(unsupported.createPacket(fixture.commands[0]), {
+      name: "RestrictedPacketStoreUnavailableError",
+    });
+    assert.equal(protection.metrics.macKeys.length, before);
     assert.equal(protection.metrics.encryptions, encryptedBefore);
     const exportId = randomUUID();
     const operationId = randomUUID();
@@ -204,9 +279,17 @@ export async function exerciseRestoredRestrictedPackets(sql, protection, fixture
     assert.equal(receipts.length, fixture.commands.length);
     for (const receipt of receipts) {
       assert.equal(receipt.request_hash_scheme, "kms-hmac-sha256.v1");
-      assert.equal(receipt.request_key_arn, fingerprintKeyArn);
+      assert.ok(fixture.fingerprintKeys.includes(receipt.request_key_arn));
     }
   }
+  assert.deepEqual(
+    [...new Set(protection.metrics.decryptKeys)].sort(),
+    [encryptionKeyArn, nextEncryptionKeyArn].sort(),
+  );
+  assert.deepEqual(
+    [...new Set(protection.metrics.macKeys)].sort(),
+    [fingerprintKeyArn, nextFingerprintKeyArn].sort(),
+  );
   const doomed = fixtures[0];
   const survivor = fixtures[1];
   await assert.rejects(
@@ -246,6 +329,9 @@ export async function exerciseRestoredRestrictedPackets(sql, protection, fixture
   );
   return {
     restrictedPacketSnapshotsRestored: 3,
+    restrictedPacketKeyEpochsRestored: 2,
+    restrictedPacketOriginalKeyReceiptsUnchanged: true,
+    restrictedPacketUnknownKeyReplayRejectedBeforeKms: fixtures.length,
     restrictedPacketOriginalValuesVerified: 3,
     restrictedPacketKeyedReplaysVerified: 3,
     restrictedMetadataRolePrivateReadsRejected: 4,

@@ -97,3 +97,7 @@ use active keys; removal refuses original replay before KMS. Old encryption keys
 supported historical/export/restore records and old MAC keys for supported original receipts.
 Reader-first rollout and accountable inventory/backup-window justification must precede retirement;
 source support does not authorize key deletion or certify production key lifecycle.
+
+The actual logical restore fixture now uses this adapter with simulated SDK transport and two key
+epochs. Exact full-row restore, three original values/keyed replays and unchanged receipts pass;
+withdrawn original MAC authority refuses before KMS. This does not prove live KMS or PITR recovery.
