@@ -9,12 +9,14 @@
 
 ## Objective
 
-2026-10-06 D3-079 implements the dedicated native image entrypoint, actual foreground provider,
-pinned Secrets Manager/TLS ports and authenticated owning principal projection. Focused Documents
-and Profile checks, 24 real SQL cases and the local hardened disabled-image smoke pass.
-[Evidence](evidence/d3-native-image-runtime-2026-10-06.md). Final Linux/emitted/full source verification
-is in progress; managed publication/IAM/routing/provider/client/accountable acceptance stays open.
-D1/D3 remain In progress; no cloud activation, main merge, third PR or CI/CD work. PC stays on.
+2026-10-06 D3-079 implements and locally verifies the dedicated native image with actual foreground
+provider, exact-version secret/TLS ports and authenticated owning principal projection. All 126
+focused checks, 24 real SQL cases, 30 Linux scenarios and six emitted checks pass. Clean source
+`214371ca` passes full verification: 38 typecheck, 39 test and 23 build tasks with unchanged lint.
+The source-labelled image builds and passes three hardened startup refusals.
+[Evidence](evidence/d3-native-image-runtime-2026-10-06.md). Managed publication/IAM/routing/provider/
+client/accountable acceptance stays open. D1/D3 remain In progress; no cloud activation, main merge,
+third PR or CI/CD work. Docker/WSL stopped; PC on.
 
 2026-10-06 D3-079 connects original native task startup: own ECS metadata -> authenticated stored
 approval -> trusted ports -> kernel/content runtime. All 72 focused, 27 Linux and five emitted
@@ -1630,3 +1632,11 @@ updated exact-source manifest/SBOM. [Evidence](evidence/d3-native-owner-rpc-2026
 Native image/bootstrap/IAM/private STS reachability/routing/managed/client/provider/accountable
 acceptance remain; D1/D3 stay In progress. No deployment/activation, third PR, main merge or
 CI/CD work. Owned fixtures removed, shared volumes retained, Docker/WSL stopped; PC stays on.
+
+2026-10-06 D3-079 clean source `214371ca0282d4110e4d8313d5a417e0cf2b6a98` passes full maintained
+verification: 38 typecheck tasks, 39 test tasks, 23 builds, zero lint errors/15 warnings/58 infos,
+all operator/security/isolation/Compose/scope checks, unchanged tracked source. The executable
+native image builds locally and its hardened default-off/extra-argument/environment-key refusals
+pass; 126 focused, 24 SQL, 30 Linux and six emitted checks pass. Image publication, managed IAM/TLS/
+routing, actual provider/client/ATS and accountable approval stay open. No third PR/main merge,
+cloud activation or hosted CI/CD work. [Evidence](evidence/d3-native-image-runtime-2026-10-06.md).

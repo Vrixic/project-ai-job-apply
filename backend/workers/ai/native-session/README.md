@@ -1,5 +1,11 @@
 # Native temporary material process
 
+Latest local checkpoint: the separate [native image](../native-material/README.md) now supplies the
+executable entrypoint and real provider/pinned-secret/TLS ports. All 30 Linux scenarios and full
+source verification pass. Historical checkpoints below describe their earlier boundaries; managed
+publication, IAM/routing/provider/client approval remains open. See
+[image evidence](../../../../docs/product/delivery/evidence/d3-native-image-runtime-2026-10-06.md).
+
 Source/local evidence only; no production launcher, bound endpoint, cloud deployment or activation.
 See [proposed ADR-040](../../../../docs/adr/040-native-temporary-material-processes.md).
 

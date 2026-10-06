@@ -1,11 +1,13 @@
 # Delivery Tracker
 
-2026-10-06 D3-079 implements the dedicated native image entrypoint, actual foreground provider,
-pinned Secrets Manager/TLS ports and authenticated owning principal projection. Focused Documents
-and Profile checks, 24 real SQL cases and the local hardened disabled-image smoke pass.
-[Evidence](evidence/d3-native-image-runtime-2026-10-06.md). Final Linux/emitted/full source verification
-is in progress; managed publication/IAM/routing/provider/client/accountable acceptance stays open.
-D1/D3 remain In progress; no cloud activation, main merge, third PR or CI/CD work. PC stays on.
+2026-10-06 D3-079 implements and locally verifies the dedicated native image with actual foreground
+provider, exact-version secret/TLS ports and authenticated owning principal projection. All 126
+focused checks, 24 real SQL cases, 30 Linux scenarios and six emitted checks pass. Clean source
+`214371ca` passes full verification: 38 typecheck, 39 test and 23 build tasks with unchanged lint.
+The source-labelled image builds and passes three hardened startup refusals.
+[Evidence](evidence/d3-native-image-runtime-2026-10-06.md). Managed publication/IAM/routing/provider/
+client/accountable acceptance stays open. D1/D3 remain In progress; no cloud activation, main merge,
+third PR or CI/CD work. Docker/WSL stopped; PC on.
 
 2026-10-06 D3-079 connects original native task startup: own ECS metadata -> authenticated stored
 approval -> trusted ports -> kernel/content runtime. All 72 focused, 27 Linux and five emitted
