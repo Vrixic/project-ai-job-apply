@@ -243,8 +243,24 @@ maintenance to roll back code; deleted candidate linkage cannot be reconstructed
 It performs one atomic batch with 30-second statement/idle and two-second lock bounds, emits only
 an expired count and is not a candidate API. SQL execution is denied to PUBLIC; a reviewed
 maintenance principal must receive an exact execution grant. Scheduling, runtime/IAM release,
-365-day case/control/audit retention and 30-day alert metadata remain unfinished. Nothing here
+privileged audit retention and 30-day alert metadata remain unfinished. Nothing here
 authorizes real candidate reports or activates a hosted cleanup task.
+
+Migration `0026_moderation_case_retention` backfills one minimal block per job and one pause per
+exact source/version/configuration tuple from resolved cases. New explicit resolutions update
+these controls atomically. Closed cases and their decision events expire after 365 days, only
+after linked reports expire and required controls exist. Operator identities and case details
+are deleted; controls contain only target identifiers and last-action time. Needed blocks and
+pauses remain to prevent resurrection. Phase 1 provides no job unblock or source resume authority.
+
+Deploy the control-aware ingestion pause reader before enabling case cleanup; an older reader
+that queries only cases would lose pause evidence after deletion. Roll back with cleanup disabled
+and preserve the control-aware reader once cases have been removed. In addition to the report flag,
+`JOB_MODERATION_RETENTION_ENABLED=true` explicitly selects combined maintenance. One owning
+transaction expires reports first, then cases/events and unused old job controls. With that flag
+unset, the existing report-only command remains unchanged. Both modes default off. The database
+function is bounded, uses row locks with SKIP LOCKED, and denies PUBLIC execution. This is local
+implementation, with no maintenance schedule, principal grant or hosted activation.
 
 Migration `0009_provider_ingestion_sources` aligns Jobs-owned durable checkpoint persistence with
 the existing bounded source-neutral identifier contract. It permits Greenhouse, Lever, and Ashby

@@ -93,7 +93,7 @@ describeWithDatabase("D2 source-aware revalidation persistence", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0025_job_report_retention applied and verified.",
+      "Jobs migrations through 0026_moderation_case_retention applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
     await store.ping();

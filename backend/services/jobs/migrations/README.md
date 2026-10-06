@@ -87,3 +87,9 @@ other service may modify these tables.
   retain their reports; authorized candidate deletion stays immediate and creates no aggregate.
   Requires migration-before-reader and reader-before-maintenance rollout; it does not schedule
   cleanup or implement case/control/audit/alert expiry.
+- `0026_moderation_case_retention.sql` — Backfills minimal non-operator block/pause controls
+  from resolved cases and updates them on subsequent explicit resolutions. Guarded bounded
+  maintenance removes case details and decision events 365 days after closure, once linked
+  reports expire and needed controls exist. Retains required controls to prevent resurrection;
+  no job unblock/source resume authority is added. Deploy the control-aware source pause reader
+  before separately enabling moderation cleanup. Privileged audit and alert expiry remain open.

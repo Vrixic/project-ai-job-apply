@@ -34,6 +34,7 @@ const migrationVersions = [
   "0023_contribution_verification_refresh",
   "0024_contribution_appeal_restoration",
   "0025_job_report_retention",
+  "0026_moderation_case_retention",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -714,11 +715,11 @@ try {
             ('jobs.job_reports'::regclass, 'job_reports_guard',
               'jobs.guard_job_report()'::regprocedure, 23::smallint),
             ('jobs.moderation_cases'::regclass, 'moderation_cases_guard',
-              'jobs.guard_moderation_case()'::regprocedure, 31::smallint),
+              'jobs.guard_moderation_case()'::regprocedure, 23::smallint),
             ('jobs.moderation_cases'::regclass, 'moderation_cases_append_event',
               'jobs.append_moderation_event()'::regprocedure, 21::smallint),
             ('jobs.moderation_events'::regclass, 'moderation_events_append_only',
-              'jobs.guard_moderation_event()'::regprocedure, 31::smallint)
+              'jobs.guard_moderation_event()'::regprocedure, 23::smallint)
           ) expected(table_oid, trigger_name, function_oid, trigger_type)
             ON expected.table_oid = trigger.tgrelid
            AND expected.trigger_name = trigger.tgname
@@ -1262,10 +1263,14 @@ try {
   if (!leaseChronology?.validated || leaseChronology.definition !== expectedLeaseChronology) {
     throw new Error("Development contribution operation lease chronology verification failed");
   }
-  const retentionMigration = migrations.find(
+  const reportRetentionMigration = migrations.find(
     (migration) => migration.version === "0025_job_report_retention",
   );
-  if (!retentionMigration) throw new Error("The report retention migration source is missing");
+  const moderationRetentionMigration = migrations.find(
+    (migration) => migration.version === "0026_moderation_case_retention",
+  );
+  if (!reportRetentionMigration || !moderationRetentionMigration)
+    throw new Error("The Jobs retention migration source is missing");
   const retentionFunctions = [
     "lock_job_report_retention",
     "guard_job_report_case_link",
@@ -1273,8 +1278,16 @@ try {
     "job_report_retention_due",
     "guard_candidate_job_report_delete",
     "purge_expired_job_reports",
+    "guard_moderation_control",
+    "append_moderation_control",
+    "moderation_case_retention_due",
+    "guard_expired_moderation_delete",
+    "purge_expired_moderation_cases",
   ];
   for (const functionName of retentionFunctions) {
+    const retentionMigration = functionName.includes("moderation")
+      ? moderationRetentionMigration
+      : reportRetentionMigration;
     const expectedBody = new RegExp(
       `CREATE (?:OR REPLACE )?FUNCTION jobs\\.${functionName}\\([\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`,
       "u",
@@ -1294,7 +1307,7 @@ try {
       actual?.body !== expectedBody ||
       JSON.stringify(actual.settings) !==
         JSON.stringify(["search_path=pg_catalog, jobs, privacy"]) ||
-      actual.definer !== (functionName === "purge_expired_job_reports") ||
+      actual.definer !== functionName.startsWith("purge_expired_") ||
       actual.publicExecute
     ) {
       throw new Error("Job report retention function verification failed");
@@ -1330,6 +1343,34 @@ try {
     retentionSchema.foreignKeys !== 3
   ) {
     throw new Error("Job report retention schema verification failed");
+  }
+  const [moderationRetentionSchema] = await client<
+    { tables: number; triggers: number; primaryKeys: number; foreignKeys: number }[]
+  >`
+    SELECT ((to_regclass('jobs.job_moderation_blocks') IS NOT NULL)::int +
+      (to_regclass('jobs.source_moderation_pauses') IS NOT NULL)::int) AS tables,
+      (SELECT count(*)::int FROM pg_trigger AS trigger JOIN (VALUES
+        ('jobs.job_moderation_blocks'::regclass, 'job_moderation_blocks_guard', 'jobs.guard_moderation_control()'::regprocedure, 31::smallint),
+        ('jobs.source_moderation_pauses'::regclass, 'source_moderation_pauses_guard', 'jobs.guard_moderation_control()'::regprocedure, 31::smallint),
+        ('jobs.moderation_cases'::regclass, 'moderation_cases_append_control', 'jobs.append_moderation_control()'::regprocedure, 17::smallint),
+        ('jobs.moderation_cases'::regclass, 'moderation_cases_retention_delete_guard', 'jobs.guard_expired_moderation_delete()'::regprocedure, 11::smallint),
+        ('jobs.moderation_events'::regclass, 'moderation_events_retention_delete_guard', 'jobs.guard_expired_moderation_delete()'::regprocedure, 11::smallint)
+      ) AS expected(table_oid, name, function_oid, trigger_type)
+      ON trigger.tgrelid = expected.table_oid AND trigger.tgname = expected.name
+        AND trigger.tgfoid = expected.function_oid AND trigger.tgtype = expected.trigger_type
+      WHERE NOT trigger.tgisinternal AND trigger.tgenabled = 'O') AS triggers,
+      (SELECT count(*)::int FROM pg_constraint WHERE contype = 'p' AND convalidated
+        AND conrelid IN ('jobs.job_moderation_blocks'::regclass, 'jobs.source_moderation_pauses'::regclass)) AS "primaryKeys",
+      (SELECT count(*)::int FROM pg_constraint WHERE contype = 'f' AND convalidated
+        AND conrelid IN ('jobs.job_moderation_blocks'::regclass, 'jobs.source_moderation_pauses'::regclass)) AS "foreignKeys"
+  `;
+  if (
+    moderationRetentionSchema?.tables !== 2 ||
+    moderationRetentionSchema.triggers !== 5 ||
+    moderationRetentionSchema.primaryKeys !== 2 ||
+    moderationRetentionSchema.foreignKeys !== 1
+  ) {
+    throw new Error("Moderation retention schema verification failed");
   }
   console.log(`Jobs migrations through ${migrationVersions.at(-1)} applied and verified.`);
 } finally {

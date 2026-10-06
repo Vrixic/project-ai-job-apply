@@ -254,6 +254,10 @@
         {
           "version": "0025_job_report_retention",
           "checksum": "4c9bc91c3ed61ea55f4086c7d1338ea5fc197f5b8de89bd5c64e01727bb300d0"
+        },
+        {
+          "version": "0026_moderation_case_retention",
+          "checksum": "d94186f63ea63bfc76e4cffaca821b8e57015c45f6cb7c73f6dfd727686b92c9"
         }
       ],
       "relations": [
@@ -275,6 +279,7 @@
         "jobs.job_contribution_state_events",
         "jobs.job_contribution_trust_decisions",
         "jobs.job_contributions",
+        "jobs.job_moderation_blocks",
         "jobs.job_report_case_links",
         "jobs.job_report_retention_totals",
         "jobs.job_reports",
@@ -282,6 +287,7 @@
         "jobs.moderation_cases",
         "jobs.moderation_events",
         "jobs.schema_migrations",
+        "jobs.source_moderation_pauses",
         "jobs.source_revalidation_queue",
         "jobs.source_verification_evidence",
         "jobs.status_events"
