@@ -57,7 +57,12 @@ Scoped Biome and four actual emitted bundle checks pass. Launcher now retains ni
 including the new pure evidence binding validator, with existing capability exclusions intact.
 No new deployable artifact/source-bound ZIP or native task image is claimed; earlier launch
 artifacts are evidence for their recorded source only. Log: `.tmp/d3-native-evidence-bundle-final.log`.
-Full clean maintained verification remains required before review.
+The first full maintained run passes all 38 typecheck, 39 test and 23 build tasks,
+then fails the standalone registry's exact emitted-file assertion because its new method retains
+the binding and launch-contract validators. Pinning those two actual pure files changes no
+capability exclusion or source guard. All eight launch/registry/disposal/retirement emitted
+checks then pass (`.tmp/d3-native-evidence-all-bundles.log`). Full clean rerun remains required
+before review; the first full log is `.tmp/d3-native-evidence-full.log`.
 
 ## Remaining gates
 
