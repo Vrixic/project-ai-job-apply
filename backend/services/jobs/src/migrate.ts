@@ -35,6 +35,7 @@ const migrationVersions = [
   "0024_contribution_appeal_restoration",
   "0025_job_report_retention",
   "0026_moderation_case_retention",
+  "0027_candidate_report_export_status",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {

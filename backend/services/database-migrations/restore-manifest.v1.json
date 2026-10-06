@@ -258,6 +258,10 @@
         {
           "version": "0026_moderation_case_retention",
           "checksum": "d94186f63ea63bfc76e4cffaca821b8e57015c45f6cb7c73f6dfd727686b92c9"
+        },
+        {
+          "version": "0027_candidate_report_export_status",
+          "checksum": "c09b9be4688af21fdf357537adabd32e61854525412353d29d09a361b21d71b9"
         }
       ],
       "relations": [

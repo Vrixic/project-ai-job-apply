@@ -153,7 +153,7 @@ describeWithDatabase("Jobs contribution candidate rights ownership", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Jobs migrations through 0026_moderation_case_retention applied and verified.",
+      "Jobs migrations through 0027_candidate_report_export_status applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });

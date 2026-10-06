@@ -93,3 +93,8 @@ other service may modify these tables.
   reports expire and needed controls exist. Retains required controls to prevent resurrection;
   no job unblock/source resume authority is added. Deploy the control-aware source pause reader
   before separately enabling moderation cleanup. Privileged audit and alert expiry remain open.
+- `0027_candidate_report_export_status.sql` — Adds the retained owner report's exact linked case
+  status to portable exports, preserving contribution and creation-audit projections. No linked
+  case is received; open is under_review; closed is resolved, without accuracy or decision claims.
+  Excludes operator/case identity and all report hashes. Deploy the optional-field schema-aware
+  export consumer before this migration; older strict validators refuse the additive field.

@@ -57,13 +57,114 @@ describeWithDatabase("Jobs reporting and moderation persistence", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(result.stdout.trim()).toBe(
-      "Jobs migrations through 0026_moderation_case_retention applied and verified.",
+      "Jobs migrations through 0027_candidate_report_export_status applied and verified.",
     );
     await reports.ping();
   });
 
   afterAll(async () => {
     await catalog.close();
+  });
+
+  async function exportedReports(owner: string) {
+    const [row] = await client<
+      {
+        data: {
+          jobs: { reports: Record<string, unknown>[] };
+          audit: { events: Record<string, unknown>[] };
+        };
+      }[]
+    >`
+      SELECT jobs.export_candidate_data(${owner}::uuid) AS data
+    `;
+    if (!row) throw new Error("Missing Jobs owner export");
+    return row.data;
+  }
+
+  it("exports owner-only linked review status through receipt, open and resolution without moderator data", async () => {
+    const job = await catalog.recordObservation(fixture("export-status"));
+    const owner = uuidv7();
+    const otherOwner = uuidv7();
+    await reports.create({
+      ownerUserId: owner,
+      requestedJobId: job.job.id,
+      reason: "job_inaccurate",
+      idempotencyKey: "export-status-owner-key",
+    });
+    await reports.create({
+      ownerUserId: otherOwner,
+      requestedJobId: job.job.id,
+      reason: "suspected_scam",
+      idempotencyKey: "export-status-neighbor-key",
+    });
+    const received = await exportedReports(owner);
+    expect(received.jobs.reports).toHaveLength(1);
+    expect(received.jobs.reports[0]).toMatchObject({
+      reason: "job_inaccurate",
+      status: "received",
+    });
+    const reviewed = await moderation.openCase({
+      target: { kind: "job", jobId: job.job.id },
+      operatorId: "operator:synthetic-export-status",
+      reasonCode: "candidate_reports",
+    });
+    expect((await exportedReports(owner)).jobs.reports[0]).toMatchObject({
+      status: "under_review",
+    });
+    await moderation.resolveCase({
+      caseId: reviewed.id,
+      expectedVersion: 0,
+      resolution: "no_action",
+      operatorId: "operator:synthetic-export-status",
+      reasonCode: "insufficient_evidence",
+    });
+    const resolved = await exportedReports(owner);
+    expect(resolved.jobs.reports[0]).toMatchObject({ status: "resolved" });
+    expect(Object.keys(resolved.jobs.reports[0] ?? {}).sort()).toEqual([
+      "canonicalJobId",
+      "createdAt",
+      "id",
+      "reason",
+      "requestedJobId",
+      "status",
+    ]);
+    expect(resolved.audit.events).toHaveLength(1);
+    expect(resolved.audit.events[0]).toMatchObject({
+      action: "jobs.report.created",
+      resourceId: resolved.jobs.reports[0]?.id,
+    });
+    expect(JSON.stringify(resolved)).not.toContain("operator:");
+    expect(JSON.stringify(resolved)).not.toContain(reviewed.id);
+    expect(JSON.stringify(resolved)).not.toContain("suspected_scam");
+    expect((await exportedReports(otherOwner)).jobs.reports[0]).toMatchObject({
+      reason: "suspected_scam",
+      status: "resolved",
+    });
+  });
+
+  it("does not infer a new report's status from a closed same-job case outside its exact link", async () => {
+    const job = await catalog.recordObservation(fixture("export-unlinked"));
+    const closed = await moderation.openCase({
+      target: { kind: "job", jobId: job.job.id },
+      operatorId: "operator:synthetic-export-unlinked",
+      reasonCode: "candidate_reports",
+    });
+    await moderation.resolveCase({
+      caseId: closed.id,
+      expectedVersion: 0,
+      resolution: "no_action",
+      operatorId: "operator:synthetic-export-unlinked",
+      reasonCode: "insufficient_evidence",
+    });
+    const owner = uuidv7();
+    await reports.create({
+      ownerUserId: owner,
+      requestedJobId: job.job.id,
+      reason: "job_closed",
+      idempotencyKey: "export-unlinked-status-key",
+    });
+    expect((await exportedReports(owner)).jobs.reports[0]).toMatchObject({ status: "received" });
+    expect((await exportedReports(uuidv7())).jobs.reports).toEqual([]);
   });
 
   it("binds semantic replay to one owner and canonical job without mutating moderation state", async () => {

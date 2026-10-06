@@ -1471,6 +1471,10 @@
         },
         "createdAt": {
           "$ref": "#/$defs/dateTime"
+        },
+        "status": {
+          "description": "Review status of this report's exact linked moderation case; received means no linked case. Omitted in older exports. Resolution does not attest report accuracy.",
+          "enum": ["received", "under_review", "resolved"]
         }
       },
       "additionalProperties": false

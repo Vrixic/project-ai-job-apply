@@ -20,6 +20,34 @@ async function exportDefinition(name: string) {
   return ajv.compile({ $ref: `#/$defs/${name}`, $defs: schema.$defs });
 }
 
+describe("portable report review status", () => {
+  const report = {
+    id: "018f1e02-1a11-7abc-8abc-1234567890ab",
+    requestedJobId: "018f1e02-1a11-7abc-8abc-1234567890ac",
+    canonicalJobId: "018f1e02-1a11-7abc-8abc-1234567890ac",
+    reason: "job_inaccurate",
+    createdAt: "2026-10-06T12:00:00Z",
+  };
+  it("accepts old exports and only fixed linked-case statuses without privileged metadata", async () => {
+    const validate = await exportDefinition("jobReport");
+    expect(validate(report)).toBe(true);
+    for (const status of ["received", "under_review", "resolved"])
+      expect(validate({ ...report, status })).toBe(true);
+    for (const status of [null, "approved", "open", 0])
+      expect(validate({ ...report, status })).toBe(false);
+    for (const field of [
+      "operatorId",
+      "reporterUserId",
+      "caseId",
+      "idempotencyKeyHash",
+      "requestHash",
+    ])
+      expect(validate({ ...report, status: "resolved", [field]: "synthetic-forbidden" })).toBe(
+        false,
+      );
+  });
+});
+
 describe("domain schema registry", () => {
   it("exports only portable original material metadata, without ownership or content", async () => {
     const validate = await exportDefinition("applicationsPacket");

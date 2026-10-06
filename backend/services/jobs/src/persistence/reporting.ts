@@ -264,7 +264,7 @@ export class PostgresJobReportStore implements JobReportStore {
         AND to_regclass('jobs.source_moderation_pauses') IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM jobs.schema_migrations
-          WHERE version = '0026_moderation_case_retention'
+          WHERE version = '0027_candidate_report_export_status'
         )
       ) AS ready
     `;

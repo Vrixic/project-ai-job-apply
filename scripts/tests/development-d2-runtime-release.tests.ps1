@@ -281,7 +281,7 @@ $declaredRootNames = @([regex]::Matches($rootVariablesSource,'(?m)^variable "([a
 Assert-True ($declaredRootNames -ccontains 'deploy_applications' -and $declaredRootNames -ccontains 'serverless_runtime_enabled' -and
   $declaredRootNames -ccontains 'deploy_gateway_lambda' -and $declaredRootNames -cnotcontains 'runtime_activation_allowed') 'Fixtures drifted from actual root authority variable shape.'
 $messages = @(Get-D2RuntimeMigrationMessages $repositoryRoot $head)
-Assert-True ($messages.Count -eq 7 -and $messages[1] -ceq 'Jobs migrations through 0026_moderation_case_retention applied and verified.' -and
+Assert-True ($messages.Count -eq 7 -and $messages[1] -ceq 'Jobs migrations through 0027_candidate_report_export_status applied and verified.' -and
   $messages[5] -cin @('Trust migrations through 0004_accepted_independent_evidence applied and verified.','Trust migrations through 0005_development_test_removal applied and verified.')) 'Actual source is not a supported exact migration boundary.'
 $inventory = [ordered]@{}
 foreach ($owner in @('profile','jobs','documents','matching','billing','trust')) {

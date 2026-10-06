@@ -1,5 +1,11 @@
 # Delivery Tracker
 
+2026-10-06 D1-012 candidate exports now include retained reports' exact linked review status
+without operator/case/neighbor data. All 119 Jobs SQL tests and historical 26 → 27 replay pass;
+local logical restore matches 69 migrations/92 relations. Full source verification is pending.
+[Evidence](evidence/d1-report-export-status-2026-10-06.md). Hosted acceptance and audit/alert
+retention remain open; D1/D3 remain In progress.
+
 2026-10-06 D1-012 closed-case retention now preserves minimal blocks and exact source pauses
 while deleting expired operator detail. All 117 Jobs SQL checks and historical 25 → 26 migration
 replay pass; local logical restore matches 68 migrations/92 relations across seven owners.

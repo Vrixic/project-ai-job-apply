@@ -262,6 +262,15 @@ unset, the existing report-only command remains unchanged. Both modes default of
 function is bounded, uses row locks with SKIP LOCKED, and denies PUBLIC execution. This is local
 implementation, with no maintenance schedule, principal grant or hosted activation.
 
+Migration `0027_candidate_report_export_status` adds review status to each retained owner report
+in candidate exports. `received` means no exact case link, `under_review` means its linked case
+is open, and `resolved` means that case is closed. This does not attest report accuracy or imply
+a particular moderation decision. No case/operator identity, other reporter, request hash or
+idempotency hash is exported; existing creation audit metadata is preserved. The portable v1
+schema makes this field optional so historical artifacts remain valid, while new SQL exports
+always include it. Deploy schema-aware export consumers before applying the migration: older
+strict validators refuse the new field. Keep those consumers on rollback after migration.
+
 Migration `0009_provider_ingestion_sources` aligns Jobs-owned durable checkpoint persistence with
 the existing bounded source-neutral identifier contract. It permits Greenhouse, Lever, and Ashby
 source IDs without weakening adapter-version, transition, dispatch, aggregate-only, or pause
