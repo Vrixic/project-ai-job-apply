@@ -115,3 +115,14 @@ The updated manifest binds source `64df6d7a`, Node.js 24/x86_64, `index.handler`
 components. The source-bound release metadata accounts for the changed bytes versus the prior
 source; the same-source repeats match. Logs: `.tmp/d3-native-owner-artifact-final.log`,
 `.tmp/d3-native-owner-artifact-final-repeat.log`. Nothing is published/deployed/activated.
+
+
+## Local handoff readiness
+
+Verified source and corrected evidence are pushed on `feat/d3-native-owner-rpc`; no third PR or
+main merge is performed. The maintained local web launcher is restored against the live
+unmodified development API: home returns 200 and anonymous Resume returns 307 without following
+or recording redirects. No new signed-in browser acceptance is claimed. Only the two generated
+Next type-import changes are restored; frontend source is preserved. Introduced local Markdown
+links validate and the tracked tree is clean at handoff. Docker engine and WSL remain stopped,
+shared volumes are retained, and the PC stays on. CI/CD remains deferred until production launch.

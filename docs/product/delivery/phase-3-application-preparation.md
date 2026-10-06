@@ -1600,7 +1600,7 @@ Owned fixtures removed, shared volumes retained, Docker/WSL stopped and PC stays
 
 
 2026-10-06 D3-079 corrected source `64df6d7a` passes full maintained verification with 38
- typecheck, 39 test and 23 build tasks, all operator/security/isolation/Compose/scope checks,
+typecheck, 39 test and 23 build tasks, all operator/security/isolation/Compose/scope checks,
 zero lint errors and the restored 15-warning/58-info baseline. The builder's fixed flag-name
 convention changes no owner/RPC/runtime behavior; the original corrected-source run exits zero
 on an unchanged tree. Its separate 363,457-byte receiver artifact reproduces identically with
