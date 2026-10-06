@@ -731,3 +731,15 @@ off; new-launch shutdown leaves positive original recovery independent. Caller I
 managed image/authenticated owner adapters/TLS routing and complete copy disposal remain review
 and deployment gates. Unknown Invoke/RunTask outcomes retain pending authority and unsettled
 provider work. [Local evidence](../product/delivery/evidence/d3-native-launch-control-2026-10-06.md).
+
+
+## Native task-state recovery hints (2026-10-06)
+
+Private ECS event -> bounded inert deployment/allocation metadata -> numeric signed original
+recovery -> owning claim plus fresh exact task/override observation -> durable original capture.
+Only five IDs and task ARN cross Invoke; arbitrary event metadata is discarded. STOPPED,
+event time/version and lost replies never prove absence/retirement or settle provider work.
+Event/source equality does not authenticate senders. Reviewed service resource policies, original
+version/configuration retention, durable retry/DLQ routing and actual managed event serialization
+remain gates. No generated body/model/database credentials enter this receiver; activation stays
+off. [Local evidence](../product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).

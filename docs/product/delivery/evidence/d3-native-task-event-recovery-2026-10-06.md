@@ -1,6 +1,6 @@
 # D3 private task-state event recovery — 2026-10-06
 
-Status: default-off source checkpoint; D3-079 and D1/D3 remain In progress. Extends the
+Status: default-off locally verified source checkpoint; D3-079 and D1/D3 remain In progress. Extends the
 private launch-control draft #563 on exact #562. No frontend or public contract change.
 
 ## Implemented path
@@ -54,8 +54,37 @@ No Docker step was needed; Docker/WSL stay stopped and shared volumes are retain
 
 ## Remaining gates
 
-Full clean-source verification and two unpublished source-bound artifact builds/integrity remain
-before updated draft review. Managed EventBridge rule/resource policy, retained original receiver
+Clean committed `0ee4c377790564bc31b4991480af2a653aed99a6` passes the full maintained
+verifier: 38 typecheck tasks, 39 test tasks, 23 production build tasks and all operator/security/
+isolation checks; unchanged zero-error, 15-warning, 58-info lint baseline. All 49 new event tests
+and the existing 44 readiness-entrypoint tests pass (23.578 seconds for the latter). Log:
+`.tmp/d3-native-task-event-full.log`. Both private artifact sets build twice from this source;
+event ZIP/archive/bundle/SBOM/source/digest integrity passes (226665 bytes, 21 components).
+
+Fresh main `88f8ae84` has exactly the previously verified #562 tree, but lacks #563: #562
+merged at 14:43:58Z, then #563 merged into its already-merged feature branch at 14:44:05Z.
+The new main-based `feat/d3-native-event-recovery` reconciles that reviewed source and this
+continuation. Squash-history conflicts resolve to the verified tree only after independently
+checking main exactly equals #562 `e36c0298`; clean combined `82ea96c9` is byte-for-byte identical
+to fully verified `0ee4c377`, including every tracked file. No implementation change or new
+verification claim for a different tree is hidden in the merge.
+
+Both artifacts rebuild twice with explicit combined source
+`82ea96c9887290ceb4303ae8a0e9dbbbe29dca99`, matching all ten companion files. Actual bundle
+refusal plus independent ZIP entry/fixed timestamp/bytes/hash/base64, bundle/embedded source,
+companion digest and CycloneDX 1.6 name/hash/component-count checks pass. Launch ZIP is 258614
+bytes, SHA-256 `6bf809fe387b4696aad000bd41fa020bfcfd60d53395ed0ba22435d426d6dae0`, 24 components.
+Event ZIP is 226665 bytes, SHA-256
+`9aaa04bd6761b8dc07b2942fb4eeb0321106732faec1fec6c89c693f43f33150`, 21 components.
+Logs: `.tmp/d3-native-event-combined-launch-first.log`/`-second.log`,
+`.tmp/d3-native-event-combined-event-first.log`/`-second.log`,
+`.tmp/d3-native-event-combined-first-hashes.json`, `.tmp/d3-native-event-combined-integrity.json`.
+The prior 0ee4c377 artifact proofs are retained as history. Later delivery-only commits leave
+this verified implementation and unpublished source-bound bytes unchanged.
+
+## Release and acceptance gates
+
+ Managed EventBridge rule/resource policy, retained original receiver
 version/configuration routing, retry/DLQ retention/alarms/recovery, actual task-event serialization,
 reviewed sender/receiver IAM and deployed task conformance are unfinished. This source does not
 create a rule, queue, permission, public route or deployment, and does not guarantee event delivery.

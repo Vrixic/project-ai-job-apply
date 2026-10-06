@@ -4011,3 +4011,14 @@ typecheck and three emitted isolation checks pass. No SQL mutation/schema change
 [Evidence](evidence/d3-native-task-event-recovery-2026-10-06.md). Full clean/artifact verification
 remains before updated review; managed event/rule/IAM/retry/DLQ/original-version/task acceptance
 remain. D1/D3 stay In progress, no deployment/activation and CI/CD stays deferred.
+
+2026-10-06 D3-079 clean `0ee4c377` passes full maintained verification: 38 typecheck,
+39 test and 23 build tasks, unchanged lint baseline and all emitted/operator/security checks.
+49 event cases and all 44 existing readiness cases pass. After #562/main `88f8ae84` merges,
+#563 merges into its already-merged feature branch; its runtime is absent from main. Fresh
+main-based `feat/d3-native-event-recovery` reconciles that source and event continuation as
+`82ea96c9`, exactly matching every tracked file of the fully verified tree. Both combined-source
+artifacts build twice with ten identical files and independent source/archive/bundle/SBOM integrity
+(launch 24/event 21 components), unpublished. [Evidence](evidence/d3-native-task-event-recovery-2026-10-06.md).
+No frontend/SQL schema change; managed event/IAM/retry/DLQ/original-version/task/client/ATS/
+provider/accountable gates remain. D1/D3 stay In progress; no cloud activation or authored main merge.

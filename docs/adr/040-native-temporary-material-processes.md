@@ -153,3 +153,14 @@ owner entrypoints omit body/crypto/model/object capability. Local PostgreSQL and
 transport evidence do not certify sender IAM, managed task/image/TLS routing or full application
 content/disposal. The proposal remains Proposed and all activation/accountable gates remain.
 [Evidence](../product/delivery/evidence/d3-native-launch-control-2026-10-06.md).
+
+
+## Task-state hint recovery checkpoint — 2026-10-06
+
+A separate default-off private receiver can forward validated original task-event scalar hints to
+the existing signed positive-recovery control. Only the owning registry and fresh exact ECS task
+observation authorize capture; the event cannot launch, settle work or certify retirement. Local
+synthetic events and emitted capability/source-bound artifact proof leave managed event routing,
+IAM, retained original versions, retries/DLQ and task conformance unfinished. This proposal remains
+Proposed and deployment/activation/accountable gates remain.
+[Evidence](../product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
