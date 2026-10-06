@@ -1,5 +1,12 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 connects authenticated private native owner RPC source: proof authentication
+before lazy owner initialization, original reviewed evidence/consent checks, owning admission,
+original work controls and scalar completion. All 140 focused checks, 24 real PostgreSQL cases, eight emitted checks and 21 Linux scenarios pass;
+full clean-source evidence follows. [Evidence](evidence/d3-native-owner-rpc-2026-10-06.md).
+Native image/bootstrap/IAM/routing/managed/client/provider/accountable acceptance remain; D1/D3
+stay In progress. No deployment/activation, third PR or CI/CD work; PC stays on.
+
 2026-10-06 D3-079 adds default-off exact native-task caller authentication: SDK-signed original/
 recipient/request context, fixed ECS credentials and strict regional STS verification. All 57 new
 cases, 91 control regressions and two emitted isolation/default-off checks pass. Full clean-source

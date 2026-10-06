@@ -1,5 +1,14 @@
 # Data Flow and Classification
 
+2026-10-06 authenticated native owner RPC (source-only/default-off): fixed task/recipient/operation
+proof -> AWS identity verification -> lazy managed-secret owner composition -> exact native
+admission -> original approved context/consent -> owner facts/job APIs or original scalar
+controls -> proof-free bound response. Evidence is private candidate data, bounded in memory;
+proofs contain credentials and are never logged/persisted/queued/exported or passed to owners.
+Authentication precedes owner access; SQL admission/context checks surround owner awaits.
+No generated content or new issue/renew/background/task-control authority crosses this RPC.
+[Evidence](../product/delivery/evidence/d3-native-owner-rpc-2026-10-06.md). Managed rollout gates remain.
+
 2026-10-06 original native caller proof (source-only/default-off): exact ECS credential endpoint
 -> actual SDK signing of fixed regional STS identity/context -> ephemeral private proof -> fixed
 AWS verification -> trusted role/original task-session match -> future separate owning admission.

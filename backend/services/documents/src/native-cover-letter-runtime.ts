@@ -65,7 +65,19 @@ export async function createNativeCoverLetterRuntime(options: NativeCoverLetterR
   const source = options.source;
   const provider = options.provider;
   const loadKernel = options.loadKernel;
-  const controlsOptions = { ...options.controls };
+  const controlsOptions = {
+    ...options.controls,
+    ...(options.controls.nativeRpc
+      ? {
+          nativeRpc: {
+            binding,
+            ...(options.controls.nativeRpc.testCredentials
+              ? { testCredentials: { ...options.controls.nativeRpc.testCredentials } }
+              : {}),
+          },
+        }
+      : {}),
+  };
   const transportOptions = {
     ...options.transport,
     identity: { ...options.transport.identity },

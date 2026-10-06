@@ -65,6 +65,12 @@ test("emitted native material controls expose only bound original scalar work/co
     inputs.filter((name) => name.startsWith("backend/") || name.startsWith("packages/")).sort(),
     [
       "backend/services/documents/dist/src/native-material-controls.js",
+      "backend/services/documents/dist/src/native-evidence-binding.js",
+      "backend/services/documents/dist/src/native-owner-rpc-client.js",
+      "backend/services/documents/dist/src/native-owner-rpc-contract.js",
+      "backend/services/documents/dist/src/native-task-caller-client.js",
+      "backend/services/documents/dist/src/native-task-caller-contract.js",
+      "backend/services/documents/dist/src/native-task-credentials.js",
       "backend/services/documents/dist/src/native-task-allocation.js",
       "backend/services/documents/dist/src/native-launch-control-contract.js",
       "packages/domain/dist/temporary-material.js",
@@ -87,6 +93,7 @@ test("emitted native material controls expose only bound original scalar work/co
       `Unexpected native material control capability: ${forbidden}`,
     );
   assert.ok(inputs.some((name) => name.includes("@aws-sdk/client-lambda")));
+  assert.ok(inputs.some((name) => name.includes("@aws-sdk/client-sts")));
   const ports = bundle.createNativeMaterialControls({
     allocation: {
       allocationId: recover.scope.allocationId,

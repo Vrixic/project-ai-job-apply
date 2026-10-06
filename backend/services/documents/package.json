@@ -83,6 +83,26 @@
     "./native-evidence-binding": {
       "types": "./dist/src/native-evidence-binding.d.ts",
       "default": "./dist/src/native-evidence-binding.js"
+    },
+    "./native-owner-rpc-contract": {
+      "types": "./dist/src/native-owner-rpc-contract.d.ts",
+      "default": "./dist/src/native-owner-rpc-contract.js"
+    },
+    "./native-owner-rpc-client": {
+      "types": "./dist/src/native-owner-rpc-client.d.ts",
+      "default": "./dist/src/native-owner-rpc-client.js"
+    },
+    "./native-owner-rpc-handler": {
+      "types": "./dist/src/native-owner-rpc-handler.d.ts",
+      "default": "./dist/src/native-owner-rpc-handler.js"
+    },
+    "./native-owner-control-store": {
+      "types": "./dist/src/native-owner-control-store.d.ts",
+      "default": "./dist/src/native-owner-control-store.js"
+    },
+    "./native-owner-evidence-client": {
+      "types": "./dist/src/native-owner-evidence-client.d.ts",
+      "default": "./dist/src/native-owner-evidence-client.js"
     }
   },
   "scripts": {

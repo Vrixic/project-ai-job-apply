@@ -46,6 +46,7 @@ Invoke-CheckedCommand "Cover-letter export read isolation" { node --test scripts
 Invoke-CheckedCommand "Native task retirement control isolation" { node --test scripts/tests/native-task-retirement-bundle.test.mjs }
 Invoke-CheckedCommand "Native content runtime composition isolation" { node --test scripts/tests/native-cover-letter-runtime-bundle.test.mjs }
 Invoke-CheckedCommand "Native task caller authentication isolation" { node --test scripts/tests/native-task-caller-bundle.test.mjs }
+Invoke-CheckedCommand "Authenticated native owner RPC isolation" { node --test scripts/tests/native-owner-rpc-bundle.test.mjs }
 Invoke-CheckedCommand "Native launch control composition isolation" { node --test scripts/tests/native-launch-control-bundle.test.mjs }
 Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }
 

@@ -1,9 +1,12 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import type { CoverLetterWorkReference } from "./cover-letter-work-store.js";
+import { type NativeEvidenceBinding, nativeEvidenceBinding } from "./native-evidence-binding.js";
 import {
   nativeLaunchControlVersion,
   validateNativeLaunchControlInput,
 } from "./native-launch-control-contract.js";
+import { createNativeOwnerRpcClient } from "./native-owner-rpc-client.js";
+import { type NativeOwnerRequest, nativeOwnerJson } from "./native-owner-rpc-contract.js";
 import { type NativeTaskAllocation, nativeTaskAllocationRegion } from "./native-task-allocation.js";
 import {
   sameTemporaryMaterialReference,
@@ -57,6 +60,11 @@ export function createNativeMaterialControls(options: {
   enabled?: () => boolean;
   timeoutMs?: number;
   testClient?: Client;
+  /** Explicit authenticated transport version; no fallback to the older scalar RPC. */
+  nativeRpc?: {
+    binding: NativeEvidenceBinding;
+    testCredentials?: Parameters<typeof createNativeOwnerRpcClient>[0]["testCredentials"];
+  };
 }) {
   let allocation: Readonly<NativeTaskAllocation>;
   let original: Readonly<CoverLetterWorkReference>;
@@ -102,7 +110,7 @@ export function createNativeMaterialControls(options: {
     if (
       workTarget.split(":")[4] !== allocation.clusterArn.split(":")[4] ||
       completionTarget.split(":")[4] !== workTarget.split(":")[4] ||
-      workTarget.split(":")[6] === completionTarget.split(":")[6] ||
+      (!options.nativeRpc && workTarget.split(":")[6] === completionTarget.split(":")[6]) ||
       typeof consent !== "string" ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(consent) ||
       new Date(consent).toISOString() !== consent ||
@@ -114,6 +122,30 @@ export function createNativeMaterialControls(options: {
       throw unavailable();
   } catch {
     throw unavailable();
+  }
+  let authenticated: Map<string, ReturnType<typeof createNativeOwnerRpcClient>> | undefined;
+  if (options.nativeRpc) {
+    const fixed = nativeEvidenceBinding(options.nativeRpc.binding);
+    if (
+      nativeOwnerJson(fixed.allocation) !== nativeOwnerJson(allocation) ||
+      nativeOwnerJson(fixed.original) !== nativeOwnerJson(original)
+    )
+      throw unavailable();
+    authenticated = new Map();
+    for (const targetArn of new Set([workTarget, completionTarget]))
+      authenticated.set(
+        targetArn,
+        createNativeOwnerRpcClient({
+          binding: fixed,
+          targetArn,
+          enabled,
+          timeoutMs: timeout,
+          ...(injected ? { testClient: injected } : {}),
+          ...(options.nativeRpc.testCredentials
+            ? { testCredentials: options.nativeRpc.testCredentials }
+            : {}),
+        }),
+      );
   }
   let active = false;
   let claimAttempted = false;
@@ -135,6 +167,22 @@ export function createNativeMaterialControls(options: {
     input: object,
   ): Promise<Record<string, unknown>> {
     if (active || !permitted()) throw unavailable();
+    if (authenticated) {
+      active = true;
+      try {
+        const request =
+          target === completionTarget && "work" in input
+            ? { action: "completion", input }
+            : { action: "work", input };
+        const reply = await authenticated.get(target)?.run(request as NativeOwnerRequest);
+        if (!reply || typeof reply !== "object" || Array.isArray(reply)) throw unavailable();
+        return reply as Record<string, unknown>;
+      } catch {
+        throw unavailable();
+      } finally {
+        active = false;
+      }
+    }
     const payload = new TextEncoder().encode(JSON.stringify(input));
     if (payload.length > 8_192) throw unavailable();
     active = true;

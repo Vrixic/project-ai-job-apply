@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { coverLetterContext } from "@ai-job-apply/ai-sdk";
 import { createApplicationsDatabase } from "@ai-job-apply/applications-service";
 import { lockNativeMaterialApplicationAdmission } from "@ai-job-apply/applications-service/native-material-runtime";
 import {
@@ -11,11 +12,21 @@ import {
   createNativeLaunchControlClient,
   type NativeLaunchControlInput,
 } from "@ai-job-apply/documents-service/native-launch-control";
+import { createNativeMaterialControls } from "@ai-job-apply/documents-service/native-material-controls";
 import {
   type NativeMaterialLaunchScope,
   PostgresNativeMaterialRegistry,
 } from "@ai-job-apply/documents-service/native-material-registry";
+import { createNativeOwnerEvidenceClient } from "@ai-job-apply/documents-service/native-owner-evidence-client";
+import { createNativeOwnerRpcClient } from "@ai-job-apply/documents-service/native-owner-rpc-client";
+import { nativeOwnerJson } from "@ai-job-apply/documents-service/native-owner-rpc-contract";
 import { nativeTaskLaunchConfiguration } from "@ai-job-apply/documents-service/native-task-launch";
+import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
+import {
+  createDatabase,
+  PostgresProfileStore,
+  profileFactToGraphFact,
+} from "@ai-job-apply/profile-service";
 import type { InvokeCommand } from "@aws-sdk/client-lambda";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -23,6 +34,10 @@ import {
   createNativeMaterialLaunchLambda,
   createNativeMaterialLaunchRuntime,
 } from "./native-material-launch-lambda.js";
+import {
+  createNativeOwnerRpcLambda,
+  createNativeOwnerRpcRuntime,
+} from "./native-owner-rpc-lambda.js";
 
 const requested = process.env.NATIVE_MATERIAL_LAUNCH_INTEGRATION === "1";
 const url = process.env.NATIVE_MATERIAL_LAUNCH_TEST_DATABASE_URL;
@@ -65,14 +80,14 @@ describe.runIf(requested)(
         throw Error("SyntheticObjectCapabilityDenied");
       },
     });
-    const runtimes: Array<ReturnType<typeof createNativeMaterialLaunchRuntime>> = [];
+    const runtimes: Array<{ close(): Promise<void> }> = [];
     beforeAll(async () => {
       const environment = Object.fromEntries(
         Object.entries(process.env).filter(([key]) =>
           /^(?:path|systemroot|windir|temp|tmp|pathext|comspec|userprofile)$/iu.test(key),
         ),
       );
-      for (const owner of ["profile", "applications", "documents"]) {
+      for (const owner of ["profile", "jobs", "applications", "documents"]) {
         const path = fileURLToPath(
           new URL(`../../services/${owner}/dist/src/migrate.js`, import.meta.url),
         );
@@ -92,19 +107,24 @@ describe.runIf(requested)(
     });
     async function original(
       consentLifetimeMs = 900_000,
+      seedEvidence?: (owner: string) => Promise<{
+        jobId: string;
+        context: { jobContextHash: string; confirmedFactsHash: string };
+      }>,
     ): Promise<Extract<NativeLaunchControlInput, { action: "launch" }>> {
       const owner = uuidv7();
       const application = uuidv7();
       const document = uuidv7();
       await sql`INSERT INTO identity.users (id) VALUES (${owner})`;
+      const seeded = await seedEvidence?.(owner);
       await sql`INSERT INTO applications.applications (id,owner_user_id,canonical_job_id,status,created_at,updated_at)
-      VALUES (${application},${owner},${uuidv7()},'preparing',clock_timestamp(),clock_timestamp())`;
+      VALUES (${application},${owner},${seeded?.jobId ?? uuidv7()},'preparing',clock_timestamp(),clock_timestamp())`;
       await documents.reserve({
         id: document,
         ownerUserId: owner,
         applicationId: application,
-        jobRevision: "a".repeat(64),
-        confirmedFactsHash: "b".repeat(64),
+        jobRevision: seeded?.context.jobContextHash ?? "a".repeat(64),
+        confirmedFactsHash: seeded?.context.confirmedFactsHash ?? "b".repeat(64),
       });
       const grant = (
         await work.issue({
@@ -500,6 +520,198 @@ describe.runIf(requested)(
         await sql`SELECT count(*)::int AS count FROM documents.native_material_allocations WHERE document_id=${request.original.documentId}`;
       expect(count?.count).toBe(1);
       await unchangedWork(request);
+    });
+    it("authenticates the original task through real owner SQL claim, settlement, completion and sealed refusal", async () => {
+      const profilePool = createDatabase(url ?? "postgres://invalid", { maxConnections: 1 });
+      runtimes.push({ close: () => profilePool.client.end() });
+      const profile = new PostgresProfileStore(profilePool);
+      const catalog = new PostgresJobCatalog(sql, {
+        searchCursorKeys: { active: { id: "synthetic-native", key: Buffer.alloc(32, 1) } },
+      });
+      const runId = uuidv7();
+      const observedAt = new Date();
+      const posting = await catalog.recordObservation({
+        provider: "greenhouse",
+        provenance: "authorized_fixture",
+        companyName: `Synthetic ${runId}`,
+        title: "Engineer",
+        locations: ["Remote"],
+        description: "Build reliable synthetic systems.",
+        sourceUrl: `https://jobs.example.test/${runId}`,
+        atsTenant: runId,
+        externalJobId: runId,
+        observedAt,
+        adapterVersion: "synthetic-v1",
+      });
+      const activeJob = await catalog.getActiveJob(posting.job.id, observedAt);
+      if (!activeJob) throw Error("SyntheticActivePostingMissing");
+      const job = {
+        title: activeJob.title,
+        company: activeJob.company.name,
+        description: activeJob.description,
+      };
+      const request = await original(900_000, async (owner) => {
+        await profile.createProfileFact(
+          owner,
+          {
+            kind: "skill",
+            key: "programming_language",
+            value: "TypeScript",
+            sensitivity: "standard",
+          },
+          uuidv7(),
+          "synthetic-native-rpc",
+        );
+        const facts = (await profile.listProfileFacts(owner)).facts.map(profileFactToGraphFact);
+        return {
+          jobId: posting.job.id,
+          context: coverLetterContext({ facts, job, now: observedAt }),
+        };
+      });
+      const facts = (await profile.listProfileFacts(request.ownerUserId)).facts.map(
+        profileFactToGraphFact,
+      );
+      const approvedContext = coverLetterContext({ facts, job, now: observedAt });
+      const f = fixture();
+      const capture = await f.client.launch(request);
+      const binding = {
+        scope: capture.scope,
+        allocation: capture.allocation,
+        original: request.original,
+      };
+      const rpcTarget = "arn:aws:lambda:us-east-2:123456789012:function:private-native-owner:11";
+      const taskId = capture.allocation.taskArn.split("/").at(-1);
+      const env = {
+        NATIVE_OWNER_RPC_ENABLED: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_LAMBDA_FUNCTION_NAME: "private-native-owner",
+        AWS_LAMBDA_FUNCTION_VERSION: "11",
+        AWS_SESSION_TOKEN: "synthetic-lambda-session",
+        DATABASE_SECRET_ID: "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-db",
+        NATIVE_OWNER_RPC_DEPLOYMENT_JSON: JSON.stringify({
+          taskRoleArn: config.taskRoleArn,
+          clusterArn: config.clusterArn,
+          taskDefinitionArn: config.taskDefinitionArn,
+          containerName: config.containerName,
+        }),
+      };
+      const resolve = vi.fn(async () => url ?? "postgres://invalid");
+      const authentication = vi.fn(
+        async () =>
+          new Response(
+            `<GetCallerIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><GetCallerIdentityResult><Arn>arn:aws:sts::123456789012:assumed-role/native-task/${taskId}</Arn><Account>123456789012</Account><UserId>AROAABCDEFGHIJKLMNOP:${taskId}</UserId></GetCallerIdentityResult><ResponseMetadata><RequestId>synthetic</RequestId></ResponseMetadata></GetCallerIdentityResponse>`,
+            { headers: { "content-type": "text/xml" } },
+          ),
+      );
+      const receiver = createNativeOwnerRpcLambda({
+        environment: () => env,
+        resolveDatabaseUrl: resolve,
+        testFetch: authentication,
+        createRuntime: (...args) => {
+          const runtime = createNativeOwnerRpcRuntime(...args);
+          runtimes.push(runtime);
+          return runtime;
+        },
+      });
+      const send = vi.fn(async (command: InvokeCommand) => {
+        const raw = JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array));
+        const reply = await receiver(raw, { invokedFunctionArn: rpcTarget });
+        return {
+          StatusCode: 200,
+          ExecutedVersion: "11",
+          Payload: new TextEncoder().encode(nativeOwnerJson(reply)),
+        };
+      });
+      const credentials = {
+        accessKeyId: `ASIA${"A".repeat(16)}`,
+        secretAccessKey: "synthetic-only-signing-secret",
+        sessionToken: "synthetic-task-token",
+      };
+      const remote = createNativeOwnerRpcClient({
+        binding,
+        targetArn: rpcTarget,
+        enabled: () => true,
+        testCredentials: credentials,
+        testClient: { send },
+      });
+      authentication.mockResolvedValueOnce(new Response("denied", { status: 403 }));
+      await expect(remote.checkAdmission(binding)).rejects.toThrow("NativeOwnerRpcUnavailable");
+      expect(resolve).not.toHaveBeenCalled();
+      await remote.checkAdmission(binding);
+      expect(resolve).toHaveBeenCalledOnce();
+      const evidence = createNativeOwnerEvidenceClient({
+        binding,
+        targetArn: rpcTarget,
+        enabled: () => true,
+        testCredentials: credentials,
+        testClient: { send },
+        context: approvedContext,
+      });
+      expect(await evidence.source.load(request.ownerUserId, request.applicationId)).toEqual({
+        facts,
+        job,
+      });
+      const wrongContext = createNativeOwnerEvidenceClient({
+        binding,
+        targetArn: rpcTarget,
+        enabled: () => true,
+        testCredentials: credentials,
+        testClient: { send },
+        context: { ...approvedContext, confirmedFactsHash: "f".repeat(64) },
+      });
+      await expect(
+        wrongContext.source.load(request.ownerUserId, request.applicationId),
+      ).rejects.toThrow("NativeOwnerRpcUnavailable");
+      const [grant] = await sql<
+        Array<{ consent: Date }>
+      >`SELECT consent_expires_at AS consent FROM documents.cover_letter_work_authorizations WHERE id=${request.original.id}`;
+      if (!grant) throw Error("SyntheticGrantMissing");
+      const controls = createNativeMaterialControls({
+        allocation: binding.allocation,
+        original: binding.original,
+        consentExpiresAt: grant.consent.toISOString(),
+        workFunctionArn: rpcTarget,
+        completionFunctionArn: rpcTarget,
+        enabled: () => true,
+        nativeRpc: { binding, testCredentials: credentials },
+        testClient: { send },
+      });
+      expect(
+        await controls.work.claimProviderDispatch({
+          documentId: binding.original.documentId,
+          requestSha256: binding.original.requestSha256,
+          consentExpiresAt: grant.consent,
+        }),
+      ).toEqual({ kind: "claimed", reference: binding.original });
+      await controls.work.settleProviderDispatch(binding.original);
+      const completedAtMs = Date.now();
+      expect(
+        await controls.completion.claimOriginalCompletion({
+          schemaVersion: 1,
+          kind: "cover_letter",
+          ownerUserId: request.ownerUserId,
+          applicationId: request.applicationId,
+          generationId: request.original.documentId,
+          version: 1,
+          contentSha256: "d".repeat(64),
+          completedAtMs,
+          expiresAtMs: completedAtMs + 1_800_000,
+        }),
+      ).toBe("claimed");
+      const [row] =
+        await sql`SELECT w.state,d.material_work_id,d.material_completed_at_ms FROM documents.cover_letter_work_authorizations w
+        JOIN documents.cover_letters d ON d.id=w.document_id WHERE w.id=${request.original.id}`;
+      expect(row?.state).toBe("settled");
+      expect(row?.material_work_id).toBe(request.original.id);
+      expect(Number(row?.material_completed_at_ms)).toBe(completedAtMs);
+      await new PostgresNativeMaterialRegistry(sql, () => true).sealApplication(
+        request.ownerUserId,
+        request.applicationId,
+      );
+      await expect(remote.checkAdmission(binding)).rejects.toThrow("NativeOwnerRpcUnavailable");
+      expect(resolve).toHaveBeenCalledOnce();
+      expect(f.commands.filter((name) => name === "RunTaskCommand")).toHaveLength(1);
     });
     it("releases the actual application/allocation locks before its signed AWS operation", async () => {
       const request = await original();

@@ -1,5 +1,13 @@
 # Durable Workflows
 
+Private native owner RPC source now connects task authentication before lazy owner access,
+original reviewed evidence/consent, owning admission and scalar work/completion. It defaults off,
+requires a numeric receiver and explicit original task deployment, and never accepts standalone
+scalar requests as a fallback. Proof headers are ephemeral and never enter owner adapters or
+responses. See [configuration and local evidence](../../docs/product/delivery/evidence/d3-native-owner-rpc-2026-10-06.md).
+Native image/bootstrap/IAM/routing/managed/provider/client acceptance still gates activation.
+
+
 This directory contains durable workflow definitions for multi-step processes that must survive crashes, deploys, provider outages, and long user waits.
 
 ## Planned subfolders
@@ -253,3 +261,8 @@ The default-off `createNativeOwnedCoverLetterEvidenceSource` wraps existing Appl
 Profile owner evidence with exact original native admission checks before and after reads and
 fixed original job/fact context comparison. It is source-only; authenticated private task
 transport and managed bootstrap remain gates. See [evidence](../../docs/product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
+
+
+`pnpm --filter @ai-job-apply/workflows build:lambda:native-owner-rpc` builds the source-bound
+private receiver artifact from clean committed source. Its default-off bundled refusal check
+performs no secret, SQL or cloud access. This does not publish, deploy or enable the receiver.

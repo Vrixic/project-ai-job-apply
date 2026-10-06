@@ -199,3 +199,15 @@ admission checks and fixed context comparison. Locks are released before owner r
 work authority is unchanged. Local units and PostgreSQL admission proof do not authenticate callers
 or establish managed evidence composition. This proposal remains Proposed; all release gates remain.
 [Evidence](../product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
+
+
+## Authenticated owner RPC checkpoint — 2026-10-06
+
+A separate strict private envelope now authenticates the original task before lazy owner access,
+then supplies owning admission, original reviewed-context/consent evidence and original scalar
+work/completion. Its production signing/invocation uses explicit ECS credentials; proofs are not
+passed to owners or responses, and authenticated mode cannot fall back to standalone contracts.
+Local synthetic transport, actual owning PostgreSQL and Linux process evidence leave native
+image/bootstrap/IAM/routing/managed/client/provider/accountable acceptance open. This proposal
+remains Proposed; no deployment/activation or new review acceptance is implied.
+[Evidence](../product/delivery/evidence/d3-native-owner-rpc-2026-10-06.md).
