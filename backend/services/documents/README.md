@@ -1,5 +1,13 @@
 # Documents Service
 
+Private `./native-task-caller-client` and `./native-task-caller-verifier` supply default-off
+original-task authentication before future native owner/control RPC admission. Actual SDK SigV4
+signing binds fixed allocation/target/request metadata; the verifier forwards only the fixed
+regional STS identity action and checks the trusted role and original task session. Production
+signing uses only the fixed ECS task credential endpoint. Credential-bearing proofs are ephemeral,
+never logged or persisted. This is authentication source, not deployed IAM/physical liveness,
+owning admission, provider settlement or purge evidence. Native RPC composition remains required.
+
 The private `./native-cover-letter-runtime` connects one admitted native original allocation to
 scalar work/completion ports, the actual memory actor/renderers and authenticated HTTPS reads.
 Defaults remain off; trusted launch, owner/provider/TLS adapters, native image/routing and managed

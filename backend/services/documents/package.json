@@ -4,6 +4,18 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-task-caller-client": {
+      "types": "./dist/src/native-task-caller-client.d.ts",
+      "default": "./dist/src/native-task-caller-client.js"
+    },
+    "./native-task-caller-verifier": {
+      "types": "./dist/src/native-task-caller-verifier.d.ts",
+      "default": "./dist/src/native-task-caller-verifier.js"
+    },
+    "./native-task-caller-contract": {
+      "types": "./dist/src/native-task-caller-contract.d.ts",
+      "default": "./dist/src/native-task-caller-contract.js"
+    },
     "./native-cover-letter-runtime": {
       "types": "./dist/src/native-cover-letter-runtime.d.ts",
       "default": "./dist/src/native-cover-letter-runtime.js"

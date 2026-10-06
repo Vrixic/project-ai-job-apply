@@ -3,6 +3,14 @@
 Status: Proposed; default-off source and local kernel evidence only
 Date: 2026-10-05
 
+2026-10-06 authentication source checkpoint: a short SDK-signed fixed regional STS identity proof
+binds original allocation, numeric recipient and request digest. Only fixed ECS task credentials
+are used. The receiver must authenticate the signature with AWS and match reviewed role/original
+task session, then perform separate owning admission. This does not prove liveness, settlement or
+retirement; managed role trust must prohibit arbitrary non-ECS task-named sessions. RPC/image/
+bootstrap/IAM and actual managed conformance remain gates; the proposal stays Proposed.
+[Evidence](../product/delivery/evidence/d3-native-task-caller-proof-2026-10-06.md).
+
 2026-10-06 source checkpoint: the private cover-letter runtime connects a fixed admitted original
 allocation, scalar controls, actual memory renderers and HTTPS server. Local Linux evidence covers
 real PDF/DOCX reads and process retirement with synthetic remote ports. Trusted bootstrap still

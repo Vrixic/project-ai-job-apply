@@ -1,5 +1,14 @@
 # Data Flow and Classification
 
+2026-10-06 original native caller proof (source-only/default-off): exact ECS credential endpoint
+-> actual SDK signing of fixed regional STS identity/context -> ephemeral private proof -> fixed
+AWS verification -> trusted role/original task-session match -> future separate owning admission.
+Proof headers carry credential material and must never be logged, persisted, queued or exported.
+Original allocation, recipient and request digest cannot be retargeted. Authentication is not
+liveness, work settlement, death or purge authority. Reviewed ECS-only role trust and managed
+conformance remain required before private RPC/image/bootstrap activation.
+[Evidence](../product/delivery/evidence/d3-native-task-caller-proof-2026-10-06.md).
+
 2026-10-06 native cover-letter composition checkpoint (source-only/default-off): fixed original
 private admission precedes kernel loading; admission surrounds source-evidence awaits and repeats
 before exposing the unbound authenticated HTTPS server. Original controls carry scalar metadata;
