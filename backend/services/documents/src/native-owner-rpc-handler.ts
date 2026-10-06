@@ -3,6 +3,7 @@ import { validateProviderControlInput } from "./cover-letter-provider-control-co
 import type { createCoverLetterProviderControlHandler } from "./cover-letter-provider-control-handler.js";
 import { type NativeEvidenceBinding, nativeEvidenceBinding } from "./native-evidence-binding.js";
 import {
+  type NativeOwnerBootstrap,
   type NativeOwnerRpcOutput,
   nativeOwnerJson,
   nativeOwnerRequestDigest,
@@ -16,6 +17,7 @@ import type { createTemporaryMaterialCompletionHandler } from "./temporary-mater
 
 export interface NativeOwnerRpcOwners {
   checkAdmission(binding: Readonly<NativeEvidenceBinding>): Promise<void>;
+  bootstrap?(binding: Readonly<NativeEvidenceBinding>): Promise<NativeOwnerBootstrap>;
   evidence(
     binding: Readonly<NativeEvidenceBinding>,
     context: { jobContextHash: string; confirmedFactsHash: string },
@@ -94,7 +96,10 @@ export function createNativeOwnerRpcHandler(options: {
       await owner.checkAdmission(binding);
       if (!permitted()) return unavailable;
       if (request.action === "admit") result = { admitted: true };
-      else if (request.action === "evidence")
+      else if (request.action === "bootstrap") {
+        if (!owner.bootstrap) return unavailable;
+        result = await owner.bootstrap(binding);
+      } else if (request.action === "evidence")
         result = await owner
           .evidence(binding, {
             jobContextHash: request.jobContextHash,

@@ -3,7 +3,10 @@ import {
   createApplicationsDatabase,
   PostgresApplicationStore,
 } from "@ai-job-apply/applications-service";
-import { lockNativeMaterialApplicationAdmission } from "@ai-job-apply/applications-service/native-material-runtime";
+import {
+  lockNativeMaterialApplicationAdmission,
+  readNativePreparationBootstrap,
+} from "@ai-job-apply/applications-service/native-material-runtime";
 import { nativeLaunchControlVersion } from "@ai-job-apply/documents-service/native-launch-control";
 import { PostgresNativeMaterialRegistry } from "@ai-job-apply/documents-service/native-material-registry";
 import { createNativeOwnerControlStore } from "@ai-job-apply/documents-service/native-owner-control-store";
@@ -124,6 +127,21 @@ export function createNativeOwnerRpcRuntime(
   const checkAdmission = registry.checkEvidenceAdmission.bind(registry);
   return Object.freeze({
     checkAdmission,
+    bootstrap: async (binding: Parameters<typeof checkAdmission>[0]) => {
+      const identity = await readNativePreparationBootstrap(
+        applicationPool,
+        binding.scope,
+        enabled,
+      );
+      await controls.checkBootstrap(binding, identity);
+      const rechecked = await readNativePreparationBootstrap(
+        applicationPool,
+        binding.scope,
+        enabled,
+      );
+      if (JSON.stringify(identity) !== JSON.stringify(rechecked)) throw nativeOwnerRpcUnavailable();
+      return identity;
+    },
     evidence: (
       binding: Parameters<typeof checkAdmission>[0],
       context: { jobContextHash: string; confirmedFactsHash: string },

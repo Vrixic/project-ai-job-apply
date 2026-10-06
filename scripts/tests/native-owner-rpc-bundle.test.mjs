@@ -99,7 +99,8 @@ test("emitted task RPC carries only fixed signing/Lambda and strict metadata", a
       `Missing actual signing/RPC source: ${name}`,
     );
   const client = exports.createNativeOwnerRpcClient({ binding, targetArn: target });
-  assert.deepEqual(Object.keys(client), ["run", "checkAdmission"]);
+  assert.deepEqual(Object.keys(client), ["run", "bootstrap", "checkAdmission"]);
+  await assert.rejects(client.bootstrap(), /^Error: NativeOwnerRpcUnavailable$/u);
   await assert.rejects(client.checkAdmission(binding), /^Error: NativeOwnerRpcUnavailable$/u);
 });
 test("emitted receiver authenticates without owning SQL or task/provider control", async () => {
@@ -161,6 +162,7 @@ test("emitted owning Lambda connects SQL/owner APIs while excluding provider/con
     "native-owner-control-store.js",
     "native-task-caller-verifier.js",
     "native-material-evidence.js",
+    "native-preparation-bootstrap.js",
   ])
     assert.ok(
       inputs.some((input) => input.includes(name)),

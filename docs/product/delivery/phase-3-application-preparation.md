@@ -9,6 +9,13 @@
 
 ## Objective
 
+2026-10-06 D3-079 adds authenticated original preparation bootstrap metadata: Applications reads
+the stored approval/context and Documents checks the exact original work consent. All 41 RPC,
+27 preparation SQL, 24 native-owner SQL and seven emitted isolation checks pass; full clean-source
+verification is pending. [Evidence](evidence/d3-native-approved-bootstrap-2026-10-06.md).
+ECS self-metadata/executable image/managed/provider/client gates remain; D1/D3 stay In progress.
+No deployment, activation, third PR or CI/CD work; PC stays on.
+
 Deliver fact-grounded, review-by-exception application preparation, measured assisted submission,
 and authoritative owner-scoped technical history through confirmed submission for supported ATS
 platforms.

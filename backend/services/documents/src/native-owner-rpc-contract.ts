@@ -8,6 +8,7 @@ import { validateTemporaryMaterialReference } from "./temporary-material-referen
 
 export type NativeOwnerRequest =
   | { action: "admit" }
+  | { action: "bootstrap" }
   | { action: "evidence"; jobContextHash: string; confirmedFactsHash: string }
   | {
       action: "work";
@@ -104,7 +105,8 @@ export function validateNativeOwnerRequest(
   binding: NativeEvidenceBinding,
 ): value is NativeOwnerRequest {
   try {
-    if (nativeOwnerClosed(value, ["action"])) return value.action === "admit";
+    if (nativeOwnerClosed(value, ["action"]))
+      return value.action === "admit" || value.action === "bootstrap";
     if (nativeOwnerClosed(value, ["action", "jobContextHash", "confirmedFactsHash"]))
       return (
         value.action === "evidence" && hash(value.jobContextHash) && hash(value.confirmedFactsHash)
@@ -297,6 +299,7 @@ export function validateNativeOwnerRpcOutput(
     if (value.outcome !== "ready") return false;
     if (request.action === "admit")
       return nativeOwnerClosed(value.result, ["admitted"]) && value.result.admitted === true;
+    if (request.action === "bootstrap") return validateNativeOwnerBootstrap(value.result, binding);
     if (request.action === "evidence") return validateNativeOwnerEvidence(value.result);
     if (request.action === "work") {
       const result = value.result;
@@ -328,6 +331,62 @@ export function validateNativeOwnerRpcOutput(
       return false;
     const { outcome: _outcome, ...input } = value.result;
     return nativeOwnerJson(input) === nativeOwnerJson(request.input);
+  } catch {
+    return false;
+  }
+}
+
+export interface NativeOwnerBootstrap {
+  id: string;
+  ownerUserId: string;
+  applicationId: string;
+  jobContextHash: string;
+  confirmedFactsHash: string;
+  noticeVersion: "openai-cover-letter.v1";
+  approvedAt: string;
+  expiresAt: string;
+}
+/** Approval comes from the owning persisted preparation, never from task launch overrides. */
+export function validateNativeOwnerBootstrap(
+  value: unknown,
+  binding: NativeEvidenceBinding,
+): value is NativeOwnerBootstrap {
+  try {
+    if (
+      !nativeOwnerClosed(value, [
+        "id",
+        "ownerUserId",
+        "applicationId",
+        "jobContextHash",
+        "confirmedFactsHash",
+        "noticeVersion",
+        "approvedAt",
+        "expiresAt",
+      ])
+    )
+      return false;
+    if (
+      value.id !== binding.scope.generationId ||
+      value.ownerUserId !== binding.scope.ownerUserId ||
+      value.applicationId !== binding.scope.applicationId ||
+      !hash(value.jobContextHash) ||
+      !hash(value.confirmedFactsHash) ||
+      value.noticeVersion !== "openai-cover-letter.v1"
+    )
+      return false;
+    for (const key of ["approvedAt", "expiresAt"]) {
+      const date = value[key];
+      if (
+        typeof date !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(date) ||
+        new Date(date).toISOString() !== date
+      )
+        return false;
+    }
+    const approved = Date.parse(value.approvedAt as string);
+    const expires = Date.parse(value.expiresAt as string);
+    const now = Date.now();
+    return approved <= now && expires > now && expires - approved === 900_000;
   } catch {
     return false;
   }

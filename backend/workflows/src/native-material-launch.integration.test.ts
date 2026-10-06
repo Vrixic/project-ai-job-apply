@@ -2,7 +2,12 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { coverLetterContext } from "@ai-job-apply/ai-sdk";
-import { createApplicationsDatabase } from "@ai-job-apply/applications-service";
+import {
+  type ApplicationStoreOptions,
+  createApplicationsDatabase,
+  defaultFieldDefinitions,
+  PostgresApplicationStore,
+} from "@ai-job-apply/applications-service";
 import { lockNativeMaterialApplicationAdmission } from "@ai-job-apply/applications-service/native-material-runtime";
 import {
   PostgresCoverLetterStore,
@@ -17,6 +22,7 @@ import {
   type NativeMaterialLaunchScope,
   PostgresNativeMaterialRegistry,
 } from "@ai-job-apply/documents-service/native-material-registry";
+import { createNativeOwnerControlStore } from "@ai-job-apply/documents-service/native-owner-control-store";
 import { createNativeOwnerEvidenceClient } from "@ai-job-apply/documents-service/native-owner-evidence-client";
 import { createNativeOwnerRpcClient } from "@ai-job-apply/documents-service/native-owner-rpc-client";
 import { nativeOwnerJson } from "@ai-job-apply/documents-service/native-owner-rpc-contract";
@@ -67,6 +73,14 @@ const config = nativeTaskLaunchConfiguration({
 });
 const target = "arn:aws:lambda:us-east-2:123456789012:function:private-native-launch:9";
 type ECS = NonNullable<Parameters<typeof createNativeMaterialLaunchRuntime>[4]>;
+const { createSyntheticPacketProtection } = await import(
+  new URL("../../../scripts/tests/d2-recovery/restricted-packets.mjs", import.meta.url).href
+);
+const packetProtection = createSyntheticPacketProtection() as {
+  options: NonNullable<ApplicationStoreOptions["restrictedPackets"]>;
+  destroy(): void;
+};
+afterAll(() => packetProtection.destroy());
 describe.runIf(requested)(
   "actual private native launcher SQL composition; simulated Lambda/ECS/secret transport",
   () => {
@@ -111,13 +125,56 @@ describe.runIf(requested)(
         jobId: string;
         context: { jobContextHash: string; confirmedFactsHash: string };
       }>,
+      prepare = false,
     ): Promise<Extract<NativeLaunchControlInput, { action: "launch" }>> {
       const owner = uuidv7();
-      const application = uuidv7();
-      const document = uuidv7();
+      let application = uuidv7();
+      let document = uuidv7();
       await sql`INSERT INTO identity.users (id) VALUES (${owner})`;
       const seeded = await seedEvidence?.(owner);
-      await sql`INSERT INTO applications.applications (id,owner_user_id,canonical_job_id,status,created_at,updated_at)
+      let expiry = new Date(Date.now() + consentLifetimeMs);
+      if (prepare && seeded) {
+        const applicationStore = new PostgresApplicationStore(sql, () => new Date(), {
+          definitions: defaultFieldDefinitions(),
+          restrictedPackets: packetProtection.options,
+        });
+        const created = await applicationStore.createApplication({
+          ownerUserId: owner,
+          canonicalJobId: seeded.jobId,
+          idempotencyKey: `create-${uuidv7()}`,
+        });
+        application = created.view.application.id;
+        const queued = await applicationStore.queuePreparation({
+          ownerUserId: owner,
+          applicationId: application,
+          idempotencyKey: `prepare-${uuidv7()}`,
+          context: seeded.context,
+          request: {
+            expectedRevision: 1,
+            coverLetter: {
+              disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            },
+          },
+          packet: {
+            jobRevision: seeded.context.jobContextHash,
+            form: null,
+            fields: [],
+            artifactHashes: { resume: "a".repeat(64) },
+          },
+        });
+        document = queued.preparation.id;
+        expiry = queued.preparation.expiresAt;
+        const [event] = await sql<
+          Array<{ id: string }>
+        >`SELECT id FROM applications.preparation_outbox WHERE preparation_id=${document}`;
+        if (
+          !event ||
+          (await applicationStore.claimPreparationGeneration(event.id, document, seeded.context))
+            .kind !== "claimed"
+        )
+          throw Error("SyntheticPreparationClaimMissing");
+      } else
+        await sql`INSERT INTO applications.applications (id,owner_user_id,canonical_job_id,status,created_at,updated_at)
       VALUES (${application},${owner},${seeded?.jobId ?? uuidv7()},'preparing',clock_timestamp(),clock_timestamp())`;
       await documents.reserve({
         id: document,
@@ -132,7 +189,7 @@ describe.runIf(requested)(
           documentId: document,
           purpose: "provider_dispatch",
           requestSha256: "c".repeat(64),
-          consentExpiresAt: new Date(Date.now() + consentLifetimeMs),
+          consentExpiresAt: expiry,
         })
       ).authorization;
       if (!grant) throw Error("SyntheticOriginalGrantMissing");
@@ -550,24 +607,28 @@ describe.runIf(requested)(
         company: activeJob.company.name,
         description: activeJob.description,
       };
-      const request = await original(900_000, async (owner) => {
-        await profile.createProfileFact(
-          owner,
-          {
-            kind: "skill",
-            key: "programming_language",
-            value: "TypeScript",
-            sensitivity: "standard",
-          },
-          uuidv7(),
-          "synthetic-native-rpc",
-        );
-        const facts = (await profile.listProfileFacts(owner)).facts.map(profileFactToGraphFact);
-        return {
-          jobId: posting.job.id,
-          context: coverLetterContext({ facts, job, now: observedAt }),
-        };
-      });
+      const request = await original(
+        900_000,
+        async (owner) => {
+          await profile.createProfileFact(
+            owner,
+            {
+              kind: "skill",
+              key: "programming_language",
+              value: "TypeScript",
+              sensitivity: "standard",
+            },
+            uuidv7(),
+            "synthetic-native-rpc",
+          );
+          const facts = (await profile.listProfileFacts(owner)).facts.map(profileFactToGraphFact);
+          return {
+            jobId: posting.job.id,
+            context: coverLetterContext({ facts, job, now: observedAt }),
+          };
+        },
+        true,
+      );
       const facts = (await profile.listProfileFacts(request.ownerUserId)).facts.map(
         profileFactToGraphFact,
       );
@@ -640,6 +701,45 @@ describe.runIf(requested)(
       expect(resolve).not.toHaveBeenCalled();
       await remote.checkAdmission(binding);
       expect(resolve).toHaveBeenCalledOnce();
+      const bootstrap = await remote.bootstrap();
+      expect(bootstrap).toMatchObject({
+        id: request.original.documentId,
+        ownerUserId: request.ownerUserId,
+        applicationId: request.applicationId,
+        jobContextHash: approvedContext.jobContextHash,
+        confirmedFactsHash: approvedContext.confirmedFactsHash,
+        noticeVersion: "openai-cover-letter.v1",
+      });
+      const [originalConsent] = await sql<
+        Array<{ consent: Date }>
+      >`SELECT consent_expires_at AS consent FROM documents.cover_letter_work_authorizations WHERE id=${request.original.id}`;
+      expect(bootstrap.expiresAt).toEqual(originalConsent?.consent);
+      expect(bootstrap.expiresAt.getTime() - bootstrap.approvedAt.getTime()).toBe(900_000);
+      const documentControls = createNativeOwnerControlStore(
+        url ?? "postgres://invalid",
+        rpcTarget,
+        () => true,
+      );
+      runtimes.push(documentControls);
+      const storedBootstrap = {
+        ...bootstrap,
+        approvedAt: bootstrap.approvedAt.toISOString(),
+        expiresAt: bootstrap.expiresAt.toISOString(),
+      };
+      await documentControls.checkBootstrap(binding, storedBootstrap);
+      await expect(
+        documentControls.checkBootstrap(binding, {
+          ...storedBootstrap,
+          approvedAt: new Date(bootstrap.approvedAt.getTime() + 1).toISOString(),
+          expiresAt: new Date(bootstrap.expiresAt.getTime() + 1).toISOString(),
+        }),
+      ).rejects.toThrow("NativeOwnerRpcUnavailable");
+      await expect(
+        documentControls.checkBootstrap(binding, {
+          ...storedBootstrap,
+          confirmedFactsHash: "f".repeat(64),
+        }),
+      ).rejects.toThrow("NativeOwnerRpcUnavailable");
       const evidence = createNativeOwnerEvidenceClient({
         binding,
         targetArn: rpcTarget,

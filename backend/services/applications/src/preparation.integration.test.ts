@@ -6,6 +6,7 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FieldDefinition } from "./field-policy.js";
+import { readNativePreparationBootstrap } from "./native-preparation-bootstrap.js";
 import { PreparationNotFoundError, type PreparationRequest } from "./preparation.js";
 import { PreparationDispatchError, type PreparationTerminalInput } from "./preparation-dispatch.js";
 import {
@@ -123,6 +124,87 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
     return event.id;
   }
   const functionArn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-preparation:7";
+  it("reads only the original claimed preparation without changing approval or creating work", async () => {
+    await withApplication(async (owner, app) => {
+      const [time] = await client<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+      if (!time) throw Error("FixtureTimeMissing");
+      now = time.now;
+      const queued = await store.queuePreparation(command(owner, app));
+      const id = queued.preparation.id;
+      const scope = { ownerUserId: owner, applicationId: app, generationId: id };
+      await expect(readNativePreparationBootstrap(client, scope, () => true)).rejects.toThrow(
+        "NativePreparationBootstrapUnavailable",
+      );
+      await store.claimPreparationGeneration(await eventId(id), id, context);
+      const before = await store.getPreparation(owner, app, id);
+      const expected = {
+        id,
+        ownerUserId: owner,
+        applicationId: app,
+        ...context,
+        noticeVersion: "openai-cover-letter.v1",
+        approvedAt: before.approvedAt.toISOString(),
+        expiresAt: before.expiresAt.toISOString(),
+      };
+      expect(await readNativePreparationBootstrap(client, scope, () => true)).toEqual(expected);
+      expect(await readNativePreparationBootstrap(client, scope, () => true)).toEqual(expected);
+      expect(await store.getPreparation(owner, app, id)).toEqual(before);
+      for (const foreign of [
+        { ...scope, ownerUserId: uuidv7() },
+        { ...scope, applicationId: uuidv7() },
+        { ...scope, generationId: uuidv7() },
+      ])
+        await expect(readNativePreparationBootstrap(client, foreign, () => true)).rejects.toThrow(
+          "NativePreparationBootstrapUnavailable",
+        );
+      await expect(readNativePreparationBootstrap(client, scope, () => false)).rejects.toThrow(
+        "NativePreparationBootstrapUnavailable",
+      );
+      await store.cancel({
+        ownerUserId: owner,
+        applicationId: app,
+        expectedRevision: 2,
+        idempotencyKey: `cancel-${uuidv7()}`,
+      });
+      await expect(readNativePreparationBootstrap(client, scope, () => true)).rejects.toThrow(
+        "NativePreparationBootstrapUnavailable",
+      );
+    });
+  });
+  it.each(["expired", "future", "failed", "revision", "packet"])(
+    "refuses %s original preparation bootstrap",
+    async (fault) => {
+      await withApplication(async (owner, app) => {
+        const [time] = await client<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+        if (!time) throw Error("FixtureTimeMissing");
+        now = new Date(
+          time.now.getTime() + (fault === "expired" ? -901_000 : fault === "future" ? 60_000 : 0),
+        );
+        const queued = await store.queuePreparation(command(owner, app));
+        const id = queued.preparation.id;
+        const event = await eventId(id);
+        expect((await store.claimPreparationGeneration(event, id, context)).kind).toBe("claimed");
+        if (fault === "failed") await store.failPreparation(event, id, "generation_unavailable");
+        if (fault === "revision")
+          await client`UPDATE applications.applications SET revision=revision+1 WHERE id=${app}`;
+        if (fault === "packet")
+          await store.createPacket({
+            ownerUserId: owner,
+            applicationId: app,
+            expectedRevision: 2,
+            idempotencyKey: `packet-${uuidv7()}`,
+            packet: command(owner, app).packet,
+          });
+        await expect(
+          readNativePreparationBootstrap(
+            client,
+            { ownerUserId: owner, applicationId: app, generationId: id },
+            () => true,
+          ),
+        ).rejects.toThrow("NativePreparationBootstrapUnavailable");
+      });
+    },
+  );
   async function dispatchFor(owner: string, app: string) {
     const queued = await store.queuePreparation(command(owner, app));
     const event = await eventId(queued.preparation.id);

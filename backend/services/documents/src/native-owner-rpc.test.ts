@@ -104,8 +104,20 @@ function fixture(defaultOff = false) {
     if (!validateTemporaryMaterialCompletionInput(input)) throw Error("FixtureCompletionMissing");
     return { ...input, outcome: "claimed" as const };
   });
+  const approvedAt = new Date(Date.now() - 1000);
+  const bootstrap = vi.fn(async () => ({
+    id: id(4),
+    ownerUserId: id(2),
+    applicationId: id(3),
+    jobContextHash: context.jobContextHash,
+    confirmedFactsHash: context.confirmedFactsHash,
+    noticeVersion: "openai-cover-letter.v1" as const,
+    approvedAt: approvedAt.toISOString(),
+    expiresAt: new Date(approvedAt.getTime() + 900_000).toISOString(),
+  }));
   const owners = vi.fn(async () => ({
     checkAdmission,
+    bootstrap,
     evidence: () => ({ load }),
     work,
     completion,
@@ -162,6 +174,7 @@ function fixture(defaultOff = false) {
     work,
     completion,
     owners,
+    bootstrap,
     receiver,
     sent,
     bytes,
@@ -177,6 +190,53 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe("authenticated original native owner RPC", () => {
+  it("authenticates and loads the stored scalar approval before task Date conversion", async () => {
+    const f = fixture();
+    const result = await f.client.bootstrap();
+    const stored = await f.bootstrap();
+    expect(result).toEqual({
+      ...stored,
+      approvedAt: new Date(stored.approvedAt),
+      expiresAt: new Date(stored.expiresAt),
+    });
+    expect(f.sent[0]?.request).toEqual({ action: "bootstrap" });
+    expect(f.checkAdmission).toHaveBeenCalledTimes(2);
+    expect(f.load).not.toHaveBeenCalled();
+    expect(f.work).not.toHaveBeenCalled();
+    expect(f.completion).not.toHaveBeenCalled();
+  });
+  it.each([
+    "ownerUserId",
+    "applicationId",
+    "id",
+    "expired",
+    "future",
+    "renewed",
+    "extra",
+    "notice",
+    "hash",
+  ])("refuses %s bootstrap metadata", async (fault) => {
+    const f = fixture();
+    const stored = await f.bootstrap();
+    const changed = { ...stored } as Record<string, unknown>;
+    if (["ownerUserId", "applicationId", "id"].includes(fault)) changed[fault] = id(99);
+    if (fault === "expired") {
+      changed.expiresAt = new Date(Date.now() - 1).toISOString();
+      changed.approvedAt = new Date(Date.parse(String(changed.expiresAt)) - 900_000).toISOString();
+    }
+    if (fault === "future") {
+      changed.approvedAt = new Date(Date.now() + 60_000).toISOString();
+      changed.expiresAt = new Date(Date.parse(String(changed.approvedAt)) + 900_000).toISOString();
+    }
+    if (fault === "renewed")
+      changed.expiresAt = new Date(Date.parse(stored.expiresAt) + 1000).toISOString();
+    if (fault === "extra") changed.rawResume = "synthetic";
+    if (fault === "notice") changed.noticeVersion = "unreviewed.v1";
+    if (fault === "hash") changed.jobContextHash = "invalid";
+    f.bootstrap.mockResolvedValueOnce(changed as unknown as typeof stored);
+    await expect(f.client.bootstrap()).rejects.toThrow("NativeOwnerRpcUnavailable");
+    expect(f.work).not.toHaveBeenCalled();
+  });
   it("runs actual SDK signing through authentication/admission/evidence and all original scalar controls", async () => {
     const f = fixture();
     const remote = createNativeOwnerEvidenceClient({ ...f.options, context: f.context });

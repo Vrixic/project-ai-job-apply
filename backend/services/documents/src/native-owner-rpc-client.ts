@@ -8,6 +8,7 @@ import {
   nativeOwnerJson,
   nativeOwnerRequestDigest,
   nativeOwnerRpcUnavailable,
+  validateNativeOwnerBootstrap,
   validateNativeOwnerRpcOutput,
 } from "./native-owner-rpc-contract.js";
 import { createNativeTaskCallerClient } from "./native-task-caller-client.js";
@@ -140,6 +141,15 @@ export function createNativeOwnerRpcClient(options: {
   }
   return Object.freeze({
     run,
+    async bootstrap() {
+      const result = await run({ action: "bootstrap" });
+      if (!validateNativeOwnerBootstrap(result, binding)) throw nativeOwnerRpcUnavailable();
+      return {
+        ...result,
+        approvedAt: new Date(result.approvedAt),
+        expiresAt: new Date(result.expiresAt),
+      };
+    },
     async checkAdmission(raw: Readonly<NativeEvidenceBinding>) {
       if (nativeOwnerJson(nativeEvidenceBinding(raw)) !== nativeOwnerJson(binding))
         throw nativeOwnerRpcUnavailable();

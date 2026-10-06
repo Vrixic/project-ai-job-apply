@@ -2,6 +2,10 @@ import postgres from "postgres";
 import { createCoverLetterProviderControlHandler } from "./cover-letter-provider-control-handler.js";
 import { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 import { type NativeEvidenceBinding, nativeEvidenceBinding } from "./native-evidence-binding.js";
+import {
+  type NativeOwnerBootstrap,
+  validateNativeOwnerBootstrap,
+} from "./native-owner-rpc-contract.js";
 import { createTemporaryMaterialCompletionHandler } from "./temporary-material-completion-handler.js";
 import { PostgresTemporaryMaterialCompletionStore } from "./temporary-material-completion-store.js";
 
@@ -23,6 +27,22 @@ export function createNativeOwnerControlStore(
   const work = new PostgresCoverLetterWorkStore(controls, enabled);
   const completion = new PostgresTemporaryMaterialCompletionStore(controls, enabled);
   return Object.freeze({
+    async checkBootstrap(raw: Readonly<NativeEvidenceBinding>, identity: NativeOwnerBootstrap) {
+      const binding = nativeEvidenceBinding(raw);
+      if (!enabled() || !validateNativeOwnerBootstrap(identity, binding))
+        throw Error("NativeOwnerRpcUnavailable");
+      const [row] = await controls`SELECT d.id FROM documents.cover_letters d
+        JOIN documents.cover_letter_work_authorizations w ON w.document_id=d.id AND w.user_id=d.user_id
+        WHERE d.id=${binding.scope.generationId} AND d.user_id=${binding.scope.ownerUserId}
+          AND d.application_id=${binding.scope.applicationId} AND d.status='pending'
+          AND d.material_work_id IS NULL
+          AND d.job_revision=${identity.jobContextHash} AND d.confirmed_facts_hash=${identity.confirmedFactsHash}
+          AND w.id=${binding.original.id} AND w.purpose='provider_dispatch'
+          AND w.request_sha256=${binding.original.requestSha256}
+          AND w.consent_expires_at=${identity.expiresAt}::timestamptz
+          AND w.consent_expires_at > clock_timestamp()`;
+      if (!enabled() || !row) throw Error("NativeOwnerRpcUnavailable");
+    },
     async checkEvidenceContext(
       raw: Readonly<NativeEvidenceBinding>,
       context: { jobContextHash: string; confirmedFactsHash: string },

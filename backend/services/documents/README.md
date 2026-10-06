@@ -1,5 +1,9 @@
 # Documents Service
 
+Private native owner RPC additionally reads the original claimed preparation's approval/context
+through Applications and checks Documents' exact original work expiry. The strict eight-scalar
+reply grants no renewal or work creation capability. See [bootstrap evidence](../../../docs/product/delivery/evidence/d3-native-approved-bootstrap-2026-10-06.md).
+
 Private native owner RPC source now connects task authentication before lazy owner access,
 original reviewed evidence/consent, owning admission and scalar work/completion. It defaults off,
 requires a numeric receiver and explicit original task deployment, and never accepts standalone

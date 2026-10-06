@@ -1,5 +1,12 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 adds authenticated original preparation bootstrap metadata: Applications reads
+the stored approval/context and Documents checks the exact original work consent. All 41 RPC,
+27 preparation SQL, 24 native-owner SQL and seven emitted isolation checks pass; full clean-source
+verification is pending. [Evidence](evidence/d3-native-approved-bootstrap-2026-10-06.md).
+ECS self-metadata/executable image/managed/provider/client gates remain; D1/D3 stay In progress.
+No deployment, activation, third PR or CI/CD work; PC stays on.
+
 2026-10-06 D3-079 connects authenticated private native owner RPC source: proof authentication
 before lazy owner initialization, original reviewed evidence/consent checks, owning admission,
 original work controls and scalar completion. All 140 focused checks, 24 real PostgreSQL cases, eight emitted checks and 21 Linux scenarios pass;
