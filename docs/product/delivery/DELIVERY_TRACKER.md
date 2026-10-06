@@ -3972,3 +3972,15 @@ Verified combined implementation `97cc9c52` is unchanged; subsequent commits rec
 evidence only. Native image/authenticated adapters/issuer/event routing/managed task/client/ATS/
 provider/accountable gates remain. D1/D3 stay In progress; no authored main merge, deployment,
 activation or hosted CI/CD work. Docker/WSL are stopped and shared volumes retained.
+
+2026-10-06 D3-079 private native launch runtime starts on fresh main `5305829d` plus exact
+open #562 `e36c0298`. Strict metadata sender/receiver, fixed signed numeric Lambda transport,
+managed-secret bootstrap and actual Applications/Docs admission/claim/capture compose without
+SQL locks across AWS. Independent recovery remains available after launch shutdown. 91 Documents
+and 33 bootstrap cases, ten real PostgreSQL cases and two emitted isolation/default-off checks
+pass; transports/credentials are synthetic, not deployed IAM/task evidence. Narrow owner exports
+remove unrelated body/crypto capabilities. Owned fixture removed, shared volumes retained and
+Docker/WSL stopped. Clean full/artifact verification remains before review.
+[Evidence](evidence/d3-native-launch-control-2026-10-06.md). D1/D3 stay In progress; native image/
+private adapters/routing/managed-task/client/ATS/provider/accountable gates remain. No frontend
+change, publication/deployment/activation or hosted CI/CD work.

@@ -8,6 +8,10 @@
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     },
+    "./native-material-runtime": {
+      "types": "./dist/src/native-material-runtime.d.ts",
+      "default": "./dist/src/native-material-runtime.js"
+    },
     "./restricted-packet-runtime": {
       "types": "./dist/src/restricted-packet-runtime.d.ts",
       "default": "./dist/src/restricted-packet-runtime.js"

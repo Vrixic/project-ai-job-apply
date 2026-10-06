@@ -53,7 +53,7 @@ function closed(value: object, keys: readonly string[]) {
   )
     throw unavailable();
 }
-function configuration(input: NativeTaskLaunchConfiguration) {
+export function nativeTaskLaunchConfiguration(input: NativeTaskLaunchConfiguration) {
   closed(input, [
     "clusterArn",
     "taskDefinitionArn",
@@ -346,9 +346,9 @@ export function createNativeTaskLaunch(options: {
   /** Test-only; production uses fixed signed regional ECS, never an endpoint override. */
   testClient?: TaskClient;
 }) {
-  let config: ReturnType<typeof configuration>;
+  let config: ReturnType<typeof nativeTaskLaunchConfiguration>;
   try {
-    config = configuration(options.configuration);
+    config = nativeTaskLaunchConfiguration(options.configuration);
   } catch {
     throw unavailable();
   }
@@ -377,7 +377,6 @@ export function createNativeTaskLaunch(options: {
     if (
       active ||
       !enabled() ||
-      (mode === "launch" && !launchEnabled()) ||
       (mode === "launch" && !launchEnabled()) ||
       (testClient && process.env.NODE_ENV !== "test")
     )

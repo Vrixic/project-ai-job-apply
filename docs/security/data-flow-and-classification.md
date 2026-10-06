@@ -721,3 +721,13 @@ Positive native task capture also binds the observed task environment to all sev
 allocation/owner/application/generation/epoch/work/hash values. Extra/missing values and command,
 role or resource retargeting refuse capture; refusal leaves pending launch and provider settlement
 independent. This is local source evidence with simulated ECS, not deployed authentication.
+
+## Private native launch runtime source (2026-10-06)
+
+Original metadata -> fixed signed numeric Lambda -> managed-secret bootstrap -> same owning
+transaction admission/claim -> one signed ECS launch -> exact original task capture. No generated
+bodies, model keys or object capabilities cross this path. Sender and receiver switches default
+off; new-launch shutdown leaves positive original recovery independent. Caller IAM, task roles,
+managed image/authenticated owner adapters/TLS routing and complete copy disposal remain review
+and deployment gates. Unknown Invoke/RunTask outcomes retain pending authority and unsettled
+provider work. [Local evidence](../product/delivery/evidence/d3-native-launch-control-2026-10-06.md).
