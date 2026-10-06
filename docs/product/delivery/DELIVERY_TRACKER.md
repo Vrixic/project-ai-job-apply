@@ -3965,3 +3965,10 @@ also pass. Combined 66/88/12 actual logical restore and all 40 registry SQL case
 [Evidence](evidence/d3-native-task-launch-2026-10-05.md). Only delivery evidence follows the
 verified source. D1/D3 stay In progress; native image/authenticated adapters/routing/task/client/
 ATS/provider/accountable gates remain. No cloud deployment/activation; CI/CD deferred until launch.
+
+2026-10-05 D3-079 one-attempt native launcher is reviewable in draft
+[PR #562](https://github.com/Vrixic/project-ai-job-apply/pull/562) against current main `5305829d`.
+Verified combined implementation `97cc9c52` is unchanged; subsequent commits record delivery
+evidence only. Native image/authenticated adapters/issuer/event routing/managed task/client/ATS/
+provider/accountable gates remain. D1/D3 stay In progress; no authored main merge, deployment,
+activation or hosted CI/CD work. Docker/WSL are stopped and shared volumes retained.

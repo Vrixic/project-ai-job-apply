@@ -165,3 +165,6 @@ Separate migration publisher OCI guards and staging restore verifier/49 input/26
 checks pass (`.tmp/d3-native-launch-combined-publisher-guards.log`,
 `.tmp/d3-native-launch-combined-staging-guards.log`). No tracked source changes during verification;
 only delivery evidence follows. No runtime activation or phase completion is claimed.
+
+Draft [PR #562](https://github.com/Vrixic/project-ai-job-apply/pull/562) opens against exact main
+`5305829d`. Tested executable source remains `97cc9c52`; only delivery evidence follows.
