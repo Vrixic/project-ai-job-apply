@@ -801,10 +801,61 @@ was checked against exact ID/name/label/tmpfs/no mounts before removal. Both gen
 were confined to that container. Shared volume inventories are unchanged, Docker Desktop stopped,
 and WSL reports no running distributions. No publication, deployment, activation or phase closure.
 
+## Maintained SQL recheck with the actual adapter and test-spy facade
+
+Whole-change review identifies that the shared integration/recovery helper now composes the actual
+KMS adapter, whereas older maintained SQL evidence used the standalone cipher. The full verifier
+skips those opt-in suites. On clean 437d59ce, the current actual-adapter recheck passes all 92
+maintained Applications SQL cases (91 general plus the independently gated dispatch/outbox rollback
+case in its required generated database), all 56 targeted Gateway SQL cases, and six general
+Workflow preparation cases. Logs: `.tmp/d3-current-applications-sql.log`,
+`.tmp/d3-current-applications-dispatch-sql.log`, `.tmp/d3-current-gateway-sql.log`,
+`.tmp/d3-current-workflow-preparation-sql.log`. PostgreSQL is real; KMS and other external
+transports are simulated. Tests use synthetic identity, not managed/live authenticated end to end.
+
+The same recheck exposes a test-instrumentation failure before the eleven isolated preparation
+cases reach their assertions: `vi.spyOn` cannot redefine the actual adapter's frozen `decrypt`
+method. The shared test-only helper now exposes a mutable facade copied from the actual adapter's
+three methods. Every method retains its original captured key authority, SDK transport checks,
+AES/HMAC implementation, deadline/capacity and buffer-clearing logic. The production factory still
+returns a frozen cipher. Test mode is still mandatory, and the helper/facade remains absent from
+normal exports and emitted production actors. No production cipher, algorithm, port, route,
+public/shared schema, migration or permission guard changes to accommodate the test.
+
+All eleven actual isolated preparation SQL cases now pass, including cipher-free native protected
+carry with exact original binding and zero decrypt calls until the separate owning read. The nineteen
+starter/recovery and three independent evidence SQL cases pass afterward, completing the 39 targeted
+Workflow cases with the six general cases. Logs:
+`.tmp/d3-current-workflow-private-preparation-rerun.log`, `.tmp/d3-current-workflow-native-sql.log`,
+`.tmp/d3-current-workflow-evidence-sql.log`. The original failing log remains accurate historical
+reproduction evidence; no assertions or timeouts are weakened.
+
+The maintained actual logical recovery recheck passes after the facade correction: all 65
+migrations, 12 schemas and exact equality of all 88 relation row sets; original three values and
+keyed replays across two key pairs, unchanged receipts, unsupported-key refusal, metadata-role
+read denial, authorized exact-owner deletion and source isolation. Log:
+`.tmp/d3-current-packet-logical-restore.log`; terminal `passed: true` and `cleanupSucceeded: true`.
+Controlled keys/maps are cleared and the runner removes only its verified generated fixture.
+
+The five manually owned tmpfs SQL fixtures are removed after exact ID/name/label/tmpfs/no-mount
+checks. Separate cluster boundaries retain the Jobs reader's cross-database permission guard.
+All generated databases stayed inside those fixtures; shared volume inventories are unchanged.
+Docker Desktop/WSL shutdown follows the last related SQL step. No cloud or provider calls,
+publication, deployment, activation, frontend work or phase completion.
+
+Four artifact families from clean 437d59ce also build twice with all 20 files byte-identical and
+archive/manifest/SBOM/digest checks passing. Bundled Profile closed-input/missing-maintenance-authority
+and native default-off probes pass with zero fetch calls. Logs:
+`.tmp/d3-packet-race-artifact-first.log`, `.tmp/d3-packet-race-artifact-second.log`,
+`.tmp/d3-packet-race-artifact-first-hashes.json`, `.tmp/d3-packet-race-artifact-probe.log`.
+This precedes the test-only facade correction, so build current source-bound artifacts and complete
+clean full verification after committing that correction before whole-slice review. All release,
+real legacy/key/role/retention/accountable/client/ATS/deployed gates remain separate and unclosed.
+
 ## Next work
 
 Verify current committed artifacts and rerun clean full verification after the concurrent
-original-key replay fix before whole-slice review. Production
+original-key replay fix and shared test-spy facade correction before whole-slice review. Production
 SQL/KMS role grants, real legacy inventory/disposition, accountable/client/ATS/deployed acceptance
 remain separate gates. Never silently purge or rehash approved/ambiguous legacy evidence. Keep
 reuse and both private composition switches disabled throughout.

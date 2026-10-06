@@ -1354,3 +1354,14 @@ isolation cases pass. Owned fixture removed, shared volumes
 preserved and Docker/WSL stopped. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). New
 emitted artifact and clean full verification remain before whole-slice review; D1/D3 stay In progress.
 No frontend change, publication, deployment or activation; CI/CD remains deferred until launch.
+
+
+2026-10-05 D3-077 whole-change SQL recheck passes current actual-adapter Applications 92 and
+Gateway 56 cases, then discovers eleven preparation tests cannot spy on the frozen adapter. A
+mutable test-only method facade preserves the actual frozen production adapter and its controls.
+All 39 targeted Workflow cases and actual two-key/65-migration/88-relation logical restore pass;
+no assertion/permission weakening. Owned fixtures removed and shared volumes preserved; Docker/WSL
+shutdown follows the last related step. Four artifact families/20 files from clean 437d59ce build
+twice identically, but current artifact/full verification remains after the facade correction.
+[Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). No frontend change, cloud publication,
+deployment/activation or D1/D3 closure; CI/CD remains deferred until launch.

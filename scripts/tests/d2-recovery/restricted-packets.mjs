@@ -90,12 +90,15 @@ export function createSyntheticPacketProtection() {
       fingerprintKeyArn: pair.fingerprintKeyArn,
       historicalFingerprintKeyArns: historicalKeys.map((pair) => pair.fingerprintKeyArn),
       enabled: () => true,
-      cipher: createRestrictedPacketKmsCipher({
-        ...pair,
-        historicalKeys,
-        enabled: () => true,
-        testClient,
-      }),
+      // Mutable test facade permits call spies; the actual production adapter stays frozen.
+      cipher: {
+        ...createRestrictedPacketKmsCipher({
+          ...pair,
+          historicalKeys,
+          enabled: () => true,
+          testClient,
+        }),
+      },
     };
   };
   return {
