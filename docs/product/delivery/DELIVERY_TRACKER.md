@@ -3995,3 +3995,11 @@ independent archive/bundle/SBOM/source checks pass (258613 bytes, 24 components)
 ten real PostgreSQL cases remain the connected proof, with synthetic secret/Lambda/ECS
 transports. Original-version/configuration retention remains a recovery release gate.
 D1/D3 stay In progress, all activation gates stay off and hosted CI/CD stays deferred.
+
+2026-10-06 D3-079 private native launch control is reviewable in draft
+[PR #563](https://github.com/Vrixic/project-ai-job-apply/pull/563), stacked on exact open
+#562 `e36c0298`. Verified implementation `228bd75d` is unchanged; later commits record
+verification and review links only. Two authored draft PRs are open. D1/D3 remain In progress;
+native image/private adapters/routing/managed-task/client/ATS/provider/accountable gates remain.
+No authored main merge, artifact publication, deployment, activation or hosted CI/CD work.
+Owned fixture is removed, shared volumes retained and Docker/WSL stopped.
