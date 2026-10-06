@@ -50,6 +50,8 @@ const encryptionKeyArn =
   "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-4000-8000-000000000001";
 const fingerprintKeyArn =
   "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-4000-8000-000000000002";
+const nextEncryptionKeyArn = encryptionKeyArn.replace(/1$/u, "3");
+const nextFingerprintKeyArn = fingerprintKeyArn.replace(/2$/u, "4");
 const configuration = () => ({
   RESTRICTED_PACKET_PROTECTION_ENABLED: "true",
   RESTRICTED_PACKET_EXPORT_ENABLED: "true",
@@ -81,28 +83,29 @@ describe.skipIf(!requested)(
       const send = async (command: unknown) => {
         commands.push(command);
         if (command instanceof GenerateDataKeyCommand) {
-          expect(command.input.KeyId).toBe(encryptionKeyArn);
+          expect([encryptionKeyArn, nextEncryptionKeyArn]).toContain(command.input.KeyId);
           return {
-            KeyId: encryptionKeyArn,
+            KeyId: command.input.KeyId,
             Plaintext: Buffer.from(encryptionKey),
             CiphertextBlob: Buffer.alloc(40, 1),
           };
         }
         if (command instanceof GenerateMacCommand) {
-          expect(command.input.KeyId).toBe(fingerprintKeyArn);
+          expect([fingerprintKeyArn, nextFingerprintKeyArn]).toContain(command.input.KeyId);
           return {
-            KeyId: fingerprintKeyArn,
+            KeyId: command.input.KeyId,
             MacAlgorithm: "HMAC_SHA_256",
             Mac: createHmac("sha256", macKey)
+              .update(command.input.KeyId as string)
               .update(command.input.Message as Uint8Array)
               .digest(),
           };
         }
         if (command instanceof DecryptCommand) {
-          expect(command.input.KeyId).toBe(encryptionKeyArn);
+          expect([encryptionKeyArn, nextEncryptionKeyArn]).toContain(command.input.KeyId);
           expect(command.input.EncryptionContext?.purpose).toBe("restricted-application-packet.v1");
           return {
-            KeyId: encryptionKeyArn,
+            KeyId: command.input.KeyId,
             EncryptionAlgorithm: "SYMMETRIC_DEFAULT",
             Plaintext: Buffer.from(encryptionKey),
           };
@@ -151,13 +154,14 @@ describe.skipIf(!requested)(
           },
         ],
       };
-      const first = await store.createPacket({
+      const originalCommand = {
         ownerUserId: owner,
         applicationId: created.view.application.id,
         expectedRevision: 1,
         idempotencyKey: uuidv7(),
         packet,
-      });
+      };
+      const first = await store.createPacket(originalCommand);
       await store.createPacket({
         ownerUserId: owner,
         applicationId: created.view.application.id,
@@ -181,7 +185,7 @@ describe.skipIf(!requested)(
         packetId: original.id,
         packetHash: original.packetHash,
       };
-      return { env, command };
+      return { env, command, originalCommand };
     }
 
     it("reads the exact original chosen value after a later packet, with decrypt-only KMS use", async () => {
@@ -206,6 +210,75 @@ describe.skipIf(!requested)(
       } finally {
         await runtime.close();
       }
+    });
+    it("replays original receipts and exports original values after explicit key rotation", async () => {
+      const f = await fixture();
+      const rotated = {
+        ...f.env,
+        RESTRICTED_PACKET_ENCRYPTION_KEY_ARN: nextEncryptionKeyArn,
+        RESTRICTED_PACKET_FINGERPRINT_KEY_ARN: nextFingerprintKeyArn,
+        RESTRICTED_PACKET_HISTORICAL_KEYS_JSON: JSON.stringify([
+          { encryptionKeyArn, fingerprintKeyArn },
+        ]),
+      };
+      const protection = restrictedPacketWriterFromEnvironment(rotated);
+      if (!protection) throw Error("MissingSyntheticRotatedProtection");
+      const store = new PostgresApplicationStore(sql, undefined, {
+        definitions: defaultFieldDefinitions(),
+        restrictedPackets: protection,
+      });
+      const receiptsBefore =
+        await sql`SELECT * FROM applications.command_receipts WHERE owner_user_id = ${f.command.ownerUserId} ORDER BY idempotency_key`;
+      const prior = commands.length;
+      const replay = await store.createPacket(f.originalCommand);
+      expect(replay.replayed).toBe(true);
+      expect(commands.slice(prior)).toHaveLength(1);
+      const mac = commands[prior];
+      expect(mac).toBeInstanceOf(GenerateMacCommand);
+      expect((mac as GenerateMacCommand).input.KeyId).toBe(fingerprintKeyArn);
+      expect(
+        await sql`SELECT * FROM applications.command_receipts WHERE owner_user_id = ${f.command.ownerUserId} ORDER BY idempotency_key`,
+      ).toEqual(receiptsBefore);
+      const runtime = createNativeRestrictedPacketExportReader(url, policy, rotated);
+      if (!runtime) throw Error("MissingSyntheticRotatedExport");
+      try {
+        const result = await runtime.reader.readExportPacketValues(f.command);
+        expect(result.values).toEqual(new Map([["authorization.us_authorized", false]]));
+        Map.prototype.clear.call(result.values);
+        expect((commands.at(-1) as DecryptCommand).input.KeyId).toBe(encryptionKeyArn);
+      } finally {
+        await runtime.close();
+      }
+      const written = await store.createPacket({
+        ...f.originalCommand,
+        expectedRevision: replay.view.application.revision,
+        idempotencyKey: uuidv7(),
+      });
+      const [receipt] =
+        await sql`SELECT request_key_arn FROM applications.command_receipts WHERE owner_user_id = ${f.command.ownerUserId} AND idempotency_key <> ${f.originalCommand.idempotencyKey} ORDER BY created_at DESC LIMIT 1`;
+      expect(receipt?.request_key_arn).toBe(nextFingerprintKeyArn);
+      const binding = written.view.currentPacket?.restrictedValues;
+      if (!binding) throw Error("MissingSyntheticRotatedBinding");
+      const [value] =
+        await sql`SELECT encryption_key_arn FROM applications_restricted.packet_values WHERE id = ${binding.id}`;
+      expect(value?.encryption_key_arn).toBe(nextEncryptionKeyArn);
+      const removed = restrictedPacketWriterFromEnvironment({
+        ...rotated,
+        RESTRICTED_PACKET_HISTORICAL_KEYS_JSON: "[]",
+      });
+      if (!removed) throw Error("MissingSyntheticRemovedHistory");
+      const closedStore = new PostgresApplicationStore(sql, undefined, {
+        definitions: defaultFieldDefinitions(),
+        restrictedPackets: removed,
+      });
+      const calls = commands.length;
+      await expect(closedStore.createPacket(f.originalCommand)).rejects.toThrow();
+      expect(commands.length).toBe(calls);
+      expect(
+        await sql`SELECT * FROM applications.command_receipts WHERE owner_user_id = ${f.command.ownerUserId} AND idempotency_key = ${f.originalCommand.idempotencyKey}`,
+      ).toEqual(
+        receiptsBefore.filter((row) => row.idempotency_key === f.originalCommand.idempotencyKey),
+      );
     });
     it("refuses foreign authority and withdrawn export configuration before KMS", async () => {
       const f = await fixture();

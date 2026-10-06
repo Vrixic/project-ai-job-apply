@@ -395,6 +395,7 @@ export interface ApplicationStoreOptions {
   restrictedPackets?: {
     cipher: RestrictedPacketCipher;
     fingerprintKeyArn: string;
+    historicalFingerprintKeyArns?: readonly string[];
     enabled: () => boolean;
   };
   definitions: ReadonlyMap<string, FieldDefinition>;
@@ -425,7 +426,12 @@ export class PostgresApplicationStore {
       [...options.definitions].map(([key, definition]) => [key, structuredClone(definition)]),
     );
     this.restrictedPackets = options.restrictedPackets
-      ? Object.freeze({ ...options.restrictedPackets })
+      ? Object.freeze({
+          ...options.restrictedPackets,
+          historicalFingerprintKeyArns: Object.freeze([
+            ...(options.restrictedPackets.historicalFingerprintKeyArns ?? []),
+          ]),
+        })
       : undefined;
     this.restrictedProtection = this.restrictedPackets
       ? createRestrictedPacketProtection({
@@ -457,6 +463,14 @@ export class PostgresApplicationStore {
     });
   }
 
+  private permittedFingerprintKey(key: string | null): boolean {
+    const { configured } = this.requireRestrictedProtection();
+    return (
+      key === configured.fingerprintKeyArn ||
+      (typeof key === "string" && (configured.historicalFingerprintKeyArns ?? []).includes(key))
+    );
+  }
+
   /** Authorize in a completed owner read before crypto; never retain SQL locks across KMS. */
   private async protectedRequestHash(
     command: {
@@ -479,16 +493,19 @@ export class PostgresApplicationStore {
     if (prior && prior.operation !== operation) throw new ApplicationIdempotencyConflictError();
     if (
       prior &&
-      (prior.scheme !== "kms-hmac-sha256.v1" || prior.key !== configured.fingerprintKeyArn)
+      (prior.scheme !== "kms-hmac-sha256.v1" || !this.permittedFingerprintKey(prior.key))
     )
       throw new RestrictedPacketStoreUnavailableError();
     try {
-      const hash = await configured.cipher.fingerprint({
-        ownerUserId: command.ownerUserId,
-        applicationId: command.applicationId,
-        operation,
-        requestSha256: canonicalHash(request),
-      });
+      const hash = await configured.cipher.fingerprint(
+        {
+          ownerUserId: command.ownerUserId,
+          applicationId: command.applicationId,
+          operation,
+          requestSha256: canonicalHash(request),
+        },
+        prior?.key ?? configured.fingerprintKeyArn,
+      );
       this.requireRestrictedProtection();
       if (!/^[a-f0-9]{64}$/u.test(hash)) throw new RestrictedPacketStoreUnavailableError();
       return hash;
@@ -2472,10 +2489,9 @@ export class PostgresApplicationStore {
     if (!row) return null;
     if (row.operation !== operation) throw new ApplicationIdempotencyConflictError();
     if (operation === "create_packet" || operation === "queue_preparation") {
-      const { configured } = this.requireRestrictedProtection();
       if (
         row.request_hash_scheme !== "kms-hmac-sha256.v1" ||
-        row.request_key_arn !== configured.fingerprintKeyArn
+        !this.permittedFingerprintKey(row.request_key_arn)
       )
         throw new RestrictedPacketStoreUnavailableError();
     }

@@ -636,11 +636,59 @@ not live KMS/managed identity/provider/ATS, actual IAM/SQL least privilege, depl
 The prior clean full verifier is on 61b2719f; it does not certify these later changes. Historical-key
 composition/retention and a fresh clean full verifier remain whole-slice requirements before review.
 
+## Bounded historical runtime key authority
+
+The private KMS factory now accepts at most eight explicitly configured historical encryption/MAC
+pairs, in addition to the active pair. Every ARN is exact, distinct across both purposes, and in
+the active account/region. Aliases, foreign authority, duplicates, sparse/accessor arrays and
+unknown fields refuse before transport. It snapshots the trusted list; records cannot add keys.
+Encryption/data-key generation always uses the active encryption key. Decryption pins the exact
+original envelope key and verifies the exact KMS reply. MAC replay pins the original receipt key;
+new command receipts retain the active key. Missing/unsupported original scheme or key still
+refuses without a replacement MAC, receipt rewrite or encryption. SQL locks remain outside KMS.
+
+The writer/export bootstraps capture `RESTRICTED_PACKET_HISTORICAL_KEYS_JSON` as canonical JSON
+(maximum 4,096 characters) and reject any later change/withdrawal alongside the existing switch
+and active-ARN checks. Omission means no history; `.env.example` sets `[]`. The list contains closed
+objects with `encryptionKeyArn` and `fingerprintKeyArn`, never credentials or candidate values.
+The private export cipher remains read-only across active and historical keys. This changes no
+public/shared schema, migration, packet commitment, original ciphertext, or production settings.
+
+Seventeen added unit cases pass: Applications now has 377 passing units. The actual PostgreSQL
+runtime fixture now passes three cases with only KMS SDK transport simulated. Its rotation case
+preserves all original receipt rows exactly, replays with one original-key MAC and no encryption,
+exports the original false value under the original encryption key, writes a new packet with the
+active keys, and refuses original replay without KMS after historical authority is removed.
+Logs: `.tmp/d3-packet-history-unit.log`, `.tmp/d3-packet-history-sql.log`.
+All three affected builds pass. Gateway passes 318 units (85 SQL/opt-in skips); Workflow passes
+1,613 units (60 SQL/opt-in skips, including the three-case runtime fixture separately run above).
+An initial concurrently loaded Workflow run timed out during entrypoint import and subsequently
+observed a late effect in the next case. The isolated 44-case entrypoint run and complete serial
+Workflow rerun pass without changing runtime behavior or test timeouts. Logs:
+`.tmp/d3-packet-history-workflow-entrypoint.log`, `.tmp/d3-packet-history-workflow-unit-rerun.log`,
+`.tmp/d3-packet-history-gateway-unit.log`. Five emitted native/provider isolation cases pass
+(`.tmp/d3-packet-history-isolation.log`), scoped Biome reports no findings, and diff whitespace is
+clean. The latest full maintained verifier remains on 61b2719f, not this newer source.
+
+Release/retention requirements remain operator/accountable gates: retain exact old encryption keys
+for live historical packet/export records and supported restored copies, and old MAC keys for
+original supported receipts/replay. Deploy compatible readers and bounded historical authority
+before rotating writers. Do not remove/disable/schedule deletion of a referenced key merely because
+new writes use another key; inventory and approved backup/deletion windows must justify retirement.
+There is no automatic discovery, re-encryption, rehash, key deletion, IAM expansion or retention
+approval. Withdrawal safely makes unsupported reads/replay unavailable, and never deletes evidence.
+Live KMS key type/grants/retirement, least privilege, real legacy inventory and restoration across
+rotated keys still need independent release evidence. Reuse and both runtime switches remain false.
+
+The exact owned tmpfs fixture `2976c60c6231f20d37655405af83f4510323f214e656faa2b6dabee7d6551691`
+was checked against ID/name/label/tmpfs/no mounts and removed. Shared volume inventories are equal;
+Docker Desktop stopped and WSL has no running distributions. No deployment or activation occurred.
+
 ## Next work
 
-Finish bounded historical-key authority and retention/replay behavior for the private runtime
-compositions, retaining exact original record authority and native/model isolation. Verify the
-current entrypoint artifacts and rerun clean full verification before whole-slice review. Production
+Verify native/model isolation and current entrypoint artifacts after the bounded historical-key
+composition, extend rotated-key restore/replay evidence as required, and rerun clean full
+verification before whole-slice review. Production
 SQL/KMS role grants, real legacy inventory/disposition, accountable/client/ATS/deployed acceptance
 remain separate gates. Never silently purge or rehash approved/ambiguous legacy evidence. Keep
 reuse and both private composition switches disabled throughout.

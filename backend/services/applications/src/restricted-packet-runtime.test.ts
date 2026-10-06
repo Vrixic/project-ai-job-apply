@@ -136,3 +136,36 @@ it("production rejects injected transport", () => {
     configurationRejected,
   );
 });
+it.each([
+  "",
+  "null",
+  "{}",
+  " [ ] ",
+  '[{"encryptionKeyArn":"x","encryptionKeyArn":"y","fingerprintKeyArn":"z"}]',
+  "x".repeat(4097),
+])("refuses malformed or ambiguous history %s", (history) => {
+  expect(() =>
+    restrictedPacketWriterFromEnvironment({
+      ...environment(),
+      RESTRICTED_PACKET_HISTORICAL_KEYS_JSON: history,
+    }),
+  ).toThrow(configurationRejected);
+});
+it("withholds historical authority when the captured history changes", async () => {
+  const env = { ...environment(), RESTRICTED_PACKET_HISTORICAL_KEYS_JSON: "[]" };
+  const send = vi.fn();
+  const protection = restrictedPacketWriterFromEnvironment(env, { send });
+  if (!protection) throw Error("MissingSyntheticProtection");
+  expect(Object.isFrozen(protection.historicalFingerprintKeyArns)).toBe(true);
+  Reflect.deleteProperty(env, "RESTRICTED_PACKET_HISTORICAL_KEYS_JSON");
+  expect(protection.enabled()).toBe(false);
+  await expect(
+    protection.cipher.fingerprint({
+      ownerUserId: scope.ownerUserId,
+      applicationId: scope.applicationId,
+      operation: "create_packet",
+      requestSha256: "b".repeat(64),
+    }),
+  ).rejects.toThrow("RestrictedPacketProtectionUnavailable");
+  expect(send).not.toHaveBeenCalled();
+});

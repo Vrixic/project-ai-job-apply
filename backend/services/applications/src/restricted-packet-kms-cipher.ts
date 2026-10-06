@@ -73,6 +73,7 @@ function bytes(value: unknown, minimum: number, maximum = minimum): value is Uin
 export function createRestrictedPacketKmsCipher(options: {
   encryptionKeyArn: string;
   fingerprintKeyArn: string;
+  historicalKeys?: readonly { encryptionKeyArn: string; fingerprintKeyArn: string }[];
   enabled?: () => boolean;
   readOnly?: true;
   testClient?: TestClient;
@@ -93,6 +94,37 @@ export function createRestrictedPacketKmsCipher(options: {
   )
     throw unavailable();
   const region = encryption[1] as string;
+  const encryptionKeys = new Set([encryptionKeyArn]);
+  const fingerprintKeys = new Set([fingerprintKeyArn]);
+  const historicalKeys = options.historicalKeys ?? [];
+  if (
+    !Array.isArray(historicalKeys) ||
+    Object.getPrototypeOf(historicalKeys) !== Array.prototype ||
+    historicalKeys.length > 8 ||
+    Reflect.ownKeys(historicalKeys).length !== historicalKeys.length + 1
+  )
+    throw unavailable();
+  for (let i = 0; i < historicalKeys.length; i++) {
+    const descriptor = Object.getOwnPropertyDescriptor(historicalKeys, String(i));
+    if (!descriptor?.enumerable || !("value" in descriptor)) throw unavailable();
+    const pair = descriptor.value;
+    closed(pair, ["encryptionKeyArn", "fingerprintKeyArn"]);
+    for (const name of ["encryptionKeyArn", "fingerprintKeyArn"] as const) {
+      const arn = pair[name];
+      if (typeof arn !== "string") throw unavailable();
+      const match = KEY.exec(arn);
+      if (
+        !match ||
+        !UUID.test(match[3] ?? "") ||
+        match[1] !== encryption[1] ||
+        match[2] !== encryption[2] ||
+        encryptionKeys.has(arn) ||
+        fingerprintKeys.has(arn)
+      )
+        throw unavailable();
+      (name === "encryptionKeyArn" ? encryptionKeys : fingerprintKeys).add(arn);
+    }
+  }
   const enabled = options.enabled ?? (() => false);
   const testClient = options.testClient;
   const readOnly = options.readOnly === true;
@@ -215,7 +247,7 @@ export function createRestrictedPacketKmsCipher(options: {
         ]);
         if (
           envelope.schemaVersion !== 1 ||
-          envelope.encryptionKeyArn !== encryptionKeyArn ||
+          !encryptionKeys.has(envelope.encryptionKeyArn) ||
           !bytes(envelope.encryptedDataKey, 1, 6144) ||
           !bytes(envelope.iv, 12) ||
           !bytes(envelope.ciphertext, 1, MAX_BYTES) ||
@@ -226,7 +258,7 @@ export function createRestrictedPacketKmsCipher(options: {
         return await guarded(async (sender, abortSignal) => {
           const output = await sender.send(
             new DecryptCommand({
-              KeyId: encryptionKeyArn,
+              KeyId: fixed.encryptionKeyArn,
               CiphertextBlob: fixed.encryptedDataKey,
               EncryptionAlgorithm: "SYMMETRIC_DEFAULT",
               EncryptionContext: context(scope),
@@ -237,7 +269,7 @@ export function createRestrictedPacketKmsCipher(options: {
           const reply = output as Record<string, unknown>;
           if (reply.Plaintext instanceof Uint8Array) key = reply.Plaintext;
           if (
-            reply.KeyId !== encryptionKeyArn ||
+            reply.KeyId !== fixed.encryptionKeyArn ||
             reply.EncryptionAlgorithm !== "SYMMETRIC_DEFAULT" ||
             !bytes(key, 32)
           )
@@ -261,10 +293,15 @@ export function createRestrictedPacketKmsCipher(options: {
       }
     },
 
-    async fingerprint(input: RestrictedPacketFingerprint): Promise<string> {
+    async fingerprint(
+      input: RestrictedPacketFingerprint,
+      originalKeyArn?: string,
+    ): Promise<string> {
       try {
         if (readOnly) throw unavailable();
         permitted();
+        const selectedKey = originalKeyArn ?? fingerprintKeyArn;
+        if (!fingerprintKeys.has(selectedKey)) throw unavailable();
         closed(input, ["ownerUserId", "applicationId", "operation", "requestSha256"]);
         if (
           ![input.ownerUserId, input.applicationId].every(
@@ -288,7 +325,7 @@ export function createRestrictedPacketKmsCipher(options: {
         return await guarded(async (sender, abortSignal) => {
           const output = await sender.send(
             new GenerateMacCommand({
-              KeyId: fingerprintKeyArn,
+              KeyId: selectedKey,
               MacAlgorithm: "HMAC_SHA_256",
               Message: message,
             }),
@@ -297,7 +334,7 @@ export function createRestrictedPacketKmsCipher(options: {
           if (!output || typeof output !== "object") throw unavailable();
           const reply = output as Record<string, unknown>;
           if (
-            reply.KeyId !== fingerprintKeyArn ||
+            reply.KeyId !== selectedKey ||
             reply.MacAlgorithm !== "HMAC_SHA_256" ||
             !bytes(reply.Mac, 32)
           )

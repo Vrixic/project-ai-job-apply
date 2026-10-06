@@ -400,3 +400,116 @@ it("does not retry an actual signed KMS SDK failure or expose its body", async (
     sdk.destroy();
   }
 });
+const oldEncryptionKeyArn = encryptionKeyArn.replace(/1$/u, "3");
+const oldFingerprintKeyArn = fingerprintKeyArn.replace(/2$/u, "4");
+const history = [
+  { encryptionKeyArn: oldEncryptionKeyArn, fingerprintKeyArn: oldFingerprintKeyArn },
+];
+it("retains original decrypt/MAC authority while new writes use only active keys", async () => {
+  const send = vi.fn<Client["send"]>(async (command) => {
+    if (command instanceof GenerateDataKeyCommand)
+      return {
+        KeyId: command.input.KeyId,
+        Plaintext: Buffer.alloc(32, 7),
+        CiphertextBlob: Buffer.from([1, 2, 3]),
+      };
+    if (command instanceof DecryptCommand)
+      return {
+        KeyId: command.input.KeyId,
+        EncryptionAlgorithm: "SYMMETRIC_DEFAULT",
+        Plaintext: Buffer.alloc(32, 7),
+      };
+    if (command instanceof GenerateMacCommand)
+      return {
+        KeyId: command.input.KeyId,
+        MacAlgorithm: "HMAC_SHA_256",
+        Mac: createHmac("sha256", command.input.KeyId as string)
+          .update(command.input.Message as Uint8Array)
+          .digest(),
+      };
+    throw Error("UnexpectedSyntheticCommand");
+  });
+  const old = createRestrictedPacketKmsCipher({
+    encryptionKeyArn: oldEncryptionKeyArn,
+    fingerprintKeyArn: oldFingerprintKeyArn,
+    enabled: () => true,
+    testClient: { send },
+  });
+  const envelope = await old.encrypt(scope, original);
+  const mac = await old.fingerprint(request);
+  const rotated = createRestrictedPacketKmsCipher({
+    encryptionKeyArn,
+    fingerprintKeyArn,
+    historicalKeys: history,
+    enabled: () => true,
+    testClient: { send },
+  });
+  const chosen = await rotated.decrypt(scope, envelope);
+  expect(Buffer.from(chosen)).toEqual(original);
+  chosen.fill(0);
+  expect(await rotated.fingerprint(request, oldFingerprintKeyArn)).toBe(mac);
+  expect(await rotated.fingerprint(request)).not.toBe(mac);
+  expect((await rotated.encrypt(scope, original)).encryptionKeyArn).toBe(encryptionKeyArn);
+  const before = send.mock.calls.length;
+  await expect(
+    rotated.decrypt(scope, {
+      ...envelope,
+      encryptionKeyArn: oldEncryptionKeyArn.replace(/3$/u, "5"),
+    }),
+  ).rejects.toThrow(unavailable);
+  await expect(
+    rotated.fingerprint(request, oldFingerprintKeyArn.replace(/4$/u, "6")),
+  ).rejects.toThrow(unavailable);
+  expect(send.mock.calls.length).toBe(before);
+  const removed = createRestrictedPacketKmsCipher({
+    encryptionKeyArn,
+    fingerprintKeyArn,
+    enabled: () => true,
+    testClient: { send },
+  });
+  await expect(removed.decrypt(scope, envelope)).rejects.toThrow(unavailable);
+  await expect(removed.fingerprint(request, oldFingerprintKeyArn)).rejects.toThrow(unavailable);
+  expect(send.mock.calls.length).toBe(before);
+});
+it.each([
+  [...history, ...history],
+  [{ encryptionKeyArn, fingerprintKeyArn: oldFingerprintKeyArn }],
+  [{ encryptionKeyArn: oldEncryptionKeyArn, fingerprintKeyArn: oldEncryptionKeyArn }],
+  [
+    {
+      encryptionKeyArn: oldEncryptionKeyArn.replace("us-east-2", "us-west-2"),
+      fingerprintKeyArn: oldFingerprintKeyArn,
+    },
+  ],
+  [
+    {
+      encryptionKeyArn: oldEncryptionKeyArn,
+      fingerprintKeyArn: oldFingerprintKeyArn.replace("123456789012", "123456789013"),
+    },
+  ],
+  [
+    {
+      encryptionKeyArn: "arn:aws:kms:us-east-2:123456789012:alias/old",
+      fingerprintKeyArn: oldFingerprintKeyArn,
+    },
+  ],
+  Array(9).fill(history[0]),
+  [{ ...history[0], extra: true }],
+])("refuses invalid historical authority %j", (historicalKeys) => {
+  expect(() => setup({ historicalKeys })).toThrow(unavailable);
+});
+it("snapshots trusted history without invoking getters or accepting sparse lists", async () => {
+  const getter = vi.fn(() => oldEncryptionKeyArn);
+  const pair = { encryptionKeyArn: oldEncryptionKeyArn, fingerprintKeyArn: oldFingerprintKeyArn };
+  Object.defineProperty(pair, "encryptionKeyArn", { enumerable: true, get: getter });
+  expect(() => setup({ historicalKeys: [pair] })).toThrow(unavailable);
+  expect(getter).not.toHaveBeenCalled();
+  expect(() => setup({ historicalKeys: Array(1) })).toThrow(unavailable);
+  const mutable = structuredClone(history);
+  const { cipher } = setup({ historicalKeys: mutable });
+  const first = mutable[0];
+  if (!first) throw Error("MissingSyntheticHistory");
+  first.fingerprintKeyArn = oldFingerprintKeyArn.replace(/4$/u, "6");
+  // Original selected authority remains pinned; the controlled reply deliberately uses the active key.
+  await expect(cipher.fingerprint(request, oldFingerprintKeyArn)).rejects.toThrow(unavailable);
+});

@@ -26,19 +26,31 @@ function configuration(
     const encryptionKeyArn = value(environment, "RESTRICTED_PACKET_ENCRYPTION_KEY_ARN");
     const fingerprintKeyArn = value(environment, "RESTRICTED_PACKET_FINGERPRINT_KEY_ARN");
     if (!encryptionKeyArn || !fingerprintKeyArn) throw unavailable();
+    const history = value(environment, "RESTRICTED_PACKET_HISTORICAL_KEYS_JSON");
+    if (history !== undefined && (history.length > 4096 || history.length === 0))
+      throw unavailable();
+    const historicalKeys = history === undefined ? [] : JSON.parse(history);
+    // Canonical JSON refuses duplicate keys and ambiguous configuration spellings.
+    if (history !== undefined && JSON.stringify(historicalKeys) !== history) throw unavailable();
     const enabled = () =>
       value(environment, flag) === "true" &&
       value(environment, "RESTRICTED_PACKET_ENCRYPTION_KEY_ARN") === encryptionKeyArn &&
-      value(environment, "RESTRICTED_PACKET_FINGERPRINT_KEY_ARN") === fingerprintKeyArn;
-    return Object.freeze({
-      cipher: createRestrictedPacketKmsCipher({
-        encryptionKeyArn,
-        fingerprintKeyArn,
-        enabled,
-        ...(readOnly ? { readOnly: true as const } : {}),
-        ...(testClient ? { testClient } : {}),
-      }),
+      value(environment, "RESTRICTED_PACKET_FINGERPRINT_KEY_ARN") === fingerprintKeyArn &&
+      value(environment, "RESTRICTED_PACKET_HISTORICAL_KEYS_JSON") === history;
+    const cipher = createRestrictedPacketKmsCipher({
+      encryptionKeyArn,
       fingerprintKeyArn,
+      historicalKeys,
+      enabled,
+      ...(readOnly ? { readOnly: true as const } : {}),
+      ...(testClient ? { testClient } : {}),
+    });
+    return Object.freeze({
+      cipher,
+      fingerprintKeyArn,
+      historicalFingerprintKeyArns: Object.freeze(
+        historicalKeys.map((pair: { fingerprintKeyArn: string }) => pair.fingerprintKeyArn),
+      ) as readonly string[],
       enabled,
     }) satisfies NonNullable<ApplicationStoreOptions["restrictedPackets"]>;
   } catch {

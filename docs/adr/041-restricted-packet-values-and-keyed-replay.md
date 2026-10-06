@@ -33,8 +33,10 @@ protection/value-free metadata context. Persist no plaintext request digest. Cre
 preparation replay require a distinct KMS HMAC authority before SQL locks; retain the exact
 original algorithm/key authority for supported historical receipts. Unsupported keys or missing
 capabilities fail unavailable rather than changing historical replay or approval semantics.
-The current prototype pins one exact encryption/MAC key pair; historical-key composition and
-rotation acceptance remain unfinished.
+The private runtime pins an active exact encryption/MAC pair and up to eight operator-configured
+historical pairs. New writes use active keys; original envelopes/receipts select only explicitly
+admitted original keys. Captured configuration changes withdraw authority. Live rotation, grants,
+key retention/retirement and rotated-key restore acceptance remain unfinished.
 
 Encrypt a detached classified command before SQL admission. Synchronous binding checks the exact
 owning prepare result against the same original fields/context before metadata and ciphertext are
@@ -88,3 +90,10 @@ clean full verifier is required after these changes.
 
 This proposal refines the technical implementation of ADR-010. It does not supply legal/privacy,
 security, retention, least-privilege/IAM/key, client final-review or enabled-ATS acceptance.
+
+Bounded historical key composition now has offline crypto and actual PostgreSQL runtime evidence:
+original receipt rows and chosen values survive an explicit rotation without rewriting; new writes
+use active keys; removal refuses original replay before KMS. Old encryption keys must remain for
+supported historical/export/restore records and old MAC keys for supported original receipts.
+Reader-first rollout and accountable inventory/backup-window justification must precede retirement;
+source support does not authorize key deletion or certify production key lifecycle.

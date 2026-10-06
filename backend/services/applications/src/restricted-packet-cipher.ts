@@ -32,7 +32,8 @@ export interface RestrictedPacketCipher {
   encrypt(scope: RestrictedPacketScope, plaintext: Uint8Array): Promise<RestrictedPacketEnvelope>;
   /** Caller owns the returned bytes and must clear them after its immediate decoder/consumer. */
   decrypt(scope: RestrictedPacketScope, envelope: RestrictedPacketEnvelope): Promise<Uint8Array>;
-  fingerprint(input: RestrictedPacketFingerprint): Promise<string>;
+  /** Replay may select only an explicitly configured original MAC key; omission uses the active key. */
+  fingerprint(input: RestrictedPacketFingerprint, originalKeyArn?: string): Promise<string>;
 }
 
 /** Value-free immutable identity carried by private packet metadata, never a plaintext digest. */

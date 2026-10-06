@@ -1315,3 +1315,12 @@ Docker/WSL stopped. Historical-key authority and a new clean full verifier remai
 key/role/legacy disposition and accountable acceptance stay separate. No deployment, activation,
 publication or D1/D3 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
 CI/CD deferred until production launch.
+
+
+2026-10-05 D3-077 private bounded historical-key composition passes 377 Applications units and three
+actual PostgreSQL runtime cases (KMS SDK transport simulated). Original key/receipt/value authority
+survives explicit rotation; new writes use active keys and unsupported history refuses before KMS.
+Owned tmpfs fixture removed, shared volumes preserved, Docker/WSL stopped. All three builds, 318 Gateway/1,613 Workflow units
+and five emitted isolation cases pass; current entrypoint artifacts and fresh full verifier remain; release/retention/accountable/deployed gates
+remain. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). No activation or D1/D3 completion;
+CI/CD remains deferred until production launch.
