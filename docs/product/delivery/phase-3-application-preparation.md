@@ -1487,3 +1487,12 @@ artifacts build twice with ten identical files and independent source/archive/bu
 (launch 24/event 21 components), unpublished. [Evidence](evidence/d3-native-task-event-recovery-2026-10-06.md).
 No frontend/SQL schema change; managed event/IAM/retry/DLQ/original-version/task/client/ATS/
 provider/accountable gates remain. D1/D3 stay In progress; no cloud activation or authored main merge.
+
+2026-10-06 D3-079 original native task recovery is reviewable in draft
+[PR #564](https://github.com/Vrixic/project-ai-job-apply/pull/564) against main `88f8ae84`.
+It brings the reviewed #563 source that missed main plus fully verified event recovery;
+implementation `0ee4c377` and exact combined tree `82ea96c9` are unchanged by later delivery
+records. One authored draft PR is open. Managed event/routing/IAM/retry/DLQ/native task and
+client/ATS/provider/accountable gates remain; D1/D3 stay In progress. No authored main merge,
+artifact publication, deployment, activation or hosted CI/CD work. Docker/WSL remain stopped.
+Owner revoked PC shutdown; shutdown was canceled and no future shutdown is scheduled.

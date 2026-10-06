@@ -90,3 +90,7 @@ reviewed sender/receiver IAM and deployed task conformance are unfinished. This 
 create a rule, queue, permission, public route or deployment, and does not guarantee event delivery.
 The native image/private adapters/provider/content/client/ATS/accountable gates remain; ADR-040
 stays Proposed and activation remains off. Hosted CI/CD stays owner-deferred until production launch.
+
+Review: draft [PR #564](https://github.com/Vrixic/project-ai-job-apply/pull/564) targets main
+and supplies reviewed launch control missing from main plus this event continuation.
+Later delivery-only records leave the verified source/artifact evidence unchanged.
