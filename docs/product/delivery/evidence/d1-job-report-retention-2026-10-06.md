@@ -43,13 +43,20 @@ not authorized by this source change.
   backfill; the unlinked/old-closed reports expire; recent-closed/open reports remain; all four
   moderation totals remain one. A second migration pass succeeds. `.tmp/d1-retention-upgrade-final.log`.
 - A local logical dump/restore matches seven owners, 12 schemas, 90 relations and 67 migration
-  checksums using the maintained read-only verifier. Restored reports/links/totals match the source.
+  checksums using the maintained read-only verifier. Restored report/link/total counts match the source.
   `.tmp/d1-retention-restore-final.log`. This is local logical restore evidence, not deployed PITR
   or candidate-deletion-ledger replay acceptance.
 - All 50 restore-verifier units pass, preserving historical boundaries rather than treating old
   releases as current evidence. `.tmp/d1-retention-restore-units-final.log`.
 - Two contract-generation passes leave generated contracts unchanged. Disabled maintenance refuses
   before opening a database connection. Full repository verification remains pending.
+
+The first full run at `85d8ce1e` passes 38 typecheck tasks and 38 of 39 workspace test tasks,
+then stops on the restore-contract source-byte assertion. The TypeScript/PowerShell replay
+contracts still pin the prior manifest hash. Both exact pins and the generated fixture's dependent
+configuration/inspection digests now bind the new manifest, without a fallback or relaxed check.
+All 207 focused TypeScript restore-contract tests pass; cross-runtime guards and the full
+corrected-source rerun are pending. The Jobs migration/lifecycle SQL is unchanged by this fix.
 
 PostgreSQL 16.6 runs only in an owned temporary local Docker fixture with tmpfs storage; all data
 is generated synthetic. The first focused attempt exposed an ambiguous SQL column and a missing
