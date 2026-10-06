@@ -21,6 +21,17 @@ release/recovery requirement. Keep staging dormant between bounded acceptance wi
 
 ## Current implementation checkpoint
 
+2026-10-06 working-flow priority: actual development Gateway is unweighted version `86`,
+release `c6ac1bef2f12e2ba7f18f45829503994e4eaf52d603f5cd333c67322806010a5`; both health endpoints
+return 200 and unauthenticated owner routes refuse. Isolated local web now connects to that API
+instead of an absent localhost:4000 service. Owner regular-Chrome managed sign-in and unfiltered
+job search succeed; sanitized runtime observations confirm jobs and saved-jobs search 200.
+The new process-only development launcher passes configuration/live-health checks without changing
+identity settings. Profile/facts reads pass, saving returns 201 and owner reload confirms durability. Preference
+write/read, resume import and remaining flow/release gates stay open.
+[Evidence](evidence/d1-working-development-flow-2026-10-06.md). No frontend source/cloud state change,
+phase completion or CI/CD work; Docker/WSL stay stopped and PC stays on.
+
 2026-10-04 D3-072 exact clean source 22a4568e passes the maintained verifier: 38 typecheck
 tasks, 39 test tasks and 23 builds; 1,174 Documents/1,588 Workflow units and unchanged lint.
 Seven SQL cases and two unpublished core artifacts pass integrity/actual activity refusal checks.

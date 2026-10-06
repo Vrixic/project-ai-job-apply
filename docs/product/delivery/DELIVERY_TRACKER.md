@@ -1,5 +1,13 @@
 # Delivery Tracker
 
+2026-10-06 D1 working-flow checkpoint: live development Gateway version 86 passes health and
+unauthenticated refusal checks. Isolated local web connects to the live API; owner regular-Chrome
+managed sign-in and unfiltered search succeed, with jobs/saved-jobs search 200 observed locally.
+Profile/facts reads and save 201 pass; owner reload confirms saved-job durability. The actual
+process-only launcher starts successfully. Preference writes, resume import and remaining release
+acceptance are still open. [Evidence](evidence/d1-working-development-flow-2026-10-06.md).
+D1/D3 remain In progress; backend-only, no cloud state change or hosted CI/CD, PC stays on.
+
 Last updated: 2026-10-05
 Program status: In progress
 Program start: 2026-07-27

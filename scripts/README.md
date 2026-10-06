@@ -52,6 +52,12 @@ both AWS environments accepted the steady-state serverless runtime.
   `lib/terraform-toolchain.ps1`; current plans/applies require 1.16.2 and an exact encrypted,
   S3-locking backend. Excluded GitHub Actions retain their historical pin and are not the current
   cloud-planning path. `pnpm test:terraform-toolchain` runs the offline regression boundary.
+- `start-development-web.ps1 -ApiOrigin <verified-development-api-origin>` — Runs local candidate
+  web against an explicit healthy Gateway using existing ignored Auth0 settings. The API origin
+  changes only in the child process; identity settings stay intact. `-CheckOnly` verifies local
+  configuration and matching live/ready releases without starting web. No deployment or Docker
+  start is performed. Use regular Chrome for Google sign-in; keep the configured localhost
+  callback and port aligned.
 - `start-local.ps1` — Starts PostgreSQL, Redis, and the OpenTelemetry collector. Workflow execution
   uses the local Lambda durable adapter; no external workflow service is required.
 - `configure-auth0-local.ps1` — Writes ignored local Auth0 web settings with compatibility-safe
