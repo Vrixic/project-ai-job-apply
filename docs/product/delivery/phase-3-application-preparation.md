@@ -11,7 +11,8 @@
 
 2026-10-06 D3-079 connects original native task startup: own ECS metadata -> authenticated stored
 approval -> trusted ports -> kernel/content runtime. All 72 focused, 27 Linux and five emitted
-checks pass; full clean-source verification is pending. [Evidence](evidence/d3-native-task-bootstrap-2026-10-06.md).
+checks pass; full clean-source verification passes at `0565ecda` (38 typecheck/39 test/23 build
+tasks and unchanged lint). [Evidence](evidence/d3-native-task-bootstrap-2026-10-06.md).
 Executable image/real image configuration/managed/client/provider acceptance remain. D1/D3 stay
 In progress; no deployment, activation, third PR or CI/CD work. Docker/WSL stopped; PC on.
 

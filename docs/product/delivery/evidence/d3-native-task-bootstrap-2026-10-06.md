@@ -50,10 +50,20 @@ The bootstrap has no SQL, object storage, issuer, ECS control or candidate-suppl
   an older generation fixture after their assertions; the dispatcher now exits after return.
   No production guard, deadline or expectation of kernel retirement was weakened.
 
-Full clean committed-source verification is pending. The maintained Linux verifier removes its
+Full clean committed-source verification passes at `0565ecdabc4ce726ac3b73f934a1153c3c149a28`:
+38 typecheck tasks, 39 test tasks, 23 builds, maintained operator/security/isolation/Compose/scope
+checks. The original verifier session exits zero and the tracked tree stays unchanged throughout.
+Lint remains zero errors, 15 warnings and 58 infos. Log: `.tmp/d3-native-task-bootstrap-full.log`.
+
+The maintained Linux verifier removes its
 owned container/staging; Docker Desktop and WSL are stopped, shared volumes retained and PC on.
 Public APIs/events, SQL migrations, dependency versions, infrastructure and frontend are unchanged.
 No deployment, activation, publication, third PR or main merge occurs; CI/CD remains deferred.
+
+The maintained local web launcher is restored against the unchanged live development API:
+home returns 200 and anonymous Resume 307 without following or retaining redirect values.
+No new signed-in acceptance is claimed. Only its two generated Next type imports are restored;
+frontend source is preserved. Source/evidence are prepared on `feat/d3-native-task-bootstrap`.
 
 The task factory still needs the executable image entrypoint and real image-owned provider/TLS/
 subject/kernel configuration. Managed IAM/routing, task/image conformance and actual candidate

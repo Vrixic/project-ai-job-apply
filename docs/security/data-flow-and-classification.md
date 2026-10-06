@@ -1,5 +1,14 @@
 # Data Flow and Classification
 
+2026-10-06 native task startup (source-only/default-off): original scalar launch environment
+-> fixed link-local ECS self/container/task metadata -> detached allocation/work binding
+-> signed owning admission -> original stored approval -> trusted image-owned ports -> kernel
+-> scoped owner evidence -> existing memory-only generation/render/HTTPS. Metadata is not caller
+authentication, image attestation, ongoing admission or death. The read-only startup wait cannot
+claim/renew work or admit candidate evidence before the kernel. No SQL/object/task-control path
+is added; executable image and real image-owned configuration/managed acceptance remain.
+[Evidence](../product/delivery/evidence/d3-native-task-bootstrap-2026-10-06.md).
+
 2026-10-06 private native bootstrap (source-only/default-off): authenticated original task request
 -> owning Applications active-candidate/preparation read -> stored approval/context scalars
 -> Documents original-work expiry/context check -> owning preparation recheck -> strict bound

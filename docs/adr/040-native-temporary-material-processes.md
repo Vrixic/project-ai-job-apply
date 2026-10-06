@@ -3,6 +3,13 @@
 Status: Proposed; default-off source and local kernel evidence only
 Date: 2026-10-05
 
+2026-10-06 startup source checkpoint: the private task factory binds ECS self metadata to original
+launch scalars, waits only for the original owning bind, reads stored approval over signed RPC
+and starts the kernel/content runtime after trusted ports/admission. Local Linux scenarios cover
+real rendering/HTTPS/retirement with synthetic AWS/owner/provider/identity ports. Executable image,
+real image-owned configuration and managed/client/provider acceptance remain; this proposal stays
+Proposed. [Evidence](../product/delivery/evidence/d3-native-task-bootstrap-2026-10-06.md).
+
 2026-10-06 original approval source checkpoint: the authenticated owner RPC reads the immutable
 Applications preparation's original approval/context and verifies Documents' exact work expiry.
 No renewal or work creation is exposed. Real local PostgreSQL and signed synthetic transport
