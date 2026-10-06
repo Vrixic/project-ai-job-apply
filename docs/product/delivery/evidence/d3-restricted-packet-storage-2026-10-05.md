@@ -2,7 +2,7 @@
 
 Status: In progress. Backend-only private WIP on isolated branch
 `feat/d3-restricted-packet-storage`, started from `2b6f59aa` and now rebased onto merged #559/main
-`18b6b2e2`. The backend slice is locally verified and prepared for draft source review; release and accountable gates remain open.
+`18b6b2e2`. The backend slice is locally verified and published for draft source review as [PR #561](https://github.com/Vrixic/project-ai-job-apply/pull/561); release and accountable gates remain open.
 Hosted CI/CD remains deferred until production launch. No feature is activated or deployed.
 
 ## Confirmed gap and required end state
@@ -880,7 +880,7 @@ and contains no KMS capability. Gateway and Profile activity carry the separatel
 These are local unpublished artifacts, not deployed acceptance. Actual PostgreSQL evidence above
 uses synthetic identity and simulated external transports. No actual UI, managed authentication,
 live KMS/provider/ATS, production least privilege or PITR verification is claimed. Owned fixtures
-are removed, shared volumes retained and Docker Desktop/WSL stopped. Source review can proceed;
+are removed, shared volumes retained and Docker Desktop/WSL stopped. Draft source review is open in PR #561;
 D3-077 and D1/D3 remain In progress. CI/CD remains owner-deferred until production launch.
 
 ## Next work
@@ -891,3 +891,11 @@ separate gates. Migration 0009 refuses incompatible legacy records; packet creat
 including ordinary fields, requires enabled protection and valid key authority. Plan and verify
 reader-first rollout before activation. Never silently purge or rehash approved/ambiguous legacy
 evidence. Keep reuse and both private composition switches disabled throughout.
+
+
+2026-10-05 D3-077 backend source opens as draft [PR #561](https://github.com/Vrixic/project-ai-job-apply/pull/561)
+on exact main 18b6b2e2. Verified executable source remains b5a7a2cf; subsequent commits contain only
+delivery/ADR evidence. No merge, artifact publication, deployment or activation. ADR-041 remains
+Proposed; saved-answer reuse and both private switches stay false. Review and all real legacy/key/
+role/retention/accountable/client/ATS/deployed gates remain. D1/D3 and D3-077 stay In progress;
+CI/CD remains owner-deferred until production launch.

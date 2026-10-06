@@ -3911,3 +3911,11 @@ delivery/ADR evidence follows the verified executable source. All release, real 
 retention/accountable/client/ATS/deployed gates remain; switches stay false. Docker/WSL stopped.
 [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). No cloud publication, deployment,
 activation or D1/D3 completion; CI/CD remains deferred until production launch.
+
+
+2026-10-05 D3-077 backend source opens as draft [PR #561](https://github.com/Vrixic/project-ai-job-apply/pull/561)
+on exact main 18b6b2e2. Verified executable source remains b5a7a2cf; subsequent commits contain only
+delivery/ADR evidence. No merge, artifact publication, deployment or activation. ADR-041 remains
+Proposed; saved-answer reuse and both private switches stay false. Review and all real legacy/key/
+role/retention/accountable/client/ATS/deployed gates remain. D1/D3 and D3-077 stay In progress;
+CI/CD remains owner-deferred until production launch.
