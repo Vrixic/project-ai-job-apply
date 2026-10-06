@@ -75,5 +75,10 @@ legacy inventory still requires accountable disposition before migration/activat
 production data, live KMS/provider, deployment or activation is claimed. Saved-answer reuse remains
 disabled. See [D3-077 evidence](../product/delivery/evidence/d3-restricted-packet-storage-2026-10-05.md).
 
+Clean `61b2719f` passes the full maintained verifier (38 typecheck tasks, 39 test tasks, 23 builds;
+unchanged lint and complete emitted isolation). Production Gateway/export packet authority
+composition is still absent and remains source work; this does not enable reuse or resolve real
+legacy disposition, key/role or accountable/deployed acceptance.
+
 This proposal refines the technical implementation of ADR-010. It does not supply legal/privacy,
 security, retention, least-privilege/IAM/key, client final-review or enabled-ATS acceptance.

@@ -565,13 +565,36 @@ and permission/source-binding guards stay intact. The complete focused migration
 baseline, schema-8 two-receipt adversarial and schema-7 round-trip tests pass afterward.
 Log: `.tmp/d3-restricted-migration-operator.log`. A new clean full-verifier run follows this commit.
 
+## Full maintained verification on clean committed source
+
+The full `scripts/verify-phase0.ps1` rerun passes on frozen clean
+`61b2719ff148600f7cded3c8217a00b8a8e766d7` with terminal exit 0. Contract generation,
+repository skill/infrastructure/operator/security guards, formatting, all 38 typecheck tasks,
+39 test tasks, 23 builds, emitted native/provider/export/retirement isolation, Compose configuration
+and product-scope checks pass. Lint retains the existing 0 errors, 15 warnings and 58 informational
+notes. HEAD and the worktree remained unchanged for the whole run. Log:
+`.tmp/d3-restricted-packet-full-verification-rerun.log`. The preceding failed attempt remains recorded
+above; this passing rerun supersedes only that stale current-marker assertion failure.
+
+This is local repository verification. Opt-in PostgreSQL behavior remains evidenced by its separate
+actual SQL logs, and synthetic OAuth/KMS/provider transport does not become live identity, KMS,
+provider, ATS, UI or deployment evidence. Docker/WSL remained stopped after the owned SQL fixture
+was removed. No image/artifact is published, no cloud state changes and no feature activation.
+
+Current source inspection confirms another unfinished whole-slice requirement: the packet KMS
+factory has no production bootstrap caller. Gateway `lambda.ts`/`main.ts` compose vault selection
+but not packet protection, and `profile-readiness-lambda.ts` composes candidate export without the
+optional restricted packet reader. Complete the private default-off Gateway and authorized export
+composition while retaining native/model capability isolation before requesting whole-slice review.
+Accountable real legacy inventory/disposition and production key/role/retention acceptance remain.
+A green verifier does not close those requirements or D1/D3.
+
 ## Next work
 
-Finish legacy migration compatibility and all maintained integration/runtime protection fixtures;
-complete private artifact isolation and the clean full verifier before review. Production SQL/KMS
-role grants, historical key composition and accountable/deployed acceptance remain separate gates.
-Update all maintained integration/runtime fixtures for mandatory protection and complete the clean
-full verifier before review. Existing legacy restricted plaintext must be handled by an explicit
-reviewed transition; do not silently rewrite approved/ambiguous submission evidence. Retain exact
-key authority for supported historical records; key rotation must never silently change replay
-or approval semantics. Complete the whole storage path before requesting review of this slice.
+Compose the private packet cipher at the default-off Gateway entry points and the authorized
+candidate export activity, with exact key authority and no native/model decryption capability.
+Finish historical-key/least-privilege source behavior and artifact isolation for those compositions;
+rerun clean full verification after source changes before whole-slice review. Production SQL/KMS
+role grants, real legacy inventory/disposition, accountable/client/ATS/deployed acceptance remain
+separate gates. Supported ordinary transition and prohibited-data refusal are now locally proven;
+never silently purge or rehash approved/ambiguous legacy evidence. Keep reuse disabled throughout.
