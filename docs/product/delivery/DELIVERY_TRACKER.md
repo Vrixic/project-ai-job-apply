@@ -3984,3 +3984,14 @@ Docker/WSL stopped. Clean full/artifact verification remains before review.
 [Evidence](evidence/d3-native-launch-control-2026-10-06.md). D1/D3 stay In progress; native image/
 private adapters/routing/managed-task/client/ATS/provider/accountable gates remain. No frontend
 change, publication/deployment/activation or hosted CI/CD work.
+
+2026-10-06 D3-079 clean `228bd75d` passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 build tasks, unchanged lint baseline and all emitted isolation checks.
+The initial existing readiness cold-import timeout is retained in evidence; all 44 cases pass
+in isolation and the unchanged-source full rerun without relaxing guards or timeouts.
+The explicitly source-bound private artifact builds twice with five identical files;
+independent archive/bundle/SBOM/source checks pass (258613 bytes, 24 components).
+[Evidence](evidence/d3-native-launch-control-2026-10-06.md). No native SQL/schema change;
+ten real PostgreSQL cases remain the connected proof, with synthetic secret/Lambda/ECS
+transports. Original-version/configuration retention remains a recovery release gate.
+D1/D3 stay In progress, all activation gates stay off and hosted CI/CD stays deferred.

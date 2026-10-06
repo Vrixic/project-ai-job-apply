@@ -1,7 +1,7 @@
 # D3 private native launch control — 2026-10-06
 
 Status: default-off private source checkpoint; full clean committed verification and unpublished
-artifact integrity remain before review. D1/D3 and D3-079 stay In progress. Starts from fresh
+artifact integrity pass at `228bd75d53fe6e7edce0486d4d2c678e42c7132d`. D1/D3 and D3-079 stay In progress. Starts from fresh
 main `5305829d` plus exact open #562 `e36c0298` in the isolated backend worktree. No frontend work.
 
 ## Implemented boundary
@@ -77,10 +77,39 @@ Owned SQL fixture `b41f214fd05e53b451d9aa5351c7de967fb7b84a7b2e1bb73c69a88846f0c
 is removed after exact ID/name/label/image/tmpfs/no-bind-or-named-mount validation. Shared volume
 inventories match; Docker Desktop and WSL are stopped.
 
+## Full verification and unpublished artifact
+
+Clean committed `228bd75d53fe6e7edce0486d4d2c678e42c7132d` passes the maintained
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 production build tasks,
+all operator/dependency-security and emitted isolation checks. Lint stays at the existing
+zero-error, 15-warning, 58-info baseline. Log: `.tmp/d3-native-launch-control-full-final.log`.
+The first full run failed a pre-existing readiness-entrypoint cold dynamic-import timeout
+and the following mock-effect assertion. All 44 cases then passed in isolation, and all 44
+passed in the unchanged-source full rerun (29.066 seconds for that file). No timeout,
+assertion, production guard or test scheduling was changed. Preserve the failed log
+`.tmp/d3-native-launch-control-full.log` and narrow investigation log for provenance;
+the successful rerun does not establish that the cold-import timing sensitivity is fixed.
+
+With `ARTIFACT_SOURCE_SHA` explicitly set to the verified committed source, the private
+Node 24/x86_64 `index.handler` artifact builds twice byte-identically across all five files.
+Independent ZIP entry/timestamp/byte count/SHA/base64, embedded source marker, bundle,
+companion digest and CycloneDX 1.6 SBOM checks pass. All five files still match after the
+full verifier. The unpublished ZIP is 258613 bytes with 24 SBOM components:
+
+- ZIP SHA-256: `31ce04eb0abb5ee79459f7a326041fceaaaa66b1198737301b11de4e16c89017`.
+- Bundle SHA-256: `c767ee2fe154b07757dd7f8d8fc88e7079cdbaa55b7cafff89344c913a3a24a0`.
+- SBOM SHA-256: `6cec69c7f9eb51bd32028b06d7176dfdea87e56f484a6fa630b5ebdb55b52f4c`.
+
+Logs: `.tmp/d3-native-launch-control-artifact-bound-first.log`,
+`.tmp/d3-native-launch-control-artifact-bound-second.log`, and
+`.tmp/d3-native-launch-control-artifact-integrity.json`. Earlier builder runs labelled
+`sourceSha: local` are not committed-source evidence. Subsequent delivery-only commits
+leave the verified implementation and these source-bound artifact bytes unchanged.
+
 ## Remaining gates
 
-Build the current source-bound artifact twice, independently verify archive/bundle/SBOM/source
-integrity, and run the full maintained verifier on a clean committed frozen HEAD before review.
+Retain the original numeric receiver version and its pinned configuration for original-task
+recovery; a replacement configuration is not permission to recapture through a different task.
 The native immutable image/entrypoint, private evidence/work/completion adapters, original
 provider/request content routing, durable ECS state-event capture, exact task IAM and managed
 TLS/DNS routing/conformance remain unfinished. Full client/ATS disposal and D3-012 provider/
