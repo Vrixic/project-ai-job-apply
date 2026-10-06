@@ -77,3 +77,14 @@ managed role trust, authenticated evidence/control RPC composition, native image
 TLS/routing, client/ATS/provider/accountable acceptance or phase completion is claimed.
 No Terraform/IAM or frontend change, publication/deployment/activation, third PR or hosted CI/CD.
 Docker/WSL stay stopped, shared volumes remain, and the PC stays on.
+
+
+## Local handoff readiness
+
+Verified source and evidence are pushed on `feat/d3-native-task-caller-proof`; no third PR or
+main merge is performed. Introduced local Markdown links validate. The maintained development
+web launcher is restored against the live development API: local home returns 200 and the
+anonymous Resume request returns 307 without following or recording its redirect. No new
+signed-in browser flow is claimed. Only the launcher's two generated Next type-import changes
+are reverted; frontend source is preserved. Tracked tree is clean at handoff. Docker Desktop's
+engine and WSL remain stopped, shared volumes are retained, and the PC stays on.
