@@ -9,11 +9,14 @@
 
 ## Objective
 
-2026-10-06 D3-079 fixes native second-generation version handling: startup reads Documents' exact
-original version and carries it through memory generation and completion, with strict mismatched/
-missing-version refusal. All 183 focused checks pass; final SQL/Linux/full verification is in progress.
-[Evidence](evidence/d3-native-document-version-2026-10-06.md). No deployment/activation, main merge,
-third PR or CI/CD work; D1/D3 remain In progress and PC stays on.
+2026-10-06 D3-079 fixes and locally verifies native second-generation version handling: Documents'
+original version is pinned through bootstrap, memory generation, completion and direct reads.
+All 183 focused checks, 24 real SQL cases, 31 Linux scenarios, six emitted checks and three actual-
+image startup refusals pass. Clean source `1b826b5c` passes full verification (38/39/23 tasks,
+unchanged lint); the matching owner artifact reproduces identically.
+[Evidence](evidence/d3-native-document-version-2026-10-06.md). Managed publication/IAM/routing/
+provider/client/ATS/accountable acceptance stays open. No deployment/activation, main merge, third
+PR or CI/CD work; D1/D3 remain In progress. Docker/WSL stopped; PC stays on.
 
 2026-10-06 D3-079 implements and locally verifies the dedicated native image with actual foreground
 provider, exact-version secret/TLS ports and authenticated owning principal projection. All 126
@@ -1646,3 +1649,12 @@ native image builds locally and its hardened default-off/extra-argument/environm
 pass; 126 focused, 24 SQL, 30 Linux and six emitted checks pass. Image publication, managed IAM/TLS/
 routing, actual provider/client/ATS and accountable approval stay open. No third PR/main merge,
 cloud activation or hosted CI/CD work. [Evidence](evidence/d3-native-image-runtime-2026-10-06.md).
+
+2026-10-06 D3-079 clean `1b826b5cbf21e000831dee2a588187d46f22259c` passes full maintained
+verification: 38 typecheck tasks, 39 test tasks, 23 builds, zero lint errors/15 warnings/58 infos,
+operator/security/isolation/Compose/scope checks and unchanged tracked source. The original version
+fix also passes 183 focused, 24 SQL, 31 Linux and six emitted checks. Its exact-source image builds
+and passes three hardened startup refusals; the matching owner ZIP reproduces byte-identically.
+No hosted CI/CD, main merge, third PR, publication or deployment/activation. D1/D3 stay In progress;
+managed IAM/TLS/routing/provider/client/ATS/accountable gates remain. Docker/WSL stopped, PC on.
+[Evidence](evidence/d3-native-document-version-2026-10-06.md).
