@@ -159,6 +159,9 @@ importers:
       '@ai-job-apply/event-contracts':
         specifier: workspace:*
         version: link:../../../packages/event-contracts
+      '@aws-sdk/client-kms':
+        specifier: 3.1133.0
+        version: 3.1133.0
       postgres:
         specifier: 3.4.9
         version: 3.4.9

@@ -80,5 +80,11 @@ unchanged lint and complete emitted isolation). Production Gateway/export packet
 composition is still absent and remains source work; this does not enable reuse or resolve real
 legacy disposition, key/role or accountable/deployed acceptance.
 
+Default-off Gateway and authorized export runtime composition now uses the private Applications
+KMS subpath; independent export mode refuses data-key/MAC effects. Local units, emitted isolation
+and actual SQL composition with simulated KMS pass. This supersedes the preceding absent-bootstrap
+source gap, not the unfinished historical-key/production-key/role/legacy/accountable gates. A new
+clean full verifier is required after these changes.
+
 This proposal refines the technical implementation of ADR-010. It does not supply legal/privacy,
 security, retention, least-privilege/IAM/key, client final-review or enabled-ATS acceptance.

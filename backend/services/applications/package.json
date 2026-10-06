@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
+    },
+    "./restricted-packet-runtime": {
+      "types": "./dist/src/restricted-packet-runtime.d.ts",
+      "default": "./dist/src/restricted-packet-runtime.js"
     }
   },
   "scripts": {
@@ -22,7 +26,8 @@
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "postgres": "3.4.9",
-    "uuid": "14.0.2"
+    "uuid": "14.0.2",
+    "@aws-sdk/client-kms": "3.1133.0"
   },
   "devDependencies": {
     "@ai-job-apply/profile-service": "workspace:*"

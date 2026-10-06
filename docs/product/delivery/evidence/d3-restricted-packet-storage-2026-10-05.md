@@ -589,12 +589,58 @@ composition while retaining native/model capability isolation before requesting 
 Accountable real legacy inventory/disposition and production key/role/retention acceptance remain.
 A green verifier does not close those requirements or D1/D3.
 
+## Default-off Gateway and authorized export runtime composition
+
+The pinned KMS adapter and its original 30 offline crypto cases move from Gateway to the private
+Applications `restricted-packet-runtime` package subpath. Normal service exports do not expose the
+adapter or pull a KMS client into native/model actors. The only dependency change adds the already
+reviewed/pinned @aws-sdk/client-kms 3.1133.0 to Applications; the lockfile changes only that importer.
+There is no new workspace, migration, shared/public DTO or route.
+
+Gateway `main.ts` and `lambda.ts` now compose packet writer authority from an independently
+false-by-default switch and two exact distinct same-account/region key ARNs. The private
+candidate-rights activity in `profile-readiness-lambda.ts` composes an independently gated packet
+export reader with its own owning Applications pool and exact Profile building-request/operation/
+policy authorization. The exposed reader has only the historical read method. Its cipher is pinned
+to read-only mode: data-key generation/encryption and MAC calls refuse before transport even when
+the writer switch is on. Runtime checks retain the captured exact ARNs and refuse changed/withdrawn
+configuration, rather than silently changing key/replay authority. Missing/malformed active settings
+fail with a fixed value-free configuration error. Defaults and .env.example keep all switches false;
+no Terraform, IAM grant, secret, provider transport or deployment setting is changed.
+
+Sixteen new configuration/capability cases pass alongside the moved 30 crypto and original 314
+Applications unit cases (360 total). All 318 remaining Gateway units and 1,613 Workflow units pass;
+the 30-case count reduction in Gateway is the move, not removed coverage. Gateway unit run skips
+85 SQL cases; Workflow skips 59 opt-in/SQL cases. Applications/Gateway/Workflow builds and scoped
+Biome pass. Five native/provider emitted-isolation checks still pass after adding the private SDK
+entrypoint. Normal native actors retain no packet KMS client or integration authority, and isolated
+model code retains no Applications packet module.
+
+Two new actual PostgreSQL composition cases use the owning default-off environment factories with
+only KMS SDK transport simulated. The Gateway writer configuration creates false then true packet
+versions through actual encrypted storage/keyed receipts. The native export factory's independently
+owned pool returns the exact original false value, uses one Decrypt command and no data-key/MAC
+command, and records admitted/validated identifier-only export audit. Foreign request authority and
+withdrawn export settings refuse before KMS and audit admission. The controlled returned map and
+process test keys are cleared. Logs: `.tmp/d3-packet-runtime-sql.log`,
+`.tmp/d3-packet-runtime-applications-unit.log`, `.tmp/d3-packet-runtime-gateway-unit.log`,
+`.tmp/d3-packet-runtime-workflow-unit.log`, `.tmp/d3-packet-runtime-workflow-build.log`,
+`.tmp/d3-packet-runtime-isolation.log`. Installation used frozen reviewed dependencies with lifecycle
+scripts disabled; no new package version is introduced.
+
+Owned tmpfs fixture
+`84fba24ce5247ef16e49b940f37cb8ae22d7f5c623a6a1d6ebb631682a5ed78e` was checked against exact
+ID/name/label/tmpfs and absence of mounts, then removed. Shared volume inventories stayed identical;
+Docker Desktop stopped and WSL reports no running distributions. This proves local source composition,
+not live KMS/managed identity/provider/ATS, actual IAM/SQL least privilege, deployment or activation.
+The prior clean full verifier is on 61b2719f; it does not certify these later changes. Historical-key
+composition/retention and a fresh clean full verifier remain whole-slice requirements before review.
+
 ## Next work
 
-Compose the private packet cipher at the default-off Gateway entry points and the authorized
-candidate export activity, with exact key authority and no native/model decryption capability.
-Finish historical-key/least-privilege source behavior and artifact isolation for those compositions;
-rerun clean full verification after source changes before whole-slice review. Production SQL/KMS
-role grants, real legacy inventory/disposition, accountable/client/ATS/deployed acceptance remain
-separate gates. Supported ordinary transition and prohibited-data refusal are now locally proven;
-never silently purge or rehash approved/ambiguous legacy evidence. Keep reuse disabled throughout.
+Finish bounded historical-key authority and retention/replay behavior for the private runtime
+compositions, retaining exact original record authority and native/model isolation. Verify the
+current entrypoint artifacts and rerun clean full verification before whole-slice review. Production
+SQL/KMS role grants, real legacy inventory/disposition, accountable/client/ATS/deployed acceptance
+remain separate gates. Never silently purge or rehash approved/ambiguous legacy evidence. Keep
+reuse and both private composition switches disabled throughout.

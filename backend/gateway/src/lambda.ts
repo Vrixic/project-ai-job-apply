@@ -2,6 +2,7 @@ import {
   createApplicationsDatabase,
   defaultFieldDefinitions,
 } from "@ai-job-apply/applications-service";
+import { restrictedPacketWriterFromEnvironment } from "@ai-job-apply/applications-service/restricted-packet-runtime";
 import "reflect-metadata";
 import { randomBytes } from "node:crypto";
 import {
@@ -1150,9 +1151,11 @@ async function createConfiguredApplication(
     : undefined;
   // Applications needs its own plain client: the shared one camel-cases columns and installs
   // Drizzle's JSON and timestamp handling, which makes the store fail (see applications-database).
+  const packetProtection = restrictedPacketWriterFromEnvironment(process.env);
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
     profile: store,
+    ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
     restrictedAnswerReuseEnabled: process.env.RESTRICTED_ANSWER_REUSE_ENABLED === "true",
     restrictedAnswers: Object.freeze({
       lockCurrentReferences:

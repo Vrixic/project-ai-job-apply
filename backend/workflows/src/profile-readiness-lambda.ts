@@ -32,6 +32,7 @@ import {
   validateProfileReadinessActivityInput,
 } from "./profile-readiness-durable.js";
 import { restrictedAnswerExportCipherFromEnvironment } from "./restricted-answer-export-cipher.js";
+import { createNativeRestrictedPacketExportReader } from "./restricted-packet-export-runtime.js";
 
 type ReadinessActivityStore = Pick<
   ProfileStore,
@@ -292,12 +293,18 @@ async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRights
   const documentKmsKeyArn = process.env.PLATFORM_KMS_KEY_ARN;
   if (coverLetterExportEnabled && (!runtimeDatabaseUrl || !documentKmsKeyArn))
     throw new Error("CandidateRightsRuntimeConfigurationIncomplete");
+  const packetExport = createNativeRestrictedPacketExportReader(
+    runtimeDatabaseUrl as string,
+    policy,
+    process.env,
+  );
   runtimeCandidateRightsStore = new PostgresCandidateRightsActivityStore({
     database,
     policy,
     artifactStore: new AwsCandidateExportArtifactStore(exportBucket, exportKmsKeyArn),
     documentObjectStore: new AwsCandidateDocumentObjectStore(documentBucket),
     resumeProposals: new PostgresResumeProposalWriter(),
+    ...(packetExport ? { restrictedPacketExport: packetExport.reader } : {}),
     ...(coverLetterExportEnabled && runtimeDatabaseUrl && documentKmsKeyArn
       ? {
           coverLetterExport: createNativeCoverLetterExportReader(

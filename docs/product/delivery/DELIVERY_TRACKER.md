@@ -3839,3 +3839,14 @@ private default-off packet authority composition; real legacy inventory/disposit
 accountable/deployed acceptance remain. Private WIP only, no review/publication/activation or D1/D3
 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
 CI/CD remains deferred until production launch.
+
+2026-10-05 D3-077 composes independently default-off packet authority in both Gateway entrypoints
+and the candidate export activity through a private Applications subpath. The export facade refuses
+data-key/MAC effects and uses an independent owning pool plus exact Profile request/operation/policy
+authorization. All 360 Applications/318 Gateway/1,613 Workflow units, three builds, five emitted
+isolation cases and two actual SQL composition cases pass with simulated KMS. The 30 crypto cases
+moved from Gateway to Applications intact. Owned fixture removed; shared volumes retained and
+Docker/WSL stopped. Historical-key authority and a new clean full verifier remain; production
+key/role/legacy disposition and accountable acceptance stay separate. No deployment, activation,
+publication or D1/D3 completion. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md).
+CI/CD deferred until production launch.

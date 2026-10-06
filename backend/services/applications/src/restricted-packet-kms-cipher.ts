@@ -1,16 +1,16 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import type {
-  RestrictedPacketCipher,
-  RestrictedPacketEnvelope,
-  RestrictedPacketFingerprint,
-  RestrictedPacketScope,
-} from "@ai-job-apply/applications-service";
 import {
   DecryptCommand,
   GenerateDataKeyCommand,
   GenerateMacCommand,
   KMSClient,
 } from "@aws-sdk/client-kms";
+import type {
+  RestrictedPacketCipher,
+  RestrictedPacketEnvelope,
+  RestrictedPacketFingerprint,
+  RestrictedPacketScope,
+} from "./restricted-packet-cipher.js";
 
 const MAX_BYTES = 800_000;
 const MAX_KMS_MS = 10_000;
@@ -66,7 +66,7 @@ function bytes(value: unknown, minimum: number, maximum = minimum): value is Uin
   return value instanceof Uint8Array && value.byteLength >= minimum && value.byteLength <= maximum;
 }
 
-/** Dedicated restricted boundary. No runtime composition enables this factory yet. Real KMS
+/** Dedicated restricted boundary. Runtime composition stays default-off. Real KMS
  * calls are signed, fixed-region/endpoint, one-attempt and contain no candidate value body.
  * Actual pending SDK promises retain admission even after abort/deadline. SQL callers must
  * prepare protection BEFORE opening a transaction and decrypt only after releasing locks. */
@@ -74,6 +74,7 @@ export function createRestrictedPacketKmsCipher(options: {
   encryptionKeyArn: string;
   fingerprintKeyArn: string;
   enabled?: () => boolean;
+  readOnly?: true;
   testClient?: TestClient;
 }): RestrictedPacketCipher {
   const encryptionKeyArn = options.encryptionKeyArn;
@@ -94,6 +95,7 @@ export function createRestrictedPacketKmsCipher(options: {
   const region = encryption[1] as string;
   const enabled = options.enabled ?? (() => false);
   const testClient = options.testClient;
+  const readOnly = options.readOnly === true;
   let client: TestClient | undefined;
   let active = false;
   const permitted = () => {
@@ -148,6 +150,7 @@ export function createRestrictedPacketKmsCipher(options: {
       let original: Buffer | undefined;
       let key: Uint8Array | undefined;
       try {
+        if (readOnly) throw unavailable();
         permitted();
         const scope = fixedScope(input);
         if (!bytes(plaintext, 1, MAX_BYTES)) throw unavailable();
@@ -260,6 +263,7 @@ export function createRestrictedPacketKmsCipher(options: {
 
     async fingerprint(input: RestrictedPacketFingerprint): Promise<string> {
       try {
+        if (readOnly) throw unavailable();
         permitted();
         closed(input, ["ownerUserId", "applicationId", "operation", "requestSha256"]);
         if (
