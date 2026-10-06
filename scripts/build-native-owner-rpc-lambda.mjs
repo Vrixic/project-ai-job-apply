@@ -5,6 +5,7 @@ import { buildLambdaArtifact } from "./lib/build-lambda-artifact.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const artifactName = "native-owner-rpc-lambda";
+const flagName = "NATIVE_OWNER_RPC_ENABLED";
 const artifact = await buildLambdaArtifact({
   repositoryRoot,
   artifactName,
@@ -14,10 +15,10 @@ const artifact = await buildLambdaArtifact({
   handlers: ["index.handler"],
   packageFilter: "@ai-job-apply/workflows...",
   verifyBundle: async (bundle) => {
-    const flag = process.env.NATIVE_OWNER_RPC_ENABLED;
+    const flag = process.env[flagName];
     const fetcher = globalThis.fetch;
     let effects = 0;
-    process.env.NATIVE_OWNER_RPC_ENABLED = "false";
+    process.env[flagName] = "false";
     globalThis.fetch = async () => {
       effects++;
       throw Error("SyntheticOwnerRpcNetworkDenied");
@@ -37,8 +38,8 @@ const artifact = await buildLambdaArtifact({
       assert.equal(effects, 0);
     } finally {
       globalThis.fetch = fetcher;
-      if (flag === undefined) delete process.env.NATIVE_OWNER_RPC_ENABLED;
-      else process.env.NATIVE_OWNER_RPC_ENABLED = flag;
+      if (flag === undefined) delete process.env[flagName];
+      else process.env[flagName] = flag;
     }
   },
 });

@@ -1588,8 +1588,9 @@ D1/D3 remain In progress; no deployment/activation, third PR, main merge or CI/C
 
 
 2026-10-06 D3-079 authenticated private owner RPC source `576f0ac9` passes the full maintained
-verifier: 38 typecheck, 39 test and 23 build tasks; zero lint errors, unchanged 15 warnings/58 infos,
-and all operator/security/isolation/Compose/scope checks. The original session exits zero on an
+verifier: 38 typecheck, 39 test and 23 build tasks; zero lint errors, 17 warnings/58 infos,
+and all operator/security/isolation/Compose/scope checks. Two new builder environment-access
+warnings are corrected using the existing fixed-flag convention; the rerun follows. The original session exits zero on an
 unchanged tracked tree. Two separate receiver-artifact builds reproduce identical 363,458-byte
 ZIPs with source-bound manifest/SBOM and bundled default-off/no-network refusal proof.
 [Evidence](evidence/d3-native-owner-rpc-2026-10-06.md). Native image/bootstrap/reviewed IAM/private

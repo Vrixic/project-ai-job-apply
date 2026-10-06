@@ -79,7 +79,9 @@ Documents/Workflow typechecks and dependency-closure builds pass. Full verificat
 clean committed source `576f0ac986306c8a23f27f5f6a9312303a709adf`: 38 typecheck tasks,
 39 test tasks and 23 builds, plus maintained operator/security/isolation/Compose/scope checks.
 The original verifier session exits zero with the tracked tree unchanged. Lint remains zero
-errors, 15 warnings and 58 informational notes. Cached unaffected tasks are included in these
+errors, 17 warnings and 58 informational notes: two new direct environment-access diagnostics
+belong to the artifact builder. Its fixed flag handling is aligned with the existing builders;
+the unchanged source-functionality rerun follows. Cached unaffected tasks are included in these
 totals. Log: `.tmp/d3-native-owner-full.log`.
 
 The new maintained source-bound builder emits a separate Node.js 24/x86_64 receiver artifact
