@@ -101,3 +101,7 @@ source support does not authorize key deletion or certify production key lifecyc
 The actual logical restore fixture now uses this adapter with simulated SDK transport and two key
 epochs. Exact full-row restore, three original values/keyed replays and unchanged receipts pass;
 withdrawn original MAC authority refuses before KMS. This does not prove live KMS or PITR recovery.
+
+Clean a6da6b3f passes full maintained verification and four actual artifact families build twice
+byte-identically with integrity/isolation/refusal checks. Concurrent first-use replay across old/new
+writer authority still needs transition evidence; no release/accountable gate or activation closes.

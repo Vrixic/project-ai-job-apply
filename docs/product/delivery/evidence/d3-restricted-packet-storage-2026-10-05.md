@@ -709,10 +709,56 @@ restoration, RTO/RPO and accountable release acceptance are not certified. Curre
 and full maintained verification still remain before whole-slice review. No publication, deployment,
 activation or frontend changes.
 
+## Current committed artifacts and full maintained verification
+
+Clean frozen `a6da6b3f62e40e0d660b4ba1e7d282d2c0679f03` passes the complete maintained
+`scripts/verify-phase0.ps1` with terminal exit 0. All 38 typecheck tasks, 39 test tasks and 23 builds
+pass, including the 377 Applications, 318 Gateway and 1,613 Workflow units. Formatting, skill/
+infrastructure/operator/security/contract generation checks, dependency security, deletion restore
+roles/replay, candidate-rights fixtures/export/session, D2 intake/source checks, emitted native/
+provider/export/retirement isolation and Compose validation pass. Lint remains zero errors,
+15 warnings and 58 informational notes. HEAD and tracked worktree stayed unchanged throughout.
+Log: `.tmp/d3-packet-final-full-verification.log`. The source includes the private default-off
+writer/export and bounded historical-key compositions plus actual two-epoch logical restore.
+This supersedes 61b2719f for those changes; no live authentication, KMS, provider/ATS or deployed
+end-to-end acceptance is inferred from the local maintained verifier.
+
+Four actual artifact families build twice from the same exact clean source. All 20 files are
+byte-identical across the builds, and remain unchanged after full verification. Independent checks
+verify ZIP contents equal the emitted bundle, archive bytes/digest, exact manifest source/runtime/
+architecture, sidecar digest, CycloneDX SBOM digest/component count and bundle digest. Builder import
+checks verify every declared handler. Gateway and Profile activity contain the private historical
+configuration and KMS dependency; native preparation and Profile durable artifacts contain no KMS
+client. Existing native/provider emitted isolation passes. Native builder probes actual bundled
+default-off and closed-input refusals with zero fetch calls. An independent bundled Profile activity
+probe rejects malformed input and missing maintenance authority with zero fetch calls. Gateway
+handler export/import is verified; no live authenticated Gateway/KMS behavior is claimed.
+
+| Artifact | Archive SHA-256 | SBOM components |
+|---|---|---|
+| gateway-lambda | 90fab56a0fe82ae3d7266c08b2ebacde2a15ba5f9a672abe6e6627bdd9d3fc97 | 153 |
+| profile-readiness-durable-lambda | 4158922c5f41d7e89a72993d1eaab0d50424cadb2aa078843645a0dc3a031c44 | 27 |
+| profile-readiness-activity-lambda | 6b66ad290baed7b26d20e737a9563f77c28b070f8763810f540ad17f00d79fe5 | 105 |
+| application-preparation-lambda | 80e6d291f373a6a1ca3b189488d3bd9161872e913a9f30f8a7a982576b69d9b0 | 41 |
+
+Logs/integrity records: `.tmp/d3-packet-final-artifact-first.log`,
+`.tmp/d3-packet-final-artifact-second.log`, `.tmp/d3-packet-final-artifact-first-hashes.json`,
+`.tmp/d3-packet-final-artifact-probe.log`. No archive is published or deployed. Docker Desktop and
+WSL are stopped; owned generated recovery fixture cleanup and unchanged shared volume inventories
+are verified. Only delivery documentation follows the verified clean source.
+
+The sequential original-key replay and two-epoch restore proofs do not yet exercise concurrent
+first use of one idempotency key across old/new writer runtimes. Inspect and test that transition
+before whole-slice review: a supported receipt appearing after pre-lock MAC computation must not
+cause an equivalent retry to be mistaken for a changed request or rewrite original authority.
+Accountable real legacy disposition, actual key/grant/retention/least-privilege and client/ATS/
+deployed acceptance remain required. D1/D3 and D3-077 stay In progress; all switches remain false.
+
 ## Next work
 
-Verify current entrypoint artifacts and rerun clean full verification after the bounded
-historical-key composition and actual logical restore before whole-slice review. Production
+Verify concurrent first-use/replay behavior across retained writer key authorities before
+whole-slice review, preserving exact original receipt authority and keeping KMS outside SQL locks.
+Rerun affected checks and clean full verification if implementation changes. Production
 SQL/KMS role grants, real legacy inventory/disposition, accountable/client/ATS/deployed acceptance
 remain separate gates. Never silently purge or rehash approved/ambiguous legacy evidence. Keep
 reuse and both private composition switches disabled throughout.

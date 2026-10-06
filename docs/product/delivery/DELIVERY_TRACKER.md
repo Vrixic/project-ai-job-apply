@@ -3868,3 +3868,13 @@ authority refuses before KMS. Source unchanged, generated fixture removed and sh
 preserved. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). Current artifacts and clean
 full verifier, production key/role/legacy/accountable/deployed gates remain. No activation, frontend
 work, publication or D1/D3 completion; CI/CD deferred until production launch.
+
+
+2026-10-05 D3-077 clean frozen a6da6b3f passes the full maintained verifier: 38 typecheck tasks,
+39 test tasks, 23 builds; unchanged lint baseline. Four source-bound artifact families/20 files
+build twice byte-identically, with independent archive/manifest/SBOM/digest integrity and actual
+bundled refusal checks. Docker/WSL stopped; no publication/deployment/activation. Only delivery
+documentation follows verified source. Concurrent old/new first-use replay still needs transition
+evidence before whole-slice review; real legacy/key/role/retention/accountable/client/ATS/deployed
+gates remain. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). D1/D3 stay In progress;
+CI/CD remains deferred until production launch.
