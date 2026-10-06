@@ -221,8 +221,30 @@ issued idempotent catalog write may finish before the next gate check. The candi
 the dedicated `jobs:moderate` administration port are locally verified source. The privileged API
 provides signed keyset pagination, fixed-code aggregate report counts, explicit case opening, and
 version-fenced resolution while excluding operator identities from transport responses. Reports
-still do not trigger automation, and there is no source-resume operation, approved
-retention/deletion policy, real-report processing, migration apply, or deployment claim.
+still do not trigger automation, and there is no source-resume operation or real-report processing
+claim. The owner accepted the D1 reporting policy in `d1-governance-v1`; deployment and final
+accountable review remain separate gates.
+
+Migration `0025_job_report_retention` implements the candidate-report portion of D1P-06. A report
+links once to the first same-job case active at receipt or explicitly opened within its original
+90-day window. Case opening links retained unlinked reports; later reports join that case while
+it is open. Historical backfill uses the same target/time interval, without asserting human review.
+No case is opened or catalog state changed automatically. An open linked case postpones expiry;
+after closure the deadline is the later of receipt + 90 days and closure + 30 days. Expiry deletes
+the entire report and linkage (including owner, request hash and idempotency hash), retaining only
+per-job fixed-reason counts. Confirmed candidate deletion still removes reports immediately and
+does not create an aggregate. Aggregate moderation counts combine active reports and expired totals.
+
+Apply the migration before deploying new Jobs readers. Deploy aggregate-aware readers before
+enabling cleanup; old readers remain structurally compatible but omit expired totals. Disable
+maintenance to roll back code; deleted candidate linkage cannot be reconstructed. The standalone
+`dist/src/run-job-report-retention.js` requires `JOB_REPORT_RETENTION_ENABLED=true`, an owning
+`DATABASE_URL`, and an optional integer `JOB_REPORT_RETENTION_BATCH_LIMIT` (default 100, max 1000).
+It performs one atomic batch with 30-second statement/idle and two-second lock bounds, emits only
+an expired count and is not a candidate API. SQL execution is denied to PUBLIC; a reviewed
+maintenance principal must receive an exact execution grant. Scheduling, runtime/IAM release,
+365-day case/control/audit retention and 30-day alert metadata remain unfinished. Nothing here
+authorizes real candidate reports or activates a hosted cleanup task.
 
 Migration `0009_provider_ingestion_sources` aligns Jobs-owned durable checkpoint persistence with
 the existing bounded source-neutral identifier contract. It permits Greenhouse, Lever, and Ashby

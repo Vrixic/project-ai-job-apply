@@ -80,3 +80,10 @@ other service may modify these tables.
   one accepted appeal after an applied takedown. It preserves the original publication/removal and
   provider truth, wakes only exact unconsumed accepted appeal decisions, and backfills affected
   completed queue rows through the same guarded predicate.
+- `0025_job_report_retention.sql` — Links candidate reports once to an exact same-job review
+  interval and backfills historical intervals. A database-clock, execute-restricted bounded
+  maintenance function removes expired reporter/request/idempotency data after the later of
+  receipt + 90 days and case closure + 30 days, preserving only fixed-reason totals. Open cases
+  retain their reports; authorized candidate deletion stays immediate and creates no aggregate.
+  Requires migration-before-reader and reader-before-maintenance rollout; it does not schedule
+  cleanup or implement case/control/audit/alert expiry.
