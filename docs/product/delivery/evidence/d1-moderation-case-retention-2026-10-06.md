@@ -46,7 +46,24 @@ before cleanup is exercised; no production guard is relaxed.
   `290f0fb1c8e8990baa66ea170e2cce6e0e3ba69ef05ff48411ea1947d8166007`.
   Log: `.tmp/d1-moderation-restore.log`. This is not deployed PITR or deletion-ledger replay proof.
 
-Clean-source full verification and final runtime cleanup are recorded below when complete.
+Clean-source full verification and final runtime cleanup are recorded below.
 Hosted maintenance release, privileged audit/alert expiry, remaining accountable
 rights review and D1/D3 phase acceptance remain open. No real candidate or deployed cleanup
 behavior is claimed. CI/CD remains deferred until production launch; the PC stays on.
+
+## Full acceptance
+
+Clean committed source `694e65a7ac81f7f29e1e8f2b91d23a33e05b896f` passes the full maintained
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 builds, formatting,
+operational/security/isolation/bundle guards, Compose and scope checks. Lint remains zero errors,
+15 warnings and 58 infos. Log: `.tmp/d1-moderation-full-final.log`.
+
+The first full run stopped on two existing 16 MB Ashby fixture tests reaching their five-second
+test deadline. All 131 Ashby tests passed in isolation, then the complete unchanged-source rerun
+passed. No timeout, byte bound or product guard was relaxed. No tracked edits occurred during
+either original verifier handle. Only delivery documentation follows the verified source.
+
+The owned tmpfs PostgreSQL fixture is removed; Docker Desktop and WSL are stopped. The PC remains
+on. Local web was stopped before the full run to release port 3000 for session fixtures. The
+branch is published without a third PR while #564/#565 remain open. No hosted CI/CD, cloud release,
+cleanup activation, production acceptance or D1/D3 completion is claimed.

@@ -3,7 +3,8 @@
 2026-10-06 D1-012 closed-case retention now preserves minimal blocks and exact source pauses
 while deleting expired operator detail. All 117 Jobs SQL checks and historical 25 → 26 migration
 replay pass; local logical restore matches 68 migrations/92 relations across seven owners.
-Full repository verification is pending. Hosted release and audit/alert policy work remain open.
+Source 694e65a7 passes full verification (38 typechecks, 39 test tasks, 23 builds).
+Hosted release and audit/alert policy work remain open.
 [Evidence](evidence/d1-moderation-case-retention-2026-10-06.md). D1/D3 remain In progress.
 
 2026-10-06 D1-012 candidate-report retention now has an owning implementation and real PostgreSQL
