@@ -39,3 +39,13 @@ candidate artifacts or browser credentials are read or retained. Full clean-sour
 is pending. Hosted export acceptance, maintenance release, privileged audit/alert retention and
 accountable rights review remain open. CI/CD stays deferred until production launch; the PC
 remains on. No cloud state change, third PR, real-data approval or D1/D3 completion is claimed.
+
+The first full run at `4c28f059` passes formatting/lint, 38 typecheck tasks and the operational
+guards, then stops on two existing 16 MB Ashby byte-limit fixtures exceeding the five-second
+test timeout. This repeated full-suite timing failure also occurred during the preceding retention
+batch. Those two byte-budget tests now freeze logical performance/timer time and use a 30-second
+test-harness allowance, isolating acquired-byte accounting from host scheduling. The production
+five-second request deadline, 16 MB byte limit and separate header/body/cancellation deadline
+tests are unchanged. Timer cleanup is asserted. All 586 ingestion unit tests pass after this
+test-only correction. Log: `.tmp/d1-report-export-ingestion-clock.log`.
+Jobs SQL and export schema are unchanged by the correction; clean-source full rerun is pending.
