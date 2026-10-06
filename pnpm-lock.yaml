@@ -138,6 +138,9 @@ importers:
       '@ai-job-apply/ai-sdk':
         specifier: workspace:*
         version: link:../../packages/ai-sdk
+      '@aws-sdk/client-ecs':
+        specifier: 3.1133.0
+        version: 3.1133.0
       '@types/aws-lambda':
         specifier: 8.10.163
         version: 8.10.163

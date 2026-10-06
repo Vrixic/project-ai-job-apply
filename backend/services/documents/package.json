@@ -47,6 +47,10 @@
     "./native-material-disposal": {
       "types": "./dist/src/native-material-disposal.d.ts",
       "default": "./dist/src/native-material-disposal.js"
+    },
+    "./native-task-launch": {
+      "types": "./dist/src/native-task-launch.d.ts",
+      "default": "./dist/src/native-task-launch.js"
     }
   },
   "scripts": {

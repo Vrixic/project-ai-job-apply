@@ -9,8 +9,8 @@ another service's tables.
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
   after Trust): twelve owned schemas (including the empty-table `jobs_public` projection schema and separate
-  `applications_restricted` storage), 88 regular relations, and 65 checksum-bound migrations
-  (Profile through `0011`; Applications through `0009`; Documents through `0011`). The
+  `applications_restricted` storage), 88 regular relations, and 66 checksum-bound migrations
+  (Profile through `0011`; Applications through `0009`; Documents through `0012`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
   purges Applications data (run 2026-09-18 against an isolated local cluster).
 
@@ -72,3 +72,10 @@ denies private tables to a metadata-only NOLOGIN role, and exercises exact autho
 without removing another candidate. Test-only AES/HMAC keys remain in the harness process and are
 cleared afterward. This proves local logical data recovery and permission refusal; production
 SQL/KMS grants, cluster-role recovery and accountable key/retention acceptance remain separate.
+
+
+Documents 0012 preserves irreversible original launch claims through logical recovery. The current
+maintained fixture includes pending, bound and retired claims and verifies that unknown launches
+remain unresolved without reissuing authority or settling original provider grants. Exact full-row
+comparison includes the private claim columns; this is local logical recovery, not managed task
+recovery, image publication, production grants or deployed PITR acceptance.

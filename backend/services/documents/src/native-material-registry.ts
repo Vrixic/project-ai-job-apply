@@ -17,6 +17,17 @@ export interface NativeMaterialIntent {
   state: "pending" | "bound" | "retired";
   allocation: NativeTaskAllocation | null;
 }
+export type NativeMaterialLaunchScope = Pick<
+  NativeMaterialIntent,
+  "allocationId" | "ownerUserId" | "applicationId" | "generationId" | "epochId"
+>;
+export interface NativeMaterialLaunchRecord {
+  intent: NativeMaterialIntent;
+  original: CoverLetterWorkReference;
+  deployment: Pick<NativeTaskAllocation, "clusterArn" | "taskDefinitionArn" | "containerName">;
+  configurationSha256: string | null;
+  claimedAtEpochMs: number | null;
+}
 export type NativeRegistryAdmissionQuery = <Rows extends Record<string, unknown>[]>(
   parts: TemplateStringsArray,
   ...values: unknown[]
@@ -42,6 +53,8 @@ interface Row {
   state: NativeMaterialIntent["state"];
   stopped_at_ms: string | null;
   observed_at_ms: string | null;
+  launch_claimed_at: Date | null;
+  launch_configuration_sha256: string | null;
 }
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
 const unavailable = () => Error("NativeMaterialRegistryUnavailable");
@@ -73,6 +86,25 @@ function intent(row: Row): NativeMaterialIntent {
   });
 }
 
+function launchRecord(row: Row): NativeMaterialLaunchRecord {
+  return Object.freeze({
+    intent: intent(row),
+    original: Object.freeze({
+      id: row.work_id,
+      documentId: row.document_id,
+      purpose: "provider_dispatch" as const,
+      requestSha256: row.request_sha256,
+    }),
+    deployment: Object.freeze({
+      clusterArn: row.cluster_arn,
+      taskDefinitionArn: row.task_definition_arn,
+      containerName: row.container_name,
+    }),
+    configurationSha256: row.launch_configuration_sha256,
+    claimedAtEpochMs: row.launch_claimed_at?.getTime() ?? null,
+  });
+}
+
 /** Documents-owned launch ledger. Pending launch intent is durable BEFORE RunTask; an unknown
  * launch ACK cannot become absence. This store has no RunTask, model, body or settlement port.
  * Private authenticated launcher/observer composition and IAM are still required before use. */
@@ -98,6 +130,81 @@ export class PostgresNativeMaterialRegistry {
     // All admission/seal/bind/receipt operations share this exact lock; never hold it over AWS.
     await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`native-material:${owner}:${app}`}, 0))`;
     this.check();
+  }
+
+  private launchScope(scope: NativeMaterialLaunchScope) {
+    const keys = ["allocationId", "ownerUserId", "applicationId", "generationId", "epochId"];
+    if (
+      Object.keys(scope).length !== keys.length ||
+      Object.keys(scope).some((key) => !keys.includes(key)) ||
+      !keys.every((key) => uuid.test(scope[key as keyof NativeMaterialLaunchScope]))
+    )
+      throw unavailable();
+    return Object.freeze(structuredClone(scope));
+  }
+
+  /** Consumes one durable launch attempt BEFORE AWS. Never clears/reissues authority on error,
+   * process crash, expiry, missing task or lost ACK. Replay of a pending claim is NOT a launch. */
+  async claimLaunch(
+    scope: NativeMaterialLaunchScope,
+    configurationSha256: string,
+  ): Promise<{
+    claimed: boolean;
+    record: NativeMaterialLaunchRecord;
+  }> {
+    return this.guarded(async () => {
+      const fixed = this.launchScope(scope);
+      if (!/^[a-f0-9]{64}$/u.test(configurationSha256) || !this.applicationAdmission)
+        throw unavailable();
+      return this.sql.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${fixed.ownerUserId}::uuid)`;
+        await this.applicationAdmission?.(
+          fixed.ownerUserId,
+          fixed.applicationId,
+          async <Rows extends Record<string, unknown>[]>(
+            parts: TemplateStringsArray,
+            ...values: unknown[]
+          ) => await tx<Rows>(parts, ...(values as postgres.ParameterOrFragment<never>[])),
+        );
+        await this.lock(tx, fixed.ownerUserId, fixed.applicationId);
+        const [row] = await tx<Row[]>`SELECT * FROM documents.native_material_allocations
+          WHERE id = ${fixed.allocationId} AND user_id = ${fixed.ownerUserId}
+            AND application_id = ${fixed.applicationId} AND document_id = ${fixed.generationId}
+            AND epoch_id = ${fixed.epochId} FOR UPDATE`;
+        if (!row || row.state === "retired") throw unavailable();
+        if (row.launch_claimed_at) {
+          if (row.launch_configuration_sha256 !== configurationSha256) throw unavailable();
+          this.check();
+          return { claimed: false, record: launchRecord(row) };
+        }
+        if (row.state !== "pending") throw unavailable();
+        const [claimed] = await tx<Row[]>`UPDATE documents.native_material_allocations
+          SET launch_claimed_at = clock_timestamp(), launch_configuration_sha256 = ${configurationSha256}
+          WHERE id = ${row.id} RETURNING *`;
+        this.check();
+        if (!claimed) throw unavailable();
+        return { claimed: true, record: launchRecord(claimed) };
+      });
+    });
+  }
+
+  /** Positive launch recovery may read after sealing/quarantine; it grants no new work or launch. */
+  async readLaunch(
+    scope: NativeMaterialLaunchScope,
+    configurationSha256: string,
+  ): Promise<NativeMaterialLaunchRecord> {
+    return this.guarded(async () => {
+      const fixed = this.launchScope(scope);
+      if (!/^[a-f0-9]{64}$/u.test(configurationSha256)) throw unavailable();
+      const [row] = await this.sql<Row[]>`SELECT * FROM documents.native_material_allocations
+        WHERE id = ${fixed.allocationId} AND user_id = ${fixed.ownerUserId}
+          AND application_id = ${fixed.applicationId} AND document_id = ${fixed.generationId}
+          AND epoch_id = ${fixed.epochId}`;
+      if (!row?.launch_claimed_at || row.launch_configuration_sha256 !== configurationSha256)
+        throw unavailable();
+      this.check();
+      return launchRecord(row);
+    });
   }
 
   async admit(input: {

@@ -20,6 +20,7 @@ import {
   requiredNonemptyD2Relations,
   seedD2RecoveryFixtures,
 } from "./fixtures.mjs";
+import { exerciseRestoredNativeLaunches, seedNativeLaunches } from "./native-launches.mjs";
 import {
   exerciseRestoredResponseInventory,
   exerciseRestoredTemporaryMaterialCompletion,
@@ -200,7 +201,7 @@ try {
   assert.equal(source.manifest.contributors.length, 7);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 12);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 88);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 65);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 66);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
@@ -251,6 +252,7 @@ try {
   );
   stage = "seed-generated-restricted-packets";
   const restrictedFixtures = await seedRestrictedPackets(sourceApplications, protection);
+  const nativeFixtures = await seedNativeLaunches(sourceApplications, fixtures.ownerUserId);
   stage = "source-aggregate-and-row-snapshot";
   const sourceAggregate = await verifyRestoreDatabase(sourceReader, source);
   const sourceRows = await exactRows(sourceReader, source.manifest);
@@ -323,6 +325,7 @@ try {
     protection,
     restrictedFixtures,
   );
+  const nativeBehavior = await exerciseRestoredNativeLaunches(targetApplications, nativeFixtures);
   stage = "restored-d2-behavior";
   const behavior = await exerciseRestoredD2(targetStore, targetProfile, fixtures, (value) => {
     stage = value;
@@ -331,7 +334,7 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 65,
+    migrationCount: 66,
     ownerCount: 7,
     schemaCount: 12,
     exactRelationRowSetsMatched: 88,
@@ -343,6 +346,7 @@ try {
     ...materialBehavior,
     ...packetBehavior,
     ...restrictedBehavior,
+    ...nativeBehavior,
     ...behavior,
   };
 } catch (error) {
@@ -354,7 +358,7 @@ try {
       : "FAILED";
   const location =
     typeof error?.stack === "string"
-      ? /((?:fixtures|response-inventory|temporary-packets|restricted-packets|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
+      ? /((?:fixtures|response-inventory|temporary-packets|restricted-packets|native-launches|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
           error.stack,
         )?.[1]
       : undefined;

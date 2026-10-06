@@ -100,7 +100,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(65);
+    ).toBe(66);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -253,7 +253,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 7,
       relationCount: 88,
-      migrationCount: 65,
+      migrationCount: 66,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -453,6 +453,7 @@ describe("read-only aggregate restore verification", () => {
                   "0009_cover_letter_provider_failure",
                   "0010_temporary_material_completion",
                   "0011_native_material_allocations",
+                  "0012_native_material_launch_claim",
                   "0008_temporary_material_bindings",
                   "0009_restricted_packet_values",
                   ...(migrationCount === 52 ? [] : ["0010_restricted_answer_vault"]),
@@ -486,6 +487,42 @@ describe("read-only aggregate restore verification", () => {
     },
   );
 
+  it.each(["0009_restricted_packet_values", "0012_native_material_launch_claim"])(
+    "requires both independent 65-migration boundaries: missing %s refuses current acceptance",
+    async (missing) => {
+      const current = loadCurrentRestoreManifest();
+      const restrictedAbsent = missing === "0009_restricted_packet_values";
+      const manifest = parseRestoreManifest({
+        ...current.manifest,
+        contributors: current.manifest.contributors.map((contributor) => ({
+          ...contributor,
+          schemas: contributor.schemas.filter(
+            (schema) => !restrictedAbsent || schema !== "applications_restricted",
+          ),
+          relations: contributor.relations.filter(
+            (relation) => !restrictedAbsent || !relation.startsWith("applications_restricted."),
+          ),
+          migrations: contributor.migrations.filter((migration) => migration.version !== missing),
+        })),
+      });
+      const historical = {
+        manifest,
+        sha256: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
+      };
+      const client: RestoreSqlClient = {
+        async begin(_options, work) {
+          return work(successfulExecutor(historical));
+        },
+      };
+      await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
+        ownerCount: 7,
+        relationCount: restrictedAbsent ? 86 : 88,
+        migrationCount: 65,
+      });
+      await expect(verifyRestoreDatabase(client, current)).rejects.toThrow();
+    },
+  );
+
   it("keeps the prior native 64-migration boundary separate from restricted packet storage", async () => {
     const current = loadCurrentRestoreManifest();
     const manifest = parseRestoreManifest({
@@ -497,7 +534,9 @@ describe("read-only aggregate restore verification", () => {
           (relation) => !relation.startsWith("applications_restricted."),
         ),
         migrations: contributor.migrations.filter(
-          (migration) => migration.version !== "0009_restricted_packet_values",
+          (migration) =>
+            migration.version !== "0009_restricted_packet_values" &&
+            migration.version !== "0012_native_material_launch_claim",
         ),
       })),
     });
@@ -537,6 +576,7 @@ describe("read-only aggregate restore verification", () => {
             (migration) =>
               migration.version !== "0009_restricted_packet_values" &&
               migration.version !== "0011_native_material_allocations" &&
+              migration.version !== "0012_native_material_launch_claim" &&
               (migrationCount >= 63 || migration.version !== "0008_temporary_material_bindings") &&
               (migrationCount >= 62 ||
                 migration.version !== "0010_temporary_material_completion") &&
@@ -580,6 +620,7 @@ describe("read-only aggregate restore verification", () => {
               "0009_cover_letter_provider_failure",
               "0010_temporary_material_completion",
               "0011_native_material_allocations",
+              "0012_native_material_launch_claim",
               "0008_temporary_material_bindings",
               "0009_restricted_packet_values",
               "0006_vault_approval_binding",

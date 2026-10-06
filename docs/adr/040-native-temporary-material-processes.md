@@ -122,3 +122,23 @@ settlement. Pending unknown launches remain unresolved and block deletion/fresh 
 Private launcher/RPC/IAM/image/routing/managed-task and complete client/ATS/provider/accountable
 gates remain. This checkpoint is source-only and does not enable a runtime, certify all-copy purge
 or accept this proposal. [Evidence](../product/delivery/evidence/d3-native-material-registry-2026-10-05.md).
+
+
+## One-attempt launch source checkpoint — 2026-10-05
+
+The private control factory now verifies exact signed task-definition/image/envelope metadata,
+consumes one durable Documents launch claim under Applications same-transaction admission,
+then issues one RunTask with no held SQL locks. Original claim/launch/capture ambiguity never
+permits another launch, including beyond the finite ECS client-token lifetime. Late fulfilled
+capture and positive exact-task recovery preserve sealed/quarantined drain, with new launches
+independently disabled. Pending unknown launch deliberately withholds disposal/fresh generation;
+negative-dispatch disposition and durable managed event capture still require design/composition.
+Local SQL, emitted isolation and logical restore evidence do not implement or authorize the
+native image, authenticated private adapters/launcher, TLS routing, IAM or managed conformance.
+This proposal remains Proposed and all activation/accountable/provider gates remain open.
+[Evidence](../product/delivery/evidence/d3-native-task-launch-2026-10-05.md).
+
+2026-10-05 source correction: fulfilled launch and positive recovery additionally validate all
+seven original allocation/work environment overrides and refuse command, role or resource
+retargeting. Local simulated ECS checks and real SQL refusal evidence do not activate this
+Proposed decision or certify managed runtime conformance.

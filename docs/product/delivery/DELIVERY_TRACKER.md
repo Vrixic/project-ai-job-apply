@@ -3919,3 +3919,56 @@ delivery/ADR evidence. No merge, artifact publication, deployment or activation.
 Proposed; saved-answer reuse and both private switches stay false. Review and all real legacy/key/
 role/retention/accountable/client/ATS/deployed gates remain. D1/D3 and D3-077 stay In progress;
 CI/CD remains owner-deferred until production launch.
+
+
+2026-10-05 D3-079 starts one-attempt native launch control on fresh main 18b6b2e2. Documents 0012
+pins an irreversible launch claim before RunTask; exact task-definition/image/envelope checks,
+late fulfilled capture and positive original-task recovery preserve unknown launch and independent
+provider settlement. 102 focused cases, all 39 registry/Gateway and 136 Documents work SQL cases,
+65-migration/86-relation logical restore, 24 restore units, 165 runtime smoke checks and 697/908
+restore/recovery guards pass locally. ECS transports are simulated; no live task or provider.
+Owned fixtures removed, shared volumes retained and Docker/WSL stopped. Full clean committed
+verification remains before source review. [Evidence](evidence/d3-native-task-launch-2026-10-05.md).
+Native image/authenticated adapters/routing/task conformance/client/ATS/accountable/deployed gates
+remain. D1/D3 stay In progress; no activation/deployment and CI/CD remains deferred until launch.
+
+2026-10-05 D3-079 recovery now binds actual task overrides to all seven original scalar values
+and exact command/role/resource limits. 110 focused and 40 real SQL cases pass; ECS is simulated.
+The first full verifier on `0a487eec` stopped at the stale Documents migration allowlist; its
+current/historical refusal tests now pass 264 assertions. Actual observer clock waits preserve
+production future-time guards. The second owned fixture is removed, volumes retained and
+Docker/WSL stopped. Corrected clean full verification remains pending.
+[Evidence](evidence/d3-native-task-launch-2026-10-05.md). D1/D3 stay In progress;
+CI/CD is owner-deferred until production launch, with no cloud activation or deployment.
+
+2026-10-05 D3-079 clean `a2600fb5` passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 builds and operational/security/Compose/emitted checks. Main independently
+merges #561 as `5305829d`; combined 66-migration/88-relation/12-schema reconciliation and
+verification remain before review. [Evidence](evidence/d3-native-task-launch-2026-10-05.md).
+D1/D3 stay In progress; no deployment/activation, and CI/CD stays deferred until launch.
+
+2026-10-05 D3-079 integrates independently merged #561/main `5305829d` into the feature branch.
+Both delivery histories are preserved. Combined 66 migrations/88 relations/12 schemas and all
+checksums/digest pins agree. 50 migration/restore units (including both prior-65 refusals),
+167 runtime smoke checks, 697 replay/908 role guards, all 40 registry SQL cases and actual
+combined logical dump/restore pass. Restricted key-epoch/replay/privacy fixtures and three native
+claims recover together without issuing launch authority or settling original grants. ECS/KMS
+transports are simulated. Owned fixtures removed, shared volumes retained, Docker/WSL stopped.
+Full clean combined verification remains before review.
+[Evidence](evidence/d3-native-task-launch-2026-10-05.md). D1/D3 stay In progress; no cloud activation
+or deployment; CI/CD stays deferred until production launch.
+
+2026-10-05 D3-079 combined clean `97cc9c52` passes full maintained verification: 38 typecheck
+and 39 test tasks, 23 builds, unchanged lint baseline and operational/security/Compose/scope/
+emitted refusal checks. Separate migration publisher OCI and staging restore/inspector guards
+also pass. Combined 66/88/12 actual logical restore and all 40 registry SQL cases already pass.
+[Evidence](evidence/d3-native-task-launch-2026-10-05.md). Only delivery evidence follows the
+verified source. D1/D3 stay In progress; native image/authenticated adapters/routing/task/client/
+ATS/provider/accountable gates remain. No cloud deployment/activation; CI/CD deferred until launch.
+
+2026-10-05 D3-079 one-attempt native launcher is reviewable in draft
+[PR #562](https://github.com/Vrixic/project-ai-job-apply/pull/562) against current main `5305829d`.
+Verified combined implementation `97cc9c52` is unchanged; subsequent commits record delivery
+evidence only. Native image/authenticated adapters/issuer/event routing/managed task/client/ATS/
+provider/accountable gates remain. D1/D3 stay In progress; no authored main merge, deployment,
+activation or hosted CI/CD work. Docker/WSL are stopped and shared volumes retained.
