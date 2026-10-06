@@ -57,7 +57,9 @@
       "passThroughEnv": [
         "DATABASE_URL",
         "D2_CANCELLATION_DATABASE_URL",
-        "D2_COMPOSED_DATABASE_URL"
+        "D2_COMPOSED_DATABASE_URL",
+        "NATIVE_MATERIAL_LAUNCH_INTEGRATION",
+        "NATIVE_MATERIAL_LAUNCH_TEST_DATABASE_URL"
       ],
       "outputs": []
     },

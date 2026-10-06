@@ -803,6 +803,13 @@ observations. Enabled development scan mapping/rules and locally parser-verified
 prepare the next resume-import check; preference writes and deployed upload/scan/parse remain open.
 [Evidence](evidence/d1-working-development-flow-2026-10-06.md). D1/D3 remain In progress; no
 frontend source/cloud activation, production or CI/CD work. PC stays on; Docker/WSL stopped.
+2026-10-06 owner directs an implementation-first route to a working launch: implement complete
+candidate-flow batches, exercise them end to end, fix concrete failures, then add focused
+regression coverage. Prioritize functional D1 composition over optional hardening or feature
+expansion. Targeted checks during implementation and the maintained verifier at batch handoff
+remain; real-data/privacy/authentication and publication safeguards remain required. Hosted
+CI/CD stays deferred until production launch. Backend work stays isolated from frontend work.
+D1 remains In progress until the working flow and its required release acceptance are evidenced.
 
 ## Decisions and scope changes
 

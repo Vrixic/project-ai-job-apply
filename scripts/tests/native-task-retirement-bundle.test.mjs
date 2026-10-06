@@ -147,7 +147,16 @@ test("native retirement emits only its control owner and refuses default-off bun
 });
 
 for (const [entrypoint, ownerFiles, requiredSdk] of [
-  ["native-material-registry", ["native-material-registry", "native-task-allocation"], false],
+  [
+    "native-material-registry",
+    [
+      "native-material-registry",
+      "native-task-allocation",
+      "native-evidence-binding",
+      "native-launch-control-contract",
+    ],
+    false,
+  ],
   [
     "native-material-disposal",
     ["native-material-disposal", "native-task-allocation", "native-task-retirement"],

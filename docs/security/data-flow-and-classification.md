@@ -721,3 +721,47 @@ Positive native task capture also binds the observed task environment to all sev
 allocation/owner/application/generation/epoch/work/hash values. Extra/missing values and command,
 role or resource retargeting refuse capture; refusal leaves pending launch and provider settlement
 independent. This is local source evidence with simulated ECS, not deployed authentication.
+
+## Private native launch runtime source (2026-10-06)
+
+Original metadata -> fixed signed numeric Lambda -> managed-secret bootstrap -> same owning
+transaction admission/claim -> one signed ECS launch -> exact original task capture. No generated
+bodies, model keys or object capabilities cross this path. Sender and receiver switches default
+off; new-launch shutdown leaves positive original recovery independent. Caller IAM, task roles,
+managed image/authenticated owner adapters/TLS routing and complete copy disposal remain review
+and deployment gates. Unknown Invoke/RunTask outcomes retain pending authority and unsettled
+provider work. [Local evidence](../product/delivery/evidence/d3-native-launch-control-2026-10-06.md).
+
+
+## Native task-state recovery hints (2026-10-06)
+
+Private ECS event -> bounded inert deployment/allocation metadata -> numeric signed original
+recovery -> owning claim plus fresh exact task/override observation -> durable original capture.
+Only five IDs and task ARN cross Invoke; arbitrary event metadata is discarded. STOPPED,
+event time/version and lost replies never prove absence/retirement or settle provider work.
+Event/source equality does not authenticate senders. Reviewed service resource policies, original
+version/configuration retention, durable retry/DLQ routing and actual managed event serialization
+remain gates. No generated body/model/database credentials enter this receiver; activation stays
+off. [Local evidence](../product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
+
+
+## Allocation-bound native scalar controls (2026-10-06)
+
+Dedicated content process -> fixed original claim/settlement/completion metadata -> signed numeric
+owning controls. The adapter cannot issue/renew work, select another owner/document, settle a
+background terminal phase, launch/stop tasks or certify purge. Only acknowledged normal original
+provider settlement permits one completion attempt; unknown/late replies never authorize replay.
+Transport holds one active send until actual settlement; kernel host retirement is independent
+from remote provider/work outcomes. The trusted input/task binding is not IAM authentication.
+Per-task/private admission, managed sender/receiver IAM and content runtime remain release gates;
+all flags stay off. [Local evidence](../product/delivery/evidence/d3-native-material-controls-2026-10-06.md).
+
+## Native original owner evidence admission (2026-10-06)
+
+Trusted fixed allocation/work/context -> short owning native admission -> lease-bound owner APIs
+(excluding restricted facts) -> original context comparison -> repeat owning admission -> detached
+original evidence. SQL locks end before content reads; no grant/renewal/body persistence follows.
+Active identity/application and current bound/unsealed exact task gates differ from recovery after
+seal. Point-in-time metadata checks do not authenticate callers or prove task liveness/retirement.
+Private task transport/IAM and managed bootstrap remain gates; activation stays off.
+[Local evidence](../product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).

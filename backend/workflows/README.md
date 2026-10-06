@@ -232,3 +232,24 @@ it before generation/recovery and final packet creation. The native actor compos
 Profile metadata reader and its fixed admission lock method, running locks inside the Applications
 transaction. No saved-answer values or references are sent to Documents generation/recovery.
 This source composition requires reviewed native deployment; nothing is activated here.
+
+The default-off private native material launcher now composes owning metadata admission and
+claim/capture using one native-codec SQL pool and a managed database secret. Its strict private
+sender uses signed fixed-region numeric Lambda invocation; recovery remains independent of
+new-launch shutdown. Build the unpublished artifact with `pnpm build:lambda:native-launch`
+from this workspace. Sender IAM, native image/private adapters/routing/task conformance remain
+release gates. See [evidence](../../docs/product/delivery/evidence/d3-native-launch-control-2026-10-06.md).
+
+
+The private `native-material-task-event-lambda` receives bounded ECS task-state hints and calls
+only positive original launch recovery. It defaults off, pins its numeric receiver/target and
+original deployment metadata, and cannot launch, stop, settle work or certify retirement.
+Build an unpublished source-bound artifact with `ARTIFACT_SOURCE_SHA=<committed SHA>` and
+`pnpm --filter @ai-job-apply/workflows build:lambda:native-task-event`. Reviewed event routing,
+IAM, original-version retention, retries/DLQ and managed task conformance remain gates; see
+[local evidence](../../docs/product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
+
+The default-off `createNativeOwnedCoverLetterEvidenceSource` wraps existing Applications/Jobs/
+Profile owner evidence with exact original native admission checks before and after reads and
+fixed original job/fact context comparison. It is source-only; authenticated private task
+transport and managed bootstrap remain gates. See [evidence](../../docs/product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).

@@ -63,3 +63,13 @@ one persisted claim/RunTask. Positive original task observation can capture lost
 without reissuing RunTask or settling work. Both controls default off; managed image/entrypoint,
 authenticated issuer/private adapters, durable task-event routing and actual task conformance
 remain required. See [source evidence](../../../../docs/product/delivery/evidence/d3-native-task-launch-2026-10-05.md).
+
+
+Documents' private `./native-material-controls` supplies frozen work/completion ports bound to
+one trusted original task, owner/application/generation/work/consent. It signs fixed numeric
+Lambda calls, admits one claim and settlement/completion attempt, and retains active transport
+until actual settlement despite timeout/abort. The Linux `controls` fixture connects these ports
+and existing private handlers to the actual native actor/session and observes kernel SIGKILL.
+Ports still require reviewed IAM/per-task admission and production owner/provider/bootstrap;
+local bindings or process death certify neither remote settlement nor all-copy purge. See
+[local evidence](../../../../docs/product/delivery/evidence/d3-native-material-controls-2026-10-06.md).

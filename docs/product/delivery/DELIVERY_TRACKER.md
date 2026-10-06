@@ -4016,3 +4016,114 @@ observations. Enabled development scan mapping/rules and locally parser-verified
 prepare the next resume-import check; preference writes and deployed upload/scan/parse remain open.
 [Evidence](evidence/d1-working-development-flow-2026-10-06.md). D1/D3 remain In progress; no
 frontend source/cloud activation, production or CI/CD work. PC stays on; Docker/WSL stopped.
+2026-10-06 D3-079 private native launch runtime starts on fresh main `5305829d` plus exact
+open #562 `e36c0298`. Strict metadata sender/receiver, fixed signed numeric Lambda transport,
+managed-secret bootstrap and actual Applications/Docs admission/claim/capture compose without
+SQL locks across AWS. Independent recovery remains available after launch shutdown. 91 Documents
+and 33 bootstrap cases, ten real PostgreSQL cases and two emitted isolation/default-off checks
+pass; transports/credentials are synthetic, not deployed IAM/task evidence. Narrow owner exports
+remove unrelated body/crypto capabilities. Owned fixture removed, shared volumes retained and
+Docker/WSL stopped. Clean full/artifact verification remains before review.
+[Evidence](evidence/d3-native-launch-control-2026-10-06.md). D1/D3 stay In progress; native image/
+private adapters/routing/managed-task/client/ATS/provider/accountable gates remain. No frontend
+change, publication/deployment/activation or hosted CI/CD work.
+
+2026-10-06 D3-079 clean `228bd75d` passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 build tasks, unchanged lint baseline and all emitted isolation checks.
+The initial existing readiness cold-import timeout is retained in evidence; all 44 cases pass
+in isolation and the unchanged-source full rerun without relaxing guards or timeouts.
+The explicitly source-bound private artifact builds twice with five identical files;
+independent archive/bundle/SBOM/source checks pass (258613 bytes, 24 components).
+[Evidence](evidence/d3-native-launch-control-2026-10-06.md). No native SQL/schema change;
+ten real PostgreSQL cases remain the connected proof, with synthetic secret/Lambda/ECS
+transports. Original-version/configuration retention remains a recovery release gate.
+D1/D3 stay In progress, all activation gates stay off and hosted CI/CD stays deferred.
+
+2026-10-06 D3-079 private native launch control is reviewable in draft
+[PR #563](https://github.com/Vrixic/project-ai-job-apply/pull/563), stacked on exact open
+#562 `e36c0298`. Verified implementation `228bd75d` is unchanged; later commits record
+verification and review links only. Two authored draft PRs are open. D1/D3 remain In progress;
+native image/private adapters/routing/managed-task/client/ATS/provider/accountable gates remain.
+No authored main merge, artifact publication, deployment, activation or hosted CI/CD work.
+Owned fixture is removed, shared volumes retained and Docker/WSL stopped.
+
+2026-10-06 D3-079 starts default-off private ECS task-state recovery on exact #563 source.
+Events supply hints only; existing signed positive recovery independently verifies the original
+owning claim and exact task before capture. 49 synthetic transport units, owner/workflow builds,
+typecheck and three emitted isolation checks pass. No SQL mutation/schema change or Docker need.
+[Evidence](evidence/d3-native-task-event-recovery-2026-10-06.md). Full clean/artifact verification
+remains before updated review; managed event/rule/IAM/retry/DLQ/original-version/task acceptance
+remain. D1/D3 stay In progress, no deployment/activation and CI/CD stays deferred.
+
+2026-10-06 D3-079 clean `0ee4c377` passes full maintained verification: 38 typecheck,
+39 test and 23 build tasks, unchanged lint baseline and all emitted/operator/security checks.
+49 event cases and all 44 existing readiness cases pass. After #562/main `88f8ae84` merges,
+#563 merges into its already-merged feature branch; its runtime is absent from main. Fresh
+main-based `feat/d3-native-event-recovery` reconciles that source and event continuation as
+`82ea96c9`, exactly matching every tracked file of the fully verified tree. Both combined-source
+artifacts build twice with ten identical files and independent source/archive/bundle/SBOM integrity
+(launch 24/event 21 components), unpublished. [Evidence](evidence/d3-native-task-event-recovery-2026-10-06.md).
+No frontend/SQL schema change; managed event/IAM/retry/DLQ/original-version/task/client/ATS/
+provider/accountable gates remain. D1/D3 stay In progress; no cloud activation or authored main merge.
+
+2026-10-06 D3-079 original native task recovery is reviewable in draft
+[PR #564](https://github.com/Vrixic/project-ai-job-apply/pull/564) against main `88f8ae84`.
+It brings the reviewed #563 source that missed main plus fully verified event recovery;
+implementation `0ee4c377` and exact combined tree `82ea96c9` are unchanged by later delivery
+records. One authored draft PR is open. Managed event/routing/IAM/retry/DLQ/native task and
+client/ATS/provider/accountable gates remain; D1/D3 stay In progress. No authored main merge,
+artifact publication, deployment, activation or hosted CI/CD work. Docker/WSL remain stopped.
+
+2026-10-06 D3-079 starts allocation-bound native scalar work/completion adapters on fresh
+main `88f8ae84` plus exact open #564 `bd23437c`. One original claim/settlement/completion,
+fixed signed numeric transport and retained pending-call admission expose no issuer or other
+phase/task authority. 50 new/108 regression cases and four emitted isolation checks pass;
+all 17 actual Linux kernel scenarios pass, including connected scalar controls and one provider
+call before observed SIGKILL. SQL/provider/render/transport ports are synthetic; not managed
+acceptance. [Evidence](evidence/d3-native-material-controls-2026-10-06.md). Full clean verification
+remains before review; image/entrypoint/private admission/IAM/routing/client/ATS/provider/accountable
+gates remain. Owned fixture removed, shared volumes retained and Docker/WSL stopped. No frontend,
+SQL schema, deployment or activation; D1/D3 stay In progress and CI/CD stays deferred.
+
+2026-10-06 D3-079 clean `4b6ba6d8` passes the full maintained verifier: 38 typecheck,
+39 test and 23 build tasks, unchanged lint baseline and all four emitted isolation checks.
+50 adapter cases pass inside the full run; the separate 108 focused regressions and all
+17 actual Linux/kernel scenarios remain local evidence. Existing Documents 0011 bound/unsealed
+owning work-claim guard is unchanged; input equality does not replace authenticated task admission.
+[Evidence](evidence/d3-native-material-controls-2026-10-06.md). No standalone production image
+or artifact/managed composition is claimed for this private factory. Image/entrypoint/evidence/
+private admission/IAM/routing/client/ATS/provider/accountable gates remain. D1/D3 stay In progress;
+no authored main merge, publication/deployment/activation or CI/CD work. Docker/WSL are stopped.
+
+2026-10-06 D3-079 allocation-bound native scalar controls are reviewable in draft
+[PR #565](https://github.com/Vrixic/project-ai-job-apply/pull/565), stacked on exact open
+#564 `bd23437c`. Verified implementation `4b6ba6d8` is unchanged; later commits record delivery
+and review evidence only. Two authored draft PRs are open. Native image/entrypoint/evidence/
+private admission/IAM/routing/client/ATS/provider/accountable gates remain; D1/D3 stay In progress.
+No authored main merge, publication/deployment/activation or hosted CI/CD work. Exact owned Linux
+fixture/staging cleanup completed, shared volumes retained and Docker/WSL stopped.
+
+2026-10-06 D3-079 adds default-off original native owner-evidence admission on fresh main
+`88f8ae84` plus exact #565 `b8bbd0c3`. Short owning SQL checks surround lease-bound owner
+reads, compare fixed original context and release locks before evidence awaits. 38 focused units,
+23 actual PostgreSQL launcher/evidence cases, owner/workflow builds/typechecks and four emitted
+bundle checks pass. No work issue/renew/consumption, body/model/listener, schema or frontend change.
+[Evidence](evidence/d3-native-evidence-admission-2026-10-06.md). Full clean verification remains
+before review. Authenticated private task transport/bootstrap/IAM, managed task/client/ATS/provider/
+accountable gates remain; D1/D3 stay In progress. Owned SQL fixture removed, volumes unchanged,
+Docker/WSL stopped; PC stays on. No deployment/activation or hosted CI/CD work.
+
+2026-10-06 D3-079 clean `34d13ab6` passes full maintained verification: 38 typecheck,
+39 test and 23 build tasks, unchanged lint baseline and all eight native emitted bundle checks.
+The initial full run caught the standalone registry's added pure validators; exact-file assertion
+correction changes no source guard or capability exclusion. Separate 38 owner-evidence units and
+23 real PostgreSQL cases pass. [Evidence](evidence/d3-native-evidence-admission-2026-10-06.md).
+Authenticated task transport/managed bootstrap/client/ATS/provider/accountable gates remain.
+D1/D3 stay In progress; no deployment/activation/main merge or CI/CD work. Docker/WSL stopped,
+owned fixture removed, shared volumes unchanged and PC stays on.
+
+2026-10-06 owner prioritizes a working launch over further product perfection. Implement larger
+complete-flow batches first, exercise the actual flow, fix failures, then add focused regression
+coverage. Targeted checks run during implementation and the maintained verifier runs at batch
+handoff. Prioritize the D1 candidate flow and concrete blockers over optional D3 hardening;
+preserve truthfulness/privacy/submission safeguards and honest deployment/acceptance status.

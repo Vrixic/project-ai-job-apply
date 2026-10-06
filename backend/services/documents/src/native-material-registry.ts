@@ -1,6 +1,7 @@
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import type { CoverLetterWorkReference } from "./cover-letter-work-store.js";
+import { type NativeEvidenceBinding, nativeEvidenceBinding } from "./native-evidence-binding.js";
 import {
   type NativeTaskAllocation,
   type NativeTaskRetirementReceipt,
@@ -204,6 +205,44 @@ export class PostgresNativeMaterialRegistry {
         throw unavailable();
       this.check();
       return launchRecord(row);
+    });
+  }
+
+  /** Point-in-time owning evidence admission, separate from recovery after sealing. This
+   * transaction ends before owner evidence reads; callers must recheck after their awaits.
+   * It grants no work, liveness, credentials, retirement or generated-copy authority. */
+  async checkEvidenceAdmission(input: NativeEvidenceBinding): Promise<void> {
+    return this.guarded(async () => {
+      const fixed = nativeEvidenceBinding(input);
+      if (!this.applicationAdmission) throw unavailable();
+      await this.sql.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${fixed.scope.ownerUserId}::uuid)`;
+        await this.applicationAdmission?.(
+          fixed.scope.ownerUserId,
+          fixed.scope.applicationId,
+          async <Rows extends Record<string, unknown>[]>(
+            parts: TemplateStringsArray,
+            ...values: unknown[]
+          ) => await tx<Rows>(parts, ...(values as postgres.ParameterOrFragment<never>[])),
+        );
+        await this.lock(tx, fixed.scope.ownerUserId, fixed.scope.applicationId);
+        const [row] = await tx`
+          SELECT a.id FROM documents.native_material_allocations a
+          JOIN documents.native_material_admission h ON h.user_id = a.user_id AND h.application_id = a.application_id
+          JOIN documents.cover_letter_work_authorizations w ON w.id = a.work_id AND w.document_id = a.document_id AND w.user_id = a.user_id
+          WHERE a.id = ${fixed.scope.allocationId} AND a.user_id = ${fixed.scope.ownerUserId}
+            AND a.application_id = ${fixed.scope.applicationId} AND a.document_id = ${fixed.scope.generationId}
+            AND a.epoch_id = ${fixed.scope.epochId} AND h.epoch_id = a.epoch_id AND h.sealed_at IS NULL
+            AND a.state = 'bound' AND a.launch_claimed_at IS NOT NULL AND a.launch_configuration_sha256 IS NOT NULL
+            AND a.task_arn = ${fixed.allocation.taskArn} AND a.cluster_arn = ${fixed.allocation.clusterArn}
+            AND a.task_definition_arn = ${fixed.allocation.taskDefinitionArn} AND a.container_name = ${fixed.allocation.containerName}
+            AND a.work_id = ${fixed.original.id} AND a.request_sha256 = ${fixed.original.requestSha256}
+            AND w.purpose = 'provider_dispatch' AND w.request_sha256 = a.request_sha256
+            AND w.state IN ('issued', 'running', 'settled') AND (w.state <> 'issued' OR w.expires_at > clock_timestamp())
+          FOR UPDATE OF a, h`;
+        this.check();
+        if (!row) throw unavailable();
+      });
     });
   }
 

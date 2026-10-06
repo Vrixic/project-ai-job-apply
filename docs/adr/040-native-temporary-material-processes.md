@@ -142,3 +142,46 @@ This proposal remains Proposed and all activation/accountable/provider gates rem
 seven original allocation/work environment overrides and refuse command, role or resource
 retargeting. Local simulated ECS checks and real SQL refusal evidence do not activate this
 Proposed decision or certify managed runtime conformance.
+
+## Private launcher runtime checkpoint — 2026-10-06
+
+A strict metadata-only sender now uses signed regional numeric-version Lambda Invoke. The lazy
+private bootstrap validates fixed task configuration and managed-secret/runtime identity before
+SQL, then supplies actual owning Applications/Docs admission/claim/capture. Independent new-launch
+shutdown permits positive recovery; late fulfilled task capture precedes reply refusal. Narrow
+owner entrypoints omit body/crypto/model/object capability. Local PostgreSQL and simulated
+transport evidence do not certify sender IAM, managed task/image/TLS routing or full application
+content/disposal. The proposal remains Proposed and all activation/accountable gates remain.
+[Evidence](../product/delivery/evidence/d3-native-launch-control-2026-10-06.md).
+
+
+## Task-state hint recovery checkpoint — 2026-10-06
+
+A separate default-off private receiver can forward validated original task-event scalar hints to
+the existing signed positive-recovery control. Only the owning registry and fresh exact ECS task
+observation authorize capture; the event cannot launch, settle work or certify retirement. Local
+synthetic events and emitted capability/source-bound artifact proof leave managed event routing,
+IAM, retained original versions, retries/DLQ and task conformance unfinished. This proposal remains
+Proposed and deployment/activation/accountable gates remain.
+[Evidence](../product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
+
+
+## Allocation-bound scalar control checkpoint — 2026-10-06
+
+A default-off adapter now supplies the native original actor only fixed claim/settlement/completion
+ports. Normal signed regional numeric Lambda transport binds the original task/work/consent;
+unknown acknowledgements never retry, and active transport stays admitted until actual settlement.
+Existing owning SQL requires bound/current unsealed native admission before a provider claim.
+Local original-task equality is not caller authentication. Fifty cases, actual emitted isolation,
+full clean verification and seventeen actual Linux/kernel scenarios leave authenticated evidence/
+private task admission, managed image/bootstrap/IAM/provider/client/ATS/accountable acceptance
+unfinished. This proposal remains Proposed and no activation or new deployment is authorized.
+[Evidence](../product/delivery/evidence/d3-native-material-controls-2026-10-06.md).
+
+## Native owner evidence admission checkpoint — 2026-10-06
+
+Default-off source now wraps original lease-bound owner evidence with short exact owning native
+admission checks and fixed context comparison. Locks are released before owner reads and original
+work authority is unchanged. Local units and PostgreSQL admission proof do not authenticate callers
+or establish managed evidence composition. This proposal remains Proposed; all release gates remain.
+[Evidence](../product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
