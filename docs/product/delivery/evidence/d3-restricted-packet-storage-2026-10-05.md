@@ -754,11 +754,57 @@ cause an equivalent retry to be mistaken for a changed request or rewrite origin
 Accountable real legacy disposition, actual key/grant/retention/least-privilege and client/ATS/
 deployed acceptance remain required. D1/D3 and D3-077 stay In progress; all switches remain false.
 
+## Concurrent first use across retained writer keys
+
+Two real SQL reproductions on the preceding implementation fail: an equivalent new-key packet
+request reports an idempotency conflict when an old-key receipt commits during its MAC generation,
+or after receipt precheck while its data-key request is pending. Log:
+`.tmp/d3-packet-race-red.log`. The first three runtime composition cases still passed; their earlier
+sequential/restore evidence did not cover this transition.
+
+Applications now retains the exact selected MAC key alongside the computed digest in a frozen,
+ephemeral private result. Receipt lookup distinguishes supported original-key changes from payload
+conflicts. Create-packet, queue-preparation and preparation-replay recheck once outside SQL after
+any rejected transaction has completed rollback, recomputing with the immutable receipt's original
+key. A repeated authority change refuses availability; there is no unbounded retry, receipt/key
+rewrite or algorithm fallback. Changed requests still conflict and unsupported keys refuse before
+another MAC. Receipt writes require a prepared digest pinned to the active key; an original-key
+prepared digest cannot become a new receipt if the original disappears. Only the scalar MAC and
+original exact key are persisted. No public/shared contract, migration, route or frontend changes.
+
+Thirty added actual PostgreSQL cases pass with the real owning store and private KMS adapter;
+only SDK transport is simulated. Twelve cover packet races at MAC/data-key boundaries; eighteen
+cover queue-preparation MAC/data-key and preparation-replay MAC boundaries. Both old/new winning
+keys, equivalent requests, changed requests and unknown original keys are covered. All equivalent
+requests replay exact committed results; changed requests conflict; unsupported keys are unavailable.
+Original receipt row sets remain exactly equal. Packet/ciphertext counts remain exact;
+preparation races produce one preparation and one outbox event. Original-key MAC hooks acquire
+`FOR UPDATE NOWAIT` on the actual application row in an independent transaction, verifying the
+losing transaction's lock is released before crypto. After the winner commits, recovery performs
+exactly one original-key MAC for supported authority (zero for unknown authority), and no further
+data-key generation/encryption. All 33 runtime cases pass including the preceding three cases.
+Log: `.tmp/d3-packet-race-all-sql.log`. Existing 27 restricted-storage real SQL cases pass separately
+in a second generated database; `.tmp/d3-packet-race-storage-regressions.log`.
+
+Applications 377, Gateway 318 and Workflow 1,613 unit cases pass; all three affected builds pass.
+Gateway skips its 85 SQL/opt-in cases; Workflow skips 90 opt-in/SQL cases, including the 33 runtime
+cases independently run above. Five emitted native/provider isolation checks also pass. Logs:
+`.tmp/d3-packet-race-applications-unit.log`, `.tmp/d3-packet-race-gateway-unit.log`,
+`.tmp/d3-packet-race-workflow-unit.log`, `.tmp/d3-packet-race-isolation.log`. Scoped Biome and diff
+whitespace pass.
+The actual SQL run uses explicit synthetic identity and only offline KMS; no live managed identity,
+KMS, provider/ATS or deployed end-to-end behavior is asserted. The earlier full verifier/artifacts
+on a6da6b3f do not certify this later source. Current committed archives and a new clean full verifier remain required before whole-slice review.
+
+Owned tmpfs fixture `8116ad9f200e26833bd3911390b4f89b5ea67a4907f191507a13e0871a6fe8ba`
+was checked against exact ID/name/label/tmpfs/no mounts before removal. Both generated SQL databases
+were confined to that container. Shared volume inventories are unchanged, Docker Desktop stopped,
+and WSL reports no running distributions. No publication, deployment, activation or phase closure.
+
 ## Next work
 
-Verify concurrent first-use/replay behavior across retained writer key authorities before
-whole-slice review, preserving exact original receipt authority and keeping KMS outside SQL locks.
-Rerun affected checks and clean full verification if implementation changes. Production
+Verify current committed artifacts and rerun clean full verification after the concurrent
+original-key replay fix before whole-slice review. Production
 SQL/KMS role grants, real legacy inventory/disposition, accountable/client/ATS/deployed acceptance
 remain separate gates. Never silently purge or rehash approved/ambiguous legacy evidence. Keep
 reuse and both private composition switches disabled throughout.

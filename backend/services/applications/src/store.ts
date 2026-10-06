@@ -390,6 +390,13 @@ export class RestrictedPacketStoreUnavailableError extends Error {
     this.name = "RestrictedPacketStoreUnavailableError";
   }
 }
+/** Ephemeral MAC result pins its exact authority; never serialize this object. */
+interface ProtectedRequestHash {
+  hash: string;
+  keyArn: string;
+}
+class RestrictedPacketReceiptAuthorityChangedError extends Error {}
+
 export interface ApplicationStoreOptions {
   authorizeRestrictedPacketExport?: RestrictedPacketExportAuthorizer;
   restrictedPackets?: {
@@ -471,6 +478,23 @@ export class PostgresApplicationStore {
     );
   }
 
+  /** Retry only a supported immutable receipt appearing under another key. The rejected
+   * transaction has completed rollback before this callback recomputes any MAC. */
+  private async withOriginalReceiptAuthority<T>(run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      if (!(error instanceof RestrictedPacketReceiptAuthorityChangedError)) throw error;
+      try {
+        return await run();
+      } catch (repeated) {
+        if (repeated instanceof RestrictedPacketReceiptAuthorityChangedError)
+          throw new RestrictedPacketStoreUnavailableError();
+        throw repeated;
+      }
+    }
+  }
+
   /** Authorize in a completed owner read before crypto; never retain SQL locks across KMS. */
   private async protectedRequestHash(
     command: {
@@ -480,7 +504,7 @@ export class PostgresApplicationStore {
     },
     operation: "create_packet" | "queue_preparation",
     request: unknown,
-  ): Promise<string> {
+  ): Promise<ProtectedRequestHash> {
     const { configured } = this.requireRestrictedProtection();
     await this.restrictedOwnerView(command.ownerUserId, command.applicationId);
     const [prior] = await this.client<
@@ -496,6 +520,7 @@ export class PostgresApplicationStore {
       (prior.scheme !== "kms-hmac-sha256.v1" || !this.permittedFingerprintKey(prior.key))
     )
       throw new RestrictedPacketStoreUnavailableError();
+    const keyArn = prior?.key ?? configured.fingerprintKeyArn;
     try {
       const hash = await configured.cipher.fingerprint(
         {
@@ -504,11 +529,11 @@ export class PostgresApplicationStore {
           operation,
           requestSha256: canonicalHash(request),
         },
-        prior?.key ?? configured.fingerprintKeyArn,
+        keyArn,
       );
       this.requireRestrictedProtection();
       if (!/^[a-f0-9]{64}$/u.test(hash)) throw new RestrictedPacketStoreUnavailableError();
-      return hash;
+      return Object.freeze({ hash, keyArn });
     } catch {
       throw new RestrictedPacketStoreUnavailableError();
     }
@@ -659,29 +684,31 @@ export class PostgresApplicationStore {
     >;
   }): Promise<CommandResult> {
     command = structuredClone(command);
-    const requestHash = await this.protectedRequestHash(command, "create_packet", {
-      operation: "create_packet",
-      applicationId: command.applicationId,
-      expectedRevision: command.expectedRevision,
-      jobRevision: command.packet.jobRevision,
-      form: command.packet.form,
-      artifactHashes: command.packet.artifactHashes,
-      ...(command.packet.temporaryMaterials?.length
-        ? { temporaryMaterials: command.packet.temporaryMaterials }
-        : {}),
-      fields: command.packet.fields,
-    });
-    const prior = await this.findReceipt(
-      this.client,
-      command.ownerUserId,
-      command.idempotencyKey,
-      "create_packet",
-      requestHash,
-    );
-    const prepared = prior ? null : await this.prepareRestrictedFields(command);
-    return this.commandResult(command, "create_packet", requestHash, async (tx, app, now) => {
-      if (prior) throw new RestrictedPacketStoreUnavailableError();
-      return this.writePacket(tx, app, now, command.packet, prepared);
+    return this.withOriginalReceiptAuthority(async () => {
+      const requestHash = await this.protectedRequestHash(command, "create_packet", {
+        operation: "create_packet",
+        applicationId: command.applicationId,
+        expectedRevision: command.expectedRevision,
+        jobRevision: command.packet.jobRevision,
+        form: command.packet.form,
+        artifactHashes: command.packet.artifactHashes,
+        ...(command.packet.temporaryMaterials?.length
+          ? { temporaryMaterials: command.packet.temporaryMaterials }
+          : {}),
+        fields: command.packet.fields,
+      });
+      const prior = await this.findReceipt(
+        this.client,
+        command.ownerUserId,
+        command.idempotencyKey,
+        "create_packet",
+        requestHash,
+      );
+      const prepared = prior ? null : await this.prepareRestrictedFields(command);
+      return this.commandResult(command, "create_packet", requestHash, async (tx, app, now) => {
+        if (prior) throw new RestrictedPacketStoreUnavailableError();
+        return this.writePacket(tx, app, now, command.packet, prepared);
+      });
     });
   }
 
@@ -1301,29 +1328,31 @@ export class PostgresApplicationStore {
     request: PreparationRequest;
   }): Promise<PreparationRecord | null> {
     command = structuredClone(command);
-    const requestHash = await this.protectedRequestHash(command, "queue_preparation", {
-      operation: "queue_preparation",
-      applicationId: command.applicationId,
-      request: command.request,
-    });
-    return this.client.begin(async (tx) => {
-      await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
-      await this.lockApplication(tx, command.ownerUserId, command.applicationId);
-      const receipt = await this.findReceipt(
-        tx,
-        command.ownerUserId,
-        command.idempotencyKey,
-        "queue_preparation",
-        requestHash,
-      );
-      if (!receipt) return null;
-      if (!receipt.note?.subjectId) throw new ApplicationIntegrityError("preparation receipt");
-      return this.readPreparation(
-        tx,
-        command.ownerUserId,
-        command.applicationId,
-        receipt.note.subjectId,
-      );
+    return this.withOriginalReceiptAuthority(async () => {
+      const requestHash = await this.protectedRequestHash(command, "queue_preparation", {
+        operation: "queue_preparation",
+        applicationId: command.applicationId,
+        request: command.request,
+      });
+      return this.client.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
+        await this.lockApplication(tx, command.ownerUserId, command.applicationId);
+        const receipt = await this.findReceipt(
+          tx,
+          command.ownerUserId,
+          command.idempotencyKey,
+          "queue_preparation",
+          requestHash,
+        );
+        if (!receipt) return null;
+        if (!receipt.note?.subjectId) throw new ApplicationIntegrityError("preparation receipt");
+        return this.readPreparation(
+          tx,
+          command.ownerUserId,
+          command.applicationId,
+          receipt.note.subjectId,
+        );
+      });
     });
   }
 
@@ -1339,67 +1368,68 @@ export class PostgresApplicationStore {
     >;
   }): Promise<{ replayed: boolean; preparation: PreparationRecord; view: ApplicationView }> {
     command = structuredClone(command);
-    const requestHash = await this.protectedRequestHash(command, "queue_preparation", {
-      operation: "queue_preparation",
-      applicationId: command.applicationId,
-      request: command.request,
-    });
-    const receiptBeforeEncryption = await this.findReceipt(
-      this.client,
-      command.ownerUserId,
-      command.idempotencyKey,
-      "queue_preparation",
-      requestHash,
-    );
-    const prepared = receiptBeforeEncryption ? null : await this.prepareRestrictedFields(command);
-    return this.retryOnKeyRace(command.ownerUserId, () =>
-      this.client.begin(async (tx) => {
-        await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
-        const app = await this.lockApplication(tx, command.ownerUserId, command.applicationId);
-        const prior = await this.findReceipt(
-          tx,
-          command.ownerUserId,
-          command.idempotencyKey,
-          "queue_preparation",
-          requestHash,
-        );
-        if (prior) {
-          if (!prior.note?.subjectId) throw new ApplicationIntegrityError("preparation receipt");
-          return {
-            replayed: true,
-            preparation: await this.readPreparation(
-              tx,
-              command.ownerUserId,
-              app.id,
-              prior.note.subjectId,
-            ),
-            view: await this.readView(tx, command.ownerUserId, app.id),
-          };
-        }
-        if (receiptBeforeEncryption) throw new RestrictedPacketStoreUnavailableError();
-        if (Number(app.revision) !== command.request.expectedRevision)
-          throw new ApplicationRevisionConflictError();
-        const active = await tx`
+    return this.withOriginalReceiptAuthority(async () => {
+      const requestHash = await this.protectedRequestHash(command, "queue_preparation", {
+        operation: "queue_preparation",
+        applicationId: command.applicationId,
+        request: command.request,
+      });
+      const receiptBeforeEncryption = await this.findReceipt(
+        this.client,
+        command.ownerUserId,
+        command.idempotencyKey,
+        "queue_preparation",
+        requestHash,
+      );
+      const prepared = receiptBeforeEncryption ? null : await this.prepareRestrictedFields(command);
+      return this.retryOnKeyRace(command.ownerUserId, () =>
+        this.client.begin(async (tx) => {
+          await tx`SELECT identity.require_active_candidate(${command.ownerUserId}::uuid)`;
+          const app = await this.lockApplication(tx, command.ownerUserId, command.applicationId);
+          const prior = await this.findReceipt(
+            tx,
+            command.ownerUserId,
+            command.idempotencyKey,
+            "queue_preparation",
+            requestHash,
+          );
+          if (prior) {
+            if (!prior.note?.subjectId) throw new ApplicationIntegrityError("preparation receipt");
+            return {
+              replayed: true,
+              preparation: await this.readPreparation(
+                tx,
+                command.ownerUserId,
+                app.id,
+                prior.note.subjectId,
+              ),
+              view: await this.readView(tx, command.ownerUserId, app.id),
+            };
+          }
+          if (receiptBeforeEncryption) throw new RestrictedPacketStoreUnavailableError();
+          if (Number(app.revision) !== command.request.expectedRevision)
+            throw new ApplicationRevisionConflictError();
+          const active = await tx`
         SELECT id FROM applications.packet_preparations WHERE application_id = ${app.id}
           AND state IN ('queued', 'running')
       `;
-        if (active.length) throw new ApplicationRevisionConflictError();
-        if (
-          command.request.coverLetter?.disclosure.noticeVersion !==
-            COVER_LETTER_DISCLOSURE_VERSION ||
-          command.request.coverLetter.disclosure.acknowledged !== true ||
-          !/^[a-f0-9]{64}$/u.test(command.context.jobContextHash) ||
-          !/^[a-f0-9]{64}$/u.test(command.context.confirmedFactsHash) ||
-          command.packet.fields.some((field) => field.fieldKey === "documents.cover_letter")
-        )
-          throw new PacketInvariantError("Invalid explicit cover-letter preparation");
-        const now = this.clock();
-        if (!Number.isFinite(now.getTime()))
-          throw new PacketInvariantError("Invalid preparation clock");
-        const updated = await this.writePacket(tx, app, now, command.packet, prepared);
-        if (!updated.current_packet_id) throw new ApplicationIntegrityError("base packet");
-        const id = uuidv7();
-        await tx`
+          if (active.length) throw new ApplicationRevisionConflictError();
+          if (
+            command.request.coverLetter?.disclosure.noticeVersion !==
+              COVER_LETTER_DISCLOSURE_VERSION ||
+            command.request.coverLetter.disclosure.acknowledged !== true ||
+            !/^[a-f0-9]{64}$/u.test(command.context.jobContextHash) ||
+            !/^[a-f0-9]{64}$/u.test(command.context.confirmedFactsHash) ||
+            command.packet.fields.some((field) => field.fieldKey === "documents.cover_letter")
+          )
+            throw new PacketInvariantError("Invalid explicit cover-letter preparation");
+          const now = this.clock();
+          if (!Number.isFinite(now.getTime()))
+            throw new PacketInvariantError("Invalid preparation clock");
+          const updated = await this.writePacket(tx, app, now, command.packet, prepared);
+          if (!updated.current_packet_id) throw new ApplicationIntegrityError("base packet");
+          const id = uuidv7();
+          await tx`
         INSERT INTO applications.packet_preparations (
           id, application_id, owner_user_id, base_packet_id, expected_revision,
           job_context_hash, confirmed_facts_hash, notice_version, approved_at, expires_at, created_at, updated_at
@@ -1408,29 +1438,30 @@ export class PostgresApplicationStore {
           ${command.context.confirmedFactsHash}, ${COVER_LETTER_DISCLOSURE_VERSION}, ${now},
           ${new Date(now.getTime() + 15 * 60_000)}, ${now}, ${now})
       `;
-        await tx`
+          await tx`
         INSERT INTO applications.preparation_outbox (id, preparation_id, owner_user_id, payload, created_at)
         VALUES (${uuidv7()}, ${id}, ${app.owner_user_id},
           ${tx.json({ preparationId: id })}, ${now})
       `;
-        await this.auditPreparation(tx, id, app.owner_user_id, "queued", now);
-        await this.writeReceipt(
-          tx,
-          command,
-          "queue_preparation",
-          requestHash,
-          app.id,
-          Number(updated.revision),
-          now,
-          { code: "preparation_queued", subjectId: id },
-        );
-        return {
-          replayed: false,
-          preparation: await this.readPreparation(tx, command.ownerUserId, app.id, id),
-          view: await this.readView(tx, command.ownerUserId, app.id),
-        };
-      }),
-    );
+          await this.auditPreparation(tx, id, app.owner_user_id, "queued", now);
+          await this.writeReceipt(
+            tx,
+            command,
+            "queue_preparation",
+            requestHash,
+            app.id,
+            Number(updated.revision),
+            now,
+            { code: "preparation_queued", subjectId: id },
+          );
+          return {
+            replayed: false,
+            preparation: await this.readPreparation(tx, command.ownerUserId, app.id, id),
+            view: await this.readView(tx, command.ownerUserId, app.id),
+          };
+        }),
+      );
+    });
   }
 
   async getPreparation(
@@ -2151,7 +2182,7 @@ export class PostgresApplicationStore {
   private async commandResult(
     command: Parameters<PostgresApplicationStore["mutate"]>[0],
     operation: CommandOperation,
-    requestHash: string,
+    requestHash: string | ProtectedRequestHash,
     run: (tx: Tx, app: ApplicationRow, now: Date) => Promise<ApplicationRow>,
   ): Promise<CommandResult> {
     const { note: _note, ...result } = await this.mutate(command, operation, requestHash, run);
@@ -2166,7 +2197,7 @@ export class PostgresApplicationStore {
       idempotencyKey: string;
     },
     operation: CommandOperation,
-    requestHash: string,
+    requestHash: string | ProtectedRequestHash,
     run: (
       tx: Tx,
       app: ApplicationRow,
@@ -2469,7 +2500,7 @@ export class PostgresApplicationStore {
     ownerUserId: string,
     idempotencyKey: string,
     operation: CommandOperation,
-    requestHash: string,
+    requestHash: string | ProtectedRequestHash,
   ): Promise<{ applicationId: string; note: CommandNote | null } | null> {
     const [row] = await tx<
       {
@@ -2494,8 +2525,12 @@ export class PostgresApplicationStore {
         !this.permittedFingerprintKey(row.request_key_arn)
       )
         throw new RestrictedPacketStoreUnavailableError();
+      if (typeof requestHash === "string") throw new RestrictedPacketStoreUnavailableError();
+      if (requestHash.keyArn !== row.request_key_arn)
+        throw new RestrictedPacketReceiptAuthorityChangedError();
     }
-    if (row.operation !== operation || row.request_hash !== requestHash) {
+    const digest = typeof requestHash === "string" ? requestHash : requestHash.hash;
+    if (row.operation !== operation || row.request_hash !== digest) {
       throw new ApplicationIdempotencyConflictError();
     }
     return {
@@ -2508,7 +2543,7 @@ export class PostgresApplicationStore {
     tx: Tx,
     command: { ownerUserId: string; idempotencyKey: string },
     operation: CommandOperation,
-    requestHash: string,
+    requestHash: string | ProtectedRequestHash,
     applicationId: string,
     revision: number,
     now: Date,
@@ -2516,11 +2551,14 @@ export class PostgresApplicationStore {
   ): Promise<void> {
     const keyed = operation === "create_packet" || operation === "queue_preparation";
     const keyArn = keyed ? this.requireRestrictedProtection().configured.fingerprintKeyArn : null;
+    if (keyed && (typeof requestHash === "string" || requestHash.keyArn !== keyArn))
+      throw new RestrictedPacketStoreUnavailableError();
+    const digest = typeof requestHash === "string" ? requestHash : requestHash.hash;
     await tx`
       INSERT INTO applications.command_receipts
         (owner_user_id, idempotency_key, operation, request_hash, application_id, response_revision,
          outcome_code, subject_id, request_hash_scheme, request_key_arn, created_at)
-      VALUES (${command.ownerUserId}, ${command.idempotencyKey}, ${operation}, ${requestHash},
+      VALUES (${command.ownerUserId}, ${command.idempotencyKey}, ${operation}, ${digest},
         ${applicationId}, ${revision}, ${note?.code ?? null}, ${note?.subjectId ?? null}, ${keyed ? "kms-hmac-sha256.v1" : "sha256.v1"}, ${keyArn}, ${now})
     `;
   }

@@ -66,6 +66,7 @@ describe.skipIf(!requested)(
     const encryptionKey = randomBytes(32);
     const macKey = randomBytes(32);
     const commands: unknown[] = [];
+    let barrier: ((command: unknown) => Promise<void>) | undefined;
     let kmsSpy: ReturnType<typeof vi.spyOn>;
     beforeAll(async () => {
       const inherited = Object.fromEntries(
@@ -82,6 +83,7 @@ describe.skipIf(!requested)(
       // Only the KMS boundary is offline; owning authorization, ciphertext and audit use real SQL.
       const send = async (command: unknown) => {
         commands.push(command);
+        await barrier?.(command);
         if (command instanceof GenerateDataKeyCommand) {
           expect([encryptionKeyArn, nextEncryptionKeyArn]).toContain(command.input.KeyId);
           return {
@@ -280,6 +282,314 @@ describe.skipIf(!requested)(
         receiptsBefore.filter((row) => row.idempotency_key === f.originalCommand.idempotencyKey),
       );
     });
+    const races = ["mac", "data-key"].flatMap((phase) =>
+      ["old", "new"].flatMap((winner) =>
+        ["equivalent", "changed", "unknown"].map((kind) => ({ phase, winner, kind })),
+      ),
+    );
+    it.each(races)(
+      "preserves original authority during $phase, $winner winner, $kind request",
+      async ({ phase, winner: epoch, kind }) => {
+        const f = await fixture();
+        const winnerOld = epoch === "old";
+        const oldProtection = restrictedPacketWriterFromEnvironment({
+          ...f.env,
+          RESTRICTED_PACKET_HISTORICAL_KEYS_JSON: JSON.stringify(
+            kind === "unknown" && !winnerOld
+              ? []
+              : [
+                  {
+                    encryptionKeyArn: nextEncryptionKeyArn,
+                    fingerprintKeyArn: nextFingerprintKeyArn,
+                  },
+                ],
+          ),
+        });
+        const nextProtection = restrictedPacketWriterFromEnvironment({
+          ...f.env,
+          RESTRICTED_PACKET_ENCRYPTION_KEY_ARN: nextEncryptionKeyArn,
+          RESTRICTED_PACKET_FINGERPRINT_KEY_ARN: nextFingerprintKeyArn,
+          RESTRICTED_PACKET_HISTORICAL_KEYS_JSON: JSON.stringify(
+            kind === "unknown" && winnerOld ? [] : [{ encryptionKeyArn, fingerprintKeyArn }],
+          ),
+        });
+        if (!oldProtection || !nextProtection) throw Error("MissingSyntheticRacingProtection");
+        const oldStore = new PostgresApplicationStore(sql, undefined, {
+          definitions: defaultFieldDefinitions(),
+          restrictedPackets: oldProtection,
+        });
+        const nextStore = new PostgresApplicationStore(sql, undefined, {
+          definitions: defaultFieldDefinitions(),
+          restrictedPackets: nextProtection,
+        });
+        const winnerStore = winnerOld ? oldStore : nextStore;
+        const loserStore = winnerOld ? nextStore : oldStore;
+        const heldMac = winnerOld ? nextFingerprintKeyArn : fingerprintKeyArn;
+        const heldEncryption = winnerOld ? nextEncryptionKeyArn : encryptionKeyArn;
+        const winnerMac = winnerOld ? fingerprintKeyArn : nextFingerprintKeyArn;
+        const current = await oldStore.getApplication(
+          f.command.ownerUserId,
+          f.command.applicationId,
+        );
+        const command = {
+          ...f.originalCommand,
+          expectedRevision: current.application.revision,
+          idempotencyKey: uuidv7(),
+        };
+        const losingCommand =
+          kind === "changed"
+            ? {
+                ...command,
+                packet: {
+                  ...command.packet,
+                  fields: command.packet.fields.map((field) => ({ ...field, value: true })),
+                },
+              }
+            : command;
+        let arrived: () => void = () => {};
+        let release: () => void = () => {};
+        const reached = new Promise<void>((resolve) => {
+          arrived = resolve;
+        });
+        const resume = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let held = false;
+        let winnerCommitted = false;
+        let unlockedChecks = 0;
+        barrier = async (kms) => {
+          const matches =
+            phase === "mac"
+              ? kms instanceof GenerateMacCommand && kms.input.KeyId === heldMac
+              : kms instanceof GenerateDataKeyCommand && kms.input.KeyId === heldEncryption;
+          if (!held && matches) {
+            held = true;
+            arrived();
+            await resume;
+          }
+          if (
+            winnerCommitted &&
+            kms instanceof GenerateMacCommand &&
+            kms.input.KeyId === winnerMac
+          ) {
+            // The losing transaction must already have rolled back before original-key KMS.
+            await sql.begin(async (tx) => {
+              await tx`SELECT id FROM applications.applications WHERE id=${command.applicationId} FOR UPDATE NOWAIT`;
+            });
+            unlockedChecks++;
+          }
+        };
+        const pending = loserStore.createPacket(losingCommand).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+        try {
+          await reached;
+          const winner = await winnerStore.createPacket(command);
+          winnerCommitted = true;
+          expect(winner.replayed).toBe(false);
+          const before =
+            await sql`SELECT * FROM applications.command_receipts WHERE owner_user_id=${command.ownerUserId} AND idempotency_key=${command.idempotencyKey}`;
+          const resumedAt = commands.length;
+          release();
+          const loser = await pending;
+          if (kind === "equivalent") {
+            if ("error" in loser) throw loser.error;
+            expect(loser.value.replayed).toBe(true);
+            expect(loser.value.view).toEqual(winner.view);
+          } else {
+            expect("error" in loser).toBe(true);
+            if (!("error" in loser)) throw Error("MissingSyntheticRaceFailure");
+            expect(loser.error.name).toBe(
+              kind === "changed"
+                ? "ApplicationIdempotencyConflictError"
+                : "RestrictedPacketStoreUnavailableError",
+            );
+          }
+          expect(unlockedChecks).toBe(kind === "unknown" ? 0 : 1);
+          const resumed = commands.slice(resumedAt);
+          expect(
+            resumed
+              .filter((kms) => kms instanceof GenerateMacCommand)
+              .map((kms) => (kms as GenerateMacCommand).input.KeyId),
+          ).toEqual(kind === "unknown" ? [] : [winnerMac]);
+          expect(resumed.some((kms) => kms instanceof GenerateDataKeyCommand)).toBe(false);
+          expect(
+            await sql`SELECT * FROM applications.command_receipts WHERE owner_user_id=${command.ownerUserId} AND idempotency_key=${command.idempotencyKey}`,
+          ).toEqual(before);
+          const [packets] =
+            await sql`SELECT count(*)::int AS count FROM applications.packets WHERE application_id=${command.applicationId}`;
+          expect(packets?.count).toBe(3);
+          const [values] =
+            await sql`SELECT count(*)::int AS count FROM applications_restricted.packet_values WHERE application_id=${command.applicationId}`;
+          expect(values?.count).toBe(3);
+        } finally {
+          release();
+          barrier = undefined;
+          await pending;
+        }
+      },
+    );
+    const preparationRaces = ["queue-mac", "queue-data-key", "replay-mac"].flatMap((phase) =>
+      ["old", "new"].flatMap((winner) =>
+        ["equivalent", "changed", "unknown"].map((kind) => ({ phase, winner, kind })),
+      ),
+    );
+    it.each(preparationRaces)(
+      "preserves preparation authority during $phase, $winner winner, $kind request",
+      async ({ phase, winner: epoch, kind }) => {
+        const f = await fixture();
+        const winnerOld = epoch === "old";
+        const oldProtection = restrictedPacketWriterFromEnvironment({
+          ...f.env,
+          RESTRICTED_PACKET_HISTORICAL_KEYS_JSON: JSON.stringify(
+            kind === "unknown" && !winnerOld
+              ? []
+              : [
+                  {
+                    encryptionKeyArn: nextEncryptionKeyArn,
+                    fingerprintKeyArn: nextFingerprintKeyArn,
+                  },
+                ],
+          ),
+        });
+        const nextProtection = restrictedPacketWriterFromEnvironment({
+          ...f.env,
+          RESTRICTED_PACKET_ENCRYPTION_KEY_ARN: nextEncryptionKeyArn,
+          RESTRICTED_PACKET_FINGERPRINT_KEY_ARN: nextFingerprintKeyArn,
+          RESTRICTED_PACKET_HISTORICAL_KEYS_JSON: JSON.stringify(
+            kind === "unknown" && winnerOld ? [] : [{ encryptionKeyArn, fingerprintKeyArn }],
+          ),
+        });
+        if (!oldProtection || !nextProtection)
+          throw Error("MissingSyntheticPreparationRaceProtection");
+        const oldStore = new PostgresApplicationStore(sql, undefined, {
+          definitions: defaultFieldDefinitions(),
+          restrictedPackets: oldProtection,
+        });
+        const nextStore = new PostgresApplicationStore(sql, undefined, {
+          definitions: defaultFieldDefinitions(),
+          restrictedPackets: nextProtection,
+        });
+        const winnerStore = winnerOld ? oldStore : nextStore;
+        const loserStore = winnerOld ? nextStore : oldStore;
+        const heldMac = winnerOld ? nextFingerprintKeyArn : fingerprintKeyArn;
+        const heldEncryption = winnerOld ? nextEncryptionKeyArn : encryptionKeyArn;
+        const winnerMac = winnerOld ? fingerprintKeyArn : nextFingerprintKeyArn;
+        const current = await oldStore.getApplication(
+          f.command.ownerUserId,
+          f.command.applicationId,
+        );
+        const command = {
+          ...f.originalCommand,
+          idempotencyKey: uuidv7(),
+          context: { jobContextHash: "a".repeat(64), confirmedFactsHash: "b".repeat(64) },
+          request: {
+            expectedRevision: current.application.revision,
+            coverLetter: {
+              disclosure: {
+                noticeVersion: "openai-cover-letter.v1" as const,
+                acknowledged: true as const,
+              },
+            },
+          },
+        };
+        const losingCommand =
+          kind === "changed"
+            ? {
+                ...command,
+                request: {
+                  ...command.request,
+                  expectedRevision: command.request.expectedRevision + 1,
+                },
+              }
+            : command;
+        let arrived: () => void = () => {};
+        let release: () => void = () => {};
+        const reached = new Promise<void>((resolve) => {
+          arrived = resolve;
+        });
+        const resume = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let held = false;
+        let winnerCommitted = false;
+        let unlockedChecks = 0;
+        barrier = async (kms) => {
+          const matches =
+            phase === "queue-data-key"
+              ? kms instanceof GenerateDataKeyCommand && kms.input.KeyId === heldEncryption
+              : kms instanceof GenerateMacCommand && kms.input.KeyId === heldMac;
+          if (!held && matches) {
+            held = true;
+            arrived();
+            await resume;
+          }
+          if (
+            winnerCommitted &&
+            kms instanceof GenerateMacCommand &&
+            kms.input.KeyId === winnerMac
+          ) {
+            await sql.begin(async (tx) => {
+              await tx`SELECT id FROM applications.applications WHERE id=${command.applicationId} FOR UPDATE NOWAIT`;
+            });
+            unlockedChecks++;
+          }
+        };
+        const losingWork = async () => {
+          if (phase !== "replay-mac") return loserStore.queuePreparation(losingCommand);
+          const preparation = await loserStore.replayPreparation(losingCommand);
+          if (!preparation) throw Error("MissingSyntheticRacingPreparation");
+          return { replayed: true, preparation };
+        };
+        const pending = losingWork().then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+        try {
+          await reached;
+          const winner = await winnerStore.queuePreparation(command);
+          winnerCommitted = true;
+          expect(winner.replayed).toBe(false);
+          const before =
+            await sql`SELECT * FROM applications.command_receipts WHERE owner_user_id=${command.ownerUserId} AND idempotency_key=${command.idempotencyKey}`;
+          const resumedAt = commands.length;
+          release();
+          const loser = await pending;
+          if (kind === "equivalent") {
+            if ("error" in loser) throw loser.error;
+            expect(loser.value.replayed).toBe(true);
+            expect(loser.value.preparation).toEqual(winner.preparation);
+          } else {
+            expect("error" in loser).toBe(true);
+            if (!("error" in loser)) throw Error("MissingSyntheticPreparationRaceFailure");
+            expect(loser.error.name).toBe(
+              kind === "changed"
+                ? "ApplicationIdempotencyConflictError"
+                : "RestrictedPacketStoreUnavailableError",
+            );
+          }
+          expect(unlockedChecks).toBe(kind === "unknown" ? 0 : 1);
+          const resumed = commands.slice(resumedAt);
+          expect(
+            resumed
+              .filter((kms) => kms instanceof GenerateMacCommand)
+              .map((kms) => (kms as GenerateMacCommand).input.KeyId),
+          ).toEqual(kind === "unknown" ? [] : [winnerMac]);
+          expect(resumed.some((kms) => kms instanceof GenerateDataKeyCommand)).toBe(false);
+          expect(
+            await sql`SELECT * FROM applications.command_receipts WHERE owner_user_id=${command.ownerUserId} AND idempotency_key=${command.idempotencyKey}`,
+          ).toEqual(before);
+          const [counts] =
+            await sql`SELECT (SELECT count(*)::int FROM applications.packet_preparations WHERE application_id=${command.applicationId}) AS preparations, (SELECT count(*)::int FROM applications.preparation_outbox WHERE preparation_id=${winner.preparation.id}) AS events, (SELECT count(*)::int FROM applications_restricted.packet_values WHERE application_id=${command.applicationId}) AS values`;
+          expect(counts).toEqual({ preparations: 1, events: 1, values: 3 });
+        } finally {
+          release();
+          barrier = undefined;
+          await pending;
+        }
+      },
+    );
     it("refuses foreign authority and withdrawn export configuration before KMS", async () => {
       const f = await fixture();
       const runtime = createNativeRestrictedPacketExportReader(url, policy, f.env);

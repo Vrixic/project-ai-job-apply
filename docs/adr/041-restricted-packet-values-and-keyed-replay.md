@@ -105,3 +105,9 @@ withdrawn original MAC authority refuses before KMS. This does not prove live KM
 Clean a6da6b3f passes full maintained verification and four actual artifact families build twice
 byte-identically with integrity/isolation/refusal checks. Concurrent first-use replay across old/new
 writer authority still needs transition evidence; no release/accountable gate or activation closes.
+
+Concurrent first use now has thirty actual SQL race cases with simulated KMS transport. Private
+prepared MAC results pin original authority; supported key changes recheck once after SQL rollback,
+while changed payloads conflict and unknown keys refuse without another MAC. Original receipts,
+packet/preparation/event counts and no SQL lock during crypto are verified. New artifact/full
+verification remains required; no release/accountable gate or activation closes.

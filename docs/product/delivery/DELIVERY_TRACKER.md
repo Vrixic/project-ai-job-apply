@@ -3878,3 +3878,14 @@ documentation follows verified source. Concurrent old/new first-use replay still
 evidence before whole-slice review; real legacy/key/role/retention/accountable/client/ATS/deployed
 gates remain. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). D1/D3 stay In progress;
 CI/CD remains deferred until production launch.
+
+
+2026-10-05 D3-077 reproduces and fixes concurrent first-use replay across old/new writer keys.
+Thirty new actual SQL races (33 runtime cases total) preserve original receipts, avoid duplicate
+packets/preparations/events and prove transaction rollback before original-key MAC. Changed requests
+still conflict; unsupported authority refuses before further KMS. Existing 27 restricted-storage
+SQL cases and 377 Applications/318 Gateway/1,613 Workflow units, all three builds and five emitted
+isolation cases pass. Owned fixture removed, shared volumes
+preserved and Docker/WSL stopped. [Evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). New
+emitted artifact and clean full verification remain before whole-slice review; D1/D3 stay In progress.
+No frontend change, publication, deployment or activation; CI/CD remains deferred until launch.
