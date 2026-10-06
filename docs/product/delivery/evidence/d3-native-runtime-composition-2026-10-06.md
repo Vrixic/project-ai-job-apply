@@ -54,3 +54,9 @@ dependency pin, artifact publication, provider call, managed task, TLS/DNS/IAM r
 client/ATS/idle-browser acceptance is claimed. Native image/bootstrap and authenticated adapter
 composition remain required before activation, alongside provider/accountable gates. Docker/WSL
 are stopped after the explicit Linux tests; shared volumes remain, and the PC stays on.
+
+After verification, the maintained launcher restores local web against the live development API:
+root 200 and unauthenticated Resume 307. Only the two inspected Next-generated development
+imports are restored; tracked source is clean. All 16 changed local file links pass. This adds
+readiness evidence, not authenticated resume/preference/native-client or hosted D3 acceptance.
+The feature branch is pushed without opening a third PR; #564 and #565 remain open.
