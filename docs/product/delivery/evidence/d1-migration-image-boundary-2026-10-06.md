@@ -19,7 +19,7 @@ altered SQL migration, extra/replaced filenames and mismatched manifest entries/
 Log: `.tmp/d1-migration-image-smoke-final.log`. Fixture execution uses real manifest/SQL files and
 generated package roots; it opens no database and makes no cloud call.
 
-Cold image build, hardened actual-image smoke and full clean-source verification follow. The
+Cold image build, hardened actual-image smoke and full clean-source verification pass. The
 image uses the existing pinned Node build/runtime bases and reviewed OpenSSL APK hashes; no
 new image/dependency pin, schema, migration, API, frontend, Terraform or hosted CI/CD change.
 The Docker context allowlist excludes environment files, credentials, caches and raw artifacts.
@@ -27,3 +27,27 @@ No ECR push, live database migration, runtime activation or phase completion is 
 
 This release blocker is addressed before the pending D3 native material-runtime image work.
 CI/CD remains deferred until production launch; the PC stays on.
+
+## Verified local artifact
+
+Committed source `dfa43da766b5f9c29fa485b4c5ae06fee91f97f0` was archived into a source-only
+Docker context and built with `--pull --no-cache --platform linux/amd64` and its committed Unix
+timestamp as `SOURCE_DATE_EPOCH`. The build-time restore package smoke passes. The resulting
+local image is `sha256:bb6c9afbec3267ac93dffb087cf19260411d10cfad49ed5c8b74bc3147842058`,
+Linux/amd64, user `65532:65532`, with its OCI revision bound to that exact source.
+Log: `.tmp/d1-migration-image-cold-build.log`.
+
+The publisher's exact inline smoke was extracted without modification and executed in that
+image with `--pull never --network none --read-only --cap-drop ALL`,
+`--security-opt no-new-privileges` and user `65532:65532`. It returns
+`migration-runtime-smoke:ok`, checking all seven owners, executable entrypoints, 69 migrations,
+92 relations and every SQL filename/checksum. No database, credentials or mounted artifacts
+were supplied. Log: `.tmp/d1-migration-image-runtime-smoke.log`.
+
+The full maintained `scripts/verify-phase0.ps1` passes on the same clean committed source,
+with `ARTIFACT_SOURCE_SHA` explicitly set: 38 typecheck tasks, 39 test tasks and 23 builds,
+including the 173 executable smoke cases, operator/security/isolation and Compose checks.
+Lint remains zero errors, 15 warnings and 58 infos. Log: `.tmp/d1-migration-image-full.log`.
+No tracked source was edited during that run. The isolated local web server was stopped before
+session fixtures bound port 3000. Docker Desktop and WSL were stopped after the image smoke;
+the PC remains on. Hosted publication, scan, migration and runtime rollout remain unclaimed.
