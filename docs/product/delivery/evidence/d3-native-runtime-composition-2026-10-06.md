@@ -44,7 +44,12 @@ decoding, grounding, acknowledgement and rendering; reads and renders cannot ren
   clients and other domain-owner runtimes are absent. It is added to the maintained verifier.
   Log: `.tmp/d3-native-runtime-bundle.log`.
 
-The full clean committed-source verifier remains pending. No new SQL/schema/public API or
+The full clean committed-source verifier passes at
+`c33691ba3d25d51bff9c2213acf16ff14288518d`, with explicit `ARTIFACT_SOURCE_SHA` and no tracked
+edits during the original run: 38 typecheck tasks, 39 test tasks, 23 builds, unchanged lint
+(zero errors, 15 warnings, 58 infos), all maintained operator/security/isolation and Compose/scope
+checks. Log: `.tmp/d3-native-runtime-full.log`. Local web was stopped before session tests used
+port 3000. No new SQL/schema/public API or
 dependency pin, artifact publication, provider call, managed task, TLS/DNS/IAM rollout or
 client/ATS/idle-browser acceptance is claimed. Native image/bootstrap and authenticated adapter
 composition remain required before activation, alongside provider/accountable gates. Docker/WSL
