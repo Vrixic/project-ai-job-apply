@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -6,6 +7,33 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+test("local actual-image proof rejects missing opt-in, mutable tags and malformed source before Docker", () => {
+  const digest = `sha256:${"a".repeat(64)}`;
+  const valid = [
+    "--enable-local-image-tests",
+    "--image",
+    digest,
+    "--certificate-image",
+    digest,
+    "--source-sha",
+    "b".repeat(40),
+  ];
+  for (const args of [
+    [],
+    valid.slice(1),
+    valid.map((value, i) => (i === 2 ? "latest" : value)),
+    valid.map((value, i) => (i === 6 ? "main" : value)),
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(root, "scripts/verify-native-material-image.mjs"), ...args],
+      { encoding: "utf8" },
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /NativeImageProofTargetRejected/u);
+    assert.equal(result.stdout, "");
+  }
+});
 test("native image contains actual provider and pinned-secret clients without owner persistence or task authority", async () => {
   const result = await build({
     absWorkingDir: root,

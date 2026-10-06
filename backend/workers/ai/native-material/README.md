@@ -48,3 +48,17 @@ docker build --platform linux/amd64 --file Dockerfile.native-material --build-ar
 For generated-only local positive proof, the maintained native Linux verifier connects these actual
 ports to synthetic AWS/provider/identity responses, real rendering/HTTPS and actual kernel retirement.
 Production rejects those test seams. No real account or model request is used by that test.
+
+To exercise the exact locally built production bundle, canvas and kernel with generated-only
+ports, opt in explicitly and supply immutable local image IDs and the image's source SHA:
+
+```powershell
+node scripts/verify-native-material-image.mjs --enable-local-image-tests --image sha256:<material-image-id> --certificate-image sha256:<local-node24-openssl-image-id> --source-sha <40-character-image-source-SHA>
+```
+
+The verifier uses no network or image pulls. Its separate test supervisor checks both original
+document versions, PDF/DOCX HTTPS reads, kernel retirement and secret-version/TLS-host refusal.
+It checks image manifest hashes, uses owned synthetic staging and removes its labelled containers.
+This exercises the bundled factory with test ports; it does not activate production configuration
+or prove managed IAM, endpoint routing or real provider acceptance.
+See [actual image evidence](../../../../docs/product/delivery/evidence/d3-native-image-conformance-2026-10-06.md).

@@ -40,6 +40,9 @@ const result = await build({
   platform: "node",
   target: "node24",
   format: "cjs",
+  // PDF verification lazily resolves canvas through createRequire(import.meta.url).
+  // CJS has no import.meta; bind it to this image's fixed bundle location.
+  define: { "import.meta.url": '"file:///materials/native-material/runtime.cjs"' },
   metafile: true,
   external: ["@napi-rs/canvas"],
 });

@@ -17,7 +17,7 @@ import { startNativeMaterialTask } from "../../../services/documents/src/native-
 import { prepareOriginalCoverLetterRequest } from "../../../services/documents/src/original-cover-letter-generation.ts";
 import { createTemporaryMaterialCompletionHandler } from "../../../services/documents/src/temporary-material-completion-handler.ts";
 
-export async function exerciseNativeRuntime(mode, kernelPath) {
+export async function exerciseNativeRuntime(mode, kernelPath, externalImage = false) {
   const ids = [1, 2, 3, 4, 5, 6].map(
     (n) => `019d04cf-1f80-7000-8000-${String(n).padStart(12, "0")}`,
   );
@@ -461,8 +461,8 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
     assert.equal(metadataReads, 2);
     assert.equal(portLoads, imageMode ? 0 : 1);
     await assert.rejects(
-      startNativeMaterialTask(bootstrapOptions),
-      /NativeTaskBootstrapUnavailable/u,
+      externalImage ? startNativeImage(imageOptions) : startNativeMaterialTask(bootstrapOptions),
+      externalImage ? /NativeImageConfigurationUnavailable/u : /NativeTaskBootstrapUnavailable/u,
     );
     assert.equal(portLoads, imageMode ? 0 : 1);
   }
@@ -473,10 +473,11 @@ export async function exerciseNativeRuntime(mode, kernelPath) {
   assert.equal(Object.hasOwn(runtime, "reader"), false);
   assert.equal(Object.hasOwn(runtime, "session"), false);
   assert.ok(Object.isFrozen(runtime.reference) && Object.isFrozen(runtime.letter.sourceFactIds));
-  await assert.rejects(
-    createNativeCoverLetterRuntime(options),
-    /NativeCoverLetterRuntimeUnavailable/u,
-  );
+  if (!externalImage)
+    await assert.rejects(
+      createNativeCoverLetterRuntime(options),
+      /NativeCoverLetterRuntimeUnavailable/u,
+    );
   runtime.server.listen(0, "127.0.0.1");
   await once(runtime.server, "listening");
   let files = 0;

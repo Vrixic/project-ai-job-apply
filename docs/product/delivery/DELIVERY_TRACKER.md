@@ -1,5 +1,10 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 adds explicit actual-image conformance and fixes lazy PDF canvas resolution
+in the production CommonJS bundle. Generated-only image verification is in progress; no managed
+acceptance is claimed. [Evidence](evidence/d3-native-image-conformance-2026-10-06.md).
+D1/D3 remain In progress; CI/CD deferred, no cloud activation and PC stays on.
+
 2026-10-06 D3-079 fixes and locally verifies native second-generation version handling: Documents'
 original version is pinned through bootstrap, memory generation, completion and direct reads.
 All 183 focused checks, 24 real SQL cases, 31 Linux scenarios, six emitted checks and three actual-
