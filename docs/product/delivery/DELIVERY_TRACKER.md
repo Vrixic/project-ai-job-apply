@@ -3972,3 +3972,42 @@ Verified combined implementation `97cc9c52` is unchanged; subsequent commits rec
 evidence only. Native image/authenticated adapters/issuer/event routing/managed task/client/ATS/
 provider/accountable gates remain. D1/D3 stay In progress; no authored main merge, deployment,
 activation or hosted CI/CD work. Docker/WSL are stopped and shared volumes retained.
+
+2026-10-06 D3-079 private native launch runtime starts on fresh main `5305829d` plus exact
+open #562 `e36c0298`. Strict metadata sender/receiver, fixed signed numeric Lambda transport,
+managed-secret bootstrap and actual Applications/Docs admission/claim/capture compose without
+SQL locks across AWS. Independent recovery remains available after launch shutdown. 91 Documents
+and 33 bootstrap cases, ten real PostgreSQL cases and two emitted isolation/default-off checks
+pass; transports/credentials are synthetic, not deployed IAM/task evidence. Narrow owner exports
+remove unrelated body/crypto capabilities. Owned fixture removed, shared volumes retained and
+Docker/WSL stopped. Clean full/artifact verification remains before review.
+[Evidence](evidence/d3-native-launch-control-2026-10-06.md). D1/D3 stay In progress; native image/
+private adapters/routing/managed-task/client/ATS/provider/accountable gates remain. No frontend
+change, publication/deployment/activation or hosted CI/CD work.
+
+2026-10-06 D3-079 clean `228bd75d` passes full maintained verification: 38 typecheck tasks,
+39 test tasks, 23 build tasks, unchanged lint baseline and all emitted isolation checks.
+The initial existing readiness cold-import timeout is retained in evidence; all 44 cases pass
+in isolation and the unchanged-source full rerun without relaxing guards or timeouts.
+The explicitly source-bound private artifact builds twice with five identical files;
+independent archive/bundle/SBOM/source checks pass (258613 bytes, 24 components).
+[Evidence](evidence/d3-native-launch-control-2026-10-06.md). No native SQL/schema change;
+ten real PostgreSQL cases remain the connected proof, with synthetic secret/Lambda/ECS
+transports. Original-version/configuration retention remains a recovery release gate.
+D1/D3 stay In progress, all activation gates stay off and hosted CI/CD stays deferred.
+
+2026-10-06 D3-079 private native launch control is reviewable in draft
+[PR #563](https://github.com/Vrixic/project-ai-job-apply/pull/563), stacked on exact open
+#562 `e36c0298`. Verified implementation `228bd75d` is unchanged; later commits record
+verification and review links only. Two authored draft PRs are open. D1/D3 remain In progress;
+native image/private adapters/routing/managed-task/client/ATS/provider/accountable gates remain.
+No authored main merge, artifact publication, deployment, activation or hosted CI/CD work.
+Owned fixture is removed, shared volumes retained and Docker/WSL stopped.
+
+2026-10-06 D3-079 starts default-off private ECS task-state recovery on exact #563 source.
+Events supply hints only; existing signed positive recovery independently verifies the original
+owning claim and exact task before capture. 49 synthetic transport units, owner/workflow builds,
+typecheck and three emitted isolation checks pass. No SQL mutation/schema change or Docker need.
+[Evidence](evidence/d3-native-task-event-recovery-2026-10-06.md). Full clean/artifact verification
+remains before updated review; managed event/rule/IAM/retry/DLQ/original-version/task acceptance
+remain. D1/D3 stay In progress, no deployment/activation and CI/CD stays deferred.

@@ -48,9 +48,17 @@
       "types": "./dist/src/native-material-disposal.d.ts",
       "default": "./dist/src/native-material-disposal.js"
     },
+    "./native-launch-control": {
+      "types": "./dist/src/native-launch-control.d.ts",
+      "default": "./dist/src/native-launch-control.js"
+    },
     "./native-task-launch": {
       "types": "./dist/src/native-task-launch.d.ts",
       "default": "./dist/src/native-task-launch.js"
+    },
+    "./native-task-allocation": {
+      "types": "./dist/src/native-task-allocation.d.ts",
+      "default": "./dist/src/native-task-allocation.js"
     }
   },
   "scripts": {

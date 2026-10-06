@@ -8,6 +8,10 @@
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     },
+    "./lambda-database-url": {
+      "types": "./dist/src/lambda-database-url.d.ts",
+      "default": "./dist/src/lambda-database-url.js"
+    },
     "./schema": {
       "types": "./dist/src/schema.d.ts",
       "default": "./dist/src/schema.js"
