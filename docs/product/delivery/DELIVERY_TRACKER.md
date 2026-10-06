@@ -3957,3 +3957,11 @@ transports are simulated. Owned fixtures removed, shared volumes retained, Docke
 Full clean combined verification remains before review.
 [Evidence](evidence/d3-native-task-launch-2026-10-05.md). D1/D3 stay In progress; no cloud activation
 or deployment; CI/CD stays deferred until production launch.
+
+2026-10-05 D3-079 combined clean `97cc9c52` passes full maintained verification: 38 typecheck
+and 39 test tasks, 23 builds, unchanged lint baseline and operational/security/Compose/scope/
+emitted refusal checks. Separate migration publisher OCI and staging restore/inspector guards
+also pass. Combined 66/88/12 actual logical restore and all 40 registry SQL cases already pass.
+[Evidence](evidence/d3-native-task-launch-2026-10-05.md). Only delivery evidence follows the
+verified source. D1/D3 stay In progress; native image/authenticated adapters/routing/task/client/
+ATS/provider/accountable gates remain. No cloud deployment/activation; CI/CD deferred until launch.

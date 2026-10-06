@@ -1,6 +1,6 @@
 # D3 native task launch claims and positive recovery — 2026-10-05
 
-Status: private source checkpoint, default-off; clean `a2600fb5` fully verified locally.
+Status: private source checkpoint, default-off; combined clean `97cc9c52` fully verified locally.
 D3-079 and D1/D3 remain In progress. Base: exact main `18b6b2e2` (#559), isolated backend worktree.
 Initial standalone source excludes restricted-packet PR #561. Its independent main merge is
 now integrated; the combined evidence is recorded below.
@@ -93,7 +93,7 @@ its separately verified fixture. Shared volume inventories match; Docker Desktop
 
 ## Remaining work and release boundary
 
-Current standalone source passes full local verification; full clean combined verification remains. The immutable native image/entrypoint,
+Current standalone source passes full local verification; full clean combined verification passes at `97cc9c52`. The immutable native image/entrypoint,
 authenticated issuer/launcher and private evidence/work/completion/registry adapters, durable task
 state-event routing/lost-ACK capture, managed TLS/DNS routing, IAM/task conformance and complete
 client/ATS disposal remain unfinished. Unknown launch requires positive exact evidence; it does not
@@ -155,4 +155,13 @@ Owned combined SQL fixture `688968963b8ba6db416b49cba68043e0301661d7ae74ecddbca9
 is removed after exact identity/image/label/tmpfs/mount checks. The logical restore harness removes
 its own fixture. Shared volumes match; Docker Desktop/WSL are stopped. ECS and KMS transport
 remain simulated; no deployed authentication/task/provider or phase acceptance is claimed.
-Full clean combined verification remains pending.
+Full clean combined verification passes at `97cc9c52`.
+
+Clean combined `97cc9c52333bf8aaccb6c56bbeff1aa3ea5434d7` passes the full maintained verifier:
+38 typecheck tasks, 39 test tasks, 23 builds, formatting, unchanged zero-error/15-warning/58-info
+lint baseline, security and operational checks, actual emitted isolation/default-off refusals,
+Compose and product-scope checks. Log: `.tmp/d3-native-launch-combined-full.log`.
+Separate migration publisher OCI guards and staging restore verifier/49 input/260 inspector
+checks pass (`.tmp/d3-native-launch-combined-publisher-guards.log`,
+`.tmp/d3-native-launch-combined-staging-guards.log`). No tracked source changes during verification;
+only delivery evidence follows. No runtime activation or phase completion is claimed.
