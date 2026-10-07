@@ -99,7 +99,7 @@ data "aws_iam_policy_document" "platform_kms" {
       condition {
         test     = "ArnEquals"
         variable = "aws:SourceArn"
-        values   = values(local.native_resume_observer_rules)
+        values   = concat(values(local.native_resume_observer_rules), values(local.native_resume_terminal_rules))
       }
     }
   }

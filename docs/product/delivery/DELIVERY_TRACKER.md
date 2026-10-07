@@ -4826,3 +4826,10 @@ from preparation releases in both environments. Twelve mocked network/RPC/secret
 both environments validate. [Evidence](evidence/d3-native-resume-private-network-2026-10-07.md).
 No live reachability or managed IAM claim; hostname/TLS, unresolved-route reconciliation and
 managed acceptance remain. D1/D3 In progress, CI/CD deferred, Docker/WSL off and PC on.
+
+2026-10-07 D3-064/D3-079 makes unresolved routed preparation fail visibly after checkpointing
+its scalar outcome and running cleanup. Default-off original-version terminal events feed the
+existing encrypted queue; added execution/delivery alarms and an operator recovery runbook.
+Build, 26 workflow tests, eight bundle checks, 19 mocked Terraform cases and both environment
+validations pass. [Evidence](evidence/d3-native-resume-terminal-signals-2026-10-07.md).
+Managed recovery drill and missed-event reconciliation remain; no activation. D1/D3 In progress.

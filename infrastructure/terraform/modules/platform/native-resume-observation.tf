@@ -12,12 +12,16 @@ variable "native_resume_observation_releases" {
   }
 }
 locals {
+  native_resume_terminal_rules = { for revision, release in var.native_resume_observation_releases : revision => "arn:aws:events:us-east-2:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-resume-durable-r${revision}-terminal" }
   native_resume_observer_rules = { for revision, release in var.native_resume_observation_releases : revision => "arn:aws:events:us-east-2:${data.aws_caller_identity.current.account_id}:rule/${var.name}-${var.environment}-resume-observer-r${revision}" }
   native_resume_observer_alarms = merge({}, [for revision, release in var.native_resume_observation_releases : {
-    "${revision}-queued"    = { namespace = "AWS/SQS", metric = "ApproximateNumberOfMessagesVisible", statistic = "Maximum", dimensions = { QueueName = element(reverse(split(":", release.queue_arn)), 0) } }
-    "${revision}-delivery"  = { namespace = "AWS/Events", metric = "InvocationsFailedToBeSentToDlq", statistic = "Sum", dimensions = { RuleName = "${var.name}-${var.environment}-resume-observer-r${revision}" } }
-    "${revision}-sweep"     = { namespace = "AWS/Events", metric = "FailedInvocations", statistic = "Sum", dimensions = { RuleName = "${var.name}-${var.environment}-resume-observer-r${revision}-sweep" } }
-    "${revision}-execution" = { namespace = "AWS/Lambda", metric = "DeadLetterErrors", statistic = "Sum", dimensions = { FunctionName = "${var.name}-${var.environment}-resume-observer-r${revision}" } }
+    "${revision}-terminal-delivery" = { namespace = "AWS/Events", metric = "FailedInvocations", statistic = "Sum", dimensions = { RuleName = "${var.name}-${var.environment}-resume-durable-r${revision}-terminal" } }
+    "${revision}-durable-failed"    = { namespace = "AWS/Lambda", metric = "DurableExecutionFailed", statistic = "Sum", dimensions = { FunctionName = "${var.name}-${var.environment}-resume-durable-r${revision}" } }
+    "${revision}-durable-timeout"   = { namespace = "AWS/Lambda", metric = "DurableExecutionTimedOut", statistic = "Sum", dimensions = { FunctionName = "${var.name}-${var.environment}-resume-durable-r${revision}" } }
+    "${revision}-queued"            = { namespace = "AWS/SQS", metric = "ApproximateNumberOfMessagesVisible", statistic = "Maximum", dimensions = { QueueName = element(reverse(split(":", release.queue_arn)), 0) } }
+    "${revision}-delivery"          = { namespace = "AWS/Events", metric = "InvocationsFailedToBeSentToDlq", statistic = "Sum", dimensions = { RuleName = "${var.name}-${var.environment}-resume-observer-r${revision}" } }
+    "${revision}-sweep"             = { namespace = "AWS/Events", metric = "FailedInvocations", statistic = "Sum", dimensions = { RuleName = "${var.name}-${var.environment}-resume-observer-r${revision}-sweep" } }
+    "${revision}-execution"         = { namespace = "AWS/Lambda", metric = "DeadLetterErrors", statistic = "Sum", dimensions = { FunctionName = "${var.name}-${var.environment}-resume-observer-r${revision}" } }
   }]...)
 }
 resource "aws_sqs_queue" "native_resume_observation" {
@@ -40,7 +44,7 @@ resource "aws_sqs_queue_policy" "native_resume_observation" {
   queue_url = aws_sqs_queue.native_resume_observation[each.key].url
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Sid = "OriginalRuleOnly", Effect = "Allow", Principal = { Service = "events.amazonaws.com" }, Action = "sqs:SendMessage", Resource = each.value.queue_arn,
-    Condition = { ArnEquals = { "aws:SourceArn" = local.native_resume_observer_rules[each.key] }, StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id } } },
+    Condition = { ArnEquals = { "aws:SourceArn" = [local.native_resume_observer_rules[each.key], local.native_resume_terminal_rules[each.key]] }, StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id } } },
     { Sid = "RequireTLS", Effect = "Deny", Principal = "*", Action = "sqs:*", Resource = each.value.queue_arn,
     Condition = { Bool = { "aws:SecureTransport" = "false" } } }
   ] })

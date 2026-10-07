@@ -491,3 +491,33 @@ resource "aws_lambda_permission" "observer_sweep" {
   source_arn     = aws_cloudwatch_event_rule.observer_sweep[0].arn
   source_account = var.account_id
 }
+
+variable "terminal_events_enabled" {
+  description = "Retain original failed execution notices even when new work/runtime is disabled."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+resource "aws_cloudwatch_event_rule" "terminal" {
+  count = local.deployed ? 1 : 0
+  name  = "${local.names.durable}-terminal"
+  state = var.terminal_events_enabled ? "ENABLED" : "DISABLED"
+  event_pattern = jsonencode({
+    source = ["aws.lambda"], detail-type = ["Durable Execution Status Change"], account = [var.account_id], region = ["us-east-2"],
+    detail = { functionArn = [{ prefix = "${local.durable_arn}:" }], status = ["FAILED", "STOPPED", "TIMED_OUT"] }
+  })
+}
+resource "aws_cloudwatch_event_target" "terminal" {
+  count     = local.deployed ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.terminal[0].name
+  target_id = "original-resume-recovery-notice"
+  arn       = var.release.observer_dead_letter_arn
+  input_transformer {
+    input_paths    = { execution = "$.detail.durableExecutionArn", function = "$.detail.functionArn", status = "$.detail.status" }
+    input_template = "{\"schemaVersion\":1,\"kind\":\"native_resume_terminal\",\"executionArn\":<execution>,\"functionArn\":<function>,\"status\":<status>}"
+  }
+  retry_policy {
+    maximum_event_age_in_seconds = 86400
+    maximum_retry_attempts       = 185
+  }
+}

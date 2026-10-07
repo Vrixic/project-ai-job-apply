@@ -129,11 +129,19 @@ export function createNativeResumePreparationWorkflow(
         creationEnabled: routing.creationEnabled,
         ...(routing.testRoute ? { testRoute: routing.testRoute } : {}),
       });
-      return {
-        schemaVersion: 1,
-        outcome: "route_lifecycle_finished",
-        ...(await lifecycle(context, scope)),
-      };
+      const completed = await lifecycle(context, scope);
+      const recorded = await context.step(
+        "native-resume.route-outcome.v1",
+        async (): Promise<RouteResult> => ({
+          schemaVersion: 1,
+          outcome: "route_lifecycle_finished",
+          ...completed,
+        }),
+      );
+      if (recorded.cleanup === "unresolved") throw Error("NativeResumeRouteCleanupUnresolved");
+      if (recorded.attachment !== "acknowledged")
+        throw Error("NativeResumeRoutePreparationIncomplete");
+      return recorded;
     }
     const completed = await invoke(
       context,

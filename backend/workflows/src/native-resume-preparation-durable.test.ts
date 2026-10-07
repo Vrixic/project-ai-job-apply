@@ -80,99 +80,116 @@ it("checkpoints original reservation and polls the same scope without repeating 
   expect(runner.getOperation("native-resume.reserve.v1.attempt-1")).toBeDefined();
   expect(runner.getOperation("native-resume.complete.v1.attempt-3")).toBeDefined();
 });
-it("routes the stored preparation through capture, DNS readiness, owner attachment and cleanup", async () => {
-  const route = {
-    intent: {
-      allocationId: scope.allocationId,
-      publicIp: "54.0.0.1",
-      hostedZoneId: "ZSYNTHETIC123",
-      baseHost: "resumes.example.com",
-    },
-    expiresAtMs: Date.now() + 1_800_000,
-  };
-  const calls: string[] = [];
-  let present = false,
-    propagated = false;
-  const handler = createNativeResumePreparationDurableHandler(target, {
-    enabled: () => true,
-    creationEnabled: () => true,
-    testControlClient: {
-      send: async (command) => {
-        const payload = command.input.Payload;
-        if (!(payload instanceof Uint8Array)) throw Error("SyntheticPayloadExpected");
-        const request = JSON.parse(
-          new TextDecoder().decode(payload),
-        ) as NativeResumePreparationControlInput;
-        calls.push(request.action);
-        const outcome =
-          request.action === "route_admit"
-            ? "admitted"
-            : request.action === "route_retired"
-              ? "retired"
-              : "ready";
-        if (request.action === "complete") expect(propagated).toBe(true);
+it.each(["success", "lost-delete", "lost-attachment"])(
+  "routes original preparation and reports %s",
+  async (mode) => {
+    const route = {
+      intent: {
+        allocationId: scope.allocationId,
+        publicIp: "54.0.0.1",
+        hostedZoneId: "ZSYNTHETIC123",
+        baseHost: "resumes.example.com",
+      },
+      expiresAtMs: Date.now() + 1_800_000,
+    };
+    const calls: string[] = [];
+    let present = false,
+      propagated = false;
+    const handler = createNativeResumePreparationDurableHandler(target, {
+      enabled: () => true,
+      creationEnabled: () => true,
+      testControlClient: {
+        send: async (command) => {
+          const payload = command.input.Payload;
+          if (!(payload instanceof Uint8Array)) throw Error("SyntheticPayloadExpected");
+          const request = JSON.parse(
+            new TextDecoder().decode(payload),
+          ) as NativeResumePreparationControlInput;
+          calls.push(request.action);
+          const outcome =
+            request.action === "route_admit"
+              ? "admitted"
+              : request.action === "route_retired"
+                ? "retired"
+                : "ready";
+          if (request.action === "complete") {
+            expect(propagated).toBe(true);
+            if (mode === "lost-attachment") throw Error("SyntheticLostAttachmentAck");
+          }
+          return {
+            StatusCode: 200,
+            ExecutedVersion: "9",
+            Payload: new TextEncoder().encode(
+              JSON.stringify({
+                schemaVersion: 1,
+                request,
+                outcome,
+                scope,
+                packet: outcome === "ready" ? { id: id(9), revision: 3 } : null,
+              }),
+            ),
+          };
+        },
+      },
+      testRoute: (observed) => {
+        expect(observed).toEqual(route.intent);
         return {
-          StatusCode: 200,
-          ExecutedVersion: "9",
-          Payload: new TextEncoder().encode(
-            JSON.stringify({
-              schemaVersion: 1,
-              request,
-              outcome,
-              scope,
-              packet: outcome === "ready" ? { id: id(9), revision: 3 } : null,
-            }),
-          ),
+          create: async () => {
+            calls.push("dns-create");
+            present = true;
+            return { changeId: "/change/CCREATE", status: "PENDING" };
+          },
+          status: async (changeId) => {
+            propagated = true;
+            return { changeId, status: "INSYNC" };
+          },
+          inspect: async () => ({ kind: present ? "present" : "absent" }),
+          remove: async () => {
+            calls.push("dns-remove");
+            present = false;
+            if (mode === "lost-delete") throw Error("SyntheticLostDeleteAck");
+            return { changeId: "/change/CDELETE", status: "PENDING" };
+          },
         };
       },
-    },
-    testRoute: (observed) => {
-      expect(observed).toEqual(route.intent);
-      return {
-        create: async () => {
-          calls.push("dns-create");
-          present = true;
-          return { changeId: "/change/CCREATE", status: "PENDING" };
-        },
-        status: async (changeId) => {
-          propagated = true;
-          return { changeId, status: "INSYNC" };
-        },
-        inspect: async () => ({ kind: present ? "present" : "absent" }),
-        remove: async () => {
-          calls.push("dns-remove");
-          present = false;
-          return { changeId: "/change/CDELETE", status: "PENDING" };
-        },
-      };
-    },
-  });
-  const runner = new LocalDurableTestRunner({ handlerFunction: handler });
-  runner.registerFunction(target, async (raw) => {
-    const request = raw as NativeResumePreparationControlInput;
-    calls.push(request.action);
-    if (request.action === "start") return reply(request);
-    expect(request.action).toBe("route_capture");
-    return { schemaVersion: 1, request, outcome: "route_captured", scope, packet: null, route };
-  });
-  const result = await runner.run({ payload: start });
-  expect(result.getStatus()).toBe(ExecutionStatus.SUCCEEDED);
-  expect(result.getResult()).toMatchObject({
-    outcome: "route_lifecycle_finished",
-    cleanup: "removed",
-    attachment: "acknowledged",
-  });
-  expect(calls).toEqual([
-    "start",
-    "route_capture",
-    "route_admit",
-    "dns-create",
-    "route_admit",
-    "complete",
-    "route_retired",
-    "dns-remove",
-  ]);
-});
+    });
+    const runner = new LocalDurableTestRunner({ handlerFunction: handler });
+    runner.registerFunction(target, async (raw) => {
+      const request = raw as NativeResumePreparationControlInput;
+      calls.push(request.action);
+      if (request.action === "start") return reply(request);
+      expect(request.action).toBe("route_capture");
+      return { schemaVersion: 1, request, outcome: "route_captured", scope, packet: null, route };
+    });
+    const result = await runner.run({ payload: start });
+    expect(result.getStatus()).toBe(
+      mode === "success" ? ExecutionStatus.SUCCEEDED : ExecutionStatus.FAILED,
+    );
+    if (mode === "success")
+      expect(result.getResult()).toMatchObject({
+        outcome: "route_lifecycle_finished",
+        cleanup: "removed",
+        attachment: "acknowledged",
+      });
+    else
+      expect(result.getError()).toMatchObject({
+        errorMessage:
+          mode === "lost-delete"
+            ? "NativeResumeRouteCleanupUnresolved"
+            : "NativeResumeRoutePreparationIncomplete",
+      });
+    expect(calls).toEqual([
+      "start",
+      "route_capture",
+      "route_admit",
+      "dns-create",
+      "route_admit",
+      "complete",
+      "route_retired",
+      "dns-remove",
+    ]);
+  },
+);
 it("retries an unavailable start using the identical original reservation", async () => {
   const calls: NativeResumePreparationControlInput[] = [];
   const runner = new LocalDurableTestRunner({

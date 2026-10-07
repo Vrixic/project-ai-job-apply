@@ -229,3 +229,16 @@ run "creation_requires_route" {
   variables { route_creation_enabled = true }
   expect_failures = [var.route_creation_enabled]
 }
+
+run "terminal_monitoring_survives_runtime_shutdown" {
+  command = plan
+  variables { terminal_events_enabled = true }
+  assert {
+    condition     = aws_cloudwatch_event_rule.terminal[0].state == "ENABLED" && aws_lambda_function.control[0].environment[0].variables.NATIVE_RESUME_PREPARATION_CONTROL_ENABLED == "false" && jsondecode(aws_cloudwatch_event_rule.terminal[0].event_pattern).detail.functionArn == [{ prefix = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-resume-durable-r7:" }] && jsondecode(aws_cloudwatch_event_rule.terminal[0].event_pattern).detail.status == ["FAILED", "STOPPED", "TIMED_OUT"]
+    error_message = "Retained original versions need terminal monitoring with intake disabled."
+  }
+  assert {
+    condition     = aws_cloudwatch_event_target.terminal[0].arn == var.release.observer_dead_letter_arn && aws_cloudwatch_event_target.terminal[0].input_transformer[0].input_paths == tomap({ execution = "$.detail.durableExecutionArn", function = "$.detail.functionArn", status = "$.detail.status" }) && aws_cloudwatch_event_target.terminal[0].retry_policy[0].maximum_retry_attempts == 185
+    error_message = "Only scalar original execution metadata should enter the existing encrypted queue."
+  }
+}

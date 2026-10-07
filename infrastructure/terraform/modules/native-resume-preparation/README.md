@@ -132,3 +132,14 @@ Prepare bootstrap first and use a new original release; retain old roles/version
 until drain. This does not migrate an existing role boundary or enable retained numeric versions.
 Network reachability, matching TLS/ingress, terminal reconciliation and live download acceptance
 remain required. Local mocked Terraform checks are not effective managed IAM evidence.
+
+## Terminal route failures
+
+Routed workflows checkpoint their scalar outcome and fail when cleanup remains unresolved or
+attachment is unacknowledged. `terminal_events_enabled` defaults false and can stay enabled while
+runtime/intake is off. It retains scalar failed/stopped/timed-out notices for all numeric versions
+of the original durable function in the existing encrypted observation queue. Platform composition
+supplies exact-rule queue/KMS grants and delivery/execution alarms. Follow the
+[original recovery runbook](../../../runbooks/observability/native-resume-terminal-recovery.md).
+No automatic redrive or replacement execution is provided. Managed alert/recovery drills and
+missed-event reconciliation remain required; retained checkpoints expire after seven days.

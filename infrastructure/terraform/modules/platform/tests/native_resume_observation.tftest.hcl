@@ -83,11 +83,11 @@ run "original_failures_are_retained_and_alerted" {
     error_message = "Failed observations need fourteen-day customer-key retention."
   }
   assert {
-    condition     = jsondecode(aws_sqs_queue_policy.native_resume_observation["7"].policy).Statement[0].Condition.ArnEquals["aws:SourceArn"] == "arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-observer-r7" && jsondecode(aws_sqs_queue_policy.native_resume_observation["7"].policy).Statement[1].Effect == "Deny"
+    condition     = jsondecode(aws_sqs_queue_policy.native_resume_observation["7"].policy).Statement[0].Condition.ArnEquals["aws:SourceArn"] == ["arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-observer-r7", "arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-durable-r7-terminal"] && jsondecode(aws_sqs_queue_policy.native_resume_observation["7"].policy).Statement[1].Effect == "Deny"
     error_message = "Queue policy must bind the original rule and require TLS."
   }
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.native_resume_observation) == 4 && alltrue([for alarm in aws_cloudwatch_metric_alarm.native_resume_observation : alarm.alarm_actions == toset([aws_sns_topic.operational_alerts.arn])])
+    condition     = length(aws_cloudwatch_metric_alarm.native_resume_observation) == 7 && alltrue([for alarm in aws_cloudwatch_metric_alarm.native_resume_observation : alarm.alarm_actions == toset([aws_sns_topic.operational_alerts.arn])])
     error_message = "Queued failures and both failed-DLQ delivery paths need alerts."
   }
   assert {
