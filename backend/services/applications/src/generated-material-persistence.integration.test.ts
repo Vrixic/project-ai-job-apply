@@ -169,6 +169,6 @@ const execute = promisify(execFile);
       [fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url))],
       { env: { ...process.env, DATABASE_URL: databaseUrl } },
     );
-    expect(replay.stdout).toContain("through 0009_restricted_packet_values applied and verified");
+    expect(replay.stdout).toContain("through 0010_native_resume_requests applied and verified");
   });
 });

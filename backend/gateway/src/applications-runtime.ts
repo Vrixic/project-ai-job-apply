@@ -41,6 +41,7 @@ export interface ApplicationsRuntimeOptions {
   profile: { listProfileFacts(userId: string): Promise<{ facts: ProfileFact[] }> };
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
   tailoring?: ResumeTailoringClient;
+  nativeResumePreparationEnabled?: () => boolean;
   /** Owned Documents context/read port only; no live provider is composed inside the Gateway. */
   coverLetters?: ApplicationCoverLetters;
   /** Owned memory availability only. No generation, persistence or refreshed reference. */
@@ -49,6 +50,9 @@ export interface ApplicationsRuntimeOptions {
   coverLetterPreparationEnabled?: boolean;
   nativeReadAuthorizationsEnabled?: () => boolean;
   nativeMaterialLocations?: {
+    resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
+  };
+  nativeResumeLocations?: {
     resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
   };
   catalog: Pick<JobCatalogReader, "resolveActiveJobSummaries" | "getActiveJob">;
@@ -81,6 +85,9 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
   const clock = options.clock ?? (() => new Date());
   const store = new PostgresApplicationStore(options.client, clock, {
     definitions: options.definitions,
+    ...(options.nativeResumePreparationEnabled
+      ? { nativeResumePreparationEnabled: options.nativeResumePreparationEnabled }
+      : {}),
     ...(options.restrictedPackets ? { restrictedPackets: options.restrictedPackets } : {}),
     ...(options.restrictedAnswerReuseEnabled === true &&
     options.restrictedAnswers?.lockCurrentReferences
@@ -117,7 +124,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     jobId: string,
     mode: "hash" | "preview",
   ): Promise<ResumeTailoringResult | undefined> {
-    if (!options.tailoring) return undefined;
+    if (options.nativeResumePreparationEnabled?.() || !options.tailoring) return undefined;
     const job = await options.catalog.getActiveJob(jobId, clock());
     if (!job) return undefined;
     try {
@@ -139,7 +146,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
 
   const resumes: ResumePreviewSource = {
     async file({ ownerUserId, jobId, format }): Promise<ResumeFileBody | undefined> {
-      if (!options.tailoring) return undefined;
+      if (options.nativeResumePreparationEnabled?.() || !options.tailoring) return undefined;
       const job = await options.catalog.getActiveJob(jobId, clock());
       if (!job) return undefined;
       let result: ResumeTailoringResult;
@@ -318,6 +325,9 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
       : {}),
     ...(options.nativeMaterialLocations
       ? { nativeMaterialLocations: options.nativeMaterialLocations }
+      : {}),
+    ...(options.nativeResumeLocations
+      ? { nativeResumeLocations: options.nativeResumeLocations }
       : {}),
     ...(options.metrics ? { metrics: options.metrics } : {}),
     clock,

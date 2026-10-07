@@ -174,6 +174,12 @@ export interface ApplicationsApi {
     generationId: string,
     signal?: AbortSignal,
   ): Promise<ApplicationTemporaryMaterialLocation>;
+  resumeMaterialLocation?(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal?: AbortSignal,
+  ): Promise<ApplicationTemporaryMaterialLocation>;
   temporaryMaterialAuthorization?(
     ownerUserId: string,
     applicationId: string,
@@ -314,6 +320,9 @@ export interface ApplicationsServiceDependencies {
   temporaryMaterials?: ApplicationTemporaryMaterials;
   /** Scalar native-read authorization only; independent of content ports, default off. */
   nativeReadAuthorizationsEnabled?: () => boolean;
+  nativeResumeLocations?: {
+    resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
+  };
   nativeMaterialLocations?: {
     resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
   };
@@ -354,6 +363,43 @@ export class ApplicationsService implements ApplicationsApi {
     }
     if (!origin || signal.aborted) throw new ApplicationsUnavailableError();
     const current = await this.temporaryMaterialAuthorization(
+      ownerUserId,
+      applicationId,
+      generationId,
+      signal,
+    );
+    if (JSON.stringify(proof) !== JSON.stringify(current))
+      throw new StalePacketError(["temporary_material_changed"]);
+    const result = { ...current, origin };
+    if (!validateMaterialLocation(result)) throw new ApplicationsUnavailableError();
+    return result;
+  }
+
+  async resumeMaterialLocation(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal = new AbortController().signal,
+  ): Promise<ApplicationTemporaryMaterialLocation> {
+    const locations = this.dependencies.nativeResumeLocations;
+    if (!locations) throw new ApplicationsUnavailableError();
+    const proof = await this.resumeMaterialAuthorization(
+      ownerUserId,
+      applicationId,
+      generationId,
+      signal,
+    );
+    let origin: string | null;
+    try {
+      origin = await locations.resolve(
+        { ...proof.temporaryMaterial, ownerUserId, applicationId },
+        signal,
+      );
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    if (!origin || signal.aborted) throw new ApplicationsUnavailableError();
+    const current = await this.resumeMaterialAuthorization(
       ownerUserId,
       applicationId,
       generationId,

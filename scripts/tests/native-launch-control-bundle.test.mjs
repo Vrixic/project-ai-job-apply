@@ -176,6 +176,7 @@ test("emitted launcher supplies only owning admission/registry/ECS/managed-secre
       "backend/services/documents/dist/src/native-material-registry.js",
       "backend/services/documents/dist/src/native-task-allocation.js",
       "backend/services/documents/dist/src/native-task-launch.js",
+      "backend/services/documents/dist/src/native-task-launch-policy.js",
       "backend/services/profile/dist/src/lambda-database-url.js",
       "backend/workflows/dist/src/native-material-launch-lambda.js",
     ].sort(),
@@ -268,4 +269,133 @@ test("emitted native sender supplies only Lambda and pure strict metadata valida
   } finally {
     globalThis.fetch = saved;
   }
+});
+
+test("emitted resume preparation client has only scalar Lambda capability", async () => {
+  const { inputs, bundle } = await emitted(
+    "backend/services/documents/dist/src/native-resume-preparation-control-client.js",
+  );
+  for (const forbidden of [
+    "postgres",
+    "client-ecs",
+    "client-s3",
+    "client-kms",
+    "client-secrets-manager",
+    "ai-sdk",
+    "pdfjs",
+    "yazl",
+    "durable-execution",
+    "drizzle",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected preparation client capability: ${forbidden}`,
+    );
+  assert.ok(inputs.some((name) => name.includes("@aws-sdk/client-lambda")));
+  const client = bundle.createNativeResumePreparationControlClient({ functionArn: target });
+  await assert.rejects(
+    client.run({ schemaVersion: 1, action: "complete", scope: recover.scope }),
+    /NativeResumePreparationControlUnavailable/u,
+  );
+});
+
+test("emitted private resume preparation stays off before secret, SQL or ECS work", async () => {
+  const { inputs, bundle } = await emitted(
+    "backend/workflows/dist/src/native-resume-preparation-control-lambda.js",
+  );
+  for (const forbidden of [
+    "client-lambda",
+    "client-s3",
+    "client-kms",
+    "ai-sdk",
+    "pdfjs",
+    "yazl",
+    "durable-execution",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected preparation control capability: ${forbidden}`,
+    );
+  assert.ok(inputs.some((name) => name.includes("@aws-sdk/client-ecs")));
+  assert.ok(inputs.some((name) => name.includes("postgres")));
+  let effects = 0;
+  const handler = bundle.createNativeResumePreparationControlLambda({
+    environment: () => ({}),
+    resolveDatabaseUrl: async () => {
+      effects++;
+      throw Error("SyntheticSecretDenied");
+    },
+    createRuntime: () => {
+      effects++;
+      throw Error("SyntheticSqlDenied");
+    },
+  });
+  const request = { schemaVersion: 1, action: "complete", scope: recover.scope };
+  assert.deepEqual(await handler(request, { invokedFunctionArn: target }), {
+    schemaVersion: 1,
+    request,
+    outcome: "unavailable",
+    scope: null,
+    packet: null,
+  });
+  await assert.rejects(
+    handler({ ...request, content: "synthetic forbidden" }, { invokedFunctionArn: target }),
+    /NativeResumePreparationControlUnavailable/u,
+  );
+  assert.equal(effects, 0);
+});
+
+test("emitted resume durable workflow excludes owner SQL, ECS and generated-content capabilities", async () => {
+  const { inputs, bundle } = await emitted(
+    "backend/workflows/dist/src/native-resume-preparation-durable-lambda.js",
+  );
+  for (const forbidden of [
+    "postgres",
+    "client-ecs",
+    "client-s3",
+    "client-kms",
+    "client-secrets-manager",
+    "ai-sdk",
+    "pdfjs",
+    "yazl",
+    "drizzle",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected resume durable capability: ${forbidden}`,
+    );
+  assert.ok(inputs.some((name) => name.includes("durable-execution-sdk-js")));
+  const handler = bundle.createNativeResumePreparationDurableLambda({ environment: () => ({}) });
+  await assert.rejects(
+    handler({}, { invokedFunctionArn: target }),
+    /NativeResumePreparationWorkflowUnavailable/u,
+  );
+});
+
+test("emitted resume queue dispatcher excludes content and task-launch capabilities", async () => {
+  const { inputs, bundle } = await emitted(
+    "backend/workflows/dist/src/native-resume-request-dispatch-lambda.js",
+  );
+  for (const forbidden of ["client-ecs", "client-s3", "ai-sdk", "pdfjs", "yazl"])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected resume queue capability: ${forbidden}`,
+    );
+  let effects = 0;
+  const handler = bundle.createNativeResumeRequestDispatchLambda({
+    environment: () => ({}),
+    resolveDatabaseUrl: async () => {
+      effects++;
+      throw Error("SyntheticSecretDenied");
+    },
+    createRuntime: () => {
+      effects++;
+      throw Error("SyntheticSqlDenied");
+    },
+  });
+  await assert.rejects(
+    handler({ schemaVersion: 1, action: "sweep" }, { invokedFunctionArn: target }),
+    /NativeResumeDispatchUnavailable/u,
+  );
+  assert.equal(effects, 0);
 });

@@ -1,17 +1,28 @@
 import postgres from "postgres";
 import { PostgresNativeMaterialReadyStore } from "./native-material-ready-store.js";
 import {
+  type NativeResumeGenerationOwnerPorts,
+  PostgresNativeResumeGenerationStore,
+} from "./native-resume-generation-store.js";
+import {
   type TemporaryMaterialReference,
   validateTemporaryMaterialReference,
 } from "./temporary-material-reference.js";
 
 /** Metadata only. Configuration must match the original image's reviewed baseHost.
  * No DNS, TLS, task liveness, content, credentials, launch or renewal capability. */
-export function createNativeMaterialLocationReader(options: {
+type LocationOptions = {
   baseHost: string;
   readAllocation(reference: TemporaryMaterialReference): Promise<string | null>;
   enabled?: () => boolean;
-}) {
+};
+export function createNativeMaterialLocationReader(options: LocationOptions) {
+  return createLocationReader(options, "cover_letter");
+}
+export function createNativeResumeLocationReader(options: LocationOptions) {
+  return createLocationReader(options, "tailored_resume");
+}
+function createLocationReader(options: LocationOptions, kind: "cover_letter" | "tailored_resume") {
   const baseHost = options.baseHost;
   if (
     typeof baseHost !== "string" ||
@@ -30,7 +41,7 @@ export function createNativeMaterialLocationReader(options: {
         !enabled() ||
         signal.aborted ||
         !validateTemporaryMaterialReference(reference) ||
-        reference.kind !== "cover_letter"
+        reference.kind !== kind
       )
         return null;
       const fixed = Object.freeze({ ...reference });
@@ -69,6 +80,35 @@ export function createNativeMaterialLocationRuntime(
     resolve: createNativeMaterialLocationReader({
       baseHost,
       readAllocation: ready.readAllocation.bind(ready),
+      enabled,
+    }),
+    close: () => sql.end(),
+  });
+}
+
+export function createNativeResumeLocationRuntime(
+  url: string,
+  baseHost: string,
+  ports: NativeResumeGenerationOwnerPorts,
+  enabled: () => boolean,
+) {
+  createNativeResumeLocationReader({ baseHost, readAllocation: async () => null });
+  const sql = postgres(url, {
+    max: 1,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    onnotice: () => undefined,
+    connection: {
+      statement_timeout: 10000,
+      lock_timeout: 2000,
+      idle_in_transaction_session_timeout: 15000,
+    },
+  });
+  const store = new PostgresNativeResumeGenerationStore(sql, ports, enabled);
+  return Object.freeze({
+    resolve: createNativeResumeLocationReader({
+      baseHost,
+      readAllocation: store.readAllocation.bind(store),
       enabled,
     }),
     close: () => sql.end(),

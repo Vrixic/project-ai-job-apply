@@ -3756,6 +3756,21 @@ describe("Applications routes", () => {
       },
       origin: `https://${attemptId}.materials.example.test:8443`,
     } as const),
+    resumeMaterialLocation: record("resumeMaterialLocation", {
+      schemaVersion: 1,
+      packetId: jobId,
+      packetHash: hash,
+      temporaryMaterial: {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: attemptId,
+        version: 1,
+        contentSha256: hash,
+        completedAtMs: 1000,
+        expiresAtMs: 1_801_000,
+      },
+      origin: `https://${attemptId}.materials.example.test:8443`,
+    } as const),
     temporaryMaterialAuthorization: record("temporaryMaterialAuthorization", {
       schemaVersion: 1,
       packetId: jobId,
@@ -3994,69 +4009,77 @@ describe("Applications routes", () => {
     }
   });
 
-  it.each(["cover-letter/authorization", "cover-letter/location", "resume/authorization"])(
-    "serves scalar native %s with resolved owner and no-store",
-    async (route) => {
-      const result = await app.inject({
-        method: "GET",
-        url: `/v1/applications/${applicationId}/${route}?generationId=${attemptId}`,
-        headers: { authorization: `Bearer ${await token("applications:read")}` },
-      });
-      expect(result.statusCode).toBe(200);
-      expect(result.headers["cache-control"]).toBe("no-store");
-      expect(result.json().packetHash).toBe(hash);
-      expect(result.json()).not.toHaveProperty("data");
-      expect(calls).toEqual([
-        {
-          method:
-            route === "cover-letter/location"
-              ? "temporaryMaterialLocation"
+  it.each([
+    "cover-letter/authorization",
+    "cover-letter/location",
+    "resume/authorization",
+    "resume/location",
+  ])("serves scalar native %s with resolved owner and no-store", async (route) => {
+    const result = await app.inject({
+      method: "GET",
+      url: `/v1/applications/${applicationId}/${route}?generationId=${attemptId}`,
+      headers: { authorization: `Bearer ${await token("applications:read")}` },
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.headers["cache-control"]).toBe("no-store");
+    expect(result.json().packetHash).toBe(hash);
+    expect(result.json()).not.toHaveProperty("data");
+    expect(calls).toEqual([
+      {
+        method:
+          route === "cover-letter/location"
+            ? "temporaryMaterialLocation"
+            : route === "resume/location"
+              ? "resumeMaterialLocation"
               : route === "resume/authorization"
                 ? "resumeMaterialAuthorization"
                 : "temporaryMaterialAuthorization",
-          args: [expect.any(String), applicationId, attemptId, expect.any(AbortSignal)],
-        },
-      ]);
-    },
-  );
+        args: [expect.any(String), applicationId, attemptId, expect.any(AbortSignal)],
+      },
+    ]);
+  });
 
-  it.each(["cover-letter/authorization", "cover-letter/location", "resume/authorization"])(
-    "rejects malformed scalar %s queries before owner service access",
-    async (route) => {
-      for (const suffix of [
-        "",
-        "?generationId=bad",
-        `?generationId=${attemptId}&owner=other`,
-        `?generationId=${attemptId}&generationId=${jobId}`,
-      ]) {
-        const result = await app.inject({
+  it.each([
+    "cover-letter/authorization",
+    "cover-letter/location",
+    "resume/authorization",
+    "resume/location",
+  ])("rejects malformed scalar %s queries before owner service access", async (route) => {
+    for (const suffix of [
+      "",
+      "?generationId=bad",
+      `?generationId=${attemptId}&owner=other`,
+      `?generationId=${attemptId}&generationId=${jobId}`,
+    ]) {
+      const result = await app.inject({
+        method: "GET",
+        url: `/v1/applications/${applicationId}/${route}${suffix}`,
+        headers: { authorization: `Bearer ${await token("applications:read")}` },
+      });
+      expect(result.statusCode).toBe(400);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    "cover-letter/authorization",
+    "cover-letter/location",
+    "resume/authorization",
+    "resume/location",
+  ])("requires authenticated read scope for scalar %s", async (route) => {
+    const url = `/v1/applications/${applicationId}/${route}?generationId=${attemptId}`;
+    expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+    expect(
+      (
+        await app.inject({
           method: "GET",
-          url: `/v1/applications/${applicationId}/${route}${suffix}`,
-          headers: { authorization: `Bearer ${await token("applications:read")}` },
-        });
-        expect(result.statusCode).toBe(400);
-      }
-      expect(calls).toHaveLength(0);
-    },
-  );
-
-  it.each(["cover-letter/authorization", "cover-letter/location", "resume/authorization"])(
-    "requires authenticated read scope for scalar %s",
-    async (route) => {
-      const url = `/v1/applications/${applicationId}/${route}?generationId=${attemptId}`;
-      expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
-      expect(
-        (
-          await app.inject({
-            method: "GET",
-            url,
-            headers: { authorization: `Bearer ${await token("profile:read")}` },
-          })
-        ).statusCode,
-      ).toBe(403);
-      expect(calls).toHaveLength(0);
-    },
-  );
+          url,
+          headers: { authorization: `Bearer ${await token("profile:read")}` },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
 
   it("rejects unknown, repeated and missing cover-letter read inputs before service access", async () => {
     const headers = { authorization: `Bearer ${await token("applications:read")}` };

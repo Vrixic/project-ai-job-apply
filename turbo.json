@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["NATIVE_RESUME_REQUEST_DISPATCH_ENABLED"],
   "globalPassThroughEnv": [
     "D2_EXTENSION_BROWSER",
     "D2_EXTENSION_BROWSER_NAME",

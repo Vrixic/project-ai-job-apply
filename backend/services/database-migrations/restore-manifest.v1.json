@@ -42,6 +42,10 @@
         {
           "version": "0009_restricted_packet_values",
           "checksum": "b8b8b19d90366c48e93ea511c458ba5607a6111c6cb83bb70956c820218bc26e"
+        },
+        {
+          "version": "0010_native_resume_requests",
+          "checksum": "55ba75fe782eda46811d80a229332fee3bed747be85960d1f863069c6ce1423d"
         }
       ],
       "relations": [

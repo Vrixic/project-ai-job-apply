@@ -1524,27 +1524,29 @@ describe("Applications routes at the Lambda boundary", () => {
     }
   });
 
-  it.each(["cover-letter/authorization", "cover-letter/location", "resume/authorization"])(
-    "forwards authenticated body-free material %s reads",
-    async (route) => {
-      const { handler, inject } = dispatcher();
-      const path = `/v1/applications/${id}/${route}`;
-      const extra = { rawQueryString: `generationId=${attempt}` };
-      const anonymous = invocation("GET", path, extra);
-      delete anonymous.requestContext.authorizer;
-      expect((await invoke(handler, anonymous)).statusCode).toBe(401);
-      expect(
-        (await invoke(handler, invocation("GET", path, { ...extra, body: "{}" }))).statusCode,
-      ).toBe(400);
-      expect((await invoke(handler, invocation("POST", path, extra))).statusCode).toBe(404);
-      expect(inject).not.toHaveBeenCalled();
-      expect((await invoke(handler, invocation("GET", path, extra))).statusCode).toBe(200);
-      expect(inject).toHaveBeenCalledOnce();
-      expect(inject).toHaveBeenCalledWith(
-        expect.objectContaining({ url: `${path}?${extra.rawQueryString}` }),
-      );
-    },
-  );
+  it.each([
+    "cover-letter/authorization",
+    "cover-letter/location",
+    "resume/authorization",
+    "resume/location",
+  ])("forwards authenticated body-free material %s reads", async (route) => {
+    const { handler, inject } = dispatcher();
+    const path = `/v1/applications/${id}/${route}`;
+    const extra = { rawQueryString: `generationId=${attempt}` };
+    const anonymous = invocation("GET", path, extra);
+    delete anonymous.requestContext.authorizer;
+    expect((await invoke(handler, anonymous)).statusCode).toBe(401);
+    expect(
+      (await invoke(handler, invocation("GET", path, { ...extra, body: "{}" }))).statusCode,
+    ).toBe(400);
+    expect((await invoke(handler, invocation("POST", path, extra))).statusCode).toBe(404);
+    expect(inject).not.toHaveBeenCalled();
+    expect((await invoke(handler, invocation("GET", path, extra))).statusCode).toBe(200);
+    expect(inject).toHaveBeenCalledOnce();
+    expect(inject).toHaveBeenCalledWith(
+      expect.objectContaining({ url: `${path}?${extra.rawQueryString}` }),
+    );
+  });
 
   it.each(["resume", "cover-letter"])("bounds %s file format and preview queries", async (kind) => {
     const file = `/v1/applications/${id}/${kind}/file`;

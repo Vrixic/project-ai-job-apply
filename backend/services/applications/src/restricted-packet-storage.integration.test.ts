@@ -158,7 +158,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
     for (let index = 0; index < 2; index++) {
       const result = await run(process.execPath, [executable], { env });
       expect(result.stdout.trim()).toBe(
-        "Applications migrations through 0009_restricted_packet_values applied and verified.",
+        "Applications migrations through 0010_native_resume_requests applied and verified.",
       );
     }
   });

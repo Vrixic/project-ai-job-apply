@@ -195,6 +195,18 @@
     "./native-resume-image-runtime": {
       "types": "./dist/src/native-resume-image-runtime.d.ts",
       "default": "./dist/src/native-resume-image-runtime.js"
+    },
+    "./native-resume-task-launch": {
+      "types": "./dist/src/native-resume-task-launch.d.ts",
+      "default": "./dist/src/native-resume-task-launch.js"
+    },
+    "./native-resume-preparation-control-contract": {
+      "types": "./dist/src/native-resume-preparation-control-contract.d.ts",
+      "default": "./dist/src/native-resume-preparation-control-contract.js"
+    },
+    "./native-resume-preparation-control-client": {
+      "types": "./dist/src/native-resume-preparation-control-client.d.ts",
+      "default": "./dist/src/native-resume-preparation-control-client.js"
     }
   },
   "scripts": {

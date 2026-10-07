@@ -19,6 +19,10 @@
     "./restricted-packet-runtime": {
       "types": "./dist/src/restricted-packet-runtime.d.ts",
       "default": "./dist/src/restricted-packet-runtime.js"
+    },
+    "./native-resume-request-store": {
+      "types": "./dist/src/native-resume-request-store.d.ts",
+      "default": "./dist/src/native-resume-request-store.js"
     }
   },
   "scripts": {

@@ -4,10 +4,34 @@
 - Start: 2026-09-18
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-10-06
+- Last updated: 2026-10-07
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d3--high-quality-application-preparation)
 
 ## Objective
+
+2026-10-07 D3-064/D3-079 connects Prepare to an atomic resume request in the existing
+Applications outbox, owner-checked source capture and private scheduled durable dispatch. All
+46 PostgreSQL checks pass, plus 236 Gateway checks (three skips), 50 restore, 20 event and eight
+emitted capability checks. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#atomic-prepare-producer-and-scheduled-dispatcher).
+The new forward migration brings the inventory to 72 migrations/93 relations. Full frozen-source
+verification, combined workflow/SQL smoke, artifact/image and managed/client/ATS acceptance remain;
+all new runtime switches default off. D1/D3 remain In progress, Docker/WSL stopped and PC on.
+
+2026-10-07 D3-064/D3-079 adds the resume durable caller: checkpoint original reservation,
+poll the original scope, and return only a ready packet. Seven local durable SDK cases and seven
+emitted control checks pass; Workflows compiles. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#durable-caller-follow-up).
+The atomic Prepare request queue, owner snapshot and dispatcher remain next. Existing cover-letter
+consent/outbox cannot authorize resume work. Source remains uncommitted and default-off; no
+managed activation or CI/CD work, D1/D3 remain In progress and PC stays on.
+
+2026-10-07 D3-064/D3-079 connects original resume launch, atomic ready packet attachment,
+private preparation invocation and scalar resume location. Local checks pass: 41 PostgreSQL,
+seven private client/handler and six emitted capability cases; earlier batch checks cover
+60 Documents, 42 Applications and 236 Gateway cases (three existing skips).
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Prepare/durable invocation,
+full frozen-source verification, built image and managed/client/ATS acceptance remain. Work is
+uncommitted and not deployed; D1/D3 stay In progress. Continue connected implementation batches,
+then smoke-test/fix/focused regressions. Hosted CI/CD remains deferred; Docker/WSL stopped, PC on.
 
 2026-10-06 D3-064/D3-079 native deterministic-resume session passes full clean verification at
 `b849cac4` (38 typecheck/39 test/23 builds, unchanged lint and all emitted isolation). Separate

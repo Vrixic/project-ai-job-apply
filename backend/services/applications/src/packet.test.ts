@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canonicalJson, NonCanonicalValueError } from "./canonical.js";
+import { defaultFieldDefinitions } from "./field-definitions.js";
 import { classifyField } from "./field-policy.js";
 import {
   type ApplicationPacket,
@@ -443,4 +444,51 @@ describe("protected packet commitments", () => {
       ),
     ).toThrow(expect.objectContaining({ code: "UNRESOLVED_FIELD" }));
   });
+});
+
+it("retains only a bound native resume digest without inventing fact provenance", () => {
+  const field = proposal({
+    fieldKey: "documents.resume",
+    origin: "generated",
+    value: HASH_C,
+    sourceFactIds: [],
+    sourceConfirmed: true,
+    confidence: 1,
+  });
+  const base = packetInputs({ artifactHashes: { resume: HASH_C }, fields: [field] });
+  const completedAtMs = NOW.getTime() - 1000;
+  const reference = {
+    schemaVersion: 1 as const,
+    kind: "tailored_resume" as const,
+    generationId: PACKET_ID,
+    ownerUserId: base.userId,
+    applicationId: base.applicationId,
+    version: 1,
+    contentSha256: HASH_C,
+    completedAtMs,
+    expiresAtMs: completedAtMs + 1800000,
+  };
+  const bound = { ...base, temporaryMaterials: [reference] };
+  const packet = assemblePacket(bound, defaultFieldDefinitions());
+  expect(packet.fields[0]).toMatchObject({
+    value: HASH_C,
+    disposition: "review",
+    requiresReview: true,
+    sourceFactIds: [],
+    reasons: ["explicit_each_time", "generated_content"],
+  });
+  for (const unproven of [
+    base,
+    { ...bound, fields: [{ ...field, sourceConfirmed: false }] },
+    { ...bound, fields: [{ ...field, confidence: 0.1 }] },
+  ]) {
+    expect(assemblePacket(unproven, defaultFieldDefinitions()).fields[0]).toMatchObject({
+      value: null,
+      disposition: "user_action",
+      requiresReview: true,
+    });
+  }
+  expect(() =>
+    assemblePacket({ ...bound, fields: [{ ...field, value: HASH_A }] }, defaultFieldDefinitions()),
+  ).toThrow("Document fields must reference their bound artifact hash");
 });

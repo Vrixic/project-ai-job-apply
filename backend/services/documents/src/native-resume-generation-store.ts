@@ -112,7 +112,7 @@ function closed<T extends object>(value: T, keys: readonly string[]): T {
   }
   return Object.freeze({ ...value });
 }
-function capture(input: NativeResumeReservation): NativeResumeReservation {
+export function nativeResumeReservation(input: NativeResumeReservation): NativeResumeReservation {
   const fixed = closed(input, [
     "identity",
     "application",
@@ -213,7 +213,7 @@ function record(row: Row): NativeResumeGenerationRecord {
         };
   if (reference && !validateTemporaryMaterialReference(reference)) throw unavailable();
   return Object.freeze({
-    reservation: capture({
+    reservation: nativeResumeReservation({
       identity,
       application: {
         ownerUserId: row.user_id,
@@ -236,6 +236,61 @@ function record(row: Row): NativeResumeGenerationRecord {
     reference: reference ? Object.freeze(reference) : null,
     ready: row.ready_at !== null,
   });
+}
+
+/** Documents proof on Applications' packet transaction. No content, nested transaction or I/O.
+ * The caller locks the candidate/application first; Jobs, admission head, base and generation
+ * then remain locked through the packet write. This closes seal/quarantine/job-change races. */
+export async function lockNativeResumeReadyForPacket(
+  intent: NativeResumeApplicationIntent,
+  reference: TemporaryMaterialReference,
+  query: NativeResumeOwnerQuery,
+  job: NativeResumeGenerationOwnerPorts["job"],
+  enabled: () => boolean = () => false,
+): Promise<void> {
+  try {
+    if (
+      !enabled() ||
+      !validateTemporaryMaterialReference(reference) ||
+      reference.kind !== "tailored_resume" ||
+      reference.ownerUserId !== intent.ownerUserId ||
+      reference.applicationId !== intent.applicationId
+    )
+      throw unavailable();
+    const ref = Object.freeze({ ...reference }),
+      expected = structuredClone(intent);
+    await query`SELECT identity.require_active_candidate(${ref.ownerUserId}::uuid)`;
+    const [initial] = await query<
+      Row[]
+    >`SELECT * FROM documents.native_resume_generations WHERE id=${ref.generationId} AND user_id=${ref.ownerUserId} AND application_id=${ref.applicationId}`;
+    if (!initial || !isDeepStrictEqual(record(initial).reservation.application, expected))
+      throw unavailable();
+    await job(expected, initial.job_context_sha256, query);
+    if (!enabled()) throw unavailable();
+    await query`SELECT pg_advisory_xact_lock(hashtextextended(${`native-material:${ref.ownerUserId}:${ref.applicationId}`},0))`;
+    const [head] = await query<
+      Record<string, unknown>[]
+    >`SELECT epoch_id FROM documents.native_material_admission WHERE user_id=${ref.ownerUserId} AND application_id=${ref.applicationId} AND epoch_id=${initial.epoch_id} AND sealed_at IS NULL FOR UPDATE`;
+    const [base] = await query<
+      Record<string, unknown>[]
+    >`SELECT id FROM documents.resume_documents WHERE id=${initial.base_document_id} AND user_id=${ref.ownerUserId} AND version=${initial.base_version} AND sha256=${initial.base_sha256} AND normalized_sha256=${initial.normalized_sha256} AND status='parsed' AND deleted_at IS NULL AND security_hold=false FOR SHARE`;
+    const [fresh] = await query<
+      Row[]
+    >`SELECT * FROM documents.native_resume_generations WHERE id=${ref.generationId} AND user_id=${ref.ownerUserId} AND application_id=${ref.applicationId} AND state='bound' AND ready_at IS NOT NULL AND expires_at_ms > floor(extract(epoch FROM clock_timestamp())*1000)::bigint FOR UPDATE`;
+    if (!enabled() || !head || !base || !fresh) throw unavailable();
+    const current = record(fresh);
+    if (
+      fresh.epoch_id !== initial.epoch_id ||
+      !current.allocation ||
+      !current.configurationSha256 ||
+      !current.reference ||
+      !isDeepStrictEqual(current.reservation, record(initial).reservation) ||
+      !sameTemporaryMaterialReference(ref, current.reference)
+    )
+      throw unavailable();
+  } catch {
+    throw unavailable();
+  }
 }
 
 /** Private scalar owner control. Authentication and positive task observation belong to its caller.
@@ -314,9 +369,77 @@ export class PostgresNativeResumeGenerationStore {
       throw unavailable();
     return fresh;
   }
+  /** Capture a queued Applications request once, before durable dispatch. Replay loads the
+   * original source selection; uploading a newer base never changes that generation's input. */
+  async reserveRequest(input: {
+    generationId: string;
+    application: NativeResumeApplicationIntent;
+    jobContextSha256: string;
+    deployment: NativeResumeReservation["deployment"];
+  }): Promise<NativeResumeGenerationRecord | null> {
+    return this.guarded(async () => {
+      const fixed = structuredClone(input);
+      if (!uuid.test(fixed.generationId) || !hash.test(fixed.jobContextSha256)) throw unavailable();
+      const captured = await this.sql.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${fixed.application.ownerUserId}::uuid)`;
+        await this.ports.application(fixed.application, this.query(tx));
+        await this.ports.job(fixed.application, fixed.jobContextSha256, this.query(tx));
+        await this.lock(tx, fixed.application.ownerUserId, fixed.application.applicationId);
+        const [original] = await tx<
+          Row[]
+        >`SELECT * FROM documents.native_resume_generations WHERE id=${fixed.generationId}`;
+        if (original) {
+          const saved = record(original).reservation;
+          if (
+            !isDeepStrictEqual(saved.application, fixed.application) ||
+            !isDeepStrictEqual(saved.deployment, fixed.deployment) ||
+            saved.identity.jobContextSha256 !== fixed.jobContextSha256
+          )
+            throw unavailable();
+          return saved;
+        }
+        const [base] = await tx<
+          Array<{ id: string; version: number; sha256: string; normalized_sha256: string }>
+        >`
+          SELECT id,version,sha256,normalized_sha256 FROM documents.resume_documents
+          WHERE user_id=${fixed.application.ownerUserId} AND status='parsed' AND deleted_at IS NULL
+            AND security_hold=false AND normalized_object_key IS NOT NULL AND normalized_object_version IS NOT NULL
+            AND normalized_sha256 IS NOT NULL AND parser_version IS NOT NULL
+          ORDER BY updated_at DESC,id DESC LIMIT 1 FOR SHARE`;
+        if (!base) return null;
+        const [previous] = await tx<Array<{ epoch_id: string; sealed_at: Date | null }>>`
+          SELECT epoch_id,sealed_at FROM documents.native_material_admission
+          WHERE user_id=${fixed.application.ownerUserId} AND application_id=${fixed.application.applicationId}`;
+        const [version] = await tx<
+          Array<{ next: number }>
+        >`SELECT (coalesce(max(version),0)+1)::int AS next
+          FROM documents.native_resume_generations WHERE user_id=${fixed.application.ownerUserId} AND application_id=${fixed.application.applicationId}`;
+        return nativeResumeReservation({
+          identity: {
+            ownerUserId: fixed.application.ownerUserId,
+            applicationId: fixed.application.applicationId,
+            generationId: fixed.generationId,
+            version: version?.next ?? 1,
+            baseDocumentId: base.id,
+            baseVersion: base.version,
+            baseSha256: base.sha256,
+            jobContextSha256: fixed.jobContextSha256,
+          },
+          application: fixed.application,
+          normalizedSha256: base.normalized_sha256,
+          previousEpochId: previous?.sealed_at ? previous.epoch_id : null,
+          deployment: fixed.deployment,
+        });
+      });
+      this.check();
+      if (!captured) return null;
+      // reserve repeats owner admission under its commit locks. Any race fails closed.
+      return this.reserve(captured);
+    });
+  }
   async reserve(input: NativeResumeReservation): Promise<NativeResumeGenerationRecord> {
     return this.guarded(async () => {
-      const fixed = capture(input),
+      const fixed = nativeResumeReservation(input),
         id = fixed.identity,
         app = fixed.application,
         deployment = fixed.deployment;

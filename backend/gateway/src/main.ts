@@ -60,7 +60,10 @@ import {
   ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
-import { nativeMaterialLocationsFromEnvironment } from "./native-material-location-runtime.js";
+import {
+  nativeMaterialLocationsFromEnvironment,
+  nativeResumeLocationsFromEnvironment,
+} from "./native-material-location-runtime.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
@@ -188,6 +191,11 @@ const nativeMaterialLocations = nativeMaterialLocationsFromEnvironment(
   process.env,
   () => packetProtection?.enabled() === true,
 );
+const nativeResumeLocations = nativeResumeLocationsFromEnvironment(
+  config.DATABASE_URL,
+  process.env,
+  () => packetProtection?.enabled() === true,
+);
 const applications =
   process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
@@ -195,6 +203,10 @@ const applications =
         profile: store,
         ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
         ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
+        ...(nativeResumeLocations ? { nativeResumeLocations } : {}),
+        nativeResumePreparationEnabled: () =>
+          process.env.NATIVE_RESUME_PREPARATION_ENABLED === "true" &&
+          packetProtection?.enabled() === true,
         nativeReadAuthorizationsEnabled: () =>
           process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&
           packetProtection?.enabled() === true,
