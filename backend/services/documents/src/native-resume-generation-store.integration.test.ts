@@ -823,9 +823,66 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       expect(await dispatch(event?.id)).toBe("unavailable");
       expect(calls).toHaveLength(1);
       const [receipt] =
-        await sql`SELECT status,resume_workflow_arn FROM applications.outbox WHERE id=${event?.id}`;
-      expect(receipt).toEqual({ status: "published", resume_workflow_arn: target });
+        await sql`SELECT status,resume_workflow_arn,resume_execution_arn,resume_dispatch_result FROM applications.outbox WHERE id=${event?.id}`;
+      expect(receipt).toEqual({
+        status: "published",
+        resume_workflow_arn: target,
+        resume_execution_arn: `${target}/durable-execution/resume-${event?.id}/synthetic`,
+        resume_dispatch_result: "started",
+      });
+      const originalReceipts = await f.requests.executionReceipts(target);
+      expect(originalReceipts).toContainEqual({
+        eventId: event?.id,
+        workflowArn: target,
+        executionArn: receipt?.resume_execution_arn,
+        dispatchResult: "started",
+      });
+      expect(await f.requests.executionReceipts(target, event?.id)).not.toContainEqual(
+        originalReceipts.find((r) => r.eventId === event?.id),
+      );
+      expect(await f.requests.executionReceipts(target.replace(":9", ":10"))).toEqual([]);
+      await expect(
+        sql`UPDATE applications.outbox SET resume_execution_arn=${`${target}/durable-execution/resume-${event?.id}/replacement`} WHERE id=${event?.id}`,
+      ).rejects.toThrow();
+      await sql`UPDATE identity.users SET account_state='quarantined',quarantined_at=clock_timestamp() WHERE id=${input.identity.ownerUserId}`;
+      expect(await f.requests.executionReceipts(target)).toEqual(originalReceipts);
       expect(await f.requests.pending()).not.toContain(event?.id);
+    } finally {
+      f.protection.destroy();
+    }
+  });
+  it("distinguishes absent-source delivery from unknown execution receipts and rejects forged bindings", async () => {
+    const f = await queuedResumeFixture();
+    try {
+      await f.applicationStore.createPacket(f.command);
+      const [event] =
+        await sql`SELECT id FROM applications.outbox WHERE application_id=${input.identity.applicationId}
+        AND event_type='application.resume-preparation.requested.v1'`;
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-recovery:9";
+      const claim = await f.requests.claim(event?.id, target);
+      expect(claim).not.toBeNull();
+      if (!claim) throw Error("SyntheticClaimMissing");
+      expect(await f.requests.executionReceipts(target)).toEqual([
+        { eventId: event?.id, workflowArn: target, executionArn: null, dispatchResult: null },
+      ]);
+      await expect(
+        sql`UPDATE applications.outbox SET resume_execution_arn='forged' WHERE id=${event?.id}`,
+      ).rejects.toThrow();
+      await expect(
+        f.requests.started(claim, `${target}/durable-execution/resume-${uuidv7()}/foreign`),
+      ).rejects.toThrow();
+      expect(await f.requests.withoutResume(claim)).toBe(true);
+      expect(await f.requests.executionReceipts(target, null, 1)).toEqual([
+        {
+          eventId: event?.id,
+          workflowArn: target,
+          executionArn: null,
+          dispatchResult: "no_resume",
+        },
+      ]);
+      await expect(f.requests.executionReceipts(target, null, 26)).rejects.toThrow();
+      await expect(f.requests.executionReceipts(target.replace(":9", ":live"))).rejects.toThrow();
+      await expect(f.requests.executionReceipts(target, "invalid")).rejects.toThrow();
     } finally {
       f.protection.destroy();
     }

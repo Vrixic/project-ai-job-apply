@@ -970,3 +970,10 @@ batch. The 142 maintained dependency remediation regression cases pass; the regi
 not. [Evidence](evidence/d3-native-resume-task-address-2026-10-07.md). Coordinate remediation with
 frontend work before launch; no acceptance/waiver is implied. D1 remains In progress, CI/CD
 deferred and the PC stays on. Previously accepted browser checks are not reopened.
+
+2026-10-07 D1-013/D3-064/D3-079 retains original resume execution acknowledgements atomically
+in Applications and adds bounded exact-version recovery reads. Forward migration 0011 advances
+the source migration/restore inventory to 74 migrations/93 relations. Applications/Workflows
+builds, 65 real SQL cases and 50 restore tests pass.
+[Evidence](evidence/d3-native-resume-execution-receipts-2026-10-07.md). No image publication or
+managed migration; AWS reconciliation and remaining launch acceptance stay open. D1/D3 In progress.

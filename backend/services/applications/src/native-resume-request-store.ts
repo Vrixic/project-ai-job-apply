@@ -139,17 +139,54 @@ export class PostgresNativeResumeRequestStore {
       )
     )
       throw unavailable();
-    return this.finish(fixed);
+    return this.finish(fixed, executionArn);
   }
   /** Documents observed no eligible original source; delivery is complete without a task. */
   async withoutResume(claim: NativeResumeRequestClaim): Promise<boolean> {
-    return this.finish(structuredClone(claim));
+    return this.finish(structuredClone(claim), null);
   }
-  private async finish(fixed: NativeResumeRequestClaim): Promise<boolean> {
+  /** Bounded original-version inventory for private recovery, independent of candidate activity.
+   * Null receipts are unknown (including legacy publications), never proof of non-dispatch. */
+  async executionReceipts(workflowArn: string, afterEventId: string | null = null, limit = 25) {
+    this.check();
+    if (
+      !isPreparationFunctionArn(workflowArn) ||
+      !workflowArn.startsWith("arn:aws:lambda:us-east-2:") ||
+      (afterEventId !== null && !uuid.test(afterEventId)) ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 25
+    )
+      throw unavailable();
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        resume_workflow_arn: string;
+        resume_execution_arn: string | null;
+        resume_dispatch_result: "started" | "no_resume" | null;
+      }>
+    >`
+      SELECT id,resume_workflow_arn,resume_execution_arn,resume_dispatch_result
+      FROM applications.outbox WHERE event_type='application.resume-preparation.requested.v1'
+        AND resume_workflow_arn=${workflowArn} AND (${afterEventId}::uuid IS NULL OR id>${afterEventId}::uuid)
+      ORDER BY id LIMIT ${limit}`;
+    this.check();
+    return rows.map((row) => ({
+      eventId: row.id,
+      workflowArn: row.resume_workflow_arn,
+      executionArn: row.resume_execution_arn,
+      dispatchResult: row.resume_dispatch_result,
+    }));
+  }
+  private async finish(
+    fixed: NativeResumeRequestClaim,
+    executionArn: string | null,
+  ): Promise<boolean> {
     this.check();
     const rows = await this
       .sql`UPDATE applications.outbox SET status='published',published_at=clock_timestamp(),
-      claim_token=NULL,lease_expires_at=NULL,last_error_code=NULL
+      claim_token=NULL,lease_expires_at=NULL,last_error_code=NULL,
+      resume_execution_arn=${executionArn},resume_dispatch_result=${executionArn === null ? "no_resume" : "started"}
       WHERE id=${fixed.eventId} AND event_type='application.resume-preparation.requested.v1'
         AND owner_user_id=${fixed.application.ownerUserId} AND application_id=${fixed.application.applicationId}
         AND resume_packet_id=${fixed.application.packetId} AND application_revision=${fixed.application.expectedRevision}

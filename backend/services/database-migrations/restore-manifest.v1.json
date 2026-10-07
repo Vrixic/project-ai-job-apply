@@ -46,6 +46,10 @@
         {
           "version": "0010_native_resume_requests",
           "checksum": "55ba75fe782eda46811d80a229332fee3bed747be85960d1f863069c6ce1423d"
+        },
+        {
+          "version": "0011_native_resume_execution_receipts",
+          "checksum": "d2b92f33fac9cbe01a3ea18758ce8ae0b4ea5f95a5b43125d59c4c3fb422b212"
         }
       ],
       "relations": [

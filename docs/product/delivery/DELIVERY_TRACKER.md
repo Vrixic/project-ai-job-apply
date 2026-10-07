@@ -4833,3 +4833,10 @@ existing encrypted queue; added execution/delivery alarms and an operator recove
 Build, 26 workflow tests, eight bundle checks, 19 mocked Terraform cases and both environment
 validations pass. [Evidence](evidence/d3-native-resume-terminal-signals-2026-10-07.md).
 Managed recovery drill and missed-event reconciliation remain; no activation. D1/D3 In progress.
+
+2026-10-07 D1-013/D3-064/D3-079 retains original resume execution acknowledgements atomically
+in Applications and adds bounded exact-version recovery reads. Forward migration 0011 advances
+the source migration/restore inventory to 74 migrations/93 relations. Applications/Workflows
+builds, 65 real SQL cases and 50 restore tests pass.
+[Evidence](evidence/d3-native-resume-execution-receipts-2026-10-07.md). No image publication or
+managed migration; AWS reconciliation and remaining launch acceptance stay open. D1/D3 In progress.
