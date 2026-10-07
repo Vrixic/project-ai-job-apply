@@ -291,6 +291,8 @@ function Assert-D2RuntimeMigrationInventory {
       $expected.documents += '|0007_cover_letter_work_authorizations|0008_cover_letter_provider_responses|0009_cover_letter_provider_failure|0010_temporary_material_completion|0011_native_material_allocations'
     } elseif (($Inventory['documents'] -join '|') -ceq ($expected.documents + '|0007_cover_letter_work_authorizations|0008_cover_letter_provider_responses|0009_cover_letter_provider_failure|0010_temporary_material_completion|0011_native_material_allocations|0012_native_material_launch_claim')) {
       $expected.documents += '|0007_cover_letter_work_authorizations|0008_cover_letter_provider_responses|0009_cover_letter_provider_failure|0010_temporary_material_completion|0011_native_material_allocations|0012_native_material_launch_claim'
+    } elseif (($Inventory['documents'] -join '|') -ceq ($expected.documents + '|0007_cover_letter_work_authorizations|0008_cover_letter_provider_responses|0009_cover_letter_provider_failure|0010_temporary_material_completion|0011_native_material_allocations|0012_native_material_launch_claim|0013_native_material_ready')) {
+      $expected.documents += '|0007_cover_letter_work_authorizations|0008_cover_letter_provider_responses|0009_cover_letter_provider_failure|0010_temporary_material_completion|0011_native_material_allocations|0012_native_material_launch_claim|0013_native_material_ready'
     }
     $expected.trust += '|0005_development_test_removal'
   } elseif (($Inventory['trust'] -join '|') -ceq ($expected.trust + '|0005_development_test_removal')) {

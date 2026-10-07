@@ -38,3 +38,26 @@ logical restore, exact-image and full frozen-source results will be recorded aft
 
 No main merge by this agent, new PR, cloud publication/activation or hosted CI/CD work. Managed
 IAM/routing/provider/client/ATS/accountable acceptance remains open. The PC stays on.
+
+## Migration boundary and local regression checkpoint
+
+All 31 native Linux scenarios pass with an assertion that the authenticated bootstrap publishes
+one ready receipt. All 11 emitted isolation/CLI checks pass; only the pure scalar ready validator
+was added to the material controls' exact module list. No SQL/provider/render/task capability was
+added to those scalar controls. The real SQL suite passes again after database-freshness hardening.
+A logical dump/restore of the owned four-owner fixture preserves migration 0013, its trigger and
+two published receipts; a digest of all receipt fields matches the original database. This is
+local fixture restore evidence, not a deployed seven-owner restore or accountable acceptance.
+
+The first full run stopped at the release operator's exact Documents-0012 boundary. The explicit
+allowlist now additionally accepts the complete 0013 sequence while rejecting missing, unknown
+and duplicate entries. The current seven-owner restore manifest adds the normalized SQL checksum:
+70 migrations, 92 relations and 12 owned schemas. Migration image smoke uses that exact file set.
+Historical restore fixtures exclude the new migration and preserve their original boundaries.
+All 268 release guard assertions, 50 restore units, 175 executable migration-smoke checks and the
+staging restore-operator guards pass. No cloud action or migration execution is performed.
+
+The first exact-image build failed during Debian dependency installation with memory-allocation
+exhaustion in the local 4-GiB Docker VM. Docker/WSL were reset, without changing machine limits or
+shared volumes. Build arguments now follow dependency installation, permitting that layer to be
+cached across source SHAs. The next image build runs separately from the full verifier.

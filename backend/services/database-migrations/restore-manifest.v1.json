@@ -134,6 +134,10 @@
         {
           "version": "0012_native_material_launch_claim",
           "checksum": "95c163f5f4b8a58aaf43ac62b96ab0efae1f4497216e91717451f4ebcaa6966b"
+        },
+        {
+          "version": "0013_native_material_ready",
+          "checksum": "e9bd7709515e49c8fb5e56a7521a57f8746327cb40f375ee6dd070bc9c3d6d8f"
         }
       ],
       "relations": [

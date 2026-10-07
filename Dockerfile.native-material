@@ -1,12 +1,12 @@
 FROM node:24.18.0-trixie-slim@sha256:5301bbf5e8046148348b1dea15436326f43c579031f8d76654a631225bdfe467 AS build
-ARG SOURCE_SHA
-ARG NATIVE_CONFIGURATION=backend/workers/ai/native-material/configuration.disabled.json
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
 WORKDIR /workspace
 COPY . .
+ARG SOURCE_SHA
+ARG NATIVE_CONFIGURATION=backend/workers/ai/native-material/configuration.disabled.json
 RUN pnpm install --frozen-lockfile \
   && pnpm contracts:generate \
   && pnpm --filter @ai-job-apply/documents-service... build \
