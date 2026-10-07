@@ -4439,3 +4439,16 @@ Cloud/identity/store responses are synthetic.
 follows. Resume launch/preparation/packet/location/client/ATS and actual image/managed gates
 remain. D1/D3 stay In progress; ADR-040 Proposed. No new PR, merge, deployment/activation or
 hosted CI/CD. Owned fixture removed; Docker/WSL stopped, shared volumes retained and PC on.
+
+2026-10-07 D3-064/D3-079 native resume runtime source `14bad3bd` passes full-verifier
+stages through 38 typecheck tasks and the existing zero-error/15-warning/58-info lint baseline.
+Two stale API route inventories stopped workspace tests. Test-only `d62d58fd` corrects them
+and proves optional native/legacy resume response compatibility; all 105 contract tests pass.
+The maintained verifier remainder then passes all 39 test/23 build tasks and isolation,
+Compose and scope checks on frozen source. This is segmented verification, not an uninterrupted
+full run. [Evidence](evidence/d3-native-resume-runtime-2026-10-07.md). Runtime source unchanged;
+launch/preparation/packet/location/client/ATS and actual-image/managed gates remain. D1/D3 stay
+In progress; ADR-040 Proposed. No new PR, main merge, deployment/activation or hosted CI/CD.
+Docker/WSL stopped, shared volumes retained, PC on.
+
+Development web restored after this batch: anonymous root 200/resume 307; no new signed-in acceptance claimed.
