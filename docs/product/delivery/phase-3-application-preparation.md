@@ -9,10 +9,12 @@
 
 ## Objective
 
-2026-10-06 D3-079 adds explicit actual-image conformance and fixes lazy PDF canvas resolution
-in the production CommonJS bundle. Generated-only image verification is in progress; no managed
-acceptance is claimed. [Evidence](evidence/d3-native-image-conformance-2026-10-06.md).
-D1/D3 remain In progress; CI/CD deferred, no cloud activation and PC stays on.
+2026-10-06 D3-079 actual-image conformance passes at clean source `44c0c354`: versions 1/2
+render and serve PDF/DOCX over authenticated HTTPS; the image-owned kernel retires both processes.
+Secret-version/TLS-host refusals and three production startup refusals pass, with no warnings.
+All 31 Linux regressions and full verification pass (38/39/23 tasks; unchanged lint).
+[Evidence](evidence/d3-native-image-conformance-2026-10-06.md). Managed acceptance stays open;
+D1/D3 remain In progress, CI/CD deferred, Docker/WSL stopped and PC stays on.
 
 2026-10-06 D3-079 fixes and locally verifies native second-generation version handling: Documents'
 original version is pinned through bootstrap, memory generation, completion and direct reads.
