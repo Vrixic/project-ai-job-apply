@@ -4594,3 +4594,11 @@ running/missing/error responses remain unresolved, and stored retirement replays
 57 focused cases, Documents typecheck/build and changed-file Biome pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
 ECS and registry ports were simulated; managed receiver/scheduling, live SQL-connected acceptance
 and routing remain. No deployment; D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds the private numeric-version resume observer Lambda and standalone
+artifact builder. Strict scope/configuration validation precedes managed secret access; the
+runtime exposes only observation and positive retirement persistence. Eleven bootstrap cases,
+Workflows typecheck/build and changed-file Biome pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Frozen-source artifact verification follows; managed receiver/IAM/event routing and SQL-connected
+acceptance remain. No deployment; D1/D3 In progress, ADR-040 Proposed and PC on.

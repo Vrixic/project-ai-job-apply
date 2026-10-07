@@ -466,3 +466,21 @@ ACK and withdrawal before writing. Documents typecheck/build and changed-file Bi
 checks use simulated ECS/registry ports; no new SQL migration, real database fixture or managed
 evidence was produced. The private receiver/artifact/IAM/schedule and SQL-connected acceptance
 remain follow-up work, alongside DNS/TLS/routing. No cloud action or Docker use.
+
+
+## Private resume observer Lambda source
+
+`native-resume-task-observer-lambda.ts` lazily composes the original SQL registry and observer
+behind a separate default-off gate and exact numeric invocation target. The only request is
+`{schemaVersion:1, action:"observe", scope}`; caller task ARNs/receipts/extra fields/accessors are
+rejected. Managed database-secret resolution follows validation. No creation owner ports are
+supplied to the registry, and the returned runtime exposes only observe/close.
+
+Eleven bootstrap tests exercise lazy reuse, disabled/unqualified/foreign/ambient/secret refusal,
+forged inputs, invocation mismatch, initialization retry, configuration drift and withdrawal.
+Workflows typecheck/build and changed-file Biome pass. Database and observer ports are simulated
+in these tests. The standalone builder targets `dist/native-resume-observer-lambda` and checks
+default-off refusal in the emitted bundle; frozen-source artifact execution follows separately.
+The existing five-artifact native resume publisher family is unchanged. A private release/IAM/
+event or scheduled receiver, connected SQL acceptance and managed execution remain unfinished.
+No cloud action, provider call, public route or content handling is introduced.
