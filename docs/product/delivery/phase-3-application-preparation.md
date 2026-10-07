@@ -1950,3 +1950,5 @@ owning workspaces compile. Cloud transports and generated readiness remain simul
 the owner's implementation-first cadence; no repeated full verifier. Enabled-image and managed/
 client/ATS/accountable gates remain. D1/D3 In progress, ADR-040 Proposed; CI/CD deferred until
 launch and PC remains on.
+
+Updated dispatcher ZIP built from clean `4cded260`; no publication/deployment. Owned SQL fixture removed, Docker/WSL stopped, development web root 200 and PC on.

@@ -235,3 +235,10 @@ cadence. The preceding full segmented repository verification remains historical
 this follow-up does not claim a new full-verifier run. Enabled-image source/render/direct-read,
 managed routing/IAM/schedule, client/ATS and accountable launch gates remain. D1/D3 stay
 In progress; ADR-040 Proposed. CI/CD deferred until production launch, PC shutdown forbidden.
+
+
+Corrected dispatcher artifact built from clean `4cded260f81eaffb5480932d4c5aac46f3c16026`:
+ZIP SHA-256 `26dc90e4c567cbd17eebcec79e1a0bd0dc2d2c83be1f08016fd1c925e7390e22`,
+515891 bytes, 30 components; bundled default-off refusal passes. No publication/deployment.
+Log: `.tmp/d3-resume-recovery-dispatch-artifact.log`. Owned SQL fixture removed; Docker Desktop
+and WSL stopped, shared volumes retained. Development web remains available (anonymous root 200).
