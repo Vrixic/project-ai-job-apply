@@ -1778,3 +1778,11 @@ Full frozen-source verification follows. Documents generation/task/completion le
 preparation/read wiring remain; D1/D3 stay In progress. No deployment, activation, new PR or
 hosted CI/CD work. Owned tmpfs fixture removed, shared volumes retained, Docker/WSL stopped;
 PC stays on.
+
+2026-10-06 D3-064/D3-079 scalar resume Applications admission at clean `c81c2ba7` passes
+full maintained verification: 38 typecheck, 39 test and 23 build tasks, unchanged lint and
+all artifact/operator/security checks. Separate three focused and seven actual SQL checks
+pass. [Evidence](evidence/d3-native-resume-owner-admission-2026-10-06.md). Owning Documents
+generation/task/completion ledger and preparation/read wiring remain; D1/D3 stay In progress.
+No new PR, main merge, deployment/activation or hosted CI/CD. Development web restored,
+owned fixture removed, shared volumes retained, Docker/WSL stopped and PC stays on.

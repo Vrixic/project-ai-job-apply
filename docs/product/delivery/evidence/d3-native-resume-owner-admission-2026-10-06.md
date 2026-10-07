@@ -27,3 +27,15 @@ Logs: `.tmp/d3-native-resume-admission-{build,units,sql}.log`.
 Full frozen-source verification follows. No new PR, main merge, hosted CI/CD work or
 managed acceptance is asserted. ADR-040 remains Proposed. Shared volumes remain and the
 PC stays on. The owned SQL fixture is removed and Docker/WSL stopped after SQL work.
+
+## Full frozen-source verification
+
+Clean committed source `c81c2ba775c559cae7c46c087d47c43f5700c6c9` passes the original
+`scripts/verify-phase0.ps1` run with matching ARTIFACT_SOURCE_SHA and terminal exit zero.
+All 38 typecheck tasks, 39 test tasks, 23 builds and operator/security/artifact isolation/
+Compose/scope checks pass. Lint remains zero errors, 15 warnings and 58 infos. The tracked
+tree remains unchanged during the run. Log: `.tmp/d3-native-resume-admission-full.log`.
+
+This repository run is separate from the seven opt-in real SQL cases above. It does not
+prove resume owner integration, managed deployment or native production-image acceptance.
+The development web is restored afterward; no repeated human acceptance is requested.
