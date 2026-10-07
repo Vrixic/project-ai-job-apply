@@ -1814,3 +1814,15 @@ RPC/source/task/preparation/packet/image/client/ATS and managed/accountable acce
 remain; D1/D3 stay In progress and ADR-040 Proposed. No deployment/activation, new PR,
 main merge or hosted CI/CD. Owned fixture removed, shared volumes retained,
 Docker/WSL stopped; PC remains on.
+
+2026-10-07 D3-064/D3-079 native-resume Jobs admission at clean frozen `3ff94848`
+passes full maintained verification: 38 typecheck, 39 test and 23 build tasks,
+operator/security/artifact isolation/Compose/scope checks. Actual Applications/Jobs
+composition passes all 22 PostgreSQL ledger checks. A post-run unused type-only
+SQL-test import cleanup restores the existing lint baseline (15 warnings/58 infos);
+Documents rebuild passes with byte-identical emitted test JavaScript. Runtime source
+remains the fully verified build. [Evidence](evidence/d3-native-resume-jobs-admission-2026-10-07.md).
+Authenticated resume RPC/source/task/preparation/packet/image/client/ATS and managed/
+accountable gates remain; D1/D3 stay In progress. No deployment/activation, new PR,
+main merge or hosted CI/CD. Development web restored; Docker/WSL stopped, shared
+volumes retained and PC remains on.

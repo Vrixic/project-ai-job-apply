@@ -8,7 +8,6 @@ import { PostgresCoverLetterStore } from "./cover-letter-store.js";
 import { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 import { PostgresNativeMaterialRegistry } from "./native-material-registry.js";
 import {
-  type NativeResumeApplicationIntent,
   type NativeResumeGenerationRecord,
   type NativeResumeOwnerQuery,
   type NativeResumeReservation,

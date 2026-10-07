@@ -1,4 +1,4 @@
-# D3 native resume Jobs admission — 2026-10-07
+# D3 native resume Jobs admission â€” 2026-10-07
 
 D3-064/D3-079 source and local verification only. D1/D3 remain In progress;
 ADR-040 remains Proposed. Nothing is deployed or activated.
@@ -42,7 +42,18 @@ Jobs authority has been removed.
 - Both emitted preparation bundle checks pass. The resume owner composition excludes
   SQL clients, AI/model, AWS, catalog runtime and content/rendering modules, and its
   actual bundled default-off ports refuse before SQL.
-- Full frozen-source maintained verification follows this checkpoint.
+- Original full maintained verifier completed with exit 0 at clean, frozen source
+  `3ff948484667f6a2b89e26b4367998717e1b1245`, with matching explicit
+  `ARTIFACT_SOURCE_SHA`: 38 typecheck tasks, 39 test tasks, 23 builds, formatting,
+  security/operator/artifact isolation, Compose and product-scope guards pass.
+  Its original process handle was 53868; tracked source stayed unchanged throughout.
+  The run had zero lint errors, 16 warnings and 58 informational findings: one new
+  warning was an unused type-only import in the SQL test. After terminal completion,
+  that import was removed. Full lint returns to the existing 15-warning/58-info
+  baseline; Documents production compilation passes and the emitted integration
+  test JavaScript SHA256 is exactly unchanged. The full verifier was not repeated
+  for this erased type-only cleanup or the evidence update. No runtime implementation
+  changed after the frozen-source pass.
 
 No schema, migration, public API, event, frontend or infrastructure change. The
 restore inventory remains 71 migrations / 93 relations / 12 schemas / 7 owners,
