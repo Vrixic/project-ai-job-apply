@@ -251,7 +251,7 @@ describe.runIf(requested)(
                   entryPoint: ["/usr/local/bin/node"],
                   command: ["native-material/main.mjs"],
                   workingDirectory: "/materials",
-                  linuxParameters: { capabilities: { drop: ["ALL"] } },
+                  linuxParameters: { initProcessEnabled: true, capabilities: { drop: ["ALL"] } },
                   ulimits: [{ name: "core", softLimit: 0, hardLimit: 0 }],
                 },
               ],

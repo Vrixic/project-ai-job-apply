@@ -1009,7 +1009,7 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
                         ? "native-material/main.mjs"
                         : "native-resume/main.mjs",
                     ],
-                    linuxParameters: { capabilities: { drop: ["ALL"] } },
+                    linuxParameters: { initProcessEnabled: true, capabilities: { drop: ["ALL"] } },
                     ulimits: [{ name: "core", softLimit: 0, hardLimit: 0 }],
                   },
                 ],

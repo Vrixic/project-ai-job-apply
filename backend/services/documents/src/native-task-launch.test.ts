@@ -63,7 +63,7 @@ function definition() {
           workingDirectory: "/materials",
           entryPoint: ["/usr/local/bin/node"],
           command: ["native-material/main.mjs"],
-          linuxParameters: { capabilities: { drop: ["ALL"] } },
+          linuxParameters: { initProcessEnabled: true, capabilities: { drop: ["ALL"] } },
           ulimits: [{ name: "core", softLimit: 0, hardLimit: 0 }],
         },
       ],
@@ -407,6 +407,8 @@ describe("private one-attempt native ECS launch", () => {
     "core",
     "root",
     "architecture",
+    "init missing",
+    "init disabled",
     "command",
   ])("refuses unsafe %s envelope before claiming", async (kind) => {
     const f = fixture();
@@ -425,6 +427,8 @@ describe("private one-attempt native ECS launch", () => {
       if (kind === "core") required(c.ulimits[0]).softLimit = 1;
       if (kind === "root") c.readonlyRootFilesystem = false;
       if (kind === "architecture") r.taskDefinition.runtimePlatform.cpuArchitecture = "ARM64";
+      if (kind === "init missing") Reflect.deleteProperty(c.linuxParameters, "initProcessEnabled");
+      if (kind === "init disabled") c.linuxParameters.initProcessEnabled = false;
       if (kind === "command") c.command = ["shell"];
       return r;
     });

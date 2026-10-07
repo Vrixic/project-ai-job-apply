@@ -167,7 +167,8 @@ export function validateNativeTaskDefinition(
     (d.volumes?.length ?? 0) !== 0 ||
     (c.linuxParameters?.capabilities?.add?.length ?? 0) !== 0 ||
     !c.linuxParameters?.capabilities?.drop?.includes("ALL") ||
-    c.linuxParameters?.initProcessEnabled === true ||
+    // Kernel SIGKILL deadlines must target a child of container init, not namespace PID 1.
+    c.linuxParameters?.initProcessEnabled !== true ||
     (c.linuxParameters?.devices?.length ?? 0) !== 0 ||
     (c.linuxParameters?.tmpfs?.length ?? 0) !== 0 ||
     !c.ulimits?.some(

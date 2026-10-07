@@ -28,3 +28,9 @@ Source Linux smoke tests use real signing, TLS, rendering and kernel retirement 
 AWS, identity, secret and owner-store responses. This is not managed IAM/routing acceptance or
 conformance of a built production image. Resume launch/preparation/packet attachment/location
 resolution, client/ATS use and managed acceptance remain separate work. ADR-040 remains Proposed.
+
+Task definitions must set `linuxParameters.initProcessEnabled: true` (local Docker runs use
+`--init`). The native kernel deadline must signal the material process as an init child: an
+actual image probe showed its SIGKILL timer did not terminate Node running as namespace PID 1.
+The shared launcher refuses missing/disabled init before claiming work. This is a task runtime
+requirement; it does not establish managed retirement or all-copy deletion evidence.

@@ -1915,3 +1915,15 @@ In progress; ADR-040 Proposed. No new PR, main merge, deployment/activation or h
 Docker/WSL stopped, shared volumes retained, PC on.
 
 Development web restored after this batch: anonymous root 200/resume 307; no new signed-in acceptance claimed.
+
+
+2026-10-07 D3-064/D3-079 connects atomic resume Prepare requests, original source capture,
+private scheduled dispatch, durable preparation, ready packet attachment and scalar location
+reads. Built-image smoke found PID 1 prevented the kernel deadline; both native launch paths
+now require an init process. The same image exits automatically with init. Fixed stale restore
+checksum after the full verifier reached workspace tests. Focused checks pass: 46 resume and
+25 cover-letter real PostgreSQL cases, 59 launcher/control and 214 restore/durable units,
+697 PowerShell assertions. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Remaining verifier stages and corrected private artifact builds follow. D1/D3 stay In progress;
+ADR-040 Proposed. Managed activation and combined/client/ATS acceptance remain. CI/CD deferred
+until launch; no new PR, main merge or deployment. PC remains on.

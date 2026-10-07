@@ -130,3 +130,41 @@ Staging restore operator checks also pass. The new schema is packaged with its e
 this remains local packaging verification, not a published migration image. Changed-file lint,
 formatting and diff checks pass. Development web is temporarily stopped for frozen-source full
 verification and will be restored after that process finishes. PC shutdown remains forbidden.
+
+
+## Built-image smoke and fixes after connected implementation
+
+The clean `0af30d5d` batch built all three private Lambda artifacts and the actual Linux/amd64
+resume image (`sha256:ff38e1c23c370a7788277b8cd5bf218a246fdcabf44806321a6f0299a7ac029e`).
+The image verified its source/file hashes, native canvas/kernel ABI, UID 65532, read-only
+filesystem and default-off refusal with networking disabled. It did not exercise the enabled
+source/TLS/render/ready flow or managed infrastructure.
+
+The real blocked-event-loop smoke exposed a launch defect: Node running as container PID 1
+remained alive beyond the armed 150 ms kernel deadline and required manual SIGKILL. That manual
+exit 137 is not successful deadline evidence. The same image with Docker `--init` exited 137
+automatically in 1322 ms including startup. Both native launch paths now require ECS
+`linuxParameters.initProcessEnabled: true`; missing/false values are refused before claiming.
+Logs/receipts: `.tmp/d3-native-resume-image-build.log`,
+`.tmp/d3-native-resume-image-check.json`, `.tmp/d3-native-resume-pid1-failure.json`,
+`.tmp/d3-native-resume-init-check.json`.
+
+The frozen-source verifier passed operational guards, formatting, lint and all 38 typecheck
+tasks, then stopped on the restore manifest's stale compiled checksum (37 of 39 workspace tasks
+succeeded; Gateway was interrupted). The manifest source was correct; its constant, PowerShell
+validation and generated synthetic fixture now use the actual SHA-256
+`6862c5d379bd77557b2b5987615cbaa8d3f1cc28ee2e3b643384305f3c71b0cf`.
+Focused checks pass: 59 launch/control units, 214 restore/durable units, 697 PowerShell assertions,
+46 real PostgreSQL resume cases and 25 real PostgreSQL cover-letter cases. The cover-letter suite
+initially hit a cluster-wide reader-role grant from the preceding resume database; rerunning on
+its own disposable PostgreSQL cluster passed. No production policy was weakened for that fixture.
+Cloud/identity transports and generated-ready receipts remain synthetic in those SQL suites.
+Logs: `.tmp/d3-native-resume-init-unit.log`, `.tmp/d3-native-resume-init-restore-unit.log`,
+`.tmp/d3-native-resume-init-restore-powershell.log`, `.tmp/d3-native-resume-init-sql.log`,
+`.tmp/d3-native-cover-init-isolated-sql.log`, `.tmp/d3-native-resume-launch-full.log`.
+
+Private artifacts built before the init fix are superseded and must be rebuilt on corrected
+frozen source. Workspace tests/builds and remaining maintained verifier stages follow this fix.
+D1/D3 remain In progress; managed activation and full combined-flow acceptance remain outstanding.
+CI/CD stays deferred until launch. No new PR, main merge or cloud deployment is authorized in this
+stretch. The PC stays on.

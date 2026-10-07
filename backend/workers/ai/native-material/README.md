@@ -67,3 +67,9 @@ It checks image manifest hashes, uses owned synthetic staging and removes its la
 This exercises the bundled factory with test ports; it does not activate production configuration
 or prove managed IAM, endpoint routing or real provider acceptance.
 See [actual image evidence](../../../../docs/product/delivery/evidence/d3-native-image-conformance-2026-10-06.md).
+
+Task definitions must set `linuxParameters.initProcessEnabled: true` (local Docker runs use
+`--init`). The native kernel deadline must signal the material process as an init child: an
+actual image probe showed its SIGKILL timer did not terminate Node running as namespace PID 1.
+The shared launcher refuses missing/disabled init before claiming work. This is a task runtime
+requirement; it does not establish managed retirement or all-copy deletion evidence.
