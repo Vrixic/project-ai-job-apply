@@ -330,3 +330,25 @@ observation. Logs: `.tmp/d3-native-resume-task-validate.log`,
 `.tmp/d3-native-resume-task-tests-json.log`, `.tmp/d3-native-resume-task-launch-check.log`.
 Managed effective IAM, exact release composition, network/TLS/DNS, enabled main and client/ATS/
 accountable acceptance remain. ADR-040 remains Proposed; D1/D3 remain In progress.
+
+
+## Source-only private owner/source release module
+
+`infrastructure/terraform/modules/native-resume-source-access` supplies the two versioned private
+RPC functions required before image configuration can pin numeric recipients. A null release
+creates nothing; a supplied release keeps handlers off by default. Immutable artifact versions,
+original task/role binding, database secret, key, extension and private network are explicit.
+Separate execution roles keep S3 unavailable to owner RPC and permit only retained normalized
+resume version reads for source RPC. Neither role can launch tasks or write resume objects.
+
+Terraform 1.16.2 validation and all five mocked tests pass: absence, disabled/versioned pair,
+explicit activation, foreign target refusal and activation without a release. Logs:
+`.tmp/d3-native-resume-source-validate.log` and `.tmp/d3-native-resume-source-tests.log`.
+Environment names match inspected handler sources; enabled handler execution and effective
+managed IAM/network access have not been verified by this module check.
+
+The module README records release order, original-version retention and required existing
+network/resource policies. Changing the gate publishes new versions rather than disabling old
+numeric versions. No environment composition or cloud action occurred. Preparation control,
+durable/dispatcher composition and managed routing/acceptance remain. D1/D3 remain In progress,
+ADR-040 Proposed, CI/CD deferred until launch, Docker/WSL stopped and PC on.

@@ -1986,3 +1986,10 @@ accepted by the actual Documents launch validator with synthetic ECS observation
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). No environment composition or
 cloud action. Managed release/routing/client/ATS/accountable gates remain; D1/D3 In progress,
 ADR-040 Proposed. CI/CD deferred until launch, Docker/WSL stopped and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds the unattached private owner/source Lambda module with exact
+artifact/task bindings, separate bounded roles and disabled runtime defaults. Terraform validation
+and five mocked tests pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+No cloud deployment or activation; preparation-control/durable/dispatcher composition and managed
+routing/acceptance remain. D1/D3 In progress, ADR-040 Proposed, CI/CD deferred and PC on.
