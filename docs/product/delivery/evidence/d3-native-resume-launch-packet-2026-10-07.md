@@ -352,3 +352,33 @@ network/resource policies. Changing the gate publishes new versions rather than 
 numeric versions. No environment composition or cloud action occurred. Preparation control,
 durable/dispatcher composition and managed routing/acceptance remain. D1/D3 remain In progress,
 ADR-040 Proposed, CI/CD deferred until launch, Docker/WSL stopped and PC on.
+
+
+## Connected preparation release sources
+
+`infrastructure/terraform/modules/native-resume-preparation` composes the existing three private
+artifacts: owning control, durable workflow and Applications outbox dispatcher. Control pins the
+original task/image/network/role envelope. Durable pins its numeric control version; dispatcher
+pins the numeric durable version. The disabled one-minute event rule invokes the numeric
+dispatcher with a scalar sweep. Runtime, launch and schedule switches default off. Each role has
+separate capabilities, and durable receives no database secret or candidate-object access.
+
+The Terraform-owned CloudFormation durable resource follows the existing platform pattern for
+customer-key encryption of checkpoints; version replacement includes the complete environment
+hash. SQL queue claims and exhaustion remain in the existing application runtime. The module
+creates no replacement queue, public route, content storage or direct task invocation.
+
+Terraform 1.16.2 validates; six mocked cases pass for absence, complete wiring/permissions,
+disabled defaults, separated activation and rejected targets. The actual compiled Documents
+launch validator accepts the emitted configuration, and dispatcher deployment fields match.
+Logs: `.tmp/d3-native-resume-preparation-validate.log`,
+`.tmp/d3-native-resume-preparation-tests.log`, `.tmp/d3-native-resume-preparation-tests-json.log`
+and `.tmp/d3-native-resume-preparation-check.log`. Cloud observations/versions are synthetic;
+this is not enabled runtime or managed end-to-end verification.
+
+Both environment compositions and bootstrap are unchanged. The current workload boundary lacks
+native control RunTask/PassRole permissions; deployment-role CloudFormation scope also needs a
+reviewed delta. Network/TLS routing, effective policies, original-version drain and managed/client/
+ATS/accountable acceptance remain. The module README records immutable-version gate semantics.
+No publication, deployment, activation or Docker use. D1/D3 In progress and ADR-040 Proposed;
+CI/CD remains deferred until launch and PC on.

@@ -95,3 +95,5 @@ files retain their old pin and must not be used for cloud planning during this l
 - `modules/native-resume-task/` supplies an unattached, default-empty native resume task/role release; no environment currently instantiates it.
 
 - `modules/native-resume-source-access/` supplies an unattached owner/source Lambda pair with separate bounded roles and disabled runtime defaults.
+
+- `modules/native-resume-preparation/` supplies unattached private control, durable and dispatcher release wiring with disabled launch/schedule defaults.

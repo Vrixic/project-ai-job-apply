@@ -4554,3 +4554,12 @@ artifact/task bindings, separate bounded roles and disabled runtime defaults. Te
 and five mocked tests pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
 No cloud deployment or activation; preparation-control/durable/dispatcher composition and managed
 routing/acceptance remain. D1/D3 In progress, ADR-040 Proposed, CI/CD deferred and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds an unattached connected preparation release: private control,
+CMK-encrypted durable workflow, SQL-outbox dispatcher and disabled numeric-version schedule.
+Runtime, new-launch and schedule gates remain separate and off. Terraform validation and six
+mocked cases pass; emitted launch JSON passes the actual Documents configuration validator.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Managed boundary/deployment-role
+updates, network/TLS routing, release composition and acceptance remain; no cloud action.
+D1/D3 In progress, ADR-040 Proposed, CI/CD deferred and PC on.
