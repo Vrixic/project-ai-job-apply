@@ -45,7 +45,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "audit:expire": "node --env-file-if-exists=../../../.env dist/src/run-privileged-moderation-audit-retention.js",
-    "build:lambda:audit-retention": "node ../../../scripts/build-privileged-moderation-audit-retention-lambda.mjs"
+    "build:lambda:audit-retention": "pnpm build && node ../../../scripts/build-privileged-moderation-audit-retention-lambda.mjs"
   },
   "dependencies": {
     "@ai-job-apply/api-contracts": "workspace:*",

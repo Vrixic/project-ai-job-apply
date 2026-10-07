@@ -124,3 +124,10 @@ Local pure-function tests pass for case-insensitive family routing, the exact fo
 foreign/mixed/incomplete/duplicate rejection, and the existing family regression suite. Log:
 `.tmp/d1-audit-publication-guards.log`. No publisher cloud entrypoint was executed. Actual
 clean-source build and local artifact readback follow; managed publication remains unperformed.
+
+
+Actual publisher local readback at clean `dc5da2f2` validates all four files and source markers;
+repeat emission is byte-identical (22,777-byte ZIP). Profile was compiled immediately before
+this readback. Review found that the package artifact command itself assumed existing compiled
+output; it now explicitly runs Profile compilation before packaging so publication cannot skip
+that step. A fresh committed-source artifact check follows this correction.
