@@ -325,3 +325,20 @@ Artifacts remain local under Workflow `dist/native-material-control-family`. Log
 repeated clean reproducibility, a fresh dependency audit or publisher cloud execution. Platform
 event/failure retention/alarms and private network integration remain before image/read-route
 managed acceptance. D1/D3 In progress; no cloud action, CI/CD deferred, Docker/WSL stopped, PC on.
+
+
+## Native material task-event delivery
+
+Original task state changes now target the numeric original event-handler version with exact
+account, region, cluster and task-definition matching. The rule stays disabled until recovery
+is enabled. EventBridge retries delivery for up to one day; Lambda retries asynchronous handler
+failure twice within six hours. Both paths retain failures in the original encrypted queue for
+fourteen days. Queue/key grants bind EventBridge to the original rule; the handler can send only
+to its original failure queue. Ten alarms cover queue depth, delivery/destination failures and
+errors/throttles on the three control functions. Retention remains independent of activation.
+
+Local verification on 2026-10-07: six control-module and three platform observation Terraform
+mock scenarios pass; development and staging configurations validate with Terraform 1.16.2.
+These are local configuration checks with simulated AWS resources, not deployed event delivery.
+Private-network access, image/read-route composition and managed acceptance remain. No cloud
+publication or activation; D1/D3 remain In progress, CI/CD deferred, PC stays on.

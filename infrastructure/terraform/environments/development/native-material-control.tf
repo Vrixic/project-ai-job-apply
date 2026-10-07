@@ -31,6 +31,7 @@ variable "native_material_control_releases" {
   }
 }
 module "native_material_control" {
+  depends_on         = [module.platform]
   for_each           = var.native_material_control_releases
   source             = "../../modules/native-material-control"
   account_id         = module.platform.account_id
@@ -42,5 +43,5 @@ module "native_material_control" {
   new_launch_enabled = each.value.new_launch_enabled
 }
 output "native_material_control_bindings" {
-  value = { for id, control in module.native_material_control : id => { functions = control.functions, role_arns = control.role_arns, launch_configuration = control.launch_configuration } }
+  value = { for id, control in module.native_material_control : id => { functions = control.functions, event_rule_arn = control.task_event_rule_arn, dead_letter_arn = control.event_dead_letter_arn, role_arns = control.role_arns, launch_configuration = control.launch_configuration } }
 }

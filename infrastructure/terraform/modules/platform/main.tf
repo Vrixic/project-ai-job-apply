@@ -80,6 +80,29 @@ data "aws_iam_policy_document" "platform_kms" {
     }
   }
   dynamic "statement" {
+    for_each = var.native_material_observation_releases
+    content {
+      sid       = "MaterialEventFailure${statement.key}"
+      effect    = "Allow"
+      actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = [local.material_event_rules[statement.key]]
+      }
+    }
+  }
+  dynamic "statement" {
     for_each = var.native_preparation_releases
     content {
       sid       = "PreparationFailure${statement.key}"

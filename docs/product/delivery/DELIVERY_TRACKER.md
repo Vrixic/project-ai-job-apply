@@ -4957,3 +4957,12 @@ twelve release companions, bundled refusal checks and seventeen emitted capabili
 Source/hash/SBOM integrity verified; artifacts remain unpublished. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#built-native-material-control-family).
 Platform event/network and managed image/read-route acceptance remain. D1/D3 In progress,
 CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 native material task-event delivery now targets the original numeric handler, with
+separate delivery/execution retries, encrypted fourteen-day failure retention and ten alarms.
+Six control and three platform mock scenarios pass; both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-task-event-delivery).
+Private-network/image/read-route composition and managed acceptance remain. D1/D3 In progress;
+no cloud activation, CI/CD deferred, PC on. Implementation proceeds in connected batches,
+followed by functional checks, fixes and focused regression tests per the owner's direction.

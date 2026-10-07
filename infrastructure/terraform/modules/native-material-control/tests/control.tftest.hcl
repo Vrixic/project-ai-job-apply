@@ -23,6 +23,15 @@ run "disabled_original_control" {
     error_message = "All runtime switches default off."
   }
   assert {
+    condition     = aws_cloudwatch_event_rule.task[0].state == "DISABLED" && jsondecode(aws_cloudwatch_event_rule.task[0].event_pattern).detail.taskDefinitionArn == [var.release.task_definition_arn] && aws_cloudwatch_event_target.task[0].arn == aws_lambda_function.event[0].qualified_arn && aws_lambda_permission.task[0].qualifier == aws_lambda_function.event[0].version
+    error_message = "Only original task events may reach the numeric handler; default rule remains disabled."
+  }
+  assert {
+    condition     = aws_cloudwatch_event_target.task[0].dead_letter_config[0].arn == output.event_dead_letter_arn && aws_cloudwatch_event_target.task[0].retry_policy[0].maximum_event_age_in_seconds == 86400 && aws_lambda_function_event_invoke_config.task[0].maximum_event_age_in_seconds == 21600 && aws_lambda_function_event_invoke_config.task[0].destination_config[0].on_failure[0].destination == output.event_dead_letter_arn
+    error_message = "Both delivery failure paths must retain original work with bounded independent retry budgets."
+  }
+
+  assert {
     condition     = length(aws_lambda_function.launch[0].vpc_config) == 1 && length(aws_lambda_function.owner[0].vpc_config) == 1 && length(aws_lambda_function.event[0].vpc_config) == 0 && !contains(keys(aws_lambda_function.event[0].environment[0].variables), "DATABASE_SECRET_ID") && jsondecode(aws_lambda_function.event[0].environment[0].variables.NATIVE_MATERIAL_TASK_EVENT_CONFIGURATION_JSON).functionArn == aws_lambda_function.launch[0].qualified_arn
     error_message = "Only owning DB handlers enter VPC; recovery invokes original numeric launcher without SQL."
   }
@@ -90,4 +99,9 @@ override_resource {
 override_resource {
   target = aws_lambda_function.event[0]
   values = { version = "9", qualified_arn = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-material-event-r1:9" }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.task[0]
+  values = { arn = "arn:aws:events:us-east-2:123456789012:rule/ai-job-apply-development-material-event-r1" }
 }

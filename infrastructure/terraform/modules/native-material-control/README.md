@@ -27,8 +27,11 @@ This source composition is not activation-ready. Bootstrap `native_material_cont
 `ai-job-apply-${environment}-material-launch-${release_id}-boundary`; this module cannot broaden
 that ceiling. Existing workload boundaries cover owner/event but effective IAM still needs
 managed verification. Platform integration must supply original secret/Lambda/ECS endpoint
-permissions, EventBridge task-change delivery with retained failure handling and alarms, and
-required secret/key policies. No event rule or function URL is created here. The image, provider
+permissions and required secret/key policies. The original task-change rule invokes the numeric
+event-handler version only when recovery is enabled. EventBridge delivery and Lambda asynchronous
+execution have separate retry budgets and share the original encrypted fourteen-day failure queue
+provided by the platform, with delivery, destination, queue and function alarms. No function URL
+is created here. The image, provider
 egress, task read route and controlled image/release publication remain separate prerequisites.
 
 Six mocked Terraform scenarios cover absence, original role/environment restrictions, recovery

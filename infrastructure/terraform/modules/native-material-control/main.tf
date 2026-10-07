@@ -240,3 +240,57 @@ resource "aws_iam_role_policy" "event" {
 output "functions" { value = local.deployed ? { launch = aws_lambda_function.launch[0].qualified_arn, owner = aws_lambda_function.owner[0].qualified_arn, event = aws_lambda_function.event[0].qualified_arn } : {} }
 output "role_arns" { value = { for k, r in aws_iam_role.runtime : k => r.arn } }
 output "launch_configuration" { value = local.launch_configuration }
+
+locals {
+  event_dead_letter_arn = local.deployed ? "arn:aws:sqs:us-east-2:${var.account_id}:ai-job-apply-${var.environment}-material-events-${var.release.release_id}" : null
+}
+resource "aws_iam_role_policy" "event_failure" {
+  count = local.deployed ? 1 : 0
+  name  = "retain-original-event-failure"
+  role  = aws_iam_role.runtime["event"].id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [
+    { Effect = "Allow", Action = ["sqs:SendMessage"], Resource = local.event_dead_letter_arn },
+    { Effect = "Allow", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = var.release.platform_kms_key_arn }
+  ] })
+}
+resource "aws_cloudwatch_event_rule" "task" {
+  count         = local.deployed ? 1 : 0
+  name          = local.names.event
+  state         = var.recovery_enabled ? "ENABLED" : "DISABLED"
+  event_pattern = jsonencode({ source = ["aws.ecs"], "detail-type" = ["ECS Task State Change"], account = [var.account_id], region = ["us-east-2"], detail = { clusterArn = [var.release.cluster_arn], taskDefinitionArn = [var.release.task_definition_arn], launchType = ["FARGATE"] } })
+}
+resource "aws_lambda_permission" "task" {
+  count          = local.deployed ? 1 : 0
+  statement_id   = "OriginalTaskChanges"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.event[0].function_name
+  qualifier      = aws_lambda_function.event[0].version
+  principal      = "events.amazonaws.com"
+  source_arn     = aws_cloudwatch_event_rule.task[0].arn
+  source_account = var.account_id
+}
+resource "aws_lambda_function_event_invoke_config" "task" {
+  count                        = local.deployed ? 1 : 0
+  depends_on                   = [aws_iam_role_policy.event_failure]
+  function_name                = aws_lambda_function.event[0].function_name
+  qualifier                    = aws_lambda_function.event[0].version
+  maximum_event_age_in_seconds = 21600
+  maximum_retry_attempts       = 2
+  destination_config {
+    on_failure { destination = local.event_dead_letter_arn }
+  }
+}
+resource "aws_cloudwatch_event_target" "task" {
+  count      = local.deployed ? 1 : 0
+  depends_on = [aws_lambda_permission.task, aws_lambda_function_event_invoke_config.task]
+  rule       = aws_cloudwatch_event_rule.task[0].name
+  target_id  = "original-task-event"
+  arn        = aws_lambda_function.event[0].qualified_arn
+  dead_letter_config { arn = local.event_dead_letter_arn }
+  retry_policy {
+    maximum_event_age_in_seconds = 86400
+    maximum_retry_attempts       = 185
+  }
+}
+output "task_event_rule_arn" { value = local.deployed ? aws_cloudwatch_event_rule.task[0].arn : null }
+output "event_dead_letter_arn" { value = local.event_dead_letter_arn }
