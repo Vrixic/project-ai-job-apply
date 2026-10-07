@@ -199,3 +199,32 @@ coexistence scenarios also pass. Both environments validate with Terraform 1.16.
 evidence, not provisioned keys or effective KMS/network acceptance. No cloud change or CI/CD
 work. Packet-owner/native-task/route composition and managed acceptance remain; D1/D3 In progress.
 Docker/WSL remain stopped and PC on.
+
+## Current recovery artifact family
+
+The complete preparation family was rebuilt after release scoping/drain and packet-key wiring
+at clean committed source `14bffe942047abb815daa157b315c89ee55d5139`. Workflow and all owning
+service dependencies compile. All four original builders' bundled refusal checks pass, and
+five independent bundle-boundary checks pass, including absence of private/provider/Invoke
+actors from recovery and absence of model/ECS/rendering actors from preparation.
+
+The first build used the builder's default `local` provenance label; the independent manifest
+check rejected it as release evidence. Repackaging the same compiled source with exact
+`ARTIFACT_SOURCE_SHA` produced the qualified family below. All sixteen ZIP/manifest/checksum/
+SBOM companions pass source identity, embedded source marker, bundle hash, ZIP hash/length/
+base64 digest and SBOM hash/component-count checks. This is one source compilation and one
+qualified packaging pass, not a repeated clean reproducibility build or publisher execution.
+
+| Artifact | ZIP SHA256 | Bytes | Components |
+|---|---|---:|---:|
+| native-application-preparation-lambda | `73d468c3eedc0a7fbe4aed141ef2f3bc30329f86220ea1a092096a33a6979f41` | 675864 | 46 |
+| application-preparation-durable-lambda | `aceedb87385cb9541ae87cd73eab13fb9fa14713340bfa76b4b0d166b84d133c` | 363691 | 31 |
+| application-preparation-starter-lambda | `bb82cd485bd3b1fd96f0c4976f92b88ccef987c0b5c84d4cd237ff378efd61c3` | 440086 | 35 |
+| application-preparation-recovery-lambda | `0d3108f678cace0dfb4aca6faea6f79e23f2019ad7baaee7d9b11e1858ceaf37` | 453903 | 35 |
+
+Local logs/inventory: `.tmp/d3-preparation-family-current-build.log`,
+`.tmp/d3-preparation-family-current-packaging.log`, and
+`.tmp/d3-preparation-family-current-integrity.json`. Artifacts remain unpublished under
+`backend/workflows/dist/native-preparation-family`. No fresh audit, cloud deployment or managed
+acceptance is claimed. Native task/launcher/owner/route infrastructure still needs composition;
+D1/D3 remain In progress. Docker/WSL remain stopped; PC on and CI/CD deferred.

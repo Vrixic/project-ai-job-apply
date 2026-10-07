@@ -4925,3 +4925,9 @@ Terraform destruction protection. Three key and four preparation/coexistence moc
 pass; both environments validate. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#retained-packet-key-provisioning).
 No keys provisioned or runtime activated. Native packet-owner/task/route composition and managed
 acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 preparation artifacts rebuilt at `14bffe94`, incorporating original-release recovery
+and intake-disabled drain. Dependency compilation, bundled refusal checks, five bundle-boundary
+checks and sixteen-file source/hash/SBOM verification pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#current-recovery-artifact-family).
+Artifacts remain unpublished; native task/launcher/owner/route composition and managed acceptance
+remain. D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
