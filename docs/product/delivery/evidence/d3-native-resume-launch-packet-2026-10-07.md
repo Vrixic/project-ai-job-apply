@@ -745,3 +745,11 @@ Local validation on 2026-10-07:
 Logs are `.tmp/d3-observer-sweep-{build,sql,unit,restore,terraform,platform,development,staging,
 restore-ps,replay-ps,release-ps}.log`. No complete new frozen-source verifier or live acceptance is
 claimed. The temporary SQL fixture was removed; Docker/WSL stopped and PC stays on.
+
+
+The updated standalone observer artifact builds from clean source `7573dc6e288af519dde41fd46faf4f19bb4720dc`.
+Its bundled disabled-runtime checks include the new sweep action and prove no network effects in
+that refused state. ZIP SHA256 is `629e5cc0ff0f1d44d0f6350addcf938e99d12e5a72d1c4b50790e69718a58b7f`
+(386823 bytes, 30 SBOM components). Log: `.tmp/d3-observer-sweep-artifact.log`. This standalone
+artifact is unpublished; it does not replace the earlier consistent six-artifact family receipt.
+The final release guard rerun passes 274 assertions, including the new migration inventory.
