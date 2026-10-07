@@ -18,13 +18,13 @@ variable "native_resume_control_network" {
   }
 }
 locals {
-  native_resume_api_configured   = length(var.native_resume_control_network) > 0 && var.persistent_data_plane_enabled
+  native_resume_api_configured   = (length(var.native_resume_control_network) > 0 || length(var.native_material_control_network) > 0) && var.persistent_data_plane_enabled
   native_resume_address_releases = { for revision, release in var.native_resume_control_network : revision => release if release.address_lookup }
   native_resume_api_principals = { for revision, release in var.native_resume_control_network : revision => {
     control  = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-control-r${revision}"
     observer = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-observer-r${revision}"
   } }
-  native_resume_ecs_endpoint_policy = { Version = "2012-10-17", Statement = flatten([for revision, release in var.native_resume_control_network : [
+  native_resume_ecs_endpoint_policy = { Version = "2012-10-17", Statement = concat(local.material_ecs_statements, flatten([for revision, release in var.native_resume_control_network : [
     { Sid       = "OriginalLaunch${revision}", Effect = "Allow", Principal = "*", Action = ["ecs:RunTask"],
       Resource  = "arn:aws:ecs:us-east-2:${data.aws_caller_identity.current.account_id}:task-definition/${var.name}-${var.environment}-native-resume:${revision}",
       Condition = { ArnEquals = { "aws:PrincipalArn" = local.native_resume_api_principals[revision].control, "ecs:cluster" = release.cluster_arn }, Bool = { "ecs:enable-execute-command" = "false" } }
@@ -36,7 +36,7 @@ locals {
       Resource  = "arn:aws:ecs:us-east-2:${data.aws_caller_identity.current.account_id}:task/${element(reverse(split("/", release.cluster_arn)), 0)}/*",
       Condition = { ArnEquals = { "aws:PrincipalArn" = values(local.native_resume_api_principals[revision]), "ecs:cluster" = release.cluster_arn } }
     }
-  ]]) }
+  ]])) }
   native_resume_ec2_endpoint_policy = { Version = "2012-10-17", Statement = [for revision, release in local.native_resume_address_releases :
     { Sid       = "OriginalAddress${revision}", Effect = "Allow", Principal = "*", Action = ["ec2:DescribeNetworkInterfaces"], Resource = "*",
       Condition = { ArnEquals = { "aws:PrincipalArn" = local.native_resume_api_principals[revision].control } }
@@ -46,13 +46,14 @@ locals {
 resource "aws_security_group" "native_resume_api" {
   count       = local.native_resume_api_configured ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-resume-api-"
+  # Preserve the existing immutable description to avoid replacing the shared group.
   description = "TLS from original resume control and observer functions"
   vpc_id      = aws_vpc.this.id
   ingress {
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = sort(distinct(flatten([for release in values(var.native_resume_control_network) : tolist(release.security_group_ids)])))
+    security_groups = sort(distinct(concat(local.material_control_groups, flatten([for release in values(var.native_resume_control_network) : tolist(release.security_group_ids)]))))
   }
 }
 resource "aws_vpc_endpoint" "native_resume_api" {

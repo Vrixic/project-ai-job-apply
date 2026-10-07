@@ -342,3 +342,29 @@ mock scenarios pass; development and staging configurations validate with Terraf
 These are local configuration checks with simulated AWS resources, not deployed event delivery.
 Private-network access, image/read-route composition and managed acceptance remain. No cloud
 publication or activation; D1/D3 remain In progress, CI/CD deferred, PC stays on.
+
+
+## Native material private network
+
+Development and staging derive original network bindings from retained task/control releases.
+The existing private ECS endpoint admits only the original launcher to RunTask on its exact
+cluster/definition without ECS exec, and to describe original tasks/definition metadata. Resume
+control/observer rules coexist in that same endpoint. Shared Secrets Manager grants separate the
+launcher/owner database secret from the task's two version-pinned provider/TLS reads; shared
+Lambda access binds the task principal to its numeric original owner. No direct KMS endpoint
+access is needed for these service-mediated secret decryptions.
+
+Inspection found SQL ingress previously accepted only the shared application group, leaving
+custom preparation/control groups unable to connect. SQL ingress now includes those declared
+groups. Material task groups are excluded, and overlap with any SQL-authorized application,
+preparation or control group is rejected. Existing ECS endpoint resource addresses and immutable
+security-group description are retained to avoid unnecessary replacement. Registering a task
+before its control release admits no task source group and does not prove launch readiness.
+
+Local Terraform 1.16.2 checks: seven new network scenarios pass, covering absence, resume
+coexistence, pinned access, registration ordering, foreign cluster/owner-alias refusal and SQL
+group reuse refusal. Fifteen affected existing scenarios pass (five resume network, three resume
+RPC, four resume secrets, three preparation). Both development and staging validate; whitespace
+checks pass. Mock tests inspect generated configuration and policy statements with simulated AWS
+resources, not live connectivity or effective managed IAM. No cloud changes were made.
+Image/provider/read-route composition and managed acceptance remain; D1/D3 In progress.

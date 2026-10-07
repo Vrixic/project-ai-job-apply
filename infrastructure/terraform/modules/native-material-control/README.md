@@ -26,8 +26,11 @@ Source qualification, audit, repeated build and object-version/readback gates re
 This source composition is not activation-ready. Bootstrap `native_material_control_releases` creates and authorizes the exact
 `ai-job-apply-${environment}-material-launch-${release_id}-boundary`; this module cannot broaden
 that ceiling. Existing workload boundaries cover owner/event but effective IAM still needs
-managed verification. Platform integration must supply original secret/Lambda/ECS endpoint
-permissions and required secret/key policies. The original task-change rule invokes the numeric
+managed verification. Platform composition supplies exact database-secret access to launcher/owner,
+pinned provider/TLS reads and numeric owner RPC to tasks, and original ECS launch/observation to
+the launcher through shared private endpoints. Declared control and preparation groups reach SQL;
+material task groups must remain separate from every SQL-authorized group. Secret/key policies
+and actual network reachability still require managed verification. The original task-change rule invokes the numeric
 event-handler version only when recovery is enabled. EventBridge delivery and Lambda asynchronous
 execution have separate retry budgets and share the original encrypted fourteen-day failure queue
 provided by the platform, with delivery, destination, queue and function alarms. No function URL

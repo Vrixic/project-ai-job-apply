@@ -2360,3 +2360,11 @@ Six control and three platform mock scenarios pass; both environments validate.
 Private-network/image/read-route composition and managed acceptance remain. D1/D3 In progress;
 no cloud activation, CI/CD deferred, PC on. Implementation proceeds in connected batches,
 followed by functional checks, fixes and focused regression tests per the owner's direction.
+
+
+2026-10-07 native material private network composition now shares ECS, Secrets Manager and Lambda
+endpoints with retained resume/preparation releases. Exact original role/resource/version grants
+and SQL separation are implemented. Seven new scenarios plus fifteen affected existing scenarios
+pass; development/staging validate locally. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-private-network).
+Managed reachability, image/provider/read-route acceptance remain. D1/D3 In progress; no cloud
+activation, CI/CD deferred, Docker/WSL stopped and PC on.

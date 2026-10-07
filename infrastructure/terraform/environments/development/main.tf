@@ -44,6 +44,21 @@ provider "aws" {
 }
 
 module "platform" {
+  native_material_control_network = { for id, r in var.native_material_control_releases : id => {
+    task_definition_arn = r.release.task_definition_arn
+    cluster_arn         = r.release.cluster_arn
+    database_secret_arn = r.release.database_secret_arn
+    security_group_ids  = toset(r.release.security_group_ids)
+  } }
+  native_material_task_access = { for id, r in var.native_material_task_releases : element(reverse(split(":", r.expected_task_definition_arn)), 0) => {
+    owner_function_arn         = r.owner_function_arn
+    provider_secret_arn        = r.provider_secret_arn
+    provider_secret_version_id = r.provider_secret_version_id
+    tls_secret_arn             = r.tls_secret_arn
+    tls_secret_version_id      = r.tls_secret_version_id
+    security_group_ids         = toset(flatten([for c in var.native_material_control_releases : c.release.task_security_group_ids if c.release.task_definition_arn == r.expected_task_definition_arn]))
+  } }
+
   native_material_observation_releases = { for id, r in var.native_material_control_releases : id => { kms_key_arn = r.release.platform_kms_key_arn } }
   restricted_packet_keys_provisioned   = var.restricted_packet_keys_provisioned
   native_preparation_releases = { for id, item in var.native_preparation_releases : id => {

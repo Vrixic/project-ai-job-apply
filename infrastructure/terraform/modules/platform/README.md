@@ -191,3 +191,14 @@ other ECS/EC2 callers affected by private DNS before activation. Existing platfo
 security groups permit outbound TLS. This is source configuration; managed DNS/reachability and
 effective permission verification remain required. See
 [local evidence](../../../../docs/product/delivery/evidence/d3-native-resume-private-network-2026-10-07.md).
+
+
+Native material private access uses `native_material_control_network` and
+`native_material_task_access`, both empty by default. Environment composition derives them from
+retained control/task releases. The existing ECS, Secrets Manager and Lambda endpoints are shared
+with the resume/preparation flows; no duplicate private DNS endpoint is added. Control roles read
+only their database secret. Task roles read their exact provider/TLS versions and invoke only the
+original numeric owner. SQL ingress includes declared preparation/control groups, with a
+precondition rejecting material task groups that overlap these or the shared application group.
+Task registration may precede control composition with no admitted task group; it is not evidence
+that a task is ready to launch. Retain original bindings until drain is verified.

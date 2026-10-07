@@ -733,7 +733,7 @@ resource "aws_security_group" "data" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.application.id]
+    security_groups = sort(distinct(concat([aws_security_group.application.id], local.preparation_security_groups, local.material_control_groups)))
   }
   dynamic "ingress" {
     for_each = var.enable_redis ? [1] : []
@@ -1804,7 +1804,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = local.preparation_configured || local.native_resume_rpc_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count       = local.material_private_configured || local.preparation_configured || local.native_resume_rpc_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1813,12 +1813,44 @@ resource "aws_security_group" "secrets_endpoint" {
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = concat([aws_security_group.application.id], sort(tolist(var.native_resume_secret_security_group_ids)), local.preparation_security_groups)
+    security_groups = sort(distinct(concat([aws_security_group.application.id], sort(tolist(var.native_resume_secret_security_group_ids)), local.preparation_security_groups, local.material_control_groups, local.material_task_groups)))
+  }
+  lifecycle {
+    precondition {
+      condition     = length(setintersection(toset(local.material_task_groups), toset(concat([aws_security_group.application.id], local.preparation_security_groups, local.material_control_groups)))) == 0
+      error_message = "Material task security groups must not share SQL-authorized application, preparation or control groups."
+    }
   }
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count = local.material_private_configured || local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  dynamic "statement" {
+    for_each = local.material_secret_access
+    content {
+      sid       = "MaterialSecret${statement.key}"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value.secret]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [statement.value.role]
+      }
+      dynamic "condition" {
+        for_each = statement.value.version == null ? [] : [statement.value.version]
+        content {
+          test     = "StringEquals"
+          variable = "secretsmanager:VersionId"
+          values   = [condition.value]
+        }
+      }
+    }
+  }
   dynamic "statement" {
     for_each = local.preparation_secrets
     content {
@@ -1943,7 +1975,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
     var.persistent_data_plane_enabled && (
-      local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
+      local.material_private_configured || local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
     )
   ) ? 1 : 0
   vpc_id              = aws_vpc.this.id
@@ -2749,7 +2781,25 @@ resource "aws_vpc_endpoint" "sqs" {
 }
 
 data "aws_iam_policy_document" "outbox_lambda_endpoint" {
-  count = local.preparation_configured || local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count = local.material_task_rpc_configured || local.preparation_configured || local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  dynamic "statement" {
+    for_each = var.native_material_task_access
+    content {
+      sid       = "MaterialOwnerRpc${statement.key}"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [statement.value.owner_function_arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [local.material_task_roles[statement.key]]
+      }
+    }
+  }
   dynamic "statement" {
     for_each = local.preparation_rpc
     content {
@@ -2903,7 +2953,7 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "lambda" {
-  count               = (local.preparation_configured || local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (local.material_task_rpc_configured || local.preparation_configured || local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.lambda"
   vpc_endpoint_type   = "Interface"
