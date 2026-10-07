@@ -1,3 +1,4 @@
+import { createApplicationsDatabase } from "@ai-job-apply/applications-service";
 import { nativeLaunchControlVersion } from "@ai-job-apply/documents-service/native-launch-control";
 import { PostgresNativeResumeGenerationStore } from "@ai-job-apply/documents-service/native-resume-generation-store";
 import { createNativeResumeTaskObserver } from "@ai-job-apply/documents-service/native-resume-task-observer";
@@ -6,7 +7,7 @@ import {
   nativeTaskLaunchConfiguration,
   nativeTaskLaunchScope,
 } from "@ai-job-apply/documents-service/native-task-launch-policy";
-import { createDatabase, resolveLambdaDatabaseUrl } from "@ai-job-apply/profile-service";
+import { resolveLambdaDatabaseUrl } from "@ai-job-apply/profile-service";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 const unavailable = () => Error("NativeResumeTaskObserverUnavailable");
@@ -71,12 +72,12 @@ export function createNativeResumeTaskObserverRuntime(
   config: Configuration,
   enabled: () => boolean,
 ) {
-  const database = createDatabase(url, { maxConnections: 1 });
+  const database = createApplicationsDatabase(url, { maxConnections: 1 });
   const denied = async () => {
     throw unavailable();
   };
   const registry = new PostgresNativeResumeGenerationStore(
-    database.client,
+    database,
     { application: denied, job: denied },
     enabled,
   );
@@ -85,7 +86,7 @@ export function createNativeResumeTaskObserverRuntime(
     configuration: config.task,
     enabled,
   });
-  return Object.freeze({ observe: observer.observe, close: () => database.client.end() });
+  return Object.freeze({ observe: observer.observe, close: () => database.end() });
 }
 
 /** Private numeric version only. Caller authentication is reviewed IAM, not event fields.

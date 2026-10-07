@@ -492,3 +492,25 @@ valid scope and forged task/receipt inputs. ZIP `native-resume-task-observer-lam
 bytes with SHA-256 `330feeb77478f3770311f1724a94b1137886ab914f4f32533afa7195b0104bd8` and 30
 inventory components. Log: `.tmp/d3-native-resume-observer-artifact.log`. This is local artifact
 verification, not a fresh dependency audit, publication or enabled managed runtime test.
+
+
+## Real SQL observer acceptance and connection fix
+
+The new integration exercises the actual compiled observer Lambda/runtime and owning PostgreSQL
+ledger, with only managed-secret resolution and ECS transport simulated. It found that the
+bootstrap used Profile's camelCase-transforming database helper while Documents expects raw SQL
+column names. The bootstrap now uses `createApplicationsDatabase`, matching existing raw ledger
+compositions. The earlier artifact's default-off success did not cover this enabled path.
+
+Three new cases prove running-task refusal leaves the ledger bound, a positive exact stopped task
+persists retirement after admission is sealed, a lost returned ACK replays the persisted result
+without relying on ECS retention, fresh explicit generation admission follows the retired epoch,
+and an unbound original allocation never consults ECS. The fixture now uses the actual synthetic
+stop instant rather than subtracting 100 ms, which could falsely predate task creation.
+
+All 51 ledger integration cases pass on a fresh disposable PostgreSQL 16.6 instance, including
+migration replay and the previous connected preparation tests. Eleven bootstrap units, Documents
+typecheck, Workflows build and changed-file Biome pass. Log:
+`.tmp/d3-native-resume-observer-sql.log`. The owned tmpfs fixture was removed; shared volumes were
+untouched and Docker/WSL shutdown requested. No actual AWS stop/describe, managed invocation,
+secret read or cloud deployment occurred. Enabled managed acceptance and receiver routing remain.

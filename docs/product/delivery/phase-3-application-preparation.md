@@ -2047,3 +2047,11 @@ acceptance remain. No deployment; D1/D3 In progress, ADR-040 Proposed and PC on.
 forged-input refusal checks pass. ZIP SHA-256 `330feeb77478f3770311f1724a94b1137886ab914f4f32533afa7195b0104bd8`,
 369857 bytes. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Artifact remains local;
 publication/IAM/event delivery and managed/SQL-connected acceptance remain. D1/D3 In progress.
+
+
+2026-10-07 D3-064/D3-079 real PostgreSQL observer acceptance finds and fixes a production wiring
+bug: Profile's camelCase-transforming connection could not serve the raw Documents ledger.
+Observer now uses the existing raw Applications SQL helper. All 51 ledger cases and 11 bootstrap
+cases pass, including real Lambda-to-SQL retirement and lost-ACK replay with simulated ECS.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Fresh artifact follows; no cloud
+deployment. D1/D3 In progress, ADR-040 Proposed and PC on.

@@ -3,11 +3,16 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { DescribeTaskDefinitionCommand, RunTaskCommand } from "@aws-sdk/client-ecs";
+import {
+  DescribeTaskDefinitionCommand,
+  DescribeTasksCommand,
+  ECSClient,
+  RunTaskCommand,
+} from "@aws-sdk/client-ecs";
 import type { InvokeCommand } from "@aws-sdk/client-lambda";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PostgresCoverLetterStore } from "./cover-letter-store.js";
 import { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 import { createNativeResumeLocationReader } from "./native-material-location.js";
@@ -26,7 +31,9 @@ import { createNativeResumeSourceRpcClient } from "./native-resume-source-rpc-cl
 import { createNativeResumeSourceStore } from "./native-resume-source-store.js";
 import type { NativeResumeTaskBinding } from "./native-resume-task-binding.js";
 import { createNativeResumeTaskLaunch } from "./native-resume-task-launch.js";
+import { createNativeResumeTaskObserver } from "./native-resume-task-observer.js";
 import type { NativeTaskRetirementReceipt } from "./native-task-allocation.js";
+import { nativeTaskLaunchConfiguration } from "./native-task-launch-policy.js";
 import { normalizeBlocks } from "./parsing/normalize.js";
 import type { TemporaryMaterialReference } from "./temporary-material-reference.js";
 
@@ -1683,6 +1690,161 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
         previousEpochId: r.epochId,
       }),
     ).rejects.toThrow();
+  });
+  it.each([false, true])(
+    "observes original retirement through the real private Lambda and SQL (lost ACK=%s)",
+    async (loseAck) => {
+      const workflow = await import(
+        new URL(
+          "../../../workflows/dist/src/native-resume-task-observer-lambda.js",
+          import.meta.url,
+        ).href
+      );
+      const configuration = nativeTaskLaunchConfiguration({
+        ...input.deployment,
+        image: `123456789012.dkr.ecr.us-east-2.amazonaws.com/synthetic-resume@sha256:${"c".repeat(64)}`,
+        executionRoleArn: "arn:aws:iam::123456789012:role/synthetic-execution",
+        taskRoleArn: "arn:aws:iam::123456789012:role/synthetic-resume",
+        cpu: "256",
+        memory: "512",
+        subnets: ["subnet-12345678901234567"],
+        securityGroups: ["sg-12345678901234567"],
+        assignPublicIp: "ENABLED",
+      });
+      const hash = createHash("sha256")
+        .update(JSON.stringify({ protocol: "native-resume-launch.v1", ...configuration }))
+        .digest("hex");
+      const s = store(),
+        r = await s.reserve(input);
+      await s.claimLaunch(scope(r), hash);
+      await s.bindTask(scope(r), hash, task);
+      await s.seal(input.identity.ownerUserId, input.identity.applicationId);
+      let stopped = false;
+      const send = vi.spyOn(ECSClient.prototype, "send").mockImplementation(async (command) => {
+        expect(command).toBeInstanceOf(DescribeTasksCommand);
+        return {
+          tasks: [
+            {
+              taskArn: task,
+              clusterArn: configuration.clusterArn,
+              taskDefinitionArn: configuration.taskDefinitionArn,
+              startedBy: r.allocationId,
+              lastStatus: stopped ? "STOPPED" : "RUNNING",
+              desiredStatus: stopped ? "STOPPED" : "RUNNING",
+              stoppedAt: new Date(),
+              containers: [
+                {
+                  name: configuration.containerName,
+                  taskArn: task,
+                  lastStatus: stopped ? "STOPPED" : "RUNNING",
+                },
+              ],
+            },
+          ],
+        };
+      });
+      let runtime: { close(): Promise<void> } | undefined;
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:resume-observer:1";
+      const handler = workflow.createNativeResumeTaskObserverLambda({
+        environment: () => ({
+          NATIVE_RESUME_TASK_OBSERVER_ENABLED: "true",
+          AWS_REGION: "us-east-2",
+          PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+          AWS_SESSION_TOKEN: "synthetic",
+          AWS_LAMBDA_FUNCTION_NAME: "resume-observer",
+          AWS_LAMBDA_FUNCTION_VERSION: "1",
+          DATABASE_SECRET_ID:
+            "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-Abc123",
+          NATIVE_RESUME_OBSERVER_CONFIGURATION_JSON: JSON.stringify(configuration),
+        }),
+        resolveDatabaseUrl: async () => url,
+        createRuntime: (connection: string, config: unknown, enabled: () => boolean) => {
+          const actual = workflow.createNativeResumeTaskObserverRuntime(
+            connection,
+            config,
+            enabled,
+          );
+          runtime = actual;
+          return {
+            ...actual,
+            observe: async (...args: unknown[]) => {
+              const result = await actual.observe(...args);
+              if (loseAck) {
+                loseAck = false;
+                throw Error("SyntheticLostPersistedAck");
+              }
+              return result;
+            },
+          };
+        },
+      });
+      const event = { schemaVersion: 1, action: "observe", scope: scope(r) };
+      try {
+        await expect(handler(event, { invokedFunctionArn: target })).rejects.toThrow(
+          "NativeResumeTaskObserverUnavailable",
+        );
+        expect((await s.readLaunch(scope(r), hash)).state).toBe("bound");
+        expect(send).toHaveBeenCalled();
+        stopped = true;
+        if (loseAck)
+          await expect(handler(event, { invokedFunctionArn: target })).rejects.toThrow(
+            "NativeResumeTaskObserverUnavailable",
+          );
+        else
+          await expect(handler(event, { invokedFunctionArn: target })).resolves.toMatchObject({
+            outcome: "retired",
+          });
+        expect((await s.readLaunch(scope(r), hash)).state).toBe("retired");
+        const calls = send.mock.calls.length;
+        send.mockImplementation(async () => {
+          throw Error("SyntheticTaskNoLongerRetained");
+        });
+        await expect(handler(event, { invokedFunctionArn: target })).resolves.toMatchObject({
+          outcome: "retired",
+        });
+        expect(send).toHaveBeenCalledTimes(calls);
+        const fresh = await s.reserve({
+          ...input,
+          identity: { ...input.identity, generationId: uuidv7(), version: 2 },
+          previousEpochId: r.epochId,
+        });
+        expect(fresh.epochId).not.toBe(r.epochId);
+      } finally {
+        send.mockRestore();
+        await runtime?.close();
+      }
+    },
+  );
+  it("does not consult ECS or retire a claimed but unbound original allocation", async () => {
+    const s = store(),
+      r = await s.reserve(input);
+    const configuration = nativeTaskLaunchConfiguration({
+      ...input.deployment,
+      image: `123456789012.dkr.ecr.us-east-2.amazonaws.com/resume@sha256:${"c".repeat(64)}`,
+      executionRoleArn: "arn:aws:iam::123456789012:role/execution",
+      taskRoleArn: "arn:aws:iam::123456789012:role/task",
+      cpu: "256",
+      memory: "512",
+      subnets: ["subnet-12345678901234567"],
+      securityGroups: ["sg-12345678901234567"],
+      assignPublicIp: "DISABLED",
+    });
+    const hash = createHash("sha256")
+      .update(JSON.stringify({ protocol: "native-resume-launch.v1", ...configuration }))
+      .digest("hex");
+    await s.claimLaunch(scope(r), hash);
+    const send = vi.fn(async () => {
+      throw Error("UnexpectedEcsCall");
+    });
+    const observer = createNativeResumeTaskObserver({
+      registry: s,
+      configuration,
+      enabled: () => true,
+      testClient: { send },
+    });
+    await expect(observer.observe(scope(r))).rejects.toThrow();
+    expect(send).not.toHaveBeenCalled();
+    expect((await s.readLaunch(scope(r), hash)).state).toBe("pending");
   });
   it("requires positive exact-task retirement before a fresh generation can reopen a sealed epoch", async () => {
     const { s, r } = await bound();
