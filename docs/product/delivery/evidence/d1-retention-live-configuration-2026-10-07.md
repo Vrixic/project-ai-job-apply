@@ -34,3 +34,26 @@ The newly implemented Jobs/audit maintenance source and local acceptance must no
 as deployed expiry. Their exact private Lambda names are absent in the current environment.
 Publication, managed migration/runtime/grant/schedule/alert acceptance and accountable review
 remain open. D1/D3 stay In progress; PC on, Docker/WSL stopped.
+
+
+## Private maintenance connectivity correction
+
+Source inspection after live prerequisite inventory found that the shared Secrets Manager endpoint
+allowlist omitted both new maintenance roles. It now includes only their exact ARNs and provisions
+the endpoint/security group/policy for a standalone Jobs or privileged-audit release. Each Lambda
+waits for endpoint configuration and the database secret version. Existing private networking and
+secret scope are preserved; no wildcard principal grant is added.
+
+All ten focused Terraform cases pass across Jobs and privileged-audit release suites, including
+standalone endpoint presence/private DNS/exact-role policy assertions. Development and staging
+validate. Log: `.tmp/d1-maintenance-private-connectivity.log`. These are mocked source checks;
+no policy was applied or secret value retrieved.
+
+At 20:19 UTC additional read-only development VPC/ECS metadata checks show available interfaces
+for ECR API/DKR, Lambda, Logs, Secrets Manager, SQS and STS, two S3 gateway endpoint entries, no ECS
+endpoint, two available NAT gateways, and zero active native-resume family task definitions.
+NAT presence is not proof of the intended subnet route or security-group reachability. Absence of
+an ECS endpoint alone does not prove no ECS API path. Sanitized local receipt:
+`.tmp/d3-native-private-network-readback.json`. No network change or new NAT is proposed here.
+Native original-role endpoint policies, numeric target access, routing/TLS and managed acceptance
+remain to be resolved separately; this fix covers the two D1 maintenance functions only.

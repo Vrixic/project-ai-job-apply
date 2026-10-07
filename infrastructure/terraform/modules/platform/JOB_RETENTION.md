@@ -34,3 +34,9 @@ the actual compiled Lambda/runtime), four mocked Terraform cases, both environme
 publisher receipt guards and compilation/Biome. Managed secret lookup is simulated in SQL tests;
 SQL expiry and replay are real. Managed IAM, migrations, secret/network access, scheduling, alarms
 and release acceptance remain unverified. No cloud publication or activation occurred.
+
+The shared Secrets Manager interface endpoint now includes this exact maintenance role and is
+provisioned even when this is the only private Lambda release. Lambda creation waits for the
+endpoint policy and database secret version. This fixes the earlier source composition, where
+role IAM allowed the secret but the endpoint would deny it. Effective managed access still needs
+an actual invocation; no secret values were read during this correction.

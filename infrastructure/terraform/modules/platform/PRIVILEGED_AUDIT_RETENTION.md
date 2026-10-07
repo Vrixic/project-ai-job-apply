@@ -46,3 +46,9 @@ configuration prerequisite cannot prove deployed schedule health. Stop capture b
 retention, allow the existing retention policy to finish, and account for immutable older Gateway
 versions during rollback. Authorization, fixed audit fingerprints and fail-closed write behavior
 remain the existing Gateway/Profile implementation; no candidate content enters the new flag.
+
+The shared Secrets Manager interface endpoint now includes this exact maintenance role and is
+provisioned even when this is the only private Lambda release. Lambda creation waits for the
+endpoint policy and database secret version. This fixes the earlier source composition, where
+role IAM allowed the secret but the endpoint would deny it. Effective managed access still needs
+an actual invocation; no secret values were read during this correction.

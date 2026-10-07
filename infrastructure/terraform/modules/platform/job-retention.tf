@@ -95,7 +95,7 @@ resource "aws_lambda_function" "job_retention" {
     system_log_level      = "WARN"
     log_group             = "/ai-job-apply/${var.environment}/application"
   }
-  depends_on = [aws_iam_role_policy.job_retention]
+  depends_on = [aws_iam_role_policy.job_retention, aws_vpc_endpoint.secretsmanager, aws_secretsmanager_secret_version.database_url]
   lifecycle {
     precondition {
       condition     = var.persistent_data_plane_enabled && data.aws_region.current.region == "us-east-2"

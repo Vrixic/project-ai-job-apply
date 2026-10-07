@@ -1700,7 +1700,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count       = local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1714,7 +1714,7 @@ resource "aws_security_group" "secrets_endpoint" {
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count = local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
 
   statement {
     sid       = "ExactMigrationExecutionRoleDatabaseSecret"
@@ -1766,6 +1766,8 @@ data "aws_iam_policy_document" "secrets_endpoint" {
       test     = "ArnEquals"
       variable = "aws:PrincipalArn"
       values = compact([
+        local.audit_retention_deployed ? aws_iam_role.audit_retention[0].arn : "",
+        local.job_retention_deployed ? aws_iam_role.job_retention[0].arn : "",
         var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : "",
         var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
         var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
@@ -1788,7 +1790,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
     var.persistent_data_plane_enabled && (
-      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
+      local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
     )
   ) ? 1 : 0
   vpc_id              = aws_vpc.this.id

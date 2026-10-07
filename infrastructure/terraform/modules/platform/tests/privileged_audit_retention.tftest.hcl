@@ -88,6 +88,11 @@ run "immutable_private_release_stays_disabled" {
     }
   }
   assert {
+    condition     = length(aws_vpc_endpoint.secretsmanager) == 1 && aws_vpc_endpoint.secretsmanager[0].private_dns_enabled && contains(flatten([for statement in data.aws_iam_policy_document.secrets_endpoint[0].statement : flatten([for condition in statement.condition : condition.values])]), aws_iam_role.audit_retention[0].arn)
+    error_message = "A standalone maintenance release must provision private secret connectivity and allow its exact role."
+  }
+
+  assert {
     condition     = aws_cloudwatch_event_rule.audit_retention[0].state == "DISABLED" && aws_lambda_function.audit_retention[0].environment[0].variables.PRIVILEGED_MODERATION_AUDIT_RETENTION_ENABLED == "false" && aws_lambda_function.audit_retention[0].environment[0].variables.PRIVILEGED_MODERATION_AUDIT_RETENTION_BATCH_LIMIT == "100"
     error_message = "Deployment alone must not authorize expiry or scheduled invocation."
   }

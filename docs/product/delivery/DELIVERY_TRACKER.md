@@ -4715,3 +4715,11 @@ an encrypted alert topic with one confirmed email subscription. Both new mainten
 are absent; no deployment is implied by local evidence. Mailbox/incident retention remains
 unverified. [Evidence](evidence/d1-retention-live-configuration-2026-10-07.md).
 Managed AWS session is currently available. No cloud mutation; D1/D3 In progress, PC on.
+
+
+2026-10-07 D1-012 fixes a release-composition gap: new Jobs/audit roles now appear in the shared
+Secrets Manager endpoint policy, and standalone maintenance provisions/waits for private secret
+connectivity. Ten mocked cases and both environment validations pass.
+[Evidence](evidence/d1-retention-live-configuration-2026-10-07.md#private-maintenance-connectivity-correction).
+Read-only native prerequisite inventory finds zero resume task definitions and two existing NATs;
+no live invocation, policy apply or phase completion is claimed. D1/D3 In progress, PC on.
