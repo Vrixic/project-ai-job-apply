@@ -92,7 +92,7 @@ cached S3 backend's locking, encryption and exact identity before planning or ap
 dependency lock is not a remote state lock. Never disable locking. The excluded GitHub Actions
 files retain their old pin and must not be used for cloud planning during this local-only transition.
 
-- `modules/native-resume-task/` supplies an unattached, default-empty native resume task/role release; no environment currently instantiates it.
+- `modules/native-resume-task/` supplies an unattached, default-empty native resume task/role release; environment release maps are empty by default.
 
 - `modules/native-resume-source-access/` supplies an unattached owner/source Lambda pair with separate bounded roles and disabled runtime defaults.
 
@@ -106,3 +106,27 @@ is unchanged. Keep original entries until trusted drain. The preparation module 
 boundary before role creation. Empty input preserves current bootstrap behavior. Policy-size
 validation rejects a combined deployment policy over 6144 characters; do not remove unresolved
 releases to fit a new one. No environment currently enables these inputs.
+
+
+### Optional native resume environment releases
+
+Development and staging now expose three separate default-empty maps:
+`native_resume_source_access_releases`, `native_resume_task_releases`, and
+`native_resume_preparation_releases`. Values hold the respective module's `release` object;
+source/preparation also accept `enabled` (default false), and preparation accepts
+`new_launch_enabled` and `schedule_enabled` (both default false). Actual account identity comes
+from the environment platform. `native_resume_release_bindings` exposes scalar outputs for
+review. No checked-in environment input populates these maps.
+
+Preserve release staging: first review/apply the exact bootstrap boundary and source RPC
+artifacts, then build the image against their original numeric versions, then supply the exact
+image/task and preparation receipts. Image/task/source/preparation bindings must agree; these
+maps do not automatically retarget a previously built image or refresh original recipients.
+Keep source and runtime stages separate and retain all original instances while work is
+unresolved. A populated map is deployment configuration, not authorization or release acceptance.
+
+The current environment locks use AWS provider 6.58.0, matching the native modules. Both roots
+validate and each has three mocked tests for default absence, separate source publication and
+explicit task/preparation binding forwarding. Backend initialization is disabled in these checks;
+no refresh-backed managed plan or actual apply is claimed. DNS/TLS, ingress, original route
+cleanup, managed permissions/runtime and client/ATS acceptance still block activation.

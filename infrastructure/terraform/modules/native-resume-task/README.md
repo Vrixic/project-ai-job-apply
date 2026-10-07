@@ -4,7 +4,7 @@ Source-only, unattached module for the on-demand container described by Proposed
 It creates no resources when `release = null`. A supplied exact release creates one Fargate
 Linux/x86-64 task definition, two revision-qualified IAM roles and their two inline policies.
 There is no ECS service, RunTask call, scheduler, network, listener, Lambda, secret value or
-candidate data in this module. Development/staging do not instantiate it yet.
+candidate data in this module. Development/staging expose optional release maps, empty by default.
 
 The task uses an immutable same-account image digest, Node entrypoint, UID/GID 65532, read-only
 root, init, dropped Linux capabilities, zero core limits and only port 8443. It has no configured

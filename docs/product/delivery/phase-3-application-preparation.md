@@ -2018,3 +2018,10 @@ the actual launcher validator accept emitted ENABLED/DISABLED configurations; in
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Browser-accessible DNS/TLS/ingress
 is still unimplemented, and a development DNS-zone question is pending. No cloud activation;
 D1/D3 In progress, ADR-040 Proposed, CI/CD deferred and PC on.
+
+
+2026-10-07 D3-064/D3-079 wires source/task/preparation modules into development and staging
+through separate default-empty release maps and scalar binding outputs. Both environment roots
+validate with AWS provider 6.58.0; three mocked cases per environment pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+No release input was populated, backend contacted or cloud resource changed. DNS/TLS/routing,
+managed release/runtime and acceptance remain; D1/D3 In progress, ADR-040 Proposed and PC on.

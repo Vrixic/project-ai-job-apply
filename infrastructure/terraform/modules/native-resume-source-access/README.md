@@ -1,7 +1,7 @@
 # Native resume private source access
 
 Source-only module for the owner and retained-source RPC functions in Proposed ADR-040.
-Neither environment instantiates it. A null release creates no resources; an exact release
+Development and staging expose optional release maps, empty by default. A null release creates no resources; an exact release
 creates two versioned Node.js Lambda functions and separate bounded execution roles. Both
 handlers remain disabled unless `enabled = true` is explicitly supplied.
 

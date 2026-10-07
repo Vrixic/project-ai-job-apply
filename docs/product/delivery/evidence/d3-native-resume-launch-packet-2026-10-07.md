@@ -421,3 +421,26 @@ emitted network choices. Logs: `.tmp/d3-native-resume-preparation-tests.log` and
 `.tmp/d3-native-resume-network-choice-check.log`. No cloud/network change was performed.
 A development DNS-zone question is pending; no hostname or certificate has been assumed.
 D1/D3 remain In progress; no browser-download or managed acceptance claim follows from this fix.
+
+
+## Optional development/staging environment composition
+
+Both environment roots now expose separate source-access, task and preparation release maps.
+Each defaults empty, preserves its exact module input and returns scalar bindings for review.
+The platform exposes actual account identity for child validation. Separate stages let private
+RPC numeric versions exist before image configuration pins them; no existing image or original
+recipient is silently retargeted. Runtime/launch/schedule switches retain disabled defaults.
+
+Both environment AWS lock entries move from 6.57.1 to the native modules' tested 6.58.0 with its
+locked checksums. Backend-disabled initialization and Terraform 1.16.2 validation pass for both
+roots. Three mocked cases per environment prove empty defaults, original source binding without
+runtime creation, and explicit matching task/preparation inputs without source recreation.
+Logs: `.tmp/d3-native-resume-env-development-validate.log`,
+`.tmp/d3-native-resume-env-staging-validate.log`,
+`.tmp/d3-native-resume-env-development-tests.log` and
+`.tmp/d3-native-resume-env-staging-tests.log`.
+
+No environment input, remote state, cloud permission or resource was changed. This establishes
+source composition, not managed planning, deployment or activation. The DNS-zone question remains
+pending, and DNS/TLS/ingress/route lifecycle plus effective IAM and managed/client/ATS/accountable
+acceptance remain open. D1/D3 remain In progress; ADR-040 Proposed and CI/CD deferred.

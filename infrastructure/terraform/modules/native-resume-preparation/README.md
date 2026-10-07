@@ -1,7 +1,7 @@
 # Native resume preparation release
 
 Unattached release module for the existing private control, durable workflow and Applications
-outbox dispatcher. Neither environment instantiates it. `release = null` creates nothing.
+outbox dispatcher. Development and staging expose optional release maps, empty by default. `release = null` creates nothing.
 An exact release creates the three functions with separate bounded roles and a disabled schedule.
 No candidate content or secret values enter Terraform.
 
