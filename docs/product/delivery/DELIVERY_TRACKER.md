@@ -1,5 +1,15 @@
 # Delivery Tracker
 
+2026-10-06 D3-064/D3-079 adds a default-off dedicated native deterministic-resume session:
+one original generation, fixed completion, memory-only preview/render inputs, verified PDF/DOCX,
+held-output release/cancellation and exact-reference reads. Shared process admission prevents
+mixing cover-letter/resume allocations. All 37 Linux/kernel scenarios pass again on final source; five emitted
+isolation checks pass. Full clean-source verification remains.
+[Evidence](evidence/d3-native-resume-memory-session-2026-10-06.md). Owning resume completion/
+packet bindings, authenticated resume transport/bootstrap, image/routing/client/ATS acceptance
+remain unfinished. No current Lambda route, schema, frontend, cloud activation or CI/CD change;
+D1/D3 stay In progress and PC stays on.
+
 2026-10-06 D1-012 private audit-retention Lambda passes full clean verification at `be646832`
 (38 typecheck/39 test/23 builds, unchanged lint and emitted isolation). Its separate artifact
 builds twice identically, with ZIP/source/SBOM integrity and unchanged post-verifier hashes.

@@ -94,3 +94,15 @@ local bindings or process death certify neither remote settlement nor all-copy p
 The maintained Linux fixture now connects actual task bootstrap metadata/signed approval to
 the kernel/content runtime, with delayed binding, revocation and pre-content refusal coverage.
 Transport/provider/owning replies remain synthetic. See [startup evidence](../../../../docs/product/delivery/evidence/d3-native-task-bootstrap-2026-10-06.md).
+
+## Native deterministic resume source
+
+The default-off Documents `./native-resume-session` entrypoint uses the same one-process admission
+as cover letters, original deterministic tailoring, bounded encoded preview/render inputs and
+actual PDF/DOCX verification. It binds original completion before async rendering/private control,
+returns only fixed scalar generation metadata, and serves held original outputs through active
+leases. No source re-read or generation occurs during a file read. Explicit release, request/lease
+abort and native process expiry clear platform-held output. Source/owner/completion adapters are
+required trusted ports; resume-owning SQL/RPC/packet metadata, authenticated transport/bootstrap,
+image/client/managed acceptance remain. No new live path or persistent generated artifact exists.
+See [resume source evidence](../../../../docs/product/delivery/evidence/d3-native-resume-memory-session-2026-10-06.md).

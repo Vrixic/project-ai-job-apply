@@ -7,6 +7,10 @@ import test from "node:test";
 const root = "/native";
 for (const mode of [
   "idle",
+  "resume-idle",
+  "resume-busy",
+  "resume-terminate",
+  "resume-completion-pending",
   "busy",
   "suspend",
   "settlement",
@@ -66,15 +70,26 @@ for (const mode of [
       // diagnostics; any document warning, exception or arbitrary output still fails.
       const startup =
         'Warning: Cannot load "@napi-rs/canvas" package: "Error: Cannot find module \'@napi-rs/canvas\'\nRequire stack:\n- /native/fixture.mjs".\nWarning: Cannot polyfill `Path2D`, rendering may be broken.\n';
-      const remainingDiagnostics = mode.startsWith("runtime")
-        ? diagnostics.replace(startup, "")
-        : diagnostics;
+      const remainingDiagnostics =
+        mode.startsWith("runtime") || mode.startsWith("resume-")
+          ? diagnostics.replace(startup, "")
+          : diagnostics;
       assert.equal(
         remainingDiagnostics,
         "",
         "No content-derived or unrecognized diagnostics are allowed",
       );
       assert.ok(!output.includes("I have experience") && !output.includes("synthetic-secret"));
+      assert.ok(!output.includes("Alex Example") && !output.includes("alex@example.test"));
+      if (mode.startsWith("resume-") && mode !== "resume-completion-pending") {
+        const value = JSON.parse(output.trim());
+        assert.equal(value.ready, true);
+        assert.equal(value.actualFiles, 2);
+        assert.equal(value.resumeAssertions, 20);
+        assert.equal(value.originalExpiry - value.originalCompletion, 1_800_000);
+        assert.ok(Date.now() - value.originalCompletion < 6000);
+      }
+      if (mode === "resume-completion-pending") assert.equal(output, "");
       if (
         [
           "idle",

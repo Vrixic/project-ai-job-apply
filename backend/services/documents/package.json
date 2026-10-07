@@ -115,6 +115,10 @@
     "./native-material-location": {
       "types": "./dist/src/native-material-location.d.ts",
       "default": "./dist/src/native-material-location.js"
+    },
+    "./native-resume-session": {
+      "types": "./dist/src/native-resume-session.d.ts",
+      "default": "./dist/src/native-resume-session.js"
     }
   },
   "scripts": {

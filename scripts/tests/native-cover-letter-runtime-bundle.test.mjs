@@ -233,3 +233,50 @@ test("native task bootstrap connects self metadata and signed approval without o
   );
   assert.equal(effects, 0);
 });
+
+test("native resume session emits memory/render capability without model, SQL or object clients", async () => {
+  const result = await build({
+    absWorkingDir: root,
+    entryPoints: ["backend/services/documents/dist/src/native-resume-session.js"],
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "cjs",
+    write: false,
+    metafile: true,
+  });
+  const inputs = Object.values(result.metafile.outputs).flatMap((output) =>
+    Object.entries(output.inputs)
+      .filter(([, entry]) => entry.bytesInOutput > 0)
+      .map(([name]) => name.replaceAll("\\", "/")),
+  );
+  for (const forbidden of [
+    "postgres",
+    "@aws-sdk/",
+    "ai-sdk",
+    "cover-letter-generation",
+    "processor-lambda",
+    "native-memory-session.js",
+  ])
+    assert.ok(!inputs.some((name) => name.includes(forbidden)), forbidden);
+  for (const required of [
+    "native-material-process.js",
+    "temporary-materials.js",
+    "render/render.js",
+    "render/verify.js",
+  ])
+    assert.ok(
+      inputs.some((name) => name.includes(required)),
+      required,
+    );
+  const module = { exports: {} };
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    createRequire(path.join(root, "package.json")),
+  );
+  assert.throws(
+    () => module.exports.createNativeResumeSession({}),
+    /TemporaryMaterialUnavailable/u,
+  );
+});
