@@ -650,3 +650,22 @@ build/readback. This replaces the previous mixed local artifact directory as a s
 candidate; it does not supersede historical receipts or claim a fresh audit/full verifier run.
 Zero cloud calls; publication, effective IAM/event delivery, DNS/TLS/browser routing and managed
 acceptance remain. D1/D3 stay In progress and ADR-040 stays Proposed.
+
+
+## Original resume secret endpoint composition
+
+Shared Secrets Manager endpoint composition now derives exact original database-reader role
+bindings and task TLS-secret/version bindings from optional environment release inputs. Caller
+security groups are explicitly forwarded for TCP443 ingress. The endpoint exists for standalone
+native releases when the data plane is active; source/preparation deployment waits for platform
+completion. Durable receives no secret binding. Native-only policy generation omits the empty
+legacy Lambda-role condition.
+
+Four focused platform cases plus ten existing maintenance cases pass. Development and staging
+validate and pass three release-composition cases each. Initial staging testing caught an overly
+strict persistent-data prerequisite for disabled source predeployment; disabled dormant staging
+is preserved and activation uses the existing staging_runtime_mode gate. Logs:
+`.tmp/d3-native-secret-endpoint-platform.log`, `.tmp/d3-native-secret-endpoint-development.log`,
+`.tmp/d3-native-secret-endpoint-staging.log`. No AWS apply or secret retrieval occurred.
+Lambda RPC/S3 endpoint composition and managed network/TLS/acceptance remain open; source policy
+checks alone do not prove effective private access. D1/D3 In progress, ADR-040 Proposed.

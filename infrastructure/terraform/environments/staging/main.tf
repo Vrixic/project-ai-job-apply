@@ -44,6 +44,16 @@ provider "aws" {
 }
 
 module "platform" {
+  native_resume_secret_readers = merge(
+    merge({}, [for item in values(var.native_resume_source_access_releases) : { for kind in ["owner", "source"] : "ai-job-apply-staging-resume-${kind}-r${element(reverse(split(":", item.release.task_definition_arn)), 0)}" => { secret_arn = item.release.database_secret_arn } }]...),
+    merge({}, [for item in values(var.native_resume_preparation_releases) : { for kind in ["control", "dispatch", "observer"] : "ai-job-apply-staging-resume-${kind}-r${element(reverse(split(":", item.release.task_definition_arn)), 0)}" => { secret_arn = item.release.database_secret_arn } }]...),
+    { for item in values(var.native_resume_task_releases) : "ai-job-apply-staging-native-resume-r${element(reverse(split(":", item.release.expected_task_definition_arn)), 0)}-task" => { secret_arn = item.release.tls_secret_arn, version_id = item.release.tls_secret_version_id } }
+  )
+  native_resume_secret_security_group_ids = toset(concat(
+    flatten([for item in values(var.native_resume_source_access_releases) : item.release.security_group_ids]),
+    flatten([for item in values(var.native_resume_preparation_releases) : concat(item.release.security_group_ids, item.release.task_security_group_ids)])
+  ))
+
   job_retention_release          = var.job_retention_release
   job_retention_enabled          = var.job_retention_enabled
   job_retention_schedule_enabled = var.job_retention_schedule_enabled

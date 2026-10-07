@@ -21,8 +21,14 @@ variable "native_resume_source_access_releases" {
   }))
   default  = {}
   nullable = false
+  validation {
+    condition     = var.staging_runtime_mode != "dormant" || alltrue([for release in values(var.native_resume_source_access_releases) : !release.enabled])
+    error_message = "Native resume runtime activation requires the persistent data plane; dormant release staging stays disabled."
+  }
+
 }
 module "native_resume_source_access" {
+  depends_on  = [module.platform]
   source      = "../../modules/native-resume-source-access"
   for_each    = var.native_resume_source_access_releases
   account_id  = module.platform.account_id
@@ -83,6 +89,11 @@ variable "native_resume_preparation_releases" {
   }))
   default  = {}
   nullable = false
+  validation {
+    condition     = var.staging_runtime_mode != "dormant" || alltrue([for release in values(var.native_resume_preparation_releases) : !release.enabled])
+    error_message = "Native resume runtime activation requires the persistent data plane; dormant release staging stays disabled."
+  }
+
 }
 module "native_resume_preparation" {
   depends_on                 = [module.platform]

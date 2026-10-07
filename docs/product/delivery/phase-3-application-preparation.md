@@ -2112,3 +2112,10 @@ No cloud action; D1/D3 remain In progress and PC on.
 byte-identical repeat emission pass. The event-capable observer now shares the family source.
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#consistent-six-artifact-release-checkpoint).
 No cloud calls or fresh audit claim; managed routing/release/acceptance remain. D1/D3 In progress.
+
+
+2026-10-07 D3-064/D3-079 connects original database-reader roles and version-pinned task TLS
+reads through the shared private Secrets endpoint, including reviewed caller security groups.
+Four native and ten maintenance mocked cases plus three per environment pass; roots validate.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-resume-secret-endpoint-composition).
+Dormant staging stays disabled. RPC/S3 endpoint and managed acceptance remain; no cloud mutation.

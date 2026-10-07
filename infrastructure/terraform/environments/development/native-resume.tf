@@ -21,8 +21,11 @@ variable "native_resume_source_access_releases" {
   }))
   default  = {}
   nullable = false
+
+
 }
 module "native_resume_source_access" {
+  depends_on  = [module.platform]
   source      = "../../modules/native-resume-source-access"
   for_each    = var.native_resume_source_access_releases
   account_id  = module.platform.account_id
@@ -83,6 +86,8 @@ variable "native_resume_preparation_releases" {
   }))
   default  = {}
   nullable = false
+
+
 }
 module "native_resume_preparation" {
   depends_on                 = [module.platform]

@@ -4723,3 +4723,10 @@ connectivity. Ten mocked cases and both environment validations pass.
 [Evidence](evidence/d1-retention-live-configuration-2026-10-07.md#private-maintenance-connectivity-correction).
 Read-only native prerequisite inventory finds zero resume task definitions and two existing NATs;
 no live invocation, policy apply or phase completion is claimed. D1/D3 In progress, PC on.
+
+
+2026-10-07 D3-064/D3-079 connects original database-reader roles and version-pinned task TLS
+reads through the shared private Secrets endpoint, including reviewed caller security groups.
+Four native and ten maintenance mocked cases plus three per environment pass; roots validate.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-resume-secret-endpoint-composition).
+Dormant staging stays disabled. RPC/S3 endpoint and managed acceptance remain; no cloud mutation.

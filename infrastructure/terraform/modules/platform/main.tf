@@ -1700,7 +1700,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count       = length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1709,12 +1709,39 @@ resource "aws_security_group" "secrets_endpoint" {
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = [aws_security_group.application.id]
+    security_groups = concat([aws_security_group.application.id], sort(tolist(var.native_resume_secret_security_group_ids)))
   }
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count = length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+
+  dynamic "statement" {
+    for_each = var.native_resume_secret_readers
+    content {
+      sid       = replace(statement.key, "-", "")
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value.secret_arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${statement.key}"]
+      }
+      dynamic "condition" {
+        for_each = statement.value.version_id == null ? [] : [statement.value.version_id]
+        content {
+          test     = "StringEquals"
+          variable = "secretsmanager:VersionId"
+          values   = [condition.value]
+        }
+      }
+    }
+  }
 
   statement {
     sid       = "ExactMigrationExecutionRoleDatabaseSecret"
@@ -1749,40 +1776,43 @@ data "aws_iam_policy_document" "secrets_endpoint" {
     }
   }
 
-  statement {
-    sid       = "ExactLambdaRolesDatabaseSecretOnly"
-    effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.database_url.arn]
+  dynamic "statement" {
+    for_each = anytrue([local.audit_retention_deployed, local.job_retention_deployed, var.deploy_gateway_lambda, var.deploy_serverless_outbox, var.deploy_profile_readiness_durable, var.candidate_deletion_restore_role_enabled, local.document_complete_dark_enabled, var.deploy_ingestion_runtime, local.d2_community_deployed, var.applications_attempt_recovery_enabled]) ? [1] : []
+    content {
+      sid       = "ExactLambdaRolesDatabaseSecretOnly"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [aws_secretsmanager_secret.database_url.arn]
 
-    # Avoid IAM principal-propagation races while retaining an exact-role endpoint boundary.
-    # For an assumed role request, aws:PrincipalArn contains the IAM role ARN, not the session ARN.
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
+      # Avoid IAM principal-propagation races while retaining an exact-role endpoint boundary.
+      # For an assumed role request, aws:PrincipalArn contains the IAM role ARN, not the session ARN.
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
 
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:PrincipalArn"
-      values = compact([
-        local.audit_retention_deployed ? aws_iam_role.audit_retention[0].arn : "",
-        local.job_retention_deployed ? aws_iam_role.job_retention[0].arn : "",
-        var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : "",
-        var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
-        var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
-        var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_activity[0].arn : "",
-        var.candidate_deletion_restore_role_enabled ? local.candidate_deletion_restore_role_arn : "",
-        var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : "",
-        local.document_complete_dark_enabled ? local.document_processor_role_arn : "",
-        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["coordinator"].arn : "",
-        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["starter"].arn : "",
-        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["activity"].arn : "",
-        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["terminal"].arn : "",
-        local.d2_community_deployed ? aws_iam_role.d2_community_scheduled[0].arn : "",
-        local.d2_community_deployed ? aws_iam_role.d2_trust_signal[0].arn : "",
-        var.applications_attempt_recovery_enabled ? aws_iam_role.applications_attempt_recovery[0].arn : ""
-      ])
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values = compact([
+          local.audit_retention_deployed ? aws_iam_role.audit_retention[0].arn : "",
+          local.job_retention_deployed ? aws_iam_role.job_retention[0].arn : "",
+          var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : "",
+          var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
+          var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
+          var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_activity[0].arn : "",
+          var.candidate_deletion_restore_role_enabled ? local.candidate_deletion_restore_role_arn : "",
+          var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : "",
+          local.document_complete_dark_enabled ? local.document_processor_role_arn : "",
+          var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["coordinator"].arn : "",
+          var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["starter"].arn : "",
+          var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["activity"].arn : "",
+          var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["terminal"].arn : "",
+          local.d2_community_deployed ? aws_iam_role.d2_community_scheduled[0].arn : "",
+          local.d2_community_deployed ? aws_iam_role.d2_trust_signal[0].arn : "",
+          var.applications_attempt_recovery_enabled ? aws_iam_role.applications_attempt_recovery[0].arn : ""
+        ])
+      }
     }
   }
 }
@@ -1790,7 +1820,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
     var.persistent_data_plane_enabled && (
-      local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
+      length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
     )
   ) ? 1 : 0
   vpc_id              = aws_vpc.this.id
