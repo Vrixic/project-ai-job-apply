@@ -2127,3 +2127,11 @@ source-role/path restrictions are preserved; dispatcher IAM pins the numeric ver
 original-function endpoint scope. Sixty mocked Terraform cases pass; both roots validate.
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-resume-rpc-and-normalized-source-endpoint-composition).
 No cloud mutation; managed key/network/routing/acceptance remain. D1/D3 In progress, PC on.
+
+
+2026-10-07 D3-064/D3-079 adds the original resume durable function's missing checkpoint-key
+service grant, bound to account, source function and matching encryption context. Removes the
+unneeded execution-role GenerateDataKey grant; existing exact-key Decrypt remains. Twelve focused
+mocked Terraform cases pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-durable-checkpoint-key).
+No deployment or live encryption claim; D1/D3 remain In progress. Continue connected implementation,
+flow checks, fixes and focused regressions; CI/CD deferred and PC stays on.

@@ -157,7 +157,6 @@ resource "aws_iam_role_policy" "durable" {
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Sid = "OwnedCheckpoints", Effect = "Allow", Action = ["lambda:CheckpointDurableExecution", "lambda:GetDurableExecutionState"], Resource = "${local.durable_arn}:*" },
     { Sid = "ExactOwnerControl", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = aws_lambda_function.control[0].qualified_arn },
-    { Sid = "EncryptedCheckpoints", Effect = "Allow", Action = ["kms:GenerateDataKey"], Resource = var.release.platform_kms_key_arn },
     { Sid = "NoDatabaseOrLaunch", Effect = "Deny", Action = ["secretsmanager:*", "rds-db:*", "ecs:*", "iam:PassRole"], Resource = "*" }
   ] })
 }

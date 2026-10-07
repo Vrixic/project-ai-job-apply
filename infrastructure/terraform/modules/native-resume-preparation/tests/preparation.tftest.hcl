@@ -73,6 +73,11 @@ run "absent_by_default" {
 run "connected_release_is_disabled" {
   command = apply
   assert {
+    condition     = !contains(flatten([for statement in jsondecode(aws_iam_role_policy.durable[0].policy).Statement : statement.Action]), "kms:GenerateDataKey") && contains(flatten([for statement in jsondecode(aws_iam_role_policy.runtime["durable"].policy).Statement : statement.Action]), "kms:Decrypt")
+    error_message = "The durable execution role reads state; the Lambda service owns data-key generation."
+  }
+
+  assert {
     condition     = aws_cloudwatch_event_rule.observer[0].state == "DISABLED" && aws_lambda_function.observer[0].environment[0].variables.NATIVE_RESUME_TASK_OBSERVER_ENABLED == "false" && aws_lambda_function.observer[0].dead_letter_config[0].target_arn == var.release.observer_dead_letter_arn && aws_cloudwatch_event_target.observer[0].dead_letter_config[0].arn == var.release.observer_dead_letter_arn
     error_message = "Observer/event delivery must remain disabled and retain failures in the reviewed queue."
   }

@@ -697,3 +697,18 @@ passes all 51 cases, including document-processing isolation and dormant data-pl
 Logs: `.tmp/d3-native-rpc-endpoint-development.log`, `.tmp/d3-native-rpc-endpoint-staging.log`,
 `.tmp/d3-native-rpc-serverless.log`. Combined local count is 60 mocked Terraform cases. Live
 invocation, key access, DNS/TLS and end-to-end acceptance remain unproved. D1/D3 In progress.
+
+
+## Original durable checkpoint key
+
+The platform key previously omitted native resume durable functions from its Lambda service grant.
+Each retained original revision now gets a separate GenerateDataKey/Decrypt statement constrained
+by exact account, unqualified source function ARN and matching function encryption context.
+The durable execution role retains exact-key Decrypt through its common policy; its redundant
+GenerateDataKey grant is removed. Empty release maps add no service grant.
+
+Two platform and ten preparation mocked Terraform cases pass locally on 2026-10-07. An initial
+assertion compared different Terraform collection types; explicit set normalization fixed the
+assertion. Logs: `.tmp/d3-native-durable-key-platform.log` and
+`.tmp/d3-native-durable-key-preparation.log`. These checks inspect planned policy composition,
+not live KMS access. No deployment, publication or runtime activation occurred.

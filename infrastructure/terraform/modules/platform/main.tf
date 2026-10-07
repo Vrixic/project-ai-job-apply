@@ -52,6 +52,35 @@ locals {
 
 data "aws_iam_policy_document" "platform_kms" {
   dynamic "statement" {
+    for_each = var.native_resume_dispatch_revisions
+    content {
+      sid       = "OriginalResumeDurableEncryption${statement.value}"
+      effect    = "Allow"
+      actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["lambda.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceArn"
+        values   = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-resume-durable-r${statement.value}"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:aws:lambda:FunctionArn"
+        values   = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-resume-durable-r${statement.value}"]
+      }
+    }
+  }
+
+  dynamic "statement" {
     for_each = length(var.native_resume_observation_releases) > 0 ? [1] : []
     content {
       sid       = "OriginalResumeObservationFailureEncryption"
