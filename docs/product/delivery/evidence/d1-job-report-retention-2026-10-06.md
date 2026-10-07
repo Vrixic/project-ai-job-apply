@@ -109,3 +109,12 @@ guards pass for case variants, correct family boundaries and incomplete/duplicat
 Logs: `.tmp/d1-job-retention-{lambda-tests,managed-sql,terraform,publisher-tests}.log` and
 `.tmp/d1-job-retention-{owner,workflows}-build.log`. No managed publication, effective IAM, runtime
 migration/schedule or alert acceptance is claimed. Fresh artifact emission follows.
+
+
+After Jobs/Workflows compilation, the committed-source artifact from clean `82685de3` passes its
+emitted default-off/no-network check, actual publisher readback of four companion files and
+byte-identical repeat emission. ZIP: 21,550 bytes, SHA-256
+`5df9a137eaf010c80755fadd273ee64748d786ddf790d0e2818ea3e7f49e54c2`.
+Logs: `.tmp/d1-job-retention-artifact.log`, `.tmp/d1-job-retention-readback.log`;
+local receipt `.tmp/d1-job-retention-local-receipt.json`. No cloud calls or fresh dependency-audit
+claim. This is a local release candidate; deployed expiry and accountable acceptance remain.
