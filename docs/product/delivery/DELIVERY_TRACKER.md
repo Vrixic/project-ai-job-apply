@@ -4881,3 +4881,10 @@ recovery with numeric bindings and independent intake/recovery gates. Terraform 
 seven mocked scenarios pass; serverless policy validation passes. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md).
 Bootstrap/publisher/queue/network/environment integration and managed acceptance remain; no
 cloud action or runtime TypeScript change. D1/D3 In progress; Docker/WSL stopped, PC on.
+
+2026-10-07 native application preparation adds a guarded four-artifact/sixteen-object publisher
+family matching its runtime module. PowerShell 5/7 receipt/family guards pass. Actual bundles
+build at `e95e4eca`; all sixteen files pass independent integrity and repeated packaging checks.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#guarded-artifact-family).
+No publication or fresh audit; bootstrap/platform/environment integration and managed acceptance
+remain. D1/D3 In progress, Docker/WSL stopped, PC on; CI/CD deferred.
