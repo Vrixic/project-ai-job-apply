@@ -4874,3 +4874,10 @@ The next missing backend composition is the native cover-letter preparation rele
 activity/durable/starter/recovery artifacts exist, corresponding Terraform wiring does not.
 [Phase record](phase-3-application-preparation.md). Managed and accountable gates remain;
 D1/D3 stay In progress. No new cloud actions or repeat verification of unchanged resume artifacts.
+
+2026-10-07 D3-017/D3-068–D3-071/D3-079 adds the standalone default-off native application
+preparation release module: activity, durable, SQS starter and separate terminal/scheduled
+recovery with numeric bindings and independent intake/recovery gates. Terraform validate and
+seven mocked scenarios pass; serverless policy validation passes. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md).
+Bootstrap/publisher/queue/network/environment integration and managed acceptance remain; no
+cloud action or runtime TypeScript change. D1/D3 In progress; Docker/WSL stopped, PC on.

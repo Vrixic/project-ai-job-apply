@@ -2268,3 +2268,10 @@ Next backend batch is that connected default-off cover-letter release path, usin
 ports/artifacts and preserving migration, original-work recovery and private network boundaries.
 This is a source inventory finding, not a completed release or a reason to repeat resume builds.
 Managed configuration, client/ATS and accountable acceptance remain; D1/D3 stay In progress.
+
+2026-10-07 D3-017/D3-068–D3-071/D3-079 adds the standalone default-off native application
+preparation release module: activity, durable, SQS starter and separate terminal/scheduled
+recovery with numeric bindings and independent intake/recovery gates. Terraform validate and
+seven mocked scenarios pass; serverless policy validation passes. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md).
+Bootstrap/publisher/queue/network/environment integration and managed acceptance remain; no
+cloud action or runtime TypeScript change. D1/D3 In progress; Docker/WSL stopped, PC on.
