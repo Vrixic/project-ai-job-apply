@@ -2055,3 +2055,9 @@ Observer now uses the existing raw Applications SQL helper. All 51 ledger cases 
 cases pass, including real Lambda-to-SQL retirement and lost-ACK replay with simulated ECS.
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Fresh artifact follows; no cloud
 deployment. D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 corrected observer artifact from clean `59a82593` passes emitted-bundle refusal checks;
+ZIP SHA-256 `611b833b02072aac300a4f945b43cdf3656603d5216fbc11a7adf47611b48fe0` (384731 bytes).
+This supersedes the earlier observer artifact. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Docker/WSL stopped, PC on; artifact remains unpublished and D1/D3 In progress.

@@ -514,3 +514,10 @@ typecheck, Workflows build and changed-file Biome pass. Log:
 `.tmp/d3-native-resume-observer-sql.log`. The owned tmpfs fixture was removed; shared volumes were
 untouched and Docker/WSL shutdown requested. No actual AWS stop/describe, managed invocation,
 secret read or cloud deployment occurred. Enabled managed acceptance and receiver routing remain.
+
+
+Corrected artifact built from clean `59a82593` with matching source SHA passes emitted-bundle
+refusal checks. ZIP SHA-256 `611b833b02072aac300a4f945b43cdf3656603d5216fbc11a7adf47611b48fe0`,
+384731 bytes and 30 inventory components, supersedes the earlier `c862e288` observer artifact.
+Log: `.tmp/d3-native-resume-observer-artifact.log`. Docker Desktop shutdown and WSL shutdown
+completed; PC stays on. No publication or deployment.
