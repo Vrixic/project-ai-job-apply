@@ -27,6 +27,7 @@ test("native launch emits only fixed ECS control and refuses both default-off ef
     inputs.filter((name) => name.startsWith("backend/") || name.startsWith("packages/")).sort(),
     [
       "backend/services/documents/dist/src/native-task-allocation.js",
+      "backend/services/documents/dist/src/native-task-launch-policy.js",
       "backend/services/documents/dist/src/native-task-launch.js",
     ],
   );
