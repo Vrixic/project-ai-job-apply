@@ -68,3 +68,32 @@ No runtime TypeScript changed. Bootstrap ceilings, queue/network/key policies, o
 alarms and development/staging composition remain the next connected source steps, followed by
 managed acceptance. Existing dependency advisories remain open; no fresh audit or waiver is
 claimed. All artifacts remain unpublished, Docker/WSL stopped, PC on.
+
+## Bootstrap composition
+
+Bootstrap now accepts optional `native_preparation_releases`, validates exact original release
+IDs and same-account/environment keys, secret, queues and numeric launcher, and provisions a
+shared boundary per original release. Each permission has an exact `aws:PrincipalArn` condition:
+only activity receives packet cryptography/launcher access, only durable receives checkpoint
+and activity invocation, only starter receives workflow invocation/queue consumption, and only
+reconciler receives nudges. Terminal/reconciler receive original execution metadata and failure
+retention grants. No preparation ceiling permits S3 content, ECS launch or PassRole. Sharing the
+policy does not share per-role capabilities. Runtime module boundary names now match bootstrap.
+
+Deployment authority admits only the named preparation boundary ARNs and original durable stacks;
+ordinary role management still cannot change permissions boundaries. Empty input preserves the
+original string/list policy representation. The first implementation with five separate boundary
+references exceeded IAM's managed-policy limit when combined with an original resume/DNS release.
+One principal-conditioned boundary per preparation release removes repeated references and passes
+that combined test without widening runtime permissions or removing retained releases. A size
+precondition rejects future oversized combinations. Retained releases must not be discarded to fit.
+
+All 12 bootstrap mock scenarios and seven preparation-module mock scenarios pass with Terraform
+1.16.2/AWS provider 6.58.0. Coverage includes default unchanged authority, exact role restrictions,
+packet/nudge separation, foreign launcher rejection, original resume/DNS coexistence under 6,144
+characters and runtime boundary-name agreement. Existing workload/restore/resume tests pass.
+Terraform validation, formatting, serverless infrastructure policy validation and diff whitespace
+checks pass. Logs: `.tmp/d3-native-preparation-bootstrap-tests.log` and
+`.tmp/d3-native-preparation-runtime-boundary-tests.log`. No AWS API, apply or effective-IAM
+acceptance; this is source/mock evidence. Queue/key resource policies, private endpoints, outbox,
+alarms and development/staging composition are still to be connected. D1/D3 remain In progress.

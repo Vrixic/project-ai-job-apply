@@ -53,3 +53,20 @@ Prepare bootstrap first and use a new original release; retain old roles/version
 until drain. This does not migrate an existing role boundary or enable retained numeric versions.
 Network reachability, matching TLS/ingress, terminal reconciliation and live download acceptance
 remain required. Local mocked Terraform checks are not effective managed IAM evidence.
+
+## Native application preparation
+
+`native_preparation_releases` defaults empty. Each explicit original release ID provisions one
+principal-conditioned boundary shared by five preparation roles. Common logging/configuration,
+private SQL access, packet cryptography, exact launcher invocation, original durable dispatch,
+metadata-only recovery and queue nudges each name only their appropriate original roles.
+Ordinary deployment can read/use these exact ceilings and manage the original durable stack;
+it cannot update or replace the boundary. Keep original releases until verified drain.
+
+Use the same release ID, exact same-account/environment secret, numeric launcher, distinct packet
+keys and queue/key IDs as the native application preparation module. Apply bootstrap separately
+before runtime planning. Tests cover original-role isolation and coexistence with a retained
+resume/DNS release under IAM's 6,144-character managed-policy limit. A precondition rejects
+oversized combined deployment policies; never delete undrained releases to satisfy it. Empty
+input preserves the original deployment-policy representation and authority. Effective AWS IAM,
+key/queue resource policies and managed release acceptance still require separate verification.

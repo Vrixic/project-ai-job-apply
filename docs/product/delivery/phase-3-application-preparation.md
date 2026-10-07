@@ -2282,3 +2282,11 @@ build at `e95e4eca`; all sixteen files pass independent integrity and repeated p
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#guarded-artifact-family).
 No publication or fresh audit; bootstrap/platform/environment integration and managed acceptance
 remain. D1/D3 In progress, Docker/WSL stopped, PC on; CI/CD deferred.
+
+2026-10-07 native preparation bootstrap is connected to the runtime module's exact original
+release boundary. Principal conditions isolate all five roles; optional deployment authority
+names only the approved boundaries/stacks. A combined resume/DNS plus preparation test exposed
+IAM policy size pressure, resolved with one principal-conditioned boundary per original release.
+All 12 bootstrap and seven runtime Terraform mock cases pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#bootstrap-composition).
+Queue/network/outbox/alarms/environment wiring and managed acceptance remain. No cloud change;
+D1/D3 In progress, Docker/WSL stopped and PC on.

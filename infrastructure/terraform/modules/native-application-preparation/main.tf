@@ -152,7 +152,7 @@ resource "aws_iam_role" "runtime" {
   for_each = local.kinds
   name     = local.names[each.key]
   # Separately reviewed bootstrap owns these ceilings; this module cannot broaden them.
-  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/${local.names[each.key]}-boundary"
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/ai-job-apply-${var.environment}-prep-runtime-${var.release.release_id}-boundary"
   assume_role_policy   = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Principal = { Service = "lambda.amazonaws.com" } }] })
 }
 resource "aws_iam_role_policy" "base" {

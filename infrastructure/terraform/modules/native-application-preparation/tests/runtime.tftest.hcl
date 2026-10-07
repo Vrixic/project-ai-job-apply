@@ -69,6 +69,11 @@ run "absent" {
 run "disabled_connected" {
   command = apply
   assert {
+    condition     = alltrue([for role in aws_iam_role.runtime : role.permissions_boundary == "arn:aws:iam::123456789012:policy/ai-job-apply-development-prep-runtime-r1-boundary"])
+    error_message = "Every actor must use the exact original release boundary owned by bootstrap."
+  }
+
+  assert {
     condition     = !aws_lambda_event_source_mapping.intake[0].enabled && alltrue([for r in aws_cloudwatch_event_rule.recovery : r.state == "DISABLED"])
     error_message = "All triggers must default off."
   }
