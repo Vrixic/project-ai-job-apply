@@ -23,6 +23,11 @@ variable "native_resume_source_access_releases" {
   nullable = false
 
 
+  validation {
+    condition     = contains(["parser-dark", "complete-dark"], var.document_processing_deployment_stage) || alltrue([for release in values(var.native_resume_source_access_releases) : !release.enabled])
+    error_message = "Native source activation requires the existing normalized-document endpoint foundation; disabled release staging remains permitted."
+  }
+
 }
 module "native_resume_source_access" {
   depends_on  = [module.platform]

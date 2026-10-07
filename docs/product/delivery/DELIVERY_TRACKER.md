@@ -4730,3 +4730,11 @@ reads through the shared private Secrets endpoint, including reviewed caller sec
 Four native and ten maintenance mocked cases plus three per environment pass; roots validate.
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-resume-secret-endpoint-composition).
 Dormant staging stays disabled. RPC/S3 endpoint and managed acceptance remain; no cloud mutation.
+
+
+2026-10-07 D3-064/D3-079 connects original task RPCs, original durable dispatch and retained
+normalized-source reads through existing private endpoints. Numeric task recipients and exact
+source-role/path restrictions are preserved; dispatcher IAM pins the numeric version within its
+original-function endpoint scope. Sixty mocked Terraform cases pass; both roots validate.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-resume-rpc-and-normalized-source-endpoint-composition).
+No cloud mutation; managed key/network/routing/acceptance remain. D1/D3 In progress, PC on.

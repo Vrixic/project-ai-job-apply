@@ -1700,7 +1700,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count       = local.native_resume_rpc_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -2607,7 +2607,44 @@ resource "aws_vpc_endpoint" "sqs" {
 }
 
 data "aws_iam_policy_document" "outbox_lambda_endpoint" {
-  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count = local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+
+  dynamic "statement" {
+    for_each = var.native_resume_task_rpc_bindings
+    content {
+      sid       = "OriginalResumeTaskRpc${statement.key}"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [statement.value.owner_function_arn, statement.value.source_function_arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-native-resume-r${statement.key}-task"]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = var.native_resume_dispatch_revisions
+    content {
+      sid       = "OriginalResumeDispatch${statement.value}"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-resume-durable-r${statement.value}:*"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-dispatch-r${statement.value}"]
+      }
+    }
+  }
 
   dynamic "statement" {
     for_each = var.deploy_serverless_outbox ? [1] : []
@@ -2686,7 +2723,7 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "lambda" {
-  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.lambda"
   vpc_endpoint_type   = "Interface"

@@ -669,3 +669,31 @@ is preserved and activation uses the existing staging_runtime_mode gate. Logs:
 `.tmp/d3-native-secret-endpoint-staging.log`. No AWS apply or secret retrieval occurred.
 Lambda RPC/S3 endpoint composition and managed network/TLS/acceptance remain open; source policy
 checks alone do not prove effective private access. D1/D3 In progress, ADR-040 Proposed.
+
+
+## Original resume RPC and normalized-source endpoint composition
+
+The shared Lambda endpoint now accepts only the original task role's two numeric owner/source
+RPC targets and the original dispatch role's durable function. Dispatcher endpoint scope uses
+that function's qualifier wildcard; existing runtime-role IAM still binds the exact numeric
+version. This avoids a platform/Lambda-version dependency cycle without opening other functions
+or callers. Shared endpoint ingress uses the reviewed native caller groups already composed.
+
+The existing document S3 endpoint now allows only original source-role GetObjectVersion on the
+selected bucket's normalized resume JSON shape. No object write/delete/current-read/list or task
+object access is introduced. Source activation requires the existing document endpoint foundation;
+disabled predeployment remains permitted. Role/bucket/key policy and runtime owner/version checks
+are independent layers and still need managed acceptance.
+
+Three focused mocked cases pass for empty defaults, connected RPC/document policy shape and
+alias/foreign-revision refusal. The connected fixture initially omitted the existing Gateway
+prerequisite for document intake; it was corrected before passing. Log:
+`.tmp/d3-native-rpc-endpoint-platform.log`. Environment and existing serverless regressions follow.
+No AWS mutation, artifact publication or runtime activation occurred.
+
+
+Development/staging validate and pass three release cases each. The existing serverless suite
+passes all 51 cases, including document-processing isolation and dormant data-plane guards.
+Logs: `.tmp/d3-native-rpc-endpoint-development.log`, `.tmp/d3-native-rpc-endpoint-staging.log`,
+`.tmp/d3-native-rpc-serverless.log`. Combined local count is 60 mocked Terraform cases. Live
+invocation, key access, DNS/TLS and end-to-end acceptance remain unproved. D1/D3 In progress.

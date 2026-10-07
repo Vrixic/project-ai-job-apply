@@ -21,5 +21,26 @@ corresponding endpoint, routing and security-group configuration themselves.
 Four focused platform tests cover no-resources defaults, role/secret/version separation, caller
 network wiring, missing TLS version and foreign-role rejection. Ten maintenance tests still pass;
 three release-composition cases pass in each environment. These are mocked-provider checks.
-Effective AWS requests, Lambda RPC and normalized-source S3 endpoint permissions, native networking,
+Effective AWS requests, caller IAM, native networking,
 TLS/DNS routing and end-to-end acceptance remain separate prerequisites. No cloud state changed.
+
+
+## Private RPC and normalized-source reads
+
+Environment release maps now also derive exact task RPC bindings, dispatcher revisions and
+normalized-source bucket bindings. The shared Lambda endpoint permits each original task role
+only its two numeric owner/source functions. Its dispatcher permission selects only that original
+revision's durable function (`:*` at the endpoint); the dispatcher IAM policy narrows invocation
+to the numeric version produced by the release. The qualifier wildcard avoids a dependency cycle
+between platform endpoint creation and the later Lambda version, and never grants another caller
+or another original function. Keep both policy layers in release review.
+
+The existing document S3 gateway endpoint grants only the original source role GetObjectVersion
+on the reviewed bucket's `normalized/*/*/*/resume.json` shape. It adds no List/GetObject/write/delete
+or task-role object permission. Actual source ownership/version/digest checks remain runtime-owned.
+Source activation requires the existing parser-dark or complete-dark document foundation; disabled
+source predeployment still works. Routes and caller subnets must match the reviewed environment.
+
+Three focused mocked cases cover empty defaults, the connected document/RPC policies and rejection
+of aliases/foreign revisions. Environment and existing serverless tests provide regression coverage;
+managed requests and current key/role/bucket policy evaluation remain release prerequisites.
