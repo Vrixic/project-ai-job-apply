@@ -117,3 +117,18 @@ before binding it. A separate fresh terminal observation then records retirement
 no claim-creation port and hard-disables new launches; IAM still denies RunTask and StopTask.
 Unclaimed, mismatched or unavailable task metadata stays unresolved. A scalar manual observe or
 scheduled sweep cannot invent the missing task ARN. Retired replays use the original SQL receipt.
+
+## Original resume download route
+
+Optional `route = { hosted_zone_id, base_host }` must agree between the preparation release and
+bootstrap `native_resume_control_releases` for the original revision. Bootstrap supplies a
+principal-bound durable DNS ceiling; the preparation module grants exact-zone CREATE/DELETE A
+records under the original host plus zone inspection/change status. The shared boundary gains
+no DNS capability. Route runtime and creation switches default false and are independent of
+new task launches. Keep lifecycle enabled for original cleanup when creation stops. The durable
+execution budget is 2,400 seconds; encrypted checkpoint retention remains seven days.
+
+Prepare bootstrap first and use a new original release; retain old roles/versions/configuration
+until drain. This does not migrate an existing role boundary or enable retained numeric versions.
+Network reachability, matching TLS/ingress, terminal reconciliation and live download acceptance
+remain required. Local mocked Terraform checks are not effective managed IAM evidence.

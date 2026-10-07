@@ -5,11 +5,13 @@ variable "native_resume_control_releases" {
     cluster_name             = string
     database_secret_arn      = string
     platform_kms_key_arn     = string
+    route                    = optional(object({ hosted_zone_id = string, base_host = string }))
   }))
   default  = {}
   nullable = false
   validation {
     condition = length(var.native_resume_control_releases) <= 4 && alltrue([for revision, release in var.native_resume_control_releases :
+      (release.route == null ? true : (can(regex("^Z[A-Z0-9]{1,31}$", release.route.hosted_zone_id)) && length(release.route.base_host) <= 200 && can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.])+[a-z]{2,63}$", release.route.base_host)))) &&
       can(regex("^[1-9][0-9]{0,8}$", revision)) &&
       can(regex("^arn:aws:sqs:us-east-2:${data.aws_caller_identity.current.account_id}:ai-job-apply-${var.environment}-[A-Za-z0-9_-]+$", release.observer_dead_letter_arn)) &&
       can(regex("^[A-Za-z0-9_-]{1,255}$", release.cluster_name)) &&
@@ -28,12 +30,13 @@ locals {
     roles     = [for kind in ["task", "execution"] : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-native-resume-r${revision}-${kind}"]
   } }
   native_resume_deploy_statements = flatten([for revision, release in local.native_resume_controls : [
-    { Sid = "CreateOriginalResumeControl${revision}", Effect = "Allow", Action = ["iam:CreateRole"], Resource = release.principal,
-    Condition = { StringEquals = { "iam:PermissionsBoundary" = release.boundary } } },
-    { Sid = "CreateOriginalResumeObserver${revision}", Effect = "Allow", Action = ["iam:CreateRole"], Resource = replace(release.principal, "resume-control-", "resume-observer-"),
-    Condition = { StringEquals = { "iam:PermissionsBoundary" = replace(release.boundary, "resume-control-", "resume-observer-") } } },
-    { Sid = "ReadOriginalObserverBoundary${revision}", Effect = "Allow", Action = ["iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"], Resource = replace(release.boundary, "resume-control-", "resume-observer-") },
-    { Sid = "ReadOriginalResumeBoundary${revision}", Effect = "Allow", Action = ["iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"], Resource = release.boundary },
+    { Sid       = "CreateOriginalResumeRoles${revision}", Effect = "Allow", Action = ["iam:CreateRole"],
+      Resource  = [for kind in ["control", "observer", "durable"] : replace(release.principal, "resume-control-", "resume-${kind}-")],
+      Condition = { StringEquals = { "iam:PermissionsBoundary" = [for kind in ["control", "observer", "durable"] : replace(release.boundary, "resume-control-", "resume-${kind}-")] } }
+    },
+    { Sid      = "ReadOriginalResumeBoundaries${revision}", Effect = "Allow", Action = ["iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"],
+      Resource = [for kind in ["control", "observer", "durable"] : replace(release.boundary, "resume-control-", "resume-${kind}-")]
+    },
     { Sid    = "ManageOriginalResumeDurable${revision}", Effect = "Allow",
       Action = ["cloudformation:CreateStack", "cloudformation:DeleteStack", "cloudformation:DescribeStackEvents", "cloudformation:DescribeStackResource", "cloudformation:DescribeStackResources", "cloudformation:DescribeStacks", "cloudformation:GetTemplate", "cloudformation:ListStackResources", "cloudformation:UpdateStack"],
     Resource = "arn:aws:cloudformation:us-east-2:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-resume-durable-r${revision}/*" }
@@ -86,4 +89,26 @@ resource "aws_iam_policy" "native_resume_observer_boundary" {
 }
 output "native_resume_observer_boundary_arns" {
   value = { for revision, policy in aws_iam_policy.native_resume_observer_boundary : revision => policy.arn }
+}
+
+resource "aws_iam_policy" "native_resume_durable_boundary" {
+  for_each    = { for revision, release in var.native_resume_control_releases : revision => release if release.route != null }
+  name        = "ai-job-apply-${var.environment}-resume-durable-r${each.key}-boundary"
+  description = "Original resume durable DNS ceiling; no owner SQL or task launch."
+  policy = jsonencode({ Version = "2012-10-17", Statement = [for statement in [
+    { Sid = "Logs", Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "arn:aws:logs:us-east-2:${data.aws_caller_identity.current.account_id}:log-group:/ai-job-apply/${var.environment}/application:*" },
+    { Sid = "ConfigurationKey", Effect = "Allow", Action = ["kms:Decrypt"], Resource = each.value.platform_kms_key_arn },
+    { Sid = "Checkpoints", Effect = "Allow", Action = ["lambda:CheckpointDurableExecution", "lambda:GetDurableExecutionState"], Resource = "arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:ai-job-apply-${var.environment}-resume-durable-r${each.key}:*" },
+    { Sid = "OwnerControl", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = "arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:ai-job-apply-${var.environment}-resume-control-r${each.key}:*" },
+    { Sid = "OriginalRecords", Effect = "Allow", Action = ["route53:ChangeResourceRecordSets"], Resource = "arn:aws:route53:::hostedzone/${each.value.route.hosted_zone_id}",
+      Condition = {
+        "ForAllValues:StringEquals" = { "route53:ChangeResourceRecordSetsRecordTypes" = ["A"], "route53:ChangeResourceRecordSetsActions" = ["CREATE", "DELETE"] },
+        "ForAllValues:StringLike"   = { "route53:ChangeResourceRecordSetsNormalizedRecordNames" = ["????????-????-7???-????-????????????.${each.value.route.base_host}"] }
+      }
+    },
+    { Sid = "InspectOriginalZone", Effect = "Allow", Action = ["route53:ListResourceRecordSets"], Resource = "arn:aws:route53:::hostedzone/${each.value.route.hosted_zone_id}" },
+    { Sid = "ObserveOriginalChange", Effect = "Allow", Action = ["route53:GetChange"], Resource = "arn:aws:route53:::change/*" }
+    ] : merge(statement, { Condition = merge(try(statement.Condition, {}), {
+      ArnEquals = { "aws:PrincipalArn" = replace(local.native_resume_controls[each.key].principal, "resume-control-", "resume-durable-") }
+  }) })] })
 }

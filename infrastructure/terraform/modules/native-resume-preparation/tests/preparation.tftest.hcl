@@ -192,3 +192,40 @@ run "scheduled_observation_requires_runtime" {
   variables { observation_schedule_enabled = true }
   expect_failures = [var.observation_schedule_enabled]
 }
+
+run "route_cleanup_without_creation" {
+  command = apply
+  variables {
+    enabled       = true
+    route_enabled = true
+    route         = { hosted_zone_id = "ZSYNTHETIC", base_host = "resume.example.com" }
+    release       = merge(var.release, { task_assign_public_ip = "ENABLED" })
+  }
+  assert {
+    condition     = jsondecode(aws_cloudformation_stack.durable[0].template_body).Resources.DurableFunction.Properties.DurableConfig.ExecutionTimeout == 2400 && local.durable_environment.NATIVE_RESUME_ROUTE_LIFECYCLE_ENABLED == "true" && local.durable_environment.NATIVE_RESUME_ROUTE_CREATION_ENABLED == "false"
+    error_message = "Cleanup needs the full route lifetime without new creation."
+  }
+  assert {
+    condition     = jsondecode(aws_lambda_function.control[0].environment[0].variables.NATIVE_RESUME_ROUTE_CONFIGURATION_JSON) == { hostedZoneId = "ZSYNTHETIC", baseHost = "resume.example.com" } && aws_lambda_function.control[0].environment[0].variables.NATIVE_RESUME_ROUTE_OWNER_ENABLED == "true" && aws_iam_role.runtime["durable"].permissions_boundary == "arn:aws:iam::123456789012:policy/ai-job-apply-development-resume-durable-r7-boundary"
+    error_message = "Original route owner configuration must match the dedicated durable ceiling."
+  }
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.route[0].policy).Statement[0].Resource == "arn:aws:route53:::hostedzone/ZSYNTHETIC" && jsondecode(aws_iam_role_policy.route[0].policy).Statement[0].Condition["ForAllValues:StringEquals"]["route53:ChangeResourceRecordSetsActions"] == ["CREATE", "DELETE"] && jsondecode(aws_iam_role_policy.route[0].policy).Statement[0].Condition["ForAllValues:StringLike"]["route53:ChangeResourceRecordSetsNormalizedRecordNames"] == ["????????-????-7???-????-????????????.resume.example.com"]
+    error_message = "DNS mutation must exclude UPSERT, unrelated zones and unrelated record names."
+  }
+}
+run "route_requires_public_task" {
+  command = plan
+  variables { route = { hosted_zone_id = "ZSYNTHETIC", base_host = "resume.example.com" } }
+  expect_failures = [var.route]
+}
+run "route_requires_configuration" {
+  command = plan
+  variables { route_enabled = true }
+  expect_failures = [var.route_enabled]
+}
+run "creation_requires_route" {
+  command = plan
+  variables { route_creation_enabled = true }
+  expect_failures = [var.route_creation_enabled]
+}

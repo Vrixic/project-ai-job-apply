@@ -38,3 +38,18 @@ The workload boundary permits `rds-db:connect` only for the exact database usern
 its exact RDS resource ID. A separately reviewed bootstrap apply must land this boundary revision
 before any anonymous public-job route can be enabled. This source packet neither applies bootstrap
 nor activates public traffic.
+
+## Original resume download route
+
+Optional `route = { hosted_zone_id, base_host }` must agree between the preparation release and
+bootstrap `native_resume_control_releases` for the original revision. Bootstrap supplies a
+principal-bound durable DNS ceiling; the preparation module grants exact-zone CREATE/DELETE A
+records under the original host plus zone inspection/change status. The shared boundary gains
+no DNS capability. Route runtime and creation switches default false and are independent of
+new task launches. Keep lifecycle enabled for original cleanup when creation stops. The durable
+execution budget is 2,400 seconds; encrypted checkpoint retention remains seven days.
+
+Prepare bootstrap first and use a new original release; retain old roles/versions/configuration
+until drain. This does not migrate an existing role boundary or enable retained numeric versions.
+Network reachability, matching TLS/ingress, terminal reconciliation and live download acceptance
+remain required. Local mocked Terraform checks are not effective managed IAM evidence.

@@ -89,6 +89,9 @@ variable "native_resume_preparation_releases" {
     observation_events_enabled   = optional(bool, false)
     observation_schedule_enabled = optional(bool, false)
     schedule_enabled             = optional(bool, false)
+    route                        = optional(object({ hosted_zone_id = string, base_host = string }))
+    route_enabled                = optional(bool, false)
+    route_creation_enabled       = optional(bool, false)
   }))
   default  = {}
   nullable = false
@@ -107,6 +110,9 @@ module "native_resume_preparation" {
   observation_events_enabled   = each.value.observation_events_enabled
   observation_schedule_enabled = each.value.observation_schedule_enabled
   schedule_enabled             = each.value.schedule_enabled
+  route                        = each.value.route
+  route_enabled                = each.value.route_enabled
+  route_creation_enabled       = each.value.route_creation_enabled
 }
 
 output "native_resume_release_bindings" {

@@ -73,6 +73,38 @@ variable "release" {
     error_message = "Use the complete source-bound four-artifact receipt, same-account original task/secret/key and exact private network/layer identifiers; activation requires a release."
   }
 }
+variable "route" {
+  description = "Original dedicated download DNS configuration; retain unchanged until original work drains."
+  type        = object({ hosted_zone_id = string, base_host = string })
+  default     = null
+  validation {
+    condition = var.route == null ? true : (
+      can(regex("^Z[A-Z0-9]{1,31}$", var.route.hosted_zone_id)) &&
+      length(var.route.base_host) <= 200 &&
+      can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.])+[a-z]{2,63}$", var.route.base_host)) &&
+      try(var.release.task_assign_public_ip == "ENABLED", false)
+    )
+    error_message = "Routing requires an exact zone, lowercase DNS base host and public-IP task release."
+  }
+}
+variable "route_enabled" {
+  type     = bool
+  default  = false
+  nullable = false
+  validation {
+    condition     = !var.route_enabled || (var.enabled && var.route != null)
+    error_message = "Route lifecycle requires runtime and original DNS configuration."
+  }
+}
+variable "route_creation_enabled" {
+  type     = bool
+  default  = false
+  nullable = false
+  validation {
+    condition     = !var.route_creation_enabled || var.route_enabled
+    error_message = "Route creation requires the lifecycle; cleanup can continue with creation disabled."
+  }
+}
 variable "new_launch_enabled" {
   type     = bool
   default  = false
@@ -115,6 +147,8 @@ locals {
     NODE_ENV                                       = "production", PLATFORM_AWS_ACCOUNT_ID = var.account_id,
     RELEASE_SHA                                    = var.release.artifacts.durable.sha256,
     NATIVE_RESUME_PREPARATION_DURABLE_ENABLED      = tostring(var.enabled),
+    NATIVE_RESUME_ROUTE_LIFECYCLE_ENABLED          = tostring(var.route_enabled),
+    NATIVE_RESUME_ROUTE_CREATION_ENABLED           = tostring(var.route_creation_enabled),
     NATIVE_RESUME_PREPARATION_CONTROL_FUNCTION_ARN = aws_lambda_function.control[0].qualified_arn
   } : {}
 }
@@ -123,7 +157,7 @@ data "aws_region" "current" { count = local.deployed ? 1 : 0 }
 resource "aws_iam_role" "runtime" {
   for_each             = local.actors
   name                 = local.names[each.key]
-  permissions_boundary = contains(["control", "observer"], each.key) ? "arn:aws:iam::${var.account_id}:policy/${local.names[each.key]}-boundary" : local.boundary
+  permissions_boundary = (contains(["control", "observer"], each.key) || (each.key == "durable" && var.route != null)) ? "arn:aws:iam::${var.account_id}:policy/${local.names[each.key]}-boundary" : local.boundary
   assume_role_policy   = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Principal = { Service = "lambda.amazonaws.com" } }] })
 }
 resource "aws_iam_role_policy" "runtime" {
@@ -160,6 +194,22 @@ resource "aws_iam_role_policy" "durable" {
     { Sid = "NoDatabaseOrLaunch", Effect = "Deny", Action = ["secretsmanager:*", "rds-db:*", "ecs:*", "iam:PassRole"], Resource = "*" }
   ] })
 }
+resource "aws_iam_role_policy" "route" {
+  count = local.deployed && var.route != null ? 1 : 0
+  name  = "original-download-dns"
+  role  = aws_iam_role.runtime["durable"].id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [
+    { Sid      = "OriginalRecords", Effect = "Allow", Action = ["route53:ChangeResourceRecordSets"],
+      Resource = "arn:aws:route53:::hostedzone/${var.route.hosted_zone_id}",
+      Condition = {
+        "ForAllValues:StringEquals" = { "route53:ChangeResourceRecordSetsRecordTypes" = ["A"], "route53:ChangeResourceRecordSetsActions" = ["CREATE", "DELETE"] },
+        "ForAllValues:StringLike"   = { "route53:ChangeResourceRecordSetsNormalizedRecordNames" = ["????????-????-7???-????-????????????.${var.route.base_host}"] }
+      }
+    },
+    { Sid = "InspectOriginalZone", Effect = "Allow", Action = ["route53:ListResourceRecordSets"], Resource = "arn:aws:route53:::hostedzone/${var.route.hosted_zone_id}" },
+    { Sid = "ObserveOriginalChange", Effect = "Allow", Action = ["route53:GetChange"], Resource = "arn:aws:route53:::change/*" }
+  ] })
+}
 resource "aws_iam_role_policy" "dispatch" {
   count = local.deployed ? 1 : 0
   name  = "exact-dispatch-capability"
@@ -194,6 +244,8 @@ resource "aws_lambda_function" "control" {
       NATIVE_RESUME_PREPARATION_CONTROL_ENABLED = tostring(var.enabled),
       RESTRICTED_PACKET_PROTECTION_ENABLED      = tostring(var.enabled),
       NATIVE_RESUME_NEW_LAUNCH_ENABLED          = tostring(var.new_launch_enabled),
+      NATIVE_RESUME_ROUTE_OWNER_ENABLED         = tostring(var.route_enabled),
+      NATIVE_RESUME_ROUTE_CONFIGURATION_JSON    = var.route == null ? "{}" : jsonencode({ hostedZoneId = var.route.hosted_zone_id, baseHost = var.route.base_host }),
       NATIVE_RESUME_LAUNCH_CONFIGURATION_JSON   = jsonencode(local.launch)
     })
   }
@@ -218,7 +270,7 @@ resource "aws_lambda_function" "control" {
 resource "aws_cloudformation_stack" "durable" {
   count      = local.deployed ? 1 : 0
   name       = local.names.durable
-  depends_on = [aws_iam_role_policy.runtime, aws_iam_role_policy.durable]
+  depends_on = [aws_iam_role_policy.runtime, aws_iam_role_policy.durable, aws_iam_role_policy.route]
   on_failure = "DELETE"
   template_body = jsonencode({
     AWSTemplateFormatVersion = "2010-09-09",
@@ -231,7 +283,7 @@ resource "aws_cloudformation_stack" "durable" {
           MemorySize    = 512, Timeout = 30, ReservedConcurrentExecutions = 2,
           Code          = { S3Bucket = var.release.artifact_bucket, S3Key = var.release.artifacts.durable.key, S3ObjectVersion = var.release.artifacts.durable.version_id },
           KmsKeyArn     = var.release.platform_kms_key_arn,
-          DurableConfig = { ExecutionTimeout = 900, RetentionPeriodInDays = 7, KMSKeyArn = var.release.platform_kms_key_arn },
+          DurableConfig = { ExecutionTimeout = 2400, RetentionPeriodInDays = 7, KMSKeyArn = var.release.platform_kms_key_arn },
           Environment   = { Variables = local.durable_environment },
           LoggingConfig = { LogFormat = "JSON", ApplicationLogLevel = "ERROR", SystemLogLevel = "WARN", LogGroup = local.log_group }
         }

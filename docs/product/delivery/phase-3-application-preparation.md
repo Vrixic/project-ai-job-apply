@@ -2203,3 +2203,10 @@ execution to DNS lifecycle/attachment/cleanup, with all new switches default off
 [Evidence](evidence/d3-native-resume-route-owner-2026-10-07.md). AWS ports were simulated;
 release configuration/timeout/IAM, terminal reconciliation, hostname/TLS and managed acceptance
 remain. D1/D3 In progress; dependency findings open, CI/CD deferred, PC on.
+
+2026-10-07 D3-064/D3-079 wires default-off route configuration through development/staging,
+extends durable execution to 2,400 seconds, and adds exact-zone DNS IAM plus an original-principal
+bootstrap ceiling. Sixteen preparation and eight bootstrap mocked Terraform cases pass; both
+environments validate. [Evidence](evidence/d3-native-resume-route-release-2026-10-07.md).
+Private control network reachability, hostname/TLS, terminal reconciliation and managed acceptance
+remain; no cloud action. D1/D3 In progress, CI/CD deferred and PC on.
