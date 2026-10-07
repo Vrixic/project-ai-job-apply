@@ -27,7 +27,7 @@ Local checks:
   process before supervisor fallback. Remote owner/provider/identity ports are synthetic.
 
 The source image harness adds the same sealed-read scenario against the actual immutable runtime
-image. Actual image evidence follows below; clean full verification remains pending.
+image. Actual image and clean full verification evidence follow below.
 Managed routing/target/IAM/key/provider/client/ATS and accountable acceptance remain open. No cloud
 activation, frontend feature change, new PR, hosted CI/CD or phase completion is asserted.
 
@@ -54,3 +54,21 @@ relabeled as a later harness commit. Logs: `.tmp/d3-native-read-admission-image-
 
 The owned SQL fixture is removed after exact-label validation. Shared volumes remain untouched;
 Docker/WSL are stopped and the PC remains on. No image publication or cloud activation is performed.
+
+## Full verification
+
+Clean committed `3f576cc4776b0373bb5c8bf2e1d9ba946f58fd28` passes
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 production builds,
+formatting/operator/security/isolation/Compose and emitted native artifact checks. Lint remains
+zero errors, 15 warnings and 58 infos. The original full run completes successfully without
+tracked edits; log `.tmp/d3-native-read-admission-full.log`.
+
+The actual-image runtime source paths remain identical to tested image source `64192061`; the
+later commit changes only the outer scenario inventory and delivery records. Its image manifest
+is not relabeled as the full verifier's source. No coordinated cloud release is asserted.
+
+The isolated development web is restored: home 200, anonymous resume 307. Only its two generated
+Next.js development type imports are restored. Existing accepted sign-in/search/Profile/save/reload
+steps need no repeat; preference writes and resume import remain unverified live. D1/D3 remain
+In progress, ADR-040 remains Proposed, and managed routing/client/provider/accountable gates stay
+open. Hosted CI/CD remains deferred; PC stays on.

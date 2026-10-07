@@ -1,5 +1,12 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 original native read admission passes full clean verification at `3f576cc4`
+(38 typecheck/39 test/23 builds, unchanged lint and native isolation). Separate 29 focused,
+28 signed Gateway SQL, 33 Linux and five actual-image cases pass. Production image source remains
+`64192061`; only the outer exact scenario inventory and records differ.
+[Evidence](evidence/d3-native-read-admission-2026-10-06.md). Managed routing/client/provider/
+accountable gates remain; D1/D3 In progress, web restored, Docker/WSL stopped and PC on.
+
 2026-10-06 D3-079 verifies native original read admission in the actual immutable production image:
 all five positive/refusal cases pass, including sealed-read refusal and version two; cold default-off
 entrypoint refuses. The exact new harness inventory fixes the first conformance rejection without
