@@ -120,3 +120,8 @@ In progress, ADR-040 remains Proposed, and the missing authenticated resume task
 packet/image/client/ATS composition and managed/accountable gates remain explicit. No new PR,
 main merge, publication or cloud activation. Owned containers/dump are removed, shared volumes
 remain, Docker/WSL stay stopped and the PC stays on.
+
+The maintained local development web is restored: anonymous root returns 200 and `/resume`
+returns 307 with redirects disabled. Only Next's two generated development type imports are
+restored after exact diff inspection. This is a startup/status check against the existing live
+API, not authenticated resume-ledger acceptance. No frontend feature or repeated human test.
