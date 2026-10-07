@@ -4868,3 +4868,9 @@ five-second accelerated native deadline, exit 137 with no OOM. [Evidence](eviden
 distinguishes synthetic external ports from actual image behavior. Image remains unpublished;
 managed runtime/client/ATS and accountable acceptance remain open. D1/D3 In progress,
 Docker/WSL stopped, PC on; CI/CD deferred.
+
+2026-10-07 D3-079 task summary reconciled to current resume implementation/artifact/image proof.
+The next missing backend composition is the native cover-letter preparation release path:
+activity/durable/starter/recovery artifacts exist, corresponding Terraform wiring does not.
+[Phase record](phase-3-application-preparation.md). Managed and accountable gates remain;
+D1/D3 stay In progress. No new cloud actions or repeat verification of unchanged resume artifacts.
