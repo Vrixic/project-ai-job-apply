@@ -14,6 +14,7 @@ import {
   PostgresCoverLetterStore,
   PostgresCoverLetterWorkStore,
   PostgresNativeMaterialReadyStore,
+  PostgresTemporaryMaterialCompletionStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
 import {
   createNativeLaunchControlClient,
@@ -35,10 +36,11 @@ import {
   PostgresProfileStore,
   profileFactToGraphFact,
 } from "@ai-job-apply/profile-service";
-import type { InvokeCommand } from "@aws-sdk/client-lambda";
+import { type InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createNativeCoverLetterPreparationPort } from "./application-preparation-native.js";
+import { createNativeApplicationPreparationRuntime } from "./native-application-preparation-lambda.js";
 import {
   createNativeMaterialLaunchLambda,
   createNativeMaterialLaunchRuntime,
@@ -588,6 +590,185 @@ describe.runIf(requested)(
         await sql`SELECT count(*)::int AS count FROM documents.native_material_allocations WHERE document_id=${request.original.documentId}`;
       expect(count?.count).toBe(1);
       await unchangedWork(request);
+    });
+    it("runs fresh native preparation through real owner pools and recovers original ready work after a lost launch ACK", async () => {
+      const owner = uuidv7();
+      await sql`INSERT INTO identity.users (id) VALUES (${owner})`;
+      const profilePool = createDatabase(url ?? "postgres://invalid", { maxConnections: 1 });
+      runtimes.push({ close: () => profilePool.client.end() });
+      const profile = new PostgresProfileStore(profilePool);
+      await profile.createProfileFact(
+        owner,
+        { kind: "skill", key: "language", value: "TypeScript", sensitivity: "standard" },
+        uuidv7(),
+        "synthetic-native-preparation",
+      );
+      const facts = (await profile.listProfileFacts(owner)).facts.map(profileFactToGraphFact);
+      const catalog = new PostgresJobCatalog(sql, {
+        searchCursorKeys: {
+          active: { id: "synthetic-native-preparation", key: Buffer.alloc(32, 1) },
+        },
+      });
+      const runId = uuidv7(),
+        now = new Date();
+      const posting = await catalog.recordObservation({
+        provider: "greenhouse",
+        provenance: "authorized_fixture",
+        companyName: `Synthetic ${runId}`,
+        title: "Engineer",
+        locations: ["Remote"],
+        description: "Build reliable synthetic systems.",
+        sourceUrl: `https://jobs.example.test/${runId}`,
+        atsTenant: runId,
+        externalJobId: runId,
+        observedAt: now,
+        adapterVersion: "synthetic-v1",
+      });
+      const activePosting = await catalog.getActiveJob(posting.job.id, now);
+      if (!activePosting) throw Error("SyntheticFreshPostingUnavailable");
+      const context = coverLetterContext({
+        facts,
+        job: {
+          title: activePosting.title,
+          company: activePosting.company.name,
+          description: activePosting.description,
+        },
+        now,
+      });
+      const applications = new PostgresApplicationStore(sql, () => new Date(), {
+        definitions: defaultFieldDefinitions(),
+        restrictedPackets: packetProtection.options,
+      });
+      const created = await applications.createApplication({
+        ownerUserId: owner,
+        canonicalJobId: posting.job.id,
+        idempotencyKey: `create-${runId}`,
+      });
+      const queued = await applications.queuePreparation({
+        ownerUserId: owner,
+        applicationId: created.view.application.id,
+        idempotencyKey: `prepare-${runId}`,
+        context,
+        request: {
+          expectedRevision: 1,
+          coverLetter: {
+            disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+          },
+        },
+        packet: {
+          jobRevision: context.jobContextHash,
+          form: null,
+          fields: [],
+          artifactHashes: { resume: "a".repeat(64) },
+        },
+      });
+      const [event] = await sql<
+        Array<{ id: string }>
+      >`SELECT id FROM applications.preparation_outbox WHERE preparation_id=${queued.preparation.id}`;
+      if (!event) throw Error("SyntheticFreshPreparationEventMissing");
+      const f = fixture();
+      const transport = vi.spyOn(LambdaClient.prototype, "send");
+      transport.mockImplementation((async (command: InvokeCommand) => {
+        expect(command.input.FunctionName).toBe(target);
+        if (!(command.input.Payload instanceof Uint8Array))
+          throw Error("SyntheticNativePayloadRejected");
+        const request = JSON.parse(new TextDecoder().decode(command.input.Payload)) as Extract<
+          NativeLaunchControlInput,
+          { action: "launch" }
+        >;
+        await f.client.launch(request);
+        expect(
+          await work.claimProviderDispatch({
+            documentId: request.original.documentId,
+            requestSha256: request.original.requestSha256,
+            consentExpiresAt: queued.preparation.expiresAt,
+          }),
+        ).toEqual({ kind: "claimed", reference: request.original });
+        await work.settleProviderDispatch(request.original);
+        const metadata = await documents.generationMetadata({
+          id: request.original.documentId,
+          ownerUserId: owner,
+          applicationId: request.applicationId,
+          jobRevision: context.jobContextHash,
+          confirmedFactsHash: context.confirmedFactsHash,
+        });
+        if (!metadata) throw Error("SyntheticNativeReservationMissing");
+        const completedAtMs = Date.now();
+        const ready = {
+          schemaVersion: 1 as const,
+          material: {
+            schemaVersion: 1 as const,
+            kind: "cover_letter" as const,
+            ownerUserId: owner,
+            applicationId: request.applicationId,
+            generationId: request.original.documentId,
+            version: metadata.version,
+            contentSha256: "d".repeat(64),
+            completedAtMs,
+            expiresAtMs: completedAtMs + 1_800_000,
+          },
+          sourceFactIds: facts.map((fact) => fact.id),
+          confidence: 1,
+        };
+        expect(
+          await new PostgresTemporaryMaterialCompletionStore(
+            sql,
+            () => true,
+          ).claimOriginalCompletion(request.original, ready.material),
+        ).toBe("claimed");
+        expect(
+          await new PostgresNativeMaterialReadyStore(sql, () => true).publish(
+            request.original,
+            ready,
+          ),
+        ).toBe(true);
+        throw Error("SyntheticLostOriginalLaunchAck");
+      }) as unknown as LambdaClient["send"]);
+      const runtime = createNativeApplicationPreparationRuntime(
+        url ?? "postgres://invalid",
+        {
+          target: "arn:aws:lambda:us-east-2:123456789012:function:native-preparation:11",
+          secretId: "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-db",
+          launcher: target,
+          packet: {
+            encryptionKeyArn:
+              "arn:aws:kms:us-east-2:123456789012:key/11111111-1111-4111-8111-111111111111",
+            fingerprintKeyArn:
+              "arn:aws:kms:us-east-2:123456789012:key/22222222-2222-4222-8222-222222222222",
+          },
+        },
+        () => true,
+        () => true,
+        { packetProtection: packetProtection.options },
+      );
+      runtimes.push(runtime);
+      const input = {
+        schemaVersion: 1 as const,
+        workflowDefinitionVersion: 1 as const,
+        action: "advance" as const,
+        eventId: event.id,
+        preparationId: queued.preparation.id,
+      };
+      try {
+        expect(await runtime.run(input)).toMatchObject({
+          outcome: "retryable_failure",
+          errorCode: "generation_in_progress",
+        });
+        expect(await runtime.run(input)).toMatchObject({ outcome: "completed" });
+        expect(
+          (await applications.getPreparationForEvent(event.id, queued.preparation.id)).state,
+        ).toBe("succeeded");
+        expect(await runtime.run(input)).toMatchObject({ outcome: "completed" });
+        expect(transport).toHaveBeenCalledOnce();
+        expect(f.commands.filter((name) => name === "RunTaskCommand")).toHaveLength(1);
+        const [inventory] = await sql<Array<{ documents: number; grants: number; slots: number }>>`
+          SELECT (SELECT count(*)::int FROM documents.cover_letters WHERE id=${queued.preparation.id}) AS documents,
+            count(*)::int AS grants, count(*) FILTER (WHERE purpose='private_slots')::int AS slots
+          FROM documents.cover_letter_work_authorizations WHERE document_id=${queued.preparation.id}`;
+        expect(inventory).toEqual({ documents: 1, grants: 1, slots: 0 });
+      } finally {
+        transport.mockRestore();
+      }
     });
     it("authenticates the original task through real owner SQL claim, settlement, completion and sealed refusal", async () => {
       const profilePool = createDatabase(url ?? "postgres://invalid", { maxConnections: 1 });

@@ -48,6 +48,7 @@ Invoke-CheckedCommand "Native content runtime composition isolation" { node --te
 Invoke-CheckedCommand "Native task caller authentication isolation" { node --test scripts/tests/native-task-caller-bundle.test.mjs }
 Invoke-CheckedCommand "Authenticated native owner RPC isolation" { node --test scripts/tests/native-owner-rpc-bundle.test.mjs }
 Invoke-CheckedCommand "Native launch control composition isolation" { node --test scripts/tests/native-launch-control-bundle.test.mjs }
+Invoke-CheckedCommand "Native preparation composition isolation" { node --test scripts/tests/native-preparation-bundle.test.mjs }
 Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }
 
 $legacy = rg -n -i `

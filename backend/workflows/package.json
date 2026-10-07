@@ -27,6 +27,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:lambda:native-launch": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-native-material-launch-lambda.mjs",
+    "build:lambda:native-preparation": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-native-application-preparation-lambda.mjs",
     "build:lambda:preparation": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-application-preparation-lambda.mjs",
     "build:lambda:preparation-durable": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-application-preparation-durable-lambda.mjs",
     "build:lambda:preparation-starter": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-application-preparation-starter-lambda.mjs",

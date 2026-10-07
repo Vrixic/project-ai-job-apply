@@ -1,5 +1,13 @@
 # Durable Workflows
 
+`native-application-preparation-lambda.ts` provides the dedicated native activity composition.
+`NATIVE_APPLICATION_PREPARATION_ENABLED` defaults off; the separate launch flag permits fresh
+reservation/dispatch while recovery needs only the overall switch. The managed secret, exact
+numeric native launcher and existing packet protection/key ring are mandatory; legacy object/
+provider settings refuse. Build its separate unpublished artifact with
+`pnpm --filter @ai-job-apply/workflows build:lambda:native-preparation`.
+See [runtime evidence](../../docs/product/delivery/evidence/d3-native-preparation-runtime-2026-10-06.md).
+
 `application-preparation-native.ts` supplies a default-off preparation port for one original
 native generation. It uses owner evidence and a canonical memory-only request digest, reserves
 one document, issues one dispatch grant and calls the private launcher once. Recovery only reads

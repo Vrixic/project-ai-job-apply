@@ -6,7 +6,7 @@ import { createNativeCoverLetterPreparationPort } from "./application-preparatio
 
 type Options = Parameters<typeof createNativeCoverLetterPreparationPort>[0];
 const id = (n: number) => `019a4000-0000-7000-8000-${String(n).padStart(12, "0")}`;
-function fixture(defaultOff = false) {
+function fixture(defaultOff = false, launchEnabled = true) {
   let enabled = true,
     now = new Date("2026-10-06T12:00:00Z"),
     reserved = false,
@@ -125,6 +125,7 @@ function fixture(defaultOff = false) {
     launcher: { launch },
     ...(defaultOff ? {} : { enabled: () => enabled }),
     clock: () => now,
+    launchEnabled: () => launchEnabled,
   };
   return {
     port: createNativeCoverLetterPreparationPort(options),
@@ -149,6 +150,15 @@ function fixture(defaultOff = false) {
   };
 }
 describe("native preparation original flow", () => {
+  it("fresh-launch shutdown keeps original recovery available without reservation or work", async () => {
+    const f = fixture(false, false);
+    expect(await f.port.generate(f.record)).toEqual({ kind: "in_progress" });
+    expect(f.reserveGeneration).not.toHaveBeenCalled();
+    expect(f.issue).not.toHaveBeenCalled();
+    f.publish();
+    expect(await f.port.recover(f.record)).toMatchObject({ temporaryMaterial: f.receipt.material });
+    expect(f.launch).not.toHaveBeenCalled();
+  });
   it("issues canonical memory request once and never retries a lost launch ACK", async () => {
     const f = fixture();
     const expected = prepareOriginalCoverLetterRequest(f.record, {

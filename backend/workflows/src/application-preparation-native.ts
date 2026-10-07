@@ -35,9 +35,11 @@ export function createNativeCoverLetterPreparationPort(options: {
   admission: Pick<PostgresNativeMaterialRegistry, "readPreviousEpoch">;
   launcher: Pick<ReturnType<typeof createNativeLaunchControlClient>, "launch">;
   enabled?: () => boolean;
+  launchEnabled?: () => boolean;
   clock?: () => Date;
 }): CoverLetterPreparationPort {
   const enabled = options.enabled ?? (() => false);
+  const launchEnabled = options.launchEnabled ?? enabled;
   const clock = options.clock ?? (() => new Date());
   const source = createOwnedCoverLetterEvidenceSource({
     ...options.owners,
@@ -116,10 +118,12 @@ export function createNativeCoverLetterPreparationPort(options: {
         const fixed = identity(record);
         const recovered = await recover(record);
         if (recovered) return { kind: "ready", letter: recovered };
+        if (!launchEnabled()) return { kind: "in_progress" };
         const fresh = () => {
           const now = clock().getTime();
           return (
             enabled() &&
+            launchEnabled() &&
             Number.isFinite(now) &&
             now >= fixed.approvedAt.getTime() &&
             now < fixed.expiresAt.getTime()

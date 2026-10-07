@@ -1,5 +1,12 @@
 # Data Flow and Classification
 
+2026-10-06 source-only native preparation activity: exact numeric private activity -> managed
+database secret -> separate owning pools/current packet protection -> original scalar native
+launcher. Fresh-launch shutdown preserves read-only original receipt recovery. This dedicated
+artifact excludes legacy objects, generated content, model, rendering and ECS capabilities.
+Managed caller IAM, key/role, target selection and routing/provider approval remain gates.
+[Evidence](../product/delivery/evidence/d3-native-preparation-runtime-2026-10-06.md).
+
 2026-10-06 source-only/default-off native preparation: claimed Applications preparation -> current
 owner evidence -> memory-only canonical request digest -> original Documents reservation/grant ->
 private native launcher. Recovery reads only exact current-admission scalar receipt -> original

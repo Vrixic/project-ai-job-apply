@@ -1,5 +1,12 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 adds a dedicated default-off native preparation activity and separate artifact.
+Exact numeric private targets/managed secret/current packet protection are pinned; fresh-launch
+shutdown preserves receipt recovery. All 77 focused and 25 real PostgreSQL cases pass, including
+fresh reservation/launch and lost-ACK recovery into the actual packet, one grant/task and no slots.
+[Evidence](evidence/d3-native-preparation-runtime-2026-10-06.md). Full clean/artifact verification
+and managed target selection/IAM/routing/client/provider/accountable gates remain; D1/D3 In progress.
+
 2026-10-06 D3-079 native preparation flow passes full verification at clean `e8b4775b`
 (38 typecheck/39 test/23 builds, unchanged lint and emitted native checks). The port-3000 owning
 Next.js parent conflict is resolved; all 101 session checks and the unchanged-source rerun pass.
