@@ -902,3 +902,10 @@ and execution/delivery alarms. Platform/development/staging validate; four mocke
 pass. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#optional-release-composition).
 Publication, managed access/expiry/alert acceptance and audit capture activation remain. No cloud
 action or phase completion; D1/D3 stay In progress and PC on.
+
+
+2026-10-07 D1-012 adds the isolated PrivilegedAuditRetention publisher family: one artifact/four
+objects, matching the Terraform key path and existing Profile builder. Local family/receipt
+regressions pass, including case variants and foreign/incomplete/duplicate rejection. Existing
+source/audit/bucket/KMS guards remain. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#guarded-publication-family).
+Clean-source build/readback follows. No publication or activation; D1/D3 remain In progress.

@@ -177,12 +177,12 @@ $configurationAssignments = @($ast.FindAll({
     param($node)
     $node -is [Management.Automation.Language.AssignmentStatementAst] -and
     $node.Left.Extent.Text -in @('$isCoreWorkflow', '$isIngestion', '$isPublicJob', '$isApplicationsRecovery',
-      '$isPrivateDocumentControls', '$isNativeResume', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
+      '$isPrivateDocumentControls', '$isNativeResume', '$isPrivilegedAuditRetention', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
       '$artifactKeyRoot', '$receiptKind', '$artifactLabel', '$expectedObjectCount')
   }, $false) | Sort-Object { $_.Extent.StartOffset })
-if ($configurationAssignments.Count -ne 13) { throw "Unexpected publication family-selection inventory." }
+if ($configurationAssignments.Count -ne 14) { throw "Unexpected publication family-selection inventory." }
 $resumeNames = @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda", "native-resume-task-observer-lambda")
-foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME")) {
+foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME", "PrivilegedAuditRetention", "privilegedauditretention", "PRIVILEGEDAUDITRETENTION")) {
   $ArtifactFamily = $family
   foreach ($assignment in $configurationAssignments) { Invoke-Expression $assignment.Extent.Text }
   if ($family -eq "PrivateDocumentControls") {
@@ -200,6 +200,14 @@ foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcon
         $operatorDirectoryName -cne "development-native-resume-artifacts" -or
         $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/workflows/dist/native-resume-lambda')) {
       throw "Native resume family escaped its exact dedicated boundary."
+    }
+  } elseif ($family -eq "PrivilegedAuditRetention") {
+    if (($artifactNames -join ',') -cne 'privileged-moderation-audit-retention-lambda' -or $expectedObjectCount -ne 4 -or
+        $receiptKind -cne 'development-privileged-audit-retention-lambda-publication' -or
+        $artifactKeyRoot -cne 'lambda/profile/audit-retention' -or
+        $operatorDirectoryName -cne 'development-privileged-audit-retention-artifacts' -or
+        $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/services/profile/dist/audit-retention-lambda')) {
+      throw "Audit retention family escaped its dedicated boundary."
     }
   } elseif (($artifactNames -join ',') -cne 'document-processor-lambda,document-parser-lambda' -or
       $expectedObjectCount -ne 8 -or $receiptKind -cne 'development-document-lambda-publication') {
@@ -233,3 +241,21 @@ foreach ($invalid in @(
   if (-not $refused) { throw "Mixed, duplicate or incomplete native resume receipt was accepted." }
 }
 Write-Host "Native resume family and twenty-four-object receipt guards passed; no cloud calls."
+
+$auditNames = @('privileged-moderation-audit-retention-lambda')
+$auditMatrix = @('zip', 'cdx.json', 'manifest.json', 'sha256') | ForEach-Object {
+  [pscustomobject]@{ artifactName = $auditNames[0]; artifactSha256 = $digest; suffix = $_ }
+}
+if (-not (Assert-CanonicalReceiptMatrix -Artifacts $auditMatrix -ExpectedArtifactNames $auditNames)) { throw 'Audit receipt refused.' }
+foreach ($invalid in @(
+  [pscustomobject]@{ Entries = @($auditMatrix | Select-Object -First 3) },
+  [pscustomobject]@{ Entries = @($auditMatrix | Select-Object -First 3) + @($auditMatrix[0]) },
+  [pscustomobject]@{ Entries = @($auditMatrix) + @($resumeMatrix) },
+  [pscustomobject]@{ Entries = $canonicalArtifacts }
+)) {
+  $refused = $false
+  try { $null = Assert-CanonicalReceiptMatrix -Artifacts $invalid.Entries -ExpectedArtifactNames $auditNames }
+  catch { $refused = $true }
+  if (-not $refused) { throw 'Mixed, incomplete or duplicate audit receipt accepted.' }
+}
+Write-Host 'Audit retention family and four-object receipt guards passed; no cloud calls.'

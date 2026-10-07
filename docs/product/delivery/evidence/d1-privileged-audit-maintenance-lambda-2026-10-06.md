@@ -110,3 +110,17 @@ The module release guide records retry/drain behavior and remaining publication,
 expiry and alarm acceptance. Existing audit capture remains separately gated. Application expiry
 facade restrictions are not a new database-grant boundary. IAM effect, provider integration,
 real-data permission and accountable phase acceptance remain open.
+
+
+## Guarded publication family
+
+The maintained document/workflow publisher now selects PrivilegedAuditRetention as a separate
+one-artifact/four-object family, matching the existing Profile builder and Terraform key prefix.
+Output and receipt roots are separate; existing families remain unchanged. Publication selects
+Profile tests and its audit-retention build twice while retaining source, dependency audit,
+account/state, bucket/version/KMS and independent exact-version readback gates.
+
+Local pure-function tests pass for case-insensitive family routing, the exact four-object receipt,
+foreign/mixed/incomplete/duplicate rejection, and the existing family regression suite. Log:
+`.tmp/d1-audit-publication-guards.log`. No publisher cloud entrypoint was executed. Actual
+clean-source build and local artifact readback follow; managed publication remains unperformed.

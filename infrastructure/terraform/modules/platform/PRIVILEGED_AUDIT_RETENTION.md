@@ -5,7 +5,10 @@ The platform's optional `privileged_audit_retention_release` deploys the existin
 same nullable input; no tfvars enable it. The source SHA, ZIP hash, exact versioned S3 key and
 numeric Secrets extension layer must come from a reviewed artifact publication. The artifact
 belongs in the existing environment artifact bucket under `lambda/profile/audit-retention/`.
-The existing local builder is implemented; guarded publication remains to be connected.
+The existing guarded publisher selects this single-artifact/four-object family with
+`-ArtifactFamily PrivilegedAuditRetention`. It runs Profile tests, the dependency audit, two
+deterministic builds and existing account/state/bucket/KMS/versioning/source guards. Publication
+is a separately authorized action; this source change does not publish anything.
 
 The private Node.js 24 function uses the platform's database secret, key, private subnets,
 application security group and log group. Its bounded role has exact secret/key access, VPC
