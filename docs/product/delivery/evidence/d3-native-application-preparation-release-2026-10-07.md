@@ -253,3 +253,29 @@ Native launcher/owner/task-event Lambdas, endpoint/secret policies, provider egr
 composition plus managed acceptance remain. Original roles/secrets/keys must outlive their work;
 a mismatched task revision is detected after registration and does not undo it. No AWS action,
 publication, deployment or activation; Docker/WSL stopped, PC on, CI/CD deferred. D1/D3 In progress.
+
+## Native launcher, owner and task-event composition
+
+`native-material-control` now composes the three existing handlers as separate numeric Lambda
+versions, exposed through optional development/staging release maps. Launcher/owner receive
+private SQL and no provider secret. Only launcher may RunTask on the original definition/cluster
+and PassRole its original task/execution roles; StopTask and Lambda invocation are denied. Owner
+is denied ECS, PassRole and Lambda invocation. Task-event has no VPC/database secret or ECS
+permission and targets only the numeric original launcher through its recover-only code path.
+All actors deny S3. New launch requires owner/control/recovery; recovery remains independent
+of new-launch activation. Default empty maps and false switches create no active journey.
+
+Six Terraform mock cases pass, covering absent/default configuration, bounded role/environment
+bindings, recovery with new tasks disabled, activation prerequisites, foreign-account refusal
+and missing-release refusal. Module and both environment configurations validate with Terraform
+1.16.2/AWS 6.58.0. The actual generated launch JSON passes compiled
+`nativeTaskLaunchConfiguration`, verifying its field/network/image/task contract. Formatting,
+serverless infrastructure validation and diff whitespace checks pass. Logs/projection are
+`.tmp/d3-native-material-control-tests.jsonl` and
+`.tmp/d3-native-material-launch-configuration.json` (synthetic metadata).
+
+No publication, deployment, invocation or activation occurred. The exact launcher bootstrap
+boundary/creation authority, guarded three-artifact publisher family, original platform endpoint
+permissions, EventBridge delivery/failure retention/alarms and image/read-route composition still
+need integration before managed acceptance. Existing TypeScript runtimes are unchanged. D1/D3
+remain In progress; Docker/WSL stopped, PC on, CI/CD deferred.

@@ -4938,3 +4938,10 @@ Eight mock scenarios and actual launcher-validator compatibility pass; both envi
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-cover-letter-task-composition).
 No cloud activation. Launcher/owner/event Lambdas, network/secret policies, route and managed
 acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 native launcher/owner/task-event Lambdas now have optional development/staging
+composition with separated roles, original task/role/version bindings and independent recovery.
+Six mock scenarios and runtime configuration validation pass; both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-launcher-owner-and-task-event-composition).
+Bootstrap/publisher/platform event/network integration and managed acceptance remain. No cloud
+action; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
