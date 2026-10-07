@@ -229,3 +229,14 @@ Local synthetic transport, actual owning PostgreSQL and Linux process evidence l
 image/bootstrap/IAM/routing/managed/client/provider/accountable acceptance open. This proposal
 remains Proposed; no deployment/activation or new review acceptance is implied.
 [Evidence](../product/delivery/evidence/d3-native-owner-rpc-2026-10-06.md).
+
+## Original route checkpoint lifecycle - 2026-10-07
+
+A private source-only durable component now checkpoints the original scalar DNS intent and
+connects one-attempt creation, propagation, owner-checked attachment and exact deletion. It uses
+the existing durable checkpoint store, with at-most-once-per-retry plus no retries for DNS writes.
+It requires exactly one original allocation-bound named execution; ambiguous work remains
+unresolved. Local SDK/adapter tests do not prove managed interruption, terminal reconciliation,
+TLS/ingress or client acceptance. Existing 900-second deployment configuration is insufficient
+for the full route lifetime and must be extended during integration. This proposal remains
+Proposed; [evidence](../product/delivery/evidence/d3-native-resume-route-lifecycle-2026-10-07.md).

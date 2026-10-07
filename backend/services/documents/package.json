@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-resume-route-policy": {
+      "types": "./dist/src/native-resume-route-policy.d.ts",
+      "default": "./dist/src/native-resume-route-policy.js"
+    },
     "./native-resume-dns-route": {
       "types": "./dist/src/native-resume-dns-route.d.ts",
       "default": "./dist/src/native-resume-dns-route.js"

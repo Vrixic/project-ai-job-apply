@@ -290,3 +290,11 @@ transport and managed bootstrap remain gates. See [evidence](../../docs/product/
 `pnpm --filter @ai-job-apply/workflows build:lambda:native-owner-rpc` builds the source-bound
 private receiver artifact from clean committed source. Its default-off bundled refusal check
 performs no secret, SQL or cloud access. This does not publish, deploy or enable the receiver.
+
+`native-resume-route-lifecycle.ts` adds a default-off private durable component for original
+route capture, one DNS creation attempt, propagated readiness, owner attachment and exact cleanup.
+It uses the existing SDK's checkpoint-before-execution semantics plus disabled retries for both
+DNS writes; all clock/I/O decisions are checkpointed. Unknown acknowledgements stay unresolved.
+It requires one owning allocation-bound execution and supplied private owner ports. Preparation
+Lambda composition, longer execution timeout and terminal reconciliation are still required; see
+[local lifecycle evidence](../../docs/product/delivery/evidence/d3-native-resume-route-lifecycle-2026-10-07.md).

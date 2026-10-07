@@ -4798,3 +4798,11 @@ frozen installation pass. [Evidence](evidence/d3-native-resume-dns-transport-202
 Owning durable intent/write recovery, preparation/retirement wiring, hostname/TLS/ingress and
 managed acceptance remain. Prior dependency audit findings remain open. D1/D3 In progress, no
 cloud/frontend/CI/CD action, Docker/WSL not started and PC on.
+
+2026-10-07 D3-064/D3-079 implements the private checkpointed route lifecycle: original intent,
+one-attempt DNS creation, propagation, owner attachment and exact deletion. Existing durable SDK
+checkpoints avoid another SQL migration. Documents/Workflows build, 22 focused SDK tests and
+compiled dependency/default-off checks pass with simulated owner/AWS ports.
+[Evidence](evidence/d3-native-resume-route-lifecycle-2026-10-07.md). Private runtime integration,
+extended execution timeout, terminal reconciliation and managed/client acceptance remain.
+D1/D3 In progress, prior dependency findings open; no cloud/frontend/CI/CD changes, PC on.
