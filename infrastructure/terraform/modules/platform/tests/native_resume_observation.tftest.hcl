@@ -87,7 +87,7 @@ run "original_failures_are_retained_and_alerted" {
     error_message = "Queue policy must bind the original rule and require TLS."
   }
   assert {
-    condition     = length(aws_cloudwatch_metric_alarm.native_resume_observation) == 3 && alltrue([for alarm in aws_cloudwatch_metric_alarm.native_resume_observation : alarm.alarm_actions == toset([aws_sns_topic.operational_alerts.arn])])
+    condition     = length(aws_cloudwatch_metric_alarm.native_resume_observation) == 4 && alltrue([for alarm in aws_cloudwatch_metric_alarm.native_resume_observation : alarm.alarm_actions == toset([aws_sns_topic.operational_alerts.arn])])
     error_message = "Queued failures and both failed-DLQ delivery paths need alerts."
   }
   assert {

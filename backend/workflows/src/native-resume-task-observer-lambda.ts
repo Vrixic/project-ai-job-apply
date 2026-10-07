@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createApplicationsDatabase } from "@ai-job-apply/applications-service";
 import { nativeLaunchControlVersion } from "@ai-job-apply/documents-service/native-launch-control";
 import { PostgresNativeResumeGenerationStore } from "@ai-job-apply/documents-service/native-resume-generation-store";
@@ -87,11 +88,44 @@ export function createNativeResumeTaskObserverRuntime(
     configuration: config.task,
     enabled,
   });
-  return Object.freeze({ observe: observer.observe, close: () => database.end() });
+  const hash = createHash("sha256")
+    .update(JSON.stringify({ protocol: "native-resume-launch.v1", ...config.task }))
+    .digest("hex");
+  let sweeping = false;
+  return Object.freeze({
+    observe: observer.observe,
+    close: () => database.end(),
+    async sweep() {
+      if (sweeping || !enabled()) throw unavailable();
+      sweeping = true;
+      try {
+        const scopes = await registry.claimObservations(hash);
+        let retired = 0;
+        for (const scope of scopes) {
+          if (!enabled()) throw unavailable();
+          try {
+            await observer.observe(scope);
+            retired++;
+          } catch {
+            /* Unknown remains bound for retry. */
+          }
+        }
+        if (!enabled()) throw unavailable();
+        return Object.freeze({
+          schemaVersion: 1 as const,
+          inspected: scopes.length,
+          retired,
+          unresolved: scopes.length - retired,
+        });
+      } finally {
+        sweeping = false;
+      }
+    },
+  });
 }
 
 /** Private numeric version only. Caller authentication is reviewed IAM, not event fields.
- * No event/HTTP route, task stop, generation, packet attachment or external receipt ingestion. */
+ * ECS hints and scalar scheduled sweeps only; no HTTP, task stop, generation or packet attachment. */
 export function createNativeResumeTaskObserverLambda(
   options: {
     environment?: () => Environment;
@@ -122,9 +156,24 @@ export function createNativeResumeTaskObserverLambda(
         raw !== null &&
         typeof raw === "object" &&
         Object.getOwnPropertyDescriptor(raw, "source")?.value === "aws.ecs";
-      const hint = isEvent
-        ? nativeResumeStoppedTaskEvent(raw, config.task)
-        : { scope: request(raw), taskArn: undefined };
+      const sweep =
+        raw !== null &&
+        typeof raw === "object" &&
+        Object.getPrototypeOf(raw) === Object.prototype &&
+        Reflect.ownKeys(raw).length === 2 &&
+        ["schemaVersion", "action"].every((key) => {
+          const field = Object.getOwnPropertyDescriptor(raw, key);
+          return (
+            field?.enumerable &&
+            "value" in field &&
+            field.value === (key === "schemaVersion" ? 1 : "sweep")
+          );
+        });
+      const hint = sweep
+        ? undefined
+        : isEvent
+          ? nativeResumeStoppedTaskEvent(raw, config.task)
+          : { scope: request(raw), taskArn: undefined };
       if (!startup) {
         pinned = key;
         startup = (async () => {
@@ -149,7 +198,7 @@ export function createNativeResumeTaskObserverLambda(
         throw unavailable();
       }
       if (!enabled()) throw unavailable();
-      const result = await runtime.observe(hint.scope, hint.taskArn);
+      const result = hint ? await runtime.observe(hint.scope, hint.taskArn) : await runtime.sweep();
       if (!enabled()) throw unavailable();
       return result;
     } catch {

@@ -87,10 +87,11 @@ variable "native_resume_preparation_releases" {
       subnet_ids               = list(string)
       security_group_ids       = list(string)
     })
-    enabled                    = optional(bool, false)
-    new_launch_enabled         = optional(bool, false)
-    observation_events_enabled = optional(bool, false)
-    schedule_enabled           = optional(bool, false)
+    enabled                      = optional(bool, false)
+    new_launch_enabled           = optional(bool, false)
+    observation_events_enabled   = optional(bool, false)
+    observation_schedule_enabled = optional(bool, false)
+    schedule_enabled             = optional(bool, false)
   }))
   default  = {}
   nullable = false
@@ -101,16 +102,17 @@ variable "native_resume_preparation_releases" {
 
 }
 module "native_resume_preparation" {
-  depends_on                 = [module.platform]
-  source                     = "../../modules/native-resume-preparation"
-  for_each                   = var.native_resume_preparation_releases
-  account_id                 = module.platform.account_id
-  environment                = "staging"
-  release                    = each.value.release
-  enabled                    = each.value.enabled
-  new_launch_enabled         = each.value.new_launch_enabled
-  observation_events_enabled = each.value.observation_events_enabled
-  schedule_enabled           = each.value.schedule_enabled
+  depends_on                   = [module.platform]
+  source                       = "../../modules/native-resume-preparation"
+  for_each                     = var.native_resume_preparation_releases
+  account_id                   = module.platform.account_id
+  environment                  = "staging"
+  release                      = each.value.release
+  enabled                      = each.value.enabled
+  new_launch_enabled           = each.value.new_launch_enabled
+  observation_events_enabled   = each.value.observation_events_enabled
+  observation_schedule_enabled = each.value.observation_schedule_enabled
+  schedule_enabled             = each.value.schedule_enabled
 }
 
 output "native_resume_release_bindings" {

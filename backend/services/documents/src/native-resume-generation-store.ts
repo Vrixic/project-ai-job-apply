@@ -524,6 +524,40 @@ export class PostgresNativeResumeGenerationStore {
     });
   }
 
+  /** Rotate a bounded original-configuration batch before remote I/O. A lost invocation
+   * only delays another attempt; these timestamps never prove task termination. */
+  async claimObservations(
+    configurationSha256: string,
+    limit = 2,
+  ): Promise<NativeResumeGenerationScope[]> {
+    return this.guarded(async () => {
+      if (!hash.test(configurationSha256) || !Number.isSafeInteger(limit) || limit < 1 || limit > 2)
+        throw unavailable();
+      return this.sql.begin(async (tx) => {
+        await tx`SET LOCAL lock_timeout='2s'`;
+        await tx`SET LOCAL statement_timeout='5s'`;
+        const rows = await tx<Row[]>`WITH candidates AS (
+          SELECT id FROM documents.native_resume_generations
+          WHERE state='bound' AND configuration_sha256=${configurationSha256}
+            AND (observation_attempted_at IS NULL OR observation_attempted_at <= clock_timestamp() - interval '60 seconds')
+          ORDER BY observation_attempted_at NULLS FIRST, id
+          LIMIT ${limit} FOR UPDATE SKIP LOCKED
+        ) UPDATE documents.native_resume_generations g SET observation_attempted_at=clock_timestamp()
+          FROM candidates c WHERE g.id=c.id RETURNING g.*`;
+        this.check();
+        return rows.map((row) =>
+          this.scope({
+            ownerUserId: row.user_id,
+            applicationId: row.application_id,
+            generationId: row.id,
+            allocationId: row.allocation_id,
+            epochId: row.epoch_id,
+          }),
+        );
+      });
+    });
+  }
+
   /** Surrounding authenticated task RPC pins these exact scalars before calling the owner port.
    * Current packet authorization remains the transport's separate before/after read boundary. */
   async checkTaskAdmission(

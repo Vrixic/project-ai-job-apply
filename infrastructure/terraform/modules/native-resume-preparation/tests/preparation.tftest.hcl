@@ -175,3 +175,20 @@ run "observation_requires_runtime" {
   variables { observation_events_enabled = true }
   expect_failures = [var.observation_events_enabled]
 }
+
+run "scheduled_observation_without_launch" {
+  command = plan
+  variables {
+    enabled                      = true
+    observation_schedule_enabled = true
+  }
+  assert {
+    condition     = aws_cloudwatch_event_rule.observer_sweep[0].state == "ENABLED" && aws_cloudwatch_event_rule.dispatch[0].state == "DISABLED" && aws_cloudwatch_event_target.observer_sweep[0].input == jsonencode({ schemaVersion = 1, action = "sweep" }) && aws_cloudwatch_event_target.observer_sweep[0].retry_policy[0].maximum_retry_attempts == 0
+    error_message = "Independent scalar sweep must rotate its own bounded retry batch."
+  }
+}
+run "scheduled_observation_requires_runtime" {
+  command = plan
+  variables { observation_schedule_enabled = true }
+  expect_failures = [var.observation_schedule_enabled]
+}

@@ -40,7 +40,12 @@ const artifact = await buildLambdaArtifact({
         "arn:aws:lambda:us-east-2:123456789012:function:private-resume-observer:9",
     };
     try {
-      for (const request of [input, { ...input, taskArn: "forbidden" }, { ...input, receipt: {} }])
+      for (const request of [
+        input,
+        { schemaVersion: 1, action: "sweep" },
+        { ...input, taskArn: "forbidden" },
+        { ...input, receipt: {} },
+      ])
         await assert.rejects(
           bundle.handler(request, context),
           /NativeResumeTaskObserverUnavailable/u,

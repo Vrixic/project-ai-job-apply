@@ -146,6 +146,10 @@
         {
           "version": "0014_native_resume_generations",
           "checksum": "436e78ba6a12fa93941a4200586196cedd48db11f38b8f36f08b96846c9e4d40"
+        },
+        {
+          "version": "0015_native_resume_observation",
+          "checksum": "d52dfc757baac272e37f5b162765cea06573152e20f024aaa8aa99e1eaf4a419"
         }
       ],
       "relations": [

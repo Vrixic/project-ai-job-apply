@@ -1691,6 +1691,111 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       }),
     ).rejects.toThrow();
   });
+  it.each([true, false])("sweeps original tasks through real SQL (stopped=%s)", async (stopped) => {
+    const workflow = await import(
+      new URL("../../../workflows/dist/src/native-resume-task-observer-lambda.js", import.meta.url)
+        .href
+    );
+    const configuration = nativeTaskLaunchConfiguration({
+      ...input.deployment,
+      image: `123456789012.dkr.ecr.us-east-2.amazonaws.com/synthetic-resume@sha256:${createHash("sha256").update(input.identity.generationId).digest("hex")}`,
+      executionRoleArn: "arn:aws:iam::123456789012:role/synthetic-execution",
+      taskRoleArn: "arn:aws:iam::123456789012:role/synthetic-resume",
+      cpu: "256",
+      memory: "512",
+      subnets: ["subnet-12345678901234567"],
+      securityGroups: ["sg-12345678901234567"],
+      assignPublicIp: "ENABLED",
+    });
+    const hash = createHash("sha256")
+      .update(JSON.stringify({ protocol: "native-resume-launch.v1", ...configuration }))
+      .digest("hex");
+    const s = store(),
+      r = await s.reserve(input);
+    await s.claimLaunch(scope(r), hash);
+    await s.bindTask(scope(r), hash, task);
+    await s.seal(input.identity.ownerUserId, input.identity.applicationId);
+    const send = vi.spyOn(ECSClient.prototype, "send").mockImplementation(async (command) => {
+      expect(command).toBeInstanceOf(DescribeTasksCommand);
+      return {
+        tasks: [
+          {
+            taskArn: task,
+            clusterArn: configuration.clusterArn,
+            taskDefinitionArn: configuration.taskDefinitionArn,
+            startedBy: r.allocationId,
+            lastStatus: stopped ? "STOPPED" : "RUNNING",
+            desiredStatus: stopped ? "STOPPED" : "RUNNING",
+            stoppedAt: new Date(),
+            containers: [
+              {
+                name: configuration.containerName,
+                taskArn: task,
+                lastStatus: stopped ? "STOPPED" : "RUNNING",
+              },
+            ],
+          },
+        ],
+      };
+    });
+    let runtime: { close(): Promise<void> } | undefined;
+    const target = "arn:aws:lambda:us-east-2:123456789012:function:resume-observer:1";
+    const handler = workflow.createNativeResumeTaskObserverLambda({
+      environment: () => ({
+        NATIVE_RESUME_TASK_OBSERVER_ENABLED: "true",
+        AWS_REGION: "us-east-2",
+        PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+        AWS_SESSION_TOKEN: "synthetic",
+        AWS_LAMBDA_FUNCTION_NAME: "resume-observer",
+        AWS_LAMBDA_FUNCTION_VERSION: "1",
+        DATABASE_SECRET_ID:
+          "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-Abc123",
+        NATIVE_RESUME_OBSERVER_CONFIGURATION_JSON: JSON.stringify(configuration),
+      }),
+      resolveDatabaseUrl: async () => url,
+      createRuntime: (...args: unknown[]) => {
+        const actual = workflow.createNativeResumeTaskObserverRuntime(...args);
+        runtime = actual;
+        return actual;
+      },
+    });
+    try {
+      expect(
+        await handler({ schemaVersion: 1, action: "sweep" }, { invokedFunctionArn: target }),
+      ).toEqual({
+        schemaVersion: 1,
+        inspected: 1,
+        retired: stopped ? 1 : 0,
+        unresolved: stopped ? 0 : 1,
+      });
+      expect((await s.readLaunch(scope(r), hash)).state).toBe(stopped ? "retired" : "bound");
+      expect(
+        await handler({ schemaVersion: 1, action: "sweep" }, { invokedFunctionArn: target }),
+      ).toEqual({ schemaVersion: 1, inspected: 0, retired: 0, unresolved: 0 });
+      expect(send).toHaveBeenCalledTimes(stopped ? 1 : 2);
+    } finally {
+      send.mockRestore();
+      await runtime?.close();
+    }
+  });
+  it("leases original observations once across concurrent sweeps without implying retirement", async () => {
+    const s = store(),
+      r = await s.reserve(input),
+      hash = createHash("sha256").update(input.identity.generationId).digest("hex");
+    await s.claimLaunch(scope(r), hash);
+    await s.bindTask(scope(r), hash, task);
+    const batches = await Promise.all([s.claimObservations(hash), store().claimObservations(hash)]);
+    expect(batches.flat()).toEqual([scope(r)]);
+    expect(await s.claimObservations(hash)).toEqual([]);
+    expect(await s.claimObservations("8".repeat(64))).toEqual([]);
+    expect((await s.readLaunch(scope(r), hash)).state).toBe("bound");
+    await expect(
+      sql`UPDATE documents.native_resume_generations SET observation_attempted_at=NULL WHERE id=${input.identity.generationId}`,
+    ).rejects.toThrow();
+    await expect(
+      sql`UPDATE documents.native_resume_generations SET observation_attempted_at=clock_timestamp()+interval '1 hour' WHERE id=${input.identity.generationId}`,
+    ).rejects.toThrow();
+  });
   it.each([false, true])(
     "observes original retirement through the real private Lambda and SQL (lost ACK=%s)",
     async (loseAck) => {

@@ -85,3 +85,24 @@ fresh ECS evidence; a queue message cannot substitute for a terminal receipt. Re
 only after successful handling or an accountable resolution. Investigate before the fourteen-day
 retention expires; expiration does not resolve the SQL allocation. There is no automatic redrive
 consumer or new operator permission grant in this change.
+
+
+## Scheduled recovery of missed task events
+
+After Documents migration `0015_native_resume_observation` and publication of the matching observer,
+`observation_schedule_enabled` independently enables a one-minute scalar `sweep` invocation at the
+original numeric observer version. It defaults false and requires `enabled`; new launches can stay
+disabled. The observer now has a 60-second timeout. Each invocation selects at most two bound
+allocations for its exact launch configuration, rotating oldest attempts with a 60-second retry
+delay. Selection commits before remote observation; crashes leave tasks eligible again later.
+The existing trusted observer still requires fresh exact ECS STOPPED evidence before retirement.
+Running, missing and failed ECS observations stay unresolved. No RunTask, StopTask or new IAM
+capability is added. A pending lost-launch-ACK row without a bound task remains outside this sweep.
+
+Scheduled event delivery has no retries: the next minute selects work again. Its FailedInvocations
+alarm uses the existing operational topic; Lambda execution failures retain the existing DLQ.
+Stopped-task event delivery remains the primary path. Monitor backlog and review batch/schedule
+capacity before increasing traffic; two attempts/minute is this bounded fallback's nominal capacity.
+Retain the original observer/configuration until its bound rows drain. Disable the schedule to
+stop new sweeps; disabling new launches does not stop cleanup observation. This is source/local
+verification, not a deployed migration, active schedule or verified live ECS observation.

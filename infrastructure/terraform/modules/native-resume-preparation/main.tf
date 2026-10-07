@@ -344,7 +344,7 @@ resource "aws_lambda_function" "observer" {
   architectures                  = ["x86_64"]
   handler                        = "index.handler"
   memory_size                    = 512
-  timeout                        = 30
+  timeout                        = 60
   reserved_concurrent_executions = 2
   publish                        = true
   s3_bucket                      = var.release.artifact_bucket
@@ -402,3 +402,40 @@ resource "aws_lambda_permission" "observer" {
 }
 output "observer_function_arn" { value = local.deployed ? aws_lambda_function.observer[0].qualified_arn : null }
 output "observer_rule_arn" { value = local.deployed ? aws_cloudwatch_event_rule.observer[0].arn : null }
+
+variable "observation_schedule_enabled" {
+  type     = bool
+  default  = false
+  nullable = false
+  validation {
+    condition     = !var.observation_schedule_enabled || var.enabled
+    error_message = "Scheduled observation requires its private runtime gate."
+  }
+}
+resource "aws_cloudwatch_event_rule" "observer_sweep" {
+  count               = local.deployed ? 1 : 0
+  name                = "${local.names.observer}-sweep"
+  schedule_expression = "rate(1 minute)"
+  state               = var.observation_schedule_enabled ? "ENABLED" : "DISABLED"
+}
+resource "aws_cloudwatch_event_target" "observer_sweep" {
+  count     = local.deployed ? 1 : 0
+  rule      = aws_cloudwatch_event_rule.observer_sweep[0].name
+  target_id = "original-resume-observation-sweep"
+  arn       = aws_lambda_function.observer[0].qualified_arn
+  input     = jsonencode({ schemaVersion = 1, action = "sweep" })
+  retry_policy {
+    maximum_event_age_in_seconds = 60
+    maximum_retry_attempts       = 0
+  }
+}
+resource "aws_lambda_permission" "observer_sweep" {
+  count          = local.deployed ? 1 : 0
+  statement_id   = "ExactResumeObservationSweep"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.observer[0].function_name
+  qualifier      = aws_lambda_function.observer[0].version
+  principal      = "events.amazonaws.com"
+  source_arn     = aws_cloudwatch_event_rule.observer_sweep[0].arn
+  source_account = var.account_id
+}

@@ -16,6 +16,7 @@ locals {
   native_resume_observer_alarms = merge({}, [for revision, release in var.native_resume_observation_releases : {
     "${revision}-queued"    = { namespace = "AWS/SQS", metric = "ApproximateNumberOfMessagesVisible", statistic = "Maximum", dimensions = { QueueName = element(reverse(split(":", release.queue_arn)), 0) } }
     "${revision}-delivery"  = { namespace = "AWS/Events", metric = "InvocationsFailedToBeSentToDlq", statistic = "Sum", dimensions = { RuleName = "${var.name}-${var.environment}-resume-observer-r${revision}" } }
+    "${revision}-sweep"     = { namespace = "AWS/Events", metric = "FailedInvocations", statistic = "Sum", dimensions = { RuleName = "${var.name}-${var.environment}-resume-observer-r${revision}-sweep" } }
     "${revision}-execution" = { namespace = "AWS/Lambda", metric = "DeadLetterErrors", statistic = "Sum", dimensions = { FunctionName = "${var.name}-${var.environment}-resume-observer-r${revision}" } }
   }]...)
 }

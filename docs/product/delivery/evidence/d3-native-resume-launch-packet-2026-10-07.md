@@ -1,4 +1,4 @@
-# D3 original resume launch and packet attachment — 2026-10-07
+# D3 original resume launch and packet attachment â€” 2026-10-07
 
 D3-064/D3-079 and D1 remain In progress. This backend batch is local
 implementation on `feat/d3-native-resume-generation-ledger`, based on `96a50e81`.
@@ -6,9 +6,9 @@ No deployment, managed activation, main merge, new PR or hosted CI/CD work occur
 
 ## Implemented path
 
-Private scalar preparation client → numeric private Lambda → Documents original reservation
-and launch claim → dedicated resume ECS launch → scalar verified-ready reference → Applications
-packet attachment under the same SQL transaction → current-packet resume location endpoint.
+Private scalar preparation client â†’ numeric private Lambda â†’ Documents original reservation
+and launch claim â†’ dedicated resume ECS launch â†’ scalar verified-ready reference â†’ Applications
+packet attachment under the same SQL transaction â†’ current-packet resume location endpoint.
 The ready producer is the native resume runtime from the preceding batch. This batch's SQL
 fixtures simulate ECS responses and the ready receipt; they do not run that container in AWS.
 
@@ -712,3 +712,36 @@ assertion compared different Terraform collection types; explicit set normalizat
 assertion. Logs: `.tmp/d3-native-durable-key-platform.log` and
 `.tmp/d3-native-durable-key-preparation.log`. These checks inspect planned policy composition,
 not live KMS access. No deployment, publication or runtime activation occurred.
+
+
+## Bounded recovery of missed stopped-task events
+
+A missed event previously needed manual original-scope observation. The existing private observer
+now accepts strict `{schemaVersion:1,action:"sweep"}` input and asks Documents for at most two bound
+allocations belonging to its immutable launch-configuration hash. A short SQL transaction uses
+SKIP LOCKED and records attempt time before AWS I/O. Attempts rotate oldest-first and become eligible
+again after 60 seconds; concurrent sweeps cannot claim the same current attempt. Only existing
+fresh exact-task ECS observation records retirement. Unknown/running/error results remain bound;
+the sweep returns counts only. Candidate seals do not suppress retirement observation.
+
+Documents migration 0015 adds the operational timestamp/index and preserves original metadata and
+terminal guards. The restore inventory advances to 73 migrations/93 relations across 12 schemas and
+seven owners; both strict restore validators and synthetic fixture hashes were synchronized.
+Original numeric-version one-minute scheduling is independently default-off in both environments.
+No launch/stop privilege is added; new launches may remain disabled. Timeout is 60 seconds, event
+retry is zero, and failed schedule delivery alerts through the existing topic. Pending allocations
+without a known bound task still require original launch recovery. Live routing, AWS observation,
+backlog capacity, deployment and phase acceptance remain open; no cloud mutation occurred.
+
+Local validation on 2026-10-07:
+- Documents and Workflows compile. 54 real PostgreSQL 16.6 ledger cases pass, including compiled
+  private observer recovery with synthetic ECS responses, running-task refusal to retire,
+  lease concurrency/cooldown and timestamp guard checks. Migration runners replay twice. The first
+  sweep fixture shared another case's configuration; isolating that fixture corrected the test.
+- 226 focused observer/restore-contract cases and 50 migration/restore package cases pass.
+- Preparation 12, platform observation two, and each environment three mocked Terraform cases
+  pass (20 total); both roots validate. No real Terraform plan or apply was performed.
+- Staging restore verifier guards, 697 synthetic deletion-replay checks, and release guards pass.
+Logs are `.tmp/d3-observer-sweep-{build,sql,unit,restore,terraform,platform,development,staging,
+restore-ps,replay-ps,release-ps}.log`. No complete new frozen-source verifier or live acceptance is
+claimed. The temporary SQL fixture was removed; Docker/WSL stopped and PC stays on.

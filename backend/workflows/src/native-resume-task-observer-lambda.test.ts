@@ -47,7 +47,16 @@ function setup() {
     allocationId: scope.allocationId,
     taskArn: "arn:aws:ecs:us-east-2:123456789012:task/resume/12345678901234567890123456789012",
   }));
-  const runtime = vi.fn(() => ({ observe, close: async () => undefined }));
+  const runtime = vi.fn(() => ({
+    observe,
+    sweep: vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      inspected: 0,
+      retired: 0,
+      unresolved: 0,
+    })),
+    close: async () => undefined,
+  }));
   const handler = createNativeResumeTaskObserverLambda({
     environment: () => env,
     resolveDatabaseUrl: resolve,
@@ -209,3 +218,17 @@ it.each(["account", "task", "running", "hash", "duplicate", "getter"])(
     expect(x.observe).not.toHaveBeenCalled();
   },
 );
+
+it("accepts a scalar sweep and rejects caller-selected batches before secret access", async () => {
+  const x = setup();
+  for (const raw of [
+    { schemaVersion: 1, action: "sweep", scope },
+    { schemaVersion: 1, action: "sweep", limit: 999 },
+  ])
+    await expect(x.handler(raw, { invokedFunctionArn: target })).rejects.toThrow();
+  expect(x.resolve).not.toHaveBeenCalled();
+  await expect(
+    x.handler({ schemaVersion: 1, action: "sweep" }, { invokedFunctionArn: target }),
+  ).resolves.toEqual({ schemaVersion: 1, inspected: 0, retired: 0, unresolved: 0 });
+  expect(x.observe).not.toHaveBeenCalled();
+});

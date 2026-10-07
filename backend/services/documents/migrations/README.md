@@ -61,3 +61,14 @@ packet/launcher/stop and managed acceptance. Rollback code must keep new invento
 No backfill, generated content, public route or live activation. The exact restore boundary becomes
 71 migrations/93 relations; old-source receipts remain historical. See
 [generation ledger evidence](../../../../docs/product/delivery/evidence/d3-native-resume-generation-ledger-2026-10-07.md).
+
+
+`0015_native_resume_observation` adds a nullable operational attempt timestamp and an original
+configuration/bound-row index for scheduled task observation. Existing rows start eligible;
+no content or terminal evidence is backfilled. The original guard permits only monotonic,
+nonfuture attempt timestamps while bound and preserves identity, transition, sealed admission,
+retirement and deletion protections. Apply before the sweep-capable observer; old writers remain
+compatible. Rollback disables the schedule and retains the additive column/index. The timestamp
+follows its original row's deletion lifecycle and grants no purge or user-content read authority.
+Restore inventory is now 73 migrations, 93 relations, 12 schemas and seven owners. Exact manifest
+hashes and synthetic deletion-replay fixtures move together; old receipts retain their old source.

@@ -4746,3 +4746,13 @@ unneeded execution-role GenerateDataKey grant; existing exact-key Decrypt remain
 mocked Terraform cases pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-durable-checkpoint-key).
 No deployment or live encryption claim; D1/D3 remain In progress. Continue connected implementation,
 flow checks, fixes and focused regressions; CI/CD deferred and PC stays on.
+
+
+2026-10-07 D3-064/D3-079 adds bounded scheduled recovery of missed stopped-task events through
+original observer -> Documents claim -> exact ECS observation -> retirement. Two attempts per
+minute rotate with persisted cooldown; running/unknown tasks remain bound. Documents migration
+0015 advances restore inventory to 73 migrations/93 relations. 54 real SQL, 226 focused workflow,
+50 restore and 20 mocked Terraform cases pass; both environment roots validate.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#bounded-recovery-of-missed-stopped-task-events).
+Source/default-off only; managed migration, routing/release/capacity and acceptance remain. D1/D3
+stay In progress. Docker/WSL stopped, PC on; CI/CD deferred.
