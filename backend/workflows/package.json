@@ -10,6 +10,7 @@
     }
   },
   "scripts": {
+    "build:lambda:job-retention": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-job-retention-lambda.mjs",
     "build": "tsc -p tsconfig.json",
     "build:lambda": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs && node ../../scripts/build-profile-readiness-lambdas.mjs && node ../../scripts/build-ingestion-lambdas.mjs && node ../../scripts/build-d2-community-lambda.mjs && node ../../scripts/build-applications-attempt-recovery-lambda.mjs",
     "build:lambda:applications-attempt-recovery": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-applications-attempt-recovery-lambda.mjs",

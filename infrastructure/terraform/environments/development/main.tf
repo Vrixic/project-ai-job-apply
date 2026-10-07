@@ -44,6 +44,10 @@ provider "aws" {
 }
 
 module "platform" {
+  job_retention_release          = var.job_retention_release
+  job_retention_enabled          = var.job_retention_enabled
+  job_retention_schedule_enabled = var.job_retention_schedule_enabled
+
   privileged_moderation_audit_enabled         = var.privileged_moderation_audit_enabled
   privileged_audit_retention_release          = var.privileged_audit_retention_release
   privileged_audit_retention_enabled          = var.privileged_audit_retention_enabled

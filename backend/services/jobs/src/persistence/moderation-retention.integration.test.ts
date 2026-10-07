@@ -4,9 +4,9 @@ import { promisify } from "node:util";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  type CatalogObservation,
   createJobCatalogDatabase,
   PostgresJobCatalog,
-  type CatalogObservation,
 } from "./catalog.js";
 import {
   PostgresJobModerationStore,
@@ -109,6 +109,54 @@ describeWithDatabase("moderation retention preserves catalog controls on Postgre
       await transaction.unsafe("ALTER TABLE jobs.job_reports ENABLE TRIGGER job_reports_guard");
     });
   }
+
+  it("runs compiled private maintenance through the real owning SQL runtime and replays safely", async () => {
+    const job = await catalog.recordObservation(observation("managed-maintenance"));
+    const caseId = await jobCase(job.job.id);
+    await closeCase(caseId, "no_action");
+    const workflow = await import(
+      new URL("../../../../workflows/dist/src/job-retention-lambda.js", import.meta.url).href
+    );
+    const env: Record<string, string | undefined> = {
+      JOB_RETENTION_ENABLED: "true",
+      JOB_RETENTION_BATCH_LIMIT: "100",
+      AWS_REGION: "us-east-2",
+      PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+      AWS_LAMBDA_FUNCTION_NAME: "synthetic-job-retention",
+      AWS_LAMBDA_FUNCTION_VERSION: "7",
+      AWS_SESSION_TOKEN: "synthetic-session",
+      DATABASE_SECRET_ID: "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-jobs",
+    };
+    const run = workflow.createJobRetentionLambda({
+      environment: () => env,
+      resolveDatabaseUrl: async () => databaseUrl,
+    });
+    const context = {
+      invokedFunctionArn:
+        "arn:aws:lambda:us-east-2:123456789012:function:synthetic-job-retention:7",
+    };
+    expect(await run({ schemaVersion: 1, action: "expire" }, context)).toEqual({
+      schemaVersion: 1,
+      owner: "jobs",
+      reportsExpired: 0,
+      casesExpired: 1,
+      eventsExpired: 2,
+      controlsExpired: 0,
+    });
+    expect(await evidence(caseId)).toEqual({ cases: 0, events: 0 });
+    expect(await run({ schemaVersion: 1, action: "expire" }, context)).toEqual({
+      schemaVersion: 1,
+      owner: "jobs",
+      reportsExpired: 0,
+      casesExpired: 0,
+      eventsExpired: 0,
+      controlsExpired: 0,
+    });
+    env.JOB_RETENTION_ENABLED = "false";
+    await expect(run({ schemaVersion: 1, action: "expire" }, context)).rejects.toThrow(
+      "JobRetentionUnavailable",
+    );
+  });
 
   it("expires closed no-action operator detail and both decision events after 365 days", async () => {
     const job = await catalog.recordObservation(observation("no-action"));

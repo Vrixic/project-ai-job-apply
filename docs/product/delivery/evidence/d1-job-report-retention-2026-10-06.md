@@ -82,3 +82,30 @@ Only delivery documentation follows this verified source. The owned tmpfs fixtur
 Docker/WSL are stopped and the PC stays on. The live development API passes the maintained
 launcher health check before local web restoration. No hosted cleanup task, cloud release,
 third PR, production acceptance or D1/D3 completion is claimed.
+
+
+## Private managed maintenance
+
+The previously CLI-only combined Jobs report/moderation expiry now has a private managed-secret
+Lambda. It reuses the unchanged owning transaction and raw PostgreSQL runtime, closes its pool,
+returns only four validated/snapshotted counts and rejects extra/accessor input, ambient URLs,
+non-numeric recipients, configuration drift and concurrent invocation. Enablement defaults off.
+Withdrawal prevents admission/withholds a result but cannot revoke an already committed expiry.
+
+Optional platform release composition pins an immutable artifact/object version, private role,
+existing database/key/network/log infrastructure, numeric scheduled recipient, 100-row batch,
+concurrency one and 90-second timeout. Runtime and hourly schedule gates default off. Errors and
+failed deliveries alert through the existing topic. The JobRetention publication family retains
+all existing source/audit/KMS/versioning guards and separate output/key/receipt roots. No migrations,
+row-age policies, public contracts or frontend source changed.
+
+Executed evidence: 21 focused handler cases; Jobs/Workflows compilation and changed-file Biome;
+nine actual PostgreSQL 16.6 moderation-retention cases, including actual compiled Lambda through
+the owning runtime removing one eligible case/two events, preserving the job and replaying to zero.
+Only managed identity/secret lookup is synthetic. The disposable loopback/tmpfs fixture was removed
+after exact ownership-label validation; Docker Desktop and WSL stopped, shared volumes preserved.
+Four mocked Terraform cases and platform/development/staging validation pass. Publisher pure-function
+guards pass for case variants, correct family boundaries and incomplete/duplicate/foreign refusal.
+Logs: `.tmp/d1-job-retention-{lambda-tests,managed-sql,terraform,publisher-tests}.log` and
+`.tmp/d1-job-retention-{owner,workflows}-build.log`. No managed publication, effective IAM, runtime
+migration/schedule or alert acceptance is claimed. Fresh artifact emission follows.

@@ -4701,3 +4701,10 @@ Managed capture/expiry/alert acceptance remains. No activation, D1/D3 In progres
 byte-identical repeat emission pass. The event-capable observer now shares the family source.
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#consistent-six-artifact-release-checkpoint).
 No cloud calls or fresh audit claim; managed routing/release/acceptance remain. D1/D3 In progress.
+
+
+2026-10-07 D1-012 connects Jobs report/moderation expiry through a private managed-secret Lambda,
+source-bound artifact/publisher family and default-disabled hourly release composition. Twenty-one
+handler cases, nine real PostgreSQL cases and four mocked Terraform cases pass; both environment
+roots validate. [Evidence](evidence/d1-job-report-retention-2026-10-06.md#private-managed-maintenance).
+Managed release/access/alerts remain. Docker/WSL stopped, PC on; D1/D3 In progress.

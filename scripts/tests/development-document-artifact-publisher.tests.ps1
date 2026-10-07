@@ -177,12 +177,12 @@ $configurationAssignments = @($ast.FindAll({
     param($node)
     $node -is [Management.Automation.Language.AssignmentStatementAst] -and
     $node.Left.Extent.Text -in @('$isCoreWorkflow', '$isIngestion', '$isPublicJob', '$isApplicationsRecovery',
-      '$isPrivateDocumentControls', '$isNativeResume', '$isPrivilegedAuditRetention', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
+      '$isPrivateDocumentControls', '$isNativeResume', '$isPrivilegedAuditRetention', '$isJobRetention', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
       '$artifactKeyRoot', '$receiptKind', '$artifactLabel', '$expectedObjectCount')
   }, $false) | Sort-Object { $_.Extent.StartOffset })
-if ($configurationAssignments.Count -ne 14) { throw "Unexpected publication family-selection inventory." }
+if ($configurationAssignments.Count -ne 15) { throw "Unexpected publication family-selection inventory." }
 $resumeNames = @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda", "native-resume-task-observer-lambda")
-foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME", "PrivilegedAuditRetention", "privilegedauditretention", "PRIVILEGEDAUDITRETENTION")) {
+foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME", "PrivilegedAuditRetention", "privilegedauditretention", "PRIVILEGEDAUDITRETENTION", "JobRetention", "jobretention", "JOBRETENTION")) {
   $ArtifactFamily = $family
   foreach ($assignment in $configurationAssignments) { Invoke-Expression $assignment.Extent.Text }
   if ($family -eq "PrivateDocumentControls") {
@@ -208,6 +208,14 @@ foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcon
         $operatorDirectoryName -cne 'development-privileged-audit-retention-artifacts' -or
         $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/services/profile/dist/audit-retention-lambda')) {
       throw "Audit retention family escaped its dedicated boundary."
+    }
+  } elseif ($family -eq "JobRetention") {
+    if (($artifactNames -join ',') -cne 'job-retention-lambda' -or $expectedObjectCount -ne 4 -or
+        $receiptKind -cne 'development-job-retention-lambda-publication' -or
+        $artifactKeyRoot -cne 'lambda/jobs/retention' -or
+        $operatorDirectoryName -cne 'development-job-retention-artifacts' -or
+        $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/workflows/dist/job-retention-lambda')) {
+      throw 'Jobs retention escaped its dedicated family.'
     }
   } elseif (($artifactNames -join ',') -cne 'document-processor-lambda,document-parser-lambda' -or
       $expectedObjectCount -ne 8 -or $receiptKind -cne 'development-document-lambda-publication') {
@@ -259,3 +267,13 @@ foreach ($invalid in @(
   if (-not $refused) { throw 'Mixed, incomplete or duplicate audit receipt accepted.' }
 }
 Write-Host 'Audit retention family and four-object receipt guards passed; no cloud calls.'
+
+$jobNames = @('job-retention-lambda')
+$jobMatrix = @('zip', 'cdx.json', 'manifest.json', 'sha256') | ForEach-Object { [pscustomobject]@{artifactName=$jobNames[0];artifactSha256=$digest;suffix=$_} }
+if (-not (Assert-CanonicalReceiptMatrix -Artifacts $jobMatrix -ExpectedArtifactNames $jobNames)) { throw 'Jobs receipt refused.' }
+foreach ($invalid in @([pscustomobject]@{Entries=$auditMatrix}, [pscustomobject]@{Entries=@($jobMatrix | Select-Object -First 3)}, [pscustomobject]@{Entries=@($jobMatrix | Select-Object -First 3)+@($jobMatrix[0])})) {
+  $refused=$false
+  try { $null=Assert-CanonicalReceiptMatrix -Artifacts $invalid.Entries -ExpectedArtifactNames $jobNames } catch {$refused=$true}
+  if (-not $refused) { throw 'Invalid Jobs receipt accepted.' }
+}
+Write-Host 'Jobs retention family guards passed; no cloud calls.'

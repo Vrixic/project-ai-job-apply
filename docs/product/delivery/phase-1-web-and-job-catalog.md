@@ -922,3 +922,10 @@ No fresh audit, publication or deployment claim; D1/D3 remain In progress and PC
 Gateway release flag, default-off and requiring scheduled retention. Six mocked audit release
 cases pass; both environment roots validate. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#audit-capture-release-flag).
 Managed capture/expiry/alert acceptance remains. No activation, D1/D3 In progress and PC on.
+
+
+2026-10-07 D1-012 connects Jobs report/moderation expiry through a private managed-secret Lambda,
+source-bound artifact/publisher family and default-disabled hourly release composition. Twenty-one
+handler cases, nine real PostgreSQL cases and four mocked Terraform cases pass; both environment
+roots validate. [Evidence](evidence/d1-job-report-retention-2026-10-06.md#private-managed-maintenance).
+Managed release/access/alerts remain. Docker/WSL stopped, PC on; D1/D3 In progress.

@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
+    },
+    "./retention-runtime": {
+      "types": "./dist/src/retention-runtime.d.ts",
+      "default": "./dist/src/retention-runtime.js"
     }
   },
   "scripts": {

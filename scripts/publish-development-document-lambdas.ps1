@@ -3,7 +3,7 @@ param(
   [ValidateSet("Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
-  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery", "PrivateDocumentControls", "NativeResume", "PrivilegedAuditRetention")]
+  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery", "PrivateDocumentControls", "NativeResume", "PrivilegedAuditRetention", "JobRetention")]
   [string]$ArtifactFamily = "Document",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -66,6 +66,8 @@ or enable processing.
 PrivilegedAuditRetention selects the private Profile expiry artifact and four companion objects.
 It uses dedicated output/key/receipt roots and does not activate audit capture or expiry.
 
+JobRetention selects one private Jobs expiry artifact/four objects without enabling maintenance.
+
 Receipts and command logs remain below the ignored development .terraform directory. Do not copy
 account IDs, bucket names, KMS identifiers, raw object content, or command logs into shared evidence.
 "@
@@ -88,6 +90,7 @@ $isApplicationsRecovery = $ArtifactFamily -ceq "ApplicationsRecovery"
 $isPrivateDocumentControls = $ArtifactFamily -eq "PrivateDocumentControls"
 $isNativeResume = $ArtifactFamily -eq "NativeResume"
 $isPrivilegedAuditRetention = $ArtifactFamily -eq "PrivilegedAuditRetention"
+$isJobRetention = $ArtifactFamily -eq "JobRetention"
 $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-workflow-artifacts"
 } elseif ($isIngestion) {
@@ -102,6 +105,8 @@ $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-native-resume-artifacts"
 } elseif ($isPrivilegedAuditRetention) {
   "development-privileged-audit-retention-artifacts"
+} elseif ($isJobRetention) {
+  "development-job-retention-artifacts"
 } else {
   "development-document-artifacts"
 }
@@ -117,6 +122,8 @@ $artifactDirectory = if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRec
   Join-Path $repositoryRoot "backend/workflows/dist/native-resume-lambda"
 } elseif ($isPrivilegedAuditRetention) {
   Join-Path $repositoryRoot "backend/services/profile/dist/audit-retention-lambda"
+} elseif ($isJobRetention) {
+  Join-Path $repositoryRoot "backend/workflows/dist/job-retention-lambda"
 } else {
   Join-Path $repositoryRoot "backend\services\documents\dist\lambda"
 }
@@ -136,6 +143,8 @@ $artifactNames = @(
     @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda", "native-resume-task-observer-lambda")
   } elseif ($isPrivilegedAuditRetention) {
     @("privileged-moderation-audit-retention-lambda")
+  } elseif ($isJobRetention) {
+    @("job-retention-lambda")
   } else {
     @("document-processor-lambda", "document-parser-lambda")
   }
@@ -154,6 +163,8 @@ $artifactKeyRoot = if ($isCoreWorkflow) {
   "lambda/documents/native-resume"
 } elseif ($isPrivilegedAuditRetention) {
   "lambda/profile/audit-retention"
+} elseif ($isJobRetention) {
+  "lambda/jobs/retention"
 } else {
   "lambda/documents"
 }
@@ -171,6 +182,8 @@ $receiptKind = if ($isCoreWorkflow) {
   "development-native-resume-lambda-publication"
 } elseif ($isPrivilegedAuditRetention) {
   "development-privileged-audit-retention-lambda-publication"
+} elseif ($isJobRetention) {
+  "development-job-retention-lambda-publication"
 } else {
   "development-document-lambda-publication"
 }
@@ -188,6 +201,8 @@ $artifactLabel = if ($isCoreWorkflow) {
   "native resume"
 } elseif ($isPrivilegedAuditRetention) {
   "privileged audit retention"
+} elseif ($isJobRetention) {
+  "job retention"
 } else {
   "document"
 }
@@ -584,7 +599,7 @@ if ($Action -eq "Publish") {
   $auditLog = Join-Path $operatorRoot "dependency-audit-$timestamp.log"
   $buildOneLog = Join-Path $operatorRoot "build-one-$timestamp.log"
   $buildTwoLog = Join-Path $operatorRoot "build-two-$timestamp.log"
-  if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRecovery -or $isNativeResume) {
+  if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRecovery -or $isNativeResume -or $isJobRetention) {
     Invoke-LocalGate -Name "Workflow tests" -LogPath $testLog -Command {
       pnpm --filter @ai-job-apply/workflows test
     }
@@ -613,6 +628,7 @@ if ($Action -eq "Publish") {
       elseif ($isPrivateDocumentControls) { pnpm --filter @ai-job-apply/documents-service build:lambda:private-controls }
       elseif ($isNativeResume) { pnpm --filter @ai-job-apply/workflows build:lambda:native-resume }
       elseif ($isPrivilegedAuditRetention) { pnpm --filter @ai-job-apply/profile-service build:lambda:audit-retention }
+      elseif ($isJobRetention) { pnpm --filter @ai-job-apply/workflows build:lambda:job-retention }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $first = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)
@@ -625,6 +641,7 @@ if ($Action -eq "Publish") {
       elseif ($isPrivateDocumentControls) { pnpm --filter @ai-job-apply/documents-service build:lambda:private-controls }
       elseif ($isNativeResume) { pnpm --filter @ai-job-apply/workflows build:lambda:native-resume }
       elseif ($isPrivilegedAuditRetention) { pnpm --filter @ai-job-apply/profile-service build:lambda:audit-retention }
+      elseif ($isJobRetention) { pnpm --filter @ai-job-apply/workflows build:lambda:job-retention }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $second = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)
