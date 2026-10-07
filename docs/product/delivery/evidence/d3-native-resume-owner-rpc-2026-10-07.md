@@ -61,7 +61,27 @@ publication/IAM/task image/routing and activation are outside this change.
   exclude SQL, owner services, model, object storage, rendering and task-control
   authority as appropriate. The owner Lambda contains actual ledger and owner admission,
   while excluding AWS SDK signing, content/provider and launch/retirement capabilities.
-- Exact-source artifact reproducibility and full frozen-source verification follow.
+- Runtime source: `460039ebf6695644eb5201821be7b875aa8d86f9`. Two clean-source
+  artifact builds produced the same 157,621-byte ZIP, with 31 components and SHA-256
+  `130498a14968f92ecb811ad4f0598c03ef96e346c299acce7118f3088b30a355`.
+  ZIP reproducibility was compared; companion files were not independently compared.
+- The full verifier ran against that frozen source with matching `ARTIFACT_SOURCE_SHA`.
+  All 38 typecheck, 39 test and 23 build tasks passed, as did preceding operational,
+  security, formatting and bundle checks. It then failed the launch-control bundle's
+  exact file inventory, which omitted the two newly extracted shared signing/transport
+  modules. A test-only correction adds those two paths without relaxing capability
+  exclusions. All six launch/preparation bundle checks then passed, followed by Compose
+  and product-scope checks; Biome formatting of the corrected test passed. These are
+  segmented verification results, not an uninterrupted full-verifier success. Runtime
+  source and the built artifact remain unchanged after the inventory correction.
+- The first full attempt encountered a 30-second Profile readiness test import timeout
+  and a subsequent mock-call failure. On unchanged source and settings, all 44 readiness
+  tests and all 1,751 Workflows tests (115 skipped) passed separately, then the complete
+  test stage passed in the final run. An intervening interrupted run had no terminal
+  result; it was restarted only after confirming its process no longer existed.
+- Development web restored against the live development API. Anonymous `/` returned
+  200 and `/resume` returned 307. These checks do not establish authenticated resume
+  acceptance; prior owner-reported Profile/save/reload success remains distinct.
 
 No public API, event, schema, SQL migration, frontend or infrastructure change. Current
 restore inventory and prior logical restore proof remain unchanged at 71 migrations /

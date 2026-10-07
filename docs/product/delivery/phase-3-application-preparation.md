@@ -1836,3 +1836,15 @@ Exact-source artifact/full verification follow. Source loading/task/image/launch
 preparation/packet/client/ATS and managed/accountable acceptance remain; D1/D3 stay
 In progress. No publication/deployment, new PR, main merge or hosted CI/CD. Owned SQL
 fixture removed, shared volumes retained, Docker/WSL stopped; PC remains on.
+
+2026-10-07 D3-064/D3-079 authenticated resume owner RPC verification records runtime
+source `460039eb`: 138 focused and 26 real PostgreSQL cases, reproducible Lambda ZIP,
+38 typecheck/39 test/23 build tasks and existing lint baseline. The full run stopped
+at a stale exact bundle inventory; a two-path test-only correction and all six
+remaining launch/preparation bundle checks, Compose and scope checks passed. Runtime
+source is unchanged; this is segmented verification, not an uninterrupted full pass.
+[Evidence](evidence/d3-native-resume-owner-rpc-2026-10-07.md). Development web restored
+(anonymous root 200/resume 307). Source loading/task/image/launch/preparation/packet/
+client/ATS and managed/accountable gates remain; D1/D3 stay In progress, ADR-040
+Proposed. No deployment/activation, new PR, main merge or hosted CI/CD. Docker/WSL
+stopped, shared volumes retained, PC on.
