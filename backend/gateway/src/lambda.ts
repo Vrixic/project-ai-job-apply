@@ -76,6 +76,7 @@ import {
   ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
+import { nativeMaterialLocationsFromEnvironment } from "./native-material-location-runtime.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
@@ -255,7 +256,7 @@ const APPLICATION_COVER_LETTER_PATH_PATTERN = new RegExp(
   "u",
 );
 const APPLICATION_MATERIAL_AUTHORIZATION_PATH_PATTERN = new RegExp(
-  `^/v1/applications/${APPLICATION_ID}/cover-letter/authorization$`,
+  `^/v1/applications/${APPLICATION_ID}/cover-letter/(?:authorization|location)$`,
   "u",
 );
 const APPLICATION_GENERATION_ID_PATTERN = new RegExp(`^${APPLICATION_ID}$`, "u");
@@ -1152,10 +1153,16 @@ async function createConfiguredApplication(
   // Applications needs its own plain client: the shared one camel-cases columns and installs
   // Drizzle's JSON and timestamp handling, which makes the store fail (see applications-database).
   const packetProtection = restrictedPacketWriterFromEnvironment(process.env);
+  const nativeMaterialLocations = nativeMaterialLocationsFromEnvironment(
+    databaseUrl,
+    process.env,
+    () => packetProtection?.enabled() === true,
+  );
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
     profile: store,
     ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
+    ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
     nativeReadAuthorizationsEnabled: () =>
       process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&
       packetProtection?.enabled() === true,

@@ -4923,6 +4923,76 @@
           }
         }
       }
+    },
+    "/applications/{applicationId}/cover-letter/location": {
+      "get": {
+        "operationId": "getApplicationTemporaryMaterialLocation",
+        "description": "Default-off scalar current-packet and original native read-location metadata. Authentication and owner resolution use the normal Gateway boundary. The configured origin is derived from owning original allocation metadata, not caller input. No generated body or token is returned. This is point-in-time discovery, not task liveness, renewed expiry or permission to read content; native HTTPS independently authorizes each read.",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "generationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current original packet and material metadata only",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTemporaryMaterialLocation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10308,6 +10378,34 @@
           },
           "temporaryMaterial": {
             "$ref": "#/components/schemas/ApplicationTemporaryMaterial"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationTemporaryMaterialLocation": {
+        "type": "object",
+        "description": "Point-in-time original native read location metadata. Not a credential or liveness proof; direct native HTTPS separately authorizes every read. Never carries generated content or renews expiry.",
+        "required": ["schemaVersion", "packetId", "packetHash", "temporaryMaterial", "origin"],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "packetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "temporaryMaterial": {
+            "$ref": "#/components/schemas/ApplicationTemporaryMaterial"
+          },
+          "origin": {
+            "type": "string",
+            "maxLength": 250,
+            "pattern": "^https://[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}:8443$"
           }
         },
         "additionalProperties": false

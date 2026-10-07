@@ -48,6 +48,9 @@ export interface ApplicationsRuntimeOptions {
   /** Default false. Enable only with compatible migrations and the owned dispatch/recovery runtime. */
   coverLetterPreparationEnabled?: boolean;
   nativeReadAuthorizationsEnabled?: () => boolean;
+  nativeMaterialLocations?: {
+    resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
+  };
   catalog: Pick<JobCatalogReader, "resolveActiveJobSummaries" | "getActiveJob">;
   definitions: ReadonlyMap<string, FieldDefinition>;
   restrictedAnswers?: VaultReader;
@@ -312,6 +315,9 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     ...(options.temporaryMaterials ? { temporaryMaterials: options.temporaryMaterials } : {}),
     ...(options.nativeReadAuthorizationsEnabled
       ? { nativeReadAuthorizationsEnabled: options.nativeReadAuthorizationsEnabled }
+      : {}),
+    ...(options.nativeMaterialLocations
+      ? { nativeMaterialLocations: options.nativeMaterialLocations }
       : {}),
     ...(options.metrics ? { metrics: options.metrics } : {}),
     clock,

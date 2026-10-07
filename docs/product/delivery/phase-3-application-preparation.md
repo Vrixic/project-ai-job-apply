@@ -9,6 +9,13 @@
 
 ## Objective
 
+2026-10-06 D3-079 connects default-off scalar native read-location discovery through a separate
+v1 route, current packet checks before/after Documents lookup, fixed HTTPS origin derivation and
+owning native pool. 220 Gateway, 104 contract, 31 Documents, 20 Applications, 28 domain/20 event
+and 25 actual SQL cases pass; generation is stable. [Evidence](evidence/d3-native-read-location-2026-10-06.md).
+Full clean verification and managed routing/client/provider/accountable acceptance remain;
+D1/D3 stay In progress, with no deployment or activation.
+
 2026-10-06 D3-079 original allocation discovery passes full clean verification at `4c708af8`
 (38 typecheck/39 test/23 builds; unchanged lint and artifact isolation). All 25 actual PostgreSQL
 owner/launcher cases pass, including withdrawal and original reference mismatch refusal.

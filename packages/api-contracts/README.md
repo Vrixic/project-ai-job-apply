@@ -108,3 +108,9 @@ The additive v1 temporary cover-letter authorization route and strict
 public material metadata. They carry no owner ID, tokens, answers or document bodies. Normal
 application-read scope and no-store apply; the capability defaults off and is not an approval,
 availability, expiry-renewal or process-stop certificate.
+
+The separate additive v1 `GET /applications/{applicationId}/cover-letter/location` requires
+applications:read and one generationId query. Its strict scalar response adds an original HTTPS
+origin without changing the authorization response consumed by native processes. Deploy compatible
+Gateway/owning runtime before client use; the route stays default off pending reviewed managed
+routing and direct client identity/content acceptance. No generated body or token is returned.

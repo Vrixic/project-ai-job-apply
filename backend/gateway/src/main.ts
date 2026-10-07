@@ -59,6 +59,7 @@ import {
   ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
+import { nativeMaterialLocationsFromEnvironment } from "./native-material-location-runtime.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
@@ -174,12 +175,18 @@ const candidateDataExportDownloads =
 // Applications stay dark unless explicitly enabled for local development. The database must already
 // have the Applications migration applied.
 const packetProtection = restrictedPacketWriterFromEnvironment(process.env);
+const nativeMaterialLocations = nativeMaterialLocationsFromEnvironment(
+  config.DATABASE_URL,
+  process.env,
+  () => packetProtection?.enabled() === true,
+);
 const applications =
   process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
         client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
         profile: store,
         ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
+        ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
         nativeReadAuthorizationsEnabled: () =>
           process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&
           packetProtection?.enabled() === true,

@@ -12,8 +12,10 @@ import type {
   ApplicationSubmissionResultRequest,
   ApplicationSubmissionStart,
   ApplicationTemporaryMaterialAuthorization,
+  ApplicationTemporaryMaterialLocation,
   ReconcileApplicationAttemptRequest,
 } from "@ai-job-apply/api-contracts";
+import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import type {
   AdapterSubmissionResult,
@@ -52,6 +54,8 @@ import {
   readBoundTemporaryCoverLetter,
 } from "./temporary-cover-letter-read.js";
 import { temporaryMaterialReasons } from "./temporary-material.js";
+
+const validateMaterialLocation = compileComponentValidator("ApplicationTemporaryMaterialLocation");
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -164,6 +168,12 @@ export class InvalidApplicationCursorError extends Error {
 
 /** Owner-scoped API used by the gateway. Every method takes the authenticated owner. */
 export interface ApplicationsApi {
+  temporaryMaterialLocation?(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal?: AbortSignal,
+  ): Promise<ApplicationTemporaryMaterialLocation>;
   temporaryMaterialAuthorization?(
     ownerUserId: string,
     applicationId: string,
@@ -298,6 +308,9 @@ export interface ApplicationsServiceDependencies {
   temporaryMaterials?: ApplicationTemporaryMaterials;
   /** Scalar native-read authorization only; independent of content ports, default off. */
   nativeReadAuthorizationsEnabled?: () => boolean;
+  nativeMaterialLocations?: {
+    resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
+  };
   /** Optional privacy-safe measurement sink. Failures never affect a request. */
   metrics?: MetricSink;
   clock?: () => Date;
@@ -308,6 +321,43 @@ export class ApplicationsService implements ApplicationsApi {
 
   constructor(private readonly dependencies: ApplicationsServiceDependencies) {
     this.clock = dependencies.clock ?? (() => new Date());
+  }
+
+  async temporaryMaterialLocation(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal = new AbortController().signal,
+  ): Promise<ApplicationTemporaryMaterialLocation> {
+    const locations = this.dependencies.nativeMaterialLocations;
+    if (!locations) throw new ApplicationsUnavailableError();
+    const proof = await this.temporaryMaterialAuthorization(
+      ownerUserId,
+      applicationId,
+      generationId,
+      signal,
+    );
+    let origin: string | null;
+    try {
+      origin = await locations.resolve(
+        { ...proof.temporaryMaterial, ownerUserId, applicationId },
+        signal,
+      );
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    if (!origin || signal.aborted) throw new ApplicationsUnavailableError();
+    const current = await this.temporaryMaterialAuthorization(
+      ownerUserId,
+      applicationId,
+      generationId,
+      signal,
+    );
+    if (JSON.stringify(proof) !== JSON.stringify(current))
+      throw new StalePacketError(["temporary_material_changed"]);
+    const result = { ...current, origin };
+    if (!validateMaterialLocation(result)) throw new ApplicationsUnavailableError();
+    return result;
   }
 
   async temporaryMaterialAuthorization(

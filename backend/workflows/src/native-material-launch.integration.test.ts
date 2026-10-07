@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { coverLetterContext } from "@ai-job-apply/ai-sdk";
 import {
   type ApplicationStoreOptions,
+  ApplicationsService,
   createApplicationsDatabase,
   createPreparationActivity,
   defaultFieldDefinitions,
@@ -21,6 +22,7 @@ import {
   type NativeLaunchControlInput,
 } from "@ai-job-apply/documents-service/native-launch-control";
 import { createNativeMaterialControls } from "@ai-job-apply/documents-service/native-material-controls";
+import { createNativeMaterialLocationReader } from "@ai-job-apply/documents-service/native-material-location";
 import {
   type NativeMaterialLaunchScope,
   PostgresNativeMaterialRegistry,
@@ -1170,6 +1172,43 @@ describe.runIf(requested)(
         request.original.documentId,
       );
       expect(accepted.state).toBe("succeeded");
+      const locationService = new ApplicationsService({
+        store: activityStore,
+        packets: {
+          prepare: async () => {
+            throw Error("SyntheticPreparationForbidden");
+          },
+        },
+        bindings: {
+          resolve: async () => {
+            throw Error("SyntheticBindingsForbidden");
+          },
+        },
+        jobs: { isActive: async () => false },
+        nativeReadAuthorizationsEnabled: () => true,
+        nativeMaterialLocations: {
+          resolve: createNativeMaterialLocationReader({
+            baseHost: "materials.example.test",
+            enabled: () => true,
+            readAllocation: readyStore.readAllocation.bind(readyStore),
+          }),
+        },
+      });
+      expect(
+        await locationService.temporaryMaterialLocation(
+          request.ownerUserId,
+          request.applicationId,
+          request.original.documentId,
+        ),
+      ).toMatchObject({
+        schemaVersion: 1,
+        origin: `https://${binding.scope.allocationId}.materials.example.test:8443`,
+        temporaryMaterial: {
+          generationId: request.original.documentId,
+          version: bootstrap.documentVersion,
+        },
+      });
+
       expect(await activity(preparationEvent.id, request.original.documentId)).toEqual({
         preparationId: request.original.documentId,
         outcome: "completed",

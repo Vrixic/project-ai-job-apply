@@ -857,3 +857,13 @@ The strict nine-scalar reply requires a coordinated exact numeric receiver/image
 adds no body, token, fact value, storage, grant renewal or provider authority. Real SQL retains
 original owner/document/work/version comparison; actual managed acceptance remains open.
 See [version evidence](../product/delivery/evidence/d3-native-document-version-2026-10-06.md).
+
+## Native read-location metadata checkpoint — 2026-10-06
+
+A separate default-off Gateway route returns only current packet/original material metadata and a
+configured HTTPS origin derived from Documents' original allocation UUID. Authentication and
+current packet proof surround the owning readiness/allocation lookup. The origin is neither a
+credential nor liveness proof; no generated content crosses this route. Hostname drift, expiry,
+abort and activation withdrawal withhold the reply. Native HTTPS separately authorizes every read.
+Managed DNS/TLS/networking and direct browser/ATS token/content handoff remain release gates.
+[Local source evidence](../product/delivery/evidence/d3-native-read-location-2026-10-06.md).
