@@ -9,6 +9,12 @@
 
 ## Objective
 
+2026-10-06 D3-079 original allocation discovery passes full clean verification at `4c708af8`
+(38 typecheck/39 test/23 builds; unchanged lint and artifact isolation). All 25 actual PostgreSQL
+owner/launcher cases pass, including withdrawal and original reference mismatch refusal.
+[Evidence](evidence/d3-native-read-allocation-2026-10-06.md). Gateway endpoint handoff and managed
+routing/client/provider/accountable gates remain; D1/D3 stay In progress, Docker/WSL stopped, PC on.
+
 2026-10-06 D3-079 adds Documents-owned original allocation discovery for an exact current-packet
 material reference. Default-off lookup requires active identity, successful settled work, immutable
 readiness, bound original task and unsealed admission; only the allocation ID leaves the owner.
