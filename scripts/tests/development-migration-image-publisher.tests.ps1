@@ -447,6 +447,7 @@ foreach ($required in @(
   'source.manifest.contributors.flatMap(x=>x.schemas).length!==12',
   'source.manifest.contributors.flatMap(x=>x.relations).length!==93',
   'source.manifest.contributors.flatMap(x=>x.migrations).length!==74',
+  'applications/migrations/0011_native_resume_execution_receipts.sql',
   'expected exactly seven generated .modules.yaml files',
   'FROM node:24.18.0-alpine3.23@sha256:595398b0081eacda8e1c4c5b97b76cd1020e4d58a8ebcb4843b9bca1e79e7436 AS runtime',
   'libcrypto3-3.5.9-r0.apk',
