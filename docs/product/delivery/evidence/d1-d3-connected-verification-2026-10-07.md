@@ -54,3 +54,29 @@ these are health/authentication-boundary checks, not signed-in UI acceptance. Pr
 save/reload checks are not reopened. No frontend source, CI/CD, cloud activation, PR or main
 merge is included. Managed resume routing/TLS/domain choices, release/recovery acceptance,
 remaining D1 flows, ATS/client acceptance and accountable launch gates remain open.
+
+## Consistent six-artifact resume family
+
+Both complete `pnpm --filter @ai-job-apply/workflows build:lambda:native-resume` runs passed
+from clean `baab14635bafb77916d249346ad141c2524a4306`. All six ZIPs and their 24 release
+companions are byte-identical between builds. Inspection verifies each single-file ZIP's bundle
+hash/source marker, exact source manifest, ZIP length/base64/checksum, CycloneDX 1.6 SBOM
+hash/component count and companion checksum. Builders also exercise their emitted disabled
+handlers; this is not enabled AWS/SQL/DNS behavior or a dependency audit.
+
+| Artifact | ZIP SHA256 | Bytes | SBOM components |
+|---|---|---:|---:|
+| native-resume-owner-rpc-lambda | `0aa6771e43a92526ac4dda8afe93f27719ea65e395150d45fddee6530d598ac5` | 158802 | 35 |
+| native-resume-source-rpc-lambda | `5336dd31afa765606cf9b3a6536d5659425b8d9dc7d54e1f14d5ef97e8a06d6a` | 432627 | 38 |
+| native-resume-preparation-control-lambda | `81ed74b3c6bdc4b892c38ec596c5f91b4a2f66197b2aa2932c328ee3aa49ca02` | 740427 | 35 |
+| native-resume-preparation-durable-lambda | `dd80902334b61254868f4565d94917e116a41e17ed5da315414d8e91c9decfce` | 421248 | 29 |
+| native-resume-request-dispatch-lambda | `1e8863f58ce09726f38dea31761b8e830e95bd2ad7928d4b6d47867421a4fd64` | 556038 | 34 |
+| native-resume-task-observer-lambda | `51a11e64e8d7b1e80547527c35e70212a3f86c86296ce8194c8c760b9201570a` | 463855 | 34 |
+
+Logs and both complete hash inventories remain ignored under
+`.tmp/d3-connected-resume-family-*`. Outputs are in
+`backend/workflows/dist/native-resume-lambda/`. No release objects were published, no runtime
+was activated and no managed receipt is claimed. The separately built migration image retains
+its `0bfe741c` identity. Current native task-image verification remains a next local gate;
+managed DNS/TLS/domain decisions and live acceptance remain open. Development web remains
+running; Docker/WSL are stopped and the PC is on.

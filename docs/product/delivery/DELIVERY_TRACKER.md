@@ -4855,3 +4855,9 @@ checks pass; 207 restore-contract, 697 replay and 908 role checks pass. The froz
 distinguishes the initial failure, corrected `dd61044a` run and unpublished image. D1/D3 remain
 In progress; managed/live acceptance and existing advisories remain open. Development web
 restored, Docker/WSL stopped, PC on; CI/CD deferred.
+
+2026-10-07 the complete six-artifact resume Lambda family builds twice identically from clean
+`baab1463`, including original execution inspection and routing. All 24 companion files pass
+source/ZIP/checksum/SBOM integrity checks. [Evidence](evidence/d1-d3-connected-verification-2026-10-07.md#consistent-six-artifact-resume-family).
+Artifacts remain local and unpublished; native task-image and managed acceptance remain open.
+D1/D3 stay In progress; CI/CD deferred, Docker/WSL stopped and PC on.
