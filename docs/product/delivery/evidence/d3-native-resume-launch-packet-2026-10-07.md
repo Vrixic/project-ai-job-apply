@@ -484,3 +484,11 @@ default-off refusal in the emitted bundle; frozen-source artifact execution foll
 The existing five-artifact native resume publisher family is unchanged. A private release/IAM/
 event or scheduled receiver, connected SQL acceptance and managed execution remain unfinished.
 No cloud action, provider call, public route or content handling is introduced.
+
+
+The standalone observer artifact builder subsequently passes from clean committed `c862e288`
+with matching `ARTIFACT_SOURCE_SHA`, including actual emitted-bundle default-off refusal for
+valid scope and forged task/receipt inputs. ZIP `native-resume-task-observer-lambda.zip` is 369857
+bytes with SHA-256 `330feeb77478f3770311f1724a94b1137886ab914f4f32533afa7195b0104bd8` and 30
+inventory components. Log: `.tmp/d3-native-resume-observer-artifact.log`. This is local artifact
+verification, not a fresh dependency audit, publication or enabled managed runtime test.
