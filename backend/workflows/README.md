@@ -1,5 +1,12 @@
 # Durable Workflows
 
+`application-preparation-native.ts` supplies a default-off preparation port for one original
+native generation. It uses owner evidence and a canonical memory-only request digest, reserves
+one document, issues one dispatch grant and calls the private launcher once. Recovery only reads
+the exact original admitted scalar receipt into Applications completion. It has no provider-object,
+model or launch-on-replay path. Managed runtime selection and activation remain pending.
+See [local flow evidence](../../docs/product/delivery/evidence/d3-native-preparation-flow-2026-10-06.md).
+
 The private native bootstrap now returns the original Documents version alongside the eight
 Applications approval/context scalars, and checks that version again before replying. This private
 shape requires a matching numeric receiver/image rollout. See

@@ -1,5 +1,12 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 implements default-off native preparation initializer and original receipt
+recovery: current owning evidence, canonical memory request digest, one reservation/grant/launch,
+then original version/citations into Applications completion. 33 focused cases and all 24 actual
+PostgreSQL integration cases pass, including actual preparation completion/replay with no launch.
+[Evidence](evidence/d3-native-preparation-flow-2026-10-06.md). Full verification and managed runtime
+selection/activation/client/provider/accountable gates remain; D1/D3 stay In progress.
+
 2026-10-06 owner reconfirms Profile access and job save/reload with "done, no errors" in the
 signed-in development browser. These accepted steps need no repeat. Preference writes and resume
 import remain unverified live; D1 remains In progress.

@@ -9,6 +9,13 @@
 
 ## Objective
 
+2026-10-06 D3-079 implements default-off native preparation initializer and original receipt
+recovery: current owning evidence, canonical memory request digest, one reservation/grant/launch,
+then original version/citations into Applications completion. 33 focused cases and all 24 actual
+PostgreSQL integration cases pass, including actual preparation completion/replay with no launch.
+[Evidence](evidence/d3-native-preparation-flow-2026-10-06.md). Full verification and managed runtime
+selection/activation/client/provider/accountable gates remain; D1/D3 stay In progress.
+
 2026-10-06 D3-079 authenticated scalar readiness passes full verification at `481d5d9f`
 (38 typecheck/39 test/23 build tasks, unchanged lint). All 122 focused, 24 real SQL, 31 Linux,
 11 emitted checks and four actual-image scenarios pass. Migration 0013 is bound into the exact

@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import type { CoverLetterPreparationIdentity } from "./cover-letter-generation.js";
 import { validateProviderControlReference } from "./cover-letter-provider-control-contract.js";
 import type { CoverLetterWorkReference } from "./cover-letter-work-store.js";
 import { type NativeMaterialReady, validateNativeMaterialReady } from "./native-material-ready.js";
@@ -10,6 +11,66 @@ export class PostgresNativeMaterialReadyStore {
     private readonly sql: postgres.Sql,
     private readonly enabled: () => boolean = () => false,
   ) {}
+  /** Read only the original admitted receipt. No launch, renewal, content or liveness authority. */
+  async read(input: CoverLetterPreparationIdentity): Promise<NativeMaterialReady | null> {
+    try {
+      if (!this.enabled()) return null;
+      const fixed = structuredClone(input);
+      return await this.sql.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${fixed.ownerUserId}::uuid)`;
+        const [row] = await tx<
+          Array<{
+            version: number;
+            hash: string;
+            completed: string;
+            expires: string;
+            facts: string[];
+            confidence: number;
+          }>
+        >`SELECT d.version, d.material_sha256 AS hash,
+          d.material_completed_at_ms AS completed, d.material_expires_at_ms AS expires,
+          d.material_source_fact_ids AS facts, d.material_confidence AS confidence
+          FROM documents.cover_letters d
+          JOIN documents.cover_letter_work_authorizations w ON w.id=d.material_work_id
+            AND w.document_id=d.id AND w.user_id=d.user_id
+          JOIN documents.native_material_allocations a ON a.document_id=d.id AND a.user_id=d.user_id
+            AND a.application_id=d.application_id AND a.work_id=w.id AND a.request_sha256=w.request_sha256
+          JOIN documents.native_material_admission h ON h.user_id=a.user_id
+            AND h.application_id=a.application_id AND h.epoch_id=a.epoch_id
+          WHERE d.id=${fixed.id} AND d.user_id=${fixed.ownerUserId} AND d.application_id=${fixed.applicationId}
+            AND d.job_revision=${fixed.jobContextHash} AND d.confirmed_facts_hash=${fixed.confirmedFactsHash}
+            AND d.status='pending' AND d.material_source_fact_ids IS NOT NULL
+            AND w.purpose='provider_dispatch' AND w.state='settled' AND w.provider_failure IS NULL
+            AND w.consent_expires_at=${fixed.expiresAt}
+            AND a.state='bound' AND a.task_arn IS NOT NULL AND a.launch_claimed_at IS NOT NULL
+            AND a.launch_configuration_sha256 IS NOT NULL AND h.sealed_at IS NULL
+            AND d.material_expires_at_ms > floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint`;
+        if (!row || !this.enabled()) return null;
+        const ready: NativeMaterialReady = {
+          schemaVersion: 1,
+          material: {
+            schemaVersion: 1,
+            kind: "cover_letter",
+            ownerUserId: fixed.ownerUserId,
+            applicationId: fixed.applicationId,
+            generationId: fixed.id,
+            version: row.version,
+            contentSha256: row.hash,
+            completedAtMs: Number(row.completed),
+            expiresAtMs: Number(row.expires),
+          },
+          sourceFactIds: row.facts,
+          confidence: row.confidence,
+        };
+        if (!validateNativeMaterialReady(ready)) return null;
+        const [fresh] = await tx<Array<{ available: boolean }>>`
+          SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint < ${ready.material.expiresAtMs} AS available`;
+        return fresh?.available && this.enabled() ? structuredClone(ready) : null;
+      });
+    } catch {
+      throw Error("NativeMaterialReadyUnavailable");
+    }
+  }
   async publish(original: CoverLetterWorkReference, raw: NativeMaterialReady): Promise<boolean> {
     try {
       if (

@@ -1,5 +1,12 @@
 # Data Flow and Classification
 
+2026-10-06 source-only/default-off native preparation: claimed Applications preparation -> current
+owner evidence -> memory-only canonical request digest -> original Documents reservation/grant ->
+private native launcher. Recovery reads only exact current-admission scalar receipt -> original
+temporary material/hash/citations/confidence -> Applications completion. No generated body or
+legacy provider object crosses this path; launch and receipt ACKs grant no liveness authority.
+[Evidence](../product/delivery/evidence/d3-native-preparation-flow-2026-10-06.md).
+
 2026-10-06 scalar native ready receipt: verified bounded process -> signed exact-task owner RPC
 -> active owning admission -> original completion/settled work/expiry checks -> Documents immutable
 fact IDs/confidence. No generated body crosses this handoff. Identifiers and hashes remain candidate

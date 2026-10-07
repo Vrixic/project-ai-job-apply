@@ -119,6 +119,22 @@ export class PostgresNativeMaterialRegistry {
   private check() {
     if (!this.enabled()) throw unavailable();
   }
+
+  /** Fresh explicit preparation may name a sealed prior epoch; this read grants no launch. */
+  async readPreviousEpoch(owner: string, app: string): Promise<string | null> {
+    return this.guarded(async () => {
+      if (!validScope(owner, app)) throw unavailable();
+      return this.sql.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${owner}::uuid)`;
+        const [head] = await tx<Array<{ epoch_id: string; sealed_at: Date | null }>>`
+          SELECT epoch_id, sealed_at FROM documents.native_material_admission
+          WHERE user_id=${owner} AND application_id=${app}`;
+        this.check();
+        if (head && (!head.sealed_at || !uuid.test(head.epoch_id))) throw unavailable();
+        return head?.epoch_id ?? null;
+      });
+    });
+  }
   private async guarded<T>(run: () => Promise<T>): Promise<T> {
     try {
       this.check();

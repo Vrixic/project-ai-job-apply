@@ -5,6 +5,7 @@ import { coverLetterContext } from "@ai-job-apply/ai-sdk";
 import {
   type ApplicationStoreOptions,
   createApplicationsDatabase,
+  createPreparationActivity,
   defaultFieldDefinitions,
   PostgresApplicationStore,
 } from "@ai-job-apply/applications-service";
@@ -12,6 +13,7 @@ import { lockNativeMaterialApplicationAdmission } from "@ai-job-apply/applicatio
 import {
   PostgresCoverLetterStore,
   PostgresCoverLetterWorkStore,
+  PostgresNativeMaterialReadyStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
 import {
   createNativeLaunchControlClient,
@@ -36,6 +38,7 @@ import {
 import type { InvokeCommand } from "@aws-sdk/client-lambda";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createNativeCoverLetterPreparationPort } from "./application-preparation-native.js";
 import {
   createNativeMaterialLaunchLambda,
   createNativeMaterialLaunchRuntime,
@@ -882,6 +885,33 @@ describe.runIf(requested)(
         }),
       ).rejects.toThrow("NativeOwnerRpcUnavailable");
       await controls.publishReady(ready);
+      const readyStore = new PostgresNativeMaterialReadyStore(sql, () => true);
+      const readyIdentity = {
+        id: request.original.documentId,
+        ownerUserId: request.ownerUserId,
+        applicationId: request.applicationId,
+        jobContextHash: approvedContext.jobContextHash,
+        confirmedFactsHash: approvedContext.confirmedFactsHash,
+        noticeVersion: "openai-cover-letter.v1",
+        approvedAt: bootstrap.approvedAt,
+        expiresAt: bootstrap.expiresAt,
+      };
+      expect(await readyStore.read(readyIdentity)).toEqual(ready);
+      expect(await readyStore.read({ ...readyIdentity, id: uuidv7() })).toBeNull();
+      expect(await readyStore.read({ ...readyIdentity, applicationId: uuidv7() })).toBeNull();
+      expect(
+        await readyStore.read({ ...readyIdentity, confirmedFactsHash: "f".repeat(64) }),
+      ).toBeNull();
+      expect(
+        await readyStore.read({
+          ...readyIdentity,
+          expiresAt: new Date(bootstrap.expiresAt.getTime() + 1),
+        }),
+      ).toBeNull();
+      const epochReader = new PostgresNativeMaterialRegistry(sql, () => true);
+      await expect(
+        epochReader.readPreviousEpoch(request.ownerUserId, request.applicationId),
+      ).rejects.toThrow("NativeMaterialRegistryUnavailable");
       expect(await remote.run({ action: "publish_ready", input: ready })).toEqual({
         published: true,
       });
@@ -904,9 +934,48 @@ describe.runIf(requested)(
           (letter) => letter.id === request.original.documentId,
         )?.nativeReady,
       ).toEqual(ready);
+      const activityStore = new PostgresApplicationStore(sql, () => new Date(), {
+        definitions: defaultFieldDefinitions(),
+        restrictedPackets: packetProtection.options,
+      });
+      const nativePreparation = createNativeCoverLetterPreparationPort({
+        owners: { applications: activityStore, profile, catalog },
+        candidateLease: documents,
+        documents,
+        work,
+        ready: readyStore,
+        admission: epochReader,
+        launcher: {
+          launch: async () => {
+            throw Error("SyntheticReplayLaunchForbidden");
+          },
+        },
+        enabled: () => true,
+      });
+      const [preparationEvent] = await sql<Array<{ id: string }>>`
+        SELECT id FROM applications.preparation_outbox WHERE preparation_id=${request.original.documentId}`;
+      if (!preparationEvent) throw Error("SyntheticPreparationEventMissing");
+      const activity = createPreparationActivity(activityStore, nativePreparation);
+      expect(await activity(preparationEvent.id, request.original.documentId)).toEqual({
+        preparationId: request.original.documentId,
+        outcome: "completed",
+      });
+      const accepted = await activityStore.getPreparationForEvent(
+        preparationEvent.id,
+        request.original.documentId,
+      );
+      expect(accepted.state).toBe("succeeded");
+      expect(await activity(preparationEvent.id, request.original.documentId)).toEqual({
+        preparationId: request.original.documentId,
+        outcome: "completed",
+      });
       await new PostgresNativeMaterialRegistry(sql, () => true).sealApplication(
         request.ownerUserId,
         request.applicationId,
+      );
+      expect(await readyStore.read(readyIdentity)).toBeNull();
+      expect(await epochReader.readPreviousEpoch(request.ownerUserId, request.applicationId)).toBe(
+        binding.scope.epochId,
       );
       await expect(remote.checkAdmission(binding)).rejects.toThrow("NativeOwnerRpcUnavailable");
       await expect(remote.run({ action: "publish_ready", input: ready })).rejects.toThrow(
