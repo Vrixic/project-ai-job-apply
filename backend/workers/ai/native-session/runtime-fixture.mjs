@@ -79,6 +79,7 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
     readyPublications = 0,
     controlInvocations = 0,
     admissions = 0;
+  let readAdmissionSealed = false;
   const imageMode = mode.startsWith("runtime-image");
   const bootstrapMode = mode.startsWith("runtime-bootstrap") || imageMode;
   const workTarget = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-original-work:9";
@@ -112,6 +113,7 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
     bootBudgetMs: 10_000,
     checkAdmission: async (fixed) => {
       assert.deepEqual(fixed, binding);
+      if (readAdmissionSealed) throw Error("SyntheticReadAdmissionSealed");
       admissions++;
       if (mode === "runtime-revoked" && admissions === 3)
         throw Error("synthetic-private-secret-not-logged");
@@ -220,6 +222,7 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
     owners: async () => ({
       checkAdmission: async (fixed) => {
         assert.deepEqual(fixed, binding);
+        if (readAdmissionSealed) throw Error("SyntheticReadAdmissionSealed");
         admissions++;
         if (mode === "runtime-bootstrap-admission-refused") throw Error("SyntheticUnbound");
         if (mode === "runtime-bootstrap-delayed" && admissions === 1)
@@ -492,7 +495,15 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
   runtime.server.listen(0, "127.0.0.1");
   await once(runtime.server, "listening");
   let files = 0;
-  for (const suffix of ["", "/file?format=pdf", "/file?format=docx"]) {
+  const sealedReadScenario = ["runtime-read-sealed", "runtime-image-read-sealed"].includes(mode);
+  const paths = [
+    "",
+    "/file?format=pdf",
+    "/file?format=docx",
+    ...(sealedReadScenario ? ["/file?format=pdf"] : []),
+  ];
+  for (const [index, suffix] of paths.entries()) {
+    if (index === 3) readAdmissionSealed = true;
     const result = await new Promise((resolve, reject) => {
       const call = request(
         {
@@ -524,6 +535,13 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
       call.on("error", reject);
       call.end();
     });
+    if (readAdmissionSealed) {
+      assert.equal(result.status, 503);
+      assert.equal(result.headers["cache-control"], "no-store");
+      assert.ok(!result.bytes.toString().includes("TypeScript"));
+      result.bytes.fill(0);
+      continue;
+    }
     assert.equal(result.status, 200);
     assert.equal(result.headers["cache-control"], "no-store");
     const data = JSON.parse(result.bytes.toString());

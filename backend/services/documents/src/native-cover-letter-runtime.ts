@@ -11,6 +11,7 @@ import {
   createNativeMemoryTransport,
   type NativeMemoryTransportOptions,
 } from "./native-memory-transport.js";
+import { createAdmittedNativeReadAuthorization } from "./native-read-admission.js";
 
 export interface NativeCoverLetterRuntimeOptions {
   documentVersion: number;
@@ -156,6 +157,12 @@ export async function createNativeCoverLetterRuntime(options: NativeCoverLetterR
     }
     const server = createNativeMemoryTransport({
       ...transportOptions,
+      authorize: createAdmittedNativeReadAuthorization({
+        binding,
+        checkAdmission: admit,
+        authorize: transportOptions.authorize,
+        enabled,
+      }),
       session,
       reference: generated.reference,
       enabled,

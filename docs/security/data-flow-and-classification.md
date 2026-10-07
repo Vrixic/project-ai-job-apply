@@ -1,5 +1,11 @@
 # Data Flow and Classification
 
+2026-10-06 native direct reads: authenticated original task admission -> current packet proof from
+the scalar Gateway route -> original task admission again; HTTPS repeats this proof around
+rendering. Sealed admission cannot serve a file while a stale packet reference remains. Gateway
+authorization stays default off and requires existing packet-protection authority; no generated
+body crosses Lambda. [Evidence](../product/delivery/evidence/d3-native-read-admission-2026-10-06.md).
+
 2026-10-06 source-only native preparation activity: exact numeric private activity -> managed
 database secret -> separate owning pools/current packet protection -> original scalar native
 launcher. Fresh-launch shutdown preserves read-only original receipt recovery. This dedicated

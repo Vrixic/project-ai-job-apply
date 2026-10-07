@@ -24,6 +24,7 @@ if (mode) {
   assert.ok(
     [
       "runtime-image",
+      "runtime-image-read-sealed",
       "runtime-image-version-two",
       "runtime-image-secret-refused",
       "runtime-image-tls-refused",
@@ -34,6 +35,7 @@ if (mode) {
 }
 for (const current of [
   "runtime-image",
+  "runtime-image-read-sealed",
   "runtime-image-version-two",
   "runtime-image-secret-refused",
   "runtime-image-tls-refused",

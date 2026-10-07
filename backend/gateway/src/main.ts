@@ -180,6 +180,9 @@ const applications =
         client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
         profile: store,
         ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
+        nativeReadAuthorizationsEnabled: () =>
+          process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&
+          packetProtection?.enabled() === true,
         restrictedAnswerReuseEnabled: process.env.RESTRICTED_ANSWER_REUSE_ENABLED === "true",
         restrictedAnswers: Object.freeze({
           lockCurrentReferences:

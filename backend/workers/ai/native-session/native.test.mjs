@@ -24,6 +24,7 @@ for (const mode of [
   "transport",
   "controls",
   "runtime",
+  "runtime-read-sealed",
   "runtime-terminate",
   "runtime-revoked",
   "runtime-controls-failure",
@@ -31,6 +32,7 @@ for (const mode of [
   "runtime-bootstrap-delayed",
   "runtime-bootstrap-revoked",
   "runtime-image",
+  "runtime-image-read-sealed",
   "runtime-image-version-two",
 ]) {
   test(`kernel retires the actual ${mode} content process`, { timeout: 10_000 }, async () => {

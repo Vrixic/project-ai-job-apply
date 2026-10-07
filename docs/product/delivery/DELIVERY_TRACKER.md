@@ -1,5 +1,11 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 wires the default-off Gateway scalar authorization switch and original task
+admission around every native packet proof. All 29 focused, 33 Linux and four emitted isolation
+checks pass; real HTTPS refuses a file after sealing without generated content. Gateway typecheck
+passes. [Evidence](evidence/d3-native-read-admission-2026-10-06.md). Actual-image/full verification
+and managed routing/client/provider/accountable gates remain; D1/D3 stay In progress.
+
 2026-10-06 D3-079 dedicated native preparation runtime passes full verification at clean `6d34cbd5`
 (38 typecheck/39 test/23 builds, unchanged lint and native artifact isolation). Two identical
 unpublished ZIP builds pass default-off checks. The actual fresh-flow/lost-ACK recovery uses
