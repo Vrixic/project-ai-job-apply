@@ -4708,3 +4708,10 @@ source-bound artifact/publisher family and default-disabled hourly release compo
 handler cases, nine real PostgreSQL cases and four mocked Terraform cases pass; both environment
 roots validate. [Evidence](evidence/d1-job-report-retention-2026-10-06.md#private-managed-maintenance).
 Managed release/access/alerts remain. Docker/WSL stopped, PC on; D1/D3 In progress.
+
+
+2026-10-07 D1-012 read-only development checks confirm encrypted 30-day application logs and
+an encrypted alert topic with one confirmed email subscription. Both new maintenance Lambdas
+are absent; no deployment is implied by local evidence. Mailbox/incident retention remains
+unverified. [Evidence](evidence/d1-retention-live-configuration-2026-10-07.md).
+Managed AWS session is currently available. No cloud mutation; D1/D3 In progress, PC on.
