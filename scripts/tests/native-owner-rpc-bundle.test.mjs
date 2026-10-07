@@ -285,3 +285,95 @@ for (const side of ["client", "handler", "lambda"]) {
     }
   });
 }
+
+for (const side of ["client", "handler", "lambda"]) {
+  test(`emitted resume source ${side} excludes generated-content and unrelated owner capability`, async () => {
+    const { inputs, exports } = await emitted(
+      side === "lambda"
+        ? "backend/workflows/dist/src/native-resume-source-rpc-lambda.js"
+        : `backend/services/documents/dist/src/native-resume-source-rpc-${side}.js`,
+    );
+    for (const name of [
+      "ai-sdk",
+      "render/",
+      "resume-tailoring.js",
+      "native-resume-session.js",
+      "processor-lambda.js",
+      "parser-lambda.js",
+      "pdfjs",
+      "yazl",
+      "client-ecs",
+      "native-task-launch.js",
+      "native-task-retirement.js",
+      "cover-letter-work-store.js",
+      "native-evidence-binding.js",
+      ...(side !== "lambda"
+        ? [
+            "postgres",
+            "client-s3",
+            "backend/services/profile",
+            "backend/services/applications",
+            "backend/services/jobs",
+          ]
+        : []),
+      ...(side === "handler" ? ["@aws-sdk"] : []),
+    ])
+      assert.ok(
+        !inputs.some((i) => i.includes(name)),
+        `Unexpected source ${side} capability: ${name}`,
+      );
+    assert.ok(inputs.some((i) => i.includes("parsing/normalize.js")));
+    if (side === "lambda") {
+      for (const name of [
+        "postgres",
+        "client-s3",
+        "normalized-document-reader.js",
+        "parsed-resume-source.js",
+        "native-resume-generation-store.js",
+        "native-resume-admission.js",
+      ])
+        assert.ok(
+          inputs.some((i) => i.includes(name)),
+          `Missing source owner capability: ${name}`,
+        );
+      let effects = 0;
+      const handler = exports.createNativeResumeSourceRpcLambda({
+        environment: () => ({}),
+        resolveDatabaseUrl: async () => {
+          effects++;
+          throw Error("SyntheticDenied");
+        },
+      });
+      await assert.rejects(
+        handler({}, { invokedFunctionArn: target }),
+        /^Error: NativeResumeSourceUnavailable$/u,
+      );
+      assert.equal(effects, 0);
+    } else if (side === "client") {
+      const bootstrap = {
+        identity: {
+          ownerUserId: id(2),
+          applicationId: id(3),
+          generationId: id(4),
+          version: 1,
+          baseDocumentId: id(8),
+          baseVersion: 1,
+          baseSha256: "a".repeat(64),
+          jobContextSha256: "b".repeat(64),
+        },
+        canonicalJobId: id(9),
+        normalizedSha256: "c".repeat(64),
+      };
+      const client = exports.createNativeResumeSourceRpcClient({
+        binding: resumeBinding,
+        bootstrap,
+        targetArn: target,
+      });
+      assert.deepEqual(Object.keys(client), ["load"]);
+      await assert.rejects(
+        client.load(bootstrap.identity),
+        /^Error: NativeResumeSourceUnavailable$/u,
+      );
+    }
+  });
+}

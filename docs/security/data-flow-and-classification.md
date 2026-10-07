@@ -877,3 +877,13 @@ Pseudonymous operator metadata expires through separate default-off exact-format
 counts-only maintenance; candidate exports exclude these unlinked rows. No automatic scheduler,
 managed maintenance, raw audit reader, historical backfill or production approval is asserted.
 [Source/local evidence](../product/delivery/evidence/d1-privileged-moderation-audit-2026-10-06.md).
+
+2026-10-07 native resume retained-source checkpoint (source-only/default-off): original
+SDK-signed task → separate numeric source Lambda → lazy Documents/Jobs ownership and
+candidate source lease → exact normalized S3 version/digest → final admission → bounded
+normalized resume and exact job context. Generated bodies never enter this path. Proofs
+and source values are excluded from logs/persistence; task replies omit object locations
+and credentials. Admission/Jobs transactions end before object I/O; only the separate
+active-candidate source lease spans it. Source holds, completion, sealing and changed
+job/preparation withhold the result. Managed IAM/source/task/client acceptance remains
+open. [Evidence](../product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).

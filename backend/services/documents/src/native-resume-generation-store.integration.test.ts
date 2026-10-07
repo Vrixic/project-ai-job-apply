@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { createNativeResumeSourceStore } from "./native-resume-source-store.js";
+import { createNativeResumeSourceRpcClient } from "./native-resume-source-rpc-client.js";
+import { normalizeBlocks } from "./parsing/normalize.js";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -164,6 +168,207 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       },
     };
   }
+  async function sourceFixture() {
+    const document = {
+      documentId: input.identity.baseDocumentId,
+      version: input.identity.baseVersion,
+      parserVersion: "parser-1",
+      mediaType: "application/pdf" as const,
+      sourceSha256: input.identity.baseSha256,
+      blocks: normalizeBlocks([{ text: "Synthetic source-only engineering experience" }]),
+      createdAt: "2026-10-07T00:00:00.000Z",
+    };
+    input.normalizedSha256 = createHash("sha256").update(JSON.stringify(document)).digest("hex");
+    await sql`UPDATE documents.resume_documents SET normalized_sha256=${input.normalizedSha256} WHERE id=${input.identity.baseDocumentId}`;
+    const { s, r } = await bound();
+    if (!r.allocation) throw Error("SyntheticAllocationMissing");
+    const binding: NativeResumeTaskBinding = {
+      schemaVersion: 1,
+      kind: "tailored_resume",
+      scope: scope(r),
+      allocation: r.allocation,
+      configurationSha256: config,
+    };
+    const bootstrap = {
+      identity: input.identity,
+      normalizedSha256: input.normalizedSha256,
+      canonicalJobId: input.application.canonicalJobId,
+    };
+    const sourceModule = await import(
+      fileURLToPath(
+        new URL("../../../workflows/dist/src/native-resume-source-rpc-lambda.js", import.meta.url),
+      )
+    );
+    const jobs = await import(
+      fileURLToPath(new URL("../../jobs/dist/src/native-resume-admission.js", import.meta.url))
+    );
+    let duringRead: () => Promise<void> = async () => {};
+    let reads = 0,
+      secrets = 0;
+    let runtime: ReturnType<typeof createNativeResumeSourceStore> | undefined;
+    const env: Record<string, string | undefined> = {
+      NATIVE_RESUME_SOURCE_RPC_ENABLED: "true",
+      AWS_REGION: "us-east-2",
+      PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+      AWS_LAMBDA_FUNCTION_NAME: "native-resume-source",
+      AWS_LAMBDA_FUNCTION_VERSION: "7",
+      AWS_SESSION_TOKEN: "synthetic-only",
+      DATABASE_SECRET_ID: "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-db",
+      NATIVE_RESUME_SOURCE_BUCKET: "synthetic-source",
+      NATIVE_RESUME_SOURCE_KMS_KEY_ARN:
+        "arn:aws:kms:us-east-2:123456789012:key/00000000-0000-4000-8000-000000000000",
+      NATIVE_RESUME_SOURCE_RPC_DEPLOYMENT_JSON: JSON.stringify({
+        ...input.deployment,
+        taskRoleArn: "arn:aws:iam::123456789012:role/native-resume",
+      }),
+    };
+    const target = "arn:aws:lambda:us-east-2:123456789012:function:native-resume-source:7";
+    const handler = sourceModule.createNativeResumeSourceRpcLambda({
+      environment: () => env,
+      resolveDatabaseUrl: async () => {
+        secrets++;
+        return url;
+      },
+      createRuntime: (connection: string, _configuration: unknown, enabled: () => boolean) => {
+        runtime = createNativeResumeSourceStore({
+          url: connection,
+          ports,
+          enabled,
+          job: (scope, query) => jobs.readNativeResumeJobSource(scope, query, enabled),
+          reader: {
+            read: async () => {
+              reads++;
+              await duringRead();
+              return structuredClone(document);
+            },
+          },
+        });
+        return runtime;
+      },
+      testFetch: async () =>
+        new Response(
+          `<GetCallerIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><GetCallerIdentityResult><Arn>arn:aws:sts::123456789012:assumed-role/native-resume/${task.split("/").at(-1)}</Arn><Account>123456789012</Account><UserId>AROAABCDEFGHIJKLMNOP:${task.split("/").at(-1)}</UserId></GetCallerIdentityResult><ResponseMetadata><RequestId>synthetic-request</RequestId></ResponseMetadata></GetCallerIdentityResponse>`,
+          { headers: { "content-type": "text/xml" } },
+        ),
+    });
+    const client = createNativeResumeSourceRpcClient({
+      binding,
+      bootstrap,
+      targetArn: target,
+      enabled: () => true,
+      testCredentials: {
+        accessKeyId: "ASIASYNTHETICEXAMPLE",
+        secretAccessKey: "synthetic-local-only",
+        sessionToken: "synthetic-local-signing-token-only",
+      },
+      testClient: {
+        send: async (command) => ({
+          StatusCode: 200,
+          ExecutedVersion: "7",
+          Payload: new TextEncoder().encode(
+            nativeOwnerJson(
+              await handler(
+                JSON.parse(new TextDecoder().decode(command.input.Payload as Uint8Array)),
+                { invokedFunctionArn: target },
+              ),
+            ),
+          ),
+        }),
+      },
+    });
+    return {
+      s,
+      r,
+      document,
+      bootstrap,
+      env,
+      client,
+      reads: () => reads,
+      secrets: () => secrets,
+      setRead: (fn: () => Promise<void>) => {
+        duringRead = fn;
+      },
+      close: async () => {
+        await runtime?.close();
+      },
+    };
+  }
+  it("loads original source through authenticated Lambda and actual owning SQL composition", async () => {
+    const f = await sourceFixture();
+    try {
+      expect(f.secrets()).toBe(0);
+      expect(await f.client.load(f.bootstrap.identity)).toEqual({
+        document: f.document,
+        job: { title: "Software Engineer", description: "Synthetic resume ledger job context." },
+      });
+      expect(f.secrets()).toBe(1);
+      expect(f.reads()).toBe(1);
+      expect(await f.s.claimOriginalCompletion(scope(f.r), reference(f.r))).toBe("claimed");
+      await expect(f.client.load(f.bootstrap.identity)).rejects.toThrow(
+        "NativeResumeSourceUnavailable",
+      );
+      expect(f.reads()).toBe(1);
+    } finally {
+      await f.close();
+    }
+  });
+  it.each(["hold", "job", "seal"])(
+    "withholds source after actual %s mutation during object read",
+    async (change) => {
+      const f = await sourceFixture();
+      try {
+        f.setRead(async () => {
+          if (change === "hold")
+            await sql`UPDATE documents.resume_documents SET security_hold=true WHERE id=${input.identity.baseDocumentId}`;
+          else if (change === "job")
+            await sql`UPDATE jobs.canonical_jobs SET description='Synthetic changed source job' WHERE id=${input.application.canonicalJobId}`;
+          else await f.s.seal(input.identity.ownerUserId, input.identity.applicationId);
+        });
+        await expect(f.client.load(f.bootstrap.identity)).rejects.toThrow(
+          "NativeResumeSourceUnavailable",
+        );
+        expect(f.reads()).toBe(1);
+      } finally {
+        await f.close();
+      }
+    },
+  );
+  it("pins source Lambda configuration and refuses forbidden ambient credentials before secret access", async () => {
+    const f = await sourceFixture();
+    try {
+      f.env.DATABASE_URL = "synthetic-forbidden";
+      await expect(f.client.load(f.bootstrap.identity)).rejects.toThrow();
+      expect(f.secrets()).toBe(0);
+      delete f.env.DATABASE_URL;
+      await f.client.load(f.bootstrap.identity);
+      f.env.NATIVE_RESUME_SOURCE_BUCKET = "changed-source";
+      await expect(f.client.load(f.bootstrap.identity)).rejects.toThrow();
+      expect(f.reads()).toBe(1);
+    } finally {
+      await f.close();
+    }
+  });
+  it("holds only the candidate source lease across I/O and releases it before quarantine", async () => {
+    const f = await sourceFixture();
+    try {
+      f.setRead(async () => {
+        await expect(
+          sql.begin(async (tx) => {
+            await tx`SET LOCAL lock_timeout='100ms'`;
+            await tx`UPDATE identity.users SET account_state='quarantined',quarantined_at=clock_timestamp() WHERE id=${input.identity.ownerUserId}`;
+          }),
+        ).rejects.toMatchObject({ code: "55P03" });
+      });
+      await f.client.load(f.bootstrap.identity);
+      await sql`UPDATE identity.users SET account_state='quarantined',quarantined_at=clock_timestamp() WHERE id=${input.identity.ownerUserId}`;
+      await expect(f.client.load(f.bootstrap.identity)).rejects.toThrow(
+        "NativeResumeSourceUnavailable",
+      );
+      expect(f.reads()).toBe(1);
+    } finally {
+      await f.close();
+    }
+  });
   it("runs signed resume controls through the actual lazy Lambda and owner ledger", async () => {
     const f = await rpcFixture();
     try {

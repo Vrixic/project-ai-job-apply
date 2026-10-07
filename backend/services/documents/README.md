@@ -756,3 +756,11 @@ uses fixed ECS credentials, numeric Lambda versions and no retry of unknown tran
 The independent owner Lambda opens its bounded SQL pool only after task authentication.
 Source bytes, task/image launch/bootstrap and packet/client/ATS composition remain
 separate work. See [source and local evidence](../../../docs/product/delivery/evidence/d3-native-resume-owner-rpc-2026-10-07.md).
+
+Private `./native-resume-source-rpc-client` supplies the session-compatible original
+source loader through a separate authenticated recipient. Its owning source runtime
+uses the ledger, candidate lease, exact Jobs context and bounded version/digest-checked
+normalized object reader. Generated bodies, rendering and provider work are excluded.
+Existing processor/tailoring imports retain compatible re-exports after the source-reader
+extraction. Source/runtime IAM, task/image/launch and managed acceptance remain gates.
+See [local evidence](../../../docs/product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).

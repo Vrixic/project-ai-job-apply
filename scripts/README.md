@@ -429,3 +429,9 @@ to the exact clean committed source for provenance. Output stays in
 `backend/workflows/dist/native-resume-owner-rpc-lambda`; the builder performs no
 publication/deployment and verifies default-off refusal without network effects.
 See [local evidence](../docs/product/delivery/evidence/d3-native-resume-owner-rpc-2026-10-07.md).
+
+`node scripts/build-native-resume-source-rpc-lambda.mjs` builds the separate default-off
+retained resume source receiver after Workflows compilation. Set `ARTIFACT_SOURCE_SHA`
+to the clean committed source. Output is isolated under
+`backend/workflows/dist/native-resume-source-rpc-lambda`; no publication occurs.
+See [local evidence](../docs/product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).

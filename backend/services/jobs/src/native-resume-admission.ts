@@ -45,11 +45,11 @@ export function nativeResumeJobBindings(
  * ones. Source insertions only add evidence; deletion/withdrawal/reassignment of held evidence
  * cannot commit. The shared revision row briefly delays catalog writes, not catalog reads.
  * Locks do not stop wall-clock expiry; callers must recheck admission for every later operation. */
-export async function lockNativeResumeJobAdmission(
+export async function readNativeResumeJobSource(
   input: NativeResumeJobScope,
   query: NativeResumeJobQuery,
   enabled: () => boolean = () => false,
-): Promise<void> {
+): Promise<Readonly<{ title: string; description: string }>> {
   try {
     const keys = ["canonicalJobId", "jobRevision", "jobContextSha256"];
     if (
@@ -121,7 +121,17 @@ export async function lockNativeResumeJobAdmission(
       !enabled()
     )
       throw unavailable();
+    return Object.freeze({ title: job.title, description: job.description });
   } catch {
     throw unavailable();
   }
+}
+
+/** Admission deliberately discards the source projection. Both operations use the same owner proof. */
+export async function lockNativeResumeJobAdmission(
+  input: NativeResumeJobScope,
+  query: NativeResumeJobQuery,
+  enabled: () => boolean = () => false,
+): Promise<void> {
+  await readNativeResumeJobSource(input, query, enabled);
 }

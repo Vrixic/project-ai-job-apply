@@ -4409,3 +4409,13 @@ source is unchanged; this is segmented verification, not an uninterrupted full p
 client/ATS and managed/accountable gates remain; D1/D3 stay In progress, ADR-040
 Proposed. No deployment/activation, new PR, main merge or hosted CI/CD. Docker/WSL
 stopped, shared volumes retained, PC on.
+
+2026-10-07 D3-064/D3-079 connects separate authenticated original resume source RPC
+through the actual Documents ledger/candidate lease, Jobs projection and narrow retained
+normalized-object reader. Generated content stays outside this path. All 66 focused,
+32 real PostgreSQL and 15 emitted checks pass; lint remains 15 warnings/58 infos.
+[Evidence](evidence/d3-native-resume-source-rpc-2026-10-07.md). Artifact/full frozen-source
+verification follow. Task/image/bootstrap/launch/preparation/packet/client/ATS and
+managed/accountable gates remain; D1/D3 stay In progress and ADR-040 Proposed. No new PR,
+main merge, publication/deployment or hosted CI/CD. Owned fixture removed, Docker/WSL
+stopped, shared volumes retained, PC on.

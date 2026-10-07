@@ -151,6 +151,30 @@
     "./native-resume-owner-controls": {
       "types": "./dist/src/native-resume-owner-controls.d.ts",
       "default": "./dist/src/native-resume-owner-controls.js"
+    },
+    "./native-resume-source": {
+      "types": "./dist/src/native-resume-source.d.ts",
+      "default": "./dist/src/native-resume-source.js"
+    },
+    "./native-resume-source-store": {
+      "types": "./dist/src/native-resume-source-store.d.ts",
+      "default": "./dist/src/native-resume-source-store.js"
+    },
+    "./native-resume-source-rpc-client": {
+      "types": "./dist/src/native-resume-source-rpc-client.d.ts",
+      "default": "./dist/src/native-resume-source-rpc-client.js"
+    },
+    "./native-resume-source-rpc-contract": {
+      "types": "./dist/src/native-resume-source-rpc-contract.d.ts",
+      "default": "./dist/src/native-resume-source-rpc-contract.js"
+    },
+    "./native-resume-source-rpc-handler": {
+      "types": "./dist/src/native-resume-source-rpc-handler.d.ts",
+      "default": "./dist/src/native-resume-source-rpc-handler.js"
+    },
+    "./normalized-document-reader": {
+      "types": "./dist/src/normalized-document-reader.d.ts",
+      "default": "./dist/src/normalized-document-reader.js"
     }
   },
   "scripts": {
