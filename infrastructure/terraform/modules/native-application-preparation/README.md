@@ -59,6 +59,8 @@ and permission structure only; it does not prove effective AWS IAM or remote exe
 Local validation uses the repository's pinned Terraform 1.16.2: initialize with `-backend=false`
 and `-lockfile=readonly`, then `terraform validate` and `terraform test`. No cloud calls are
 needed by the mock suite. Before activation, verify retained original-runtime drain and
-packet-key policies and inventory other VPC KMS callers: the preparation KMS endpoint enables
-private DNS and currently admits only preparation activity packet operations. Managed launch,
+packet-key policies. The KMS endpoint enables private DNS and admits preparation packet
+operations plus exact existing vault/export/deletion-locator owners when configured. Existing
+owners receive no packet-key access. Include any newly composed packet owner explicitly before
+activation. Managed launch,
 owner/task/route composition and acceptance remain.

@@ -113,6 +113,28 @@ resource "aws_cloudwatch_metric_alarm" "native_preparation" {
   ok_actions          = [aws_sns_topic.operational_alerts.arn]
   alarm_description   = "Investigate original preparation work; never regenerate or infer task retirement from a failed delivery."
 }
+# Private DNS sends all VPC KMS calls here. Preserve the existing direct SDK callers,
+# without admitting service-mediated S3/SQS/Secrets Manager calls or unrelated keys.
+locals {
+  preparation_existing_kms_access = concat(
+    var.restricted_answer_vault_enabled ? [{
+      Sid       = "GatewayVault", Effect = "Allow", Principal = "*", Action = ["kms:Encrypt", "kms:Decrypt"], Resource = aws_kms_key.restricted_answer_vault[0].arn,
+      Condition = { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-gateway-lambda" }, StringEquals = { "kms:EncryptionContext:purpose" = "restricted-answer-vault-v1" } }
+    }] : [],
+    var.restricted_answer_export_enabled ? [{
+      Sid       = "ActivityVaultExport", Effect = "Allow", Principal = "*", Action = ["kms:Decrypt"], Resource = aws_kms_key.restricted_answer_vault[0].arn,
+      Condition = { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-profile-readiness-activity" }, StringEquals = { "kms:EncryptionContext:purpose" = "restricted-answer-vault-v1" } }
+    }] : [],
+    var.candidate_rights_enabled ? [for actor, actions in { "gateway-lambda" = ["kms:Encrypt"], "profile-readiness-activity" = ["kms:Encrypt", "kms:Decrypt"] } : {
+      Sid                                                                    = actor == "gateway-lambda" ? "GatewayDeletionLocator" : "ActivityDeletionLocator", Effect = "Allow", Principal = "*", Action = actions, Resource = aws_kms_key.platform.arn,
+      Condition                                                              = { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-${actor}" }, StringEquals = { "kms:EncryptionContext:purpose" = "candidate-deletion-recovery-v1" } }
+    }] : [],
+    var.candidate_deletion_restore_role_enabled ? [{
+      Sid       = "RestoreDeletionLocator", Effect = "Allow", Principal = "*", Action = ["kms:Decrypt"], Resource = aws_kms_key.platform.arn,
+      Condition = { ArnEquals = { "aws:PrincipalArn" = local.candidate_deletion_restore_role_arn }, StringEquals = { "kms:EncryptionContext:purpose" = "candidate-deletion-recovery-v1" } }
+    }] : []
+  )
+}
 resource "aws_vpc_endpoint" "native_preparation_kms" {
   count               = local.preparation_configured && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
@@ -121,8 +143,8 @@ resource "aws_vpc_endpoint" "native_preparation_kms" {
   private_dns_enabled = true
   subnet_ids          = [aws_subnet.private[0].id]
   security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
-  policy = jsonencode({ Version = "2012-10-17", Statement = flatten([for id, r in var.native_preparation_releases : [
+  policy = jsonencode({ Version = "2012-10-17", Statement = concat(local.preparation_existing_kms_access, flatten([for id, r in var.native_preparation_releases : [
     { Effect = "Allow", Principal = "*", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = r.packet_encryption_key_arn, Condition = { ArnEquals = { "aws:PrincipalArn" = local.preparation_roles[id].activity } } },
     { Effect = "Allow", Principal = "*", Action = ["kms:GenerateMac"], Resource = r.packet_fingerprint_key_arn, Condition = { ArnEquals = { "aws:PrincipalArn" = local.preparation_roles[id].activity } } }
-  ]]) })
+  ]])) })
 }

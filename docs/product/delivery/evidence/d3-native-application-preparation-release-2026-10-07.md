@@ -153,3 +153,24 @@ whitespace checks pass. No new schema or migration, frontend change, cloud actio
 Temporary PostgreSQL container removed; Docker/WSL stopped and PC retained. Native launcher/
 task/owner/route composition, packet-key/private-DNS coexistence and managed acceptance remain.
 D1/D3 remain In progress; CI/CD is deferred to production launch.
+
+## KMS private-DNS coexistence
+
+Source inventory identified direct KMS SDK calls in the gateway vault and deletion-confirmation
+journal, candidate-rights activity export/recovery ledger, and restore operator. The new private
+KMS endpoint would have denied those existing owners when preparation enabled private DNS.
+Its policy now preserves their exact role/key/action pairs only when the corresponding existing
+feature is configured. Vault operations require `restricted-answer-vault-v1`; deletion locators
+require `candidate-deletion-recovery-v1`. Export and restore remain decrypt-only, gateway
+locator access remains encrypt-only, and none receives preparation packet-key access.
+Service-mediated S3/SQS/Secrets Manager encryption does not require caller endpoint grants.
+
+The coexistence mock plan combines preparation, vault/export, candidate rights and restore,
+and verifies seven endpoint statements, exact principal roles, key separation and purpose/action
+limits. The three preparation and three restore scenarios also pass. Both environments validate;
+serverless policy validation, Terraform formatting and diff whitespace checks pass. No AWS IAM
+or network acceptance, deployment or activation is claimed. Packet-key provisioning and the
+future native packet owners must still be connected explicitly; D1/D3 remain In progress.
+
+All 51 existing serverless-runtime Terraform mock scenarios also pass after this change
+(`.tmp/d3-preparation-kms-existing-tests.log`), for 58 passing scenarios in this batch.

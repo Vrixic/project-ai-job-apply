@@ -2305,3 +2305,10 @@ starter refuses unbound or unretained work under the owning lock. 53 PostgreSQL 
 cases, 101 existing unit cases and eight Terraform mock scenarios pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#original-release-recovery-and-drain).
 AWS calls/secrets were simulated; managed launcher/task/route and acceptance remain. D1/D3
 In progress, no cloud action, CI/CD deferred; temporary SQL removed, Docker/WSL stopped, PC on.
+
+2026-10-07 preparation KMS private-DNS policy now preserves existing vault/export and
+candidate-deletion locator callers with exact role/key/purpose/action restrictions. A combined
+coexistence plan and six preparation/restore mock scenarios pass; both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#kms-private-dns-coexistence).
+No cloud action; packet keys and managed native task/owner/route composition remain. D1/D3
+In progress, CI/CD deferred, Docker/WSL stopped and PC on.
