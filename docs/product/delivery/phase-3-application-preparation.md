@@ -1939,3 +1939,14 @@ ADR-040 Proposed. CI/CD deferred until launch. Owned SQL fixtures removed, Docke
 shared volumes retained, PC on.
 
 Development web restored after verification: anonymous `/` returns 200 and `/resume` returns 307. No new signed-in acceptance is claimed.
+
+
+2026-10-07 D3-064/D3-079 closes exhausted native resume queue delivery in the existing outbox
+and reports bounded failure counts without declaring task/workflow death or regenerating.
+The combined local durable SDK + owning SQL path now passes Prepare/source capture/one launch/
+poll/ready attachment/receipt. All 48 PostgreSQL cases and eight emitted checks pass; three
+owning workspaces compile. Cloud transports and generated readiness remain simulated.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Focused verification follows
+the owner's implementation-first cadence; no repeated full verifier. Enabled-image and managed/
+client/ATS/accountable gates remain. D1/D3 In progress, ADR-040 Proposed; CI/CD deferred until
+launch and PC remains on.

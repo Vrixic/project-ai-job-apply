@@ -28,6 +28,26 @@ export class PostgresNativeResumeRequestStore {
   private check() {
     if (!this.enabled()) throw unavailable();
   }
+  /** Delivery exhaustion is not proof that the original durable execution or task stopped. */
+  async failExpiredDeliveries(limit = 25): Promise<number> {
+    this.check();
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) throw unavailable();
+    return this.sql.begin(async (tx) => {
+      const rows = await tx<Array<{ id: string }>>`
+        WITH expired AS (
+          SELECT id FROM applications.outbox
+          WHERE event_type='application.resume-preparation.requested.v1'
+            AND status='processing' AND attempt_count=5
+            AND lease_expires_at <= clock_timestamp()
+          ORDER BY lease_expires_at,id LIMIT ${limit} FOR UPDATE SKIP LOCKED
+        )
+        UPDATE applications.outbox e SET status='failed',failed_at=clock_timestamp(),
+          claim_token=NULL,lease_expires_at=NULL,last_error_code='lease_expired'
+        FROM expired WHERE e.id=expired.id RETURNING e.id`;
+      this.check();
+      return rows.length;
+    });
+  }
   async pending(limit = 25): Promise<string[]> {
     this.check();
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) throw unavailable();

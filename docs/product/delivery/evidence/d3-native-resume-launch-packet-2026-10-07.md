@@ -202,3 +202,36 @@ bounded dispatch does not itself prove those requests are surfaced as failed. D1
 In progress and ADR-040 Proposed. CI/CD remains deferred until production launch.
 
 Development web restored after verification: anonymous `/` returns 200 and `/resume` returns 307. No new signed-in acceptance is claimed.
+
+
+## Delivery exhaustion and combined local durable/SQL flow
+
+Resume request dispatch now closes expired fifth delivery attempts in the existing Applications
+outbox as `failed`/`lease_expired`, preserving the original packet/workflow binding and attempt
+count. A bounded `FOR UPDATE SKIP LOCKED` sweep runs before scheduled dispatch and returns a
+`deliveryFailed` count. It leaves live leases, earlier attempts and unrelated event types alone,
+and includes superseded packets so stale requests cannot remain processing forever. This is an
+internal delivery outcome, not proof of workflow failure, task death, content destruction or a
+new candidate-visible status. It never starts a replacement generation.
+
+The connected local smoke now runs Prepare -> actual SQL outbox/source capture -> actual local
+AWS durable SDK -> owning SQL preparation/one ECS launch -> pending readiness -> ready attachment
+-> delivery receipt. It proves one launch, polling, review-required resume attachment and no
+second launch on dispatch replay. Lambda delivery, ECS responses and the generated-ready receipt
+remain simulated; this is not actual rendering, managed cloud or browser acceptance.
+
+All 48 PostgreSQL 16.6 cases pass on a fresh disposable cluster, including concurrent exhaustion
+sweepers and the combined flow. The first combined attempt found a fixture clock mismatch:
+durable skip-time advances Date.now beyond PostgreSQL's clock, so the synthetic readiness receipt
+now uses owning SQL time. A reused-database run encountered old pending test requests; the clean
+run removes that cross-run interference without weakening production checks. All eight emitted
+launch/control isolation cases pass. Applications, Documents and Workflows compile; changed-file
+Biome checks and git diff checks pass. Logs: `.tmp/d3-resume-recovery-fresh-sql.log`,
+`.tmp/d3-resume-recovery-bundle.log`, `.tmp/d3-resume-recovery-lint.log` and
+`.tmp/d3-resume-recovery-{app,doc,workflow}-build.log`.
+
+Validation is focused on this change, following the owner's implement/smoke/fix/regression
+cadence. The preceding full segmented repository verification remains historical evidence;
+this follow-up does not claim a new full-verifier run. Enabled-image source/render/direct-read,
+managed routing/IAM/schedule, client/ATS and accountable launch gates remain. D1/D3 stay
+In progress; ADR-040 Proposed. CI/CD deferred until production launch, PC shutdown forbidden.

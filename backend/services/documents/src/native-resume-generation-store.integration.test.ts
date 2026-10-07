@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { DescribeTaskDefinitionCommand, RunTaskCommand } from "@aws-sdk/client-ecs";
@@ -14,6 +15,7 @@ import { PostgresNativeMaterialRegistry } from "./native-material-registry.js";
 import { nativeOwnerJson } from "./native-owner-rpc-contract.js";
 import {
   type NativeResumeGenerationRecord,
+  type NativeResumeGenerationScope,
   type NativeResumeOwnerQuery,
   type NativeResumeReservation,
   PostgresNativeResumeGenerationStore,
@@ -890,6 +892,7 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
           started: held ? 0 : 1,
           noResume: held ? 1 : 0,
           pending: 0,
+          deliveryFailed: 0,
         });
         expect(calls).toBe(held ? 0 : 1);
         expect(await running.run()).toEqual({
@@ -898,6 +901,7 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
           started: 0,
           noResume: 0,
           pending: 0,
+          deliveryFailed: 0,
         });
         const [result] = await sql`SELECT status FROM applications.outbox WHERE id=${event?.id}`;
         expect(result?.status).toBe("published");
@@ -907,6 +911,69 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       }
     },
   );
+  it("closes only expired fifth deliveries, including stale packets, without changing task state", async () => {
+    const f = await queuedResumeFixture();
+    try {
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-resume-durable:9";
+      const ids: string[] = [];
+      for (const [index, [attempt, expired, native]] of (
+        [
+          [5, true, true],
+          [5, true, true],
+          [5, false, true],
+          [4, true, true],
+          [5, true, false],
+        ] as const
+      ).entries()) {
+        const id = uuidv7();
+        ids.push(id);
+        const revision = 100 + index;
+        const event = native
+          ? "application.resume-preparation.requested.v1"
+          : "application.status_changed.v1";
+        await sql`INSERT INTO applications.outbox
+          (id,application_id,owner_user_id,application_revision,event_type,subject,payload,
+           occurred_at,available_at,status,claim_token,lease_expires_at,attempt_count,resume_packet_id,resume_workflow_arn)
+          VALUES (${id},${input.identity.applicationId},${input.identity.ownerUserId},${revision},${event},
+           ${`application/${input.identity.applicationId}`},${sql.json({
+             applicationId: input.identity.applicationId,
+             userId: input.identity.ownerUserId,
+             revision,
+             status: "review_required",
+           })},
+           clock_timestamp()-interval '2 minutes',clock_timestamp()-interval '2 minutes','processing',${uuidv7()},
+           clock_timestamp()+${expired ? -1 : 60}*interval '1 second',${attempt},
+           ${native ? input.application.packetId : null},${native ? target : null})`;
+      }
+      const winners = await Promise.all([
+        f.requests.failExpiredDeliveries(1),
+        f.requests.failExpiredDeliveries(1),
+      ]);
+      expect(winners.reduce((sum, count) => sum + count, 0)).toBe(2);
+      expect(await f.requests.failExpiredDeliveries()).toBe(0);
+      const rows =
+        await sql`SELECT id,status,last_error_code,claim_token,lease_expires_at,resume_workflow_arn
+        FROM applications.outbox WHERE id IN ${sql(ids)}`;
+      for (const [index, id] of ids.entries()) {
+        const row = rows.find((row) => row.id === id);
+        if (index < 2)
+          expect(row).toMatchObject({
+            status: "failed",
+            last_error_code: "lease_expired",
+            claim_token: null,
+            lease_expires_at: null,
+            resume_workflow_arn: target,
+          });
+        else expect(row?.status).toBe("processing");
+      }
+      await expect(f.requests.failExpiredDeliveries(0)).rejects.toThrow(
+        "NativeResumeRequestUnavailable",
+      );
+    } finally {
+      f.protection.destroy();
+    }
+  });
+
   it("grants one concurrent dispatch lease and rejects changing its original packet or workflow", async () => {
     const f = await queuedResumeFixture();
     try {
@@ -1068,6 +1135,131 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       runs: () => runs,
     };
   }
+  it("runs queued Prepare through the actual local durable SDK, owning SQL launch and ready attachment", async () => {
+    const queued = await queuedResumeFixture();
+    const requireWorkflow = createRequire(
+      new URL("../../../workflows/package.json", import.meta.url),
+    );
+    const { LocalDurableTestRunner, ExecutionStatus } = await import(
+      requireWorkflow.resolve("@aws/durable-execution-sdk-js-testing")
+    );
+    await LocalDurableTestRunner.setupTestEnvironment({ skipTime: true });
+    try {
+      const created = await queued.applicationStore.createPacket(queued.command);
+      const [event] =
+        await sql`SELECT id FROM applications.outbox WHERE application_id=${input.identity.applicationId}
+        AND event_type='application.resume-preparation.requested.v1'`;
+      const dispatchModule = await import(
+        fileURLToPath(
+          new URL("../../../workflows/dist/src/native-resume-request-dispatch.js", import.meta.url),
+        )
+      );
+      const durableModule = await import(
+        fileURLToPath(
+          new URL(
+            "../../../workflows/dist/src/native-resume-preparation-durable.js",
+            import.meta.url,
+          ),
+        )
+      );
+      const f = await preparationFixture();
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-resume-durable:9";
+      const control = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-resume-control:3";
+      let polls = 0;
+      const failures: string[] = [];
+      const runner = new LocalDurableTestRunner({
+        handlerFunction: durableModule.createNativeResumePreparationDurableHandler(control),
+      });
+      runner.registerFunction(
+        control,
+        async (request: {
+          action: string;
+          reservation: NativeResumeReservation;
+          scope: NativeResumeGenerationScope;
+        }) => {
+          try {
+            if (request.action === "start")
+              return {
+                schemaVersion: 1,
+                request,
+                outcome: "reserved",
+                scope: await f.preparation.start(request.reservation),
+                packet: null,
+              };
+            polls++;
+            if (polls === 2) {
+              const row = await f.generations.readLaunch(
+                request.scope,
+                f.launcher.configurationSha256,
+              );
+              // Durable skip-time advances Date.now; readiness must use the owning SQL clock.
+              const [clock] =
+                await sql`SELECT floor(extract(epoch FROM clock_timestamp())*1000)::text AS now`;
+              const ref = reference(row, Number(clock?.now));
+              expect(await f.generations.claimOriginalCompletion(request.scope, ref)).toBe(
+                "claimed",
+              );
+              await f.generations.publishReady(request.scope, ref);
+            }
+            const result = await f.preparation.complete(request.scope);
+            return {
+              schemaVersion: 1,
+              request,
+              outcome: result.kind === "ready" ? "ready" : "pending",
+              scope: request.scope,
+              packet:
+                result.kind === "ready" ? { id: result.packetId, revision: result.revision } : null,
+            };
+          } catch (error) {
+            failures.push(String(error));
+            throw error;
+          }
+        },
+      );
+      const dispatch = dispatchModule.createNativeResumeRequestDispatcher({
+        requests: queued.requests,
+        generations: f.generations,
+        deployment: input.deployment,
+        workflowArn: target,
+        jobContext: async () => input.identity.jobContextSha256,
+        enabled: () => true,
+        invoker: {
+          send: async (command: InvokeCommand) => {
+            if (!(command.input.Payload instanceof Uint8Array)) throw Error("ExpectedPayload");
+            const result = await runner.run({
+              payload: JSON.parse(new TextDecoder().decode(command.input.Payload)),
+            });
+            expect(result.getStatus(), JSON.stringify(failures)).toBe(ExecutionStatus.SUCCEEDED);
+            expect(result.getResult()).toMatchObject({ outcome: "ready", packet: { revision: 4 } });
+            return {
+              StatusCode: 202,
+              DurableExecutionArn: `${target}/durable-execution/resume-${event?.id}/synthetic`,
+            };
+          },
+        },
+      });
+      expect(await dispatch(event?.id)).toBe("started");
+      expect(f.runs()).toBe(1);
+      expect(polls).toBe(2);
+      const view = await f.applicationStore.getApplication(
+        input.identity.ownerUserId,
+        input.identity.applicationId,
+      );
+      expect(view.currentPacket.id).not.toBe(created.view.currentPacket.id);
+      expect(view.currentPacket.temporaryMaterials).toHaveLength(1);
+      expect(view.currentPacket.fields).toContainEqual(
+        expect.objectContaining({ fieldKey: "documents.resume", requiresReview: true }),
+      );
+      const [receipt] = await sql`SELECT status FROM applications.outbox WHERE id=${event?.id}`;
+      expect(receipt?.status).toBe("published");
+      expect(await dispatch(event?.id)).toBe("unavailable");
+      expect(f.runs()).toBe(1);
+    } finally {
+      await LocalDurableTestRunner.teardownTestEnvironment();
+      queued.protection.destroy();
+    }
+  }, 30000);
+
   it("connects original launch, verified-ready packet attachment and current resume location", async () => {
     const f = await preparationFixture();
     const original = await f.preparation.start(input);

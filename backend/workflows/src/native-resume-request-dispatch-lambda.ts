@@ -1,16 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { LambdaClient } from "@aws-sdk/client-lambda";
 import { createApplicationsDatabase } from "@ai-job-apply/applications-service";
 import { PostgresNativeResumeRequestStore } from "@ai-job-apply/applications-service/native-resume-request-store";
 import { nativeLaunchControlVersion } from "@ai-job-apply/documents-service/native-launch-control";
 import {
-  PostgresNativeResumeGenerationStore,
   type NativeResumeReservation,
+  PostgresNativeResumeGenerationStore,
 } from "@ai-job-apply/documents-service/native-resume-generation-store";
 import { nativeTaskDeploymentRegion } from "@ai-job-apply/documents-service/native-task-allocation";
 import { createJobCatalogDatabase, PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import { nativeResumeJobBindings } from "@ai-job-apply/jobs-service/native-resume-admission";
 import { resolveLambdaDatabaseUrl } from "@ai-job-apply/profile-service/lambda-database-url";
+import { LambdaClient } from "@aws-sdk/client-lambda";
 import type { PreparationLambdaInvoker } from "./application-preparation-dispatch-aws.js";
 import { createNativeResumeGenerationOwnerPorts } from "./native-resume-owner-ports.js";
 import { createNativeResumeRequestDispatcher } from "./native-resume-request-dispatch.js";
@@ -124,8 +124,10 @@ export function createNativeResumeRequestDispatchRuntime(
         started: 0,
         noResume: 0,
         pending: 0,
+        deliveryFailed: 0,
       };
       try {
+        counts.deliveryFailed = await requests.failExpiredDeliveries(5);
         for (const id of await requests.pending(5)) {
           if (!enabled()) throw unavailable();
           counts.examined++;
