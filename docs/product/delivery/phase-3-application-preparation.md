@@ -2251,3 +2251,10 @@ restored, Docker/WSL stopped, PC on; CI/CD deferred.
 source/ZIP/checksum/SBOM integrity checks. [Evidence](evidence/d1-d3-connected-verification-2026-10-07.md#consistent-six-artifact-resume-family).
 Artifacts remain local and unpublished; native task-image and managed acceptance remain open.
 D1/D3 stay In progress; CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 current native resume image from frozen `5b45fd12` passes production default-off
+refusal and the immutable-image smoke: 23 assertions, real PDF/DOCX and authenticated TLS reads,
+five-second accelerated native deadline, exit 137 with no OOM. [Evidence](evidence/d1-d3-connected-verification-2026-10-07.md#current-native-resume-image)
+distinguishes synthetic external ports from actual image behavior. Image remains unpublished;
+managed runtime/client/ATS and accountable acceptance remain open. D1/D3 In progress,
+Docker/WSL stopped, PC on; CI/CD deferred.

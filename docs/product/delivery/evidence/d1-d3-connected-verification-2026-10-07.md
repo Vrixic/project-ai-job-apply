@@ -80,3 +80,32 @@ was activated and no managed receipt is claimed. The separately built migration 
 its `0bfe741c` identity. Current native task-image verification remains a next local gate;
 managed DNS/TLS/domain decisions and live acceptance remain open. Development web remains
 running; Docker/WSL are stopped and the PC is on.
+
+## Current native resume image
+
+A frozen Git archive of clean `5b45fd12942a400d6aeb7aeba49644c1798f9e1c` builds successfully
+with `Dockerfile.native-resume` for Linux/amd64. Local tag
+`ai-job-apply-native-resume-local:5b45fd12` resolves to
+`sha256:cd3e35b1093c1dbddc0e96cb490385477c415b153c0a8fcba77bf2543229043b`.
+
+The normal production entrypoint with its image-owned disabled configuration exits 1 and emits
+only `NativeImageConfigurationUnavailable`. The unchanged `verify-native-resume-image.mjs`
+then runs the image-owned runtime/kernel with synthetic ports under UID 65532, init, disabled
+networking, read-only root, dropped capabilities, no-new-privileges and bounded memory/PIDs.
+It passes 23 runtime assertions, renders and verifies both PDF and DOCX, exercises TLS 1.3 and
+JWT/current-packet checks, rejects foreign/forged/unscoped or revoked access and packet races,
+and observes native timer termination (exit 137, Docker `OOMKilled=false`) in 6,599 ms.
+The fixture accelerates the native deadline to five seconds; scalar completion/expiry retains
+the original 30-minute interval. This is not a wall-clock 30-minute endurance test.
+
+Manifest source and runtime/configuration/kernel hashes are checked inside the image. The
+fixture replaces the entrypoint and uses `NODE_ENV=test` for synthetic AWS, identity, source,
+owner and TLS-secret ports. Actual rendering, HTTPS and kernel behavior are exercised; enabled
+production startup, managed transport/IAM/DNS/TLS, candidate browser/ATS integration, remote
+retirement and all-copy disposal remain unverified. One image was built; no reproducibility,
+scan, publication, deployment or real candidate-data claim follows. ADR-040 stays Proposed.
+
+Ignored logs/receipt: `.tmp/d3-connected-native-resume-image-{build.log,inspect.json,default-off.log,smoke.log}`.
+The harness removed its owned container and staging; inspection found no remaining labeled
+container. Docker Desktop and WSL were stopped after the checks; shared images/volumes and the
+running local development web server were retained. PC remains on.
