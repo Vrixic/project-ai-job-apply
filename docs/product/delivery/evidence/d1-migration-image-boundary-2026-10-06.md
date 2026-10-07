@@ -70,3 +70,22 @@ Logs: `.tmp/d3-observation-migration-smoke.log` and `.tmp/d3-observation-migrati
 The first combined verifier at `254bde13` was deliberately stopped after discovering this guaranteed
 later failure; it is not a full pass. A fresh clean-source verifier and actual updated image build
 remain to run. No publication, vulnerability-scan, deployed migration or phase completion claim.
+
+
+The clean `65976e1549d8d1a7c43e26429db509dae0e2e90b` verifier passed through document staged operator
+checks, then found a separate stale Documents 0014 success-message fixture in the migration
+operator suite. Correcting that expected message to 0015 passes the path/baseline and both
+schema-7/schema-8 adversarial suites. This correction changes only a test fixture; the remaining
+maintained verifier stages will run from the new clean commit. Earlier stages are not a claim
+that this later commit ran the entire script uninterrupted. Logs:
+`.tmp/d3-recovery-full-verification-final.log` and `.tmp/d3-observation-migration-operator.log`.
+
+The same archived `65976e15` source builds cold with the committed Unix timestamp and pinned base
+images. Local Linux/amd64 image `sha256:359c3d0cb68fe78fafd1c74d406a5b54a64d3e4db9d0c08fed9e7f8b1900a4ce`
+passes both build-time package checks and the unchanged publisher runtime smoke. The latter runs
+as UID/GID 65532, read-only, no network, all capabilities dropped and no-new-privileges. It checks
+all seven owners, 73 migrations, 93 relations, entrypoints and exact SQL names/checksums, returning
+`migration-runtime-smoke:ok`. No database, credentials or bind mounts were supplied. Logs/receipt:
+`.tmp/d3-observation-migration-image-{build,smoke}.log` and
+`.tmp/d3-observation-migration-image-receipt.json`. This is one local build, not reproducibility,
+ECR scan, publication or migration execution evidence. Docker/WSL stopped after the smoke; PC on.
