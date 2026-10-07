@@ -403,3 +403,15 @@ remote owner authentication is enabled.
 control owner and ECS SDK, excludes SQL/Profile/model/object/render/Invoke owners, and refuses
 default-off use in the actual emitted artifact. It performs no AWS call; the maintained verifier
 runs it after build. Real managed-task terminal conformance remains a release prerequisite.
+
+`build-native-material-launch-lambda.mjs` produces the independent unpublished default-off
+private launcher artifact under `backend/workflows/dist/native-launch-lambda`. It uses the
+maintained clean-source builder and actual bundled refusal checks. It creates no publication,
+deployment or activation. `native-launch-control-bundle.test.mjs` verifies sender/receiver emitted
+capabilities and is included in the maintained full verifier.
+
+
+`build-native-material-task-event-lambda.mjs` builds the separate private task-event recovery
+artifact at `backend/workflows/dist/native-task-event-lambda` with bundled default-off refusal.
+Set `ARTIFACT_SOURCE_SHA` to the committed source for source-bound evidence. It publishes nothing
+and supplies no EventBridge rule, IAM permission, queue/retry/DLQ routing or activation.

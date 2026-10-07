@@ -142,3 +142,25 @@ This proposal remains Proposed and all activation/accountable/provider gates rem
 seven original allocation/work environment overrides and refuse command, role or resource
 retargeting. Local simulated ECS checks and real SQL refusal evidence do not activate this
 Proposed decision or certify managed runtime conformance.
+
+## Private launcher runtime checkpoint — 2026-10-06
+
+A strict metadata-only sender now uses signed regional numeric-version Lambda Invoke. The lazy
+private bootstrap validates fixed task configuration and managed-secret/runtime identity before
+SQL, then supplies actual owning Applications/Docs admission/claim/capture. Independent new-launch
+shutdown permits positive recovery; late fulfilled task capture precedes reply refusal. Narrow
+owner entrypoints omit body/crypto/model/object capability. Local PostgreSQL and simulated
+transport evidence do not certify sender IAM, managed task/image/TLS routing or full application
+content/disposal. The proposal remains Proposed and all activation/accountable gates remain.
+[Evidence](../product/delivery/evidence/d3-native-launch-control-2026-10-06.md).
+
+
+## Task-state hint recovery checkpoint — 2026-10-06
+
+A separate default-off private receiver can forward validated original task-event scalar hints to
+the existing signed positive-recovery control. Only the owning registry and fresh exact ECS task
+observation authorize capture; the event cannot launch, settle work or certify retirement. Local
+synthetic events and emitted capability/source-bound artifact proof leave managed event routing,
+IAM, retained original versions, retries/DLQ and task conformance unfinished. This proposal remains
+Proposed and deployment/activation/accountable gates remain.
+[Evidence](../product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
