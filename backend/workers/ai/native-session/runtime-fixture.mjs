@@ -76,6 +76,7 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
     },
   };
   let providerCalls = 0,
+    readyPublications = 0,
     controlInvocations = 0,
     admissions = 0;
   const imageMode = mode.startsWith("runtime-image");
@@ -244,6 +245,15 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
       completion: async (input, context) => {
         controlInvocations++;
         return completionHandler(input, context);
+      },
+      publishReady: async (fixed, ready) => {
+        readyPublications++;
+        assert.deepEqual(fixed, binding);
+        assert.equal(ready.material.version, documentVersion);
+        assert.equal(ready.material.generationId, identity.id);
+        assert.deepEqual(ready.sourceFactIds, [ids[3]]);
+        assert.equal(ready.confidence, 1);
+        return true;
       },
     }),
   });
@@ -470,6 +480,7 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
   assert.equal(reference.version, documentVersion);
   assert.equal(providerCalls, 1);
   assert.equal(controlInvocations, 3);
+  assert.equal(readyPublications, bootstrapMode ? 1 : 0);
   assert.equal(Object.hasOwn(runtime, "reader"), false);
   assert.equal(Object.hasOwn(runtime, "session"), false);
   assert.ok(Object.isFrozen(runtime.reference) && Object.isFrozen(runtime.letter.sourceFactIds));
@@ -539,7 +550,7 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
   assert.equal(providerCalls, 1);
   assert.ok(admissions >= 10);
   process.stdout.write(
-    `${JSON.stringify({ ready: true, providerCalls, controlInvocations, actualFiles: files, originalCompletion: reference.completedAtMs, originalExpiry: reference.expiresAtMs })}\n`,
+    `${JSON.stringify({ ready: true, providerCalls, controlInvocations, readyPublications, actualFiles: files, originalCompletion: reference.completedAtMs, originalExpiry: reference.expiresAtMs })}\n`,
   );
   if (mode === "runtime-terminate") runtime.terminate();
   setInterval(() => {}, 5000);

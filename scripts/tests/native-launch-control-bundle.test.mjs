@@ -57,7 +57,7 @@ async function emitted(entry) {
   );
   return { inputs, bundle: module.exports };
 }
-test("emitted native material controls expose only bound original scalar work/completion", async () => {
+test("emitted native material controls expose only bound original scalar work/completion/readiness", async () => {
   const { inputs, bundle } = await emitted(
     "backend/services/documents/dist/src/native-material-controls.js",
   );
@@ -65,6 +65,7 @@ test("emitted native material controls expose only bound original scalar work/co
     inputs.filter((name) => name.startsWith("backend/") || name.startsWith("packages/")).sort(),
     [
       "backend/services/documents/dist/src/native-material-controls.js",
+      "backend/services/documents/dist/src/native-material-ready.js",
       "backend/services/documents/dist/src/native-evidence-binding.js",
       "backend/services/documents/dist/src/native-owner-rpc-client.js",
       "backend/services/documents/dist/src/native-owner-rpc-contract.js",
@@ -110,7 +111,8 @@ test("emitted native material controls expose only bound original scalar work/co
     workFunctionArn: target,
     completionFunctionArn: target.replace("private-native-launch", "private-original-completion"),
   });
-  assert.deepEqual(Object.keys(ports), ["work", "completion"]);
+  assert.deepEqual(Object.keys(ports), ["publishReady", "work", "completion"]);
+  await assert.rejects(ports.publishReady({}), /NativeMaterialControlsUnavailable/u);
   assert.deepEqual(
     await ports.work.claimProviderDispatch({
       documentId: input.original.documentId,

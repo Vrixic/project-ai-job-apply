@@ -1,5 +1,12 @@
 # Data Flow and Classification
 
+2026-10-06 scalar native ready receipt: verified bounded process -> signed exact-task owner RPC
+-> active owning admission -> original completion/settled work/expiry checks -> Documents immutable
+fact IDs/confidence. No generated body crosses this handoff. Identifiers and hashes remain candidate
+metadata under existing owned-row retention/deletion; candidate portability includes the receipt.
+This is not liveness, process-death, provider acceptance or production approval.
+[Evidence](../product/delivery/evidence/d3-native-ready-receipt-2026-10-06.md).
+
 2026-10-06 native task startup (source-only/default-off): original scalar launch environment
 -> fixed link-local ECS self/container/task metadata -> detached allocation/work binding
 -> signed owning admission -> original stored approval -> trusted image-owned ports -> kernel

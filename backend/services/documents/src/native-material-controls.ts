@@ -5,6 +5,7 @@ import {
   nativeLaunchControlVersion,
   validateNativeLaunchControlInput,
 } from "./native-launch-control-contract.js";
+import { type NativeMaterialReady, validateNativeMaterialReady } from "./native-material-ready.js";
 import { createNativeOwnerRpcClient } from "./native-owner-rpc-client.js";
 import { type NativeOwnerRequest, nativeOwnerJson } from "./native-owner-rpc-contract.js";
 import { type NativeTaskAllocation, nativeTaskAllocationRegion } from "./native-task-allocation.js";
@@ -158,6 +159,8 @@ export function createNativeMaterialControls(options: {
   let settlementAttempted = false;
   let successfulSettlement = false;
   let completionAttempted = false;
+  let completionReference: TemporaryMaterialReference | undefined;
+  let readyAttempted = false;
   const permitted = () => {
     try {
       return enabled() && (!injected || process.env.NODE_ENV === "test");
@@ -272,6 +275,38 @@ export function createNativeMaterialControls(options: {
     successfulSettlement = action === "settle";
   }
   return Object.freeze({
+    async publishReady(raw: NativeMaterialReady): Promise<void> {
+      if (
+        !authenticated ||
+        !permitted() ||
+        active ||
+        readyAttempted ||
+        !completionReference ||
+        !validateNativeMaterialReady(raw) ||
+        !sameTemporaryMaterialReference(raw.material, completionReference) ||
+        Date.now() >= raw.material.expiresAtMs
+      )
+        throw unavailable();
+      const receipt = structuredClone(raw);
+      readyAttempted = true;
+      active = true;
+      try {
+        const result = await authenticated
+          .get(completionTarget)
+          ?.run({ action: "publish_ready", input: receipt });
+        if (
+          !permitted() ||
+          Date.now() >= receipt.material.expiresAtMs ||
+          !closed(result, ["published"]) ||
+          result.published !== true
+        )
+          throw unavailable();
+      } catch {
+        throw unavailable();
+      } finally {
+        active = false;
+      }
+    },
     work: Object.freeze({
       async claimProviderDispatch(input: {
         documentId: string;
@@ -366,6 +401,7 @@ export function createNativeMaterialControls(options: {
             !["claimed", "already_completed", "unavailable"].includes(String(reply.outcome))
           )
             return "unavailable";
+          if (reply.outcome === "claimed") completionReference = structuredClone(material);
           return reply.outcome as "claimed" | "already_completed" | "unavailable";
         } catch {
           return "unavailable";

@@ -2,6 +2,8 @@ import postgres from "postgres";
 import { createCoverLetterProviderControlHandler } from "./cover-letter-provider-control-handler.js";
 import { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 import { type NativeEvidenceBinding, nativeEvidenceBinding } from "./native-evidence-binding.js";
+import type { NativeMaterialReady } from "./native-material-ready.js";
+import { PostgresNativeMaterialReadyStore } from "./native-material-ready-store.js";
 import {
   type NativeOwnerBootstrap,
   validateNativeOwnerBootstrap,
@@ -26,7 +28,10 @@ export function createNativeOwnerControlStore(
   const lease = postgres(url, config);
   const work = new PostgresCoverLetterWorkStore(controls, enabled);
   const completion = new PostgresTemporaryMaterialCompletionStore(controls, enabled);
+  const ready = new PostgresNativeMaterialReadyStore(controls, enabled);
   return Object.freeze({
+    publishReady: (binding: Readonly<NativeEvidenceBinding>, receipt: NativeMaterialReady) =>
+      ready.publish(nativeEvidenceBinding(binding).original, receipt),
     async checkBootstrap(
       raw: Readonly<NativeEvidenceBinding>,
       identity: Omit<NativeOwnerBootstrap, "documentVersion"> & { documentVersion?: number },

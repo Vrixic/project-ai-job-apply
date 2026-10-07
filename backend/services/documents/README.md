@@ -1,5 +1,12 @@
 # Documents Service
 
+The native runtime now publishes a scalar ready receipt after grounding and PDF/DOCX verification.
+The authenticated private action carries only the exact material reference, cited fact IDs and
+confidence. Documents migration 0013 makes this metadata immutable and portable. Apply it and pin
+the updated numeric receiver before enabling an updated image; older receivers refuse the action.
+The preparation initializer/recovery still needs to consume this receipt.
+See [receipt evidence](../../../docs/product/delivery/evidence/d3-native-ready-receipt-2026-10-06.md).
+
 Private `./native-task-bootstrap` binds the task's own ECS container/task metadata, reads its
 original approval over signed owner RPC and starts the existing kernel/content runtime after
 admission. It waits only for the original launcher's task bind and exposes no work issuer or

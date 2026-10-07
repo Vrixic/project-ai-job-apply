@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { CoverLetterEvidenceSource } from "./cover-letter-generation.js";
 import type { CoverLetterProviderControlInput } from "./cover-letter-provider-control-contract.js";
 import { type NativeEvidenceBinding, nativeEvidenceBinding } from "./native-evidence-binding.js";
+import { type NativeMaterialReady, validateNativeMaterialReady } from "./native-material-ready.js";
 import type { NativeTaskCallerProof } from "./native-task-caller-contract.js";
 import type { TemporaryMaterialCompletionInput } from "./temporary-material-completion-contract.js";
 import { validateTemporaryMaterialReference } from "./temporary-material-reference.js";
@@ -15,7 +16,8 @@ export type NativeOwnerRequest =
       action: "work";
       input: Exclude<CoverLetterProviderControlInput, { action: "settle_terminal" }>;
     }
-  | { action: "completion"; input: TemporaryMaterialCompletionInput };
+  | { action: "completion"; input: TemporaryMaterialCompletionInput }
+  | { action: "publish_ready"; input: NativeMaterialReady };
 export interface NativeOwnerRpcInput {
   schemaVersion: 1;
   binding: NativeEvidenceBinding;
@@ -115,6 +117,13 @@ export function validateNativeOwnerRequest(
         value.action === "evidence" && hash(value.jobContextHash) && hash(value.confirmedFactsHash)
       );
     if (!nativeOwnerClosed(value, ["action", "input"])) return false;
+    if (value.action === "publish_ready")
+      return (
+        validateNativeMaterialReady(value.input) &&
+        value.input.material.ownerUserId === binding.scope.ownerUserId &&
+        value.input.material.applicationId === binding.scope.applicationId &&
+        value.input.material.generationId === binding.scope.generationId
+      );
     if (value.action === "work") {
       const input = value.input;
       if (
@@ -305,6 +314,8 @@ export function validateNativeOwnerRpcOutput(
     if (request.action === "principal")
       return validateNativeOwnerPrincipal(value.result, request.issuer);
     if (request.action === "evidence") return validateNativeOwnerEvidence(value.result);
+    if (request.action === "publish_ready")
+      return nativeOwnerClosed(value.result, ["published"]) && value.result.published === true;
     if (request.action === "work") {
       const result = value.result;
       return (

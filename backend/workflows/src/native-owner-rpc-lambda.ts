@@ -181,6 +181,7 @@ export function createNativeOwnerRpcRuntime(
       }),
     work: controls.work,
     completion: controls.completion,
+    publishReady: controls.publishReady,
     close: async () => {
       await Promise.all([
         applicationPool.end(),

@@ -1,5 +1,11 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 adds authenticated scalar native readiness after actual grounding and render
+verification. Documents 0013 binds immutable fact IDs/confidence to original completion and settled
+work; candidate export preserves the metadata. All 122 focused and 24 real SQL checks pass.
+[Evidence](evidence/d3-native-ready-receipt-2026-10-06.md). Remaining verification is in progress;
+the native preparation initializer/recovery and managed acceptance stay open. D1/D3 In progress.
+
 2026-10-06 D3-079 actual-image conformance passes at clean source `44c0c354`: versions 1/2
 render and serve PDF/DOCX over authenticated HTTPS; the image-owned kernel retires both processes.
 Secret-version/TLS-host refusals and three production startup refusals pass, with no warnings.

@@ -815,6 +815,25 @@ describe.runIf(requested)(
       ).toEqual({ kind: "claimed", reference: binding.original });
       await controls.work.settleProviderDispatch(binding.original);
       const completedAtMs = Date.now();
+      const ready = {
+        schemaVersion: 1 as const,
+        material: {
+          schemaVersion: 1 as const,
+          kind: "cover_letter" as const,
+          ownerUserId: request.ownerUserId,
+          applicationId: request.applicationId,
+          generationId: request.original.documentId,
+          version: bootstrap.documentVersion,
+          contentSha256: "d".repeat(64),
+          completedAtMs,
+          expiresAtMs: completedAtMs + 1_800_000,
+        },
+        sourceFactIds: facts.map((fact) => fact.id),
+        confidence: 1,
+      };
+      await expect(remote.run({ action: "publish_ready", input: ready })).rejects.toThrow(
+        "NativeOwnerRpcUnavailable",
+      );
       await expect(
         remote.run({
           action: "completion",
@@ -856,11 +875,43 @@ describe.runIf(requested)(
       expect(row?.state).toBe("settled");
       expect(row?.material_work_id).toBe(request.original.id);
       expect(Number(row?.material_completed_at_ms)).toBe(completedAtMs);
+      await expect(
+        remote.run({
+          action: "publish_ready",
+          input: { ...ready, material: { ...ready.material, version: 1 } },
+        }),
+      ).rejects.toThrow("NativeOwnerRpcUnavailable");
+      await controls.publishReady(ready);
+      expect(await remote.run({ action: "publish_ready", input: ready })).toEqual({
+        published: true,
+      });
+      await expect(
+        remote.run({ action: "publish_ready", input: { ...ready, confidence: 0.5 } }),
+      ).rejects.toThrow("NativeOwnerRpcUnavailable");
+      await expect(controls.publishReady(ready)).rejects.toThrow(
+        "NativeMaterialControlsUnavailable",
+      );
+      await expect(
+        sql`UPDATE documents.cover_letters SET material_confidence=0.5 WHERE id=${request.original.documentId}`,
+      ).rejects.toThrow();
+      const [exported] = await sql<
+        Array<{
+          data: { documents: { coverLetters: Array<{ id: string; nativeReady?: unknown }> } };
+        }>
+      >`SELECT documents.export_candidate_data(${request.ownerUserId}::uuid) AS data`;
+      expect(
+        exported?.data.documents.coverLetters.find(
+          (letter) => letter.id === request.original.documentId,
+        )?.nativeReady,
+      ).toEqual(ready);
       await new PostgresNativeMaterialRegistry(sql, () => true).sealApplication(
         request.ownerUserId,
         request.applicationId,
       );
       await expect(remote.checkAdmission(binding)).rejects.toThrow("NativeOwnerRpcUnavailable");
+      await expect(remote.run({ action: "publish_ready", input: ready })).rejects.toThrow(
+        "NativeOwnerRpcUnavailable",
+      );
       expect(resolve).toHaveBeenCalledOnce();
       expect(f.commands.filter((name) => name === "RunTaskCommand")).toHaveLength(1);
     });

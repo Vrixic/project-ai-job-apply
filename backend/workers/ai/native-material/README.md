@@ -1,5 +1,10 @@
 # Native material image
 
+After original completion and real grounding/render verification, the authenticated native image
+publishes an immutable scalar ready receipt. Updated enabled images require Documents migration
+0013 and the matching numeric owner receiver. Readiness never contains generated text or refreshes
+original expiry. See [receipt evidence](../../../../docs/product/delivery/evidence/d3-native-ready-receipt-2026-10-06.md).
+
 The authenticated startup now requires the original Documents row version. The nine-scalar
 bootstrap and native actor/controls preserve version 2 and later explicit generations. Pin the
 matching numeric owner receiver; older eight-scalar replies refuse without a version fallback.

@@ -75,6 +75,7 @@ for (const current of [
       assert.equal(value.ready, true);
       assert.equal(value.providerCalls, 1);
       assert.equal(value.controlInvocations, 3);
+      assert.equal(value.readyPublications, 1);
       assert.equal(value.actualFiles, 2);
       assert.equal(value.originalExpiry - value.originalCompletion, 1_800_000);
       assert.ok(Date.now() - value.originalCompletion < 6000);

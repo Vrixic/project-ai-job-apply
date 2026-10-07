@@ -105,6 +105,7 @@ function fixture(defaultOff = false) {
     return { ...input, outcome: "claimed" as const };
   });
   const approvedAt = new Date(Date.now() - 1000);
+  const publishReady = vi.fn(async () => true);
   const bootstrap = vi.fn(async () => ({
     documentVersion: 1,
     id: id(4),
@@ -126,6 +127,7 @@ function fixture(defaultOff = false) {
     evidence: () => ({ load }),
     work,
     completion,
+    publishReady,
   }));
   const receiver = createNativeOwnerRpcHandler({
     targetArn: target,
@@ -186,6 +188,7 @@ function fixture(defaultOff = false) {
     send,
     options,
     client,
+    publishReady,
     input,
   };
 }
@@ -195,6 +198,43 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe("authenticated original native owner RPC", () => {
+  it("publishes only authenticated bound grounding metadata with admission around the write", async () => {
+    const f = fixture();
+    const completedAtMs = Date.now();
+    const ready = {
+      schemaVersion: 1 as const,
+      material: {
+        schemaVersion: 1 as const,
+        kind: "cover_letter" as const,
+        generationId: f.binding.scope.generationId,
+        ownerUserId: f.binding.scope.ownerUserId,
+        applicationId: f.binding.scope.applicationId,
+        version: 2,
+        contentSha256: "a".repeat(64),
+        completedAtMs,
+        expiresAtMs: completedAtMs + 1_800_000,
+      },
+      sourceFactIds: [id(8)],
+      confidence: 1,
+    };
+    expect(await f.client.run({ action: "publish_ready", input: ready })).toEqual({
+      published: true,
+    });
+    expect(f.publishReady).toHaveBeenCalledExactlyOnceWith(f.binding, ready);
+    expect(f.checkAdmission).toHaveBeenCalledTimes(2);
+    expect(f.load).not.toHaveBeenCalled();
+    f.publishReady.mockResolvedValueOnce(false);
+    await expect(f.client.run({ action: "publish_ready", input: ready })).rejects.toThrow(
+      "NativeOwnerRpcUnavailable",
+    );
+    await expect(
+      f.client.run({
+        action: "publish_ready",
+        input: { ...ready, material: { ...ready.material, ownerUserId: id(9) } },
+      }),
+    ).rejects.toThrow("NativeOwnerRpcUnavailable");
+    expect(f.publishReady).toHaveBeenCalledTimes(2);
+  });
   it("preserves the owning document version in the authenticated bootstrap", async () => {
     const f = fixture();
     const stored = await f.bootstrap();

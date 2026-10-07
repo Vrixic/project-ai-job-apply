@@ -121,9 +121,9 @@ describe("one native allocation scalar control capabilities", () => {
       expect(f.send).not.toHaveBeenCalled();
     },
   );
-  it("exposes only frozen original work and completion ports", () => {
+  it("exposes only frozen original work, completion and scalar readiness ports", () => {
     const { ports } = fixture();
-    expect(Object.keys(ports)).toEqual(["work", "completion"]);
+    expect(Object.keys(ports)).toEqual(["publishReady", "work", "completion"]);
     expect(Object.keys(ports.work)).toEqual([
       "claimProviderDispatch",
       "settleProviderDispatch",
@@ -132,6 +132,18 @@ describe("one native allocation scalar control capabilities", () => {
     ]);
     expect(Object.keys(ports.completion)).toEqual(["claimOriginalCompletion"]);
     expect([ports, ports.work, ports.completion].every(Object.isFrozen)).toBe(true);
+  });
+  it("refuses readiness without authenticated RPC before any legacy control effects", async () => {
+    const f = fixture();
+    await expect(
+      f.ports.publishReady({
+        schemaVersion: 1,
+        material: material(),
+        sourceFactIds: [id(8)],
+        confidence: 1,
+      }),
+    ).rejects.toThrow("NativeMaterialControlsUnavailable");
+    expect(f.send).not.toHaveBeenCalled();
   });
   it("defaults off before SDK/owning effects", async () => {
     const f = fixture();

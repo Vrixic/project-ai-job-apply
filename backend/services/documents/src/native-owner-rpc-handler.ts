@@ -2,6 +2,7 @@ import type { CoverLetterEvidenceSource } from "./cover-letter-generation.js";
 import { validateProviderControlInput } from "./cover-letter-provider-control-contract.js";
 import type { createCoverLetterProviderControlHandler } from "./cover-letter-provider-control-handler.js";
 import { type NativeEvidenceBinding, nativeEvidenceBinding } from "./native-evidence-binding.js";
+import type { NativeMaterialReady } from "./native-material-ready.js";
 import {
   type NativeOwnerBootstrap,
   type NativeOwnerRpcOutput,
@@ -28,6 +29,10 @@ export interface NativeOwnerRpcOwners {
   ): CoverLetterEvidenceSource;
   work: ReturnType<typeof createCoverLetterProviderControlHandler>;
   completion: ReturnType<typeof createTemporaryMaterialCompletionHandler>;
+  publishReady?(
+    binding: Readonly<NativeEvidenceBinding>,
+    ready: NativeMaterialReady,
+  ): Promise<boolean>;
 }
 /** No caller proof reaches owners or a response. Authentication precedes lazy owner creation;
  * short owning admission surrounds owner awaits without retaining a SQL transaction. */
@@ -116,6 +121,10 @@ export function createNativeOwnerRpcHandler(options: {
       else if (request.action === "work") {
         if (!validateProviderControlInput(request.input)) return unavailable;
         result = await owner.work(request.input, { invokedFunctionArn: target });
+      } else if (request.action === "publish_ready") {
+        if (!owner.publishReady || !(await owner.publishReady(binding, request.input)))
+          return unavailable;
+        result = { published: true };
       } else result = await owner.completion(request.input, { invokedFunctionArn: target });
       result = structuredClone(result);
       await owner.checkAdmission(binding);

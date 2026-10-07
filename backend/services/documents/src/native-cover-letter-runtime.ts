@@ -144,6 +144,16 @@ export async function createNativeCoverLetterRuntime(options: NativeCoverLetterR
     if (generated.kind !== "ready" || !enabled()) throw unavailable();
     await admit(binding);
     if (!enabled() || Date.now() >= generated.reference.expiresAtMs) throw unavailable();
+    if (controlsOptions.nativeRpc) {
+      await controls.publishReady({
+        schemaVersion: 1,
+        material: { ...generated.reference },
+        sourceFactIds: [...generated.letter.sourceFactIds],
+        confidence: generated.letter.confidence,
+      });
+      await admit(binding);
+      if (!enabled() || Date.now() >= generated.reference.expiresAtMs) throw unavailable();
+    }
     const server = createNativeMemoryTransport({
       ...transportOptions,
       session,
