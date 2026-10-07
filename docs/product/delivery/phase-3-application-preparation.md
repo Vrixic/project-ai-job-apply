@@ -2383,3 +2383,11 @@ original binding/reference admission, separate material checkpoints and shared r
 Seventeen owner and thirty-two lifecycle scenarios pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-route-owner-and-lifecycle).
 Private handler/dispatcher, attachment/cloud composition and managed acceptance remain; D1/D3
 In progress. No cloud action, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 the existing numeric material control now handles separate private route capture,
+admission and retirement envelopes; launch/recovery compatibility is preserved. Optional
+route configuration and original-launcher EC2 endpoint access are wired in both environments.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#private-material-route-control).
+Durable dispatch/attachment and managed acceptance remain. D1/D3 In progress; no cloud action,
+CI/CD deferred, Docker/WSL stopped and PC on.

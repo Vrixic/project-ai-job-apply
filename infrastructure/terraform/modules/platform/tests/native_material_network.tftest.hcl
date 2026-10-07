@@ -81,6 +81,7 @@ run "connected_with_resume" {
   command = plan
   variables {
     native_material_control_network = { m1 = {
+      address_lookup      = true
       task_definition_arn = "arn:aws:ecs:us-east-2:111122223333:task-definition/ai-job-apply-development-native-material:3"
       cluster_arn         = "arn:aws:ecs:us-east-2:111122223333:cluster/material"
       database_secret_arn = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/database-abc123"
@@ -99,6 +100,10 @@ run "connected_with_resume" {
       security_group_ids = ["sg-33333333333333333"]
       address_lookup     = true
     } }
+  }
+  assert {
+    condition     = length(jsondecode(aws_vpc_endpoint.native_resume_api["ec2"].policy).Statement) == 2 && one([for s in jsondecode(aws_vpc_endpoint.native_resume_api["ec2"].policy).Statement : s if s.Sid == "MaterialAddressm1"]).Condition.ArnEquals["aws:PrincipalArn"] == local.material_control_roles.m1.launch
+    error_message = "Only the original material launcher joins the shared address lookup endpoint."
   }
   assert {
     condition     = toset(keys(aws_vpc_endpoint.native_resume_api)) == toset(["ecs", "ec2"]) && length(aws_vpc_endpoint.lambda) == 1 && length(aws_vpc_endpoint.secretsmanager) == 1 && length(jsondecode(aws_vpc_endpoint.native_resume_api["ecs"].policy).Statement) == 6

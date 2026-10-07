@@ -145,7 +145,7 @@ resource "aws_lambda_function" "launch" {
   s3_object_version              = var.release.artifacts.launch.version_id
   source_code_hash               = var.release.artifacts.launch.base64sha256
   kms_key_arn                    = var.release.platform_kms_key_arn
-  environment { variables = merge(local.common, { NATIVE_MATERIAL_LAUNCH_CONTROL_ENABLED = tostring(var.control_enabled), NATIVE_MATERIAL_NEW_LAUNCH_ENABLED = tostring(var.new_launch_enabled), NATIVE_MATERIAL_LAUNCH_CONFIGURATION_JSON = jsonencode(local.launch_configuration), DATABASE_SECRET_ID = var.release.database_secret_arn }, { RELEASE_SHA = var.release.artifacts.launch.sha256 }) }
+  environment { variables = merge(local.common, { NATIVE_MATERIAL_LAUNCH_CONTROL_ENABLED = tostring(var.control_enabled), NATIVE_MATERIAL_ROUTE_CONTROL_ENABLED = tostring(var.route_enabled), NATIVE_MATERIAL_ROUTE_CONFIGURATION_JSON = var.route == null ? "{}" : jsonencode({ hostedZoneId = var.route.hosted_zone_id, baseHost = var.route.base_host }), NATIVE_MATERIAL_NEW_LAUNCH_ENABLED = tostring(var.new_launch_enabled), NATIVE_MATERIAL_LAUNCH_CONFIGURATION_JSON = jsonencode(local.launch_configuration), DATABASE_SECRET_ID = var.release.database_secret_arn }, { RELEASE_SHA = var.release.artifacts.launch.sha256 }) }
   layers = [var.release.extension_layer_arn]
   vpc_config {
     subnet_ids         = var.release.subnet_ids
@@ -303,5 +303,24 @@ variable "task_public_ip_enabled" {
   validation {
     condition     = !var.task_public_ip_enabled || var.release != null
     error_message = "Public task networking requires an original release."
+  }
+}
+
+variable "route" {
+  description = "Original material DNS configuration for private read-only route admission. No DNS resources are created."
+  type        = object({ hosted_zone_id = string, base_host = string })
+  default     = null
+  validation {
+    condition     = var.route == null ? true : (can(regex("^Z[A-Z0-9]{1,31}$", var.route.hosted_zone_id)) && length(var.route.base_host) <= 200 && can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.])+[a-z]{2,63}$", var.route.base_host)))
+    error_message = "Use the original reviewed hosted zone and lowercase base hostname."
+  }
+}
+variable "route_enabled" {
+  type     = bool
+  default  = false
+  nullable = false
+  validation {
+    condition     = !var.route_enabled || (var.control_enabled && var.task_public_ip_enabled && var.route != null && var.release != null)
+    error_message = "Route admission requires the original control, public task configuration and reviewed DNS binding."
   }
 }

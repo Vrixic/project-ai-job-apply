@@ -51,3 +51,13 @@ public route and its task groups must remain separate from SQL groups. This is i
 configuration: retain the original configuration for recovery rather than changing it for an
 already claimed generation. Address discovery, route ownership, EC2 endpoint/IAM grants and DNS
 lifecycle composition remain separate from this switch.
+
+
+Optional `route` and `route_enabled` now configure read-only original route capture/admission/
+retirement on the existing numeric launcher endpoint. Activation requires original control,
+public task networking and reviewed zone/base hostname; fresh launch can remain disabled.
+The separate `native-material-route.v1` envelope does not change launch/recovery shapes. Platform
+composition adds only the original launcher to shared EC2 metadata endpoint policy when a route
+is configured; its existing VPC role/boundary already permits DescribeNetworkInterfaces.
+This creates no DNS record or durable routing execution. Dispatcher/lifecycle/attachment
+integration and Route53 authority for that durable execution remain outstanding.

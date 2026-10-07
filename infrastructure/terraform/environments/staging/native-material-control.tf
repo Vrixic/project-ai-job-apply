@@ -18,6 +18,8 @@ variable "native_material_control_releases" {
       task_subnet_ids         = list(string)
       task_security_group_ids = list(string)
     })
+    route                  = optional(object({ hosted_zone_id = string, base_host = string }))
+    route_enabled          = optional(bool, false)
     task_public_ip_enabled = optional(bool, false)
     owner_enabled          = optional(bool, false)
     control_enabled        = optional(bool, false)
@@ -38,6 +40,8 @@ module "native_material_control" {
   account_id             = module.platform.account_id
   environment            = "staging"
   release                = each.value.release
+  route                  = each.value.route
+  route_enabled          = each.value.route_enabled
   task_public_ip_enabled = each.value.task_public_ip_enabled
   owner_enabled          = each.value.owner_enabled
   control_enabled        = each.value.control_enabled

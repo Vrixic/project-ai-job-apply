@@ -37,11 +37,13 @@ locals {
       Condition = { ArnEquals = { "aws:PrincipalArn" = values(local.native_resume_api_principals[revision]), "ecs:cluster" = release.cluster_arn } }
     }
   ]])) }
-  native_resume_ec2_endpoint_policy = { Version = "2012-10-17", Statement = [for revision, release in local.native_resume_address_releases :
+  native_resume_ec2_endpoint_policy = { Version = "2012-10-17", Statement = concat([for id, r in local.material_address_releases :
+    { Sid = "MaterialAddress${id}", Effect = "Allow", Principal = "*", Action = ["ec2:DescribeNetworkInterfaces"], Resource = "*", Condition = { ArnEquals = { "aws:PrincipalArn" = local.material_control_roles[id].launch } } }
+    ], [for revision, release in local.native_resume_address_releases :
     { Sid       = "OriginalAddress${revision}", Effect = "Allow", Principal = "*", Action = ["ec2:DescribeNetworkInterfaces"], Resource = "*",
       Condition = { ArnEquals = { "aws:PrincipalArn" = local.native_resume_api_principals[revision].control } }
     }
-  ] }
+  ]) }
 }
 resource "aws_security_group" "native_resume_api" {
   count       = local.native_resume_api_configured ? 1 : 0
@@ -57,7 +59,7 @@ resource "aws_security_group" "native_resume_api" {
   }
 }
 resource "aws_vpc_endpoint" "native_resume_api" {
-  for_each            = local.native_resume_api_configured ? toset(concat(["ecs"], length(local.native_resume_address_releases) > 0 ? ["ec2"] : [])) : toset([])
+  for_each            = local.native_resume_api_configured ? toset(concat(["ecs"], length(local.native_resume_address_releases) + length(local.material_address_releases) > 0 ? ["ec2"] : [])) : toset([])
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.${each.key}"
   vpc_endpoint_type   = "Interface"

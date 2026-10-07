@@ -45,6 +45,7 @@ provider "aws" {
 
 module "platform" {
   native_material_control_network = { for id, r in var.native_material_control_releases : id => {
+    address_lookup      = r.route != null
     task_definition_arn = r.release.task_definition_arn
     cluster_arn         = r.release.cluster_arn
     database_secret_arn = r.release.database_secret_arn

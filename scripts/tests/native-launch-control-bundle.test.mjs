@@ -162,7 +162,7 @@ test("emitted native task event receiver carries only scalar Lambda recovery cap
     /NativeMaterialTaskEventUnavailable/u,
   );
 });
-test("emitted launcher supplies only owning admission/registry/ECS/managed-secret capabilities", async () => {
+test("emitted launcher supplies owning admission and read-only route inspection without DNS mutation", async () => {
   const { inputs, bundle } = await emitted(
     "backend/workflows/dist/src/native-material-launch-lambda.js",
   );
@@ -179,11 +179,22 @@ test("emitted launcher supplies only owning admission/registry/ECS/managed-secre
       "backend/services/documents/dist/src/native-task-launch-policy.js",
       "backend/services/profile/dist/src/lambda-database-url.js",
       "backend/workflows/dist/src/native-material-launch-lambda.js",
+      "backend/workflows/dist/src/native-material-control-configuration.js",
+      "backend/workflows/dist/src/native-material-route-control-lambda.js",
+      "backend/workflows/dist/src/native-material-route-owner.js",
+      "backend/services/documents/dist/src/native-material-route-control-contract.js",
+      "backend/services/documents/dist/src/native-material-task-address.js",
+      "backend/services/documents/dist/src/native-task-address.js",
+      "backend/services/documents/dist/src/native-material-location-store.js",
+      "backend/services/documents/dist/src/native-resume-route-policy.js",
+      "backend/services/documents/dist/src/native-owner-rpc-contract.js",
+      "packages/domain/dist/temporary-material.js",
     ].sort(),
   );
   for (const forbidden of [
     "ai-sdk",
     "client-lambda",
+    "client-route-53",
     "client-s3",
     "client-kms",
     "client-secrets-manager",
@@ -200,6 +211,7 @@ test("emitted launcher supplies only owning admission/registry/ECS/managed-secre
     );
   assert.ok(inputs.some((name) => name.includes("@aws-sdk/client-ecs")));
   assert.ok(inputs.some((name) => name.includes("postgres")));
+  assert.ok(inputs.some((name) => name.includes("@aws-sdk/client-ec2")));
   let effects = 0;
   const handler = bundle.createNativeMaterialLaunchLambda({
     environment: () => ({}),
@@ -398,4 +410,30 @@ test("emitted resume queue dispatcher excludes content and task-launch capabilit
     /NativeResumeDispatchUnavailable/u,
   );
   assert.equal(effects, 0);
+});
+
+test("emitted material route sender contains only scalar Lambda invocation", async () => {
+  const { inputs, bundle } = await emitted(
+    "backend/services/documents/dist/src/native-material-route-control-client.js",
+  );
+  for (const forbidden of [
+    "postgres",
+    "client-ecs",
+    "client-ec2",
+    "client-route-53",
+    "client-s3",
+    "client-kms",
+    "ai-sdk",
+    "pdfjs",
+    "durable-execution",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected route sender capability: ${forbidden}`,
+    );
+  assert.ok(inputs.some((name) => name.includes("@aws-sdk/client-lambda")));
+  await assert.rejects(
+    bundle.createNativeMaterialRouteControlClient({ functionArn: target }).run({}),
+    /NativeMaterialRouteControlUnavailable/u,
+  );
 });

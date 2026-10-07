@@ -64,6 +64,43 @@ const artifact = await buildLambdaArtifact({
         bundle.handler({ ...input, text: "synthetic forbidden" }, context),
         /NativeLaunchControlUnavailable/u,
       );
+      const completedAtMs = Date.now() - 1000;
+      const routeRequest = {
+        schemaVersion: 1,
+        protocol: "native-material-route.v1",
+        action: "capture",
+        binding: {
+          scope: recover.scope,
+          original: input.original,
+          allocation: {
+            allocationId: recover.scope.allocationId,
+            ownerUserId: input.ownerUserId,
+            applicationId: input.applicationId,
+            generationId: input.original.documentId,
+            clusterArn: "arn:aws:ecs:us-east-2:123456789012:cluster/native",
+            taskArn: recover.taskArn,
+            taskDefinitionArn: "arn:aws:ecs:us-east-2:123456789012:task-definition/native:7",
+            containerName: "native-material",
+          },
+        },
+        reference: {
+          schemaVersion: 1,
+          kind: "cover_letter",
+          ownerUserId: input.ownerUserId,
+          applicationId: input.applicationId,
+          generationId: input.original.documentId,
+          version: 1,
+          contentSha256: "c".repeat(64),
+          completedAtMs,
+          expiresAtMs: completedAtMs + 1_800_000,
+        },
+      };
+      assert.deepEqual(await bundle.handler(routeRequest, context), {
+        schemaVersion: 1,
+        request: routeRequest,
+        outcome: "unavailable",
+        route: null,
+      });
       assert.equal(effects, 0);
     } finally {
       globalThis.fetch = saved;

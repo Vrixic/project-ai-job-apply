@@ -4,6 +4,18 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-material-location-store": {
+      "types": "./dist/src/native-material-location-store.d.ts",
+      "default": "./dist/src/native-material-location-store.js"
+    },
+    "./native-material-route-control-client": {
+      "types": "./dist/src/native-material-route-control-client.d.ts",
+      "default": "./dist/src/native-material-route-control-client.js"
+    },
+    "./native-material-route-control-contract": {
+      "types": "./dist/src/native-material-route-control-contract.d.ts",
+      "default": "./dist/src/native-material-route-control-contract.js"
+    },
     "./temporary-material-reference": {
       "types": "./dist/src/temporary-material-reference.d.ts",
       "default": "./dist/src/temporary-material-reference.js"

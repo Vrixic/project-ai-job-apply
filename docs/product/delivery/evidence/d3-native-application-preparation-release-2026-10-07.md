@@ -421,3 +421,34 @@ remain. No database implementation or schema changes; D1/D3 remain In progress.
 
 Workflows compilation, touched-file Biome checks, whitespace checks and all eight emitted
 control/resume capability-boundary checks pass on this source.
+
+
+## Private material route control
+
+The existing material-launch handler accepts a separate strict `native-material-route.v1`
+envelope for capture/admit/retired. Launch/recover v1 inputs and outputs remain unchanged. The
+new exact-version Lambda client validates detached binding/reference/snapshot and matching reply,
+uses one signed regional attempt, refuses log-bearing/error/foreign-version replies and preserves
+admission until its transport settles. The default-off receiver pins original managed-secret,
+public task and DNS configuration, and lazily composes the owning registry, allocation reader,
+signed address reader and route owner. New-launch enablement is not required for route recovery.
+No DNS write, task stop, new generation or packet attachment is provided by these actions.
+
+Optional route configuration/activation is wired through development and staging. Activation
+requires original control, reviewed DNS binding and public task mode. Shared EC2 endpoint access
+is added only for the original material launcher, preserving resume access and existing endpoint
+addresses. Existing VPC IAM and bootstrap ceiling already permit DescribeNetworkInterfaces.
+No new Lambda deployment or Route53 permission is added.
+
+The emitted check caught readiness-store publishing/rendering dependencies entering the read-only
+route control. The unchanged readAllocation implementation was extracted into a dedicated read-only
+store; the existing ready store inherits it. The final control bundle excludes rendering, model,
+object storage, packet writing, DNS mutation and Lambda invocation; the sender has Lambda only.
+No SQL query, migration or persistence semantics changed; real PostgreSQL was not rerun for this
+mechanical extraction and local ports do not establish live database/network behavior.
+
+Local checks: 68 private receiver/launch/owner cases and 37 affected Documents cases pass;
+21 Terraform control/network scenarios pass; both environments validate. Documents and Workflows
+compile and touched-file Biome/whitespace checks pass. Nine emitted capability checks pass.
+Production remains disabled/unpublished. Original durable dispatch, propagation-gated attachment,
+Route53 composition, managed image/provider/routing and accountable acceptance remain.

@@ -114,3 +114,22 @@ run "explicit_public_task_network_keeps_launch_disabled" {
     error_message = "Public task configuration must not activate launches, recovery or DNS."
   }
 }
+
+run "original_route_without_new_launches" {
+  command = plan
+  variables {
+    route                  = { hosted_zone_id = "ZSYNTHETIC123", base_host = "materials.example.com" }
+    task_public_ip_enabled = true
+    control_enabled        = true
+    route_enabled          = true
+  }
+  assert {
+    condition     = aws_lambda_function.launch[0].environment[0].variables.NATIVE_MATERIAL_ROUTE_CONTROL_ENABLED == "true" && jsondecode(aws_lambda_function.launch[0].environment[0].variables.NATIVE_MATERIAL_ROUTE_CONFIGURATION_JSON).baseHost == "materials.example.com" && aws_lambda_function.launch[0].environment[0].variables.NATIVE_MATERIAL_NEW_LAUNCH_ENABLED == "false"
+    error_message = "Route inspection must use original configuration without enabling fresh work."
+  }
+}
+run "route_requires_original_network" {
+  command = plan
+  variables { route_enabled = true }
+  expect_failures = [var.route_enabled]
+}

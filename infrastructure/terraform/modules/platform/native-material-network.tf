@@ -1,6 +1,7 @@
 variable "native_material_control_network" {
   description = "Original material launcher/owner network bindings, retained through drain."
   type = map(object({
+    address_lookup      = optional(bool, false)
     task_definition_arn = string
     cluster_arn         = string
     database_secret_arn = string
@@ -44,6 +45,7 @@ variable "native_material_task_access" {
   }
 }
 locals {
+  material_address_releases    = { for id, r in var.native_material_control_network : id => r if r.address_lookup }
   material_private_configured  = length(var.native_material_control_network) > 0 || length(var.native_material_task_access) > 0
   material_task_rpc_configured = length(var.native_material_task_access) > 0
   material_control_groups      = sort(distinct(flatten([for r in var.native_material_control_network : tolist(r.security_group_ids)])))

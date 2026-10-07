@@ -313,3 +313,12 @@ uses the shared `native-route-lifecycle.ts` implementation with `material-route.
 resume retains its existing `resume-route.*` names. Both are default-off and retain uncertain DNS
 writes/attachments for reconciliation rather than retrying mutations. Material private invocation,
 one-original-execution dispatch, packet attachment and deployment/IAM composition remain unwired.
+
+
+`native-material-launch-lambda.ts` now multiplexes the new closed `native-material-route.v1`
+private envelope to `native-material-route-control-lambda.ts`. Existing launch/recovery inputs
+are unchanged. The route path pins managed database/task/DNS configuration and needs its own
+`NATIVE_MATERIAL_ROUTE_CONTROL_ENABLED` switch as well as control enablement. It reuses the
+original numeric deployment and owning admission/address checks, without fresh launch, packet
+attachment or DNS mutation. Its sender has only scalar Lambda invocation capability. Preparation
+dispatch still needs to bind one original route execution and attach after propagation.
