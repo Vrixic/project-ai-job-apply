@@ -2025,3 +2025,11 @@ through separate default-empty release maps and scalar binding outputs. Both env
 validate with AWS provider 6.58.0; three mocked cases per environment pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
 No release input was populated, backend contacted or cloud resource changed. DNS/TLS/routing,
 managed release/runtime and acceptance remain; D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 D3-064/D3-079 connects original resume metadata to positive task observation and
+owning retirement persistence. The shared ECS adapter now exposes observation without StopTask;
+running/missing/error responses remain unresolved, and stored retirement replays without AWS.
+57 focused cases, Documents typecheck/build and changed-file Biome pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+ECS and registry ports were simulated; managed receiver/scheduling, live SQL-connected acceptance
+and routing remain. No deployment; D1/D3 In progress, ADR-040 Proposed and PC on.

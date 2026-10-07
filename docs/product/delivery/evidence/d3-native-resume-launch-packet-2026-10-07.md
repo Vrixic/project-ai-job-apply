@@ -444,3 +444,25 @@ No environment input, remote state, cloud permission or resource was changed. Th
 source composition, not managed planning, deployment or activation. The DNS-zone question remains
 pending, and DNS/TLS/ingress/route lifecycle plus effective IAM and managed/client/ATS/accountable
 acceptance remain open. D1/D3 remain In progress; ADR-040 Proposed and CI/CD deferred.
+
+
+## Positive resume task observation composition
+
+The existing resume SQL store could record a trusted terminal receipt, but no composition called
+it from the task observer. `native-resume-task-observer.ts` now reads the original claimed
+allocation/configuration, validates owner/application/generation/epoch/deployment bindings,
+observes that exact task and passes only the resulting positive receipt to `recordRetirement`.
+Callers cannot supply a task ARN or receipt. Already-recorded retirement returns without
+requiring ECS to retain the stopped task, including replay after a lost persistence ACK.
+
+The shared task retirement adapter gains `observe`, which uses the same exact DescribeTasks
+validation as retirement but never enters the StopTask branch. Existing `retire` behavior remains.
+This helper does not request cancellation, create a generation, settle a workflow or certify
+all-copy deletion. Source remains default-off and is not yet composed into a managed receiver.
+
+57 focused tests pass across the existing adapter and nine observer cases: exact stopped evidence,
+stored replay, running/missing/error refusal, changed configuration, default-off, lost persistence
+ACK and withdrawal before writing. Documents typecheck/build and changed-file Biome pass. These
+checks use simulated ECS/registry ports; no new SQL migration, real database fixture or managed
+evidence was produced. The private receiver/artifact/IAM/schedule and SQL-connected acceptance
+remain follow-up work, alongside DNS/TLS/routing. No cloud action or Docker use.

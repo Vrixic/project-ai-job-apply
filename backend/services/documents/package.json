@@ -196,6 +196,10 @@
       "types": "./dist/src/native-resume-image-runtime.d.ts",
       "default": "./dist/src/native-resume-image-runtime.js"
     },
+    "./native-resume-task-observer": {
+      "types": "./dist/src/native-resume-task-observer.d.ts",
+      "default": "./dist/src/native-resume-task-observer.js"
+    },
     "./native-resume-task-launch": {
       "types": "./dist/src/native-resume-task-launch.d.ts",
       "default": "./dist/src/native-resume-task-launch.js"
