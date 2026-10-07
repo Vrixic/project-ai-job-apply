@@ -87,3 +87,26 @@ Profile/save/reload steps. Docker/WSL remain stopped, shared volumes retained an
 Managed runtime/Secrets extension, reviewed invocation IAM, scheduling/release, audit security/
 rights review and alert storage/retention acceptance remain. D1/D3 remain In progress; full local
 verification does not close their deployed, provider, browser, ATS or accountable review gates.
+
+
+## Optional release composition
+
+The platform now accepts a nullable immutable audit-retention artifact receipt, forwarded by
+both environment roots. Default null creates no resources. The private Node24 Lambda pins the
+artifact object version and existing numeric Secrets extension, owning database secret/key,
+private network and application logs. Its role explicitly denies object/task/role-passing/other
+function capabilities. Runtime and hourly schedule gates default false; the rule targets the
+numeric published version with only the existing expire envelope. Batch100/concurrency1 bounds
+work; fixed execution and event-delivery alarms use the existing operational SNS topic.
+
+Four mocked cases pass, covering no resources by default, disabled concrete release, exact
+numeric/artifact/envelope binding, secret/content authority and alarms, and invalid enablement.
+Platform and both environment roots validate. Log: `.tmp/d1-audit-retention-terraform.log`.
+An initial undeclared secret reference was corrected to the actual platform database_url resource
+before these results. These checks are local synthetic-provider evidence; earlier real SQL and
+handler evidence remains separate. No publication or deployment occurred.
+
+The module release guide records retry/drain behavior and remaining publication, managed access,
+expiry and alarm acceptance. Existing audit capture remains separately gated. Application expiry
+facade restrictions are not a new database-grant boundary. IAM effect, provider integration,
+real-data permission and accountable phase acceptance remain open.

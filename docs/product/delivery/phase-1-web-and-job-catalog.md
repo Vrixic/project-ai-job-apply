@@ -894,3 +894,11 @@ D1 remains In progress and no prior private acceptance or manual Apply test is r
 - Accepted residual risks: ADR-023's AWS-managed DNS covert-channel residual is accepted only for
   generated-synthetic development processing. It is not accepted for real documents; all other open
   items remain gates rather than accepted residual risk.
+
+
+2026-10-07 D1-012 connects the existing private audit-expiry Lambda to optional platform release
+composition: immutable numeric version, bounded private role, separately disabled hourly schedule
+and execution/delivery alarms. Platform/development/staging validate; four mocked release cases
+pass. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#optional-release-composition).
+Publication, managed access/expiry/alert acceptance and audit capture activation remain. No cloud
+action or phase completion; D1/D3 stay In progress and PC on.

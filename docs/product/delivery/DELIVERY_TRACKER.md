@@ -4666,3 +4666,11 @@ Two platform mocked cases and three per environment pass; environment validation
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#observer-failure-retention).
 Effective managed permissions/alert delivery and missed-event recovery remain unverified.
 No cloud action; D1/D3 remain In progress and PC on.
+
+
+2026-10-07 D1-012 connects the existing private audit-expiry Lambda to optional platform release
+composition: immutable numeric version, bounded private role, separately disabled hourly schedule
+and execution/delivery alarms. Platform/development/staging validate; four mocked release cases
+pass. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#optional-release-composition).
+Publication, managed access/expiry/alert acceptance and audit capture activation remain. No cloud
+action or phase completion; D1/D3 stay In progress and PC on.
