@@ -4529,3 +4529,12 @@ local files and exact source markers; second artifact emission is byte-identical
 companions. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Zero cloud calls;
 no publication, deployment or activation. Enabled-image and managed/client/ATS/accountable gates
 remain. D1/D3 In progress, ADR-040 Proposed, CI/CD deferred until launch and PC on.
+
+
+2026-10-07 D3-064/D3-079 actual built resume image passes 23 render/read assertions, real PDF
+and DOCX output, authenticated TLS checks and automatic native deadline under init/read-only/
+UID65532/network-none restrictions. Docker confirms no OOM kill. Image-owned bundle/kernel hashes
+match source `0af30d5d`; external ports and identity remain synthetic through a test entrypoint.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Enabled production main,
+managed transport/routing and client/ATS/accountable acceptance remain; D1/D3 In progress,
+ADR-040 Proposed. No publication/deployment, CI/CD deferred, Docker/WSL stopped and PC on.

@@ -279,3 +279,28 @@ release acceptance. Logs: `.tmp/d3-resume-publication-build.log`,
 | native-resume-request-dispatch-lambda | `02bb145a718f7c365cec55d4a5f10923292378bfaf8632160d7430d8b37fbf3d` | 515890 |
 
 No Docker runtime or cloud call was needed. Existing development web remains running; PC stays on.
+
+
+## Actual built-image render/read/deadline smoke
+
+The maintained `scripts/verify-native-resume-image.mjs` harness now loads the actual image-owned
+runtime bundle and native kernel, verifies its manifest/source/file hashes and uses the existing
+synthetic connected read fixture. Image
+`sha256:ff38e1c23c370a7788277b8cd5bf218a246fdcabf44806321a6f0299a7ac029e`, built from
+`0af30d5d334f3df6af9d80f3dfd345915eeaa160`, passes all 23 runtime assertions and renders both actual
+PDF and DOCX files. It serves valid authenticated TLS responses with current-packet checks,
+rejects foreign/unscoped/forged tokens, malformed routes/origins, TLS 1.2 and revoked packets,
+and exercises bounded pending reads. The image bundle and kernel are unmodified.
+
+Container execution uses init, UID 65532, read-only root, no network, dropped capabilities,
+no-new-privileges, core dumps disabled, 512 MiB memory and a 64-process limit. The native five-second
+test deadline exits 137 in 6605 ms including startup; Docker confirms `OOMKilled=false`, and the
+host fallback is not used. The original reference remains exactly 1800000 ms from completion to
+expiry. No unexpected diagnostic output is permitted. Log: `.tmp/d3-resume-built-image-smoke.log`.
+
+The fixture explicitly overrides the entrypoint and uses NODE_ENV=test with synthetic AWS,
+metadata, secret, identity, source and owner ports. It proves the built bundle's render/read/
+deadline behavior under container restrictions, not enabled production main, live cloud transport
+or managed/client/ATS acceptance. These distinctions remain release gates rather than inferred
+success from local tests. No image is published or deployed. The owned containers and staging
+files are removed; shared images/volumes retained. Docker/WSL stopped after the check, PC on.

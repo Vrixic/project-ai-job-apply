@@ -21,7 +21,7 @@ import {
   syntheticDocument,
 } from "../../../services/documents/src/resume-ast/test-support.ts";
 
-export async function exerciseResumeRuntime(mode, kernelPath) {
+export async function exerciseResumeRuntime(mode, kernelPath, imageStart = startNativeResumeImage) {
   const id = (n) => `019d04cf-1f80-7000-8000-${String(n).padStart(12, "0")}`;
   const job = { title: "Backend engineer", description: "TypeScript PostgreSQL APIs" };
   const document = syntheticDocument(SYNTHETIC_RESUME);
@@ -274,7 +274,7 @@ export async function exerciseResumeRuntime(mode, kernelPath) {
         versionId: "12345678-1234-1234-1234-123456789012",
       };
       let secretReads = 0;
-      runtime = await startNativeResumeImage({
+      runtime = await imageStart({
         configuration: {
           schemaVersion: 1,
           enabled: true,
