@@ -6,8 +6,9 @@ confidence. Documents migration 0013 makes this metadata immutable and portable.
 the updated numeric receiver before enabling an updated image; older receivers refuse the action.
 The dedicated default-off native preparation initializer/recovery consumes this receipt.
 Internal `readAllocation` discovers only the original allocation ID from an exact packet material
-reference after ready/work/identity/admission/expiry checks. Gateway metadata handoff and managed
-routing/client integration remain unfinished.
+reference after ready/work/identity/admission/expiry checks. The separate default-off Gateway
+location route now consumes this metadata with packet proof before/after lookup. Managed
+routing/client integration remains unfinished.
 See [receipt evidence](../../../docs/product/delivery/evidence/d3-native-ready-receipt-2026-10-06.md).
 
 Private `./native-task-bootstrap` binds the task's own ECS container/task metadata, reads its

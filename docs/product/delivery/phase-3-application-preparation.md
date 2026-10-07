@@ -9,6 +9,12 @@
 
 ## Objective
 
+2026-10-06 D3-079 scalar native read-location handoff passes full clean verification at `0df9bd0b`
+(38 typecheck/39 test/23 builds, unchanged lint and native artifact isolation). All 25 actual SQL
+cases and focused Gateway/contract/owner checks pass. [Evidence](evidence/d3-native-read-location-2026-10-06.md).
+Managed routing/client/provider/accountable acceptance remains; D1/D3 stay In progress, no cloud
+activation, development web restored, Docker/WSL stopped and PC on.
+
 2026-10-06 D3-079 connects default-off scalar native read-location discovery through a separate
 v1 route, current packet checks before/after Documents lookup, fixed HTTPS origin derivation and
 owning native pool. 220 Gateway, 104 contract, 31 Documents, 20 Applications, 28 domain/20 event

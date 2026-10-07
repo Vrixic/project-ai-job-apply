@@ -44,7 +44,7 @@ Local verification:
   Affected suites pass on rerun.
 
 Logs are `.tmp/d3-native-read-location-{gateway-final,contract-final,doc-tests,app-tests,sql}.log`.
-Full clean-source verification follows. No image rebuild is needed: native image/HTTPS content
+Full clean-source verification passes (details below). No image rebuild is needed: native image/HTTPS content
 source is unchanged. Managed DNS/TLS/network reachability, reviewed hostname/routing deployment,
 browser access-token handoff and actual direct client/ATS/provider/accountable acceptance remain.
 An origin derived from owning metadata does not certify any task is alive or reachable.
@@ -57,3 +57,19 @@ is asserted. The PC stays on.
 
 The newly owned SQL container is removed after exact label verification; Docker/WSL are stopped.
 The owning isolated web parent/child are stopped before full verification reserves port 3000.
+
+## Full clean-source verification
+
+Clean source `0df9bd0bf6907efaaa50d1c847eca5657cd25da4` passes
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 builds,
+formatting/operator/security/Compose and emitted native isolation checks. Lint remains zero errors,
+15 warnings and 58 infos. The original verifier handle finishes with exit zero; tracked source is
+unchanged throughout the run. Log: `.tmp/d3-native-read-location-full.log`.
+
+The owning isolated development web is restored against the live development API. Home returns
+200 and anonymous `/resume` returns 307. Only Next.js's two generated development type imports
+are restored after exact diff inspection. Docker/WSL remain stopped, shared volumes are retained
+and the PC stays on. No sign-in or previously accepted owner browser step is repeated.
+
+Source/local verification does not activate the Proposed ADR-040 decision or certify managed
+routing, client token handoff, live provider, ATS or accountable approval. D1/D3 remain In progress.
