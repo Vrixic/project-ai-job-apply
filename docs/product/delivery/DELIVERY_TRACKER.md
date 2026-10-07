@@ -1,5 +1,12 @@
 # Delivery Tracker
 
+2026-10-06 D1-012 private audit-retention Lambda passes full clean verification at `be646832`
+(38 typecheck/39 test/23 builds, unchanged lint and emitted isolation). Its separate artifact
+builds twice identically, with ZIP/source/SBOM integrity and unchanged post-verifier hashes.
+[Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md). Managed invocation IAM,
+scheduling/release, alert retention and accountable acceptance remain; D1/D3 stay In progress.
+Development web restored, Docker/WSL stopped, PC on; no cloud activation or CI/CD work.
+
 2026-10-06 D1-012 adds a private default-off numeric-version audit-retention Lambda with
 managed-secret-only configuration, expiry-only owning pool and counts-only output. Nineteen
 focused cases, seven real PostgreSQL cases and emitted isolation pass; local artifact cold

@@ -59,3 +59,31 @@ Owned SQL fixture is removed after exact label validation; shared volumes remain
 stopped. Development web will pause only while the full verifier reserves localhost:3000, then
 be restored. The PC remains on. Managed secret extension/runtime/IAM/scheduling/release, alert
 retention verification and independent security/rights/phase acceptance remain open.
+
+## Clean-source full verification and artifact integrity
+
+Frozen clean source `be646832f61eb520f7193026a7429f3827cbf4d9` passes the original
+`scripts/verify-phase0.ps1` run with matching ARTIFACT_SOURCE_SHA and exit zero: 38 typecheck
+tasks, 39 test tasks, 23 production builds, operator/security/formatting/Compose checks and every
+emitted isolation check, including the new audit-maintenance check. Lint remains zero errors,
+15 warnings and 58 infos. Tracked source stays unchanged while the original handle is alive.
+Full log: `.tmp/d1-audit-maintenance-full.log`. Opt-in SQL remains skipped in workspace tests;
+the seven explicit actual PostgreSQL cases above remain separate evidence.
+
+The separate committed-source artifact builds twice byte-identically across all five output
+files. ZIP is 22,777 bytes with SHA-256
+`ff17b7ef4e441bd8b848e9ffa90b6e19167d87f23c1b39f742bba132c25b7fe4`.
+Manifest binds the exact source, Node.js 24/x86_64 and `index.handler`; SBOM has two components.
+Independent ZIP/manifest/bundle/SBOM hash and component checks pass. All five hashes still match
+after full verification. Logs: `.tmp/d1-audit-maintenance-artifact-{first,second}.log`; local hash
+receipt: `.tmp/d1-audit-maintenance-artifact-hashes.json`. No artifact is published or deployed.
+
+The maintained launcher restores development web against the live development API. Anonymous
+root returns 200 and `/resume` returns 307 with redirects disabled. Only the two generated Next
+development-type imports are restored after diff inspection; no frontend feature changes occur.
+This startup check does not claim new authenticated acceptance or repeat the owner's accepted
+Profile/save/reload steps. Docker/WSL remain stopped, shared volumes retained and PC on.
+
+Managed runtime/Secrets extension, reviewed invocation IAM, scheduling/release, audit security/
+rights review and alert storage/retention acceptance remain. D1/D3 remain In progress; full local
+verification does not close their deployed, provider, browser, ATS or accountable review gates.
