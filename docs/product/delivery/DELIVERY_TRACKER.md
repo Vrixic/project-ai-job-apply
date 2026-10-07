@@ -4681,3 +4681,10 @@ objects, matching the Terraform key path and existing Profile builder. Local fam
 regressions pass, including case variants and foreign/incomplete/duplicate rejection. Existing
 source/audit/bucket/KMS guards remain. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#guarded-publication-family).
 Clean-source build/readback follows. No publication or activation; D1/D3 remain In progress.
+
+
+2026-10-07 D1-012 corrected audit artifact command compiles Profile before packaging. Clean
+`91dd7478` passes actual publisher four-file readback and byte-identical repeat emission; ZIP
+SHA-256 `afb9234e1b85cd3e2f2a41a3a5f241f6ac9952b0ff68058f233a94d6b83ea716` (22,777 bytes).
+[Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#guarded-publication-family).
+No fresh audit, publication or deployment claim; D1/D3 remain In progress and PC on.

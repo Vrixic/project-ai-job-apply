@@ -131,3 +131,13 @@ repeat emission is byte-identical (22,777-byte ZIP). Profile was compiled immedi
 this readback. Review found that the package artifact command itself assumed existing compiled
 output; it now explicitly runs Profile compilation before packaging so publication cannot skip
 that step. A fresh committed-source artifact check follows this correction.
+
+
+Corrected clean source `91dd7478922f62213b86f908e50c0ec5e0220820` passes the package command's
+Profile compilation, emitted default-off refusal, actual publisher readback of all four files
+and byte-identical repeat emission. ZIP SHA-256
+`afb9234e1b85cd3e2f2a41a3a5f241f6ac9952b0ff68058f233a94d6b83ea716`, 22,777 bytes, two SBOM
+components. Logs: `.tmp/d1-audit-publication-build.log`, `.tmp/d1-audit-publication-readback.log`;
+local receipt `.tmp/d1-audit-publication-local-receipt.json`. Package Biome check passes. This
+is local integrity/reproducibility evidence, not a fresh dependency audit, cloud publication or
+managed release. D1/D3 remain In progress.
