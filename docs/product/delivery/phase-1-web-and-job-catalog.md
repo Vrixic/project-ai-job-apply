@@ -977,3 +977,11 @@ the source migration/restore inventory to 74 migrations/93 relations. Applicatio
 builds, 65 real SQL cases and 50 restore tests pass.
 [Evidence](evidence/d3-native-resume-execution-receipts-2026-10-07.md). No image publication or
 managed migration; AWS reconciliation and remaining launch acceptance stay open. D1/D3 In progress.
+
+2026-10-07 connected D1/D3 backend verification passes after correcting deletion replay's
+stale restore-manifest binding. All 38 typecheck/39 test/23 build tasks and remaining packaged
+checks pass; 207 restore-contract, 697 replay and 908 role checks pass. The frozen `0bfe741c`
+74-migration image passes hardened runtime smoke. [Evidence](evidence/d1-d3-connected-verification-2026-10-07.md)
+distinguishes the initial failure, corrected `dd61044a` run and unpublished image. D1/D3 remain
+In progress; managed/live acceptance and existing advisories remain open. Development web
+restored, Docker/WSL stopped, PC on; CI/CD deferred.
