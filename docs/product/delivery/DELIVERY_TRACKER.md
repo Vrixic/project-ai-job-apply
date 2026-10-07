@@ -4488,3 +4488,15 @@ checksum after the full verifier reached workspace tests. Focused checks pass: 4
 Remaining verifier stages and corrected private artifact builds follow. D1/D3 stay In progress;
 ADR-040 Proposed. Managed activation and combined/client/ATS acceptance remain. CI/CD deferred
 until launch; no new PR, main merge or deployment. PC remains on.
+
+
+2026-10-07 D3-064/D3-079 corrected runtime `12c58461` passes 38 typecheck, 39 workspace test
+and 23 build tasks plus formatting/lint. Test-only `ff17d209` updates one extracted-module
+inventory; remaining isolation/Compose/scope stages pass. Verification is segmented. Three
+private resume artifacts rebuilt on corrected source, with no publication or deployment.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Combined-flow/enabled-image,
+managed/client/ATS acceptance and queue exhaustion handling remain. D1/D3 stay In progress;
+ADR-040 Proposed. CI/CD deferred until launch. Owned SQL fixtures removed, Docker/WSL stopped,
+shared volumes retained, PC on.
+
+Development web restored after verification: anonymous `/` returns 200 and `/resume` returns 307. No new signed-in acceptance is claimed.

@@ -168,3 +168,37 @@ frozen source. Workspace tests/builds and remaining maintained verifier stages f
 D1/D3 remain In progress; managed activation and full combined-flow acceptance remain outstanding.
 CI/CD stays deferred until launch. No new PR, main merge or cloud deployment is authorized in this
 stretch. The PC stays on.
+
+
+## Segmented verification and corrected artifact receipts
+
+Corrected runtime source `12c58461c332f4bfb49e3a621764fac205ad7f08` passes formatting,
+the existing lint baseline, all 38 typecheck tasks, all 39 workspace test tasks and all 23 build
+tasks. Subsequent bundle checks found one stale expected file inventory after extracting the
+shared launch policy. Test-only `ff17d209` adds that exact module; all remaining maintained
+isolation, Compose and product-scope checks then pass. This is segmented verification, not one
+uninterrupted full-verifier pass. Logs: `.tmp/d3-native-init-remainder.log` and
+`.tmp/d3-native-init-isolation.log`. Runtime source did not change in the inventory correction.
+
+All three private artifacts rebuilt successfully from clean `12c58461`, including their bundled
+default-off checks. No artifact was published or deployed:
+
+| Artifact | ZIP SHA-256 | Bytes |
+| --- | --- | ---: |
+| Resume preparation control | `2c13c359d50e5c6616747a81f7f947b7e3b820037a7ef7e3f0ab8e8faeabc150` | 381539 |
+| Resume preparation durable | `dced2f2d22efc7f3311810fa46a7b09de488f704d6f7f1be1f36c62ad76aef9b` | 265662 |
+| Resume request dispatcher | `9dc197a829056daaac55898b1b86e4099fd794d79c049de36a177dbcf99de28c` | 515678 |
+
+Logs: `.tmp/d3-native-resume-init-control-artifact.log`,
+`.tmp/d3-native-resume-init-durable-artifact.log`, `.tmp/d3-native-resume-init-dispatch-artifact.log`.
+Both owned disposable SQL fixtures were removed after use; Docker Desktop and WSL stopped,
+shared volumes retained and PC on. User-accepted sign-in/search/Profile/save-reload checks are
+preserved; this backend batch adds no new signed-in browser or managed acceptance claim.
+
+Next connected work remains the combined durable-to-SQL-to-ready flow and enabled-image
+source/render/direct-read smoke, followed by managed routing/IAM/schedule and client/ATS acceptance.
+Also assess explicit terminal handling for exhausted resume queue delivery attempts; current
+bounded dispatch does not itself prove those requests are surfaced as failed. D1/D3 remain
+In progress and ADR-040 Proposed. CI/CD remains deferred until production launch.
+
+Development web restored after verification: anonymous `/` returns 200 and `/resume` returns 307. No new signed-in acceptance is claimed.
