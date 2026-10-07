@@ -521,3 +521,18 @@ refusal checks. ZIP SHA-256 `611b833b02072aac300a4f945b43cdf3656603d5216fbc11a7a
 384731 bytes and 30 inventory components, supersedes the earlier `c862e288` observer artifact.
 Log: `.tmp/d3-native-resume-observer-artifact.log`. Docker Desktop shutdown and WSL shutdown
 completed; PC stays on. No publication or deployment.
+
+
+## Observer joins the maintained release family
+
+NativeResume now includes owner RPC, source RPC, preparation control, durable preparation,
+request dispatch and task observation: six ZIP/manifest/SBOM/checksum sets, twenty-four objects.
+The observer builder shares the dedicated native-resume output directory; its individual build
+command remains available. Existing publication source/audit/KMS/versioning guards and separate
+family/key/receipt roots remain. The old five-artifact receipt is intentionally rejected.
+
+Publisher local guard tests pass, including case variants, complete inventory and old/mixed/
+duplicate/incomplete receipt refusal. Changed JavaScript/package formatting passes. Log:
+`.tmp/d3-resume-observer-publication-guards.log`. The actual clean-source family build and
+publisher readback/repeat emission follow. No Publish/Verify cloud action, IAM, schedule or
+activation is performed by this change.

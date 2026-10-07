@@ -58,8 +58,8 @@ output, receipt and immutable key roots; it never extends an existing Document r
 it only for separately authorized publication. Building or publishing does not authenticate,
 deploy or activate these default-off controls.
 
-NativeResume selects five private artifacts/twenty objects: owner RPC, retained-source RPC,
-preparation control, durable preparation and request dispatcher. Dedicated output/key/receipt
+NativeResume selects six private artifacts/twenty-four objects: owner RPC, retained-source RPC,
+preparation control, durable preparation, request dispatcher and task observer. Dedicated output/key/receipt
 roots preserve existing families. Publication does not deploy task images, configure IAM/TLS
 or enable processing.
 
@@ -125,7 +125,7 @@ $artifactNames = @(
   } elseif ($isPrivateDocumentControls) {
     @("cover-letter-provider-control-lambda", "cover-letter-response-capture-lambda", "cover-letter-cleanup-lambda", "cover-letter-response-disposal-lambda")
   } elseif ($isNativeResume) {
-    @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda")
+    @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda", "native-resume-task-observer-lambda")
   } else {
     @("document-processor-lambda", "document-parser-lambda")
   }

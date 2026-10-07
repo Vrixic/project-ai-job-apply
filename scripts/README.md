@@ -140,8 +140,8 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
   and metadata, and emits a checksum-reviewed ignored receipt without deploying either Lambda.
   `-ArtifactFamily PrivateDocumentControls` selects the dedicated four-artifact/sixteen-object
   family with isolated receipt/key roots and unchanged audit/source/KMS/immutable-write guards.
-  `-ArtifactFamily NativeResume` packages all five resume owner/source/control/durable/dispatch
-  entrypoints as twenty immutable objects; local build command is Workflows `build:lambda:native-resume`.
+  `-ArtifactFamily NativeResume` packages all six resume owner/source/control/durable/dispatch/observer
+  entrypoints as twenty-four immutable objects; local build command is Workflows `build:lambda:native-resume`.
 - `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
   fallback for the migration-only container. Its cloud-independent `LocalBuild` action proves two
   source-bound `linux/amd64` builds have identical configuration and rootfs identities and passes a
@@ -428,12 +428,12 @@ and supplies no EventBridge rule, IAM permission, queue/retry/DLQ routing or act
 `node scripts/build-native-resume-owner-rpc-lambda.mjs` builds the separate default-off
 native-resume scalar owner RPC after Workflows compilation. Set `ARTIFACT_SOURCE_SHA`
 to the exact clean committed source for provenance. Output stays in
-`backend/workflows/dist/native-resume-owner-rpc-lambda`; the builder performs no
+`backend/workflows/dist/native-resume-lambda`; the builder performs no
 publication/deployment and verifies default-off refusal without network effects.
 See [local evidence](../docs/product/delivery/evidence/d3-native-resume-owner-rpc-2026-10-07.md).
 
 `node scripts/build-native-resume-source-rpc-lambda.mjs` builds the separate default-off
 retained resume source receiver after Workflows compilation. Set `ARTIFACT_SOURCE_SHA`
 to the clean committed source. Output is isolated under
-`backend/workflows/dist/native-resume-source-rpc-lambda`; no publication occurs.
+`backend/workflows/dist/native-resume-lambda`; no publication occurs.
 See [local evidence](../docs/product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).

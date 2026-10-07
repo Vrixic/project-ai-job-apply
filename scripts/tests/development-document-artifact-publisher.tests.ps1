@@ -181,7 +181,7 @@ $configurationAssignments = @($ast.FindAll({
       '$artifactKeyRoot', '$receiptKind', '$artifactLabel', '$expectedObjectCount')
   }, $false) | Sort-Object { $_.Extent.StartOffset })
 if ($configurationAssignments.Count -ne 13) { throw "Unexpected publication family-selection inventory." }
-$resumeNames = @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda")
+$resumeNames = @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda", "native-resume-task-observer-lambda")
 foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME")) {
   $ArtifactFamily = $family
   foreach ($assignment in $configurationAssignments) { Invoke-Expression $assignment.Extent.Text }
@@ -194,7 +194,7 @@ foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcon
       throw "Private artifact family escaped its exact dedicated boundary."
     }
   } elseif ($family -eq "NativeResume") {
-    if (($artifactNames -join ',') -cne ($resumeNames -join ',') -or $expectedObjectCount -ne 20 -or
+    if (($artifactNames -join ',') -cne ($resumeNames -join ',') -or $expectedObjectCount -ne 24 -or
         $receiptKind -cne "development-native-resume-lambda-publication" -or
         $artifactKeyRoot -cne "lambda/documents/native-resume" -or
         $operatorDirectoryName -cne "development-native-resume-artifacts" -or
@@ -222,8 +222,9 @@ if (-not (Assert-CanonicalReceiptMatrix -Artifacts $resumeMatrix -ExpectedArtifa
 foreach ($invalid in @(
     [pscustomobject]@{ Entries = $canonicalArtifacts },
     [pscustomobject]@{ Entries = $privateMatrix },
-    [pscustomobject]@{ Entries = @($resumeMatrix | Select-Object -First 19) },
-    [pscustomobject]@{ Entries = @($resumeMatrix | Select-Object -First 19) + @($resumeMatrix[0]) },
+    [pscustomobject]@{ Entries = @($resumeMatrix | Where-Object artifactName -ne "native-resume-task-observer-lambda") },
+    [pscustomobject]@{ Entries = @($resumeMatrix | Select-Object -First 23) },
+    [pscustomobject]@{ Entries = @($resumeMatrix | Select-Object -First 23) + @($resumeMatrix[0]) },
     [pscustomobject]@{ Entries = @($resumeMatrix) + @($privateMatrix) }
   )) {
   $refused = $false
@@ -231,4 +232,4 @@ foreach ($invalid in @(
   catch { $refused = $true }
   if (-not $refused) { throw "Mixed, duplicate or incomplete native resume receipt was accepted." }
 }
-Write-Host "Native resume family and twenty-object receipt guards passed; no cloud calls."
+Write-Host "Native resume family and twenty-four-object receipt guards passed; no cloud calls."

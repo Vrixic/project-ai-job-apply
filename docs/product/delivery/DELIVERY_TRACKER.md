@@ -4622,3 +4622,9 @@ deployment. D1/D3 In progress, ADR-040 Proposed and PC on.
 ZIP SHA-256 `611b833b02072aac300a4f945b43cdf3656603d5216fbc11a7adf47611b48fe0` (384731 bytes).
 This supersedes the earlier observer artifact. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
 Docker/WSL stopped, PC on; artifact remains unpublished and D1/D3 In progress.
+
+
+2026-10-07 D3-064/D3-079 adds the observer to the maintained NativeResume build/publication
+family: six artifacts and twenty-four companion objects. Publisher guards reject the old
+observer-less receipt and incomplete/mixed/duplicate sets. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Frozen-source family build/readback follows. No publication or deployment; D1/D3 In progress.
