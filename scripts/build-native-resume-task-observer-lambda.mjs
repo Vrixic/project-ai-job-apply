@@ -43,6 +43,12 @@ const artifact = await buildLambdaArtifact({
       for (const request of [
         input,
         { schemaVersion: 1, action: "sweep" },
+        {
+          schemaVersion: 1,
+          action: "inspect_executions",
+          workflowArn: context.invokedFunctionArn,
+          afterEventId: null,
+        },
         { ...input, taskArn: "forbidden" },
         { ...input, receipt: {} },
       ])

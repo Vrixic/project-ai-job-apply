@@ -143,3 +143,11 @@ supplies exact-rule queue/KMS grants and delivery/execution alarms. Follow the
 [original recovery runbook](../../../runbooks/observability/native-resume-terminal-recovery.md).
 No automatic redrive or replacement execution is provided. Managed alert/recovery drills and
 missed-event reconciliation remain required; retained checkpoints expire after seven days.
+
+Private execution inspection shares the observer artifact. `execution_inspection_enabled` defaults
+false, requires runtime but not new launch, and exposes only an explicit bounded metadata read.
+`retained_workflow_versions` lists at most seven old numeric versions beside the current version.
+Applications 0011, original observer bootstrap ceiling and Lambda endpoint policy must precede
+activation. Inspect whole inventories repeatedly; no persistent cursor or automatic settlement is
+provided. The [recovery runbook](../../../runbooks/observability/native-resume-terminal-recovery.md)
+describes the request and interpretation limits.

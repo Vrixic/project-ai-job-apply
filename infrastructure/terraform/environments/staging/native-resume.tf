@@ -96,6 +96,8 @@ variable "native_resume_preparation_releases" {
     route_enabled                = optional(bool, false)
     route_creation_enabled       = optional(bool, false)
     terminal_events_enabled      = optional(bool, false)
+    execution_inspection_enabled = optional(bool, false)
+    retained_workflow_versions   = optional(set(string), [])
   }))
   default  = {}
   nullable = false
@@ -121,6 +123,8 @@ module "native_resume_preparation" {
   route_enabled                = each.value.route_enabled
   route_creation_enabled       = each.value.route_creation_enabled
   terminal_events_enabled      = each.value.terminal_events_enabled
+  execution_inspection_enabled = each.value.execution_inspection_enabled
+  retained_workflow_versions   = each.value.retained_workflow_versions
 }
 
 output "native_resume_release_bindings" {

@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 import { createApplicationsDatabase } from "@ai-job-apply/applications-service";
+import {
+  nativeResumeExecutionName,
+  PostgresNativeResumeRequestStore,
+} from "@ai-job-apply/applications-service/native-resume-request-store";
 import { nativeLaunchControlVersion } from "@ai-job-apply/documents-service/native-launch-control";
 import { PostgresNativeResumeGenerationStore } from "@ai-job-apply/documents-service/native-resume-generation-store";
 import { createNativeResumeTaskLaunch } from "@ai-job-apply/documents-service/native-resume-task-launch";
@@ -10,6 +14,11 @@ import {
   nativeTaskLaunchScope,
 } from "@ai-job-apply/documents-service/native-task-launch-policy";
 import { resolveLambdaDatabaseUrl } from "@ai-job-apply/profile-service";
+import { LambdaClient } from "@aws-sdk/client-lambda";
+import {
+  createNativeResumeExecutionInspection,
+  type NativeResumeExecutionReader,
+} from "./native-resume-execution-inspection.js";
 import { nativeResumeStoppedTaskEvent } from "./native-resume-task-event.js";
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -64,7 +73,30 @@ function configuration(env: Environment) {
   const task = nativeTaskLaunchConfiguration(JSON.parse(json) as NativeTaskLaunchConfiguration);
   if (!task.clusterArn.startsWith(`arn:aws:ecs:us-east-2:${env.PLATFORM_AWS_ACCOUNT_ID}:cluster/`))
     throw unavailable();
-  return { target, secretId, task };
+  let inspectionArns: string[] = [];
+  if (env.NATIVE_RESUME_EXECUTION_INSPECTION_ENABLED === "true") {
+    const raw = env.NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON;
+    if (!raw || Buffer.byteLength(raw) > 4096) throw unavailable();
+    const values: unknown = JSON.parse(raw);
+    if (
+      !Array.isArray(values) ||
+      !values.length ||
+      values.length > 8 ||
+      new Set(values).size !== values.length
+    )
+      throw unavailable();
+    for (const value of values) {
+      nativeLaunchControlVersion(value);
+      if (
+        typeof value !== "string" ||
+        !value.startsWith(`arn:aws:lambda:us-east-2:${env.PLATFORM_AWS_ACCOUNT_ID}:function:`) ||
+        value.slice(0, value.lastIndexOf(":")) !== values[0].slice(0, values[0].lastIndexOf(":"))
+      )
+        throw unavailable();
+    }
+    inspectionArns = values as string[];
+  }
+  return { target, secretId, task, inspectionArns };
 }
 type Configuration = ReturnType<typeof configuration>;
 
@@ -75,7 +107,9 @@ export function createNativeResumeTaskObserverRuntime(
   url: string,
   config: Configuration,
   enabled: () => boolean,
+  testExecutionReader?: NativeResumeExecutionReader,
 ) {
+  if (testExecutionReader && process.env.NODE_ENV !== "test") throw unavailable();
   const database = createApplicationsDatabase(url, { maxConnections: 1 });
   const denied = async () => {
     throw unavailable();
@@ -103,8 +137,28 @@ export function createNativeResumeTaskObserverRuntime(
     enabled,
     launchEnabled: () => false,
   });
+  const client = config.inspectionArns?.length
+    ? (testExecutionReader ??
+      new LambdaClient({
+        region: "us-east-2",
+        endpoint: "https://lambda.us-east-2.amazonaws.com",
+        maxAttempts: 1,
+      }))
+    : undefined;
+  const inspect = client
+    ? createNativeResumeExecutionInspection({
+        requests: new PostgresNativeResumeRequestStore(database, enabled),
+        client,
+        workflowArns: config.inspectionArns,
+        enabled,
+      })
+    : undefined;
   let sweeping = false;
   return Object.freeze({
+    async inspectExecutions(workflowArn: string, afterEventId: string | null) {
+      if (!inspect) throw unavailable();
+      return inspect(workflowArn, afterEventId);
+    },
     async observe(scope: Parameters<typeof observer.observe>[0], expectedTaskArn?: string) {
       if (expectedTaskArn !== undefined) {
         const original = await registry.readLaunch(scope, hash);
@@ -187,11 +241,37 @@ export function createNativeResumeTaskObserverLambda(
             field.value === (key === "schemaVersion" ? 1 : "sweep")
           );
         });
-      const hint = sweep
-        ? undefined
-        : isEvent
-          ? nativeResumeStoppedTaskEvent(raw, config.task)
-          : { scope: request(raw), taskArn: undefined };
+      let inspection: { workflowArn: string; afterEventId: string | null } | undefined;
+      if (
+        raw &&
+        typeof raw === "object" &&
+        Object.getOwnPropertyDescriptor(raw, "action")?.value === "inspect_executions"
+      ) {
+        if (
+          Object.getPrototypeOf(raw) !== Object.prototype ||
+          Reflect.ownKeys(raw).length !== 4 ||
+          !["schemaVersion", "action", "workflowArn", "afterEventId"].every((key) => {
+            const field = Object.getOwnPropertyDescriptor(raw, key);
+            return field?.enumerable && "value" in field;
+          })
+        )
+          throw unavailable();
+        const input = raw as {
+          schemaVersion: unknown;
+          workflowArn: string;
+          afterEventId: string | null;
+        };
+        if (input.schemaVersion !== 1 || !config.inspectionArns.includes(input.workflowArn))
+          throw unavailable();
+        if (input.afterEventId !== null) nativeResumeExecutionName(input.afterEventId);
+        inspection = { workflowArn: input.workflowArn, afterEventId: input.afterEventId };
+      }
+      const hint =
+        sweep || inspection
+          ? undefined
+          : isEvent
+            ? nativeResumeStoppedTaskEvent(raw, config.task)
+            : { scope: request(raw), taskArn: undefined };
       if (!startup) {
         pinned = key;
         startup = (async () => {
@@ -216,7 +296,11 @@ export function createNativeResumeTaskObserverLambda(
         throw unavailable();
       }
       if (!enabled()) throw unavailable();
-      const result = hint ? await runtime.observe(hint.scope, hint.taskArn) : await runtime.sweep();
+      const result = inspection
+        ? await runtime.inspectExecutions(inspection.workflowArn, inspection.afterEventId)
+        : hint
+          ? await runtime.observe(hint.scope, hint.taskArn)
+          : await runtime.sweep();
       if (!enabled()) throw unavailable();
       return result;
     } catch {

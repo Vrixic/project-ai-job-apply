@@ -67,6 +67,7 @@ variables {
 
 run "empty_does_not_add_rpc_endpoint" {
   command = plan
+
   assert {
     condition     = length(aws_vpc_endpoint.lambda) == 0
     error_message = "Empty native inputs must preserve existing endpoint absence."
@@ -92,6 +93,10 @@ run "original_rpc_and_normalized_reads" {
     document_parser_artifact_sha256            = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     document_parser_artifact_base64sha256      = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY="
     document_security_health_rules_enabled     = true
+  }
+  assert {
+    condition     = length([for statement in data.aws_iam_policy_document.outbox_lambda_endpoint[0].statement : statement if statement.sid == "OriginalResumeExecutionMetadata7" && statement.actions == toset(["lambda:GetDurableExecution"]) && statement.resources == toset(["arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-resume-durable-r7:*/durable-execution/*"]) && contains(flatten([for condition in statement.condition : condition.values]), "arn:aws:iam::111122223333:role/ai-job-apply-development-resume-observer-r7")]) == 1
+    error_message = "Only the original observer may inspect retained original execution metadata."
   }
   assert {
     condition     = length(aws_vpc_endpoint.lambda) == 1 && aws_vpc_endpoint.lambda[0].private_dns_enabled && length(aws_security_group.secrets_endpoint) == 1

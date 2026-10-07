@@ -838,7 +838,7 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
         dispatchResult: "started",
       });
       expect(await f.requests.executionReceipts(target, event?.id)).not.toContainEqual(
-        originalReceipts.find((r) => r.eventId === event?.id),
+        originalReceipts.find((r: { eventId: string }) => r.eventId === event?.id),
       );
       expect(await f.requests.executionReceipts(target.replace(":9", ":10"))).toEqual([]);
       await expect(
@@ -846,6 +846,64 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       ).rejects.toThrow();
       await sql`UPDATE identity.users SET account_state='quarantined',quarantined_at=clock_timestamp() WHERE id=${input.identity.ownerUserId}`;
       expect(await f.requests.executionReceipts(target)).toEqual(originalReceipts);
+      const observerModule = await import(
+        new URL(
+          "../../../workflows/dist/src/native-resume-task-observer-lambda.js",
+          import.meta.url,
+        ).href
+      );
+      const inspection = observerModule.createNativeResumeTaskObserverRuntime(
+        url,
+        {
+          target: "arn:aws:lambda:us-east-2:123456789012:function:synthetic-observer:1",
+          secretId: "synthetic-unused",
+          inspectionArns: [target],
+          task: nativeTaskLaunchConfiguration({
+            ...input.deployment,
+            image: `123456789012.dkr.ecr.us-east-2.amazonaws.com/synthetic-resume@sha256:${"a".repeat(64)}`,
+            executionRoleArn: "arn:aws:iam::123456789012:role/synthetic-execution",
+            taskRoleArn: "arn:aws:iam::123456789012:role/synthetic-resume",
+            cpu: "256",
+            memory: "512",
+            subnets: ["subnet-12345678901234567"],
+            securityGroups: ["sg-12345678901234567"],
+            assignPublicIp: "ENABLED",
+          }),
+        },
+        () => true,
+        {
+          send: async (command: { input: unknown }) => {
+            expect(command.input).toEqual({
+              DurableExecutionArn: receipt?.resume_execution_arn,
+              IncludeExecutionData: false,
+            });
+            return {
+              ExecutionDataIncluded: false,
+              DurableExecutionArn: receipt?.resume_execution_arn,
+              FunctionArn: target.slice(0, -2),
+              Version: "9",
+              DurableExecutionName: `resume-${event?.id}`,
+              Status: "FAILED",
+              StartTimestamp: new Date(1000),
+              EndTimestamp: new Date(2000),
+            };
+          },
+        },
+      );
+      try {
+        expect(await inspection.inspectExecutions(target, null)).toMatchObject({
+          schemaVersion: 1,
+          results: [
+            { eventId: event?.id, executionArn: receipt?.resume_execution_arn, status: "FAILED" },
+          ],
+        });
+        await expect(
+          inspection.inspectExecutions(target.replace(":9", ":10"), null),
+        ).rejects.toThrow();
+      } finally {
+        await inspection.close();
+      }
+
       expect(await f.requests.pending()).not.toContain(event?.id);
     } finally {
       f.protection.destroy();

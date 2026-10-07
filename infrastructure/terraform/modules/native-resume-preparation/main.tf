@@ -407,9 +407,11 @@ resource "aws_lambda_function" "observer" {
   kms_key_arn                    = var.release.platform_kms_key_arn
   environment {
     variables = merge(local.common_environment, {
-      RELEASE_SHA                               = var.release.artifacts.observer.sha256,
-      NATIVE_RESUME_TASK_OBSERVER_ENABLED       = tostring(var.enabled),
-      NATIVE_RESUME_OBSERVER_CONFIGURATION_JSON = jsonencode(local.launch)
+      RELEASE_SHA                                = var.release.artifacts.observer.sha256,
+      NATIVE_RESUME_TASK_OBSERVER_ENABLED        = tostring(var.enabled),
+      NATIVE_RESUME_EXECUTION_INSPECTION_ENABLED = tostring(var.execution_inspection_enabled),
+      NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON    = jsonencode(local.resume_inspection_arns),
+      NATIVE_RESUME_OBSERVER_CONFIGURATION_JSON  = jsonencode(local.launch)
     })
   }
   vpc_config {
@@ -423,7 +425,7 @@ resource "aws_lambda_function" "observer" {
     log_group             = local.log_group
   }
   dead_letter_config { target_arn = var.release.observer_dead_letter_arn }
-  depends_on = [aws_iam_role_policy.runtime, aws_iam_role_policy.observer]
+  depends_on = [aws_iam_role_policy.runtime, aws_iam_role_policy.observer, aws_iam_role_policy.execution_inspection]
 }
 resource "aws_cloudwatch_event_rule" "observer" {
   count         = local.deployed ? 1 : 0
@@ -520,4 +522,33 @@ resource "aws_cloudwatch_event_target" "terminal" {
     maximum_event_age_in_seconds = 86400
     maximum_retry_attempts       = 185
   }
+}
+
+variable "execution_inspection_enabled" {
+  type     = bool
+  default  = false
+  nullable = false
+  validation {
+    condition     = !var.execution_inspection_enabled || var.enabled
+    error_message = "Original execution inspection requires the observer runtime."
+  }
+}
+variable "retained_workflow_versions" {
+  description = "Original numeric durable versions retained for recovery, besides the current version."
+  type        = set(string)
+  default     = []
+  nullable    = false
+  validation {
+    condition     = length(var.retained_workflow_versions) <= 7 && alltrue([for version in var.retained_workflow_versions : can(regex("^[1-9][0-9]{0,8}$", version))])
+    error_message = "Retain at most seven original numeric versions; aliases and latest are forbidden."
+  }
+}
+locals {
+  resume_inspection_arns = local.deployed ? distinct(concat([aws_cloudformation_stack.durable[0].outputs["DurableVersionArn"]], [for version in sort(tolist(var.retained_workflow_versions)) : "${local.durable_arn}:${version}"])) : []
+}
+resource "aws_iam_role_policy" "execution_inspection" {
+  count  = local.deployed && var.execution_inspection_enabled ? 1 : 0
+  name   = "original-execution-metadata"
+  role   = aws_iam_role.runtime["observer"].id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = ["lambda:GetDurableExecution"], Resource = [for arn in local.resume_inspection_arns : "${arn}/durable-execution/*"] }] })
 }

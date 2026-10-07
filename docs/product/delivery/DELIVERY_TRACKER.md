@@ -4840,3 +4840,10 @@ the source migration/restore inventory to 74 migrations/93 relations. Applicatio
 builds, 65 real SQL cases and 50 restore tests pass.
 [Evidence](evidence/d3-native-resume-execution-receipts-2026-10-07.md). No image publication or
 managed migration; AWS reconciliation and remaining launch acceptance stay open. D1/D3 In progress.
+
+2026-10-07 D3-064/D3-079 connects original execution receipts to metadata-only AWS inspection
+inside the existing private observer. Two receipts/page, explicit retained numeric versions,
+default-off configuration and scoped role/boundary/endpoint access are implemented. Builds,
+41 focused tests, 65 real SQL cases and 31 mocked Terraform cases pass; both environments validate.
+[Evidence](evidence/d3-native-resume-execution-inspection-2026-10-07.md). This is inspection, not
+recovery settlement or managed acceptance. D1/D3 In progress; no cloud action, PC on.

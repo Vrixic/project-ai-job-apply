@@ -49,6 +49,11 @@ function setup() {
   }));
   const runtime = vi.fn(() => ({
     observe,
+    inspectExecutions: vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      results: [],
+      nextAfterEventId: null,
+    })),
     sweep: vi.fn(async () => ({
       schemaVersion: 1 as const,
       inspected: 0,
@@ -231,4 +236,39 @@ it("accepts a scalar sweep and rejects caller-selected batches before secret acc
     x.handler({ schemaVersion: 1, action: "sweep" }, { invokedFunctionArn: target }),
   ).resolves.toEqual({ schemaVersion: 1, inspected: 0, retired: 0, unresolved: 0 });
   expect(x.observe).not.toHaveBeenCalled();
+});
+
+it("inspects only configured original versions without observation or launch", async () => {
+  const x = setup();
+  const workflowArn = "arn:aws:lambda:us-east-2:123456789012:function:resume-durable:9";
+  x.env.NATIVE_RESUME_EXECUTION_INSPECTION_ENABLED = "true";
+  x.env.NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON = JSON.stringify([workflowArn]);
+  const raw = { schemaVersion: 1, action: "inspect_executions", workflowArn, afterEventId: null };
+  await expect(x.handler(raw, { invokedFunctionArn: target })).resolves.toEqual({
+    schemaVersion: 1,
+    results: [],
+    nextAfterEventId: null,
+  });
+  expect(x.observe).not.toHaveBeenCalled();
+  await expect(
+    x.handler(
+      { ...raw, workflowArn: workflowArn.replace(":9", ":10") },
+      { invokedFunctionArn: target },
+    ),
+  ).rejects.toThrow();
+  x.env.NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON = JSON.stringify([
+    workflowArn.replace(":9", ":10"),
+  ]);
+  await expect(x.handler(raw, { invokedFunctionArn: target })).rejects.toThrow();
+  expect(x.runtime).toHaveBeenCalledOnce();
+});
+it("rejects default-off execution inspection before secret access", async () => {
+  const x = setup();
+  await expect(
+    x.handler(
+      { schemaVersion: 1, action: "inspect_executions", workflowArn: target, afterEventId: null },
+      { invokedFunctionArn: target },
+    ),
+  ).rejects.toThrow();
+  expect(x.resolve).not.toHaveBeenCalled();
 });

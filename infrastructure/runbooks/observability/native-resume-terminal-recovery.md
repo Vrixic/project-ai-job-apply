@@ -57,3 +57,21 @@ for duplicate notices for the same original execution without treating duplicate
 Retain original releases until every owned task/route/attachment is accounted for. If execution
 history is unavailable or mutation ordering cannot be proven, keep the incident unresolved and
 block release retirement. Automated missed-event reconciliation remains a separate launch gap.
+
+## Bounded private receipt inspection
+
+After Applications migration 0011, the new observer version can expose `inspect_executions` with
+`execution_inspection_enabled=true`. Its exact retained workflow allowlist is configured through
+`retained_workflow_versions` plus the current original durable version. Invoke only the approved
+numeric observer version under the existing private operations authority with this scalar request:
+
+```json
+{"schemaVersion":1,"action":"inspect_executions","workflowArn":"<retained numeric original workflow ARN>","afterEventId":null}
+```
+
+The response contains at most two scalar receipt results. Follow `nextAfterEventId` through the
+whole version's inventory; start subsequent passes at null so late receipts are revisited. This
+is an explicit operator read, not an enabled scheduled sweep. Keep identifiers in restricted
+operations context. Unknown receipt/status is not failed work, no-source is not an execution,
+and SUCCEEDED is not independent proof of route cleanup. Existing role/boundary/endpoint grants
+must all be released and verified before relying on managed results.

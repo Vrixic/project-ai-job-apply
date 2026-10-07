@@ -4,7 +4,7 @@ mock_provider "aws" {
   mock_data "aws_region" { defaults = { region = "us-east-2" } }
   mock_resource "aws_iam_role" { defaults = { arn = "arn:aws:iam::123456789012:role/synthetic-runtime" } }
   mock_resource "aws_lambda_function" { defaults = { qualified_arn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-control:1", version = "1" } }
-  mock_resource "aws_cloudformation_stack" { defaults = { outputs = { DurableVersionArn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-durable:2" } } }
+  mock_resource "aws_cloudformation_stack" { defaults = { outputs = { DurableVersionArn = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-resume-durable-r7:2" } } }
 }
 variables {
   account_id  = "123456789012"
@@ -241,4 +241,31 @@ run "terminal_monitoring_survives_runtime_shutdown" {
     condition     = aws_cloudwatch_event_target.terminal[0].arn == var.release.observer_dead_letter_arn && aws_cloudwatch_event_target.terminal[0].input_transformer[0].input_paths == tomap({ execution = "$.detail.durableExecutionArn", function = "$.detail.functionArn", status = "$.detail.status" }) && aws_cloudwatch_event_target.terminal[0].retry_policy[0].maximum_retry_attempts == 185
     error_message = "Only scalar original execution metadata should enter the existing encrypted queue."
   }
+}
+
+run "retained_execution_inspection_without_launch" {
+  command = apply
+  variables {
+    enabled                      = true
+    execution_inspection_enabled = true
+    retained_workflow_versions   = ["1"]
+  }
+  assert {
+    condition     = aws_lambda_function.observer[0].environment[0].variables.NATIVE_RESUME_EXECUTION_INSPECTION_ENABLED == "true" && toset(jsondecode(aws_lambda_function.observer[0].environment[0].variables.NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON)) == toset(["arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-resume-durable-r7:2", "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-resume-durable-r7:1"]) && aws_lambda_function.control[0].environment[0].variables.NATIVE_RESUME_NEW_LAUNCH_ENABLED == "false"
+    error_message = "Inspection must retain original numeric versions independently of launch."
+  }
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.execution_inspection[0].policy).Statement[0].Action == ["lambda:GetDurableExecution"] && toset(jsondecode(aws_iam_role_policy.execution_inspection[0].policy).Statement[0].Resource) == toset(["arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-resume-durable-r7:2/durable-execution/*", "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-resume-durable-r7:1/durable-execution/*"])
+    error_message = "Inspection IAM must grant reads only for the exact retained execution versions."
+  }
+}
+run "inspection_requires_runtime" {
+  command = plan
+  variables { execution_inspection_enabled = true }
+  expect_failures = [var.execution_inspection_enabled]
+}
+run "inspection_rejects_alias" {
+  command = plan
+  variables { retained_workflow_versions = ["live"] }
+  expect_failures = [var.retained_workflow_versions]
 }

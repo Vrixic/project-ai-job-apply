@@ -2639,6 +2639,25 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
   count = local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
 
   dynamic "statement" {
+    for_each = var.native_resume_dispatch_revisions
+    content {
+      sid       = "OriginalResumeExecutionMetadata${statement.value}"
+      effect    = "Allow"
+      actions   = ["lambda:GetDurableExecution"]
+      resources = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-resume-durable-r${statement.value}:*/durable-execution/*"]
+      principals {
+        type        = "AWS"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-observer-r${statement.value}"]
+      }
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.native_resume_task_rpc_bindings
     content {
       sid       = "OriginalResumeTaskRpc${statement.key}"

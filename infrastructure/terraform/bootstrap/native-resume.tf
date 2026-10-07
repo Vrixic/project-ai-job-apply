@@ -81,6 +81,8 @@ resource "aws_iam_policy" "native_resume_observer_boundary" {
       Condition = merge(statement.Condition, { ArnEquals = merge(statement.Condition.ArnEquals, { "aws:PrincipalArn" = replace(local.native_resume_controls[each.key].principal, "resume-control-", "resume-observer-") }) })
     }) if !contains(["TaskMetadata", "OriginalLaunch", "OriginalRoles"], statement.Sid)
     ], [
+    { Sid = "OriginalExecutionMetadata", Effect = "Allow", Action = ["lambda:GetDurableExecution"], Resource = "arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:ai-job-apply-${var.environment}-resume-durable-r${each.key}:*/durable-execution/*",
+    Condition = { ArnEquals = { "aws:PrincipalArn" = replace(local.native_resume_controls[each.key].principal, "resume-control-", "resume-observer-") } } },
     { Sid = "RetainFailedObservation", Effect = "Allow", Action = ["sqs:SendMessage"], Resource = each.value.observer_dead_letter_arn,
     Condition = { ArnEquals = { "aws:PrincipalArn" = replace(local.native_resume_controls[each.key].principal, "resume-control-", "resume-observer-") } } },
     { Sid = "EncryptFailedObservation", Effect = "Allow", Action = ["kms:GenerateDataKey"], Resource = each.value.platform_kms_key_arn,
