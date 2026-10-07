@@ -61,3 +61,20 @@ The first exact-image build failed during Debian dependency installation with me
 exhaustion in the local 4-GiB Docker VM. Docker/WSL were reset, without changing machine limits or
 shared volumes. Build arguments now follow dependency installation, permitting that layer to be
 cached across source SHAs. The next image build runs separately from the full verifier.
+
+The image retry at source `9f9994f0caedbf0f1d016fbbe95cdf674ea2681d` succeeds. Its immutable ID is
+`sha256:bd3cdf19c026f7300b14a5afa57a35063d67aad8754f12ddd1baf59053afbabf`. All four actual-image
+scenarios pass, now asserting one readiness publication from each authenticated positive process,
+and three hardened production startup refusals pass with exactly the fixed diagnostic. The
+matching receiver ZIP reproduces byte-identically: 365939 bytes, SHA256
+`feb7f88383881c9a8a33c61bbbcadee13b8f81e5a9ac18289c0f46bd46ac5ac1`, 32 dependency components.
+These artifacts remain local and source-labelled; they are not published or activated.
+
+The second full run passes operators, formatting, lint and all 38 typecheck tasks, then stops at
+the current restore-manifest identity pin. The expanded manifest SHA256 is
+`d16353d38b3cba30e370e9dd60cc2f31c9b984e7ec53353c1a1956ba4a172646`. The TypeScript contract and
+PowerShell replay guard now require that exact hash. The generated-only cross-runtime fixture
+recomputes configuration and inspection hashes; no recorded live approval is rewritten. All 207
+restore-contract checks, replay checks and 908 restore-role guard assertions pass. The final
+correction affects restore tooling and its fixture, not the already tested native image runtime.
+The final full verification is still pending. Docker/WSL are stopped and the PC stays on.
