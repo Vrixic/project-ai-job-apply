@@ -394,3 +394,30 @@ changed. No AWS publication, deployment or activation; D1/D3 remain In progress.
 
 Eight emitted control/resume capability checks also pass after compiling Documents; the sixteen
 new material address cases pass again after the test-only TypeScript correction.
+
+
+## Native material route owner and lifecycle
+
+The private cover-letter route owner pins a detached original evidence binding, launch hash,
+ready reference and reviewed DNS configuration. Capture checks exact launch/work/deployment and
+current owning admission before/after the existing signed task-address reader. Admission repeats
+capture and requires the same address/expiry snapshot. Retirement accepts only the matching
+original ledger's positive retired state and remains independent of sealed/expired creation
+admission; absence/errors are never retirement. No SQL transaction spans AWS network calls.
+
+Resume and material now share the existing durable DNS algorithm. Existing resume checkpoint
+names remain unchanged; material uses separate `material-route.*` names. Both checkpoint intent
+before the single create, wait for propagation before attachment, preserve ambiguous writes and
+attachment acknowledgements, and remove the exact record after original expiry or positive
+retirement. New-creation shutdown preserves cleanup. DNS removal does not prove task death,
+provider settlement or candidate-rights disposal.
+
+Seventeen cover-letter owner cases pass with synthetic registry/address ports. The full existing
+DNS lifecycle suite now runs against both kinds: thirty-two local durable-SDK cases pass, including
+the actual DNS adapter with synthetic transport and interrupted create/attach/remove operations.
+This is local implementation, not deployed routing. Private invocation/dispatcher ownership of one
+original execution, atomic attachment, EC2/Route53 permission composition and managed acceptance
+remain. No database implementation or schema changes; D1/D3 remain In progress.
+
+Workflows compilation, touched-file Biome checks, whitespace checks and all eight emitted
+control/resume capability-boundary checks pass on this source.

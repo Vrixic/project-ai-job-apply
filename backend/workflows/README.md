@@ -304,3 +304,12 @@ route-owner, lifecycle and creation switches (all default off). Attachment inter
 unresolved while cleanup continues. Release timeout/IAM/configuration and terminal reconciliation
 are still required. See [owner integration evidence](../../docs/product/delivery/evidence/d3-native-resume-route-owner-2026-10-07.md)
 for configuration, local verification and remaining managed acceptance.
+
+
+Cover-letter route groundwork uses `native-material-route-owner.ts` to pin one original work
+binding and ready reference. It checks current owning admission before/after address capture;
+positive original retirement remains observable after admission is sealed. The material lifecycle
+uses the shared `native-route-lifecycle.ts` implementation with `material-route.*` checkpoints;
+resume retains its existing `resume-route.*` names. Both are default-off and retain uncertain DNS
+writes/attachments for reconciliation rather than retrying mutations. Material private invocation,
+one-original-execution dispatch, packet attachment and deployment/IAM composition remain unwired.

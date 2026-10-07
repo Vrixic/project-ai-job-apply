@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./temporary-material-reference": {
+      "types": "./dist/src/temporary-material-reference.d.ts",
+      "default": "./dist/src/temporary-material-reference.js"
+    },
     "./native-material-task-address": {
       "types": "./dist/src/native-material-task-address.d.ts",
       "default": "./dist/src/native-material-task-address.js"

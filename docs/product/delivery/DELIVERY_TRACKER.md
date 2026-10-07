@@ -4982,3 +4982,10 @@ and task identity are rechecked after observation. Public task IP configuration 
 optional/default-off. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-address-discovery).
 Route-owner/DNS lifecycle and managed composition remain; D1/D3 In progress. No cloud action,
 CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 native material route ownership and durable lifecycle are implemented locally: exact
+original binding/reference admission, separate material checkpoints and shared resume DNS recovery.
+Seventeen owner and thirty-two lifecycle scenarios pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-route-owner-and-lifecycle).
+Private handler/dispatcher, attachment/cloud composition and managed acceptance remain; D1/D3
+In progress. No cloud action, CI/CD deferred, Docker/WSL stopped and PC on.
