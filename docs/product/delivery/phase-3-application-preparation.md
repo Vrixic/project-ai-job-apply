@@ -9,11 +9,12 @@
 
 ## Objective
 
-2026-10-06 D3-079 adds authenticated scalar native readiness after actual grounding and render
-verification. Documents 0013 binds immutable fact IDs/confidence to original completion and settled
-work; candidate export preserves the metadata. All 122 focused and 24 real SQL checks pass.
-[Evidence](evidence/d3-native-ready-receipt-2026-10-06.md). Remaining verification is in progress;
-the native preparation initializer/recovery and managed acceptance stay open. D1/D3 In progress.
+2026-10-06 D3-079 authenticated scalar readiness passes full verification at `481d5d9f`
+(38 typecheck/39 test/23 build tasks, unchanged lint). All 122 focused, 24 real SQL, 31 Linux,
+11 emitted checks and four actual-image scenarios pass. Migration 0013 is bound into the exact
+70-migration restore/release boundary, including cross-runtime configuration hashes.
+[Evidence](evidence/d3-native-ready-receipt-2026-10-06.md). Native preparation consumption and
+managed acceptance remain open. D1/D3 In progress; Docker/WSL stopped, PC on, CI/CD deferred.
 
 2026-10-06 D3-079 actual-image conformance passes at clean source `44c0c354`: versions 1/2
 render and serve PDF/DOCX over authenticated HTTPS; the image-owned kernel retires both processes.
@@ -1671,3 +1672,9 @@ and passes three hardened startup refusals; the matching owner ZIP reproduces by
 No hosted CI/CD, main merge, third PR, publication or deployment/activation. D1/D3 stay In progress;
 managed IAM/TLS/routing/provider/client/ATS/accountable gates remain. Docker/WSL stopped, PC on.
 [Evidence](evidence/d3-native-document-version-2026-10-06.md).
+
+2026-10-06 D3-079 completes local scalar ready receipt verification at clean `481d5d9f`.
+Grounding metadata crosses authenticated RPC after render verification, remains bound to immutable
+original completion/settled work and is included in candidate export. The native preparation
+initializer/recovery is the next source gap. [Evidence](evidence/d3-native-ready-receipt-2026-10-06.md).
+No phase completion, cloud activation, new PR or hosted CI/CD; isolated web restored and PC on.
