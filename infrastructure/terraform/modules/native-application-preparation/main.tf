@@ -40,6 +40,16 @@ variable "intake_enabled" {
     error_message = "New intake requires runtime, launch and recovery."
   }
 }
+variable "drain_enabled" {
+  description = "Retry only previously bound work while new intake is disabled. Retain original numeric runtimes until drain."
+  type        = bool
+  default     = false
+  nullable    = false
+  validation {
+    condition     = !var.drain_enabled || var.recovery_enabled
+    error_message = "Bound-work retries require recovery."
+  }
+}
 variable "recovery_enabled" {
   type     = bool
   default  = false
@@ -126,7 +136,8 @@ locals {
   }) : {}
   environments = local.deployed ? {
     starter = merge(local.common, local.database, local.workflow, {
-      APPLICATION_PREPARATION_STARTER_ENABLED = tostring(var.intake_enabled)
+      APPLICATION_PREPARATION_STARTER_ENABLED = tostring(var.intake_enabled || var.drain_enabled)
+      APPLICATION_PREPARATION_INTAKE_ENABLED  = tostring(var.intake_enabled)
       APPLICATION_PREPARATION_QUEUE_ARN       = var.release.queue_arn
     })
     terminal = merge(local.common, local.database, local.workflow, {
@@ -134,7 +145,8 @@ locals {
     })
     reconcile = merge(local.common, local.database, local.workflow, {
       APPLICATION_PREPARATION_RECOVERY_ENABLED  = tostring(var.recovery_enabled)
-      APPLICATION_PREPARATION_NUDGES_ENABLED    = tostring(var.intake_enabled)
+      APPLICATION_PREPARATION_NUDGES_ENABLED    = tostring(var.intake_enabled || var.drain_enabled)
+      APPLICATION_PREPARATION_INTAKE_ENABLED    = tostring(var.intake_enabled)
       APPLICATION_PREPARATION_QUEUE_URL         = var.release.queue_url
       APPLICATION_PREPARATION_RECOVERY_RULE_ARN = "arn:aws:events:us-east-2:${var.account_id}:rule/${local.names.reconcile}"
     })
@@ -310,7 +322,7 @@ resource "aws_lambda_event_source_mapping" "intake" {
   depends_on              = [aws_iam_role_policy.starter]
   event_source_arn        = var.release.queue_arn
   function_name           = aws_lambda_function.runtime["starter"].qualified_arn
-  enabled                 = var.intake_enabled
+  enabled                 = var.intake_enabled || var.drain_enabled
   batch_size              = 1
   function_response_types = ["ReportBatchItemFailures"]
 }

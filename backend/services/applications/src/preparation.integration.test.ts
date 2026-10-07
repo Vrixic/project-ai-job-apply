@@ -565,6 +565,41 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
     });
   });
 
+  it("scopes recovery leases to retained releases and separates unbound intake", async () => {
+    await withApplication(async (owner, app) => {
+      const queued = await store.queuePreparation(command(owner, app));
+      const event = await eventId(queued.preparation.id);
+      const foreign = functionArn.replace(":7", ":8");
+      expect(await store.claimPreparationNudges(25, [functionArn], false)).toEqual([]);
+      expect(await store.claimPreparationNudges(25, [functionArn], true)).toEqual([
+        { eventId: event, preparationId: queued.preparation.id },
+      ]);
+      const first = await store.claimPreparationDispatch(event, functionArn);
+      if (first.kind !== "claimed") throw Error("SyntheticMissingClaim");
+      now = new Date(now.getTime() + 60001);
+      expect(await store.claimPreparationNudges(25, [foreign], true)).toEqual([]);
+      expect(await store.claimPreparationNudges(25, [functionArn], false)).toHaveLength(1);
+      await store.markPreparationStarted(
+        event,
+        first.dispatch.leaseId ?? "",
+        `${functionArn}/durable-execution/${first.dispatch.executionName}/synthetic-execution`,
+      );
+      now = new Date(now.getTime() + 60001);
+      expect(await store.claimPreparationExecutionsForReconciliation(25, [foreign])).toEqual([]);
+      expect(
+        await store.claimPreparationExecutionsForReconciliation(25, [functionArn]),
+      ).toHaveLength(1);
+      for (const invalid of [[], [functionArn, functionArn], ["alias:live"]]) {
+        await expect(store.claimPreparationNudges(25, invalid)).rejects.toThrow(
+          PreparationDispatchError,
+        );
+        await expect(
+          store.claimPreparationExecutionsForReconciliation(25, invalid),
+        ).rejects.toThrow(PreparationDispatchError);
+      }
+    });
+  });
+
   it("claims a nudge once per bounded interval without prematurely recording publication", async () => {
     await withApplication(async (owner, app) => {
       const queued = await store.queuePreparation(command(owner, app));

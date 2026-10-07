@@ -64,6 +64,8 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
   });
   it.each([
     "normal",
+    "drain_bound",
+    "drain_unbound",
     "invoke_ack",
     "mark_ack",
     "retained",
@@ -102,7 +104,7 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
     if (!event) throw Error("SyntheticMissingPreparationEvent");
     const durable = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-durable:7";
     const older = durable.replace(":7", ":6");
-    if (fault === "retained" || fault === "unretained") {
+    if (fault === "retained" || fault === "unretained" || fault === "drain_bound") {
       expect(
         (await store.claimPreparationDispatch(event.id, older, queued.preparation.id)).kind,
       ).toBe("claimed");
@@ -134,7 +136,9 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
     const send = vi.spyOn(lambda, "send").mockImplementation(async (command: unknown) => {
       if (!(command instanceof InvokeCommand)) throw Error("SyntheticUnexpectedCommand");
       expect(command.input.InvocationType).toBe("Event");
-      expect(command.input.FunctionName).toBe(fault === "retained" ? older : durable);
+      expect(command.input.FunctionName).toBe(
+        fault === "retained" || fault === "drain_bound" ? older : durable,
+      );
       expect(command.input.LogType).toBeUndefined();
       const body = new TextDecoder().decode(command.input.Payload as Uint8Array);
       wires.push(body);
@@ -159,6 +163,7 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
     const queue = "arn:aws:sqs:us-east-2:123456789012:synthetic-preparation";
     const env = {
       APPLICATION_PREPARATION_STARTER_ENABLED: "true",
+      APPLICATION_PREPARATION_INTAKE_ENABLED: fault.startsWith("drain_") ? "false" : "true",
       AWS_REGION: "us-east-2",
       PLATFORM_AWS_ACCOUNT_ID: "123456789012",
       AWS_LAMBDA_FUNCTION_NAME: "synthetic-starter",
@@ -168,7 +173,7 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
         "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-db-123456",
       APPLICATION_PREPARATION_DURABLE_FUNCTION_ARN: durable,
       APPLICATION_PREPARATION_QUEUE_ARN: queue,
-      ...(fault === "retained"
+      ...(fault === "retained" || fault === "drain_bound"
         ? { APPLICATION_PREPARATION_RETAINED_FUNCTION_ARNS: JSON.stringify([older, durable]) }
         : {}),
     };
@@ -207,7 +212,7 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
       ],
     };
     const result = await handler(batch, { invokedFunctionArn: target });
-    const refused = ["inactive", "unretained", "sdk_retry_config"].includes(fault);
+    const refused = ["inactive", "unretained", "sdk_retry_config", "drain_unbound"].includes(fault);
     expect(result.batchItemFailures).toHaveLength(
       refused || fault === "invoke_ack" || fault === "mark_ack" ? 1 : 0,
     );
@@ -227,9 +232,9 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
     expect(secret).toHaveBeenCalledTimes(1);
     const binding = await store.getPreparationDispatch(event.id);
     expect(binding?.functionArn).toBe(
-      fault === "retained" || fault === "unretained"
+      fault === "retained" || fault === "unretained" || fault === "drain_bound"
         ? older
-        : fault === "inactive"
+        : fault === "inactive" || fault === "drain_unbound"
           ? undefined
           : durable,
     );

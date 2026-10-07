@@ -149,3 +149,16 @@ run "enabled_configuration" {
     error_message = "Lambda and EventBridge must retain their distinct supported retry windows."
   }
 }
+
+run "bound_work_drain" {
+  command = apply
+  variables {
+    recovery_enabled  = true
+    drain_enabled     = true
+    retained_versions = ["1"]
+  }
+  assert {
+    condition     = aws_lambda_event_source_mapping.intake[0].enabled && aws_lambda_function.runtime["starter"].environment[0].variables.APPLICATION_PREPARATION_STARTER_ENABLED == "true" && aws_lambda_function.runtime["starter"].environment[0].variables.APPLICATION_PREPARATION_INTAKE_ENABLED == "false" && aws_lambda_function.runtime["reconcile"].environment[0].variables.APPLICATION_PREPARATION_NUDGES_ENABLED == "true" && aws_lambda_function.runtime["reconcile"].environment[0].variables.APPLICATION_PREPARATION_INTAKE_ENABLED == "false"
+    error_message = "Drain must retry original work while refusing unbound intake."
+  }
+}

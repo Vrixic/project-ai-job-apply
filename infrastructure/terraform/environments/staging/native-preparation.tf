@@ -23,6 +23,7 @@ variable "native_preparation_releases" {
     launch_enabled    = optional(bool, false)
     intake_enabled    = optional(bool, false)
     recovery_enabled  = optional(bool, false)
+    drain_enabled     = optional(bool, false)
     retained_versions = optional(set(string), [])
   }))
   default  = {}
@@ -43,6 +44,7 @@ module "native_preparation" {
   launch_enabled    = each.value.launch_enabled
   intake_enabled    = each.value.intake_enabled
   recovery_enabled  = each.value.recovery_enabled
+  drain_enabled     = each.value.drain_enabled
   retained_versions = each.value.retained_versions
 }
 output "native_preparation_bindings" {

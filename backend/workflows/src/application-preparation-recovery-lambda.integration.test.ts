@@ -76,6 +76,10 @@ describe.skipIf(!requested)("native recovery through owning Applications ledger"
     "scheduled_terminal",
     "scheduled_running",
     "nudge",
+    "drain_bound",
+    "drain_unbound",
+    "foreign_nudge",
+    "scheduled_foreign",
     "nudge_withdrawal",
     "sdk_retry_config",
     "nudge_sdk_retry",
@@ -111,18 +115,26 @@ describe.skipIf(!requested)("native recovery through owning Applications ledger"
     if (!event) throw Error("SyntheticMissingPreparationEvent");
     const durable = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-durable:7";
     const original =
-      fault === "retained" || fault === "unretained" ? durable.replace(":7", ":6") : durable;
+      fault === "foreign_nudge" || fault === "scheduled_foreign"
+        ? durable.replace("synthetic-durable", "other-release")
+        : fault === "retained" || fault === "unretained"
+          ? durable.replace(":7", ":6")
+          : durable;
     const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-recovery:9";
     const rule = "arn:aws:events:us-east-2:123456789012:rule/synthetic-recovery";
     const queue = "https://sqs.us-east-2.amazonaws.com/123456789012/synthetic-preparation";
     const name = `preparation-${event.id}`;
     const execution = `${original}/durable-execution/${name}/synthetic-execution`;
     const nudging =
-      fault === "nudge" || fault === "nudge_withdrawal" || fault === "nudge_sdk_retry";
-    if (!nudging) {
+      fault === "nudge" ||
+      fault === "nudge_withdrawal" ||
+      fault === "nudge_sdk_retry" ||
+      fault.startsWith("drain_") ||
+      fault === "foreign_nudge";
+    if (!nudging || fault === "drain_bound" || fault === "foreign_nudge") {
       const claim = await store.claimPreparationDispatch(event.id, original, queued.preparation.id);
       if (claim.kind !== "claimed" || !claim.dispatch.leaseId) throw Error("SyntheticClaimMissing");
-      if (fault !== "lost_start_ack")
+      if (fault !== "lost_start_ack" && fault !== "drain_bound" && fault !== "foreign_nudge")
         await store.markPreparationStarted(event.id, claim.dispatch.leaseId, execution);
     }
     const start = new Date(now);
@@ -146,7 +158,12 @@ describe.skipIf(!requested)("native recovery through owning Applications ledger"
             APPLICATION_PREPARATION_QUEUE_URL: queue,
           }
         : {}),
-      ...(nudging ? { APPLICATION_PREPARATION_NUDGES_ENABLED: "true" } : {}),
+      ...(nudging
+        ? {
+            APPLICATION_PREPARATION_NUDGES_ENABLED: "true",
+            APPLICATION_PREPARATION_INTAKE_ENABLED: fault.startsWith("drain_") ? "false" : "true",
+          }
+        : {}),
       ...(fault === "retained"
         ? { APPLICATION_PREPARATION_RETAINED_FUNCTION_ARNS: JSON.stringify([original, durable]) }
         : {}),
@@ -269,17 +286,20 @@ describe.skipIf(!requested)("native recovery through owning Applications ledger"
       await expect(handler(value, { invokedFunctionArn: target })).rejects.toThrow();
     else if (scheduled)
       expect(await handler(value, { invokedFunctionArn: target })).toEqual({
-        inspected: nudging ? 0 : 1,
+        inspected: nudging || fault === "scheduled_foreign" ? 0 : 1,
         settled: fault === "scheduled_terminal" ? 1 : 0,
-        sent: fault === "nudge" ? 1 : 0,
+        sent: fault === "nudge" || fault === "drain_bound" ? 1 : 0,
         failed: fault === "nudge_withdrawal" || fault === "nudge_sdk_retry" ? 1 : 0,
       });
     else expect(await handler(value, { invokedFunctionArn: target })).toEqual({ handled: true });
     if (fault === "settle_ack")
       expect(await handler(value, { invokedFunctionArn: target })).toEqual({ handled: true });
     const binding = await store.getPreparationDispatch(event.id);
-    expect(binding?.functionArn).toBe(nudging ? undefined : original);
-    const settled = !refused && !nudging && fault !== "scheduled_running";
+    expect(binding?.functionArn).toBe(
+      nudging && fault !== "drain_bound" && fault !== "foreign_nudge" ? undefined : original,
+    );
+    const settled =
+      !refused && !nudging && fault !== "scheduled_running" && fault !== "scheduled_foreign";
     expect(binding?.terminalStatus ?? null).toBe(settled ? "SUCCEEDED" : null);
     const preparation = await store.getPreparation(
       owner,
@@ -289,9 +309,12 @@ describe.skipIf(!requested)("native recovery through owning Applications ledger"
     expect(preparation.approvedAt).toEqual(queued.preparation.approvedAt);
     expect(preparation.expiresAt).toEqual(queued.preparation.expiresAt);
     expect(preparation.state).toBe(settled ? "failed" : "queued");
-    expect(send).toHaveBeenCalledTimes(fault === "nudge" ? 1 : 0);
+    expect(send).toHaveBeenCalledTimes(fault === "nudge" || fault === "drain_bound" ? 1 : 0);
     expect(read).toHaveBeenCalledTimes(
-      nudging || fault === "unretained" || fault === "sdk_retry_config"
+      nudging ||
+        fault === "scheduled_foreign" ||
+        fault === "unretained" ||
+        fault === "sdk_retry_config"
         ? 0
         : fault === "settle_ack"
           ? 2

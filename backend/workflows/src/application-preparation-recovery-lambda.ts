@@ -24,6 +24,7 @@ type Configuration = {
   durable: string;
   secret: string;
   retained: readonly string[];
+  intake: boolean;
   rule?: string;
   queue?: string;
 };
@@ -85,12 +86,14 @@ function configuration(env: Environment, mode: Mode): Configuration | undefined 
     durable,
     secret,
     retained: Object.freeze([...retained].sort()),
+    intake: env.APPLICATION_PREPARATION_INTAKE_ENABLED === "true",
   };
   if (mode === "terminal") {
     if (
       env.APPLICATION_PREPARATION_RECOVERY_RULE_ARN !== undefined ||
       env.APPLICATION_PREPARATION_QUEUE_URL !== undefined ||
-      env.APPLICATION_PREPARATION_NUDGES_ENABLED !== undefined
+      env.APPLICATION_PREPARATION_NUDGES_ENABLED !== undefined ||
+      env.APPLICATION_PREPARATION_INTAKE_ENABLED !== undefined
     )
       return;
   } else {
@@ -197,7 +200,7 @@ export function createApplicationPreparationRecoveryRuntime(
       ...args: Parameters<typeof applications.claimPreparationExecutionsForReconciliation>
     ) => {
       check();
-      return applications.claimPreparationExecutionsForReconciliation(...args);
+      return applications.claimPreparationExecutionsForReconciliation(args[0], config.retained);
     },
     settlePreparationExecution: async (
       ...args: Parameters<typeof applications.settlePreparationExecution>
@@ -209,7 +212,9 @@ export function createApplicationPreparationRecoveryRuntime(
       ...args: Parameters<typeof applications.claimPreparationNudges>
     ) => {
       check();
-      return nudgesEnabled() ? applications.claimPreparationNudges(...args) : [];
+      return nudgesEnabled()
+        ? applications.claimPreparationNudges(args[0], config.retained, config.intake)
+        : [];
     },
   });
   const reader = createAwsPreparationStatusReader(lambda);

@@ -4904,3 +4904,10 @@ Terraform mock cases pass; both environments validate. [Evidence](evidence/d3-na
 Original-release SQL claim scoping and disabled-intake drain need correction before activation;
 KMS private-DNS coexistence and managed launcher/task/route acceptance remain. No cloud action,
 CI/CD deferred, D1/D3 In progress; Docker/WSL stopped and PC on.
+
+2026-10-07 preparation recovery now filters retained original numeric releases before SQL
+leasing. A separate default-off drain switch retries bound work with intake disabled; the
+starter refuses unbound or unretained work under the owning lock. 53 PostgreSQL integration
+cases, 101 existing unit cases and eight Terraform mock scenarios pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#original-release-recovery-and-drain).
+AWS calls/secrets were simulated; managed launcher/task/route and acceptance remain. D1/D3
+In progress, no cloud action, CI/CD deferred; temporary SQL removed, Docker/WSL stopped, PC on.

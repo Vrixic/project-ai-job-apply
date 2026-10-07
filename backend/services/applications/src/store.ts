@@ -1894,9 +1894,27 @@ export class PostgresApplicationStore {
     });
   }
 
-  /** Private bounded reconciler: publication is not recorded until durable start is acknowledged. */
-  async claimPreparationNudges(limit: number): Promise<PreparationNudge[]> {
+  private preparationRecoveryVersions(retained: readonly string[] | undefined): string[] {
+    if (
+      retained !== undefined &&
+      (!Array.isArray(retained) ||
+        retained.length < 1 ||
+        retained.length > 20 ||
+        new Set(retained).size !== retained.length ||
+        !retained.every((arn) => isPreparationFunctionArn(arn)))
+    )
+      throw new PreparationDispatchError();
+    return [...(retained ?? [])];
+  }
+
+  /** Filter original releases before leasing; only the intake owner may nudge unbound work. */
+  async claimPreparationNudges(
+    limit: number,
+    retained?: readonly string[],
+    includeUnbound = true,
+  ): Promise<PreparationNudge[]> {
     this.preparationBatchLimit(limit);
+    const versions = this.preparationRecoveryVersions(retained);
     const now = this.preparationDispatchNow();
     const stale = new Date(now.getTime() - PREPARATION_DISPATCH_LEASE_MS);
     return this.client.begin(
@@ -1906,6 +1924,9 @@ export class PostgresApplicationStore {
         JOIN applications.packet_preparations preparation ON preparation.id = event.preparation_id
         WHERE event.published_at IS NULL AND event.terminal_status IS NULL
           AND (preparation.state IN ('queued', 'running') OR event.workflow_function_arn IS NOT NULL)
+          AND ((event.workflow_function_arn IS NULL AND ${includeUnbound}) OR
+            (event.workflow_function_arn IS NOT NULL AND (${retained === undefined} OR
+              event.workflow_function_arn IN (SELECT jsonb_array_elements_text(${tx.json(versions)}::jsonb)))))
           AND (event.nudge_claimed_at IS NULL OR event.nudge_claimed_at <= ${stale})
         ORDER BY event.nudge_claimed_at NULLS FIRST, event.created_at, event.id FOR UPDATE OF event SKIP LOCKED LIMIT ${limit}
       )
@@ -1921,8 +1942,10 @@ export class PostgresApplicationStore {
     eventId: string,
     functionArn: string,
     expectedPreparationId?: string,
+    scope: { allowUnbound?: boolean; retained?: readonly string[] } = {},
   ): Promise<PreparationDispatchClaim> {
     const name = preparationExecutionName(eventId);
+    this.preparationRecoveryVersions(scope.retained);
     if (!isPreparationFunctionArn(functionArn)) throw new PreparationDispatchError();
     const now = this.preparationDispatchNow();
     const [target] = await this.client<
@@ -1958,6 +1981,11 @@ export class PostgresApplicationStore {
         FROM applications.preparation_outbox WHERE id = ${eventId} FOR UPDATE
       `;
       if (!event) return { kind: "missing" };
+      if (
+        (!event.functionArn && scope.allowUnbound === false) ||
+        (event.functionArn && scope.retained && !scope.retained.includes(event.functionArn))
+      )
+        throw new PreparationDispatchError();
       if (event.terminalStatus) return { kind: "terminal" };
       const operationTerminal = preparation.state === "succeeded" || preparation.state === "failed";
       if (operationTerminal && !event.functionArn) return { kind: "terminal" };
@@ -2035,14 +2063,20 @@ export class PostgresApplicationStore {
   }
 
   /** Bounded status-poll recovery for a lost terminal event; no prompts/provider state leave SQL. */
-  async claimPreparationExecutionsForReconciliation(limit: number): Promise<PreparationDispatch[]> {
+  async claimPreparationExecutionsForReconciliation(
+    limit: number,
+    retained?: readonly string[],
+  ): Promise<PreparationDispatch[]> {
     this.preparationBatchLimit(limit);
+    const versions = this.preparationRecoveryVersions(retained);
     const now = this.preparationDispatchNow();
     const stale = new Date(now.getTime() - PREPARATION_DISPATCH_LEASE_MS);
     const events = await this.client<Array<{ id: string }>>`
       WITH due AS (
         SELECT id FROM applications.preparation_outbox
         WHERE durable_started_at <= ${stale} AND terminal_status IS NULL
+          AND (${retained === undefined} OR workflow_function_arn IN
+            (SELECT jsonb_array_elements_text(${this.client.json(versions)}::jsonb)))
           AND (nudge_claimed_at IS NULL OR nudge_claimed_at <= ${stale})
         ORDER BY nudge_claimed_at NULLS FIRST, durable_started_at, id
         LIMIT ${limit} FOR UPDATE SKIP LOCKED

@@ -122,3 +122,34 @@ The KMS endpoint enables VPC private DNS: inventory other enabled KMS callers an
 their exact access before applying it. Packet key policies, native launcher/task/owner/route
 composition and managed acceptance remain. No publication, deployment, activation or CI/CD
 work; Docker/WSL remain stopped, PC on. D1 and D3 remain In progress.
+
+## Original-release recovery and drain
+
+The global recovery-claim defect identified above is corrected. Native reconciliation passes
+its retained numeric function allowlist into SQL; both nudge and execution-poll queries filter
+before taking a lease. Unbound work is admitted only by the configured intake owner. The
+starter also checks the retained allowlist and unbound-intake permission under the owning SQL
+lock, before mutating dispatch state. A queued message cannot bypass drain restrictions.
+
+A default-off `drain_enabled` switch is connected through development/staging and the runtime
+module. With recovery enabled, it keeps starter consumption and recovery nudges running while
+`APPLICATION_PREPARATION_INTAKE_ENABLED=false` refuses new unbound work. Bound work still
+reuses its original numeric function and named execution. Original runtime versions, activity
+configuration, roles and keys must remain available until verified drain; publishing a new
+disabled version does not withdraw an old version. No original work is retargeted.
+
+Verification on the local branch: Applications compilation and Workflow typechecking pass;
+101 existing dispatch/recovery/bootstrap unit tests pass; 28 Applications PostgreSQL tests and
+25 actual starter/recovery-runtime PostgreSQL integration cases pass. New cases cover foreign
+release exclusion before leasing, invalid allowlists, retained-version draining, unbound
+refusal, and a bound request with no acknowledged execution receipt. These use fresh isolated
+PostgreSQL 16.14 databases and simulated AWS Lambda/SQS and secret resolution, not remote AWS
+execution. The initial SQL run exposed JSON parameter double encoding; using the PostgreSQL
+client's explicit JSON binding corrected it, and all affected suites were rerun successfully.
+
+Eight preparation Terraform mock scenarios pass, including drain without intake; development
+and staging validate. Serverless policy validation, touched-file formatting/lint and diff
+whitespace checks pass. No new schema or migration, frontend change, cloud action or activation.
+Temporary PostgreSQL container removed; Docker/WSL stopped and PC retained. Native launcher/
+task/owner/route composition, packet-key/private-DNS coexistence and managed acceptance remain.
+D1/D3 remain In progress; CI/CD is deferred to production launch.

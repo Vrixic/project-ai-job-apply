@@ -2,14 +2,18 @@
 
 Source-only release composition for the existing native cover-letter preparation activity,
 durable workflow, SQS starter, terminal handler and scheduled reconciler. A null release creates
-no resources. All runtime, launch, intake and recovery gates default off. Development and staging expose optional release maps, empty by default.
+no resources. All runtime, launch, intake, drain and recovery gates default off. Development and staging expose optional release maps, empty by default.
 This module is not a deployed or activation-ready candidate journey.
 
 The path is owning Applications outbox Ã¢â€ â€™ existing dedicated SQS queue Ã¢â€ â€™ numeric starter Ã¢â€ â€™
 original named numeric durable workflow Ã¢â€ â€™ numeric private activity Ã¢â€ â€™ original native launcher.
 Terminal events and the periodic reconciler independently verify original execution metadata
 before owning SQL settlement. Only the reconciler can send a nudge; neither recovery role can
-invoke a workflow or launch a task. Recovery can stay enabled with intake/runtime disabled.
+invoke a workflow or launch a task. Recovery can stay enabled with intake/runtime disabled. Set `drain_enabled` with recovery
+to keep SQS consumption and nudges enabled for already bound retained numeric versions only.
+`APPLICATION_PREPARATION_INTAKE_ENABLED` defaults false in both starter and reconciler; only
+the configured intake owner can bind or nudge unbound work. SQL filters original versions
+before leasing, so retained releases cannot steal one another's recovery leases.
 Existing executions retain their original numeric activity/configuration; disabling a new
 version does not disable an old one. Retain original releases, roles, queues and keys until drain.
 
@@ -41,8 +45,7 @@ visibility, bounded redrive to a retained DLQ, fourteen-day recovery retention, 
 producer/EventBridge/role grants in both queue and key policies. Add monitored queue depth,
 oldest-message, function error/throttle, EventBridge failed-delivery and Lambda destination
 failure alarms before activation. The platform now supplies encrypted retained queues, these policies, private service endpoints
-and nineteen alarms per original release. Outbox claims still need release scoping before
-multiple original releases can coexist safely. The scheduled recovery envelope is delivered
+and nineteen alarms per original release. Outbox and execution claims are scoped to retained original numeric versions before leasing. The scheduled recovery envelope is delivered
 unchanged; its strict handler binds the rule ARN. Terminal delivery uses the original durable
 function prefix and revalidates against at most twenty retained numeric versions. EventBridge
 retries terminal delivery for 24 hours; Lambda asynchronous retries are separately capped at
@@ -55,7 +58,7 @@ and permission structure only; it does not prove effective AWS IAM or remote exe
 
 Local validation uses the repository's pinned Terraform 1.16.2: initialize with `-backend=false`
 and `-lockfile=readonly`, then `terraform validate` and `terraform test`. No cloud calls are
-needed by the mock suite. Before activation, scope recovery claims to original releases, verify
+needed by the mock suite. Before activation, verify retained original-runtime drain and
 packet-key policies and inventory other VPC KMS callers: the preparation KMS endpoint enables
 private DNS and currently admits only preparation activity packet operations. Managed launch,
 owner/task/route composition and acceptance remain.
