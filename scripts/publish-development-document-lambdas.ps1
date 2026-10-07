@@ -3,7 +3,7 @@ param(
   [ValidateSet("Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
-  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery", "PrivateDocumentControls", "NativeResume", "NativePreparation", "PrivilegedAuditRetention", "JobRetention")]
+  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery", "PrivateDocumentControls", "NativeResume", "NativePreparation", "NativeMaterialControls", "PrivilegedAuditRetention", "JobRetention")]
   [string]$ArtifactFamily = "Document",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -63,6 +63,7 @@ preparation control, durable preparation, request dispatcher and task observer. 
 roots preserve existing families. Publication does not deploy task images, configure IAM/TLS
 or enable processing.
 
+NativeMaterialControls selects three artifacts/twelve objects: original launcher, owner RPC and task-event recovery.
 NativePreparation selects four artifacts/sixteen objects: native activity, durable workflow,
 SQS starter and dual-handler recovery. Its dedicated roots match the native application
 preparation Terraform module. Publication does not create runtime resources or enable intake.
@@ -94,6 +95,7 @@ $isApplicationsRecovery = $ArtifactFamily -ceq "ApplicationsRecovery"
 $isPrivateDocumentControls = $ArtifactFamily -eq "PrivateDocumentControls"
 $isNativeResume = $ArtifactFamily -eq "NativeResume"
 $isNativePreparation = $ArtifactFamily -eq "NativePreparation"
+$isNativeMaterialControls = $ArtifactFamily -eq "NativeMaterialControls"
 $isPrivilegedAuditRetention = $ArtifactFamily -eq "PrivilegedAuditRetention"
 $isJobRetention = $ArtifactFamily -eq "JobRetention"
 $operatorDirectoryName = if ($isCoreWorkflow) {
@@ -106,6 +108,8 @@ $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-applications-recovery-artifacts"
 } elseif ($isPrivateDocumentControls) {
   "development-private-document-control-artifacts"
+} elseif ($isNativeMaterialControls) {
+  "development-native-material-controls-artifacts"
 } elseif ($isNativePreparation) {
   "development-native-preparation-artifacts"
 } elseif ($isNativeResume) {
@@ -125,6 +129,8 @@ $artifactDirectory = if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRec
   Join-Path $repositoryRoot "backend\gateway\dist\public-job-lambda"
 } elseif ($isPrivateDocumentControls) {
   Join-Path $repositoryRoot "backend\services\documents\dist\private-control-lambda"
+} elseif ($isNativeMaterialControls) {
+  Join-Path $repositoryRoot "backend/workflows/dist/native-material-control-family"
 } elseif ($isNativePreparation) {
   Join-Path $repositoryRoot "backend/workflows/dist/native-preparation-family"
 } elseif ($isNativeResume) {
@@ -148,7 +154,9 @@ $artifactNames = @(
     @("applications-attempt-recovery-lambda")
   } elseif ($isPrivateDocumentControls) {
     @("cover-letter-provider-control-lambda", "cover-letter-response-capture-lambda", "cover-letter-cleanup-lambda", "cover-letter-response-disposal-lambda")
-  } elseif ($isNativePreparation) {
+  } elseif ($isNativeMaterialControls) {
+    @("native-material-launch-lambda", "native-owner-rpc-lambda", "native-material-task-event-lambda")
+} elseif ($isNativePreparation) {
     @("native-application-preparation-lambda", "application-preparation-durable-lambda", "application-preparation-starter-lambda", "application-preparation-recovery-lambda")
   } elseif ($isNativeResume) {
     @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda", "native-resume-task-observer-lambda")
@@ -170,6 +178,8 @@ $artifactKeyRoot = if ($isCoreWorkflow) {
   "lambda/applications"
 } elseif ($isPrivateDocumentControls) {
   "lambda/documents/private-controls"
+} elseif ($isNativeMaterialControls) {
+  "lambda/documents/native-material/control"
 } elseif ($isNativePreparation) {
   "lambda/applications/native-preparation"
 } elseif ($isNativeResume) {
@@ -191,6 +201,8 @@ $receiptKind = if ($isCoreWorkflow) {
   "development-applications-recovery-lambda-publication"
 } elseif ($isPrivateDocumentControls) {
   "development-private-document-controls-lambda-publication"
+} elseif ($isNativeMaterialControls) {
+  "development-native-material-controls-lambda-publication"
 } elseif ($isNativePreparation) {
   "development-native-preparation-lambda-publication"
 } elseif ($isNativeResume) {
@@ -212,6 +224,8 @@ $artifactLabel = if ($isCoreWorkflow) {
   "applications recovery"
 } elseif ($isPrivateDocumentControls) {
   "private document controls"
+} elseif ($isNativeMaterialControls) {
+  "native material controls"
 } elseif ($isNativePreparation) {
   "native preparation"
 } elseif ($isNativeResume) {
@@ -616,7 +630,7 @@ if ($Action -eq "Publish") {
   $auditLog = Join-Path $operatorRoot "dependency-audit-$timestamp.log"
   $buildOneLog = Join-Path $operatorRoot "build-one-$timestamp.log"
   $buildTwoLog = Join-Path $operatorRoot "build-two-$timestamp.log"
-  if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRecovery -or $isNativeResume -or $isNativePreparation -or $isJobRetention) {
+  if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRecovery -or $isNativeResume -or $isNativePreparation -or $isNativeMaterialControls -or $isJobRetention) {
     Invoke-LocalGate -Name "Workflow tests" -LogPath $testLog -Command {
       pnpm --filter @ai-job-apply/workflows test
     }
@@ -643,6 +657,7 @@ if ($Action -eq "Publish") {
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       elseif ($isApplicationsRecovery) { pnpm --filter @ai-job-apply/workflows build:lambda:applications-attempt-recovery }
       elseif ($isPrivateDocumentControls) { pnpm --filter @ai-job-apply/documents-service build:lambda:private-controls }
+      elseif ($isNativeMaterialControls) { pnpm --filter @ai-job-apply/workflows build:lambda:native-material-control-family }
       elseif ($isNativePreparation) { pnpm --filter @ai-job-apply/workflows build:lambda:native-preparation-family }
       elseif ($isNativeResume) { pnpm --filter @ai-job-apply/workflows build:lambda:native-resume }
       elseif ($isPrivilegedAuditRetention) { pnpm --filter @ai-job-apply/profile-service build:lambda:audit-retention }
@@ -657,6 +672,7 @@ if ($Action -eq "Publish") {
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       elseif ($isApplicationsRecovery) { pnpm --filter @ai-job-apply/workflows build:lambda:applications-attempt-recovery }
       elseif ($isPrivateDocumentControls) { pnpm --filter @ai-job-apply/documents-service build:lambda:private-controls }
+      elseif ($isNativeMaterialControls) { pnpm --filter @ai-job-apply/workflows build:lambda:native-material-control-family }
       elseif ($isNativePreparation) { pnpm --filter @ai-job-apply/workflows build:lambda:native-preparation-family }
       elseif ($isNativeResume) { pnpm --filter @ai-job-apply/workflows build:lambda:native-resume }
       elseif ($isPrivilegedAuditRetention) { pnpm --filter @ai-job-apply/profile-service build:lambda:audit-retention }

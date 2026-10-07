@@ -279,3 +279,28 @@ boundary/creation authority, guarded three-artifact publisher family, original p
 permissions, EventBridge delivery/failure retention/alarms and image/read-route composition still
 need integration before managed acceptance. Existing TypeScript runtimes are unchanged. D1/D3
 remain In progress; Docker/WSL stopped, PC on, CI/CD deferred.
+
+## Material control bootstrap and publisher
+
+Bootstrap now provisions the exact launcher ceiling used by native material control, with
+original-principal conditions on every grant. It permits only original task/cluster launch,
+metadata reads, the owning database/configuration key and PassRole of the two original task
+roles; no StopTask, object content or Lambda Invoke. Optional deployment authority can read/use
+these exact ceilings, preserving empty-input authority and the ordinary-role prohibition on
+changing boundaries. All sixteen bootstrap mock scenarios pass, including combined retained
+resume/DNS, preparation and native material control within the 6,144-character policy limit.
+
+The guarded publisher adds `NativeMaterialControls`: three artifacts/twelve companions, a
+separate receipt kind/operator directory and `lambda/documents/native-material/control` root.
+Its family builder compiles dependencies once and stages original launcher/owner/event artifacts
+without changing standalone paths. Both publisher build passes select this family; existing
+source/merge/audit/versioning/readback gates remain unchanged. PowerShell 5 and 7 family/receipt
+suites pass including case variants and mixed/duplicate/incomplete receipt refusal. No publisher
+cloud action ran. Comparing the actual publication contract caught an incorrect Terraform key
+layout from the prior control-module commit; it now expects `<source>/<artifact-sha>/<name>.zip`.
+All six control-module mock cases pass after that correction. Actual family packaging is the
+next local check; no build/provenance claim is made by these selection tests alone.
+
+Terraform bootstrap validation, formatting, serverless infrastructure validation and whitespace
+checks pass. No AWS action or CI/CD execution. Platform event/failure retention/alarms, private
+network permissions and native image/read-route acceptance remain; D1/D3 In progress.

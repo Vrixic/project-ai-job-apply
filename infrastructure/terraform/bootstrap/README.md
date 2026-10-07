@@ -70,3 +70,14 @@ resume/DNS release under IAM's 6,144-character managed-policy limit. A precondit
 oversized combined deployment policies; never delete undrained releases to satisfy it. Empty
 input preserves the original deployment-policy representation and authority. Effective AWS IAM,
 key/queue resource policies and managed release acceptance still require separate verification.
+
+## Native material launcher
+
+`native_material_control_releases` defaults empty. Each retained release ID creates the exact
+`material-launch-${release_id}-boundary` used by native material control. Every statement names
+only its original launcher principal, exact task/cluster, database/configuration key and two
+original task roles. No task stopping, content storage or Lambda invocation is allowed by the
+ceiling. Deployment can read/use the approved boundary but cannot modify it. Match the release
+ID, task revision and bindings to the control/task modules; retain original authority until drain.
+Sixteen bootstrap mock scenarios pass, including combined resume/DNS, preparation and material
+control under IAM's policy-size limit. This does not prove effective managed IAM.

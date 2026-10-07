@@ -17,10 +17,13 @@ provided to a control Lambda.
 
 The original image, task revision, roles, CPU/memory, container name and private network are
 encoded into the launch configuration. Owner identity uses that same task role/deployment.
-Source/hash/version-bound artifacts use `lambda/documents/native-material/control/`; a guarded
-publisher family for these three artifacts is still required. Do not invent object versions.
+Source/hash/version-bound artifacts use `lambda/documents/native-material/control/`; the guarded publisher selects the three-artifact/twelve-object family with
+`-ArtifactFamily NativeMaterialControls`. The family builder preserves standalone artifact
+paths and stages companions under Workflow `dist/native-material-control-family`. Keys use
+`<source>/<artifact-sha>/<artifact-name>.zip`, matching the immutable receipt contract.
+Source qualification, audit, repeated build and object-version/readback gates remain in force.
 
-This source composition is not activation-ready. Bootstrap must create and authorize the exact
+This source composition is not activation-ready. Bootstrap `native_material_control_releases` creates and authorizes the exact
 `ai-job-apply-${environment}-material-launch-${release_id}-boundary`; this module cannot broaden
 that ceiling. Existing workload boundaries cover owner/event but effective IAM still needs
 managed verification. Platform integration must supply original secret/Lambda/ECS endpoint

@@ -2339,3 +2339,9 @@ Six mock scenarios and runtime configuration validation pass; both environments 
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-launcher-owner-and-task-event-composition).
 Bootstrap/publisher/platform event/network integration and managed acceptance remain. No cloud
 action; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 native material control bootstrap and guarded three-artifact publisher family are
+connected. Sixteen bootstrap and six runtime mock cases pass; PowerShell 5/7 family/receipt
+guards pass. Publisher/terraform key layout mismatch was corrected. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#material-control-bootstrap-and-publisher).
+No cloud publication or activation; actual family packaging, platform event/network integration
+and managed acceptance remain. D1/D3 In progress, Docker/WSL stopped, PC on, CI/CD deferred.

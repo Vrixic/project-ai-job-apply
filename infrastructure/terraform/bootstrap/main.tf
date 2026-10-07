@@ -203,7 +203,7 @@ locals {
         Resource = local.workload_role_arn
         Condition = {
           StringEquals = {
-            "iam:PermissionsBoundary" = jsondecode(length(local.preparation_boundary_arns) == 0 ? jsonencode(local.workload_boundary_arn) : jsonencode(concat([local.workload_boundary_arn], local.preparation_boundary_arns)))
+            "iam:PermissionsBoundary" = jsondecode(length(local.additional_runtime_boundary_arns) == 0 ? jsonencode(local.workload_boundary_arn) : jsonencode(concat([local.workload_boundary_arn], local.additional_runtime_boundary_arns)))
           }
         }
       },
@@ -244,7 +244,7 @@ locals {
         Resource = concat([
           local.workload_boundary_arn,
           "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-        ], local.preparation_boundary_arns)
+        ], local.additional_runtime_boundary_arns)
       },
       {
         Sid      = "PassWorkloadRolesToApprovedServices"

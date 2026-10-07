@@ -68,7 +68,7 @@ variable "release" {
       can(regex("^[a-f0-9]{40}$", var.release.source_sha)) && can(regex("^[a-z0-9]{1,12}$", var.release.release_id)) &&
       can(regex("^ai-job-apply-${var.environment}-artifacts-[a-z0-9-]+$", var.release.artifact_bucket)) &&
       toset(keys(var.release.artifacts)) == toset(["launch", "owner", "event"]) &&
-      alltrue([for k, a in var.release.artifacts : can(regex("^[a-f0-9]{64}$", a.sha256)) && can(regex("^[A-Za-z0-9+/]{43}=$", a.base64sha256)) && a.version_id != "" && a.version_id != "null" && a.key == "lambda/documents/native-material/control/${var.release.source_sha}/${lookup({ launch = "native-material-launch-lambda", owner = "native-owner-rpc-lambda", event = "native-material-task-event-lambda" }, k, "invalid")}-${a.sha256}.zip"]) &&
+      alltrue([for k, a in var.release.artifacts : can(regex("^[a-f0-9]{64}$", a.sha256)) && can(regex("^[A-Za-z0-9+/]{43}=$", a.base64sha256)) && a.version_id != "" && a.version_id != "null" && a.key == "lambda/documents/native-material/control/${var.release.source_sha}/${a.sha256}/${lookup({ launch = "native-material-launch-lambda", owner = "native-owner-rpc-lambda", event = "native-material-task-event-lambda" }, k, "invalid")}.zip"]) &&
       can(regex("^arn:aws:secretsmanager:us-east-2:${var.account_id}:secret:ai-job-apply/${var.environment}/[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{6}$", var.release.database_secret_arn)) &&
       can(regex("^arn:aws:kms:us-east-2:${var.account_id}:key/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", var.release.platform_kms_key_arn)) &&
       can(regex("^arn:aws:lambda:us-east-2:[0-9]{12}:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[1-9][0-9]*$", var.release.extension_layer_arn)) &&
