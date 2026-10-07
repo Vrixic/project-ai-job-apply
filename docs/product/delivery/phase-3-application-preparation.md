@@ -2145,3 +2145,11 @@ minute rotate with persisted cooldown; running/unknown tasks remain bound. Docum
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#bounded-recovery-of-missed-stopped-task-events).
 Source/default-off only; managed migration, routing/release/capacity and acceptance remain. D1/D3
 stay In progress. Docker/WSL stopped, PC on; CI/CD deferred.
+
+
+2026-10-07 D3-064/D3-079 connects stopped-event recovery for an original launch whose response
+was lost. Fresh ECS metadata must match the persisted claim before binding; separate terminal
+observation records retirement. No new launch/stop authority. Workflows compiles; 57 real SQL and
+81 focused handler/observer/launch cases pass with synthetic ECS responses.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#lost-launch-response-recovered-from-original-stopped-event).
+No deployment; routing/managed acceptance remain. D1/D3 In progress, CI/CD deferred and PC on.

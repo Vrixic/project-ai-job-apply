@@ -753,3 +753,23 @@ that refused state. ZIP SHA256 is `629e5cc0ff0f1d44d0f6350addcf938e99d12e5a72d1c
 (386823 bytes, 30 SBOM components). Log: `.tmp/d3-observer-sweep-artifact.log`. This standalone
 artifact is unpublished; it does not replace the earlier consistent six-artifact family receipt.
 The final release guard rerun passes 274 assertions, including the new migration inventory.
+
+
+## Lost launch response recovered from original stopped event
+
+The stopped-event observer previously rejected a pending row even when its persisted launch claim
+and a fresh ECS response could prove the original task. The private runtime now supplies the
+existing launcher recovery adapter with only read/bind ports, a denied claim port and new launches
+hard-disabled. Only a validated event hint may select this pending recovery path. Original SQL and
+fresh DescribeTasks metadata must match the allocation, configuration, task definition and six
+scalar overrides before binding. The ordinary observer then obtains a separate fresh terminal
+receipt. An event timestamp, launch response or successful bind alone never proves retirement.
+IAM is unchanged and still denies RunTask/StopTask. No public API, migration or new event shape.
+
+Workflows compiles; 19 handler and 62 observer/launch cases pass. All 57 real PostgreSQL 16.6
+ledger cases pass, including the compiled Lambda's stopped-event -> original claim -> exact ECS
+metadata -> binding -> positive retirement path after sealing. Foreign generation overrides and
+missing launch claims remain pending with no task binding. Recorded retirement replays without
+another ECS request. SQL/migrations are real; secret lookup and ECS responses are synthetic.
+Logs: `.tmp/d3-resume-event-recovery-{build,handler,unit,sql}.log`. No AWS mutation, deployment or
+live end-to-end claim. DNS/TLS routing, managed release and phase acceptance remain unfinished.

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createApplicationsDatabase } from "@ai-job-apply/applications-service";
 import { nativeLaunchControlVersion } from "@ai-job-apply/documents-service/native-launch-control";
 import { PostgresNativeResumeGenerationStore } from "@ai-job-apply/documents-service/native-resume-generation-store";
+import { createNativeResumeTaskLaunch } from "@ai-job-apply/documents-service/native-resume-task-launch";
 import { createNativeResumeTaskObserver } from "@ai-job-apply/documents-service/native-resume-task-observer";
 import {
   type NativeTaskLaunchConfiguration,
@@ -67,8 +68,9 @@ function configuration(env: Environment) {
 }
 type Configuration = ReturnType<typeof configuration>;
 
-/** No creation/admission ports are supplied. Runtime exposes only original observation and
- * positive retirement persistence; ECS policy must allow DescribeTasks and deny StopTask. */
+/** No creation/admission ports are supplied. A stopped event can recover an original launch
+ * claim using fresh ECS metadata before observation. IAM allows DescribeTasks and denies
+ * RunTask/StopTask; recovery never manufactures terminal evidence. */
 export function createNativeResumeTaskObserverRuntime(
   url: string,
   config: Configuration,
@@ -91,9 +93,25 @@ export function createNativeResumeTaskObserverRuntime(
   const hash = createHash("sha256")
     .update(JSON.stringify({ protocol: "native-resume-launch.v1", ...config.task }))
     .digest("hex");
+  const recovery = createNativeResumeTaskLaunch({
+    registry: {
+      readLaunch: registry.readLaunch.bind(registry),
+      bindTask: registry.bindTask.bind(registry),
+      claimLaunch: denied,
+    },
+    configuration: config.task,
+    enabled,
+    launchEnabled: () => false,
+  });
   let sweeping = false;
   return Object.freeze({
-    observe: observer.observe,
+    async observe(scope: Parameters<typeof observer.observe>[0], expectedTaskArn?: string) {
+      if (expectedTaskArn !== undefined) {
+        const original = await registry.readLaunch(scope, hash);
+        if (original.state === "pending") await recovery.recover(scope, expectedTaskArn);
+      }
+      return observer.observe(scope, expectedTaskArn);
+    },
     close: () => database.end(),
     async sweep() {
       if (sweeping || !enabled()) throw unavailable();

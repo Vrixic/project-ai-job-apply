@@ -39,13 +39,15 @@ platform module with fourteen-day platform-key encryption, TLS enforcement, orig
 SendMessage/key grants and alerts for visible messages and both failed-DLQ delivery paths.
 Queue deletion is protected; retain each original release entry until reviewed drain. Preparation
 waits for platform dependencies. Standalone callers must provide equivalent infrastructure.
-Before activation, verify effective permissions, alarm delivery and restricted replay access. No
-scheduled reconciliation is included: a missed source event or an observation delayed beyond ECS
-history can leave work unresolved and never proves retirement. Retain original resources until
-trusted drain completes.
+Before activation, verify effective permissions, alarm delivery and restricted replay access.
+The separately gated sweep below recovers missed events for bound tasks. Observation delayed beyond
+ECS history can still leave work unresolved and never proves retirement. Retain original resources
+until trusted drain completes.
 
-`enabled`, `new_launch_enabled`, `schedule_enabled` and `observation_events_enabled` all default false. Runtime enablement can
-leave launches and scheduling off. Scheduling requires both runtime and launch gates. Published
+`enabled`, `new_launch_enabled`, `schedule_enabled`, `observation_events_enabled` and
+`observation_schedule_enabled` all default false. Runtime enablement can
+leave launches and scheduling off. Launch scheduling requires both runtime and launch gates;
+observation scheduling requires only the runtime gate. Published
 Lambda environments are immutable: flipping a gate publishes new versions and does not disable
 old numeric recipients. Disable the event rule to stop scheduled intake, retain original release
 instances/roles and resolve existing work through the reviewed drain process. Removing this
@@ -106,3 +108,12 @@ capacity before increasing traffic; two attempts/minute is this bounded fallback
 Retain the original observer/configuration until its bound rows drain. Disable the schedule to
 stop new sweeps; disabling new launches does not stop cleanup observation. This is source/local
 verification, not a deployed migration, active schedule or verified live ECS observation.
+
+
+Stopped-task events also recover an original persisted launch claim whose RunTask response or
+binding acknowledgement was lost. The event supplies only a hint: recovery describes that exact
+task and validates its original allocation, task definition, launch mode and six scalar overrides
+before binding it. A separate fresh terminal observation then records retirement. Recovery uses
+no claim-creation port and hard-disables new launches; IAM still denies RunTask and StopTask.
+Unclaimed, mismatched or unavailable task metadata stays unresolved. A scalar manual observe or
+scheduled sweep cannot invent the missing task ARN. Retired replays use the original SQL receipt.

@@ -1920,6 +1920,129 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       }
     },
   );
+  it.each(["original", "foreign-overrides", "unclaimed"])(
+    "recovers a lost launch response from a stopped event only with original ECS proof (%s)",
+    async (mode) => {
+      const workflow = await import(
+        new URL(
+          "../../../workflows/dist/src/native-resume-task-observer-lambda.js",
+          import.meta.url,
+        ).href
+      );
+      const configuration = nativeTaskLaunchConfiguration({
+        ...input.deployment,
+        image: `123456789012.dkr.ecr.us-east-2.amazonaws.com/synthetic-resume@sha256:${"c".repeat(64)}`,
+        executionRoleArn: "arn:aws:iam::123456789012:role/synthetic-execution",
+        taskRoleArn: "arn:aws:iam::123456789012:role/synthetic-resume",
+        cpu: "256",
+        memory: "512",
+        subnets: ["subnet-12345678901234567"],
+        securityGroups: ["sg-12345678901234567"],
+        assignPublicIp: "ENABLED",
+      });
+      const hash = createHash("sha256")
+        .update(JSON.stringify({ protocol: "native-resume-launch.v1", ...configuration }))
+        .digest("hex");
+      const s = store(),
+        r = await s.reserve(input);
+      if (mode !== "unclaimed") await s.claimLaunch(scope(r), hash);
+      await s.seal(input.identity.ownerUserId, input.identity.applicationId);
+      const detail = {
+        taskArn: task,
+        clusterArn: configuration.clusterArn,
+        taskDefinitionArn: configuration.taskDefinitionArn,
+        startedBy: r.allocationId,
+        lastStatus: "STOPPED",
+        desiredStatus: "STOPPED",
+        launchType: "FARGATE",
+        platformVersion: "1.4.0",
+        enableExecuteCommand: false,
+        overrides: {
+          containerOverrides: [
+            {
+              name: configuration.containerName,
+              environment: [
+                { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: r.allocationId },
+                { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: input.identity.ownerUserId },
+                { name: "NATIVE_MATERIAL_APPLICATION_ID", value: input.identity.applicationId },
+                { name: "NATIVE_MATERIAL_GENERATION_ID", value: input.identity.generationId },
+                { name: "NATIVE_MATERIAL_EPOCH_ID", value: r.epochId },
+                { name: "NATIVE_RESUME_CONFIGURATION_SHA256", value: hash },
+              ],
+            },
+          ],
+        },
+        containers: [{ name: configuration.containerName, taskArn: task, lastStatus: "STOPPED" }],
+      };
+      const event = {
+        version: "0",
+        id: uuidv7(),
+        source: "aws.ecs",
+        "detail-type": "ECS Task State Change",
+        account: "123456789012",
+        region: "us-east-2",
+        time: new Date().toISOString(),
+        resources: [task],
+        detail,
+      };
+      const send = vi.spyOn(ECSClient.prototype, "send").mockImplementation(async (command) => {
+        expect(command).toBeInstanceOf(DescribeTasksCommand);
+        expect(command.input).toEqual({ cluster: configuration.clusterArn, tasks: [task] });
+        const actual = structuredClone(detail);
+        if (mode === "foreign-overrides")
+          for (const container of actual.overrides.containerOverrides)
+            for (const entry of container.environment)
+              if (entry.name === "NATIVE_MATERIAL_GENERATION_ID") entry.value = uuidv7();
+        return { tasks: [{ ...actual, stoppedAt: new Date() }] };
+      });
+      let runtime: { close(): Promise<void> } | undefined;
+      const target = "arn:aws:lambda:us-east-2:123456789012:function:resume-observer:1";
+      const handler = workflow.createNativeResumeTaskObserverLambda({
+        environment: () => ({
+          NATIVE_RESUME_TASK_OBSERVER_ENABLED: "true",
+          AWS_REGION: "us-east-2",
+          PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+          AWS_SESSION_TOKEN: "synthetic",
+          AWS_LAMBDA_FUNCTION_NAME: "resume-observer",
+          AWS_LAMBDA_FUNCTION_VERSION: "1",
+          DATABASE_SECRET_ID:
+            "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-database-Abc123",
+          NATIVE_RESUME_OBSERVER_CONFIGURATION_JSON: JSON.stringify(configuration),
+        }),
+        resolveDatabaseUrl: async () => url,
+        createRuntime: (...args: unknown[]) => {
+          const actual = workflow.createNativeResumeTaskObserverRuntime(...args);
+          runtime = actual;
+          return actual;
+        },
+      });
+      try {
+        if (mode === "original") {
+          expect(await handler(event, { invokedFunctionArn: target })).toMatchObject({
+            outcome: "retired",
+            taskArn: task,
+          });
+          expect((await s.readLaunch(scope(r), hash)).state).toBe("retired");
+          expect(send).toHaveBeenCalledTimes(2);
+          expect(await handler(event, { invokedFunctionArn: target })).toMatchObject({
+            outcome: "retired",
+          });
+          expect(send).toHaveBeenCalledTimes(2);
+        } else {
+          await expect(handler(event, { invokedFunctionArn: target })).rejects.toThrow(
+            "NativeResumeTaskObserverUnavailable",
+          );
+          const [row] =
+            await sql`SELECT state, task_arn FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`;
+          expect(row).toEqual({ state: "pending", task_arn: null });
+          expect(send).toHaveBeenCalledTimes(mode === "unclaimed" ? 0 : 1);
+        }
+      } finally {
+        send.mockRestore();
+        await runtime?.close();
+      }
+    },
+  );
   it("does not consult ECS or retire a claimed but unbound original allocation", async () => {
     const s = store(),
       r = await s.reserve(input);
