@@ -36,7 +36,8 @@
     "build:lambda:native-task-event": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-native-material-task-event-lambda.mjs",
     "build:lambda:native-owner-rpc": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-native-owner-rpc-lambda.mjs",
     "build:lambda:native-resume-observer": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-native-resume-task-observer-lambda.mjs",
-    "build:lambda:native-resume": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-native-resume-owner-rpc-lambda.mjs && node ../../scripts/build-native-resume-source-rpc-lambda.mjs && node ../../scripts/build-native-resume-preparation-control-lambda.mjs && node ../../scripts/build-native-resume-preparation-durable-lambda.mjs && node ../../scripts/build-native-resume-request-dispatch-lambda.mjs && node ../../scripts/build-native-resume-task-observer-lambda.mjs"
+    "build:lambda:native-resume": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-native-resume-owner-rpc-lambda.mjs && node ../../scripts/build-native-resume-source-rpc-lambda.mjs && node ../../scripts/build-native-resume-preparation-control-lambda.mjs && node ../../scripts/build-native-resume-preparation-durable-lambda.mjs && node ../../scripts/build-native-resume-request-dispatch-lambda.mjs && node ../../scripts/build-native-resume-task-observer-lambda.mjs",
+    "build:lambda:native-preparation-family": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-native-preparation-family.mjs"
   },
   "dependencies": {
     "@ai-job-apply/ai-sdk": "workspace:*",

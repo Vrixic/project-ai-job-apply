@@ -177,12 +177,13 @@ $configurationAssignments = @($ast.FindAll({
     param($node)
     $node -is [Management.Automation.Language.AssignmentStatementAst] -and
     $node.Left.Extent.Text -in @('$isCoreWorkflow', '$isIngestion', '$isPublicJob', '$isApplicationsRecovery',
-      '$isPrivateDocumentControls', '$isNativeResume', '$isPrivilegedAuditRetention', '$isJobRetention', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
+      '$isPrivateDocumentControls', '$isNativeResume', '$isNativePreparation', '$isPrivilegedAuditRetention', '$isJobRetention', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
       '$artifactKeyRoot', '$receiptKind', '$artifactLabel', '$expectedObjectCount')
   }, $false) | Sort-Object { $_.Extent.StartOffset })
-if ($configurationAssignments.Count -ne 15) { throw "Unexpected publication family-selection inventory." }
+if ($configurationAssignments.Count -ne 16) { throw "Unexpected publication family-selection inventory." }
+$preparationNames = @("native-application-preparation-lambda", "application-preparation-durable-lambda", "application-preparation-starter-lambda", "application-preparation-recovery-lambda")
 $resumeNames = @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda", "native-resume-task-observer-lambda")
-foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME", "PrivilegedAuditRetention", "privilegedauditretention", "PRIVILEGEDAUDITRETENTION", "JobRetention", "jobretention", "JOBRETENTION")) {
+foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME", "NativePreparation", "nativepreparation", "NATIVEPREPARATION", "PrivilegedAuditRetention", "privilegedauditretention", "PRIVILEGEDAUDITRETENTION", "JobRetention", "jobretention", "JOBRETENTION")) {
   $ArtifactFamily = $family
   foreach ($assignment in $configurationAssignments) { Invoke-Expression $assignment.Extent.Text }
   if ($family -eq "PrivateDocumentControls") {
@@ -192,6 +193,14 @@ foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcon
         $operatorDirectoryName -cne "development-private-document-control-artifacts" -or
         $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/services/documents/dist/private-control-lambda')) {
       throw "Private artifact family escaped its exact dedicated boundary."
+    }
+  } elseif ($family -eq "NativePreparation") {
+    if (($artifactNames -join ',') -cne ($preparationNames -join ',') -or $expectedObjectCount -ne 16 -or
+        $receiptKind -cne "development-native-preparation-lambda-publication" -or
+        $artifactKeyRoot -cne "lambda/applications/native-preparation" -or
+        $operatorDirectoryName -cne "development-native-preparation-artifacts" -or
+        $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/workflows/dist/native-preparation-family')) {
+      throw "Native preparation family escaped its exact dedicated boundary."
     }
   } elseif ($family -eq "NativeResume") {
     if (($artifactNames -join ',') -cne ($resumeNames -join ',') -or $expectedObjectCount -ne 24 -or
@@ -277,3 +286,23 @@ foreach ($invalid in @([pscustomobject]@{Entries=$auditMatrix}, [pscustomobject]
   if (-not $refused) { throw 'Invalid Jobs receipt accepted.' }
 }
 Write-Host 'Jobs retention family guards passed; no cloud calls.'
+
+$preparationMatrix = @()
+foreach ($name in $preparationNames) {
+  foreach ($suffix in @('zip', 'cdx.json', 'manifest.json', 'sha256')) {
+    $preparationMatrix += [pscustomobject]@{ artifactName = $name; artifactSha256 = $digest; suffix = $suffix }
+  }
+}
+if (-not (Assert-CanonicalReceiptMatrix -Artifacts $preparationMatrix -ExpectedArtifactNames $preparationNames)) { throw 'Preparation receipt refused.' }
+foreach ($invalid in @(
+  [pscustomobject]@{ Entries = $resumeMatrix },
+  [pscustomobject]@{ Entries = $privateMatrix },
+  [pscustomobject]@{ Entries = @($preparationMatrix | Select-Object -First 15) },
+  [pscustomobject]@{ Entries = @($preparationMatrix | Select-Object -First 15) + @($preparationMatrix[0]) },
+  [pscustomobject]@{ Entries = @($preparationMatrix) + @($canonicalArtifacts) }
+)) {
+  $refused = $false
+  try { $null = Assert-CanonicalReceiptMatrix -Artifacts $invalid.Entries -ExpectedArtifactNames $preparationNames } catch { $refused = $true }
+  if (-not $refused) { throw 'Mixed, duplicate or incomplete preparation receipt accepted.' }
+}
+Write-Host 'Native preparation family and sixteen-object receipt guards passed; no cloud calls.'

@@ -437,3 +437,12 @@ retained resume source receiver after Workflows compilation. Set `ARTIFACT_SOURC
 to the clean committed source. Output is isolated under
 `backend/workflows/dist/native-resume-lambda`; no publication occurs.
 See [local evidence](../docs/product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).
+
+`build-native-preparation-family.mjs` runs the four existing native activity/durable/starter/
+recovery builders after one workflow compilation. It preserves standalone outputs and assembles
+sixteen release companions under Workflow `dist/native-preparation-family`. The guarded document
+publisher's `NativePreparation` family uses dedicated local receipt, source/hash-bound
+`lambda/applications/native-preparation` keys and exact four-member receipts, matching the native
+application preparation Terraform module. Existing source/merge, dependency audit, double-build,
+bucket/KMS/version and independent readback gates remain required. Building does not publish,
+deploy or activate; cloud publication still requires separate authorization.
