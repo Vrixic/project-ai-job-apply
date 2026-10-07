@@ -776,3 +776,16 @@ live end-to-end claim. DNS/TLS routing, managed release and phase acceptance rem
 
 
 Standalone observer packaging and bundled disabled-runtime checks pass from clean source `73f56e1b4dbeb9a851253c44b63f2d5e2680bdb6`. ZIP SHA256 `849d2db5afbf9ab09db21d61d6e95c259e2529ca510ba285db87c060fb729ff1`, 389388 bytes. Log: `.tmp/d3-resume-event-recovery-artifact.log`. Unpublished; no replacement six-artifact family receipt or full verifier claim. Temporary SQL fixture removed; Docker/WSL stopped, PC on.
+
+
+## Combined recovery verification checkpoint
+
+Clean source `66a2c3d1` completes formatting, publication guards, lint (zero errors, existing
+15 warnings/58 infos), 38 typecheck tasks, 39 workspace test tasks and 23 builds. The first
+remaining-stage run then exposes a stale emitted-retirement test expecting only `retire` even
+though the helper now also exports observation-only `observe`. Its exact API assertion now requires
+both methods, and both must refuse default-off bundled use. All four retirement/control bundle
+cases pass locally. No runtime capability or permission changed for this fixture correction.
+Logs: `.tmp/d3-recovery-remaining-verification.log` and `.tmp/d3-recovery-retirement-bundle.log`.
+The final emitted checks and Compose/scope checks remain to be run from the corrected clean commit.
+This is segmented verification, not one uninterrupted exact-head verifier pass.

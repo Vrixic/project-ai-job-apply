@@ -143,8 +143,9 @@ test("native retirement emits only its control owner and refuses default-off bun
     containerName: "materials",
   };
   const client = module.exports.createNativeTaskRetirement({ allocation });
-  assert.deepEqual(Object.keys(client), ["retire"]);
+  assert.deepEqual(Object.keys(client), ["retire", "observe"]);
   await assert.rejects(client.retire(allocation), /^Error: NativeTaskRetirementUnavailable$/u);
+  await assert.rejects(client.observe(allocation), /^Error: NativeTaskRetirementUnavailable$/u);
 });
 
 for (const [entrypoint, ownerFiles, requiredSdk] of [
