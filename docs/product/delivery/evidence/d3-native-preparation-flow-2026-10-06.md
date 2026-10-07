@@ -34,9 +34,22 @@ Local verification:
   migrations, applied twice. AWS/Lambda/ECS authentication/transport and secret resolution are
   simulated; no live provider or task evidence is asserted.
 - Owned fixture removed after checking its exact ownership label; shared volumes untouched.
-  Docker/WSL stopped; PC remains on. Full clean verification is pending.
+  Docker/WSL stopped; PC remains on.
 
 Managed runtime selection/bootstrap, sender IAM, native routing/content client/ATS transport,
 real provider and accountable approval remain separate gates. The existing deployed preparation
 runtime is not switched by this source factory. No deployment, activation, frontend change, new
 PR, production acceptance or phase completion is claimed. Hosted CI/CD remains deferred.
+
+## Full verification
+
+Clean committed source `e8b4775bde57060cf5f0e455594fd3d5cd287aa8` passes
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 production builds, formatting,
+operator/security/isolation/Compose and emitted native artifact checks. Lint remains zero errors,
+15 warnings and 58 infos. Log: `.tmp/d3-native-preparation-full-final.log`.
+
+The first run genuinely failed when the owned Next.js development parent restarted its stopped
+child and reclaimed the session fixture's exclusive port 3000. Stopping the verified owning
+parent resolves it: all 101 session cases and the unchanged-source full rerun pass. No session
+guard, timeout or authentication constraint is weakened. The development web is restored after
+terminal verification; only Next.js's two generated development type imports are restored.

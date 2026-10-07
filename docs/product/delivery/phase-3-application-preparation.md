@@ -9,6 +9,12 @@
 
 ## Objective
 
+2026-10-06 D3-079 native preparation flow passes full verification at clean `e8b4775b`
+(38 typecheck/39 test/23 builds, unchanged lint and emitted native checks). The port-3000 owning
+Next.js parent conflict is resolved; all 101 session checks and the unchanged-source rerun pass.
+[Evidence](evidence/d3-native-preparation-flow-2026-10-06.md). Managed native activity composition
+is next; activation/client/provider/accountable gates remain. D1/D3 stay In progress, CI/CD deferred.
+
 2026-10-06 D3-079 implements default-off native preparation initializer and original receipt
 recovery: current owning evidence, canonical memory request digest, one reservation/grant/launch,
 then original version/citations into Applications completion. 33 focused cases and all 24 actual
