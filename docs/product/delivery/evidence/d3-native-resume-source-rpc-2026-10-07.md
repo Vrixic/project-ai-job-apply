@@ -56,7 +56,17 @@ Publication, reviewed source-only IAM and managed role/task conformance remain g
   Lambda contains actual owners/S3/normalization but excludes parsing runtime, rendering,
   model and task launch/retirement. Existing scalar owner exclusions still pass.
 - Formatting passes. Lint retains zero errors, 15 warnings and 58 informational findings.
-- Exact-source artifact build and full frozen-source verification follow.
+- Full `scripts/verify-phase0.ps1` passes on clean frozen source
+  `b9e912b24786bd7047b66e62455ac0bd100254c4`, with matching `ARTIFACT_SOURCE_SHA`:
+  38 typecheck, 39 test and 23 build tasks, operational/security guards, formatting,
+  emitted isolation, Compose and product-scope checks. No tracked changes during the run.
+- Two builds on that source produce the identical 392,953-byte source Lambda ZIP,
+  with 34 components and SHA-256
+  `06f9ee752e1abccb13edf6f1f7c9143b010bc7c2558dfebd178343e54f9301d8`.
+  ZIP reproducibility was compared; companion files were not independently compared.
+- Development web restored against the live development API. Anonymous root returns
+  200 and `/resume` returns 307. These checks do not establish authenticated resume
+  acceptance; prior owner-reported Profile/save/reload success remains separate.
 
 No public API, event, SQL migration, frontend or infrastructure change. The current
 71-migration/93-relation restore inventory remains unchanged. Owned tmpfs fixture removed;

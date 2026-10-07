@@ -4419,3 +4419,13 @@ verification follow. Task/image/bootstrap/launch/preparation/packet/client/ATS a
 managed/accountable gates remain; D1/D3 stay In progress and ADR-040 Proposed. No new PR,
 main merge, publication/deployment or hosted CI/CD. Owned fixture removed, Docker/WSL
 stopped, shared volumes retained, PC on.
+
+2026-10-07 D3-064/D3-079 original resume source at clean frozen `b9e912b2` passes the
+full verifier: 38 typecheck/39 test/23 build tasks, operational/security/bundle/Compose/
+scope checks and unchanged lint baseline. Two source Lambda ZIP builds are identical;
+66 focused, 32 real PostgreSQL and 15 emitted cases provide the separate local evidence.
+[Evidence](evidence/d3-native-resume-source-rpc-2026-10-07.md). Development web restored
+(anonymous root 200/resume 307). Native resume task/image/bootstrap/launch and current
+packet/read/client/ATS integration plus managed/accountable gates remain. D1/D3 stay
+In progress and ADR-040 Proposed. No new PR, main merge, deployment/activation or hosted
+CI/CD. Owned fixture removed, Docker/WSL stopped, shared volumes retained, PC on.
