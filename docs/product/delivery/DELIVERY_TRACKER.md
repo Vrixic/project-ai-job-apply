@@ -4628,3 +4628,9 @@ Docker/WSL stopped, PC on; artifact remains unpublished and D1/D3 In progress.
 family: six artifacts and twenty-four companion objects. Publisher guards reject the old
 observer-less receipt and incomplete/mixed/duplicate sets. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
 Frozen-source family build/readback follows. No publication or deployment; D1/D3 In progress.
+
+
+2026-10-07 the six-artifact NativeResume family builds from clean `d0c036dd` and passes actual
+publisher local readback of all twenty-four files. Second emission is byte-identical, including
+the corrected observer. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Zero cloud calls; publication, observer IAM/delivery and managed acceptance remain. D1/D3 In progress.

@@ -536,3 +536,20 @@ duplicate/incomplete receipt refusal. Changed JavaScript/package formatting pass
 `.tmp/d3-resume-observer-publication-guards.log`. The actual clean-source family build and
 publisher readback/repeat emission follow. No Publish/Verify cloud action, IAM, schedule or
 activation is performed by this change.
+
+
+The full six-artifact family subsequently builds from clean `d0c036dd65243b86fe17d4044e33f24b3a17343b`. Actual publisher
+`Get-ArtifactSet` validates all twenty-four local files and source markers; a second emission
+has the identical complete fingerprint. All bundle refusal checks pass. Logs:
+`.tmp/d3-resume-observer-family-build.log`, `.tmp/d3-resume-observer-family-readback.log`;
+local receipt `.tmp/d3-resume-publication-local-receipt.json`. No cloud calls, fresh dependency-audit
+claim, publication, deployment or activation. Current source-bound ZIP inventory:
+
+| Artifact | SHA-256 | Bytes |
+|---|---|---|
+| native-resume-owner-rpc-lambda | `7287666711ca2bdc86f4da7a3baf64175eeca87d1ef34c0f7b90eed54bab7b14` | 158278 |
+| native-resume-source-rpc-lambda | `bcc50613ec7c7531434434b38c3007428e6dfb6baa2ba024ead80ee56602a642` | 393570 |
+| native-resume-preparation-control-lambda | `a7f11982fb72e2b0ac237659ae554d3ff9fbc962f881dd7a430e532890ef6f2a` | 381538 |
+| native-resume-preparation-durable-lambda | `915f5236b9325cfb7bf53ff6cf2ba2d6879f61a5d01c02410ff6f0fd3a43d96c` | 265661 |
+| native-resume-request-dispatch-lambda | `7ed548fb7bb6960b24a02a1b1663494fbd14d921c51479777fb97249ea2944d3` | 515891 |
+| native-resume-task-observer-lambda | `9892beea70ecf77347ef9ae5c8e56ac0f35e796961a18a51af0561f16e3ea8bb` | 384729 |
