@@ -2180,3 +2180,11 @@ regression tests pass (142), but the current registry audit fails on five pre-ex
 versions, including critical shell-quote. [Evidence](evidence/d3-native-resume-task-address-2026-10-07.md).
 DNS registration/cleanup, domain/TLS/ingress, managed composition and acceptance remain; the new
 reader alone grants no candidate authorization or DNS readiness. D1/D3 In progress, PC on.
+
+2026-10-07 D3-064/D3-079 adds the default-off original Route 53 DNS transport: immutable
+allocation A record, exact create/inspect/delete and separate propagation status, with no upsert
+or automatic write retry. Documents build, 78 focused cases, compiled DNS/address isolation and
+frozen installation pass. [Evidence](evidence/d3-native-resume-dns-transport-2026-10-07.md).
+Owning durable intent/write recovery, preparation/retirement wiring, hostname/TLS/ingress and
+managed acceptance remain. Prior dependency audit findings remain open. D1/D3 In progress, no
+cloud/frontend/CI/CD action, Docker/WSL not started and PC on.

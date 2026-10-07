@@ -1,5 +1,13 @@
 # Documents Service
 
+Private `./native-resume-dns-route` implements one immutable allocation A-record intent in a
+configured Route 53 zone. It exposes create, exact inspection/deletion and change-propagation
+status, with runtime/creation gates off by default. It does not upsert, retry failed writes or
+treat record absence as cleanup completion. The caller must persist the intent, claim each write
+and reconcile ambiguous responses before enabling preparation/retirement composition. There is
+no DNS deployment or content authorization in this adapter; see
+[DNS transport evidence](../../../docs/product/delivery/evidence/d3-native-resume-dns-transport-2026-10-07.md).
+
 Private `./native-resume-task-address` resolves the original ready resume task's public IPv4
 through signed regional ECS and EC2 metadata reads. It pins the stored launch configuration,
 running task/image/overrides and attached ENI, checks owner/subnet/security groups, and rereads

@@ -12,6 +12,7 @@ import type {
   NativeResumeGenerationScope,
   PostgresNativeResumeGenerationStore,
 } from "./native-resume-generation-store.js";
+import { nativeResumePublicIpv4 } from "./native-resume-route-policy.js";
 import {
   nativeTaskAllocationRegion,
   nativeTaskDeploymentRegion,
@@ -37,23 +38,6 @@ type TestClients = {
   };
 };
 const unavailable = () => Error("NativeResumeTaskAddressUnavailable");
-
-function publicIpv4(value: unknown): value is string {
-  if (typeof value !== "string" || !isIPv4(value)) return false;
-  const [a = 0, b = 0, c = 0] = value.split(".").map(Number);
-  return !(
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    a >= 224 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && (b === 168 || (b === 0 && (c === 0 || c === 2)))) ||
-    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
-    (a === 203 && b === 0 && c === 113)
-  );
-}
 
 /** Private, point-in-time network metadata for the original ready task. This neither grants
  * content access nor proves DNS/TLS reachability. No launch, task stop, DNS or ENI mutation.
@@ -243,7 +227,7 @@ export function createNativeResumeTaskAddressReader(options: {
           !isDeepStrictEqual(eni.Groups.map((group) => group.GroupId).sort(), [
             ...config.securityGroups,
           ]) ||
-          !publicIpv4(eni.Association?.PublicIp)
+          !nativeResumePublicIpv4(eni.Association?.PublicIp)
         )
           throw unavailable();
         const publicIp = eni.Association.PublicIp;

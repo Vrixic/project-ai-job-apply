@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-resume-dns-route": {
+      "types": "./dist/src/native-resume-dns-route.d.ts",
+      "default": "./dist/src/native-resume-dns-route.js"
+    },
     "./native-resume-task-address": {
       "types": "./dist/src/native-resume-task-address.d.ts",
       "default": "./dist/src/native-resume-task-address.js"
@@ -243,6 +247,7 @@
     "@aws-sdk/client-ec2": "3.1133.0",
     "@aws-sdk/client-ecs": "3.1133.0",
     "@aws-sdk/client-lambda": "3.1133.0",
+    "@aws-sdk/client-route-53": "3.1133.0",
     "@aws-sdk/client-s3": "3.1133.0",
     "@aws-sdk/client-secrets-manager": "3.1133.0",
     "@aws-sdk/client-sts": "3.1133.0",

@@ -4790,3 +4790,11 @@ focused cases, compiled isolation and 142 dependency regression cases pass. The 
 audit fails on five already-pinned dependencies (including critical shell-quote); no waiver.
 [Evidence](evidence/d3-native-resume-task-address-2026-10-07.md). DNS/TLS routing, cleanup, managed
 release and acceptance remain. D1/D3 In progress; no CI/CD/cloud/frontend changes, PC on.
+
+2026-10-07 D3-064/D3-079 adds the default-off original Route 53 DNS transport: immutable
+allocation A record, exact create/inspect/delete and separate propagation status, with no upsert
+or automatic write retry. Documents build, 78 focused cases, compiled DNS/address isolation and
+frozen installation pass. [Evidence](evidence/d3-native-resume-dns-transport-2026-10-07.md).
+Owning durable intent/write recovery, preparation/retirement wiring, hostname/TLS/ingress and
+managed acceptance remain. Prior dependency audit findings remain open. D1/D3 In progress, no
+cloud/frontend/CI/CD action, Docker/WSL not started and PC on.
