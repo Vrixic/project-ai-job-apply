@@ -123,6 +123,34 @@
     "./native-resume-generation-store": {
       "types": "./dist/src/native-resume-generation-store.d.ts",
       "default": "./dist/src/native-resume-generation-store.js"
+    },
+    "./native-resume-task-binding": {
+      "types": "./dist/src/native-resume-task-binding.d.ts",
+      "default": "./dist/src/native-resume-task-binding.js"
+    },
+    "./native-resume-task-caller-client": {
+      "types": "./dist/src/native-resume-task-caller-client.d.ts",
+      "default": "./dist/src/native-resume-task-caller-client.js"
+    },
+    "./native-resume-task-caller-verifier": {
+      "types": "./dist/src/native-resume-task-caller-verifier.d.ts",
+      "default": "./dist/src/native-resume-task-caller-verifier.js"
+    },
+    "./native-resume-owner-rpc-contract": {
+      "types": "./dist/src/native-resume-owner-rpc-contract.d.ts",
+      "default": "./dist/src/native-resume-owner-rpc-contract.js"
+    },
+    "./native-resume-owner-rpc-handler": {
+      "types": "./dist/src/native-resume-owner-rpc-handler.d.ts",
+      "default": "./dist/src/native-resume-owner-rpc-handler.js"
+    },
+    "./native-resume-owner-rpc-client": {
+      "types": "./dist/src/native-resume-owner-rpc-client.d.ts",
+      "default": "./dist/src/native-resume-owner-rpc-client.js"
+    },
+    "./native-resume-owner-controls": {
+      "types": "./dist/src/native-resume-owner-controls.d.ts",
+      "default": "./dist/src/native-resume-owner-controls.js"
     }
   },
   "scripts": {

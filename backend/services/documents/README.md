@@ -748,3 +748,11 @@ The resume ledger's SQL integration now uses actual Applications and Jobs owner 
 canonical source eligibility, current packet summary revision and exact resume context
 stay fenced on the original transaction. This does not activate authenticated task,
 source or packet transport. See [local evidence](../../../docs/product/delivery/evidence/d3-native-resume-jobs-admission-2026-10-07.md).
+
+Private native-resume task binding and owner RPC now connect authenticated original
+admission/bootstrap/principal/completion/ready metadata to the generation ledger.
+Resume signing domains are distinct from cover-letter consent/work. Shared transport
+uses fixed ECS credentials, numeric Lambda versions and no retry of unknown transport.
+The independent owner Lambda opens its bounded SQL pool only after task authentication.
+Source bytes, task/image launch/bootstrap and packet/client/ATS composition remain
+separate work. See [source and local evidence](../../../docs/product/delivery/evidence/d3-native-resume-owner-rpc-2026-10-07.md).

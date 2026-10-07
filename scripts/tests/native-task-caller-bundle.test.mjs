@@ -55,6 +55,7 @@ for (const side of ["client", "verifier"]) {
       "native-task-allocation.js",
       "native-task-caller-contract.js",
       `native-task-caller-${side}.js`,
+      `native-task-caller-${side}-core.js`,
       ...(side === "client" ? ["native-task-credentials.js"] : []),
     ].map((name) => `backend/services/documents/dist/src/${name}`);
     assert.deepEqual(

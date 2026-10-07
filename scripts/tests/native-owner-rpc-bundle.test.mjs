@@ -186,3 +186,102 @@ test("emitted owning Lambda connects SQL/owner APIs while excluding provider/con
   );
   assert.equal(effects, 0);
 });
+
+const resumeBinding = {
+  schemaVersion: 1,
+  kind: "tailored_resume",
+  scope: binding.scope,
+  allocation: binding.allocation,
+  configurationSha256: "f".repeat(64),
+};
+for (const side of ["client", "handler", "lambda"]) {
+  test(`emitted resume ${side} keeps original task controls separate from content and provider work`, async () => {
+    const entry =
+      side === "lambda"
+        ? "backend/workflows/dist/src/native-resume-owner-rpc-lambda.js"
+        : `backend/services/documents/dist/src/native-resume-owner-rpc-${side}.js`;
+    const { inputs, exports } = await emitted(entry);
+    for (const name of [
+      ...prohibited,
+      "ai-sdk",
+      "native-evidence-binding.js",
+      "cover-letter-work-store.js",
+      "native-material-registry.js",
+      "native-resume-session.js",
+      "native-task-launch.js",
+      "native-task-retirement.js",
+      ...(side !== "lambda"
+        ? [
+            "postgres",
+            "backend/services/profile",
+            "backend/services/applications",
+            "backend/services/jobs",
+          ]
+        : []),
+      ...(side !== "client" ? ["@aws-sdk"] : []),
+    ])
+      assert.ok(
+        !inputs.some((input) => input.includes(name)),
+        `Unexpected resume ${side} capability: ${name}`,
+      );
+    assert.ok(inputs.some((input) => input.includes("native-resume-task-binding.js")));
+    if (side === "client") {
+      assert.ok(inputs.some((input) => input.includes("@aws-sdk/client-sts")));
+      assert.ok(inputs.some((input) => input.includes("@aws-sdk/client-lambda")));
+      const client = exports.createNativeResumeOwnerRpcClient({
+        binding: resumeBinding,
+        targetArn: target,
+      });
+      await assert.rejects(client.bootstrap(), /^Error: NativeResumeOwnerUnavailable$/u);
+      await assert.rejects(
+        client.checkAdmission(resumeBinding),
+        /^Error: NativeResumeOwnerUnavailable$/u,
+      );
+    } else if (side === "handler") {
+      let effects = 0;
+      const handler = exports.createNativeResumeOwnerRpcHandler({
+        targetArn: target,
+        taskRoleArn: "arn:aws:iam::123456789012:role/native-resume",
+        deployment: {
+          clusterArn: binding.allocation.clusterArn,
+          taskDefinitionArn: binding.allocation.taskDefinitionArn,
+          containerName: binding.allocation.containerName,
+        },
+        owners: async () => {
+          effects++;
+          throw Error("UnexpectedOwner");
+        },
+      });
+      await assert.rejects(
+        handler({ schemaVersion: 1, action: "claim" }, { invokedFunctionArn: target }),
+        /^Error: NativeResumeOwnerUnavailable$/u,
+      );
+      assert.equal(effects, 0);
+    } else {
+      for (const name of [
+        "native-resume-generation-store.js",
+        "native-resume-admission.js",
+        "native-resume-owner-ports.js",
+        "native-principal.js",
+        "postgres",
+      ])
+        assert.ok(
+          inputs.some((input) => input.includes(name)),
+          `Missing resume owner capability: ${name}`,
+        );
+      let effects = 0;
+      const handler = exports.createNativeResumeOwnerRpcLambda({
+        environment: () => ({}),
+        resolveDatabaseUrl: async () => {
+          effects++;
+          throw Error("UnexpectedSecret");
+        },
+      });
+      await assert.rejects(
+        handler({}, { invokedFunctionArn: target }),
+        /^Error: NativeResumeOwnerUnavailable$/u,
+      );
+      assert.equal(effects, 0);
+    }
+  });
+}

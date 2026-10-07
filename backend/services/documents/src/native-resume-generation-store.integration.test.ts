@@ -7,6 +7,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PostgresCoverLetterStore } from "./cover-letter-store.js";
 import { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
 import { PostgresNativeMaterialRegistry } from "./native-material-registry.js";
+import { nativeOwnerJson } from "./native-owner-rpc-contract.js";
+import { createNativeResumeOwnerRpcClient } from "./native-resume-owner-rpc-client.js";
+import type { NativeResumeTaskBinding } from "./native-resume-task-binding.js";
 import {
   type NativeResumeGenerationRecord,
   type NativeResumeOwnerQuery,
@@ -73,6 +76,184 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     await s.claimLaunch(scope(r), config);
     return { s, r: await s.bindTask(scope(r), config, task) };
   }
+  async function rpcFixture() {
+    const { s, r } = await bound();
+    if (!r.allocation) throw Error("SyntheticTaskUnavailable");
+    const module = await import(
+      fileURLToPath(
+        new URL("../../../workflows/dist/src/native-resume-owner-rpc-lambda.js", import.meta.url),
+      )
+    );
+    const target = "arn:aws:lambda:us-east-2:123456789012:function:native-resume-owner:7";
+    const binding: NativeResumeTaskBinding = {
+      schemaVersion: 1,
+      kind: "tailored_resume",
+      scope: scope(r),
+      allocation: r.allocation,
+      configurationSha256: config,
+    };
+    const env: Record<string, string | undefined> = {
+      NATIVE_RESUME_OWNER_RPC_ENABLED: "true",
+      AWS_REGION: "us-east-2",
+      PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+      AWS_LAMBDA_FUNCTION_NAME: "native-resume-owner",
+      AWS_LAMBDA_FUNCTION_VERSION: "7",
+      AWS_SESSION_TOKEN: "synthetic-session",
+      DATABASE_SECRET_ID: "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-resume",
+      NATIVE_RESUME_OWNER_RPC_DEPLOYMENT_JSON: JSON.stringify({
+        ...input.deployment,
+        taskRoleArn: "arn:aws:iam::123456789012:role/native-resume",
+      }),
+    };
+    let owner: { close(): Promise<void> } | undefined;
+    let secrets = 0;
+    const session = task.split("/").at(-1);
+    const handler = module.createNativeResumeOwnerRpcLambda({
+      environment: () => env,
+      resolveDatabaseUrl: async () => {
+        secrets++;
+        return url;
+      },
+      createRuntime: (...args: unknown[]) => {
+        const result = module.createNativeResumeOwnerRpcRuntime(...args);
+        owner = result;
+        return result;
+      },
+      testFetch: async () =>
+        new Response(
+          `<GetCallerIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><GetCallerIdentityResult><Arn>arn:aws:sts::123456789012:assumed-role/native-resume/${session}</Arn><Account>123456789012</Account><UserId>AROAABCDEFGHIJKLMNOP:${session}</UserId></GetCallerIdentityResult><ResponseMetadata><RequestId>synthetic-request</RequestId></ResponseMetadata></GetCallerIdentityResponse>`,
+          { headers: { "content-type": "text/xml" } },
+        ),
+    });
+    const connect = (candidate: NativeResumeTaskBinding = binding) =>
+      createNativeResumeOwnerRpcClient({
+        binding: candidate,
+        targetArn: target,
+        enabled: () => true,
+        testCredentials: {
+          accessKeyId: "ASIASYNTHETICEXAMPLE",
+          secretAccessKey: "synthetic-local-signing-secret-only",
+          sessionToken: "synthetic-local-signing-token-only",
+        },
+        testClient: {
+          send: async (command) => {
+            if (!(command.input.Payload instanceof Uint8Array))
+              throw Error("SyntheticRpcPayloadUnavailable");
+            const request = JSON.parse(new TextDecoder().decode(command.input.Payload));
+            const result = await handler(request, { invokedFunctionArn: target });
+            return {
+              StatusCode: 200,
+              ExecutedVersion: "7",
+              Payload: new TextEncoder().encode(nativeOwnerJson(result)),
+            };
+          },
+        },
+      });
+    return {
+      s,
+      r,
+      binding,
+      client: connect(),
+      connect,
+      env,
+      handler,
+      target,
+      secrets: () => secrets,
+      close: async () => {
+        await owner?.close();
+      },
+    };
+  }
+  it("runs signed resume controls through the actual lazy Lambda and owner ledger", async () => {
+    const f = await rpcFixture();
+    try {
+      expect(f.secrets()).toBe(0);
+      await f.client.checkAdmission(f.binding);
+      expect(await f.client.bootstrap()).toEqual({
+        identity: input.identity,
+        normalizedSha256: input.normalizedSha256,
+        canonicalJobId: input.application.canonicalJobId,
+      });
+      expect(f.secrets()).toBe(1);
+      const ref = reference(f.r);
+      expect(await f.client.claimOriginalCompletion(ref)).toBe("claimed");
+      expect(await f.client.claimOriginalCompletion(ref)).toBe("already_completed");
+      await expect(f.client.bootstrap()).rejects.toThrow("NativeResumeOwnerUnavailable");
+      expect(
+        await f.client.claimOriginalCompletion({
+          ...ref,
+          completedAtMs: ref.completedAtMs + 1,
+          expiresAtMs: ref.expiresAtMs + 1,
+        }),
+      ).toBe("unavailable");
+      await f.client.publishReady(ref);
+      expect(await f.s.readAllocation(ref)).toBe(f.r.allocationId);
+      await sql`UPDATE jobs.canonical_jobs SET description='Synthetic changed RPC job' WHERE id=${input.application.canonicalJobId}`;
+      await expect(f.client.checkAdmission(f.binding)).rejects.toThrow(
+        "NativeResumeOwnerUnavailable",
+      );
+      await expect(f.s.readAllocation(ref)).rejects.toThrow();
+    } finally {
+      await f.close();
+    }
+  });
+  it("refuses correctly signed but altered original ledger bindings", async () => {
+    const f = await rpcFixture();
+    try {
+      for (const part of ["configuration", "epoch", "owner", "generation"] as const) {
+        const changed = structuredClone(f.binding);
+        if (part === "configuration") changed.configurationSha256 = "0".repeat(64);
+        else if (part === "epoch") changed.scope.epochId = uuidv7();
+        else if (part === "owner")
+          changed.scope.ownerUserId = changed.allocation.ownerUserId = uuidv7();
+        else changed.scope.generationId = changed.allocation.generationId = uuidv7();
+        await expect(f.connect(changed).bootstrap()).rejects.toThrow(
+          "NativeResumeOwnerUnavailable",
+        );
+      }
+      await f.client.checkAdmission(f.binding);
+      const [stored] =
+        await sql`SELECT configuration_sha256,task_arn,content_sha256 FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`;
+      expect(stored).toEqual({
+        configuration_sha256: config,
+        task_arn: task,
+        content_sha256: null,
+      });
+    } finally {
+      await f.close();
+    }
+  });
+  it("refuses Lambda configuration drift and forbidden ambient credentials before secret resolution", async () => {
+    const f = await rpcFixture();
+    try {
+      f.env.DATABASE_URL = "synthetic-forbidden";
+      await expect(f.client.bootstrap()).rejects.toThrow();
+      expect(f.secrets()).toBe(0);
+      delete f.env.DATABASE_URL;
+      await f.client.checkAdmission(f.binding);
+      f.env.AWS_LAMBDA_FUNCTION_VERSION = "8";
+      await expect(f.client.bootstrap()).rejects.toThrow();
+      expect(f.secrets()).toBe(1);
+    } finally {
+      await f.close();
+    }
+  });
+  it("refuses a sealed or source-held original task through authenticated RPC", async () => {
+    const f = await rpcFixture();
+    try {
+      await sql`UPDATE documents.resume_documents SET security_hold=true WHERE id=${input.identity.baseDocumentId}`;
+      await expect(f.client.bootstrap()).rejects.toThrow("NativeResumeOwnerUnavailable");
+      expect(await f.client.claimOriginalCompletion(reference(f.r))).toBe("unavailable");
+      await sql`UPDATE documents.resume_documents SET security_hold=false WHERE id=${input.identity.baseDocumentId}`;
+      await f.s.seal(input.identity.ownerUserId, input.identity.applicationId);
+      await expect(f.client.checkAdmission(f.binding)).rejects.toThrow(
+        "NativeResumeOwnerUnavailable",
+      );
+      expect(await f.client.claimOriginalCompletion(reference(f.r))).toBe("unavailable");
+    } finally {
+      await f.close();
+    }
+  });
   it("matches the existing Applications packet revision and exact resume context", async () => {
     const module = await import(
       fileURLToPath(new URL("../../applications/dist/src/packet-source.js", import.meta.url))

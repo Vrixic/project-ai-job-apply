@@ -4387,3 +4387,13 @@ Authenticated resume RPC/source/task/preparation/packet/image/client/ATS and man
 accountable gates remain; D1/D3 stay In progress. No deployment/activation, new PR,
 main merge or hosted CI/CD. Development web restored; Docker/WSL stopped, shared
 volumes retained and PC remains on.
+
+2026-10-07 D3-064/D3-079 connects a separate authenticated resume task scope to private
+owner RPC and the actual Documents ledger with Applications/Jobs admission. Original
+bootstrap/completion/ready controls and Profile principal projection are scalar-only;
+shared signing/transport preserve cover-letter framing. All 138 focused, 26 actual SQL
+and eight emitted checks pass. [Evidence](evidence/d3-native-resume-owner-rpc-2026-10-07.md).
+Exact-source artifact/full verification follow. Source loading/task/image/launch/
+preparation/packet/client/ATS and managed/accountable acceptance remain; D1/D3 stay
+In progress. No publication/deployment, new PR, main merge or hosted CI/CD. Owned SQL
+fixture removed, shared volumes retained, Docker/WSL stopped; PC remains on.

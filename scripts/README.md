@@ -422,3 +422,10 @@ capabilities and is included in the maintained full verifier.
 artifact at `backend/workflows/dist/native-task-event-lambda` with bundled default-off refusal.
 Set `ARTIFACT_SOURCE_SHA` to the committed source for source-bound evidence. It publishes nothing
 and supplies no EventBridge rule, IAM permission, queue/retry/DLQ routing or activation.
+
+`node scripts/build-native-resume-owner-rpc-lambda.mjs` builds the separate default-off
+native-resume scalar owner RPC after Workflows compilation. Set `ARTIFACT_SOURCE_SHA`
+to the exact clean committed source for provenance. Output stays in
+`backend/workflows/dist/native-resume-owner-rpc-lambda`; the builder performs no
+publication/deployment and verifies default-off refusal without network effects.
+See [local evidence](../docs/product/delivery/evidence/d3-native-resume-owner-rpc-2026-10-07.md).
