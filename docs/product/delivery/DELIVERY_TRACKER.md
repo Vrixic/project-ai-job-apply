@@ -4772,3 +4772,14 @@ runtime-smoke cases and OCI publisher guards pass. The first combined verifier w
 finding the stale pins; a fresh clean-source pass and updated actual image remain.
 [Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#observation-migration-package-alignment-2026-10-07).
 No cloud action; D1/D3 In progress, CI/CD deferred, PC on.
+
+
+2026-10-07 D1-013/D3-064/D3-079 completes the maintained local verification stages across
+clean checkpoints `65976e15`, `66a2c3d1` and `5065427a`, with two stale test fixtures corrected
+between segments. Runtime source is unchanged across those fixture corrections. Results: 38
+typecheck tasks, 39 test tasks, 23 builds, emitted isolation, Compose/scope and unchanged lint
+baseline. The cold Linux migration image passes hardened runtime smoke at the exact 73-migration/
+93-relation boundary. [Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#observation-migration-package-alignment-2026-10-07)
+and [recovery verification](evidence/d3-native-resume-launch-packet-2026-10-07.md#combined-recovery-verification-checkpoint).
+Development web is restored (root 200; anonymous Resume 307). No new signed-in acceptance, cloud
+publication or deployment; D1/D3 remain In progress. Docker/WSL stopped, PC on, CI/CD deferred.

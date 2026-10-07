@@ -789,3 +789,18 @@ cases pass locally. No runtime capability or permission changed for this fixture
 Logs: `.tmp/d3-recovery-remaining-verification.log` and `.tmp/d3-recovery-retirement-bundle.log`.
 The final emitted checks and Compose/scope checks remain to be run from the corrected clean commit.
 This is segmented verification, not one uninterrupted exact-head verifier pass.
+
+
+All final maintained stages pass at clean `5065427af41480c62730c0d69dc1b0ea213d6292`, including
+retirement/content/caller/owner/launch/preparation emitted isolation and Compose/product-scope
+validation. Log: `.tmp/d3-recovery-final-verification.log`; exit receipt is zero. Earlier stages
+passed at `65976e15` (through document staged operators) and `66a2c3d1` (corrected migration
+operator through export isolation, including 38 typecheck/39 test/23 build tasks). Only the two
+identified test fixtures and evidence changed between these checkpoints; no runtime source edits
+occurred during verification. This records all maintained stages in segments, not a single run.
+
+The maintained local launcher restores development web against the live development API in
+session 18829. Anonymous root returns 200 and Resume returns its expected 307; this is readiness,
+not fresh authenticated acceptance. Only the inspected Next-generated development type-import
+changes were restored. Docker and WSL are stopped; PC remains on. Publication, DNS/TLS/routing,
+managed migration/runtime and accountable acceptance remain open; D1/D3 remain In progress.
