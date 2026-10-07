@@ -1065,6 +1065,9 @@ describe.runIf(requested)(
           input: { ...ready, material: { ...ready.material, version: 1 } },
         }),
       ).rejects.toThrow("NativeOwnerRpcUnavailable");
+      expect(
+        await new PostgresNativeMaterialReadyStore(sql, () => true).readAllocation(ready.material),
+      ).toBeNull();
       await controls.publishReady(ready);
       const readyStore = new PostgresNativeMaterialReadyStore(sql, () => true);
       const readyIdentity = {
@@ -1078,6 +1081,27 @@ describe.runIf(requested)(
         expiresAt: bootstrap.expiresAt,
       };
       expect(await readyStore.read(readyIdentity)).toEqual(ready);
+      expect(await readyStore.readAllocation(ready.material)).toBe(binding.scope.allocationId);
+      let enabledChecks = 0;
+      expect(
+        await new PostgresNativeMaterialReadyStore(sql, () => ++enabledChecks === 1).readAllocation(
+          ready.material,
+        ),
+      ).toBeNull();
+      expect(
+        await new PostgresNativeMaterialReadyStore(sql).readAllocation(ready.material),
+      ).toBeNull();
+      for (const changed of [
+        { applicationId: uuidv7() },
+        { generationId: uuidv7() },
+        { version: ready.material.version + 1 },
+        { contentSha256: "f".repeat(64) },
+        { completedAtMs: completedAtMs - 1, expiresAtMs: completedAtMs + 1_800_000 - 1 },
+      ])
+        expect(await readyStore.readAllocation({ ...ready.material, ...changed })).toBeNull();
+      await expect(
+        readyStore.readAllocation({ ...ready.material, ownerUserId: uuidv7() }),
+      ).rejects.toThrow("NativeMaterialReadyUnavailable");
       expect(await readyStore.read({ ...readyIdentity, id: uuidv7() })).toBeNull();
       expect(await readyStore.read({ ...readyIdentity, applicationId: uuidv7() })).toBeNull();
       expect(
@@ -1155,6 +1179,7 @@ describe.runIf(requested)(
         request.applicationId,
       );
       expect(await readyStore.read(readyIdentity)).toBeNull();
+      expect(await readyStore.readAllocation(ready.material)).toBeNull();
       expect(await epochReader.readPreviousEpoch(request.ownerUserId, request.applicationId)).toBe(
         binding.scope.epochId,
       );

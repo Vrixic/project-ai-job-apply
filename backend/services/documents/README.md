@@ -4,7 +4,10 @@ The native runtime now publishes a scalar ready receipt after grounding and PDF/
 The authenticated private action carries only the exact material reference, cited fact IDs and
 confidence. Documents migration 0013 makes this metadata immutable and portable. Apply it and pin
 the updated numeric receiver before enabling an updated image; older receivers refuse the action.
-The preparation initializer/recovery still needs to consume this receipt.
+The dedicated default-off native preparation initializer/recovery consumes this receipt.
+Internal `readAllocation` discovers only the original allocation ID from an exact packet material
+reference after ready/work/identity/admission/expiry checks. Gateway metadata handoff and managed
+routing/client integration remain unfinished.
 See [receipt evidence](../../../docs/product/delivery/evidence/d3-native-ready-receipt-2026-10-06.md).
 
 Private `./native-task-bootstrap` binds the task's own ECS container/task metadata, reads its
