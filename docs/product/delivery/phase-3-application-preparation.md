@@ -2172,3 +2172,11 @@ baseline. The cold Linux migration image passes hardened runtime smoke at the ex
 and [recovery verification](evidence/d3-native-resume-launch-packet-2026-10-07.md#combined-recovery-verification-checkpoint).
 Development web is restored (root 200; anonymous Resume 307). No new signed-in acceptance, cloud
 publication or deployment; D1/D3 remain In progress. Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 D3-064/D3-079 implements private original task address lookup with exact running
+task/image/override/interface checks and a final task/ledger recheck. Documents build, 113
+focused tests and compiled default-off isolation pass with simulated AWS/ledger. Dependency
+regression tests pass (142), but the current registry audit fails on five pre-existing dependency
+versions, including critical shell-quote. [Evidence](evidence/d3-native-resume-task-address-2026-10-07.md).
+DNS registration/cleanup, domain/TLS/ingress, managed composition and acceptance remain; the new
+reader alone grants no candidate authorization or DNS readiness. D1/D3 In progress, PC on.

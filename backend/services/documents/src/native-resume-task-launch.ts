@@ -2,6 +2,7 @@ import {
   type NativeTaskLaunchConfiguration,
   nativeLaunchedTask,
   nativeTaskLaunchConfiguration,
+  nativeResumeLaunchEnvironment as originalEnvironment,
   nativeTaskLaunchScope as scope,
   validateNativeTaskDefinition,
 } from "./native-task-launch-policy.js";
@@ -69,16 +70,6 @@ function checkedRecord(
       if (record.allocation[key] !== config[key]) throw unavailable();
     if (record.state === "pending" || record.state === "abandoned") throw unavailable();
   } else if (record.state !== "pending" && record.state !== "abandoned") throw unavailable();
-}
-function originalEnvironment(fixed: NativeResumeGenerationScope, configurationSha256: string) {
-  return [
-    { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: fixed.allocationId },
-    { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: fixed.ownerUserId },
-    { name: "NATIVE_MATERIAL_APPLICATION_ID", value: fixed.applicationId },
-    { name: "NATIVE_MATERIAL_GENERATION_ID", value: fixed.generationId },
-    { name: "NATIVE_MATERIAL_EPOCH_ID", value: fixed.epochId },
-    { name: "NATIVE_RESUME_CONFIGURATION_SHA256", value: configurationSha256 },
-  ];
 }
 
 /** Private control-plane launcher only. No content, provider, SQL driver, credential issuer,

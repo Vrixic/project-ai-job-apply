@@ -24,6 +24,20 @@ export interface NativeTaskLaunchConfiguration {
   securityGroups: readonly string[];
   assignPublicIp: "ENABLED" | "DISABLED";
 }
+/** Original scalar overrides shared by launch and subsequent task observations. */
+export function nativeResumeLaunchEnvironment(
+  fixed: NativeTaskLaunchScope,
+  configurationSha256: string,
+) {
+  return [
+    { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: fixed.allocationId },
+    { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: fixed.ownerUserId },
+    { name: "NATIVE_MATERIAL_APPLICATION_ID", value: fixed.applicationId },
+    { name: "NATIVE_MATERIAL_GENERATION_ID", value: fixed.generationId },
+    { name: "NATIVE_MATERIAL_EPOCH_ID", value: fixed.epochId },
+    { name: "NATIVE_RESUME_CONFIGURATION_SHA256", value: configurationSha256 },
+  ];
+}
 const unavailable = () => Error("NativeTaskLaunchUnavailable");
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
 function closed(value: object, keys: readonly string[]) {

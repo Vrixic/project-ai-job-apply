@@ -963,3 +963,10 @@ baseline. The cold Linux migration image passes hardened runtime smoke at the ex
 and [recovery verification](evidence/d3-native-resume-launch-packet-2026-10-07.md#combined-recovery-verification-checkpoint).
 Development web is restored (root 200; anonymous Resume 307). No new signed-in acceptance, cloud
 publication or deployment; D1/D3 remain In progress. Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 fresh dependency audit during the D3 address-reader batch reports node-forge, braces,
+source-map-js, sharp and critical shell-quote advisories at versions already present before the
+batch. The 142 maintained dependency remediation regression cases pass; the registry audit does
+not. [Evidence](evidence/d3-native-resume-task-address-2026-10-07.md). Coordinate remediation with
+frontend work before launch; no acceptance/waiver is implied. D1 remains In progress, CI/CD
+deferred and the PC stays on. Previously accepted browser checks are not reopened.

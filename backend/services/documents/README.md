@@ -1,5 +1,14 @@
 # Documents Service
 
+Private `./native-resume-task-address` resolves the original ready resume task's public IPv4
+through signed regional ECS and EC2 metadata reads. It pins the stored launch configuration,
+running task/image/overrides and attached ENI, checks owner/subnet/security groups, and rereads
+task/ledger metadata before returning. It defaults off and has no DNS, launch, stop or ENI-write
+capability. Its result is a point-in-time network observation, not candidate authorization,
+DNS/TLS readiness or continued liveness. The recovery-oriented ledger read permits sealed
+allocations; any future route writer must separately enforce current owner admission. DNS
+registration, propagation, retirement cleanup and private runtime composition are still required.
+
 The native runtime now publishes a scalar ready receipt after grounding and PDF/DOCX verification.
 The authenticated private action carries only the exact material reference, cited fact IDs and
 confidence. Documents migration 0013 makes this metadata immutable and portable. Apply it and pin

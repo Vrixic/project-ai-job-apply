@@ -4783,3 +4783,10 @@ baseline. The cold Linux migration image passes hardened runtime smoke at the ex
 and [recovery verification](evidence/d3-native-resume-launch-packet-2026-10-07.md#combined-recovery-verification-checkpoint).
 Development web is restored (root 200; anonymous Resume 307). No new signed-in acceptance, cloud
 publication or deployment; D1/D3 remain In progress. Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 D3-064/D3-079 adds the default-off original task public-address reader: owning
+ledger -> exact ECS task -> exact EC2 interface -> task/ledger recheck. Documents build, 113
+focused cases, compiled isolation and 142 dependency regression cases pass. The fresh registry
+audit fails on five already-pinned dependencies (including critical shell-quote); no waiver.
+[Evidence](evidence/d3-native-resume-task-address-2026-10-07.md). DNS/TLS routing, cleanup, managed
+release and acceptance remain. D1/D3 In progress; no CI/CD/cloud/frontend changes, PC on.

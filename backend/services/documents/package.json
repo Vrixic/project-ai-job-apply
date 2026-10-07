@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-resume-task-address": {
+      "types": "./dist/src/native-resume-task-address.d.ts",
+      "default": "./dist/src/native-resume-task-address.js"
+    },
     "./native-task-bootstrap": {
       "types": "./dist/src/native-task-bootstrap.d.ts",
       "default": "./dist/src/native-task-bootstrap.js"
@@ -236,6 +240,7 @@
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
+    "@aws-sdk/client-ec2": "3.1133.0",
     "@aws-sdk/client-ecs": "3.1133.0",
     "@aws-sdk/client-lambda": "3.1133.0",
     "@aws-sdk/client-s3": "3.1133.0",
