@@ -916,3 +916,9 @@ Clean-source build/readback follows. No publication or activation; D1/D3 remain 
 SHA-256 `afb9234e1b85cd3e2f2a41a3a5f241f6ac9952b0ff68058f233a94d6b83ea716` (22,777 bytes).
 [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#guarded-publication-family).
 No fresh audit, publication or deployment claim; D1/D3 remain In progress and PC on.
+
+
+2026-10-07 D1-012 connects the existing privileged moderation audit writer to an explicit
+Gateway release flag, default-off and requiring scheduled retention. Six mocked audit release
+cases pass; both environment roots validate. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#audit-capture-release-flag).
+Managed capture/expiry/alert acceptance remains. No activation, D1/D3 In progress and PC on.

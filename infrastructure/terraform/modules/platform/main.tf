@@ -1831,6 +1831,9 @@ resource "aws_lambda_function" "gateway" {
         OIDC_ISSUER        = var.oidc_issuer
         OIDC_AUDIENCE      = var.oidc_audience
       },
+      var.privileged_moderation_audit_enabled ? {
+        PRIVILEGED_MODERATION_AUDIT_ENABLED = "true"
+      } : {},
       var.deploy_serverless_outbox ? {
         OUTBOX_DISPATCH_TARGET = "lambda_durable"
         OUTBOX_QUEUE_URL       = aws_sqs_queue.events.url

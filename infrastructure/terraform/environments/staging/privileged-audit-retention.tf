@@ -1,3 +1,10 @@
+variable "privileged_moderation_audit_enabled" {
+  description = "Explicit privileged moderation access/attempt capture; enable only with reviewed retention."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "privileged_audit_retention_release" {
   description = "Reviewed immutable audit-maintenance artifact; null creates nothing. No secret values."
   type = object({

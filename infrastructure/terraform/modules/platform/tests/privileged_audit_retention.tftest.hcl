@@ -110,3 +110,36 @@ run "schedule_requires_runtime" {
   variables { privileged_audit_retention_schedule_enabled = true }
   expect_failures = [var.privileged_audit_retention_schedule_enabled]
 }
+
+run "capture_requires_scheduled_retention" {
+  command = plan
+  variables { privileged_moderation_audit_enabled = true }
+  expect_failures = [var.privileged_moderation_audit_enabled]
+}
+run "capture_is_connected_to_gateway" {
+  command = plan
+  variables {
+    privileged_audit_retention_release = {
+      source_sha            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      artifact_sha256       = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      artifact_base64sha256 = "u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s="
+      artifact_version      = "synthetic-version"
+      artifact_key          = "lambda/profile/audit-retention/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/privileged-moderation-audit-retention-lambda.zip"
+      extension_layer_arn   = "arn:aws:lambda:us-east-2:111122223333:layer:AWS-Parameters-and-Secrets-Lambda-Extension:1"
+    }
+    privileged_moderation_audit_enabled         = true
+    privileged_audit_retention_enabled          = true
+    privileged_audit_retention_schedule_enabled = true
+    deploy_applications                         = true
+    deploy_gateway_lambda                       = true
+    gateway_lambda_artifact_s3_key              = "lambda/gateway.zip"
+    gateway_lambda_artifact_s3_object_version   = "synthetic-gateway"
+    gateway_lambda_artifact_sha256              = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    gateway_lambda_artifact_base64sha256        = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+    gateway_lambda_extension_layer_arn          = "arn:aws:lambda:us-east-2:111122223333:layer:AWS-Parameters-and-Secrets-Lambda-Extension:1"
+  }
+  assert {
+    condition     = aws_lambda_function.gateway[0].environment[0].variables.PRIVILEGED_MODERATION_AUDIT_ENABLED == "true" && aws_cloudwatch_event_rule.audit_retention[0].state == "ENABLED"
+    error_message = "Reviewed capture must reach Gateway together with scheduled retention."
+  }
+}

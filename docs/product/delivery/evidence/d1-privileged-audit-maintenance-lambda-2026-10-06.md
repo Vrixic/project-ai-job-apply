@@ -141,3 +141,23 @@ components. Logs: `.tmp/d1-audit-publication-build.log`, `.tmp/d1-audit-publicat
 local receipt `.tmp/d1-audit-publication-local-receipt.json`. Package Biome check passes. This
 is local integrity/reproducibility evidence, not a fresh dependency audit, cloud publication or
 managed release. D1/D3 remain In progress.
+
+
+## Audit capture release flag
+
+The existing Gateway audit implementation now has a platform input forwarded by development and
+staging: privileged_moderation_audit_enabled, false by default. Only explicit enablement supplies
+the existing runtime environment flag. Validation requires the owning Gateway/database and
+scheduled audit retention, preventing a release configuration that enables capture without its
+expiry path. The guide records capture-first shutdown and immutable-version limitations.
+
+Six mocked audit-release cases pass, including connected Gateway capture/maintenance and refusal
+without prerequisites. Both environment roots validate. Log:
+`.tmp/d1-audit-capture-terraform.log`. The connected test initially omitted the existing
+application deployment prerequisite; its fixture was corrected before final pass. No Gateway
+handler, schema or row semantics changed. Existing real SQL/capture evidence remains separate;
+managed audit capture/expiry, effective IAM, alert delivery and phase acceptance remain open.
+
+The existing serverless-runtime Terraform suite also passes all 51 mocked cases on this source,
+including dark Gateway routing and dormant-environment behavior. Log:
+`.tmp/d1-audit-capture-serverless.log`. No live runtime or source artifact was changed.

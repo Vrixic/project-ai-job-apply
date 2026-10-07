@@ -44,6 +44,7 @@ provider "aws" {
 }
 
 module "platform" {
+  privileged_moderation_audit_enabled         = var.privileged_moderation_audit_enabled
   privileged_audit_retention_release          = var.privileged_audit_retention_release
   privileged_audit_retention_enabled          = var.privileged_audit_retention_enabled
   privileged_audit_retention_schedule_enabled = var.privileged_audit_retention_schedule_enabled

@@ -1,3 +1,14 @@
+variable "privileged_moderation_audit_enabled" {
+  description = "Explicit privileged moderation access/attempt capture; enable only with reviewed retention."
+  type        = bool
+  default     = false
+  nullable    = false
+  validation {
+    condition     = !var.privileged_moderation_audit_enabled || (var.deploy_gateway_lambda && var.persistent_data_plane_enabled && var.privileged_audit_retention_enabled && var.privileged_audit_retention_schedule_enabled)
+    error_message = "Audit capture requires the owning Gateway/database and enabled scheduled retention."
+  }
+}
+
 variable "privileged_audit_retention_release" {
   description = "Reviewed immutable audit-maintenance artifact; null creates nothing. No secret values."
   type = object({
