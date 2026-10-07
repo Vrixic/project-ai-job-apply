@@ -175,3 +175,19 @@ The exact sitemap route is created by the same activation expression as public j
 absent under repository defaults. Its separate route metrics and alarms retain the same frozen
 rate/burst and generic availability boundary; adding the source does not enable indexing or
 crawling.
+
+## Native resume control API network
+
+`native_resume_control_network` supplies original revision, cluster and Lambda security groups.
+The persistent data plane adds one private-DNS ECS interface endpoint and, for original address
+lookup, one EC2 endpoint. Empty inputs and dormant mode add neither. TCP 443 ingress admits only
+the supplied groups. Endpoint policies restrict launch/observation/address reads to original
+roles and resources; they never grant task stop or interface mutation. Role IAM remains required.
+Development/staging derive these inputs from their preparation releases, with address lookup
+selected by the optional route configuration.
+
+Retain original entries until drain. Check caller-owned outbound TLS rules, VPC membership and
+other ECS/EC2 callers affected by private DNS before activation. Existing platform application
+security groups permit outbound TLS. This is source configuration; managed DNS/reachability and
+effective permission verification remain required. See
+[local evidence](../../../../docs/product/delivery/evidence/d3-native-resume-private-network-2026-10-07.md).

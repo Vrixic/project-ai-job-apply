@@ -4820,3 +4820,9 @@ bootstrap ceiling. Sixteen preparation and eight bootstrap mocked Terraform case
 environments validate. [Evidence](evidence/d3-native-resume-route-release-2026-10-07.md).
 Private control network reachability, hostname/TLS, terminal reconciliation and managed acceptance
 remain; no cloud action. D1/D3 In progress, CI/CD deferred and PC on.
+
+2026-10-07 D3-064/D3-079 adds original-role ECS and optional EC2 private API endpoints derived
+from preparation releases in both environments. Twelve mocked network/RPC/secret cases pass and
+both environments validate. [Evidence](evidence/d3-native-resume-private-network-2026-10-07.md).
+No live reachability or managed IAM claim; hostname/TLS, unresolved-route reconciliation and
+managed acceptance remain. D1/D3 In progress, CI/CD deferred, Docker/WSL off and PC on.

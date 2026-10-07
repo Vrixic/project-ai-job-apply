@@ -44,6 +44,11 @@ provider "aws" {
 }
 
 module "platform" {
+  native_resume_control_network = { for item in values(var.native_resume_preparation_releases) : element(reverse(split(":", item.release.task_definition_arn)), 0) => {
+    cluster_arn        = item.release.cluster_arn
+    security_group_ids = toset(item.release.security_group_ids)
+    address_lookup     = item.route != null
+  } }
   native_resume_task_rpc_bindings  = { for item in values(var.native_resume_task_releases) : element(reverse(split(":", item.release.expected_task_definition_arn)), 0) => { owner_function_arn = item.release.owner_function_arn, source_function_arn = item.release.source_function_arn } }
   native_resume_dispatch_revisions = toset([for item in values(var.native_resume_preparation_releases) : element(reverse(split(":", item.release.task_definition_arn)), 0)])
   native_resume_normalized_buckets = { for item in values(var.native_resume_source_access_releases) : element(reverse(split(":", item.release.task_definition_arn)), 0) => item.release.normalized_bucket }
