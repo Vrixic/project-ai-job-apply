@@ -90,3 +90,11 @@ metadata into Profile's existing platform audit table. Gateway capture and separ
 counts-only maintenance default off. No raw operator subject, body, token, candidate link or new
 public reader is exposed. Apply reviewed capture/maintenance release before claiming enforcement;
 source/local evidence does not activate production audit or certify independent security review.
+
+Private managed maintenance uses `privileged-moderation-audit-retention-lambda.handler` with
+only `{schemaVersion:1, action:"expire"}`. It requires the existing retention flag, canonical
+batch, same-account us-east-2 DATABASE_SECRET_ID ARN and exact numeric Lambda invocation context;
+DATABASE_URL is refused. It pins warm configuration, closes its dedicated expiry-only pool per
+invocation and returns aggregate counts. Build the separate source-bound artifact with
+`pnpm --filter @ai-job-apply/profile-service build:lambda:audit-retention`. Reviewed invocation
+IAM, Secrets extension, scheduling and managed release remain required; nothing is activated.

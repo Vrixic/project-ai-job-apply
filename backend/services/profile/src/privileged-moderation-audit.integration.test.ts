@@ -8,6 +8,10 @@ import {
   PostgresPrivilegedModerationAuditStore,
   privilegedModerationActions,
 } from "./privileged-moderation-audit.js";
+import {
+  createPrivilegedModerationAuditRetentionLambda,
+  createPrivilegedModerationAuditRetentionRuntime,
+} from "./privileged-moderation-audit-retention-lambda.js";
 
 const requested = process.env.PRIVILEGED_MODERATION_AUDIT_INTEGRATION === "1";
 const url = process.env.PRIVILEGED_MODERATION_AUDIT_TEST_DATABASE_URL;
@@ -120,5 +124,51 @@ describe.runIf(requested)("owning audit capture/365-day expiry with real Postgre
     expect(counts.reduce((a, b) => a + b, 0)).toBe(5);
     expect(counts.every((n) => n <= 3)).toBe(true);
     expect(await sql`SELECT id FROM platform.audit_events`).toHaveLength(0);
+  });
+  it("composes the private Lambda with real bounded owner expiry and withdrawal rollback", async () => {
+    for (let index = 0; index < 3; index++) await store.record(input());
+    await sql`UPDATE platform.audit_events SET occurred_at=clock_timestamp()-interval '366 days'`;
+    const target = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-audit-expiry:9";
+    const env = {
+      PRIVILEGED_MODERATION_AUDIT_RETENTION_ENABLED: "true",
+      PRIVILEGED_MODERATION_AUDIT_RETENTION_BATCH_LIMIT: "2",
+      AWS_REGION: "us-east-2",
+      PLATFORM_AWS_ACCOUNT_ID: "123456789012",
+      AWS_LAMBDA_FUNCTION_NAME: "synthetic-audit-expiry",
+      AWS_LAMBDA_FUNCTION_VERSION: "9",
+      AWS_SESSION_TOKEN: "synthetic-session",
+      DATABASE_SECRET_ID: "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-audit-db",
+    };
+    const request = { schemaVersion: 1, action: "expire" },
+      context = { invokedFunctionArn: target };
+    const options = {
+      environment: () => env,
+      resolveDatabaseUrl: async () => {
+        if (!url) throw Error("SyntheticAuditDatabaseUnavailable");
+        return url;
+      },
+    };
+    const run = createPrivilegedModerationAuditRetentionLambda(options);
+    expect(await run(request, context)).toEqual({
+      schemaVersion: 1,
+      owner: "profile",
+      privilegedModerationAuditExpired: 2,
+    });
+    expect(await sql`SELECT id FROM platform.audit_events`).toHaveLength(1);
+    let checks = 0;
+    const withdrawn = createPrivilegedModerationAuditRetentionLambda({
+      ...options,
+      createRuntime: (connection, enabled) =>
+        createPrivilegedModerationAuditRetentionRuntime(
+          connection,
+          () => enabled() && ++checks === 1,
+        ),
+    });
+    await expect(withdrawn(request, context)).rejects.toThrow(
+      "PrivilegedModerationAuditRetentionUnavailable",
+    );
+    expect(await sql`SELECT id FROM platform.audit_events`).toHaveLength(1);
+    expect(await run(request, context)).toMatchObject({ privilegedModerationAuditExpired: 1 });
+    expect(await run(request, context)).toMatchObject({ privilegedModerationAuditExpired: 0 });
   });
 });

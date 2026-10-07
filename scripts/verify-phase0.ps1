@@ -36,6 +36,7 @@ Invoke-CheckedCommand "Type checking" { pnpm typecheck }
 Invoke-CheckedCommand "Dependency security regressions" { pnpm test:dependency-security }
 Invoke-CheckedCommand "Tests" { pnpm test }
 Invoke-CheckedCommand "Build" { pnpm build }
+Invoke-CheckedCommand "Privileged moderation audit maintenance isolation" { node --test scripts/tests/privileged-moderation-audit-retention-bundle.test.mjs }
 Invoke-CheckedCommand "Isolated provider bundle dependency isolation" { node --test scripts/tests/isolated-provider-bundle.test.mjs }
 Invoke-CheckedCommand "Response maintenance bundle dependency isolation" { node --test scripts/tests/response-maintenance-bundle.test.mjs }
 Invoke-CheckedCommand "Private preparation port model isolation" { node --test scripts/tests/private-preparation-port-bundle.test.mjs }
