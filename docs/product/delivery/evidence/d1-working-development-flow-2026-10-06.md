@@ -62,3 +62,8 @@ No deployed upload/scan/parse result is claimed from this local fixture check.
 Remaining preference-write and resume-import flow acceptance continues after restoring local web.
 The generated-synthetic-only document boundary and real-resume approval gates stay in force.
 No phase exit, production release or hosted CI/CD acceptance is asserted.
+
+The owner explicitly reconfirms the requested Profile-open and save/reload checks: "done, no
+errors". This is human acceptance of those development browser steps, not an additional automated
+run or evidence of preference writes or resume import. No further sign-in or repeat of these
+accepted steps is requested.

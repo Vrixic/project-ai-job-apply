@@ -795,6 +795,11 @@ crawler policy only after those gates pass.
 | 2026-10-03 | PR #511 merged as `3f142c1`; exact merged-main quality/catalog/PostgreSQL integration/both containers pass. Profile passes 29 PostgreSQL cases; Documents passes 50 and skips 66 opt-in ledger cases. Audit and 65 scanner findings remain blocking. Owner-approved source-only D3-041 fixes the stale publisher SQL arrays and binds every exact name/checksum to the existing 57-migration manifest. Both PowerShell hosts pass 149 executable smoke cases, and the exact updated smoke passes on the unchanged retained diagnostic image under hardened networkless restrictions. Full maintained verification passes, including cached workspace tasks; lint remains at 15 baseline warnings/58 infos, and database opt-ins remain unclaimed. No new build, publisher receipt, scan, database migration, API/frontend/Terraform, publication, deployment or apply. D1 remains In progress behind deployed and external exit gates. | D1-002; D3-040; D3-041 | [Publisher](../../../scripts/publish-development-migration-image.ps1), [smoke tests](../../../scripts/tests/development-migration-runtime-smoke.test.mjs), [merged-main CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479546), [scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479543) |
 
 
+2026-10-06 owner reconfirms Profile access and job save/reload with "done, no errors" in the
+signed-in development browser. These accepted steps need no repeat. Preference writes and resume
+import remain unverified live; D1 remains In progress.
+[Evidence](evidence/d1-working-development-flow-2026-10-06.md).
+
 2026-10-06 working development flow: clean `1a559af2` passes the maintained full verifier
 (38 typecheck, 39 test, 23 build tasks; unchanged lint). The initial run's occupied localhost:3000
 conflict is resolved by stopping only isolated web; all 101 session cases then pass unchanged.

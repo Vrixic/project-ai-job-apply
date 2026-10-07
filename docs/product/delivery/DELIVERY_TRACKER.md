@@ -1,5 +1,10 @@
 # Delivery Tracker
 
+2026-10-06 owner reconfirms Profile access and job save/reload with "done, no errors" in the
+signed-in development browser. These accepted steps need no repeat. Preference writes and resume
+import remain unverified live; D1 remains In progress.
+[Evidence](evidence/d1-working-development-flow-2026-10-06.md).
+
 2026-10-06 D3-079 authenticated scalar readiness passes full verification at `481d5d9f`
 (38 typecheck/39 test/23 build tasks, unchanged lint). All 122 focused, 24 real SQL, 31 Linux,
 11 emitted checks and four actual-image scenarios pass. Migration 0013 is bound into the exact
