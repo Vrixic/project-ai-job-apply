@@ -1795,3 +1795,12 @@ restore pass. [Evidence](evidence/d3-native-resume-generation-ledger-2026-10-07.
 verification follows. Authenticated resume RPC/Jobs/source/launcher/packet/image/client/ATS and
 managed/accountable acceptance remain; D1/D3 stay In progress. No cloud activation, new PR or
 CI/CD. Owned tmpfs fixtures removed, shared volumes retained, Docker/WSL stopped and PC on.
+
+2026-10-07 D3-064/D3-079 native-resume ledger at clean `dcf4a3e0` passes full maintained
+verification: 38 typecheck, 39 test and 23 build tasks, unchanged lint and all emitted/operational
+checks. Exact migration inventories, 177 runtime-smoke cases and 273 release guards include
+0014; separate 15/25 actual SQL suites and 71-migration/93-relation logical restore pass.
+[Evidence](evidence/d3-native-resume-generation-ledger-2026-10-07.md). Authenticated resume
+RPC/Jobs/source/task/packet/image/client/ATS and managed/accountable acceptance remain; D1/D3
+stay In progress. Development web restored, Docker/WSL stopped, shared volumes retained, PC on.
+No deployment/activation, new PR, main merge or hosted CI/CD work.

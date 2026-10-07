@@ -98,3 +98,25 @@ requires exactly 71 migrations/93 relations and the named 0014 file, with manife
 verification unchanged. Its current-image smoke tests and the document migration operator's
 current 0014 success marker are synchronized. This changes inventory recognition, not deployment
 approval or cloud state. A corrected committed-source full rerun follows.
+
+## Full corrected frozen-source verification
+
+Clean source `dcf4a3e07ac2f112a50e205be1df699b6e410d20` passes the original corrected
+`scripts/verify-phase0.ps1` run with matching ARTIFACT_SOURCE_SHA and terminal exit zero.
+All 38 typecheck tasks, 39 workspace test tasks, 23 builds and operational/security/formatting/
+artifact-isolation/Compose/scope checks pass. The new scalar generation-owner emitted isolation
+and bundled default-off refusal pass in the full run. Lint remains zero errors, 15 warnings and
+58 infos. Tracked source stays unchanged while the original verifier is alive. Log:
+`.tmp/d3-native-resume-ledger-full.log`; initial stopped run is retained separately.
+
+The corrected executable migration smoke passes all 177 cases against the exact named 71-
+migration inventory, including missing/extra/replaced/changed SQL and checksum refusal. It is
+source/runtime smoke with generated files, not a newly built/published migration image. The
+actual local 71-migration/93-relation logical restore and 15/25 SQL suites remain separate evidence.
+No hosted CI/CD, managed 0014 migration, native resume production image or deployed acceptance.
+
+Restore the maintained development web against the live development API afterward. D1/D3 remain
+In progress, ADR-040 remains Proposed, and the missing authenticated resume task/RPC/Jobs/source/
+packet/image/client/ATS composition and managed/accountable gates remain explicit. No new PR,
+main merge, publication or cloud activation. Owned containers/dump are removed, shared volumes
+remain, Docker/WSL stay stopped and the PC stays on.
