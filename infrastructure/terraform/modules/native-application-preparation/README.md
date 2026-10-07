@@ -33,7 +33,16 @@ role creation and the original durable CloudFormation stack. Each permission is 
 its original actor role, so sharing the release ceiling does not share actor capabilities.
 This module cannot create or broaden that boundary. Bootstrap must be applied separately first;
 retain each release and its roles until verified drain. Packet encryption and HMAC keys must be distinct from
-the platform key, with separately reviewed key policies. Existing database secret, Parameters
+the platform key. Development/staging can provision the retained pair separately with
+`restricted_packet_keys_provisioned=true`. This creates no preparation runtime or trigger.
+Use `restricted_packet_key_bindings` to populate exact bootstrap/release inputs only after
+reviewing the provisioning result. The symmetric envelope key rotates automatically; the
+`HMAC_256` fingerprint key does not support automatic rotation. Both have thirty-day deletion
+windows and Terraform destruction protection. Key policy delegates to account IAM and denies
+non-packet encryption purposes or non-SHA256 MAC algorithms. Existing exact runtime IAM and
+endpoint policies remain required; key creation alone does not grant actor access. Keep these
+keys through packet retention and original-release drain. Do not replace the HMAC key or change
+a release's key ARN without an explicit retained-data migration design. Existing database secret, Parameters
 and Secrets extension, private SQL/Lambda/SQS/Secrets/KMS reachability and log group are inputs
 or prerequisites. No provider secret, S3 content, ECS or PassRole grant reaches these roles.
 The original launcher, owner RPC, native cover-letter task/image, provider access and DNS/TLS

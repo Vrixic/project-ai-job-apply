@@ -55,3 +55,13 @@ output "native_preparation_bindings" {
     rule_arns            = runtime.rule_arns
   } }
 }
+
+variable "restricted_packet_keys_provisioned" {
+  description = "Create retained packet keys before binding a preparation release; does not activate runtime."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+output "restricted_packet_key_bindings" {
+  value = module.platform.restricted_packet_key_bindings
+}

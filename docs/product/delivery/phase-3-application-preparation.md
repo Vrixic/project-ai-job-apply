@@ -2312,3 +2312,10 @@ coexistence plan and six preparation/restore mock scenarios pass; both environme
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#kms-private-dns-coexistence).
 No cloud action; packet keys and managed native task/owner/route composition remain. D1/D3
 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 development/staging can separately provision retained packet envelope and HMAC
+fingerprint keys, default off, with exact output bindings, purpose/algorithm restrictions and
+Terraform destruction protection. Three key and four preparation/coexistence mock scenarios
+pass; both environments validate. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#retained-packet-key-provisioning).
+No keys provisioned or runtime activated. Native packet-owner/task/route composition and managed
+acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.

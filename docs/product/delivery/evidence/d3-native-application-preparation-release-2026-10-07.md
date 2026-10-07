@@ -174,3 +174,28 @@ future native packet owners must still be connected explicitly; D1/D3 remain In 
 
 All 51 existing serverless-runtime Terraform mock scenarios also pass after this change
 (`.tmp/d3-preparation-kms-existing-tests.log`), for 58 passing scenarios in this batch.
+
+## Retained packet-key provisioning
+
+Development and staging now expose default-off `restricted_packet_keys_provisioned` separately
+from release activation. The platform creates a dedicated symmetric encryption key and an
+HMAC_256 / GENERATE_VERIFY_MAC key, matching the runtime's AES-256 envelope data keys and
+HMAC_SHA_256 fingerprints. Key bindings are outputs for the reviewed bootstrap/release inputs;
+provisioning does not activate callers, queues, endpoints or a preparation release. Both keys
+have thirty-day deletion windows and Terraform destruction protection. Encryption rotation is
+enabled; HMAC rotation is deliberately omitted, consistent with
+[AWS HMAC documentation](https://docs.aws.amazon.com/kms/latest/developerguide/hmac.html).
+
+Account IAM delegation follows the platform's existing key ownership model. An explicit deny
+rejects other envelope encryption purposes (including missing context), while the fingerprint
+key rejects other MAC algorithms. No caller-specific allow is added by provisioning; actor IAM,
+boundaries and endpoint grants remain independently required. The two packet keys are separate
+resources from each other, the shared platform CMK and the restricted-answer vault key.
+
+Three key-provisioning mock scenarios pass: empty default, correctly typed/purpose-bound keys
+without activation, and refusal without the retained data plane. The four preparation/KMS
+coexistence scenarios also pass. Both environments validate with Terraform 1.16.2/AWS provider
+6.58.0; formatting, serverless policy validation and whitespace checks pass. This is source/mock
+evidence, not provisioned keys or effective KMS/network acceptance. No cloud change or CI/CD
+work. Packet-owner/native-task/route composition and managed acceptance remain; D1/D3 In progress.
+Docker/WSL remain stopped and PC on.
