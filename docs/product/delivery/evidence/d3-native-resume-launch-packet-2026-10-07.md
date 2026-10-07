@@ -625,3 +625,28 @@ assertion mismatch) were corrected before final pass. No AWS calls or managed pr
 Actual policy evaluation, alert receipt and authorized replay still require release acceptance.
 The README records replay against the original numeric observer and explicit unresolved handling
 when fresh terminal evidence is unavailable. This queue cannot recover missing source events.
+
+
+## Consistent six-artifact release checkpoint
+
+The NativeResume package command already compiles Workflows and its workspace dependencies before
+packaging; it does not share the audit command's prior compilation omission. The complete family
+now builds from clean `15185a12b525cf5fa4186ead9986d93432212411`, including the event-capable observer. All bundled
+refusal checks pass. The actual publisher's local reader validates the 24 ZIP/manifest/SBOM/
+checksum files and source markers; a second emission has the identical full fingerprint.
+
+| Artifact | ZIP SHA-256 | Bytes |
+|---|---|---|
+| native-resume-owner-rpc-lambda | `b39ff7f576eaca43f3493fe54181e5af829110ba54a16860da3ad9df3dce50ca` | 158279 |
+| native-resume-source-rpc-lambda | `7e1ce26c4828b24ed691751bbaef337f82fdd8625ead24d89353832c017fffaa` | 393571 |
+| native-resume-preparation-control-lambda | `c255eaa7fb936f78463c82808a57fa7541c8fd94995ff968dc788b4d38cb76c7` | 381538 |
+| native-resume-preparation-durable-lambda | `f3a7c1a92a059edb606d70c1e61c97c2a8af8317addd08de141c3e17a8d436f8` | 265662 |
+| native-resume-request-dispatch-lambda | `301ecbd9878359bb1782a2ba2e912f4fadfac48010200aaf41c454a6f378278c` | 515893 |
+| native-resume-task-observer-lambda | `8e25e090b2c0ac963e888eb239ec710a98dc1882b4d36e4f48bfab4f588290a1` | 386140 |
+
+Logs: `.tmp/d3-resume-current-family-build.log`, `.tmp/d3-resume-current-family-readback.log`;
+local receipt `.tmp/d3-resume-publication-local-receipt.json`. No tracked edits occurred during
+build/readback. This replaces the previous mixed local artifact directory as a same-source
+candidate; it does not supersede historical receipts or claim a fresh audit/full verifier run.
+Zero cloud calls; publication, effective IAM/event delivery, DNS/TLS/browser routing and managed
+acceptance remain. D1/D3 stay In progress and ADR-040 stays Proposed.

@@ -2105,3 +2105,10 @@ Two platform mocked cases and three per environment pass; environment validation
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#observer-failure-retention).
 Effective managed permissions/alert delivery and missed-event recovery remain unverified.
 No cloud action; D1/D3 remain In progress and PC on.
+
+
+2026-10-07 D3-064/D3-079 rebuilds the complete six-artifact NativeResume family from clean
+`15185a12`. Compilation, emitted refusal checks, actual publisher readback of 24 files and
+byte-identical repeat emission pass. The event-capable observer now shares the family source.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#consistent-six-artifact-release-checkpoint).
+No cloud calls or fresh audit claim; managed routing/release/acceptance remain. D1/D3 In progress.

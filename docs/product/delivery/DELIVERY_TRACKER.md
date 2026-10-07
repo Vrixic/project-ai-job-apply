@@ -4694,3 +4694,10 @@ No fresh audit, publication or deployment claim; D1/D3 remain In progress and PC
 Gateway release flag, default-off and requiring scheduled retention. Six mocked audit release
 cases pass; both environment roots validate. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#audit-capture-release-flag).
 Managed capture/expiry/alert acceptance remains. No activation, D1/D3 In progress and PC on.
+
+
+2026-10-07 D3-064/D3-079 rebuilds the complete six-artifact NativeResume family from clean
+`15185a12`. Compilation, emitted refusal checks, actual publisher readback of 24 files and
+byte-identical repeat emission pass. The event-capable observer now shares the family source.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#consistent-six-artifact-release-checkpoint).
+No cloud calls or fresh audit claim; managed routing/release/acceptance remain. D1/D3 In progress.
