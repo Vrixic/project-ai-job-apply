@@ -1,6 +1,7 @@
 import {
   type NativeTaskLaunchConfiguration,
   nativeLaunchedTask,
+  nativeMaterialLaunchEnvironment,
   nativeTaskLaunchConfiguration,
   nativeTaskLaunchScope as scope,
   validateNativeTaskDefinition,
@@ -79,20 +80,6 @@ function checkedRecord(
     )
       throw unavailable();
   } else if (record.intent.state !== "pending") throw unavailable();
-}
-function originalEnvironment(
-  fixed: NativeMaterialLaunchScope,
-  original: NativeMaterialLaunchRecord["original"],
-) {
-  return [
-    { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: fixed.allocationId },
-    { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: fixed.ownerUserId },
-    { name: "NATIVE_MATERIAL_APPLICATION_ID", value: fixed.applicationId },
-    { name: "NATIVE_MATERIAL_GENERATION_ID", value: fixed.generationId },
-    { name: "NATIVE_MATERIAL_EPOCH_ID", value: fixed.epochId },
-    { name: "NATIVE_MATERIAL_WORK_ID", value: original.id },
-    { name: "NATIVE_MATERIAL_REQUEST_SHA256", value: original.requestSha256 },
-  ];
 }
 /** Private control-plane launcher only. No content, provider, SQL driver, credential issuer,
  * task listing or stop/settlement capability. Registry ports must be owning/authenticated.
@@ -228,7 +215,7 @@ export function createNativeTaskLaunch(options: {
               containerOverrides: [
                 {
                   name: config.containerName,
-                  environment: originalEnvironment(fixed, record.original),
+                  environment: nativeMaterialLaunchEnvironment(fixed, record.original),
                 },
               ],
             },
@@ -240,7 +227,7 @@ export function createNativeTaskLaunch(options: {
           response,
           fixed,
           config,
-          originalEnvironment(fixed, record.original),
+          nativeMaterialLaunchEnvironment(fixed, record.original),
         );
         const bound = await registry.bindTask(allocation);
         if (!bound.allocation || bound.allocation.taskArn !== allocation.taskArn)
@@ -261,7 +248,7 @@ export function createNativeTaskLaunch(options: {
         response,
         fixed,
         config,
-        originalEnvironment(fixed, record.original),
+        nativeMaterialLaunchEnvironment(fixed, record.original),
         taskArn,
       );
       const bound = await registry.bindTask(allocation);

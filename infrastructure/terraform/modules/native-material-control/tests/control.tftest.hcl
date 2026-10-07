@@ -105,3 +105,12 @@ override_resource {
   target = aws_cloudwatch_event_rule.task[0]
   values = { arn = "arn:aws:events:us-east-2:123456789012:rule/ai-job-apply-development-material-event-r1" }
 }
+
+run "explicit_public_task_network_keeps_launch_disabled" {
+  command = plan
+  variables { task_public_ip_enabled = true }
+  assert {
+    condition     = output.launch_configuration.assignPublicIp == "ENABLED" && aws_lambda_function.launch[0].environment[0].variables.NATIVE_MATERIAL_NEW_LAUNCH_ENABLED == "false" && aws_cloudwatch_event_rule.task[0].state == "DISABLED"
+    error_message = "Public task configuration must not activate launches, recovery or DNS."
+  }
+}

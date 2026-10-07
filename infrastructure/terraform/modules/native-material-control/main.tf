@@ -90,7 +90,7 @@ locals {
   task_role            = "arn:aws:iam::${var.account_id}:role/ai-job-apply-${var.environment}-native-material-r${local.revision}-task"
   execution_role       = "arn:aws:iam::${var.account_id}:role/ai-job-apply-${var.environment}-native-material-r${local.revision}-execution"
   deployment           = local.deployed ? { clusterArn = var.release.cluster_arn, taskDefinitionArn = var.release.task_definition_arn, containerName = "native-material" } : null
-  launch_configuration = local.deployed ? merge(local.deployment, { image = "${var.account_id}.dkr.ecr.us-east-2.amazonaws.com/${var.release.image_repository}@sha256:${var.release.image_sha256}", taskRoleArn = local.task_role, executionRoleArn = local.execution_role, cpu = "256", memory = "512", subnets = var.release.task_subnet_ids, securityGroups = var.release.task_security_group_ids, assignPublicIp = "DISABLED" }) : null
+  launch_configuration = local.deployed ? merge(local.deployment, { image = "${var.account_id}.dkr.ecr.us-east-2.amazonaws.com/${var.release.image_repository}@sha256:${var.release.image_sha256}", taskRoleArn = local.task_role, executionRoleArn = local.execution_role, cpu = "256", memory = "512", subnets = var.release.task_subnet_ids, securityGroups = var.release.task_security_group_ids, assignPublicIp = var.task_public_ip_enabled ? "ENABLED" : "DISABLED" }) : null
   common               = { PLATFORM_AWS_ACCOUNT_ID = var.account_id }
 }
 data "aws_caller_identity" "current" { count = local.deployed ? 1 : 0 }
@@ -294,3 +294,14 @@ resource "aws_cloudwatch_event_target" "task" {
 }
 output "task_event_rule_arn" { value = local.deployed ? aws_cloudwatch_event_rule.task[0].arn : null }
 output "event_dead_letter_arn" { value = local.event_dead_letter_arn }
+
+variable "task_public_ip_enabled" {
+  description = "Original direct-TLS task networking; requires separately reviewed public subnet, ingress and routing. Does not activate launches."
+  type        = bool
+  default     = false
+  nullable    = false
+  validation {
+    condition     = !var.task_public_ip_enabled || var.release != null
+    error_message = "Public task networking requires an original release."
+  }
+}

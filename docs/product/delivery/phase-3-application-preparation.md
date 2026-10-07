@@ -2368,3 +2368,11 @@ and SQL separation are implemented. Seven new scenarios plus fifteen affected ex
 pass; development/staging validate locally. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-private-network).
 Managed reachability, image/provider/read-route acceptance remain. D1/D3 In progress; no cloud
 activation, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 native material address discovery binds the current cover-letter receipt and original
+launch to signed task/ENI metadata, sharing resume network validation. Original work, admission
+and task identity are rechecked after observation. Public task IP configuration is explicitly
+optional/default-off. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-address-discovery).
+Route-owner/DNS lifecycle and managed composition remain; D1/D3 In progress. No cloud action,
+CI/CD deferred, Docker/WSL stopped and PC on.

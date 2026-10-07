@@ -73,3 +73,11 @@ Task definitions must set `linuxParameters.initProcessEnabled: true` (local Dock
 actual image probe showed its SIGKILL timer did not terminate Node running as namespace PID 1.
 The shared launcher refuses missing/disabled init before claiming work. This is a task runtime
 requirement; it does not establish managed retirement or all-copy deletion evidence.
+
+
+The Documents private `native-material-task-address` port now checks the original launch and
+current ready receipt around signed ECS/EC2 reads. Resume and cover-letter observation share the
+same task/image/ENI/public-address validation. This supplies scalar address discovery only;
+it is not yet composed into the material route owner/durable DNS lifecycle or its managed IAM.
+The control Terraform module exposes a default-false public-IP launch setting for a reviewed
+direct-TLS task network. No route or production activation follows from that setting alone.

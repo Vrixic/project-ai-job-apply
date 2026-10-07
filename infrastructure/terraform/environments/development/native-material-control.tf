@@ -18,10 +18,11 @@ variable "native_material_control_releases" {
       task_subnet_ids         = list(string)
       task_security_group_ids = list(string)
     })
-    owner_enabled      = optional(bool, false)
-    control_enabled    = optional(bool, false)
-    recovery_enabled   = optional(bool, false)
-    new_launch_enabled = optional(bool, false)
+    task_public_ip_enabled = optional(bool, false)
+    owner_enabled          = optional(bool, false)
+    control_enabled        = optional(bool, false)
+    recovery_enabled       = optional(bool, false)
+    new_launch_enabled     = optional(bool, false)
   }))
   default  = {}
   nullable = false
@@ -31,16 +32,17 @@ variable "native_material_control_releases" {
   }
 }
 module "native_material_control" {
-  depends_on         = [module.platform]
-  for_each           = var.native_material_control_releases
-  source             = "../../modules/native-material-control"
-  account_id         = module.platform.account_id
-  environment        = "development"
-  release            = each.value.release
-  owner_enabled      = each.value.owner_enabled
-  control_enabled    = each.value.control_enabled
-  recovery_enabled   = each.value.recovery_enabled
-  new_launch_enabled = each.value.new_launch_enabled
+  depends_on             = [module.platform]
+  for_each               = var.native_material_control_releases
+  source                 = "../../modules/native-material-control"
+  account_id             = module.platform.account_id
+  environment            = "development"
+  release                = each.value.release
+  task_public_ip_enabled = each.value.task_public_ip_enabled
+  owner_enabled          = each.value.owner_enabled
+  control_enabled        = each.value.control_enabled
+  recovery_enabled       = each.value.recovery_enabled
+  new_launch_enabled     = each.value.new_launch_enabled
 }
 output "native_material_control_bindings" {
   value = { for id, control in module.native_material_control : id => { functions = control.functions, event_rule_arn = control.task_event_rule_arn, dead_letter_arn = control.event_dead_letter_arn, role_arns = control.role_arns, launch_configuration = control.launch_configuration } }

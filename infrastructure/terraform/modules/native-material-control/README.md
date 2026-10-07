@@ -15,7 +15,7 @@ secret; its only control capability is invoking the numeric original launcher, a
 runtime emits recover requests only. All three deny object-store access. No provider secret is
 provided to a control Lambda.
 
-The original image, task revision, roles, CPU/memory, container name and private network are
+The original image, task revision, roles, CPU/memory, container name and task network are
 encoded into the launch configuration. Owner identity uses that same task role/deployment.
 Source/hash/version-bound artifacts use `lambda/documents/native-material/control/`; the guarded publisher selects the three-artifact/twelve-object family with
 `-ArtifactFamily NativeMaterialControls`. The family builder preserves standalone artifact
@@ -37,9 +37,17 @@ provided by the platform, with delivery, destination, queue and function alarms.
 is created here. The image, provider
 egress, task read route and controlled image/release publication remain separate prerequisites.
 
-Six mocked Terraform scenarios cover absence, original role/environment restrictions, recovery
+Seven mocked Terraform scenarios cover absence, original role/environment restrictions, recovery
 without new launches, activation prerequisites, foreign bindings and null-release refusal.
 Both environments validate, and the generated launch configuration passes the actual compiled
 runtime validator. These checks do not prove live AWS permissions or execution. Retain original
 versions, roles, task definitions and secrets until verified drain; disabling new launch does
 not authorize deleting them.
+
+
+`task_public_ip_enabled` defaults false. An explicitly reviewed direct-TLS release can set it
+true without enabling launch/recovery or creating DNS/ingress. Its subnets must have the reviewed
+public route and its task groups must remain separate from SQL groups. This is immutable launch
+configuration: retain the original configuration for recovery rather than changing it for an
+already claimed generation. Address discovery, route ownership, EC2 endpoint/IAM grants and DNS
+lifecycle composition remain separate from this switch.

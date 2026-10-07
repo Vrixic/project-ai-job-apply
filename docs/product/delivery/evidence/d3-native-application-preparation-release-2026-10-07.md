@@ -368,3 +368,29 @@ RPC, four resume secrets, three preparation). Both development and staging valid
 checks pass. Mock tests inspect generated configuration and policy statements with simulated AWS
 resources, not live connectivity or effective managed IAM. No cloud changes were made.
 Image/provider/read-route composition and managed acceptance remain; D1/D3 In progress.
+
+
+## Native material address discovery
+
+The missing cover-letter address port now reads the original claimed launch configuration and
+current ready receipt, validates signed ECS task/image/overrides and exact EC2 interface,
+account/subnet/groups/public IPv4, then repeats task and owning admission checks. A changed work
+binding, retirement, withdrawn readiness, expired reference, timeout or mismatch withholds the
+result. Return values contain only original allocation/task/interface/address/expiry metadata.
+The existing resume reader now uses the same AWS observation implementation; its original
+ledger-specific admission remains separate. Launcher and observer share the exact cover-letter
+scalar override constructor to prevent differing work identities.
+
+The control module and both environments expose `task_public_ip_enabled`, false by default.
+Explicit public task networking changes only the pinned launch configuration, not launch flags,
+security-group ingress or DNS. Public subnets, provider reachability, route-owner composition,
+EC2 IAM/private endpoint access and checkpointed DNS create/remove lifecycle still need connection
+and managed verification. This work does not claim the download path is functional end to end.
+
+Local verification: 119 material/resume address and launcher tests pass with synthetic owner/AWS
+ports. Seven control Terraform mock scenarios pass; development and staging validate. Documents
+compilation and touched-file Biome checks pass. No database schema or persistence implementation
+changed. No AWS publication, deployment or activation; D1/D3 remain In progress.
+
+Eight emitted control/resume capability checks also pass after compiling Documents; the sixteen
+new material address cases pass again after the test-only TypeScript correction.

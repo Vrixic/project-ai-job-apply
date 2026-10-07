@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-material-task-address": {
+      "types": "./dist/src/native-material-task-address.d.ts",
+      "default": "./dist/src/native-material-task-address.js"
+    },
     "./native-resume-route-policy": {
       "types": "./dist/src/native-resume-route-policy.d.ts",
       "default": "./dist/src/native-resume-route-policy.js"
