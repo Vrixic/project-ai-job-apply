@@ -65,6 +65,10 @@ run "absent_by_default" {
 run "connected_release_is_disabled" {
   command = apply
   assert {
+    condition     = aws_iam_role.runtime["control"].permissions_boundary == "arn:aws:iam::123456789012:policy/ai-job-apply-development-resume-control-r7-boundary" && aws_iam_role.runtime["dispatch"].permissions_boundary == local.boundary && aws_iam_role.runtime["durable"].permissions_boundary == local.boundary
+    error_message = "Only control uses the original release's separate launch ceiling."
+  }
+  assert {
     condition     = aws_lambda_function.control[0].environment[0].variables.NATIVE_RESUME_NEW_LAUNCH_ENABLED == "false" && aws_lambda_function.control[0].environment[0].variables.NATIVE_RESUME_PREPARATION_CONTROL_ENABLED == "false" && aws_lambda_function.dispatch[0].environment[0].variables.NATIVE_RESUME_REQUEST_DISPATCH_ENABLED == "false" && aws_cloudwatch_event_rule.dispatch[0].state == "DISABLED"
     error_message = "Deployment must not activate work."
   }

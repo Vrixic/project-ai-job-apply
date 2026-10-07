@@ -97,3 +97,12 @@ files retain their old pin and must not be used for cloud planning during this l
 - `modules/native-resume-source-access/` supplies an unattached owner/source Lambda pair with separate bounded roles and disabled runtime defaults.
 
 - `modules/native-resume-preparation/` supplies unattached private control, durable and dispatcher release wiring with disabled launch/schedule defaults.
+
+
+Native resume control IAM is opt-in through bootstrap `native_resume_control_releases`, keyed by
+original task revision with exact cluster, database secret and platform key. Each entry creates a
+separate principal-bound ceiling and exact deployment permissions; the shared workload boundary
+is unchanged. Keep original entries until trusted drain. The preparation module expects that
+boundary before role creation. Empty input preserves current bootstrap behavior. Policy-size
+validation rejects a combined deployment policy over 6144 characters; do not remove unresolved
+releases to fit a new one. No environment currently enables these inputs.

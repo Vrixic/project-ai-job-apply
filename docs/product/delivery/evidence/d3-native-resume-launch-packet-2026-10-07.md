@@ -382,3 +382,26 @@ reviewed delta. Network/TLS routing, effective policies, original-version drain 
 ATS/accountable acceptance remain. The module README records immutable-version gate semantics.
 No publication, deployment, activation or Docker use. D1/D3 In progress and ADR-040 Proposed;
 CI/CD remains deferred until launch and PC on.
+
+
+## Original-control bootstrap permission sources
+
+The optional bootstrap `native_resume_control_releases` map now supplies a dedicated boundary
+for each original control revision. Every statement matches the exact control principal; launch
+is limited to the original task definition/cluster, recovery to that cluster's tasks and PassRole
+to the two original task roles through ECS. Only exact owning secret/key access and existing
+log/VPC operations accompany it. The shared workload boundary gains no launch or PassRole action.
+The preparation module selects this dedicated boundary only for control.
+
+Deployment-role policy source permits creation of that exact control role with its exact boundary,
+read-only inspection of that boundary and management of the original durable stack. Empty input
+adds no policies or permissions. No GitHub workflow, CI/CD job or cloud resource was changed.
+Original release entries must remain until trusted drain. A size precondition rejects oversized
+combined deployment policies rather than silently dropping original permissions.
+
+Terraform 1.16.2 validation and seven bootstrap tests pass, including four pre-existing cases,
+default absence, original scope/size and foreign-secret rejection. The six preparation tests
+also pass with the exact dedicated boundary check. Log: `.tmp/d3-native-resume-boundary-tests.log`.
+All providers are mocked for tests; no effective managed permission or deployment is established.
+Both environment inputs remain unchanged. Actual bootstrap/module application, private routing,
+managed end-to-end and accountable acceptance remain; D1/D3 In progress and ADR-040 Proposed.

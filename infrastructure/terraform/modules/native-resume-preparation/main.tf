@@ -119,7 +119,7 @@ data "aws_region" "current" { count = local.deployed ? 1 : 0 }
 resource "aws_iam_role" "runtime" {
   for_each             = local.actors
   name                 = local.names[each.key]
-  permissions_boundary = local.boundary
+  permissions_boundary = each.key == "control" ? "arn:aws:iam::${var.account_id}:policy/${local.names.control}-boundary" : local.boundary
   assume_role_policy   = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Principal = { Service = "lambda.amazonaws.com" } }] })
 }
 resource "aws_iam_role_policy" "runtime" {

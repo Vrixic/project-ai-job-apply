@@ -2002,3 +2002,11 @@ mocked cases pass; emitted launch JSON passes the actual Documents configuration
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Managed boundary/deployment-role
 updates, network/TLS routing, release composition and acceptance remain; no cloud action.
 D1/D3 In progress, ADR-040 Proposed, CI/CD deferred and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds opt-in bootstrap IAM for original native resume controls: a separate
+principal/task/cluster-bound ceiling and exact role-creation/durable-stack deployment permissions.
+The shared workload boundary is unchanged; empty input adds nothing. Seven bootstrap checks and
+six preparation checks pass, including original-role scope and policy size. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+No cloud or CI/CD action. Environment composition, effective IAM, routing and managed acceptance
+remain; D1/D3 In progress, ADR-040 Proposed and PC on.

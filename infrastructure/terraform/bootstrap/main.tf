@@ -96,7 +96,7 @@ locals {
 
   github_deploy_policy = {
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid      = "TerraformStateBucket"
         Effect   = "Allow"
@@ -276,7 +276,7 @@ locals {
           }
         }
       }
-    ]
+    ], local.native_resume_deploy_statements)
   }
 }
 

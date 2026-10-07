@@ -36,9 +36,10 @@ its work is unresolved; permission retargeting can break retained versions.
 Inputs require the three immutable artifact receipts, original image/task, existing secret/key,
 extension and distinct task/Lambda network identifiers. Required external dependencies include
 private database/ECS/Lambda/Secrets Manager reachability, image pull and task TLS/read routing,
-resource/key policies, migrations and release acceptance. Existing workload boundaries are
-attached unchanged and do not yet supply the native control's RunTask/PassRole permissions.
-Deployment-role CloudFormation scope also requires a reviewed update before managed release.
+resource/key policies, migrations and release acceptance. Control requires the dedicated original-release boundary supplied by bootstrap
+`native_resume_control_releases`; other actors retain the shared workload boundary. The optional
+bootstrap input also supplies exact role-creation and durable-stack deployment permissions.
+Those source changes require separate review/application before managed release.
 This module alone cannot activate a working cloud path.
 
 Local Terraform 1.16.2 validation and six mocked tests cover absence, connected numeric versions,
