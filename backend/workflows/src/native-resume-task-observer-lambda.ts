@@ -8,6 +8,7 @@ import {
   nativeTaskLaunchScope,
 } from "@ai-job-apply/documents-service/native-task-launch-policy";
 import { resolveLambdaDatabaseUrl } from "@ai-job-apply/profile-service";
+import { nativeResumeStoppedTaskEvent } from "./native-resume-task-event.js";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 const unavailable = () => Error("NativeResumeTaskObserverUnavailable");
@@ -112,12 +113,18 @@ export function createNativeResumeTaskObserverLambda(
   };
   return async (raw: unknown, context: { invokedFunctionArn: string }) => {
     try {
-      const scope = request(raw);
       const env = environment(),
         config = configuration(env),
         key = JSON.stringify(config);
       if (context?.invokedFunctionArn !== config.target || (pinned !== undefined && pinned !== key))
         throw unavailable();
+      const isEvent =
+        raw !== null &&
+        typeof raw === "object" &&
+        Object.getOwnPropertyDescriptor(raw, "source")?.value === "aws.ecs";
+      const hint = isEvent
+        ? nativeResumeStoppedTaskEvent(raw, config.task)
+        : { scope: request(raw), taskArn: undefined };
       if (!startup) {
         pinned = key;
         startup = (async () => {
@@ -142,7 +149,7 @@ export function createNativeResumeTaskObserverLambda(
         throw unavailable();
       }
       if (!enabled()) throw unavailable();
-      const result = await runtime.observe(scope);
+      const result = await runtime.observe(hint.scope, hint.taskArn);
       if (!enabled()) throw unavailable();
       return result;
     } catch {

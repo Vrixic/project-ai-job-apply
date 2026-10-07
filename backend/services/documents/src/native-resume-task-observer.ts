@@ -32,7 +32,7 @@ export function createNativeResumeTaskObserver(options: {
   };
   let active = false;
   return Object.freeze({
-    async observe(input: NativeResumeGenerationScope) {
+    async observe(input: NativeResumeGenerationScope, expectedTaskArn?: string) {
       if (active) throw unavailable();
       const scope = nativeTaskLaunchScope(input);
       check();
@@ -48,6 +48,8 @@ export function createNativeResumeTaskObserver(options: {
           record.allocationId !== scope.allocationId ||
           record.configurationSha256 !== sha
         )
+          throw unavailable();
+        if (expectedTaskArn !== undefined && allocation.taskArn !== expectedTaskArn)
           throw unavailable();
         nativeTaskAllocationRegion(allocation);
         for (const key of ["ownerUserId", "applicationId", "generationId", "allocationId"] as const)

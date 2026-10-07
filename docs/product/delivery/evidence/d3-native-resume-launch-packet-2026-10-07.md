@@ -553,3 +553,20 @@ claim, publication, deployment or activation. Current source-bound ZIP inventory
 | native-resume-preparation-durable-lambda | `915f5236b9325cfb7bf53ff6cf2ba2d6879f61a5d01c02410ff6f0fd3a43d96c` | 265661 |
 | native-resume-request-dispatch-lambda | `7ed548fb7bb6960b24a02a1b1663494fbd14d921c51479777fb97249ea2944d3` | 515891 |
 | native-resume-task-observer-lambda | `9892beea70ecf77347ef9ae5c8e56ac0f35e796961a18a51af0561f16e3ea8bb` | 384729 |
+
+
+## Stopped-event input to private observer
+
+The observer Lambda now accepts an inert bounded ECS Task State Change STOPPED envelope as an
+alternative to the strict private observe request. Parsing checks account/region, cluster,
+original task definition, task/resource ARN, Fargate envelope, six exact launch overrides and
+configuration digest. Accessors, duplicate/extra overrides and foreign/configuration drift are
+rejected before secret resolution. The resulting scope/task is only a hint: the observer reads
+the original SQL allocation, compares the hinted task before ECS access and obtains its own
+fresh terminal receipt. Event timestamps/status never become a retirement receipt.
+
+Eighteen Lambda cases and 58 observer/retirement cases pass, including seven event cases and a
+foreign-task hint refused before ECS/persistence. Documents and Workflows builds and changed-file
+Biome pass. These use synthetic event/ECS/registry fixtures; prior SQL evidence is unchanged.
+No EventBridge resource, public endpoint, permissions or trigger was activated. Exact numeric
+rule routing, delivery retry/retention, managed IAM and AWS acceptance remain to be composed.

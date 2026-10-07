@@ -2073,3 +2073,11 @@ Frozen-source family build/readback follows. No publication or deployment; D1/D3
 publisher local readback of all twenty-four files. Second emission is byte-identical, including
 the corrected observer. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
 Zero cloud calls; publication, observer IAM/delivery and managed acceptance remain. D1/D3 In progress.
+
+
+2026-10-07 D3-064/D3-079 connects strict stopped-task event hints to the private observer. Account,
+cluster, original definition, six launch overrides and configuration hash are checked before
+secret access; the hinted task must match SQL before fresh ECS observation. Eighteen Lambda and
+58 observer/retirement cases pass with Documents/Workflows builds and changed-file Biome.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). EventBridge rule/IAM/delivery and
+managed acceptance remain; no cloud activation, D1/D3 In progress and PC on.

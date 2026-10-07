@@ -1,3 +1,8 @@
+import { createHash } from "node:crypto";
+import {
+  type NativeTaskLaunchConfiguration,
+  nativeTaskLaunchConfiguration,
+} from "@ai-job-apply/documents-service/native-task-launch-policy";
 import { expect, it, vi } from "vitest";
 import { createNativeResumeTaskObserverLambda } from "./native-resume-task-observer-lambda.js";
 
@@ -58,7 +63,7 @@ it("lazily composes only qualified observation and reuses the runtime", async ()
   await x.handler(input, { invokedFunctionArn: target });
   expect(x.resolve).toHaveBeenCalledOnce();
   expect(x.runtime).toHaveBeenCalledOnce();
-  expect(x.observe).toHaveBeenCalledWith(scope);
+  expect(x.observe).toHaveBeenCalledWith(scope, undefined);
 });
 it.each(["disabled", "unqualified", "foreign", "secret", "ambient"])(
   "rejects %s configuration before secret access",
@@ -127,3 +132,80 @@ it("withdrawal during secret access prevents runtime creation", async () => {
   await expect(x.handler(input, { invokedFunctionArn: target })).rejects.toThrow();
   expect(x.runtime).not.toHaveBeenCalled();
 });
+
+function stoppedEvent() {
+  const configuration = nativeTaskLaunchConfiguration(config as NativeTaskLaunchConfiguration);
+  const hash = createHash("sha256")
+    .update(JSON.stringify({ protocol: "native-resume-launch.v1", ...configuration }))
+    .digest("hex");
+  const taskArn = "arn:aws:ecs:us-east-2:123456789012:task/resume/12345678901234567890123456789012";
+  return {
+    version: "0",
+    id: "12345678-1234-1234-1234-123456789012",
+    source: "aws.ecs",
+    "detail-type": "ECS Task State Change",
+    account: "123456789012",
+    region: "us-east-2",
+    time: "2026-10-07T12:00:00Z",
+    resources: [taskArn],
+    detail: {
+      taskArn,
+      clusterArn: config.clusterArn,
+      taskDefinitionArn: config.taskDefinitionArn,
+      lastStatus: "STOPPED",
+      launchType: "FARGATE",
+      platformVersion: "1.4.0",
+      enableExecuteCommand: false,
+      startedBy: scope.allocationId,
+      overrides: {
+        containerOverrides: [
+          {
+            name: config.containerName,
+            environment: [
+              { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: scope.ownerUserId },
+              { name: "NATIVE_MATERIAL_APPLICATION_ID", value: scope.applicationId },
+              { name: "NATIVE_MATERIAL_GENERATION_ID", value: scope.generationId },
+              { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: scope.allocationId },
+              { name: "NATIVE_MATERIAL_EPOCH_ID", value: scope.epochId },
+              { name: "NATIVE_RESUME_CONFIGURATION_SHA256", value: hash },
+            ],
+          },
+        ],
+      },
+    },
+  };
+}
+it("forwards a stopped-event hint only to original task observation", async () => {
+  const x = setup(),
+    event = stoppedEvent();
+  await expect(x.handler(event, { invokedFunctionArn: target })).resolves.toMatchObject({
+    outcome: "retired",
+  });
+  expect(x.observe).toHaveBeenCalledWith(scope, event.detail.taskArn);
+});
+it.each(["account", "task", "running", "hash", "duplicate", "getter"])(
+  "rejects %s event before secrets or SQL",
+  async (kind) => {
+    const x = setup(),
+      event = stoppedEvent(),
+      getter = vi.fn(() => "STOPPED");
+    if (kind === "account") event.account = "999900001111";
+    if (kind === "task")
+      event.detail.taskArn = event.detail.taskArn.replace("/resume/", "/foreign/");
+    if (kind === "running") event.detail.lastStatus = "RUNNING";
+    const entries = event.detail.overrides.containerOverrides[0]?.environment;
+    const first = entries?.[0],
+      hash = entries?.[5];
+    if (!entries || !first || !hash) throw Error("SyntheticEventFixtureMissing");
+    if (kind === "hash") hash.value = "0".repeat(64);
+    if (kind === "duplicate") entries[5] = first;
+    if (kind === "getter")
+      Object.defineProperty(event.detail, "lastStatus", { enumerable: true, get: getter });
+    await expect(x.handler(event, { invokedFunctionArn: target })).rejects.toThrow(
+      "NativeResumeTaskObserverUnavailable",
+    );
+    expect(getter).not.toHaveBeenCalled();
+    expect(x.resolve).not.toHaveBeenCalled();
+    expect(x.observe).not.toHaveBeenCalled();
+  },
+);

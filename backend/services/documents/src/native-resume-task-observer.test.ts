@@ -167,3 +167,10 @@ it("refuses withdrawal after observation before persistence", async () => {
   await expect(x.observer.observe(scope)).rejects.toThrow();
   expect(x.recordRetirement).not.toHaveBeenCalled();
 });
+
+it("refuses an event hint for a different task before ECS or persistence", async () => {
+  const x = setup();
+  await expect(x.observer.observe(scope, allocation.taskArn.replace(/1/u, "2"))).rejects.toThrow();
+  expect(x.send).not.toHaveBeenCalled();
+  expect(x.recordRetirement).not.toHaveBeenCalled();
+});
