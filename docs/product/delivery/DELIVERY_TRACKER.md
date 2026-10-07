@@ -1,5 +1,13 @@
 # Delivery Tracker
 
+2026-10-06 D3-064/D3-079 native deterministic-resume session passes full clean verification at
+`b849cac4` (38 typecheck/39 test/23 builds, unchanged lint and all emitted isolation). Separate
+37 actual Linux process scenarios pass twice. [Evidence](evidence/d3-native-resume-memory-session-2026-10-06.md).
+Source inspection confirms owner-issued resume generation/completion/task metadata is next:
+existing provider/cover-letter consent cannot supply renderer authority. Packet/transport/image/
+managed/client/ATS/accountable acceptance remain; D1/D3 stay In progress. Development web restored,
+Docker/WSL stopped and PC on; no deployment, activation, new PR or CI/CD work.
+
 2026-10-06 D3-064/D3-079 adds a default-off dedicated native deterministic-resume session:
 one original generation, fixed completion, memory-only preview/render inputs, verified PDF/DOCX,
 held-output release/cancellation and exact-reference reads. Shared process admission prevents

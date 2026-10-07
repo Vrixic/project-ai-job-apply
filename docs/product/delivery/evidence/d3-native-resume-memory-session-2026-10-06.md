@@ -76,3 +76,39 @@ The owned Linux verifier removes both exact containers and invocation staging di
 completion. Docker/WSL are stopped; shared volumes remain. Only the owning isolated web parent
 and child are stopped before full verification reserves localhost:3000. Restore the maintained
 web afterward. No PC shutdown is performed.
+
+## Full clean-source verification
+
+Frozen clean source `b849cac40c90c5901b2bc791900fc9b937411e90` passes the original
+`scripts/verify-phase0.ps1` run with matching ARTIFACT_SOURCE_SHA and exit zero. All 38 typecheck
+tasks, 39 test tasks and 23 production builds pass, along with operator/security/formatting/Compose
+and emitted isolation checks. The new resume memory/render dependency isolation passes in the
+full run. Lint remains zero errors, 15 warnings and 58 infos. Tracked source stays unchanged while
+the original verifier is alive. Log: `.tmp/d3-native-resume-full.log`.
+
+This complete repository check is separate from the 37 real Linux child-process scenarios above.
+It does not execute a new production image or managed native task. No persistence implementation
+or actual owner-SQL completion claim for resume is implied by injected process fixture ports.
+
+The maintained development web launcher restores the isolated app against the live development
+API. Anonymous root returns 200 and `/resume` returns 307 with redirects disabled. Only Next's
+two generated development type imports are restored after exact diff inspection. No frontend
+feature or new authenticated acceptance is asserted; owner-confirmed Profile/save/reload steps
+are not repeated. Docker/WSL remain stopped, shared volumes retained and the PC stays on.
+
+## Next owner integration boundary
+
+Current `PostgresTemporaryMaterialCompletionStore` accepts cover_letter only, tied to a running/
+settled original provider_dispatch grant. `PostgresNativeMaterialRegistry` also binds cover-letter
+work and Documents cover-letter rows. Applications' `readNativePreparationBootstrap` explicitly
+checks OpenAI cover-letter purpose, consent notice, model and categories. Those are not generic
+deterministic-renderer authority and cannot be silently repurposed for native resume generation.
+
+Resume needs an owner-issued original-generation record binding the active candidate/application,
+selected immutable base resume/version/hash, canonical job context and current application revision.
+Its original completion/restart fence and exact native task allocation/retirement must be composed
+before readiness can enter a packet or a trusted content endpoint. Then connect current packet
+metadata and authenticated direct reads without generated Lambda body copies. These are existing
+D3-064/D3-079 requirements, not completed by the local session or by this full verifier. Source
+inspection clarifies that next integration step; all managed/provider/client/ATS/accountable gates
+remain open. D1/D3 stay In progress.
