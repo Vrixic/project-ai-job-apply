@@ -6,6 +6,53 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+test("resume owner admission contains no model, SQL client, AWS or content runtime", async () => {
+  const result = await build({
+    absWorkingDir: root,
+    entryPoints: ["backend/workflows/dist/src/native-resume-owner-ports.js"],
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "cjs",
+    write: false,
+    metafile: true,
+  });
+  const inputs = Object.values(result.metafile.outputs).flatMap((output) =>
+    Object.entries(output.inputs)
+      .filter(([, item]) => item.bytesInOutput > 0)
+      .map(([name]) => name.replaceAll("\\", "/")),
+  );
+  for (const forbidden of [
+    "/postgres/",
+    "/drizzle-orm/",
+    "/ai-sdk/",
+    "/@aws-sdk/",
+    "native-resume-session.js",
+    "catalog.js",
+    "resume-tailoring.js",
+    "render-memory.js",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Forbidden resume admission dependency: ${forbidden}`,
+    );
+  assert.ok(inputs.some((name) => name.endsWith("jobs/dist/src/native-resume-admission.js")));
+  assert.ok(
+    inputs.some((name) => name.endsWith("applications/dist/src/native-resume-admission.js")),
+  );
+  const module = { exports: {} };
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    createRequire(path.join(root, "package.json")),
+  );
+  const ports = module.exports.createNativeResumeGenerationOwnerPorts();
+  const query = async () => {
+    throw Error("SQL must remain unused");
+  };
+  await assert.rejects(ports.application({}, query), /NativeResumeAdmissionUnavailable/u);
+  await assert.rejects(ports.job({}, "", query), /NativeResumeJobAdmissionUnavailable/u);
+});
 test("dedicated native preparation artifact excludes legacy objects, model, ECS and rendering", async () => {
   const result = await build({
     absWorkingDir: root,

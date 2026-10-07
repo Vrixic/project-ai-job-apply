@@ -4365,3 +4365,13 @@ checks. Exact migration inventories, 177 runtime-smoke cases and 273 release gua
 RPC/Jobs/source/task/packet/image/client/ATS and managed/accountable acceptance remain; D1/D3
 stay In progress. Development web restored, Docker/WSL stopped, shared volumes retained, PC on.
 No deployment/activation, new PR, main merge or hosted CI/CD work.
+
+2026-10-07 D3-064/D3-079 replaces the native-resume ledger's synthetic Jobs authority
+with actual same-transaction Jobs canonical/source/revision/context admission and
+Applications/Jobs owner composition. All 22 actual PostgreSQL ledger cases, two
+focused and two emitted preparation checks pass; full clean verification follows.
+[Evidence](evidence/d3-native-resume-jobs-admission-2026-10-07.md). Authenticated resume
+RPC/source/task/preparation/packet/image/client/ATS and managed/accountable acceptance
+remain; D1/D3 stay In progress and ADR-040 Proposed. No deployment/activation, new PR,
+main merge or hosted CI/CD. Owned fixture removed, shared volumes retained,
+Docker/WSL stopped; PC remains on.

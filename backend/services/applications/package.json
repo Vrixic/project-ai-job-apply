@@ -8,6 +8,10 @@
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     },
+    "./native-resume-admission": {
+      "types": "./dist/src/native-resume-admission.d.ts",
+      "default": "./dist/src/native-resume-admission.js"
+    },
     "./native-material-runtime": {
       "types": "./dist/src/native-material-runtime.d.ts",
       "default": "./dist/src/native-material-runtime.js"

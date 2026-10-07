@@ -33,30 +33,17 @@ if (requested) {
 describe.runIf(requested)("native resume generation ledger with real PostgreSQL", () => {
   const sql = postgres(url ?? "postgres://invalid", { max: 4, onnotice: () => undefined });
   let input: NativeResumeReservation;
-  let admitApplication: (
-    scope: NativeResumeApplicationIntent,
-    query: NativeResumeOwnerQuery,
-    enabled: () => boolean,
-  ) => Promise<void>;
+  let ports: import("./native-resume-generation-store.js").NativeResumeGenerationOwnerPorts;
+  let bindings: (job: Record<string, unknown>) => { jobRevision: string; jobContextSha256: string };
+  let catalog: {
+    recordObservation(input: Record<string, unknown>): Promise<{ job: { id: string } }>;
+    getActiveJob(id: string): Promise<Record<string, unknown> | null>;
+  };
   let admitAnyApplication: (
     owner: string,
     app: string,
     query: NativeResumeOwnerQuery,
   ) => Promise<void>;
-  const ports = {
-    application: async (
-      intent: Readonly<NativeResumeApplicationIntent>,
-      query: NativeResumeOwnerQuery,
-    ) => admitApplication(intent, query, () => true),
-    // Jobs authority is synthetic here. Applications, Documents and transaction locks are real.
-    job: async (
-      _intent: Readonly<NativeResumeApplicationIntent>,
-      context: string,
-      _query: NativeResumeOwnerQuery,
-    ) => {
-      if (context !== "c".repeat(64)) throw Error("SyntheticJobRevisionUnavailable");
-    },
-  };
   const store = () => new PostgresNativeResumeGenerationStore(sql, ports, () => true);
   const scope = (r: NativeResumeGenerationRecord) => ({
     ownerUserId: r.reservation.identity.ownerUserId,
@@ -87,6 +74,138 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     await s.claimLaunch(scope(r), config);
     return { s, r: await s.bindTask(scope(r), config, task) };
   }
+  it("matches the existing Applications packet revision and exact resume context", async () => {
+    const module = await import(
+      fileURLToPath(new URL("../../applications/dist/src/packet-source.js", import.meta.url))
+    );
+    const job = await catalog.getActiveJob(input.application.canonicalJobId);
+    if (!job) throw Error("SyntheticJobUnavailable");
+    const company = job.company as { id: string; name: string };
+    expect(input.application.jobRevision).toBe(
+      module.jobRevisionHash({
+        id: job.id,
+        active: true,
+        company: { id: company.id, name: company.name },
+        title: job.title,
+        locations: job.locations,
+        department: job.department ?? null,
+      }),
+    );
+    await store().reserve(input);
+  });
+  it("refuses changed posting text even when the packet's summary revision stays unchanged", async () => {
+    await sql`UPDATE jobs.canonical_jobs SET description='Synthetic changed description'
+      WHERE id=${input.application.canonicalJobId}`;
+    await expect(store().reserve(input)).rejects.toThrow("NativeResumeGenerationUnavailable");
+    expect(
+      await sql`SELECT id FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`,
+    ).toHaveLength(0);
+  });
+  it("refuses changed company, title and locations at every admission", async () => {
+    const s = store(),
+      r = await s.reserve(input);
+    await sql`UPDATE jobs.canonical_jobs SET title='Synthetic changed title'
+      WHERE id=${input.application.canonicalJobId}`;
+    await expect(s.claimLaunch(scope(r), config)).rejects.toThrow();
+    const active = await catalog.getActiveJob(input.application.canonicalJobId);
+    if (!active) throw Error("SyntheticJobUnavailable");
+    input.application.jobRevision = bindings(active).jobRevision;
+    input.identity.jobContextSha256 = bindings(active).jobContextSha256;
+    await sql`UPDATE jobs.companies SET display_name='Synthetic changed company'
+      WHERE id=(SELECT company_id FROM jobs.canonical_jobs WHERE id=${input.application.canonicalJobId})`;
+    await expect(s.reserve(input)).rejects.toThrow();
+    await sql`UPDATE jobs.canonical_jobs SET locations='["Synthetic changed location"]'::jsonb
+      WHERE id=${input.application.canonicalJobId}`;
+    await expect(s.reserve(input)).rejects.toThrow();
+  });
+  it("refuses withdrawn sources, expiry and terminal status", async () => {
+    await sql`UPDATE jobs.job_sources SET withdrawn_at=last_verified_at WHERE job_id=${input.application.canonicalJobId}`;
+    await expect(store().reserve(input)).rejects.toThrow();
+    await sql`UPDATE jobs.job_sources SET withdrawn_at=NULL WHERE job_id=${input.application.canonicalJobId}`;
+    await sql`UPDATE jobs.canonical_jobs SET expires_at=clock_timestamp()-interval '1 second' WHERE id=${input.application.canonicalJobId}`;
+    await expect(store().reserve(input)).rejects.toThrow();
+    await sql`UPDATE jobs.canonical_jobs SET expires_at=clock_timestamp()+interval '1 day',status='blocked' WHERE id=${input.application.canonicalJobId}`;
+    await expect(store().reserve(input)).rejects.toThrow();
+  });
+  it("holds catalog revision and source withdrawal fences until its caller transaction ends", async () => {
+    await sql.begin(async (tx) => {
+      await ports.application(input.application, tx as unknown as NativeResumeOwnerQuery);
+      await ports.job(
+        input.application,
+        input.identity.jobContextSha256,
+        tx as unknown as NativeResumeOwnerQuery,
+      );
+      for (const change of ["title", "source", "company", "alias"] as const) {
+        await expect(
+          sql.begin(async (other) => {
+            await other`SET LOCAL lock_timeout='150ms'`;
+            if (change === "title")
+              await other`UPDATE jobs.canonical_jobs SET title='Synthetic concurrent title' WHERE id=${input.application.canonicalJobId}`;
+            else if (change === "source")
+              await other`UPDATE jobs.job_sources SET withdrawn_at=last_verified_at WHERE job_id=${input.application.canonicalJobId}`;
+            else if (change === "company")
+              await other`UPDATE jobs.companies SET display_name='Synthetic concurrent company' WHERE id=(SELECT company_id FROM jobs.canonical_jobs WHERE id=${input.application.canonicalJobId})`;
+            else
+              await other`UPDATE jobs.duplicate_candidates SET fingerprint=fingerprint WHERE false`;
+          }),
+        ).rejects.toMatchObject({ code: "55P03" });
+      }
+    });
+    await sql`UPDATE jobs.job_sources SET withdrawn_at=last_verified_at WHERE job_id=${input.application.canonicalJobId}`;
+    await expect(store().reserve(input)).rejects.toThrow();
+  });
+  it("accepts active exact-member source evidence but refuses an alias as canonical intent", async () => {
+    const alias = await catalog.recordObservation({
+      provider: "greenhouse",
+      provenance: "authorized_fixture",
+      companyName: `Synthetic alias ${uuidv7()}`,
+      title: "Other synthetic role",
+      locations: ["Remote - US"],
+      description: "Synthetic alias source.",
+      sourceUrl: `https://jobs.example.test/${uuidv7()}`,
+      observedAt: new Date(),
+      atsTenant: `synthetic-${uuidv7()}`,
+      externalJobId: "job-2",
+      adapterVersion: "synthetic-v1",
+    });
+    const canonical = input.application.canonicalJobId;
+    const [first, second] = [canonical, alias.job.id].sort();
+    if (!first || !second) throw Error("SyntheticAliasUnavailable");
+    await sql`INSERT INTO jobs.duplicate_candidates(job_id,candidate_job_id,classification,fingerprint,
+      resolution,canonical_job_id,reviewed_at,reviewed_by,review_reason_code,resolution_version)
+      VALUES (${first},${second},'exact','synthetic','exact',${canonical},clock_timestamp(),'synthetic','synthetic',1)`;
+    await sql`UPDATE jobs.job_sources SET withdrawn_at=last_verified_at WHERE job_id=${canonical}`;
+    expect((await catalog.getActiveJob(canonical))?.id).toBe(canonical);
+    await store().reserve(input);
+    await expect(
+      sql.begin(async (tx) =>
+        ports.job(
+          { ...input.application, canonicalJobId: alias.job.id },
+          input.identity.jobContextSha256,
+          tx as unknown as NativeResumeOwnerQuery,
+        ),
+      ),
+    ).rejects.toThrow("NativeResumeJobAdmissionUnavailable");
+    await sql`UPDATE jobs.job_sources SET withdrawn_at=last_verified_at WHERE job_id=${alias.job.id}`;
+    await expect(store().reserve(input)).rejects.toThrow();
+  });
+  it("withholds original ready material after source withdrawal without renewing completion", async () => {
+    const { s, r } = await bound(),
+      ref = reference(r);
+    expect(await s.claimOriginalCompletion(scope(r), ref)).toBe("claimed");
+    await s.publishReady(scope(r), ref);
+    expect(await s.readAllocation(ref)).toBe(r.allocationId);
+    await sql`UPDATE jobs.job_sources SET withdrawn_at=last_verified_at WHERE job_id=${input.application.canonicalJobId}`;
+    await expect(s.readAllocation(ref)).rejects.toThrow("NativeResumeGenerationUnavailable");
+    expect(await s.claimOriginalCompletion(scope(r), ref)).toBe("unavailable");
+    const [record] =
+      await sql`SELECT completed_at_ms::text AS completed, expires_at_ms::text AS expires
+      FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`;
+    expect(record).toEqual({
+      completed: String(ref.completedAtMs),
+      expires: String(ref.expiresAtMs),
+    });
+  });
   beforeAll(async () => {
     const inherited = Object.fromEntries(
       Object.entries(process.env).filter(([key]) =>
@@ -96,6 +215,7 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     for (const path of [
       "../../profile/dist/src/migrate.js",
       "../../applications/dist/src/migrate.js",
+      "../../jobs/dist/src/migrate.js",
       "../dist/src/migrate.js",
     ])
       for (let replay = 0; replay < 2; replay++)
@@ -104,12 +224,22 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
           [fileURLToPath(new URL(path, import.meta.url))],
           { env: { ...inherited, DATABASE_URL: url } },
         );
-    const module = await import(
+    const ownerPorts = await import(
       fileURLToPath(
-        new URL("../../applications/dist/src/native-resume-admission.js", import.meta.url),
+        new URL("../../../workflows/dist/src/native-resume-owner-ports.js", import.meta.url),
       )
     );
-    admitApplication = module.lockNativeResumePreparationAdmission;
+    ports = ownerPorts.createNativeResumeGenerationOwnerPorts(() => true);
+    const jobs = await import(
+      fileURLToPath(new URL("../../jobs/dist/src/persistence/catalog.js", import.meta.url))
+    );
+    catalog = new jobs.PostgresJobCatalog(sql, {
+      searchCursorKeys: { active: { id: "synthetic-v1", key: Buffer.alloc(32, 1) } },
+    });
+    const jobOwner = await import(
+      fileURLToPath(new URL("../../jobs/dist/src/native-resume-admission.js", import.meta.url))
+    );
+    bindings = jobOwner.nativeResumeJobBindings;
     const ordinary = await import(
       fileURLToPath(
         new URL("../../applications/dist/src/native-material-admission.js", import.meta.url),
@@ -122,8 +252,24 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     const owner = uuidv7(),
       app = uuidv7(),
       base = uuidv7(),
-      packet = uuidv7(),
-      job = uuidv7();
+      packet = uuidv7();
+    const observed = await catalog.recordObservation({
+      provider: "greenhouse",
+      provenance: "authorized_fixture",
+      companyName: `Synthetic ${app}`,
+      title: "Software Engineer",
+      locations: ["Remote - US"],
+      description: "Synthetic resume ledger job context.",
+      sourceUrl: `https://jobs.example.test/${app}`,
+      observedAt: new Date(),
+      atsTenant: `synthetic-${app}`,
+      externalJobId: "job-1",
+      adapterVersion: "synthetic-v1",
+    });
+    const job = observed.job.id;
+    const active = await catalog.getActiveJob(job);
+    if (!active) throw Error("SyntheticJobUnavailable");
+    const current = bindings(active);
     input = {
       identity: {
         generationId: uuidv7(),
@@ -133,7 +279,7 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
         baseDocumentId: base,
         baseVersion: 1,
         baseSha256: "a".repeat(64),
-        jobContextSha256: "c".repeat(64),
+        jobContextSha256: current.jobContextSha256,
       },
       application: {
         ownerUserId: owner,
@@ -142,7 +288,7 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
         expectedRevision: 2,
         packetId: packet,
         packetHash: "e".repeat(64),
-        jobRevision: "b".repeat(64),
+        jobRevision: current.jobRevision,
       },
       normalizedSha256: "b".repeat(64),
       previousEpochId: null,

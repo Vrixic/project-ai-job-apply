@@ -351,3 +351,11 @@ crawlability, real-source acceptance, or deployment is claimed.
 
 This service determines source truth. Per-user constraint assessment and any future ranking belong
 to Matching.
+
+Private `./native-resume-admission` proves canonical active source truth, the current
+packet summary revision and full resume context on Documents' same short transaction.
+It defaults off and returns no posting content. Existing revision triggers fence
+posting/company/alias commits; exact-member source rows have separate lifetime locks.
+Never hold these locks across source/network/rendering work. Workflows composes the
+actual Applications and Jobs adapters; authenticated task/source/preparation/read and
+managed acceptance remain unfinished. See [local evidence](../../../docs/product/delivery/evidence/d3-native-resume-jobs-admission-2026-10-07.md).

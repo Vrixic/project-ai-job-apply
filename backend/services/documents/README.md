@@ -743,3 +743,8 @@ prevents cross-kind overlap and false disposal acknowledgement. Migration 0014, 
 consumer rollout and current restore boundary are required before store deployment. Authenticated
 resume RPC/source/Jobs/task/packet/image/client/ATS composition remains unfinished. See
 [evidence](../../../docs/product/delivery/evidence/d3-native-resume-generation-ledger-2026-10-07.md).
+
+The resume ledger's SQL integration now uses actual Applications and Jobs owner ports:
+canonical source eligibility, current packet summary revision and exact resume context
+stay fenced on the original transaction. This does not activate authenticated task,
+source or packet transport. See [local evidence](../../../docs/product/delivery/evidence/d3-native-resume-jobs-admission-2026-10-07.md).
