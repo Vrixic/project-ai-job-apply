@@ -13,6 +13,11 @@ import { createTemporaryMaterialCompletionHandler } from "../../../services/docu
 const require = createRequire(import.meta.url);
 const mode = process.argv[2];
 const kernelPath = process.argv[3];
+if (mode.startsWith("resume-runtime")) {
+  const { exerciseResumeRuntime } = await import("./resume-runtime-fixture.mjs");
+  await exerciseResumeRuntime(mode, kernelPath);
+  process.exit(0);
+}
 if (mode.startsWith("resume-")) {
   const { exerciseNativeResume } = await import("./resume-fixture.mjs");
   await exerciseNativeResume(mode, kernelPath);

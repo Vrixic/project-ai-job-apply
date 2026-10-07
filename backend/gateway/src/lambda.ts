@@ -257,7 +257,7 @@ const APPLICATION_COVER_LETTER_PATH_PATTERN = new RegExp(
   "u",
 );
 const APPLICATION_MATERIAL_AUTHORIZATION_PATH_PATTERN = new RegExp(
-  `^/v1/applications/${APPLICATION_ID}/cover-letter/(?:authorization|location)$`,
+  `^/v1/applications/${APPLICATION_ID}/(?:cover-letter/(?:authorization|location)|resume/authorization)$`,
   "u",
 );
 const APPLICATION_GENERATION_ID_PATTERN = new RegExp(`^${APPLICATION_ID}$`, "u");

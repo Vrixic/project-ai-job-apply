@@ -1511,22 +1511,24 @@ describe("Applications routes at the Lambda boundary", () => {
     ["owner override", `generationId=${attempt}&ownerUserId=${id}`],
     ["oversized", `generationId=${"a".repeat(300)}`],
   ])("refuses %s material authorization queries before dispatch", async (_label, query) => {
-    const { handler, inject } = dispatcher();
-    const response = await invoke(
-      handler,
-      invocation("GET", `/v1/applications/${id}/cover-letter/authorization`, {
-        rawQueryString: query,
-      }),
-    );
-    expect(response.statusCode).toBe(400);
-    expect(inject).not.toHaveBeenCalled();
+    for (const kind of ["cover-letter", "resume"]) {
+      const { handler, inject } = dispatcher();
+      const response = await invoke(
+        handler,
+        invocation("GET", `/v1/applications/${id}/${kind}/authorization`, {
+          rawQueryString: query,
+        }),
+      );
+      expect(response.statusCode).toBe(400);
+      expect(inject).not.toHaveBeenCalled();
+    }
   });
 
-  it.each(["authorization", "location"])(
+  it.each(["cover-letter/authorization", "cover-letter/location", "resume/authorization"])(
     "forwards authenticated body-free material %s reads",
     async (route) => {
       const { handler, inject } = dispatcher();
-      const path = `/v1/applications/${id}/cover-letter/${route}`;
+      const path = `/v1/applications/${id}/${route}`;
       const extra = { rawQueryString: `generationId=${attempt}` };
       const anonymous = invocation("GET", path, extra);
       delete anonymous.requestContext.authorizer;

@@ -1,6 +1,6 @@
-import { expect, it, vi } from "vitest";
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain/temporary-material";
-import { authorizeNativeMaterialRead } from "./native-material-read.js";
+import { expect, it, vi } from "vitest";
+import { authorizeNativeMaterialRead, authorizeNativeResumeRead } from "./native-material-read.js";
 import type { ApplicationView } from "./store.js";
 
 const ids = [
@@ -116,3 +116,37 @@ it("does not convert an owner outage into an affirmative proof", async () => {
   test.store.getApplication.mockRejectedValue(Error("synthetic-private-outage"));
   await expect(authorizeNativeMaterialRead(test)).rejects.toThrow("synthetic-private-outage");
 });
+
+it("authorizes the exact original resume hash/reference and refuses cover-letter confusion", async () => {
+  const test = input();
+  test.reference.kind = "tailored_resume";
+  const current = view();
+  if (!current.currentPacket) throw Error("SyntheticPacketMissing");
+  current.currentPacket.artifactHashes = { resume: reference.contentSha256 };
+  current.currentPacket.temporaryMaterials = [{ ...test.reference }];
+  test.store.getApplication.mockResolvedValue(current);
+  expect((await authorizeNativeResumeRead(test))?.reference).toEqual(test.reference);
+  expect(await authorizeNativeMaterialRead(test)).toBeNull();
+  current.currentPacket.artifactHashes = { coverLetter: reference.contentSha256 };
+  expect(await authorizeNativeResumeRead(test)).toBeNull();
+});
+it.each(["generation", "expiry", "owner", "packet", "cancelled"])(
+  "refuses stale resume %s proof",
+  async (change) => {
+    const test = input();
+    test.reference.kind = "tailored_resume";
+    const current = view();
+    const packet = current.currentPacket;
+    if (!packet) throw Error("SyntheticPacketMissing");
+    packet.artifactHashes = { resume: reference.contentSha256 };
+    packet.temporaryMaterials = [{ ...test.reference }];
+    if (change === "generation")
+      packet.temporaryMaterials = [{ ...test.reference, generationId: ids[3] }];
+    if (change === "expiry") test.clock = () => new Date(reference.expiresAtMs);
+    if (change === "owner") current.application.ownerUserId = ids[3];
+    if (change === "packet") current.application.currentPacketId = ids[2];
+    if (change === "cancelled") current.application.status = "cancelled";
+    test.store.getApplication.mockResolvedValue(current);
+    expect(await authorizeNativeResumeRead(test)).toBeNull();
+  },
+);

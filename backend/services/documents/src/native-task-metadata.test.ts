@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { startNativeResumeTask } from "./native-resume-task-bootstrap.js";
+import { readNativeResumeTaskBinding } from "./native-resume-task-metadata.js";
 import { startNativeMaterialTask } from "./native-task-bootstrap.js";
 import { readNativeTaskBinding } from "./native-task-metadata.js";
 
@@ -180,4 +182,53 @@ describe("original ECS native task bootstrap metadata", () => {
     });
     await expect(readNativeTaskBinding(f)).rejects.toThrow("NativeTaskBootstrapUnavailable");
   });
+});
+
+it("binds resume self metadata and configuration without a provider work grant", async () => {
+  const f = fixture();
+  const {
+    NATIVE_MATERIAL_WORK_ID: _work,
+    NATIVE_MATERIAL_REQUEST_SHA256: _request,
+    ...environment
+  } = f.environment;
+  const binding = await readNativeResumeTaskBinding({
+    ...f,
+    environment: { ...environment, NATIVE_RESUME_CONFIGURATION_SHA256: "f".repeat(64) },
+  });
+  expect(binding.kind).toBe("tailored_resume");
+  expect(binding.configurationSha256).toBe("f".repeat(64));
+  expect(binding.allocation.taskArn).toBe(f.taskArn);
+  expect(Object.hasOwn(binding, "original")).toBe(false);
+  expect(Object.isFrozen(binding)).toBe(true);
+});
+it("refuses resume metadata with cover-letter grant or missing configuration before I/O", async () => {
+  const f = fixture();
+  await expect(
+    readNativeResumeTaskBinding({
+      ...f,
+      environment: { ...f.environment, NATIVE_RESUME_CONFIGURATION_SHA256: "f".repeat(64) },
+    }),
+  ).rejects.toThrow("NativeTaskBootstrapUnavailable");
+  const {
+    NATIVE_MATERIAL_WORK_ID: _work,
+    NATIVE_MATERIAL_REQUEST_SHA256: _request,
+    ...environment
+  } = f.environment;
+  await expect(readNativeResumeTaskBinding({ ...f, environment })).rejects.toThrow(
+    "NativeTaskBootstrapUnavailable",
+  );
+  expect(f.testFetch).not.toHaveBeenCalled();
+});
+it("defaults resume task startup off before trusted ports or network", async () => {
+  const f = fixture(),
+    loadPorts = vi.fn();
+  await expect(
+    startNativeResumeTask({
+      deployment: f.deployment,
+      ownerFunctionArn: "invalid",
+      sourceFunctionArn: "invalid",
+      loadPorts,
+    }),
+  ).rejects.toThrow("NativeTaskBootstrapUnavailable");
+  expect(loadPorts).not.toHaveBeenCalled();
 });

@@ -4,11 +4,11 @@ import { ApplicationsService, type ApplicationsServiceDependencies } from "./ser
 import type { ApplicationView } from "./store.js";
 
 const id = (n: number) => `019a4000-0000-7000-8000-${String(n).padStart(12, "0")}`;
-function setup() {
+function setup(kind: "cover_letter" | "tailored_resume" = "cover_letter") {
   const completedAtMs = Date.now();
   const reference = {
     schemaVersion: 1 as const,
-    kind: "cover_letter" as const,
+    kind,
     ownerUserId: id(1),
     applicationId: id(2),
     generationId: id(3),
@@ -29,7 +29,9 @@ function setup() {
       userId: id(1),
       applicationId: id(2),
       packetHash: "b".repeat(64),
-      artifactHashes: { coverLetter: reference.contentSha256 },
+      artifactHashes: {
+        [kind === "cover_letter" ? "coverLetter" : "resume"]: reference.contentSha256,
+      },
       temporaryMaterials: [reference],
     },
   } as unknown as ApplicationView;
@@ -79,4 +81,24 @@ it("defaults off before location lookup", async () => {
   delete f.dependencies.nativeReadAuthorizationsEnabled;
   await expect(f.read()).rejects.toThrow("Applications are unavailable");
   expect(f.resolve).not.toHaveBeenCalled();
+});
+
+it("authorizes only the exact current resume and strips ownership from its scalar response", async () => {
+  const f = setup("tailored_resume");
+  const service = new ApplicationsService(f.dependencies);
+  const proof = await service.resumeMaterialAuthorization(id(1), id(2), id(3));
+  expect(compileComponentValidator("ApplicationTemporaryMaterialAuthorization")(proof)).toBe(true);
+  expect(proof.temporaryMaterial.kind).toBe("tailored_resume");
+  expect(proof.temporaryMaterial).not.toHaveProperty("ownerUserId");
+  await expect(service.temporaryMaterialAuthorization(id(1), id(2), id(3))).rejects.toThrow();
+  await expect(service.resumeMaterialAuthorization(id(1), id(2), id(5))).rejects.toThrow();
+  expect(f.resolve).not.toHaveBeenCalled();
+});
+it("defaults resume authorization off before owner reads", async () => {
+  const f = setup("tailored_resume");
+  delete f.dependencies.nativeReadAuthorizationsEnabled;
+  await expect(
+    new ApplicationsService(f.dependencies).resumeMaterialAuthorization(id(1), id(2), id(3)),
+  ).rejects.toThrow("Applications are unavailable");
+  expect(f.dependencies.store.getApplication).not.toHaveBeenCalled();
 });

@@ -175,6 +175,26 @@
     "./normalized-document-reader": {
       "types": "./dist/src/normalized-document-reader.d.ts",
       "default": "./dist/src/normalized-document-reader.js"
+    },
+    "./native-resume-transport": {
+      "types": "./dist/src/native-resume-transport.d.ts",
+      "default": "./dist/src/native-resume-transport.js"
+    },
+    "./native-resume-runtime": {
+      "types": "./dist/src/native-resume-runtime.d.ts",
+      "default": "./dist/src/native-resume-runtime.js"
+    },
+    "./native-resume-task-metadata": {
+      "types": "./dist/src/native-resume-task-metadata.d.ts",
+      "default": "./dist/src/native-resume-task-metadata.js"
+    },
+    "./native-resume-task-bootstrap": {
+      "types": "./dist/src/native-resume-task-bootstrap.d.ts",
+      "default": "./dist/src/native-resume-task-bootstrap.js"
+    },
+    "./native-resume-image-runtime": {
+      "types": "./dist/src/native-resume-image-runtime.d.ts",
+      "default": "./dist/src/native-resume-image-runtime.js"
     }
   },
   "scripts": {

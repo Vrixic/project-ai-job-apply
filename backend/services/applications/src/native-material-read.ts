@@ -8,16 +8,17 @@ import type { ApplicationStorePort } from "./service.js";
 /** Private owning scalar read, after authenticated subject-to-owner resolution. Not a public
  * route or a content read. No SQL locks span rendering; the native transport repeats this read
  * and compares the original packet before sending. Remote authentication is not supplied here. */
-export async function authorizeNativeMaterialRead(input: {
+interface Input {
   store: Pick<ApplicationStorePort, "getApplication">;
   ownerUserId: string;
   reference: Readonly<TemporaryMaterialReference>;
   signal: AbortSignal;
   clock?: () => Date;
-}) {
+}
+async function authorize(input: Input, kind: "cover_letter" | "tailored_resume") {
   if (
     !validateTemporaryMaterialReference(input.reference) ||
-    input.reference.kind !== "cover_letter" ||
+    input.reference.kind !== kind ||
     input.reference.ownerUserId !== input.ownerUserId ||
     input.signal.aborted
   )
@@ -38,7 +39,8 @@ export async function authorizeNativeMaterialRead(input: {
     packet.userId !== reference.ownerUserId ||
     packet.applicationId !== reference.applicationId ||
     view.application.currentPacketId !== packet.id ||
-    packet.artifactHashes.coverLetter !== reference.contentSha256 ||
+    packet.artifactHashes[kind === "cover_letter" ? "coverLetter" : "resume"] !==
+      reference.contentSha256 ||
     !packet.temporaryMaterials?.some((candidate) =>
       sameTemporaryMaterialReference(reference, candidate),
     )
@@ -51,3 +53,8 @@ export async function authorizeNativeMaterialRead(input: {
     reference,
   };
 }
+
+/** Existing cover-letter scope remains fixed. */
+export const authorizeNativeMaterialRead = (input: Input) => authorize(input, "cover_letter");
+/** Resume-only owning proof. No new public route or body read is authorized by this projection. */
+export const authorizeNativeResumeRead = (input: Input) => authorize(input, "tailored_resume");

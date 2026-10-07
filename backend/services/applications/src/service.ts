@@ -30,7 +30,7 @@ import {
   safeRecord,
   versionToken,
 } from "./metrics.js";
-import { authorizeNativeMaterialRead } from "./native-material-read.js";
+import { authorizeNativeMaterialRead, authorizeNativeResumeRead } from "./native-material-read.js";
 import {
   type ArtifactHashes,
   type CurrentBindings,
@@ -175,6 +175,12 @@ export interface ApplicationsApi {
     signal?: AbortSignal,
   ): Promise<ApplicationTemporaryMaterialLocation>;
   temporaryMaterialAuthorization?(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal?: AbortSignal,
+  ): Promise<ApplicationTemporaryMaterialAuthorization>;
+  resumeMaterialAuthorization?(
     ownerUserId: string,
     applicationId: string,
     generationId: string,
@@ -366,14 +372,47 @@ export class ApplicationsService implements ApplicationsApi {
     generationId: string,
     signal = new AbortController().signal,
   ): Promise<ApplicationTemporaryMaterialAuthorization> {
+    return this.authorizeTemporaryMaterial(
+      ownerUserId,
+      applicationId,
+      generationId,
+      "cover_letter",
+      signal,
+    );
+  }
+
+  async resumeMaterialAuthorization(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal = new AbortController().signal,
+  ): Promise<ApplicationTemporaryMaterialAuthorization> {
+    return this.authorizeTemporaryMaterial(
+      ownerUserId,
+      applicationId,
+      generationId,
+      "tailored_resume",
+      signal,
+    );
+  }
+
+  private async authorizeTemporaryMaterial(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    kind: "cover_letter" | "tailored_resume",
+    signal: AbortSignal,
+  ): Promise<ApplicationTemporaryMaterialAuthorization> {
     const enabled = this.dependencies.nativeReadAuthorizationsEnabled ?? (() => false);
     if (!enabled() || signal.aborted) throw new ApplicationsUnavailableError();
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const reference = view.currentPacket?.temporaryMaterials?.find(
-      (ref) => ref.kind === "cover_letter" && ref.generationId === generationId,
+      (ref) => ref.kind === kind && ref.generationId === generationId,
     );
     if (!reference) throw new StalePacketError(["temporary_material_changed"]);
-    const proof = await authorizeNativeMaterialRead({
+    const authorize =
+      kind === "cover_letter" ? authorizeNativeMaterialRead : authorizeNativeResumeRead;
+    const proof = await authorize({
       store: this.dependencies.store,
       ownerUserId,
       reference,

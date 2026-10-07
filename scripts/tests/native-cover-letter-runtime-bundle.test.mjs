@@ -340,3 +340,66 @@ test("native resume generation owner emits scalar SQL control without content, m
   await assert.rejects(store.reserve({}), /^Error: NativeResumeGenerationUnavailable$/u);
   assert.equal(effects, 0);
 });
+
+test("native resume image connects source, pinned TLS and direct reads without provider or persistence", async () => {
+  const result = await build({
+    absWorkingDir: root,
+    entryPoints: ["backend/services/documents/dist/src/native-resume-image-runtime.js"],
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "cjs",
+    write: false,
+    metafile: true,
+  });
+  const inputs = Object.values(result.metafile.outputs).flatMap((output) =>
+    Object.entries(output.inputs)
+      .filter(([, entry]) => entry.bytesInOutput > 0)
+      .map(([name]) => name.replaceAll("\\", "/")),
+  );
+  for (const forbidden of [
+    "postgres",
+    "openai",
+    "client-s3",
+    "client-ecs",
+    "client-kms",
+    "backend/workflows",
+    "backend/services/profile",
+    "backend/services/applications",
+    "backend/services/jobs",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(forbidden)),
+      `Unexpected image authority: ${forbidden}`,
+    );
+  for (const required of [
+    "client-secrets-manager",
+    "native-resume-task-bootstrap.js",
+    "native-resume-owner-rpc-client.js",
+    "native-resume-source-rpc-client.js",
+    "native-resume-transport.js",
+    "render/render.js",
+    "pdfjs-dist",
+  ])
+    assert.ok(
+      inputs.some((name) => name.includes(required)),
+      `Missing real image component: ${required}`,
+    );
+  const module = { exports: {} };
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    createRequire(path.join(root, "package.json")),
+  );
+  let effects = 0;
+  await assert.rejects(
+    module.exports.startNativeResumeImage({
+      configuration: {},
+      loadKernel: () => {
+        effects++;
+      },
+    }),
+    /^Error: NativeResumeImageConfigurationUnavailable$/u,
+  );
+  assert.equal(effects, 0);
+});

@@ -1116,6 +1116,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/applications/{applicationId}/resume/authorization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Default-off scalar-only owner authorization for a native temporary resume process. Authentication and owner resolution use the normal Gateway boundary. No generated body is read, rendered, reconstructed or persisted. An affirmative result is a point-in-time packet proof, not an approval, expiry renewal, process-stop or purge certificate. */
+        get: operations["authorizeApplicationResumeMaterial"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2343,6 +2360,8 @@ export interface components {
             matchesPacket: boolean;
             matchedTerms?: string[];
             sections?: components["schemas"]["ApplicationResumeSection"][];
+            /** @description Exact original memory generation and fixed expiry on the native resume path. Do not persist or cache this response; discard platform copies at expiry, logout, cancellation or confirmed submission. */
+            temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
         ApplicationResumeFile: {
             /** @enum {string} */
@@ -2356,6 +2375,8 @@ export interface components {
             /** @description Format-independent content hash that the packet's resume hash binds. */
             contentSha256: string;
             contentBase64: string;
+            /** @description Exact original memory generation and fixed expiry on the native resume path. Do not persist or cache this response; discard platform copies at expiry, logout, cancellation or confirmed submission. */
+            temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
         CreateApplicationRequest: {
             /** Format: uuid */
@@ -5122,6 +5143,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApplicationTemporaryMaterialLocation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    authorizeApplicationResumeMaterial: {
+        parameters: {
+            query: {
+                generationId: string;
+            };
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current original packet and material metadata only */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationTemporaryMaterialAuthorization"];
                 };
             };
             400: components["responses"]["BadRequest"];

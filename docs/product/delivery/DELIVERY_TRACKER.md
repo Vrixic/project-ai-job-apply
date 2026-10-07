@@ -4429,3 +4429,13 @@ scope checks and unchanged lint baseline. Two source Lambda ZIP builds are ident
 packet/read/client/ATS integration plus managed/accountable gates remain. D1/D3 stay
 In progress and ADR-040 Proposed. No new PR, main merge, deployment/activation or hosted
 CI/CD. Owned fixture removed, Docker/WSL stopped, shared volumes retained, PC on.
+
+2026-10-07 D3-064/D3-079 connects native resume runtime/task/image startup and authenticated
+current-packet direct reads. OpenAPI/Gateway add scalar resume authorization and optional
+original temporary-material metadata. All 42 actual Linux process cases, 89 focused Documents,
+28 Applications, seven emitted bundle checks and 220 Gateway checks pass (3 existing skips).
+Cloud/identity/store responses are synthetic.
+[Evidence](evidence/d3-native-resume-runtime-2026-10-07.md). Frozen-source full verification
+follows. Resume launch/preparation/packet/location/client/ATS and actual image/managed gates
+remain. D1/D3 stay In progress; ADR-040 Proposed. No new PR, merge, deployment/activation or
+hosted CI/CD. Owned fixture removed; Docker/WSL stopped, shared volumes retained and PC on.

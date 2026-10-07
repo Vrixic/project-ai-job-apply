@@ -8,6 +8,11 @@ const root = "/native";
 for (const mode of [
   "idle",
   "resume-idle",
+  "resume-runtime",
+  "resume-runtime-bootstrap",
+  "resume-runtime-image",
+  "resume-runtime-terminate",
+  "resume-runtime-ready-pending",
   "resume-busy",
   "resume-terminate",
   "resume-completion-pending",
@@ -81,15 +86,21 @@ for (const mode of [
       );
       assert.ok(!output.includes("I have experience") && !output.includes("synthetic-secret"));
       assert.ok(!output.includes("Alex Example") && !output.includes("alex@example.test"));
-      if (mode.startsWith("resume-") && mode !== "resume-completion-pending") {
+      if (
+        mode.startsWith("resume-") &&
+        mode !== "resume-completion-pending" &&
+        mode !== "resume-runtime-ready-pending"
+      ) {
         const value = JSON.parse(output.trim());
         assert.equal(value.ready, true);
         assert.equal(value.actualFiles, 2);
-        assert.equal(value.resumeAssertions, 20);
+        if (mode.startsWith("resume-runtime")) assert.ok(value.runtimeAssertions >= 20);
+        else assert.equal(value.resumeAssertions, 20);
         assert.equal(value.originalExpiry - value.originalCompletion, 1_800_000);
         assert.ok(Date.now() - value.originalCompletion < 6000);
       }
-      if (mode === "resume-completion-pending") assert.equal(output, "");
+      if (mode === "resume-completion-pending" || mode === "resume-runtime-ready-pending")
+        assert.equal(output, "");
       if (
         [
           "idle",
