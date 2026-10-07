@@ -4571,3 +4571,11 @@ The shared workload boundary is unchanged; empty input adds nothing. Seven boots
 six preparation checks pass, including original-role scope and policy size. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
 No cloud or CI/CD action. Environment composition, effective IAM, routing and managed acceptance
 remain; D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 D3-064/D3-079 corrects the preparation release's hard-coded private-only task network:
+`task_assign_public_ip` is now an explicit validated release input. Eight Terraform cases and
+the actual launcher validator accept emitted ENABLED/DISABLED configurations; invalid modes fail.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Browser-accessible DNS/TLS/ingress
+is still unimplemented, and a development DNS-zone question is pending. No cloud activation;
+D1/D3 In progress, ADR-040 Proposed, CI/CD deferred and PC on.

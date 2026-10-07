@@ -36,6 +36,7 @@ variable "release" {
     platform_kms_key_arn    = string
     image                   = string
     task_subnet_ids         = list(string)
+    task_assign_public_ip   = string
     task_security_group_ids = list(string)
     extension_layer_arn     = string
     subnet_ids              = list(string)
@@ -58,6 +59,7 @@ variable "release" {
       can(regex("^arn:aws:kms:us-east-2:${var.account_id}:key/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", var.release.platform_kms_key_arn)) &&
       can(regex("^arn:aws:lambda:us-east-2:[0-9]{12}:layer:AWS-Parameters-and-Secrets-Lambda-Extension:[1-9][0-9]*$", var.release.extension_layer_arn)) &&
       can(regex("^${var.account_id}[.]dkr[.]ecr[.]us-east-2[.]amazonaws[.]com/ai-job-apply/[a-z0-9/_-]+@sha256:[a-f0-9]{64}$", var.release.image)) &&
+      contains(["ENABLED", "DISABLED"], var.release.task_assign_public_ip) &&
       alltrue([for ids in [var.release.task_subnet_ids, var.release.task_security_group_ids] : length(ids) >= 1 && length(ids) <= 4 && length(distinct(ids)) == length(ids)]) &&
       alltrue([for id in var.release.task_subnet_ids : can(regex("^subnet-[a-f0-9]{17}$", id))]) &&
       alltrue([for id in var.release.task_security_group_ids : can(regex("^sg-[a-f0-9]{17}$", id))]) &&
@@ -101,7 +103,7 @@ locals {
   launch = local.deployed ? merge(local.deployment, {
     image          = var.release.image, taskRoleArn = local.task_role, executionRoleArn = local.execution_role,
     cpu            = "256", memory = "512", subnets = sort(var.release.task_subnet_ids),
-    securityGroups = sort(var.release.task_security_group_ids), assignPublicIp = "DISABLED"
+    securityGroups = sort(var.release.task_security_group_ids), assignPublicIp = var.release.task_assign_public_ip
   }) : null
   common_environment = local.deployed ? {
     NODE_ENV           = "production", PLATFORM_AWS_ACCOUNT_ID = var.account_id,

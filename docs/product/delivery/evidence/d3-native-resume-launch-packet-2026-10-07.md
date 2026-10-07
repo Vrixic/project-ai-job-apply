@@ -405,3 +405,19 @@ also pass with the exact dedicated boundary check. Log: `.tmp/d3-native-resume-b
 All providers are mocked for tests; no effective managed permission or deployment is established.
 Both environment inputs remain unchanged. Actual bootstrap/module application, private routing,
 managed end-to-end and accountable acceptance remain; D1/D3 In progress and ADR-040 Proposed.
+
+
+## Explicit task network choice
+
+Reviewing the image's direct browser HTTPS contract found a mismatch in preparation Terraform:
+it forced `assignPublicIp = DISABLED` without supplying a browser-accessible private route.
+The module now requires an explicit `task_assign_public_ip` release value and preserves it in
+launch configuration. ENABLED is not activation or routing proof; public subnet/ingress, DNS,
+trusted certificate and allocation-specific route lifecycle still require implementation.
+
+Eight mocked Terraform cases pass, including explicit public choice with scheduling still off
+and unknown mode rejection. Actual compiled Documents configuration validation accepts both
+emitted network choices. Logs: `.tmp/d3-native-resume-preparation-tests.log` and
+`.tmp/d3-native-resume-network-choice-check.log`. No cloud/network change was performed.
+A development DNS-zone question is pending; no hostname or certificate has been assumed.
+D1/D3 remain In progress; no browser-download or managed acceptance claim follows from this fix.

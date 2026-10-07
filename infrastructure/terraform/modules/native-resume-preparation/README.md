@@ -8,8 +8,10 @@ No candidate content or secret values enter Terraform.
 The control function pins the original task definition, image and revision-qualified roles. It
 can describe task metadata, run that exact definition in its original cluster, pass only its two
 roles to ECS, and recover positively identified tasks. Application admission still owns the
-single persisted launch attempt. Task networking uses the reviewed subnets/security groups with
-public IP disabled. Control has owning database access but no S3, remote-exec or stop authority.
+single persisted launch attempt. Task networking preserves the explicit `task_assign_public_ip` release choice (`ENABLED` or
+`DISABLED`) with the reviewed subnets/security groups. A public address alone does not supply
+DNS, a trusted certificate, a public-subnet route or inbound rules. Private-only tasks need an
+independently reviewed browser-accessible routing path. No network mode is inferred. Control has owning database access but no S3, remote-exec or stop authority.
 
 The durable function pins the numeric control version and has encrypted scalar checkpoints,
 seven-day history retention and a 900-second execution timeout. It has no database secret or VPC
@@ -42,7 +44,7 @@ bootstrap input also supplies exact role-creation and durable-stack deployment p
 Those source changes require separate review/application before managed release.
 This module alone cannot activate a working cloud path.
 
-Local Terraform 1.16.2 validation and six mocked tests cover absence, connected numeric versions,
+Local Terraform 1.16.2 validation and eight mocked tests cover absence, connected numeric versions,
 CMK state, capability separation, disabled defaults and invalid activation/target cases. The
 emitted launch JSON also passes the actual compiled Documents launch configuration validator;
 dispatch deployment fields agree. Cloud resources and numeric outputs are synthetic in these

@@ -45,6 +45,7 @@ variables {
       "sg-0123456789abcdef0"
     ],
     "image" : "123456789012.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/native-resume@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "task_assign_public_ip" : "DISABLED",
     "task_subnet_ids" : [
       "subnet-0123456789abcdef0",
       "subnet-0123456789abcdef1"
@@ -112,6 +113,24 @@ run "activation_requires_release" {
   variables {
     release = null
     enabled = true
+  }
+  expect_failures = [var.release]
+}
+
+run "direct_route_preserves_public_ip_choice" {
+  command = plan
+  variables {
+    release = merge(var.release, { task_assign_public_ip = "ENABLED" })
+  }
+  assert {
+    condition     = jsondecode(aws_lambda_function.control[0].environment[0].variables.NATIVE_RESUME_LAUNCH_CONFIGURATION_JSON).assignPublicIp == "ENABLED" && aws_cloudwatch_event_rule.dispatch[0].state == "DISABLED"
+    error_message = "The reviewed direct-route choice must reach the launcher without activating work."
+  }
+}
+run "unknown_network_mode_refused" {
+  command = plan
+  variables {
+    release = merge(var.release, { task_assign_public_ip = "AUTO" })
   }
   expect_failures = [var.release]
 }
