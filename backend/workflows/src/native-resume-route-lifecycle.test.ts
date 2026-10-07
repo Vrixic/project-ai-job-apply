@@ -55,7 +55,7 @@ function setup() {
     NonNullable<Parameters<typeof createNativeResumeRouteLifecycle>[0]["testRoute"]>
   >(() => ({ create, remove, inspect, status }));
   const options = { capture, admit, attach, retired, enabled, creationEnabled, testRoute };
-  const run = async (interrupted?: "create" | "remove") => {
+  const run = async (interrupted?: "create" | "remove" | "attach") => {
     const lifecycle = createNativeResumeRouteLifecycle(options);
     const runner = new LocalDurableTestRunner({
       handlerFunction: withDurableExecution(async (_input, context) => {
@@ -71,7 +71,8 @@ function setup() {
                 };
                 expect(config.semantics).toBe(StepSemantics.AtMostOncePerRetry);
                 expect(config.retryStrategy()).toEqual({ shouldRetry: false });
-                present = interrupted === "create";
+                if (interrupted === "create") present = true;
+                if (interrupted === "remove") present = false;
                 throw new StepInterruptedError("synthetic-operation", String(args[0]));
               }
               return Reflect.apply(step, context, args);
@@ -257,6 +258,13 @@ it.each(["create", "remove"] as const)(
     expect(x.remove).toHaveBeenCalledTimes(interrupted === "remove" ? 0 : 1);
   },
 );
+it("retains an interrupted attachment as unresolved and continues DNS cleanup", async () => {
+  const x = setup();
+  const { result } = await x.run("attach");
+  expect(result.getResult()).toMatchObject({ cleanup: "removed", attachment: "unresolved" });
+  expect(x.attach).not.toHaveBeenCalled();
+  expect(x.remove).toHaveBeenCalledOnce();
+});
 it("removes an expired route without treating expiry as positive task retirement", async () => {
   const x = setup();
   x.capture.mockImplementation(async () => ({ intent, expiresAtMs: Date.now() + 2_000 }));

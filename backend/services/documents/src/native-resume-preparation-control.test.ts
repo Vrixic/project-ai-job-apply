@@ -1,5 +1,5 @@
-import type { InvokeCommand } from "@aws-sdk/client-lambda";
 import { fileURLToPath } from "node:url";
+import type { InvokeCommand } from "@aws-sdk/client-lambda";
 import { expect, it, vi } from "vitest";
 import { createNativeResumePreparationControlClient } from "./native-resume-preparation-control-client.js";
 import {
@@ -88,6 +88,69 @@ it("accepts scalar original preparation and rejects bodies, foreign scope and mi
   ])
     expect(validateNativeResumePreparationControlOutput(value)).toBe(false);
 });
+it("binds route capture/admission/retirement metadata to the exact original scope", () => {
+  const route = {
+    intent: {
+      allocationId: scope.allocationId,
+      publicIp: "54.0.0.1",
+      hostedZoneId: "ZSYNTHETIC123",
+      baseHost: "resumes.example.com",
+    },
+    expiresAtMs: Date.now() + 10000,
+  };
+  const request = { schemaVersion: 1 as const, action: "route_capture" as const, scope };
+  const captured = {
+    schemaVersion: 1,
+    request,
+    outcome: "route_captured",
+    scope,
+    packet: null,
+    route,
+  };
+  expect(validateNativeResumePreparationControlInput(request)).toBe(true);
+  expect(validateNativeResumePreparationControlOutput(captured)).toBe(true);
+  const admit = { schemaVersion: 1, action: "route_admit", scope, route };
+  expect(validateNativeResumePreparationControlInput(admit)).toBe(true);
+  expect(validateNativeResumePreparationControlOutput({ ...captured, outcome: "ready" })).toBe(
+    false,
+  );
+  expect(
+    validateNativeResumePreparationControlOutput({
+      ...captured,
+      route: { ...route, token: "synthetic" },
+    }),
+  ).toBe(false);
+  expect(
+    validateNativeResumePreparationControlInput({
+      ...admit,
+      route: { ...route, intent: { ...route.intent, allocationId: id(99) } },
+    }),
+  ).toBe(false);
+  expect(
+    validateNativeResumePreparationControlInput({
+      ...admit,
+      route: { ...route, intent: { ...route.intent, publicIp: "127.0.0.1" } },
+    }),
+  ).toBe(false);
+  const retired = { schemaVersion: 1, action: "route_retired", scope };
+  expect(validateNativeResumePreparationControlInput(retired)).toBe(true);
+  expect(
+    validateNativeResumePreparationControlOutput({
+      schemaVersion: 1,
+      request: retired,
+      outcome: "retired",
+      scope,
+      packet: null,
+    }),
+  ).toBe(true);
+  expect(
+    validateNativeResumePreparationControlOutput({
+      ...captured,
+      outcome: "retired",
+      request: retired,
+    }),
+  ).toBe(false);
+});
 it.each(["version", "log", "foreign", "unavailable"])(
   "refuses %s Lambda replies without retry",
   async (mode) => {
@@ -126,6 +189,11 @@ it("connects the actual numeric client/handler and pins warm configuration befor
   );
   const environment: Record<string, string | undefined> = {
     NATIVE_RESUME_PREPARATION_CONTROL_ENABLED: "true",
+    NATIVE_RESUME_ROUTE_OWNER_ENABLED: "true",
+    NATIVE_RESUME_ROUTE_CONFIGURATION_JSON: JSON.stringify({
+      hostedZoneId: "ZSYNTHETIC123",
+      baseHost: "resumes.example.com",
+    }),
     NATIVE_RESUME_NEW_LAUNCH_ENABLED: "true",
     RESTRICTED_PACKET_PROTECTION_ENABLED: "true",
     AWS_REGION: "us-east-2",
@@ -179,6 +247,16 @@ it("connects the actual numeric client/handler and pins warm configuration befor
   await expect(client.run(start)).rejects.toThrow();
   expect(secret).toHaveBeenCalledOnce();
   expect(run).toHaveBeenCalledTimes(2);
+  environment.NATIVE_RESUME_ROUTE_CONFIGURATION_JSON = JSON.stringify({
+    hostedZoneId: "ZFOREIGN",
+    baseHost: "resumes.example.com",
+  });
+  await expect(client.run(complete)).rejects.toThrow();
+  expect(run).toHaveBeenCalledTimes(2);
+  environment.NATIVE_RESUME_ROUTE_CONFIGURATION_JSON = JSON.stringify({
+    hostedZoneId: "ZSYNTHETIC123",
+    baseHost: "resumes.example.com",
+  });
   environment.AWS_LAMBDA_FUNCTION_VERSION = "10";
   await expect(client.run(complete)).rejects.toThrow();
   expect(run).toHaveBeenCalledTimes(2);

@@ -13,6 +13,11 @@ import {
   validateNativeResumePreparationControlOutput,
 } from "@ai-job-apply/documents-service/native-resume-preparation-control-contract";
 import {
+  type NativeResumeRouteConfiguration,
+  nativeResumeRouteConfiguration,
+} from "@ai-job-apply/documents-service/native-resume-route-policy";
+import { createNativeResumeTaskAddressReader } from "@ai-job-apply/documents-service/native-resume-task-address";
+import {
   createNativeResumeTaskLaunch,
   type NativeTaskLaunchConfiguration,
   nativeTaskLaunchConfiguration,
@@ -23,12 +28,14 @@ import {
   createNativeResumePacketAuthority,
 } from "./native-resume-owner-ports.js";
 import { createNativeResumePreparation } from "./native-resume-preparation.js";
+import { createNativeResumeRouteOwner } from "./native-resume-route-owner.js";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 interface Configuration {
   target: string;
   secretId: string;
   task: ReturnType<typeof nativeTaskLaunchConfiguration>;
+  route?: NativeResumeRouteConfiguration;
 }
 function configuration(env: Environment): Configuration | undefined {
   if (
@@ -63,7 +70,14 @@ function configuration(env: Environment): Configuration | undefined {
   const task = nativeTaskLaunchConfiguration(JSON.parse(json) as NativeTaskLaunchConfiguration);
   if (!task.clusterArn.startsWith(`arn:aws:ecs:us-east-2:${env.PLATFORM_AWS_ACCOUNT_ID}:cluster/`))
     return;
-  return { target, secretId, task };
+  let route: NativeResumeRouteConfiguration | undefined;
+  if (env.NATIVE_RESUME_ROUTE_OWNER_ENABLED === "true") {
+    const routeJson = env.NATIVE_RESUME_ROUTE_CONFIGURATION_JSON;
+    if (!routeJson || Buffer.byteLength(routeJson) > 1024 || task.assignPublicIp !== "ENABLED")
+      return;
+    route = nativeResumeRouteConfiguration(JSON.parse(routeJson) as NativeResumeRouteConfiguration);
+  }
+  return { target, secretId, task, ...(route ? { route } : {}) };
 }
 
 /** Private owner control only: scalar reservation/launch and ready packet attachment. No source
@@ -74,8 +88,9 @@ export function createNativeResumePreparationControlRuntime(
   enabled: () => boolean,
   launchEnabled: () => boolean,
   testClient?: Parameters<typeof createNativeResumeTaskLaunch>[0]["testClient"],
+  testAddressClients?: Parameters<typeof createNativeResumeTaskAddressReader>[0]["testClients"],
 ) {
-  if (testClient && process.env.NODE_ENV !== "test")
+  if ((testClient || testAddressClients) && process.env.NODE_ENV !== "test")
     throw nativeResumePreparationControlUnavailable();
   const task = nativeTaskLaunchConfiguration(config.task);
   const pool = createApplicationsDatabase(url, { maxConnections: 2 });
@@ -101,6 +116,20 @@ export function createNativeResumePreparationControlRuntime(
     launcher,
     enabled,
   });
+  const routeOwner = config.route
+    ? createNativeResumeRouteOwner({
+        generations,
+        configurationSha256: launcher.configurationSha256,
+        route: config.route,
+        enabled,
+        address: createNativeResumeTaskAddressReader({
+          registry: generations,
+          configuration: task,
+          enabled,
+          ...(testAddressClients ? { testClients: testAddressClients } : {}),
+        }),
+      })
+    : undefined;
   let active = false;
   return Object.freeze({
     async run(
@@ -131,6 +160,34 @@ export function createNativeResumePreparationControlRuntime(
             outcome: "captured",
             scope: fixed.scope,
             packet: null,
+          };
+        }
+        if (
+          fixed.action === "route_capture" ||
+          fixed.action === "route_admit" ||
+          fixed.action === "route_retired"
+        ) {
+          if (!routeOwner) throw nativeResumePreparationControlUnavailable();
+          const base = {
+            schemaVersion: 1 as const,
+            request: fixed,
+            scope: fixed.scope,
+            packet: null,
+          };
+          if (fixed.action === "route_capture") {
+            const route = await routeOwner.capture(fixed.scope);
+            return route
+              ? { ...base, outcome: "route_captured", route }
+              : { ...base, outcome: "pending" };
+          }
+          if (fixed.action === "route_admit") {
+            if (!(await routeOwner.admit(fixed.scope, fixed.route)))
+              throw nativeResumePreparationControlUnavailable();
+            return { ...base, outcome: "admitted" };
+          }
+          return {
+            ...base,
+            outcome: (await routeOwner.retired(fixed.scope)) ? "retired" : "pending",
           };
         }
         const result = await preparation.complete(fixed.scope);

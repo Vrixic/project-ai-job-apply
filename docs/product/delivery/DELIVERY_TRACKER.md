@@ -4806,3 +4806,10 @@ compiled dependency/default-off checks pass with simulated owner/AWS ports.
 [Evidence](evidence/d3-native-resume-route-lifecycle-2026-10-07.md). Private runtime integration,
 extended execution timeout, terminal reconciliation and managed/client acceptance remain.
 D1/D3 In progress, prior dependency findings open; no cloud/frontend/CI/CD changes, PC on.
+
+2026-10-07 D3-064/D3-079 connects private owner route admission and the original preparation
+execution to DNS lifecycle/attachment/cleanup, with all new switches default off. Local builds,
+86 contract/address/DNS tests, 24 workflow tests, 64 real-SQL cases and eight bundle checks pass.
+[Evidence](evidence/d3-native-resume-route-owner-2026-10-07.md). AWS ports were simulated;
+release configuration/timeout/IAM, terminal reconciliation, hostname/TLS and managed acceptance
+remain. D1/D3 In progress; dependency findings open, CI/CD deferred, PC on.

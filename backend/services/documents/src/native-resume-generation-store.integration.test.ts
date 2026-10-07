@@ -33,7 +33,10 @@ import type { NativeResumeTaskBinding } from "./native-resume-task-binding.js";
 import { createNativeResumeTaskLaunch } from "./native-resume-task-launch.js";
 import { createNativeResumeTaskObserver } from "./native-resume-task-observer.js";
 import type { NativeTaskRetirementReceipt } from "./native-task-allocation.js";
-import { nativeTaskLaunchConfiguration } from "./native-task-launch-policy.js";
+import {
+  nativeResumeLaunchEnvironment,
+  nativeTaskLaunchConfiguration,
+} from "./native-task-launch-policy.js";
 import { normalizeBlocks } from "./parsing/normalize.js";
 import type { TemporaryMaterialReference } from "./temporary-material-reference.js";
 
@@ -1267,6 +1270,230 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     }
   }, 30000);
 
+  it("captures route admission only for the current ready preparation and rechecks after address I/O", async () => {
+    const f = await preparationFixture();
+    const original = await f.preparation.start(input);
+    await expect(
+      f.generations.readRouteAdmission(original, f.launcher.configurationSha256),
+    ).resolves.toBeNull();
+    const row = await f.generations.readLaunch(original, f.launcher.configurationSha256),
+      ref = reference(row);
+    await f.generations.claimOriginalCompletion(original, ref);
+    await f.generations.publishReady(original, ref);
+    const ownerModule = await import(
+      fileURLToPath(
+        new URL("../../../workflows/dist/src/native-resume-route-owner.js", import.meta.url),
+      )
+    );
+    let sealOnRead = false;
+    const owner = ownerModule.createNativeResumeRouteOwner({
+      generations: f.generations,
+      configurationSha256: f.launcher.configurationSha256,
+      route: { hostedZoneId: "ZSYNTHETIC123", baseHost: "resumes.example.com" },
+      enabled: () => true,
+      address: {
+        read: async () => {
+          if (sealOnRead) await f.generations.seal(original.ownerUserId, original.applicationId);
+          return {
+            allocationId: original.allocationId,
+            taskArn: row.allocation?.taskArn,
+            networkInterfaceId: "eni-0123456789abcdef0",
+            publicIp: "54.0.0.1",
+            expiresAtMs: ref.expiresAtMs,
+          };
+        },
+      },
+    });
+    const captured = await owner.capture(original);
+    expect(captured).toEqual({
+      intent: {
+        hostedZoneId: "ZSYNTHETIC123",
+        baseHost: "resumes.example.com",
+        allocationId: original.allocationId,
+        publicIp: "54.0.0.1",
+      },
+      expiresAtMs: ref.expiresAtMs,
+    });
+    expect(await owner.admit(original, captured)).toBe(true);
+    expect(
+      await owner.admit(original, {
+        ...captured,
+        intent: { ...captured.intent, publicIp: "54.0.0.2" },
+      }),
+    ).toBe(false);
+    const [packets] =
+      await sql`SELECT count(*)::int AS count FROM applications.packets WHERE application_id=${original.applicationId}`;
+    expect(packets?.count).toBe(1);
+    sealOnRead = true;
+    await expect(owner.capture(original)).rejects.toThrow("NativeResumeRouteOwnerUnavailable");
+    await expect(
+      f.generations.readLaunch(original, f.launcher.configurationSha256),
+    ).resolves.toMatchObject({ state: "bound" });
+  });
+  it.each(["job", "hold", "revision", "quarantine", "foreign scope"])(
+    "refuses route admission after %s changes",
+    async (change) => {
+      const f = await preparationFixture();
+      const original = await f.preparation.start(input);
+      const row = await f.generations.readLaunch(original, f.launcher.configurationSha256),
+        ref = reference(row);
+      await f.generations.claimOriginalCompletion(original, ref);
+      await f.generations.publishReady(original, ref);
+      if (change === "job")
+        await sql`UPDATE jobs.canonical_jobs SET description='Synthetic changed job' WHERE id=${input.application.canonicalJobId}`;
+      if (change === "hold")
+        await sql`UPDATE documents.resume_documents SET security_hold=true WHERE id=${input.identity.baseDocumentId}`;
+      if (change === "revision")
+        await sql`UPDATE applications.applications SET revision=revision+1 WHERE id=${original.applicationId}`;
+      if (change === "quarantine")
+        await sql`UPDATE identity.users SET account_state='quarantined',quarantined_at=clock_timestamp() WHERE id=${original.ownerUserId}`;
+      await expect(
+        f.generations.readRouteAdmission(
+          change === "foreign scope" ? { ...original, ownerUserId: uuidv7() } : original,
+          f.launcher.configurationSha256,
+        ),
+      ).rejects.toThrow();
+    },
+  );
+  it("connects the compiled route owner control to real SQL, exact task address, admission and attachment", async () => {
+    const f = await preparationFixture();
+    const original = await f.preparation.start(input);
+    const row = await f.generations.readLaunch(original, f.launcher.configurationSha256),
+      ref = reference(row);
+    await f.generations.claimOriginalCompletion(original, ref);
+    await f.generations.publishReady(original, ref);
+    const module = await import(
+      fileURLToPath(
+        new URL(
+          "../../../workflows/dist/src/native-resume-preparation-control-lambda.js",
+          import.meta.url,
+        ),
+      )
+    );
+    const c = f.configuration,
+      eni = "eni-0123456789abcdef0",
+      privateIp = "10.0.1.5";
+    const runtime = module.createNativeResumePreparationControlRuntime(
+      url,
+      {
+        target: "arn:aws:lambda:us-east-2:123456789012:function:native-resume-preparation:9",
+        secretId: "arn:aws:secretsmanager:us-east-2:123456789012:secret:synthetic-resume",
+        task: c,
+        route: { hostedZoneId: "ZSYNTHETIC123", baseHost: "resumes.example.com" },
+      },
+      () => true,
+      () => false,
+      undefined,
+      {
+        ecs: {
+          send: async () => ({
+            tasks: [
+              {
+                taskArn: task,
+                clusterArn: c.clusterArn,
+                taskDefinitionArn: c.taskDefinitionArn,
+                startedBy: original.allocationId,
+                launchType: "FARGATE",
+                platformVersion: "1.4.0",
+                enableExecuteCommand: false,
+                lastStatus: "RUNNING",
+                desiredStatus: "RUNNING",
+                overrides: {
+                  containerOverrides: [
+                    {
+                      name: c.containerName,
+                      environment: nativeResumeLaunchEnvironment(
+                        original,
+                        f.launcher.configurationSha256,
+                      ),
+                    },
+                  ],
+                },
+                containers: [
+                  {
+                    name: c.containerName,
+                    taskArn: task,
+                    image: c.image,
+                    imageDigest: c.image.split("@")[1],
+                    lastStatus: "RUNNING",
+                    networkInterfaces: [
+                      { attachmentId: "synthetic-eni", privateIpv4Address: privateIp },
+                    ],
+                  },
+                ],
+                attachments: [
+                  {
+                    id: "synthetic-eni",
+                    type: "ElasticNetworkInterface",
+                    status: "ATTACHED",
+                    details: [
+                      { name: "networkInterfaceId", value: eni },
+                      { name: "subnetId", value: c.subnets[0] },
+                      { name: "privateIPv4Address", value: privateIp },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }),
+        },
+        ec2: {
+          send: async () => ({
+            NetworkInterfaces: [
+              {
+                NetworkInterfaceId: eni,
+                OwnerId: "123456789012",
+                Status: "in-use",
+                SubnetId: c.subnets[0],
+                PrivateIpAddress: privateIp,
+                Groups: c.securityGroups.map((GroupId) => ({ GroupId })),
+                Association: { PublicIp: "54.0.0.1" },
+              },
+            ],
+          }),
+        },
+      },
+    );
+    try {
+      const captured = await runtime.run({
+        schemaVersion: 1,
+        action: "route_capture",
+        scope: original,
+      });
+      expect(captured).toMatchObject({
+        outcome: "route_captured",
+        route: {
+          intent: { allocationId: original.allocationId, publicIp: "54.0.0.1" },
+          expiresAtMs: ref.expiresAtMs,
+        },
+      });
+      await expect(
+        runtime.run({
+          schemaVersion: 1,
+          action: "route_admit",
+          scope: original,
+          route: captured.route,
+        }),
+      ).resolves.toMatchObject({ outcome: "admitted" });
+      await expect(
+        runtime.run({ schemaVersion: 1, action: "complete", scope: original }),
+      ).resolves.toMatchObject({ outcome: "ready", packet: { revision: 3 } });
+      await expect(
+        runtime.run({ schemaVersion: 1, action: "route_retired", scope: original }),
+      ).resolves.toMatchObject({ outcome: "pending" });
+      // Original admission has changed after attachment; retirement observation remains valid.
+      await expect(
+        runtime.run({
+          schemaVersion: 1,
+          action: "route_admit",
+          scope: original,
+          route: captured.route,
+        }),
+      ).rejects.toThrow();
+    } finally {
+      await runtime.close();
+    }
+  });
   it("connects original launch, verified-ready packet attachment and current resume location", async () => {
     const f = await preparationFixture();
     const original = await f.preparation.start(input);

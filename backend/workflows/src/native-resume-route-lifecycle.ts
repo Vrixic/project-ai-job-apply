@@ -153,27 +153,34 @@ export function createNativeResumeRouteLifecycle(options: {
       created.kind === "accepted" &&
       (await propagated(created.receipt.changeId, "resume-route.ready.v1", "present"))
     ) {
-      attachment = await context.step(
-        "resume-route.attach.v1",
-        async (): Promise<Attachment> => {
-          check();
-          try {
-            if (
-              Date.now() >= snapshot.expiresAtMs ||
-              (await options.admit(scope, detached())) !== true
-            )
-              return "not_attempted";
+      try {
+        attachment = await context.step(
+          "resume-route.attach.v1",
+          async (): Promise<Attachment> => {
             check();
-            if (Date.now() >= snapshot.expiresAtMs) return "not_attempted";
-            await options.attach(scope);
-            check();
-            return "acknowledged";
-          } catch {
-            return "unresolved";
-          }
-        },
-        noRetry,
-      );
+            try {
+              if (
+                Date.now() >= snapshot.expiresAtMs ||
+                (await options.admit(scope, detached())) !== true
+              )
+                return "not_attempted";
+              check();
+              if (Date.now() >= snapshot.expiresAtMs) return "not_attempted";
+              await options.attach(scope);
+              check();
+              return "acknowledged";
+            } catch {
+              return "unresolved";
+            }
+          },
+          once,
+        );
+      } catch (error) {
+        if (!(error instanceof StepInterruptedError)) throw error;
+        // Admission changes after the packet commits. Do not replay that changed admission
+        // and incorrectly label a lost successful attachment as "not_attempted".
+        attachment = "unresolved";
+      }
     }
 
     // Bounded 30-minute lifetime observation, with early cleanup on positive task retirement.

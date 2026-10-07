@@ -8,6 +8,51 @@ export interface NativeResumeRouteIntent {
   hostedZoneId: string;
   baseHost: string;
 }
+export type NativeResumeRouteConfiguration = Pick<
+  NativeResumeRouteIntent,
+  "hostedZoneId" | "baseHost"
+>;
+export interface NativeResumeRouteSnapshot {
+  intent: NativeResumeRouteIntent;
+  expiresAtMs: number;
+}
+export function nativeResumeRouteConfiguration(input: NativeResumeRouteConfiguration) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Object.getPrototypeOf(input) !== Object.prototype ||
+    Reflect.ownKeys(input).length !== 2 ||
+    !["hostedZoneId", "baseHost"].every((key) => {
+      const field = Object.getOwnPropertyDescriptor(input, key);
+      return field?.enumerable && "value" in field && typeof field.value === "string";
+    }) ||
+    !/^Z[A-Z0-9]{1,31}$/u.test(input.hostedZoneId) ||
+    input.baseHost.length > 200 ||
+    !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u.test(input.baseHost)
+  )
+    throw Error("NativeResumeDnsUnavailable");
+  return Object.freeze({ hostedZoneId: input.hostedZoneId, baseHost: input.baseHost });
+}
+export function nativeResumeRouteSnapshot(input: NativeResumeRouteSnapshot) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Object.getPrototypeOf(input) !== Object.prototype ||
+    Reflect.ownKeys(input).length !== 2 ||
+    !["intent", "expiresAtMs"].every((key) => {
+      const field = Object.getOwnPropertyDescriptor(input, key);
+      return field?.enumerable && "value" in field;
+    }) ||
+    !Number.isSafeInteger(input.expiresAtMs) ||
+    input.expiresAtMs <= 0 ||
+    input.expiresAtMs > 8_640_000_000_000_000
+  )
+    throw Error("NativeResumeDnsUnavailable");
+  return Object.freeze({
+    intent: nativeResumeRouteIntent(input.intent),
+    expiresAtMs: input.expiresAtMs,
+  });
+}
 
 export function nativeResumePublicIpv4(value: unknown): value is string {
   if (typeof value !== "string" || !isIPv4(value)) return false;

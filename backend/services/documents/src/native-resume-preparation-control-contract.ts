@@ -4,16 +4,40 @@ import {
   type NativeResumeReservation,
   nativeResumeReservation,
 } from "./native-resume-generation-store.js";
+import {
+  type NativeResumeRouteSnapshot,
+  nativeResumeRouteSnapshot,
+} from "./native-resume-route-policy.js";
 export type NativeResumePreparationControlInput =
   | { schemaVersion: 1; action: "start"; reservation: NativeResumeReservation }
   | { schemaVersion: 1; action: "complete"; scope: NativeResumeGenerationScope }
+  | {
+      schemaVersion: 1;
+      action: "route_capture" | "route_retired";
+      scope: NativeResumeGenerationScope;
+    }
+  | {
+      schemaVersion: 1;
+      action: "route_admit";
+      scope: NativeResumeGenerationScope;
+      route: NativeResumeRouteSnapshot;
+    }
   | { schemaVersion: 1; action: "recover"; scope: NativeResumeGenerationScope; taskArn: string };
 export interface NativeResumePreparationControlOutput {
   schemaVersion: 1;
   request: NativeResumePreparationControlInput;
-  outcome: "reserved" | "pending" | "ready" | "captured" | "unavailable";
+  outcome:
+    | "reserved"
+    | "pending"
+    | "ready"
+    | "captured"
+    | "unavailable"
+    | "route_captured"
+    | "admitted"
+    | "retired";
   scope: NativeResumeGenerationScope | null;
   packet: { id: string; revision: number } | null;
+  route?: NativeResumeRouteSnapshot;
 }
 export const nativeResumePreparationControlUnavailable = () =>
   Error("NativeResumePreparationControlUnavailable");
@@ -45,12 +69,26 @@ export function validateNativeResumePreparationControlInput(
       nativeResumeReservation(value.reservation as NativeResumeReservation);
       return true;
     }
-    if (value.action === "complete")
+    if (
+      value.action === "complete" ||
+      value.action === "route_capture" ||
+      value.action === "route_retired"
+    )
       return (
         nativeOwnerClosed(value, ["schemaVersion", "action", "scope"]) &&
         value.schemaVersion === 1 &&
         scope(value.scope)
       );
+    if (value.action === "route_admit") {
+      if (
+        !nativeOwnerClosed(value, ["schemaVersion", "action", "scope", "route"]) ||
+        value.schemaVersion !== 1 ||
+        !scope(value.scope)
+      )
+        return false;
+      const route = nativeResumeRouteSnapshot(value.route as NativeResumeRouteSnapshot);
+      return route.intent.allocationId === value.scope.allocationId;
+    }
     return (
       value.action === "recover" &&
       nativeOwnerClosed(value, ["schemaVersion", "action", "scope", "taskArn"]) &&
@@ -70,7 +108,14 @@ export function validateNativeResumePreparationControlOutput(
 ): value is NativeResumePreparationControlOutput {
   try {
     if (
-      !nativeOwnerClosed(value, ["schemaVersion", "request", "outcome", "scope", "packet"]) ||
+      !nativeOwnerClosed(value, [
+        "schemaVersion",
+        "request",
+        "outcome",
+        "scope",
+        "packet",
+        ...((value as { outcome?: unknown })?.outcome === "route_captured" ? ["route"] : []),
+      ]) ||
       value.schemaVersion !== 1 ||
       !validateNativeResumePreparationControlInput(value.request) ||
       Buffer.byteLength(JSON.stringify(value)) > 8192
@@ -93,7 +138,22 @@ export function validateNativeResumePreparationControlOutput(
     if (value.outcome === "captured")
       return value.request.action === "recover" && value.packet === null;
     if (value.outcome === "pending")
-      return value.request.action === "complete" && value.packet === null;
+      return (
+        ["complete", "route_capture", "route_retired"].includes(value.request.action) &&
+        value.packet === null
+      );
+    if (value.outcome === "route_captured") {
+      const route = nativeResumeRouteSnapshot(value.route as NativeResumeRouteSnapshot);
+      return (
+        value.request.action === "route_capture" &&
+        value.packet === null &&
+        route.intent.allocationId === value.scope.allocationId
+      );
+    }
+    if (value.outcome === "admitted")
+      return value.request.action === "route_admit" && value.packet === null;
+    if (value.outcome === "retired")
+      return value.request.action === "route_retired" && value.packet === null;
     return (
       value.outcome === "ready" &&
       value.request.action === "complete" &&

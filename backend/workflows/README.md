@@ -298,3 +298,9 @@ DNS writes; all clock/I/O decisions are checkpointed. Unknown acknowledgements s
 It requires one owning allocation-bound execution and supplied private owner ports. Preparation
 Lambda composition, longer execution timeout and terminal reconciliation are still required; see
 [local lifecycle evidence](../../docs/product/delivery/evidence/d3-native-resume-route-lifecycle-2026-10-07.md).
+
+The preparation control and durable entrypoint now compose those owner ports behind separate
+route-owner, lifecycle and creation switches (all default off). Attachment interruptions remain
+unresolved while cleanup continues. Release timeout/IAM/configuration and terminal reconciliation
+are still required. See [owner integration evidence](../../docs/product/delivery/evidence/d3-native-resume-route-owner-2026-10-07.md)
+for configuration, local verification and remaining managed acceptance.

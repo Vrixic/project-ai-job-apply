@@ -524,6 +524,31 @@ export class PostgresNativeResumeGenerationStore {
     });
   }
 
+  /** Fresh preparation admission for route capture/creation. Unlike recovery readLaunch,
+   * this requires the current candidate, original application intent, job/source and epoch.
+   * No locks survive the return; callers must recheck after remote address observation. */
+  async readRouteAdmission(
+    input: NativeResumeGenerationScope,
+    configurationSha256: string,
+  ): Promise<NativeResumeGenerationRecord | null> {
+    return this.guarded(async () => {
+      const scope = this.scope(input);
+      if (typeof configurationSha256 !== "string" || !hash.test(configurationSha256))
+        throw unavailable();
+      return this.sql.begin(async (tx) => {
+        let row = await this.row(tx, scope);
+        if (!row.launch_claimed_at || row.configuration_sha256 !== configurationSha256)
+          throw unavailable();
+        row = await this.active(tx, row, true);
+        if (row.state !== "bound" || row.ready_at === null || row.content_sha256 === null)
+          return null;
+        const value = record(row);
+        if (!value.reference || !value.allocation) throw unavailable();
+        this.check();
+        return value;
+      });
+    });
+  }
   /** Rotate a bounded original-configuration batch before remote I/O. A lost invocation
    * only delays another attempt; these timestamps never prove task termination. */
   async claimObservations(

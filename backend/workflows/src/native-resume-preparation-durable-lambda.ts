@@ -2,7 +2,7 @@ import type { DurableLambdaHandler } from "@aws/durable-execution-sdk-js";
 import { createNativeResumePreparationDurableHandler } from "./native-resume-preparation-durable.js";
 
 type Environment = Readonly<Record<string, string | undefined>>;
-type Configuration = { target: string; activity: string };
+type Configuration = { target: string; activity: string; routing: boolean };
 const unavailable = () => new Error("NativeResumePreparationWorkflowUnavailable");
 
 function configuration(env: Environment): Configuration | undefined {
@@ -35,7 +35,7 @@ function configuration(env: Environment): Configuration | undefined {
     target.slice(0, target.lastIndexOf(":")) === activity.slice(0, activity.lastIndexOf(":"))
   )
     return;
-  return { target, activity };
+  return { target, activity, routing: env.NATIVE_RESUME_ROUTE_LIFECYCLE_ENABLED === "true" };
 }
 
 /** Configuration and kill-switch qualification stay outside deterministic SDK workflow code.
@@ -58,12 +58,37 @@ export function createNativeResumePreparationDurableLambda(
     if (
       !config ||
       context?.invokedFunctionArn !== config.target ||
-      (pinned && (pinned.target !== config.target || pinned.activity !== config.activity))
+      (pinned &&
+        (pinned.target !== config.target ||
+          pinned.activity !== config.activity ||
+          pinned.routing !== config.routing))
     )
       throw unavailable();
     if (!runtime) {
       pinned = config;
-      runtime = createNativeResumePreparationDurableHandler(config.activity);
+      const enabled = () => {
+        try {
+          const current = configuration(environment());
+          return (
+            current !== undefined &&
+            current.target === pinned?.target &&
+            current.activity === pinned.activity &&
+            current.routing === pinned.routing
+          );
+        } catch {
+          return false;
+        }
+      };
+      runtime = createNativeResumePreparationDurableHandler(
+        config.activity,
+        config.routing
+          ? {
+              enabled,
+              creationEnabled: () =>
+                enabled() && environment().NATIVE_RESUME_ROUTE_CREATION_ENABLED === "true",
+            }
+          : undefined,
+      );
     }
     // Delegate the original SDK control envelope unchanged; its workflow validates the strict
     // identifier-only application payload. Never wrap SDK continuation/checkpoint exceptions.
