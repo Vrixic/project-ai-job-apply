@@ -1952,3 +1952,11 @@ client/ATS/accountable gates remain. D1/D3 In progress, ADR-040 Proposed; CI/CD 
 launch and PC remains on.
 
 Updated dispatcher ZIP built from clean `4cded260`; no publication/deployment. Owned SQL fixture removed, Docker/WSL stopped, development web root 200 and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds the complete native resume publication family to the existing
+guarded operator: five private artifacts, twenty companion files, dedicated output/key/receipt
+roots and one build command. Pure guards pass for complete inventory and mixed/duplicate/missing
+receipt rejection. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Actual
+frozen-source family build follows. No publication, deployment, schedule or IAM activation.
+D1/D3 remain In progress; ADR-040 Proposed. CI/CD deferred until launch, PC on.

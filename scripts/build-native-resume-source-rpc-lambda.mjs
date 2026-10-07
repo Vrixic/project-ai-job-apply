@@ -11,10 +11,7 @@ const artifact = await buildLambdaArtifact({
   artifactName,
   applicationName: `@ai-job-apply/${artifactName}`,
   entryPoint: path.join(repositoryRoot, `backend/workflows/dist/src/${artifactName}.js`),
-  outputDirectory: path.join(
-    repositoryRoot,
-    "backend/workflows/dist/native-resume-source-rpc-lambda",
-  ),
+  outputDirectory: path.join(repositoryRoot, "backend/workflows/dist/native-resume-lambda"),
   handlers: ["index.handler"],
   packageFilter: "@ai-job-apply/workflows...",
   verifyBundle: async (bundle) => {

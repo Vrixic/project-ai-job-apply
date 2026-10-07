@@ -177,11 +177,12 @@ $configurationAssignments = @($ast.FindAll({
     param($node)
     $node -is [Management.Automation.Language.AssignmentStatementAst] -and
     $node.Left.Extent.Text -in @('$isCoreWorkflow', '$isIngestion', '$isPublicJob', '$isApplicationsRecovery',
-      '$isPrivateDocumentControls', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
+      '$isPrivateDocumentControls', '$isNativeResume', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
       '$artifactKeyRoot', '$receiptKind', '$artifactLabel', '$expectedObjectCount')
   }, $false) | Sort-Object { $_.Extent.StartOffset })
-if ($configurationAssignments.Count -ne 12) { throw "Unexpected publication family-selection inventory." }
-foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS")) {
+if ($configurationAssignments.Count -ne 13) { throw "Unexpected publication family-selection inventory." }
+$resumeNames = @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda")
+foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME")) {
   $ArtifactFamily = $family
   foreach ($assignment in $configurationAssignments) { Invoke-Expression $assignment.Extent.Text }
   if ($family -eq "PrivateDocumentControls") {
@@ -192,6 +193,14 @@ foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcon
         $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/services/documents/dist/private-control-lambda')) {
       throw "Private artifact family escaped its exact dedicated boundary."
     }
+  } elseif ($family -eq "NativeResume") {
+    if (($artifactNames -join ',') -cne ($resumeNames -join ',') -or $expectedObjectCount -ne 20 -or
+        $receiptKind -cne "development-native-resume-lambda-publication" -or
+        $artifactKeyRoot -cne "lambda/documents/native-resume" -or
+        $operatorDirectoryName -cne "development-native-resume-artifacts" -or
+        $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/workflows/dist/native-resume-lambda')) {
+      throw "Native resume family escaped its exact dedicated boundary."
+    }
   } elseif (($artifactNames -join ',') -cne 'document-processor-lambda,document-parser-lambda' -or
       $expectedObjectCount -ne 8 -or $receiptKind -cne 'development-document-lambda-publication') {
     throw "Existing document publication family changed."
@@ -200,3 +209,26 @@ foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcon
 Write-Host "Private control family and receipt-isolation regressions passed; no cloud calls."
 & node --test (Join-Path $repositoryRoot 'scripts/tests/private-document-artifacts.test.mjs')
 if ($LASTEXITCODE -ne 0) { throw "Private artifact smoke regressions failed." }
+
+$resumeMatrix = @()
+foreach ($name in $resumeNames) {
+  foreach ($suffix in @("zip", "cdx.json", "manifest.json", "sha256")) {
+    $resumeMatrix += [pscustomobject]@{ artifactName = $name; artifactSha256 = $digest; suffix = $suffix }
+  }
+}
+if (-not (Assert-CanonicalReceiptMatrix -Artifacts $resumeMatrix -ExpectedArtifactNames $resumeNames)) {
+  throw "Complete native resume receipt was refused."
+}
+foreach ($invalid in @(
+    [pscustomobject]@{ Entries = $canonicalArtifacts },
+    [pscustomobject]@{ Entries = $privateMatrix },
+    [pscustomobject]@{ Entries = @($resumeMatrix | Select-Object -First 19) },
+    [pscustomobject]@{ Entries = @($resumeMatrix | Select-Object -First 19) + @($resumeMatrix[0]) },
+    [pscustomobject]@{ Entries = @($resumeMatrix) + @($privateMatrix) }
+  )) {
+  $refused = $false
+  try { $null = Assert-CanonicalReceiptMatrix -Artifacts $invalid.Entries -ExpectedArtifactNames $resumeNames }
+  catch { $refused = $true }
+  if (-not $refused) { throw "Mixed, duplicate or incomplete native resume receipt was accepted." }
+}
+Write-Host "Native resume family and twenty-object receipt guards passed; no cloud calls."

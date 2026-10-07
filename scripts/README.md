@@ -140,6 +140,8 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
   and metadata, and emits a checksum-reviewed ignored receipt without deploying either Lambda.
   `-ArtifactFamily PrivateDocumentControls` selects the dedicated four-artifact/sixteen-object
   family with isolated receipt/key roots and unchanged audit/source/KMS/immutable-write guards.
+  `-ArtifactFamily NativeResume` packages all five resume owner/source/control/durable/dispatch
+  entrypoints as twenty immutable objects; local build command is Workflows `build:lambda:native-resume`.
 - `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
   fallback for the migration-only container. Its cloud-independent `LocalBuild` action proves two
   source-bound `linux/amd64` builds have identical configuration and rootfs identities and passes a

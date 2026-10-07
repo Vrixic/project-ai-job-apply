@@ -3,7 +3,7 @@ param(
   [ValidateSet("Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
-  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery", "PrivateDocumentControls")]
+  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery", "PrivateDocumentControls", "NativeResume")]
   [string]$ArtifactFamily = "Document",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -58,6 +58,11 @@ output, receipt and immutable key roots; it never extends an existing Document r
 it only for separately authorized publication. Building or publishing does not authenticate,
 deploy or activate these default-off controls.
 
+NativeResume selects five private artifacts/twenty objects: owner RPC, retained-source RPC,
+preparation control, durable preparation and request dispatcher. Dedicated output/key/receipt
+roots preserve existing families. Publication does not deploy task images, configure IAM/TLS
+or enable processing.
+
 Receipts and command logs remain below the ignored development .terraform directory. Do not copy
 account IDs, bucket names, KMS identifiers, raw object content, or command logs into shared evidence.
 "@
@@ -78,6 +83,7 @@ $isPublicJob = $ArtifactFamily -ceq "PublicJob"
 $isApplicationsRecovery = $ArtifactFamily -ceq "ApplicationsRecovery"
 # Match ValidateSet's case-insensitive binding; never fall back to parser/processor artifacts.
 $isPrivateDocumentControls = $ArtifactFamily -eq "PrivateDocumentControls"
+$isNativeResume = $ArtifactFamily -eq "NativeResume"
 $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-workflow-artifacts"
 } elseif ($isIngestion) {
@@ -88,6 +94,8 @@ $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-applications-recovery-artifacts"
 } elseif ($isPrivateDocumentControls) {
   "development-private-document-control-artifacts"
+} elseif ($isNativeResume) {
+  "development-native-resume-artifacts"
 } else {
   "development-document-artifacts"
 }
@@ -99,6 +107,8 @@ $artifactDirectory = if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRec
   Join-Path $repositoryRoot "backend\gateway\dist\public-job-lambda"
 } elseif ($isPrivateDocumentControls) {
   Join-Path $repositoryRoot "backend\services\documents\dist\private-control-lambda"
+} elseif ($isNativeResume) {
+  Join-Path $repositoryRoot "backend/workflows/dist/native-resume-lambda"
 } else {
   Join-Path $repositoryRoot "backend\services\documents\dist\lambda"
 }
@@ -114,6 +124,8 @@ $artifactNames = @(
     @("applications-attempt-recovery-lambda")
   } elseif ($isPrivateDocumentControls) {
     @("cover-letter-provider-control-lambda", "cover-letter-response-capture-lambda", "cover-letter-cleanup-lambda", "cover-letter-response-disposal-lambda")
+  } elseif ($isNativeResume) {
+    @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda")
   } else {
     @("document-processor-lambda", "document-parser-lambda")
   }
@@ -128,6 +140,8 @@ $artifactKeyRoot = if ($isCoreWorkflow) {
   "lambda/applications"
 } elseif ($isPrivateDocumentControls) {
   "lambda/documents/private-controls"
+} elseif ($isNativeResume) {
+  "lambda/documents/native-resume"
 } else {
   "lambda/documents"
 }
@@ -141,6 +155,8 @@ $receiptKind = if ($isCoreWorkflow) {
   "development-applications-recovery-lambda-publication"
 } elseif ($isPrivateDocumentControls) {
   "development-private-document-controls-lambda-publication"
+} elseif ($isNativeResume) {
+  "development-native-resume-lambda-publication"
 } else {
   "development-document-lambda-publication"
 }
@@ -154,6 +170,8 @@ $artifactLabel = if ($isCoreWorkflow) {
   "applications recovery"
 } elseif ($isPrivateDocumentControls) {
   "private document controls"
+} elseif ($isNativeResume) {
+  "native resume"
 } else {
   "document"
 }
@@ -550,7 +568,7 @@ if ($Action -eq "Publish") {
   $auditLog = Join-Path $operatorRoot "dependency-audit-$timestamp.log"
   $buildOneLog = Join-Path $operatorRoot "build-one-$timestamp.log"
   $buildTwoLog = Join-Path $operatorRoot "build-two-$timestamp.log"
-  if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRecovery) {
+  if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRecovery -or $isNativeResume) {
     Invoke-LocalGate -Name "Workflow tests" -LogPath $testLog -Command {
       pnpm --filter @ai-job-apply/workflows test
     }
@@ -573,6 +591,7 @@ if ($Action -eq "Publish") {
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       elseif ($isApplicationsRecovery) { pnpm --filter @ai-job-apply/workflows build:lambda:applications-attempt-recovery }
       elseif ($isPrivateDocumentControls) { pnpm --filter @ai-job-apply/documents-service build:lambda:private-controls }
+      elseif ($isNativeResume) { pnpm --filter @ai-job-apply/workflows build:lambda:native-resume }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $first = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)
@@ -583,6 +602,7 @@ if ($Action -eq "Publish") {
       elseif ($isPublicJob) { pnpm --filter @ai-job-apply/gateway build:public-job-lambda }
       elseif ($isApplicationsRecovery) { pnpm --filter @ai-job-apply/workflows build:lambda:applications-attempt-recovery }
       elseif ($isPrivateDocumentControls) { pnpm --filter @ai-job-apply/documents-service build:lambda:private-controls }
+      elseif ($isNativeResume) { pnpm --filter @ai-job-apply/workflows build:lambda:native-resume }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $second = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)

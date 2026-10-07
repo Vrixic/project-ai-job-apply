@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildLambdaArtifact } from "./lib/build-lambda-artifact.mjs";
+
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const artifactName = "native-resume-request-dispatch-lambda";
 const artifact = await buildLambdaArtifact({
   repositoryRoot,
   entryPoint: path.join(repositoryRoot, `backend/workflows/dist/src/${artifactName}.js`),
-  outputDirectory: path.join(repositoryRoot, "backend/workflows/dist", artifactName),
+  outputDirectory: path.join(repositoryRoot, "backend/workflows/dist/native-resume-lambda"),
   artifactName,
   applicationName: `@ai-job-apply/${artifactName}`,
   handlers: ["index.handler"],

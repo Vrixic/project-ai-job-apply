@@ -24,7 +24,7 @@ const names = [
 const artifact = await buildLambdaArtifact({
   repositoryRoot,
   entryPoint: path.join(repositoryRoot, `backend/workflows/dist/src/${artifactName}.js`),
-  outputDirectory: path.join(repositoryRoot, "backend/workflows/dist/preparation-durable-lambda"),
+  outputDirectory: path.join(repositoryRoot, "backend/workflows/dist/native-resume-lambda"),
   artifactName,
   applicationName: `@ai-job-apply/${artifactName}`,
   handlers: ["index.handler"],

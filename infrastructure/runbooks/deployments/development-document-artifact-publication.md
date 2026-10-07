@@ -68,3 +68,27 @@ this source work. The unchanged clean-main, dependency-audit, deterministic-buil
 KMS/checksum and immutable-write guards still apply; this family cannot enable functions or IAM.
 Reviewed maintenance-only permissions, runtime composition, writer drain and accountable acceptance
 must precede activation. Response disposal does not settle private work or authorize platform purge.
+
+
+## Native resume release family
+
+`-ArtifactFamily NativeResume` selects five private Lambda artifacts: `native-resume-owner-rpc-lambda`,
+`native-resume-source-rpc-lambda`, `native-resume-preparation-control-lambda`,
+`native-resume-preparation-durable-lambda` and `native-resume-request-dispatch-lambda`.
+Build the complete set locally with `pnpm --filter @ai-job-apply/workflows build:lambda:native-resume`.
+Each existing builder verifies default-off behavior; outputs share the dedicated
+`backend/workflows/dist/native-resume-lambda` directory. Set `ARTIFACT_SOURCE_SHA` to the exact clean
+commit when producing release artifacts.
+
+The publisher requires all twenty ZIP/manifest/CycloneDX/checksum files. Its receipt/log directory
+is `.terraform/development-native-resume-artifacts`, receipt kind is
+`development-native-resume-lambda-publication`, and immutable S3 key root is
+`lambda/documents/native-resume`. Native resume publication runs Workflow tests and the existing
+dependency audit and requires two identical complete builds. It preserves clean-main, exact
+source, KMS, immutable-write and exact-version verification requirements. Existing Document and
+PrivateDocumentControls receipts cannot substitute for this family.
+
+This source-only capability does not authorize publication. Publication requires its own exact
+account/state/source authorization and does not deploy Lambdas, apply database migrations, publish
+the native image, provision task roles/TLS/routing or enable a schedule. The resume image requires
+`linuxParameters.initProcessEnabled: true`. Managed acceptance remains separate from artifact proof.

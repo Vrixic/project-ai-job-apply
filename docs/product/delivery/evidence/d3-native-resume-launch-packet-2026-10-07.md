@@ -242,3 +242,20 @@ ZIP SHA-256 `26dc90e4c567cbd17eebcec79e1a0bd0dc2d2c83be1f08016fd1c925e7390e22`,
 515891 bytes, 30 components; bundled default-off refusal passes. No publication/deployment.
 Log: `.tmp/d3-resume-recovery-dispatch-artifact.log`. Owned SQL fixture removed; Docker Desktop
 and WSL stopped, shared volumes retained. Development web remains available (anonymous root 200).
+
+
+## Complete native resume publication path
+
+The existing guarded publisher now selects `NativeResume` as a separate five-artifact/twenty-file
+family: owner RPC, retained-source RPC, preparation control, durable preparation and dispatcher.
+All five existing builders emit under the dedicated Workflows `dist/native-resume-lambda` root,
+and one package command builds the full dependency closure and artifact set. Publication uses
+separate operator/receipt/S3 key roots and inherits the existing clean-main, source marker,
+checksum/SBOM, dependency audit, two-build, KMS and immutable-write guards. It cannot enable
+functions, schedules or task routing. No cloud action is run by this implementation.
+
+The local publisher guard suite passes, including case-insensitive NativeResume selection and
+rejection of incomplete, duplicated or mixed twenty-object receipts. Existing document and private
+control families retain their exact roots/inventories. Five-artifact actual build/readback checks
+follow on committed source. This closes release packaging only; enabled-image conformance and
+managed/client/ATS/accountable acceptance remain. D1/D3 stay In progress and ADR-040 Proposed.
