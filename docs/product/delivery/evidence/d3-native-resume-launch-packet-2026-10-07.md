@@ -604,3 +604,24 @@ launch disabled. Logs: `.tmp/d3-observer-wiring-boundary.log`,
 `.tmp/d3-observer-wiring-env-staging.log`. These are synthetic-provider checks, not effective IAM,
 queue retention or managed delivery evidence. No publication, deployment or activation occurred.
 The current-source six-artifact family still requires rebuilding before publication.
+
+
+## Observer failure retention
+
+Optional environment composition now derives one platform-owned standard queue per original
+preparation revision using the reviewed queue ARN. Duplicate queues are refused. Queues retain
+messages fourteen days, use the environment platform key and deny insecure transport. A key
+precondition rejects a release targeting a different key; deletion is protected. Rule-scoped
+EventBridge SendMessage and KMS grants preserve original recipients. Existing observer IAM
+supplies Lambda failure-delivery permission. Three alarms route queue depth, EventBridge failed
+DLQ delivery and Lambda DeadLetterErrors to the existing operational topic. Preparation depends
+on platform completion. Empty maps remain inert; no operator replay permissions are added.
+
+Two platform mocked tests cover retention/encryption, rule/TLS policies, key-policy source scope,
+alerts and empty defaults. Three tests in each environment pass, with Terraform validation.
+Logs: `.tmp/d3-observer-queue-platform.log`, `.tmp/d3-observer-queue-development.log`,
+`.tmp/d3-observer-queue-staging.log`. Initial fixture failures (synthetic SNS ARN and set/list
+assertion mismatch) were corrected before final pass. No AWS calls or managed proof occurred.
+Actual policy evaluation, alert receipt and authorized replay still require release acceptance.
+The README records replay against the original numeric observer and explicit unresolved handling
+when fresh terminal evidence is unavailable. This queue cannot recover missing source events.

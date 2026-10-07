@@ -51,6 +51,29 @@ locals {
 }
 
 data "aws_iam_policy_document" "platform_kms" {
+  dynamic "statement" {
+    for_each = length(var.native_resume_observation_releases) > 0 ? [1] : []
+    content {
+      sid       = "OriginalResumeObservationFailureEncryption"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = values(local.native_resume_observer_rules)
+      }
+    }
+  }
   statement {
     sid       = "EnableAccountIAMPermissions"
     effect    = "Allow"

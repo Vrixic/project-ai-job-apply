@@ -4657,3 +4657,12 @@ validation and 23 mocked cases pass (bootstrap 7, preparation 10, development 3,
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#observer-release-wiring).
 Queue/resource/key policies, retention/monitoring, missed-event recovery and managed acceptance
 remain unverified. No cloud action; D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 D3-064/D3-079 provisions original observer failure queues through optional platform
+composition: fourteen-day customer-key retention, TLS enforcement, original-rule SQS/KMS grants,
+delete protection and three failure alarms. Preparation waits for platform prerequisites.
+Two platform mocked cases and three per environment pass; environment validation passes.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#observer-failure-retention).
+Effective managed permissions/alert delivery and missed-event recovery remain unverified.
+No cloud action; D1/D3 remain In progress and PC on.

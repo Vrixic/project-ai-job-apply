@@ -85,6 +85,7 @@ variable "native_resume_preparation_releases" {
   nullable = false
 }
 module "native_resume_preparation" {
+  depends_on                 = [module.platform]
   source                     = "../../modules/native-resume-preparation"
   for_each                   = var.native_resume_preparation_releases
   account_id                 = module.platform.account_id

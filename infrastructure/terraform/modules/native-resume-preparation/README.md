@@ -34,10 +34,12 @@ and the original SQL allocation determine retirement.
 
 `observer_dead_letter_arn` must identify an existing same-account standard SQS queue. Both
 EventBridge delivery failures (24-hour/185-attempt retry window) and Lambda asynchronous execution
-failures target it. This module does not create that queue or its resource/key policies. Before
-activation, verify retention, restricted replay access, failure alarms, the rule-scoped
-`events.amazonaws.com` SQS SendMessage grant, and customer-key Decrypt/GenerateDataKey permissions
-for EventBridge and the observer. Queue encryption must use the supplied platform key. No
+failures target it. This module consumes the queue. Development/staging composition now provisions it through the
+platform module with fourteen-day platform-key encryption, TLS enforcement, original-rule
+SendMessage/key grants and alerts for visible messages and both failed-DLQ delivery paths.
+Queue deletion is protected; retain each original release entry until reviewed drain. Preparation
+waits for platform dependencies. Standalone callers must provide equivalent infrastructure.
+Before activation, verify effective permissions, alarm delivery and restricted replay access. No
 scheduled reconciliation is included: a missed source event or an observation delayed beyond ECS
 history can leave work unresolved and never proves retirement. Retain original resources until
 trusted drain completes.
@@ -75,3 +77,11 @@ AWS references: [ECS action scopes](https://docs.aws.amazon.com/service-authoriz
 (`DescribeTaskDefinition` requires a wildcard resource) and
 [durable configuration](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lambda-function-durableconfig.html).
 These sources do not establish effective permissions or deployment evidence for this release.
+
+Failure recovery: inspect messages only through an authorized operations session; do not paste raw
+events into logs, tickets or source. Identify the original revision, resolve its delivery failure,
+and replay the original event to that revision's numeric observer. The observer still obtains
+fresh ECS evidence; a queue message cannot substitute for a terminal receipt. Remove a message
+only after successful handling or an accountable resolution. Investigate before the fourteen-day
+retention expires; expiration does not resolve the SQL allocation. There is no automatic redrive
+consumer or new operator permission grant in this change.

@@ -44,6 +44,11 @@ provider "aws" {
 }
 
 module "platform" {
+  native_resume_observation_releases = { for release in values(var.native_resume_preparation_releases) : element(reverse(split(":", release.release.task_definition_arn)), 0) => {
+    queue_arn   = release.release.observer_dead_letter_arn
+    kms_key_arn = release.release.platform_kms_key_arn
+  } }
+
   source                              = "../../modules/platform"
   name                                = "ai-job-apply"
   environment                         = "staging"
