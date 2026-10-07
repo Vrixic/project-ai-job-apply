@@ -53,11 +53,45 @@ fixed object in SQL with scalar bound operator data. The actual metadata and exp
 without relaxing any predicate. No migrated or production malformed rows are claimed or changed.
 
 Logs: `.tmp/d1-privileged-audit-{sql-acceptance,units,gateway-final,cold-refusal}.log`.
-Full clean-source verification remains. Managed capture/maintenance release, independent audit
-security/rights review, 30-day alert/incident delivery metadata enforcement and phase acceptance
-remain open. No cloud deployment/activation, main merge, new PR or hosted CI/CD work is asserted.
+Full clean-source verification passes as recorded below. Managed capture/maintenance release,
+independent audit security/rights review, managed alert/incident metadata retention verification
+and phase acceptance remain open. No cloud deployment/activation, main merge, new PR or hosted CI/CD work is asserted.
 The PC stays on.
 
 The exact owned tmpfs SQL fixture is removed after label verification, with shared volumes
 retained. Docker/WSL are stopped. The owning isolated web parent/child are stopped before full
 verification so session checks can reserve localhost:3000.
+
+## Full verification and restored development web
+
+Frozen clean source `18632bdcce2bc6417088e35941b63fbaa0642a18` passes
+`scripts/verify-phase0.ps1` with explicit matching ARTIFACT_SOURCE_SHA. The original run completes
+with exit zero: 38 typecheck tasks, 39 test tasks, 23 production builds, maintained operator/security
+checks, all emitted bundle isolation checks and Compose configuration. Lint remains zero errors,
+15 warnings and 58 infos. Log: `.tmp/d1-privileged-audit-full.log`. Conditional SQL tests in the
+workspace run remain skipped; the six real PostgreSQL cases above are separate explicit evidence.
+No tracked edits occur while that full run is alive.
+
+The maintained development launcher restores the isolated web against the live development API.
+Unauthenticated local root returns 200 and `/resume` returns 307 with redirects disabled. These
+startup checks do not repeat or extend the owner's accepted Profile/save/reload browser checks.
+Only the two generated Next development type imports are restored to committed source after
+inspection. No frontend feature changes occur. Docker/WSL remain stopped and the PC remains on.
+
+## Alert-retention source inspection
+
+The accepted D1P-06 policy distinguishes 30-day delivery metadata from the retained aggregate
+acceptance record. `scripts/operate-platform-alerts.ps1` emits aggregate status/exercise proof,
+including reviewed recipient-set digest and explicit manual confirmation; it does not write a
+raw recipient or delivery-history artifact. Recipient subscriptions are current configuration,
+not an application incident-history table. No new deletion implementation is inferred from them.
+
+The application CloudWatch log group in
+`infrastructure/terraform/modules/platform/main.tf` configures 30-day retention. The
+[current CloudWatch alarm guide](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Alarms.html)
+documents 30-day alarm-history retention. These are source/service policy evidence, not fresh
+managed-state or all-copy expiry acceptance. A read-only development STS attempt cannot obtain
+credentials because the SSO token has expired and refresh failed; no cloud state changes or new
+managed verification is claimed. Actual storage/producer coverage and managed retention evidence
+remain required before closing D1-012. No unnecessary application alert table or cleanup service
+is added to substitute for that evidence.
