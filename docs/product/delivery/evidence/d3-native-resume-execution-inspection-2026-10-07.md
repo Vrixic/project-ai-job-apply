@@ -51,3 +51,11 @@ The disposable SQL container is removed and Docker/WSL stopped; PC stays on. CI/
 Persisted recovery settlement, automatic repeated scans, unknown launch-ACK reconciliation and
 DNS-effect recovery still require work or an accepted, drilled operator procedure. Hostname/TLS,
 managed release and client acceptance remain open. ADR-040 is Proposed; D1/D3 are incomplete.
+
+## Packaged checkpoint
+
+Clean committed source `83d466ac` builds the existing observer ZIP and passes its actual bundled
+default-off refusal checks, including the new inspection action, without network effects.
+Artifact SHA-256: `c62d4d34b42acb2150218b75c92c6399134e3e9d573702bcebd7c7d2e4567c06`;
+463,853 bytes and 34 SBOM components. It remains local and unpublished. This is not a managed
+execution or an independent release/security review.
