@@ -4538,3 +4538,12 @@ match source `0af30d5d`; external ports and identity remain synthetic through a 
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Enabled production main,
 managed transport/routing and client/ATS/accountable acceptance remain; D1/D3 In progress,
 ADR-040 Proposed. No publication/deployment, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds an unattached, default-empty native resume task/IAM module with
+immutable image, init/read-only/non-root envelope, revision-qualified bounded roles and pinned
+RPC/TLS permissions. Terraform validation and five mocked cases pass; emitted task shape is
+accepted by the actual Documents launch validator with synthetic ECS observation.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). No environment composition or
+cloud action. Managed release/routing/client/ATS/accountable gates remain; D1/D3 In progress,
+ADR-040 Proposed. CI/CD deferred until launch, Docker/WSL stopped and PC on.

@@ -7,3 +7,5 @@ measured-demand or launch-review changes.
 
 - `platform/` owns the environment runtime, data plane, ingress, secrets, and observability.
 - `cost-controls/` owns the account-local monthly budget and CUR 2.0 export/storage controls.
+
+- `native-resume-task/` supplies an unattached, default-empty native resume task/role release; no environment currently instantiates it.

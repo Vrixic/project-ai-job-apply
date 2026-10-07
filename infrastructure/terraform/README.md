@@ -91,3 +91,5 @@ Remote init must explicitly request `use_lockfile=true`, and operators must veri
 cached S3 backend's locking, encryption and exact identity before planning or applying. A provider
 dependency lock is not a remote state lock. Never disable locking. The excluded GitHub Actions
 files retain their old pin and must not be used for cloud planning during this local-only transition.
+
+- `modules/native-resume-task/` supplies an unattached, default-empty native resume task/role release; no environment currently instantiates it.

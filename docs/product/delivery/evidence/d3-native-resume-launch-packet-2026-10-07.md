@@ -304,3 +304,29 @@ deadline behavior under container restrictions, not enabled production main, liv
 or managed/client/ATS acceptance. These distinctions remain release gates rather than inferred
 success from local tests. No image is published or deployed. The owned containers and staging
 files are removed; shared images/volumes retained. Docker/WSL stopped after the check, PC on.
+
+
+## Source-only native task/IAM release module
+
+`infrastructure/terraform/modules/native-resume-task` adds the actual Fargate task-definition and
+dedicated task/execution-role resources without composing them into either environment. Null
+release produces no resources. Exact release metadata pins image digest, original task revision,
+two numeric RPC recipients, one TLS secret/version and its customer key. The generated container
+matches the existing owning launch validator: init, Linux/x86-64, UID65532, read-only root, dropped
+capabilities, zero core limit, no content-bearing environment/logs/volumes or sidecar. Task IAM
+has only pinned RPC/TLS access plus explicit content-storage/logging/remote-exec/database denials;
+execution IAM has only ECR pull access. Existing environment boundaries remain in place.
+
+Role names are revision-qualified so later environment composition can retain original releases.
+Task definitions use skip_destroy, and removal of old IAM instances still requires explicit drain
+handling; this module is not a kill switch. A postcondition rejects a registered revision differing
+from image-owned configuration, after registration; it is not rollback. These limitations are
+spelled out in the module README. No environment, role, task or cloud state was changed.
+
+Terraform 1.16.2 local validation and five mocked cases cover absent defaults, envelope/policies,
+foreign account/environment and mismatched revision. The actual emitted Terraform container/task
+shape is also accepted by the compiled Documents launch-policy validator with a synthetic ECS
+observation. Logs: `.tmp/d3-native-resume-task-validate.log`,
+`.tmp/d3-native-resume-task-tests-json.log`, `.tmp/d3-native-resume-task-launch-check.log`.
+Managed effective IAM, exact release composition, network/TLS/DNS, enabled main and client/ATS/
+accountable acceptance remain. ADR-040 remains Proposed; D1/D3 remain In progress.
