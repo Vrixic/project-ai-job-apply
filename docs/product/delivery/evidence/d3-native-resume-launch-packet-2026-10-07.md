@@ -773,3 +773,6 @@ missing launch claims remain pending with no task binding. Recorded retirement r
 another ECS request. SQL/migrations are real; secret lookup and ECS responses are synthetic.
 Logs: `.tmp/d3-resume-event-recovery-{build,handler,unit,sql}.log`. No AWS mutation, deployment or
 live end-to-end claim. DNS/TLS routing, managed release and phase acceptance remain unfinished.
+
+
+Standalone observer packaging and bundled disabled-runtime checks pass from clean source `73f56e1b4dbeb9a851253c44b63f2d5e2680bdb6`. ZIP SHA256 `849d2db5afbf9ab09db21d61d6e95c259e2529ca510ba285db87c060fb729ff1`, 389388 bytes. Log: `.tmp/d3-resume-event-recovery-artifact.log`. Unpublished; no replacement six-artifact family receipt or full verifier claim. Temporary SQL fixture removed; Docker/WSL stopped, PC on.
