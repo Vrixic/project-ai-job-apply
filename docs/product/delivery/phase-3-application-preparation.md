@@ -9,6 +9,13 @@
 
 ## Objective
 
+2026-10-06 D3-079 dedicated native preparation runtime passes full verification at clean `6d34cbd5`
+(38 typecheck/39 test/23 builds, unchanged lint and native artifact isolation). Two identical
+unpublished ZIP builds pass default-off checks. The actual fresh-flow/lost-ACK recovery uses
+existing packet protection with synthetic KMS; managed key/role/IAM/target/routing/provider/client
+acceptance remains. [Evidence](evidence/d3-native-preparation-runtime-2026-10-06.md).
+D1/D3 In progress; isolated web restored, Docker/WSL stopped, PC on and CI/CD deferred.
+
 2026-10-06 D3-079 adds a dedicated default-off native preparation activity and separate artifact.
 Exact numeric private targets/managed secret/current packet protection are pinned; fresh-launch
 shutdown preserves receipt recovery. All 77 focused and 25 real PostgreSQL cases pass, including

@@ -45,8 +45,30 @@ Local checks:
 
 `build:lambda:native-preparation` creates a separately named artifact/output root using the
 existing clean-source builder, source manifest, SBOM and bundled default-off checks. Full clean
-verification and exact artifact evidence are pending at this implementation checkpoint.
+verification and exact artifact evidence follow below.
 
 Managed artifact publication, durable activity target selection, IAM, native routing/client/ATS,
 real provider, real key/role and accountable approval remain. No cloud deployment/activation,
 frontend change, new PR, CI/CD work or phase completion is asserted. The owner PC stays on.
+
+## Clean source and artifact verification
+
+Clean committed source `6d34cbd50587457e329e4b4f5efde09cc9885e44` passes
+`scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 production builds,
+formatting/operator/security/isolation/Compose and emitted artifact checks, including the new
+native preparation isolation check. Lint remains zero errors, 15 warnings and 58 infos.
+Log: `.tmp/d3-native-preparation-runtime-full.log`. This run passes on its original handle;
+the owning Next.js parent and child were stopped before the test fixtures bound port 3000.
+
+Two identical clean-source artifact builds pass their bundled default-off and content-bearing
+input refusal checks. The separate unpublished ZIP is
+`backend/workflows/dist/native-preparation-lambda/native-application-preparation-lambda.zip`,
+634,538 bytes, SHA-256 `e25c5da4a760eaa25b425b8317fc4d992b8ea93f4a7219dd1e34a3860fc60b43`.
+Its manifest pins the source above; its SBOM contains 42 components. No artifact is published.
+
+The owned SQL fixture was removed after checking its exact ownership label; shared volumes are
+unchanged. Docker/WSL are stopped and the PC stays on. The isolated web is restored against the
+live development API: home 200, anonymous resume route 307. Only Next.js's two generated development
+type imports are restored; no frontend source feature is changed. Prior owner-accepted sign-in,
+search/Profile/save/reload steps need no repeat. Preference writes and resume import remain
+unverified live, and no D1/D3 exit criterion is closed from this batch.
