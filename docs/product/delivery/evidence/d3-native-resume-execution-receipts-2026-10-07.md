@@ -51,3 +51,11 @@ Wire the bounded receipt inventory to exact AWS execution metadata and a durable
 including unknown launch acknowledgements and missed terminal events. Receipt retention alone is
 not reconciliation and never permits another execution. Hostname/TLS, managed release/recovery and
 client acceptance remain. D1/D3 incomplete; ADR-040 remains Proposed.
+
+## Final local checkpoint
+
+At committed source `faa8b94d`, the source-bound document migration operator's path/baseline,
+schema-8 two-receipt and schema-7 round-trip/adversarial checks pass. The publisher OCI guards and
+all 183 production runtime-smoke regression cases pass on the aligned 74-migration inventory.
+Focused Biome checks pass. The disposable SQL container was removed; Docker Desktop and WSL
+were stopped and no WSL distributions remain running. The PC remains on.
