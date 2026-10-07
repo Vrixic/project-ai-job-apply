@@ -4896,3 +4896,11 @@ IAM policy size pressure, resolved with one principal-conditioned boundary per o
 All 12 bootstrap and seven runtime Terraform mock cases pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#bootstrap-composition).
 Queue/network/outbox/alarms/environment wiring and managed acceptance remain. No cloud change;
 D1/D3 In progress, Docker/WSL stopped and PC on.
+
+2026-10-07 native preparation platform/environment wiring now includes optional development
+and staging releases, encrypted retained queues, exact private service policies and nineteen
+failure/backlog alarms per original release. Three focused and twelve affected existing
+Terraform mock cases pass; both environments validate. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#platform-and-environment-composition).
+Original-release SQL claim scoping and disabled-intake drain need correction before activation;
+KMS private-DNS coexistence and managed launcher/task/route acceptance remain. No cloud action,
+CI/CD deferred, D1/D3 In progress; Docker/WSL stopped and PC on.

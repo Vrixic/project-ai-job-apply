@@ -2,8 +2,8 @@
 
 Source-only release composition for the existing native cover-letter preparation activity,
 durable workflow, SQS starter, terminal handler and scheduled reconciler. A null release creates
-no resources. All runtime, launch, intake and recovery gates default off. No environment calls
-this module yet; this module is not a deployed or activation-ready candidate journey.
+no resources. All runtime, launch, intake and recovery gates default off. Development and staging expose optional release maps, empty by default.
+This module is not a deployed or activation-ready candidate journey.
 
 The path is owning Applications outbox Ã¢â€ â€™ existing dedicated SQS queue Ã¢â€ â€™ numeric starter Ã¢â€ â€™
 original named numeric durable workflow Ã¢â€ â€™ numeric private activity Ã¢â€ â€™ original native launcher.
@@ -40,8 +40,9 @@ Both must use `queue_kms_key_arn`. Require TLS-only queue policies, at least 360
 visibility, bounded redrive to a retained DLQ, fourteen-day recovery retention, and exact
 producer/EventBridge/role grants in both queue and key policies. Add monitored queue depth,
 oldest-message, function error/throttle, EventBridge failed-delivery and Lambda destination
-failure alarms before activation. Queue creation, outbox routing and those policies/alarms
-are not yet integrated into the platform. The scheduled recovery envelope is delivered
+failure alarms before activation. The platform now supplies encrypted retained queues, these policies, private service endpoints
+and nineteen alarms per original release. Outbox claims still need release scoping before
+multiple original releases can coexist safely. The scheduled recovery envelope is delivered
 unchanged; its strict handler binds the rule ARN. Terminal delivery uses the original durable
 function prefix and revalidates against at most twenty retained numeric versions. EventBridge
 retries terminal delivery for 24 hours; Lambda asynchronous retries are separately capped at
@@ -54,5 +55,7 @@ and permission structure only; it does not prove effective AWS IAM or remote exe
 
 Local validation uses the repository's pinned Terraform 1.16.2: initialize with `-backend=false`
 and `-lockfile=readonly`, then `terraform validate` and `terraform test`. No cloud calls are
-needed by the mock suite. Environment and network/queue integration remain
-the next connected source work before managed planning.
+needed by the mock suite. Before activation, scope recovery claims to original releases, verify
+packet-key policies and inventory other VPC KMS callers: the preparation KMS endpoint enables
+private DNS and currently admits only preparation activity packet operations. Managed launch,
+owner/task/route composition and acceptance remain.

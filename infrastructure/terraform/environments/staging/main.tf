@@ -44,6 +44,17 @@ provider "aws" {
 }
 
 module "platform" {
+  native_preparation_releases = { for id, item in var.native_preparation_releases : id => {
+    queue_arn                  = item.release.queue_arn
+    dead_letter_arn            = item.release.dead_letter_arn
+    kms_key_arn                = item.release.queue_kms_key_arn
+    database_secret_arn        = item.release.database_secret_arn
+    launcher_function_arn      = item.release.launcher_function_arn
+    packet_encryption_key_arn  = item.release.packet_encryption_key_arn
+    packet_fingerprint_key_arn = item.release.packet_fingerprint_key_arn
+    security_group_ids         = toset(item.release.security_group_ids)
+  } }
+
   native_resume_control_network = { for item in values(var.native_resume_preparation_releases) : element(reverse(split(":", item.release.task_definition_arn)), 0) => {
     cluster_arn        = item.release.cluster_arn
     security_group_ids = toset(item.release.security_group_ids)

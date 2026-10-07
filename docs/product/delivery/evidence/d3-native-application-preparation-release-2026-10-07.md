@@ -97,3 +97,28 @@ checks pass. Logs: `.tmp/d3-native-preparation-bootstrap-tests.log` and
 `.tmp/d3-native-preparation-runtime-boundary-tests.log`. No AWS API, apply or effective-IAM
 acceptance; this is source/mock evidence. Queue/key resource policies, private endpoints, outbox,
 alarms and development/staging composition are still to be connected. D1/D3 remain In progress.
+
+## Platform and environment composition
+
+Development and staging now expose empty-by-default original preparation release maps, with
+at most one new-work intake owner. The platform supplies dedicated encrypted standard queues,
+360-second visibility, bounded redrive, fourteen-day failure retention, TLS queue policies,
+original EventBridge delivery grants and durable-state key grants. Private Lambda, SQS and
+Secrets Manager endpoint policies admit exact actor/resource pairs. A private KMS endpoint
+admits only activity packet encryption/decryption and fingerprint generation. Nineteen alarms
+cover queue depth/age, retained failures, function errors/throttles, EventBridge delivery/DLQ
+failures and Lambda destination failures. All activation switches remain false by default.
+
+Three focused preparation Terraform mock scenarios and twelve existing resume network/RPC/
+secret scenarios pass. Development and staging validate using Terraform 1.16.2 and AWS provider
+6.58.0; formatting, serverless infrastructure validation and diff whitespace checks pass.
+This is source/mock verification, not AWS IAM, cloud deployment or a live candidate journey.
+
+Inspection found a remaining recovery defect: SQL nudge and execution-reconciliation claims
+are global rather than scoped to retained original function versions. A newer release can
+claim older work that its runtime correctly refuses. Scope claims and verify retained-release
+drain before activation, including lost start acknowledgements when new intake is disabled.
+The KMS endpoint enables VPC private DNS: inventory other enabled KMS callers and reconcile
+their exact access before applying it. Packet key policies, native launcher/task/owner/route
+composition and managed acceptance remain. No publication, deployment, activation or CI/CD
+work; Docker/WSL remain stopped, PC on. D1 and D3 remain In progress.
