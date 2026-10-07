@@ -24,6 +24,7 @@ import {
   type UgcContributionConsentStore,
   UgcContributionConsentUnavailableError,
 } from "@ai-job-apply/profile-service";
+import type { PrivilegedModerationAuditWriter } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import { TrustApplicationService } from "@ai-job-apply/trust-service";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -48,6 +49,7 @@ export interface GatewayApplicationOptions {
   ugcContributionConsents?: UgcContributionConsentStore;
   ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
+  privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   savedJobs: SavedJobs;
   applications?: ApplicationsApi;
   privateSavedPageCaptures?: PrivateSavedPageCaptures;
@@ -131,6 +133,9 @@ export async function createGatewayApplication(
         ? { ugcContributionPolicyVersion: options.ugcContributionPolicyVersion }
         : {}),
       moderation: options.moderation,
+      ...(options.privilegedModerationAudit
+        ? { privilegedModerationAudit: options.privilegedModerationAudit }
+        : {}),
       savedJobs: options.savedJobs,
       applications: options.applications ?? unavailableApplications(),
       privateSavedPageCaptures:

@@ -9,6 +9,13 @@
 
 ## Objective
 
+2026-10-06 D1-012 adds default-off privileged moderation access/attempt audit capture through
+Profile's existing platform audit table, plus separately gated bounded 365-day expiry. Fixed
+operator fingerprints/resource IDs replace raw identity/body/token storage. Six actual SQL and
+six validation cases pass; 216 signed synthetic Gateway cases pass. [Evidence](evidence/d1-privileged-moderation-audit-2026-10-06.md).
+Full clean verification, managed capture/maintenance, alert metadata expiry and accountable
+acceptance remain; D1/D3 stay In progress, with no cloud activation.
+
 Deliver a trustworthy candidate web experience and canonical job catalog in which users can
 onboard, discover, understand, save, and report fresh jobs.
 

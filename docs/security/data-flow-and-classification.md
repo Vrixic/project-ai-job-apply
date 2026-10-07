@@ -867,3 +867,13 @@ credential nor liveness proof; no generated content crosses this route. Hostname
 abort and activation withdrawal withhold the reply. Native HTTPS separately authorizes every read.
 Managed DNS/TLS/networking and direct browser/ATS token/content handoff remain release gates.
 [Local source evidence](../product/delivery/evidence/d3-native-read-location-2026-10-06.md).
+
+## D1 privileged moderation audit checkpoint — 2026-10-06
+
+Default-off Jobs moderation access/attempt capture uses the existing Gateway OIDC operator
+fingerprint, fixed action and nullable resource UUID. Profile owns the existing platform audit
+row, records database time and omits candidate linkage, raw identity/body/token/cursor fields.
+Pseudonymous operator metadata expires through separate default-off exact-format 365-day
+counts-only maintenance; candidate exports exclude these unlinked rows. No automatic scheduler,
+managed maintenance, raw audit reader, historical backfill or production approval is asserted.
+[Source/local evidence](../product/delivery/evidence/d1-privileged-moderation-audit-2026-10-06.md).

@@ -57,6 +57,7 @@ import {
   PostgresUgcContributionConsentStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
+import { createPrivilegedModerationAuditRuntime } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import type {
@@ -1152,6 +1153,13 @@ async function createConfiguredApplication(
     : undefined;
   // Applications needs its own plain client: the shared one camel-cases columns and installs
   // Drizzle's JSON and timestamp handling, which makes the store fail (see applications-database).
+  const privilegedModerationAudit =
+    process.env.PRIVILEGED_MODERATION_AUDIT_ENABLED === "true"
+      ? createPrivilegedModerationAuditRuntime(
+          databaseUrl,
+          () => process.env.PRIVILEGED_MODERATION_AUDIT_ENABLED === "true",
+        )
+      : undefined;
   const packetProtection = restrictedPacketWriterFromEnvironment(process.env);
   const nativeMaterialLocations = nativeMaterialLocationsFromEnvironment(
     databaseUrl,
@@ -1194,6 +1202,9 @@ async function createConfiguredApplication(
     ugcContributionConsents,
     ...(ugcContributionPolicyVersion ? { ugcContributionPolicyVersion } : {}),
     moderation,
+    ...(privilegedModerationAudit
+      ? { privilegedModerationAudit: privilegedModerationAudit.writer }
+      : {}),
     savedJobs,
     applications,
     privateSavedPageCaptures,

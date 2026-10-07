@@ -31,6 +31,10 @@
     "./ugc-contribution-consent": {
       "types": "./dist/src/ugc-contribution-consent.d.ts",
       "default": "./dist/src/ugc-contribution-consent.js"
+    },
+    "./privileged-moderation-audit": {
+      "types": "./dist/src/privileged-moderation-audit.d.ts",
+      "default": "./dist/src/privileged-moderation-audit.js"
     }
   },
   "scripts": {
@@ -39,7 +43,8 @@
     "db:migrate": "node --env-file-if-exists=../../../.env dist/src/migrate.js",
     "test": "vitest run src --exclude=dist/** --passWithNoTests",
     "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "audit:expire": "node --env-file-if-exists=../../../.env dist/src/run-privileged-moderation-audit-retention.js"
   },
   "dependencies": {
     "@ai-job-apply/api-contracts": "workspace:*",

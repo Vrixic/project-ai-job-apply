@@ -1,5 +1,12 @@
 # Delivery Tracker
 
+2026-10-06 D1-012 adds default-off privileged moderation access/attempt audit capture through
+Profile's existing platform audit table, plus separately gated bounded 365-day expiry. Fixed
+operator fingerprints/resource IDs replace raw identity/body/token storage. Six actual SQL and
+six validation cases pass; 216 signed synthetic Gateway cases pass. [Evidence](evidence/d1-privileged-moderation-audit-2026-10-06.md).
+Full clean verification, managed capture/maintenance, alert metadata expiry and accountable
+acceptance remain; D1/D3 stay In progress, with no cloud activation.
+
 2026-10-06 D3-079 scalar native read-location handoff passes full clean verification at `0df9bd0b`
 (38 typecheck/39 test/23 builds, unchanged lint and native artifact isolation). All 25 actual SQL
 cases and focused Gateway/contract/owner checks pass. [Evidence](evidence/d3-native-read-location-2026-10-06.md).

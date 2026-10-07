@@ -170,6 +170,7 @@ import {
   type UgcContributionConsentStore,
   UgcContributionConsentUnavailableError,
 } from "@ai-job-apply/profile-service";
+import type { PrivilegedModerationAuditWriter } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import {
   TrustApplicationError,
   type TrustApplicationService,
@@ -222,6 +223,7 @@ const CONTRIBUTION_CAPABILITY_POLICY = Symbol("CONTRIBUTION_CAPABILITY_POLICY");
 const UGC_CONTRIBUTION_CONSENTS = Symbol("UGC_CONTRIBUTION_CONSENTS");
 const UGC_CONTRIBUTION_POLICY_VERSION = Symbol("UGC_CONTRIBUTION_POLICY_VERSION");
 const JOB_MODERATION = Symbol("JOB_MODERATION");
+const PRIVILEGED_MODERATION_AUDIT = Symbol("PRIVILEGED_MODERATION_AUDIT");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
 const APPLICATIONS = Symbol("APPLICATIONS");
 const PRIVATE_SAVED_PAGE_CAPTURES = Symbol("PRIVATE_SAVED_PAGE_CAPTURES");
@@ -1584,13 +1586,24 @@ class AdminModerationController {
   constructor(
     @Inject(RequestIdentity) private readonly identity: RequestIdentity,
     @Inject(JOB_MODERATION) private readonly moderation: JobModeration,
+    @Inject(PRIVILEGED_MODERATION_AUDIT)
+    private readonly audit: PrivilegedModerationAuditWriter | null,
   ) {}
+
+  private async recordAudit(input: Parameters<PrivilegedModerationAuditWriter["record"]>[0]) {
+    if (!this.audit) return;
+    try {
+      await this.audit.record(input);
+    } catch {
+      throw new ModerationServiceUnavailableError();
+    }
+  }
 
   @Post("/cases/search")
   @HttpCode(HttpStatus.OK)
   @Header("cache-control", "no-store")
   async searchCases(@Req() request: AuthenticatedRequest): Promise<ModerationCasePage> {
-    await this.identity.operator(request);
+    const operatorId = await this.identity.operator(request);
     if (
       (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
       !validateModerationCaseSearch(request.body)
@@ -1600,6 +1613,11 @@ class AdminModerationController {
         HttpStatus.BAD_REQUEST,
       );
     }
+    await this.recordAudit({
+      action: "jobs.moderation.case_search.access",
+      operatorId,
+      resourceId: null,
+    });
     const page = await this.moderation.searchCases(request.body as ModerationCaseSearchRequest);
     const projected = {
       items: page.items.map(projectModerationCase),
@@ -1627,6 +1645,11 @@ class AdminModerationController {
       );
     }
     const input = request.body as OpenModerationCaseRequest;
+    await this.recordAudit({
+      action: "jobs.moderation.case_open.attempt",
+      operatorId,
+      resourceId: input.target.kind === "job" ? input.target.jobId : null,
+    });
     return projectModerationCase(
       await this.moderation.openCase({
         target: input.target,
@@ -1658,6 +1681,11 @@ class AdminModerationController {
       );
     }
     const input = request.body as ResolveModerationCaseRequest;
+    await this.recordAudit({
+      action: "jobs.moderation.case_resolve.attempt",
+      operatorId,
+      resourceId: caseId,
+    });
     return projectModerationCase(
       await this.moderation.resolveCase({ caseId, operatorId, ...input }),
     );
@@ -1669,7 +1697,7 @@ class AdminModerationController {
     @Req() request: AuthenticatedRequest,
     @Param("jobId") jobId: string,
   ): Promise<JobReportSummary> {
-    await this.identity.operator(request);
+    const operatorId = await this.identity.operator(request);
     if (
       (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
       request.body !== undefined ||
@@ -1677,6 +1705,11 @@ class AdminModerationController {
     ) {
       throw new HttpException("The report-summary input is invalid", HttpStatus.BAD_REQUEST);
     }
+    await this.recordAudit({
+      action: "jobs.moderation.report_summary.access",
+      operatorId,
+      resourceId: jobId,
+    });
     const summary = await this.moderation.summarizeReports(jobId);
     if (!validateJobReportSummary(summary)) throw new ModerationServiceUnavailableError();
     return summary as JobReportSummary;
@@ -3030,6 +3063,7 @@ export interface AppModuleOptions {
   ugcContributionConsents: UgcContributionConsentStore;
   ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
+  privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   savedJobs: SavedJobs;
   applications: ApplicationsApi;
   privateSavedPageCaptures: PrivateSavedPageCaptures;
@@ -3078,6 +3112,10 @@ export class AppModule {
           useValue: options.ugcContributionPolicyVersion ?? null,
         },
         { provide: JOB_MODERATION, useValue: options.moderation },
+        {
+          provide: PRIVILEGED_MODERATION_AUDIT,
+          useValue: options.privilegedModerationAudit ?? null,
+        },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
         { provide: APPLICATIONS, useValue: options.applications },
         { provide: PRIVATE_SAVED_PAGE_CAPTURES, useValue: options.privateSavedPageCaptures },

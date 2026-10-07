@@ -48,6 +48,7 @@ import {
   PostgresRestrictedAnswerVaultStore,
   PostgresUgcContributionConsentStore,
 } from "@ai-job-apply/profile-service";
+import { createPrivilegedModerationAuditRuntime } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { createGatewayApplication } from "./application.js";
 import { createApplicationsRuntime } from "./applications-runtime.js";
@@ -174,6 +175,13 @@ const candidateDataExportDownloads =
 
 // Applications stay dark unless explicitly enabled for local development. The database must already
 // have the Applications migration applied.
+const privilegedModerationAudit =
+  process.env.PRIVILEGED_MODERATION_AUDIT_ENABLED === "true"
+    ? createPrivilegedModerationAuditRuntime(
+        config.DATABASE_URL,
+        () => process.env.PRIVILEGED_MODERATION_AUDIT_ENABLED === "true",
+      )
+    : undefined;
 const packetProtection = restrictedPacketWriterFromEnvironment(process.env);
 const nativeMaterialLocations = nativeMaterialLocationsFromEnvironment(
   config.DATABASE_URL,
@@ -220,6 +228,9 @@ const app = await createGatewayApplication({
   ugcContributionConsents,
   ...(ugcContributionPolicyVersion ? { ugcContributionPolicyVersion } : {}),
   moderation,
+  ...(privilegedModerationAudit
+    ? { privilegedModerationAudit: privilegedModerationAudit.writer }
+    : {}),
   savedJobs,
   ...(applications ? { applications } : {}),
   privateSavedPageCaptures,

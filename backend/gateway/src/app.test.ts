@@ -13,6 +13,7 @@ import {
   RestrictedPacketStoreUnavailableError,
   StalePacketError,
 } from "@ai-job-apply/applications-service";
+import type { PrivilegedModerationAuditWriter } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import "reflect-metadata";
 import { createHash } from "node:crypto";
 import type {
@@ -949,6 +950,7 @@ async function createApp(
     applications?: ApplicationsApi;
     documents?: DocumentStore;
     restrictedAnswerVault?: RestrictedAnswerVaultStore;
+    privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   } = {},
 ) {
   const issuer = await createTestTokenIssuer();
@@ -1004,6 +1006,9 @@ async function createApp(
     ugcContributionConsents,
     ugcContributionPolicyVersion: "d2-synthetic-policy.v1",
     moderation,
+    ...(options.privilegedModerationAudit
+      ? { privilegedModerationAudit: options.privilegedModerationAudit }
+      : {}),
     matchAssessments,
     entitlements,
     documents,
@@ -5826,6 +5831,119 @@ describe("restricted answer vault routes (D3-001)", () => {
       expect(JSON.stringify(restrictedAnswerVault.saveCalls)).toContain(secret);
     } finally {
       await app.close();
+    }
+  });
+});
+
+describe("bounded privileged moderation audit boundary", () => {
+  it("records fixed access/attempt metadata for all four authenticated operations", async () => {
+    const record = vi.fn<PrivilegedModerationAuditWriter["record"]>(async () => undefined);
+    const f = await createApp({ privilegedModerationAudit: { record } });
+    try {
+      const rawSubject = "auth0|synthetic-audit-operator";
+      const headers = {
+        authorization: `Bearer ${await f.issuer.issue(rawSubject, { scope: "jobs:moderate" })}`,
+      };
+      const opened = await f.app.inject({
+        method: "POST",
+        url: "/v1/admin/moderation/cases",
+        headers,
+        payload: {
+          target: { kind: "job", jobId: f.catalog.job.id },
+          reasonCode: "candidate_reports",
+        },
+      });
+      expect(opened.statusCode).toBe(201);
+      const caseId = opened.json().id;
+      expect(
+        (
+          await f.app.inject({
+            method: "POST",
+            url: "/v1/admin/moderation/cases/search",
+            headers,
+            payload: { status: "open" },
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await f.app.inject({
+            method: "GET",
+            url: `/v1/admin/moderation/jobs/${f.catalog.job.id}/report-summary`,
+            headers,
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await f.app.inject({
+            method: "POST",
+            url: `/v1/admin/moderation/cases/${caseId}/resolve`,
+            headers,
+            payload: {
+              expectedVersion: 0,
+              resolution: "no_action",
+              reasonCode: "insufficient_evidence",
+            },
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(record.mock.calls.map(([r]) => r.action)).toEqual([
+        "jobs.moderation.case_open.attempt",
+        "jobs.moderation.case_search.access",
+        "jobs.moderation.report_summary.access",
+        "jobs.moderation.case_resolve.attempt",
+      ]);
+      for (const [r] of record.mock.calls) {
+        expect(Object.keys(r).sort()).toEqual(["action", "operatorId", "resourceId"]);
+        expect(r.operatorId).toMatch(/^oidc:[a-f0-9]{64}$/);
+        expect(JSON.stringify(r)).not.toContain(rawSubject);
+      }
+    } finally {
+      await f.app.close();
+    }
+  });
+  it("does not record unauthorized or invalid requests and denies work when audit fails", async () => {
+    const record = vi.fn<PrivilegedModerationAuditWriter["record"]>(async () => {
+      throw Error("synthetic private audit failure");
+    });
+    const f = await createApp({ privilegedModerationAudit: { record } });
+    try {
+      const url = "/v1/admin/moderation/cases/search";
+      expect(
+        (await f.app.inject({ method: "POST", url, payload: { status: "open" } })).statusCode,
+      ).toBe(401);
+      const headers = {
+        authorization: `Bearer ${await f.issuer.issue("auth0|synthetic-audit", { scope: "jobs:moderate" })}`,
+      };
+      expect(
+        (await f.app.inject({ method: "POST", url, headers, payload: { status: "invalid" } }))
+          .statusCode,
+      ).toBe(400);
+      expect(record).not.toHaveBeenCalled();
+      const response = await f.app.inject({
+        method: "POST",
+        url,
+        headers,
+        payload: { status: "open" },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.body).not.toContain("synthetic private audit failure");
+      expect(record).toHaveBeenCalledOnce();
+      const openCase = vi.spyOn(f.moderation, "openCase");
+      const blockedWrite = await f.app.inject({
+        method: "POST",
+        url: "/v1/admin/moderation/cases",
+        headers,
+        payload: {
+          target: { kind: "job", jobId: f.catalog.job.id },
+          reasonCode: "candidate_reports",
+        },
+      });
+      expect(blockedWrite.statusCode).toBe(503);
+      expect(openCase).not.toHaveBeenCalled();
+    } finally {
+      await f.app.close();
     }
   });
 });

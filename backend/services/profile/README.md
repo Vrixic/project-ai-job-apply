@@ -84,3 +84,9 @@ the preview digest or selected posting content.
 Candidate export includes an allowlisted owner-scoped consent history without preview digests,
 internal lineage identifiers, or command receipts. Candidate deletion removes that history only
 inside the existing privacy-authorized transaction; normal mutation remains fail-closed.
+
+The private privileged-moderation-audit entrypoint writes only fixed pseudonymous access/attempt
+metadata into Profile's existing platform audit table. Gateway capture and separate 365-day
+counts-only maintenance default off. No raw operator subject, body, token, candidate link or new
+public reader is exposed. Apply reviewed capture/maintenance release before claiming enforcement;
+source/local evidence does not activate production audit or certify independent security review.
