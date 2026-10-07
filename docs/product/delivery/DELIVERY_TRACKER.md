@@ -4642,3 +4642,9 @@ secret access; the hinted task must match SQL before fresh ECS observation. Eigh
 58 observer/retirement cases pass with Documents/Workflows builds and changed-file Biome.
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). EventBridge rule/IAM/delivery and
 managed acceptance remain; no cloud activation, D1/D3 In progress and PC on.
+
+
+2026-10-07 observer event-capable artifact builds from clean `717c09b0`; emitted default-off
+checks pass. ZIP SHA-256 `c7ec6dd82bca4a5b57094eb3a04832684f9cf0a73d1d388a086a09c57ea27e03`,
+386142 bytes. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Only this artifact
+was refreshed; a complete current-source family rebuild is required before publication.

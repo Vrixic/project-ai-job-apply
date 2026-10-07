@@ -570,3 +570,11 @@ foreign-task hint refused before ECS/persistence. Documents and Workflows builds
 Biome pass. These use synthetic event/ECS/registry fixtures; prior SQL evidence is unchanged.
 No EventBridge resource, public endpoint, permissions or trigger was activated. Exact numeric
 rule routing, delivery retry/retention, managed IAM and AWS acceptance remain to be composed.
+
+
+The event-capable observer artifact builds from clean `717c09b0` with matching source SHA and
+passes emitted-bundle default-off checks: 386142 bytes, SHA-256
+`c7ec6dd82bca4a5b57094eb3a04832684f9cf0a73d1d388a086a09c57ea27e03`. Log:
+`.tmp/d3-native-resume-observer-event-artifact.log`. Only the observer was rebuilt in this
+checkpoint; the six-artifact family must be rebuilt together at the intended release source.
+No complete current-head family, publication or deployment claim is made.
