@@ -1,15 +1,17 @@
 variable "native_resume_control_releases" {
   description = "Explicit original resume releases approved for private control IAM. Empty preserves existing bootstrap behavior. Keys are original task revisions; retain until trusted drain."
   type = map(object({
-    cluster_name         = string
-    database_secret_arn  = string
-    platform_kms_key_arn = string
+    observer_dead_letter_arn = string
+    cluster_name             = string
+    database_secret_arn      = string
+    platform_kms_key_arn     = string
   }))
   default  = {}
   nullable = false
   validation {
     condition = length(var.native_resume_control_releases) <= 4 && alltrue([for revision, release in var.native_resume_control_releases :
       can(regex("^[1-9][0-9]{0,8}$", revision)) &&
+      can(regex("^arn:aws:sqs:us-east-2:${data.aws_caller_identity.current.account_id}:ai-job-apply-${var.environment}-[A-Za-z0-9_-]+$", release.observer_dead_letter_arn)) &&
       can(regex("^[A-Za-z0-9_-]{1,255}$", release.cluster_name)) &&
       can(regex("^arn:aws:secretsmanager:us-east-2:${data.aws_caller_identity.current.account_id}:secret:ai-job-apply/${var.environment}/[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{6}$", release.database_secret_arn)) &&
       can(regex("^arn:aws:kms:us-east-2:${data.aws_caller_identity.current.account_id}:key/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", release.platform_kms_key_arn))
@@ -28,6 +30,9 @@ locals {
   native_resume_deploy_statements = flatten([for revision, release in local.native_resume_controls : [
     { Sid = "CreateOriginalResumeControl${revision}", Effect = "Allow", Action = ["iam:CreateRole"], Resource = release.principal,
     Condition = { StringEquals = { "iam:PermissionsBoundary" = release.boundary } } },
+    { Sid = "CreateOriginalResumeObserver${revision}", Effect = "Allow", Action = ["iam:CreateRole"], Resource = replace(release.principal, "resume-control-", "resume-observer-"),
+    Condition = { StringEquals = { "iam:PermissionsBoundary" = replace(release.boundary, "resume-control-", "resume-observer-") } } },
+    { Sid = "ReadOriginalObserverBoundary${revision}", Effect = "Allow", Action = ["iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"], Resource = replace(release.boundary, "resume-control-", "resume-observer-") },
     { Sid = "ReadOriginalResumeBoundary${revision}", Effect = "Allow", Action = ["iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"], Resource = release.boundary },
     { Sid    = "ManageOriginalResumeDurable${revision}", Effect = "Allow",
       Action = ["cloudformation:CreateStack", "cloudformation:DeleteStack", "cloudformation:DescribeStackEvents", "cloudformation:DescribeStackResource", "cloudformation:DescribeStackResources", "cloudformation:DescribeStacks", "cloudformation:GetTemplate", "cloudformation:ListStackResources", "cloudformation:UpdateStack"],
@@ -62,4 +67,23 @@ resource "aws_iam_policy" "native_resume_control_boundary" {
 }
 output "native_resume_control_boundary_arns" {
   value = { for revision, policy in aws_iam_policy.native_resume_control_boundary : revision => policy.arn }
+}
+
+resource "aws_iam_policy" "native_resume_observer_boundary" {
+  for_each    = var.native_resume_control_releases
+  name        = "ai-job-apply-${var.environment}-resume-observer-r${each.key}-boundary"
+  description = "Original resume observation ceiling without launch or stop authority."
+  policy = jsonencode({ Version = "2012-10-17", Statement = concat([
+    for statement in jsondecode(aws_iam_policy.native_resume_control_boundary[each.key].policy).Statement : merge(statement, {
+      Condition = merge(statement.Condition, { ArnEquals = merge(statement.Condition.ArnEquals, { "aws:PrincipalArn" = replace(local.native_resume_controls[each.key].principal, "resume-control-", "resume-observer-") }) })
+    }) if !contains(["TaskMetadata", "OriginalLaunch", "OriginalRoles"], statement.Sid)
+    ], [
+    { Sid = "RetainFailedObservation", Effect = "Allow", Action = ["sqs:SendMessage"], Resource = each.value.observer_dead_letter_arn,
+    Condition = { ArnEquals = { "aws:PrincipalArn" = replace(local.native_resume_controls[each.key].principal, "resume-control-", "resume-observer-") } } },
+    { Sid = "EncryptFailedObservation", Effect = "Allow", Action = ["kms:GenerateDataKey"], Resource = each.value.platform_kms_key_arn,
+    Condition = { ArnEquals = { "aws:PrincipalArn" = replace(local.native_resume_controls[each.key].principal, "resume-control-", "resume-observer-") } } }
+  ]) })
+}
+output "native_resume_observer_boundary_arns" {
+  value = { for revision, policy in aws_iam_policy.native_resume_observer_boundary : revision => policy.arn }
 }

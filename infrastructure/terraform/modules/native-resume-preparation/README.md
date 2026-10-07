@@ -1,8 +1,7 @@
 # Native resume preparation release
 
-Unattached release module for the existing private control, durable workflow and Applications
-outbox dispatcher. Development and staging expose optional release maps, empty by default. `release = null` creates nothing.
-An exact release creates the three functions with separate bounded roles and a disabled schedule.
+Release module for private control, durable workflow, Applications outbox dispatch and stopped-task observation. Development and staging expose optional release maps, empty by default. `release = null` creates nothing.
+An exact release creates the four functions with separate bounded roles and disabled event rules.
 No candidate content or secret values enter Terraform.
 
 The control function pins the original task definition, image and revision-qualified roles. It
@@ -27,7 +26,23 @@ Missed schedule delivery is retried by the next sweep; EventBridge retries are d
 claim limits and exhaustion remain application-owned. Timeout/failure is not evidence of task
 retirement and does not authorize a replacement generation.
 
-`enabled`, `new_launch_enabled` and `schedule_enabled` all default false. Runtime enablement can
+The observer rule selects STOPPED events for the original cluster/task definition and invokes
+an exact numeric observer version. Observation can remain enabled while new launches are off.
+Its role can describe original-cluster tasks and access the owning database, but cannot launch,
+stop, pass roles or invoke other functions. Event data is only a hint; fresh ECS observation
+and the original SQL allocation determine retirement.
+
+`observer_dead_letter_arn` must identify an existing same-account standard SQS queue. Both
+EventBridge delivery failures (24-hour/185-attempt retry window) and Lambda asynchronous execution
+failures target it. This module does not create that queue or its resource/key policies. Before
+activation, verify retention, restricted replay access, failure alarms, the rule-scoped
+`events.amazonaws.com` SQS SendMessage grant, and customer-key Decrypt/GenerateDataKey permissions
+for EventBridge and the observer. Queue encryption must use the supplied platform key. No
+scheduled reconciliation is included: a missed source event or an observation delayed beyond ECS
+history can leave work unresolved and never proves retirement. Retain original resources until
+trusted drain completes.
+
+`enabled`, `new_launch_enabled`, `schedule_enabled` and `observation_events_enabled` all default false. Runtime enablement can
 leave launches and scheduling off. Scheduling requires both runtime and launch gates. Published
 Lambda environments are immutable: flipping a gate publishes new versions and does not disable
 old numeric recipients. Disable the event rule to stop scheduled intake, retain original release
@@ -35,16 +50,16 @@ instances/roles and resolve existing work through the reviewed drain process. Re
 module is not a safe retirement mechanism. Keep the original input/artifact set immutable while
 its work is unresolved; permission retargeting can break retained versions.
 
-Inputs require the three immutable artifact receipts, original image/task, existing secret/key,
+Inputs require the four immutable artifact receipts, original image/task, existing secret/key,
 extension and distinct task/Lambda network identifiers. Required external dependencies include
 private database/ECS/Lambda/Secrets Manager reachability, image pull and task TLS/read routing,
-resource/key policies, migrations and release acceptance. Control requires the dedicated original-release boundary supplied by bootstrap
-`native_resume_control_releases`; other actors retain the shared workload boundary. The optional
+resource/key policies, migrations and release acceptance. Control and observer require separate original-release boundaries supplied by bootstrap
+`native_resume_control_releases`; durable and dispatch retain the shared workload boundary. The optional
 bootstrap input also supplies exact role-creation and durable-stack deployment permissions.
 Those source changes require separate review/application before managed release.
 This module alone cannot activate a working cloud path.
 
-Local Terraform 1.16.2 validation and eight mocked tests cover absence, connected numeric versions,
+Local Terraform 1.16.2 validation and ten mocked tests cover absence, connected numeric versions,
 CMK state, capability separation, disabled defaults and invalid activation/target cases. The
 emitted launch JSON also passes the actual compiled Documents launch configuration validator;
 dispatch deployment fields agree. Cloud resources and numeric outputs are synthetic in these

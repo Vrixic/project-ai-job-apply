@@ -4648,3 +4648,12 @@ managed acceptance remain; no cloud activation, D1/D3 In progress and PC on.
 checks pass. ZIP SHA-256 `c7ec6dd82bca4a5b57094eb3a04832684f9cf0a73d1d388a086a09c57ea27e03`,
 386142 bytes. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Only this artifact
 was refreshed; a complete current-source family rebuild is required before publication.
+
+
+2026-10-07 D3-064/D3-079 adds the numeric observer Lambda, dedicated observation-only boundary
+and default-disabled original STOPPED-event rule to optional release composition. Both event
+delivery and execution failures reference a required existing dead-letter queue. Terraform
+validation and 23 mocked cases pass (bootstrap 7, preparation 10, development 3, staging 3).
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#observer-release-wiring).
+Queue/resource/key policies, retention/monitoring, missed-event recovery and managed acceptance
+remain unverified. No cloud action; D1/D3 In progress, ADR-040 Proposed and PC on.

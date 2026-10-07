@@ -92,11 +92,16 @@ run "native_resume_default_absent" {
 }
 run "native_resume_original_control_only" {
   command = plan
+  assert {
+    condition     = alltrue([for statement in jsondecode(aws_iam_policy.native_resume_observer_boundary["7"].policy).Statement : statement.Condition.ArnEquals["aws:PrincipalArn"] == "arn:aws:iam::111122223333:role/ai-job-apply-staging-resume-observer-r7" && !contains(statement.Action, "ecs:RunTask") && !contains(statement.Action, "ecs:StopTask") && !contains(statement.Action, "iam:PassRole")])
+    error_message = "Observer ceiling must remain principal-bound with no launch, stop or PassRole."
+  }
   variables {
     native_resume_control_releases = { "7" = {
-      cluster_name         = "native-resume"
-      database_secret_arn  = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/staging/database-Abc123"
-      platform_kms_key_arn = "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-1234-1234-123456789012"
+      observer_dead_letter_arn = "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-resume-observation-dlq"
+      cluster_name             = "native-resume"
+      database_secret_arn      = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/staging/database-Abc123"
+      platform_kms_key_arn     = "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-1234-1234-123456789012"
     } }
   }
   assert {
@@ -120,9 +125,10 @@ run "native_resume_foreign_secret_refused" {
   command = plan
   variables {
     native_resume_control_releases = { "7" = {
-      cluster_name         = "native-resume"
-      database_secret_arn  = "arn:aws:secretsmanager:us-east-2:999900001111:secret:ai-job-apply/staging/database-Abc123"
-      platform_kms_key_arn = "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-1234-1234-123456789012"
+      observer_dead_letter_arn = "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-resume-observation-dlq"
+      cluster_name             = "native-resume"
+      database_secret_arn      = "arn:aws:secretsmanager:us-east-2:999900001111:secret:ai-job-apply/staging/database-Abc123"
+      platform_kms_key_arn     = "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-1234-1234-123456789012"
     } }
   }
   expect_failures = [var.native_resume_control_releases]

@@ -30,6 +30,12 @@ variables {
         "base64sha256" : "u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=",
         "version_id" : "synthetic-version",
         "key" : "lambda/documents/native-resume/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/native-resume-request-dispatch-lambda.zip"
+      },
+      "observer" : {
+        "sha256" : "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "base64sha256" : "u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=",
+        "version_id" : "synthetic-version",
+        "key" : "lambda/documents/native-resume/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/native-resume-task-observer-lambda.zip"
       }
     },
     "cluster_arn" : "arn:aws:ecs:us-east-2:123456789012:cluster/native-resume",
@@ -44,6 +50,7 @@ variables {
     "security_group_ids" : [
       "sg-0123456789abcdef0"
     ],
+    "observer_dead_letter_arn" : "arn:aws:sqs:us-east-2:123456789012:ai-job-apply-development-resume-observation-dlq",
     "image" : "123456789012.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/native-resume@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "task_assign_public_ip" : "DISABLED",
     "task_subnet_ids" : [
@@ -65,6 +72,18 @@ run "absent_by_default" {
 }
 run "connected_release_is_disabled" {
   command = apply
+  assert {
+    condition     = aws_cloudwatch_event_rule.observer[0].state == "DISABLED" && aws_lambda_function.observer[0].environment[0].variables.NATIVE_RESUME_TASK_OBSERVER_ENABLED == "false" && aws_lambda_function.observer[0].dead_letter_config[0].target_arn == var.release.observer_dead_letter_arn && aws_cloudwatch_event_target.observer[0].dead_letter_config[0].arn == var.release.observer_dead_letter_arn
+    error_message = "Observer/event delivery must remain disabled and retain failures in the reviewed queue."
+  }
+  assert {
+    condition     = aws_lambda_permission.observer[0].qualifier == aws_lambda_function.observer[0].version && aws_cloudwatch_event_target.observer[0].arn == aws_lambda_function.observer[0].qualified_arn && jsondecode(aws_cloudwatch_event_rule.observer[0].event_pattern).detail.taskDefinitionArn == [var.release.task_definition_arn] && jsondecode(aws_cloudwatch_event_rule.observer[0].event_pattern).detail.lastStatus == ["STOPPED"] && aws_iam_role.runtime["observer"].permissions_boundary == "arn:aws:iam::123456789012:policy/ai-job-apply-development-resume-observer-r7-boundary"
+    error_message = "Only the original stopped-task rule may invoke the bounded numeric observer."
+  }
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.observer[0].policy).Statement[0].Action == ["ecs:DescribeTasks"] && jsondecode(aws_iam_role_policy.observer[0].policy).Statement[3].Effect == "Deny" && contains(jsondecode(aws_iam_role_policy.observer[0].policy).Statement[3].Action, "ecs:StopTask")
+    error_message = "Observer must describe original tasks without launch/stop authority."
+  }
   assert {
     condition     = aws_iam_role.runtime["control"].permissions_boundary == "arn:aws:iam::123456789012:policy/ai-job-apply-development-resume-control-r7-boundary" && aws_iam_role.runtime["dispatch"].permissions_boundary == local.boundary && aws_iam_role.runtime["durable"].permissions_boundary == local.boundary
     error_message = "Only control uses the original release's separate launch ceiling."
@@ -133,4 +152,21 @@ run "unknown_network_mode_refused" {
     release = merge(var.release, { task_assign_public_ip = "AUTO" })
   }
   expect_failures = [var.release]
+}
+
+run "observation_can_continue_without_launch" {
+  command = plan
+  variables {
+    enabled                    = true
+    observation_events_enabled = true
+  }
+  assert {
+    condition     = aws_cloudwatch_event_rule.observer[0].state == "ENABLED" && aws_cloudwatch_event_rule.dispatch[0].state == "DISABLED" && aws_lambda_function.control[0].environment[0].variables.NATIVE_RESUME_NEW_LAUNCH_ENABLED == "false"
+    error_message = "Original task observation must remain independent of new launches."
+  }
+}
+run "observation_requires_runtime" {
+  command = plan
+  variables { observation_events_enabled = true }
+  expect_failures = [var.observation_events_enabled]
 }

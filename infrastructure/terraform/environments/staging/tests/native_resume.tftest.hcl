@@ -150,6 +150,12 @@ run "explicit_task_and_preparation_bindings" {
           "base64sha256" : "u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=",
           "version_id" : "synthetic-version",
           "key" : "lambda/documents/native-resume/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/native-resume-request-dispatch-lambda.zip"
+        },
+        "observer" : {
+          "sha256" : "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "base64sha256" : "u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7s=",
+          "version_id" : "synthetic-version",
+          "key" : "lambda/documents/native-resume/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/native-resume-task-observer-lambda.zip"
         }
       },
       "cluster_arn" : "arn:aws:ecs:us-east-2:111122223333:cluster/native-resume",
@@ -164,6 +170,7 @@ run "explicit_task_and_preparation_bindings" {
       "security_group_ids" : [
         "sg-0123456789abcdef0"
       ],
+      "observer_dead_letter_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-resume-observation-dlq",
       "image" : "111122223333.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/native-resume@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "task_assign_public_ip" : "DISABLED",
       "task_subnet_ids" : [

@@ -578,3 +578,29 @@ passes emitted-bundle default-off checks: 386142 bytes, SHA-256
 `.tmp/d3-native-resume-observer-event-artifact.log`. Only the observer was rebuilt in this
 checkpoint; the six-artifact family must be rebuilt together at the intended release source.
 No complete current-head family, publication or deployment claim is made.
+
+
+## Observer release wiring
+
+The preparation module now requires four immutable artifacts and creates the numeric observer
+alongside control, durable and dispatch. A separately gated, default-disabled EventBridge rule
+selects the original cluster/task definition STOPPED events. Observation can continue with new
+launches disabled. Bootstrap supplies an original observer boundary without launch, stop or
+role-passing grants. Both environment release maps remain empty by default.
+
+EventBridge delivery retries are explicitly 185 attempts/24 hours. Delivery failures and Lambda
+asynchronous execution failures reference the required existing same-account standard SQS queue.
+The module does not provision its retention, resource policy or key grants. Activation requires
+review of rule-scoped EventBridge SendMessage, platform-key Decrypt/GenerateDataKey permissions,
+restricted replay access and failure monitoring. No scheduled reconciliation or source-event
+completeness is proved; delayed/lost events can leave the original allocation unresolved. Event
+status alone never authorizes retirement or replacement.
+
+Local Terraform validation passes for bootstrap, preparation, development and staging. All 23
+mocked cases pass: 7 bootstrap, 10 preparation and 3 in each environment. Coverage includes
+numeric rule recipients, separate observer boundary, both failure targets and observation with
+launch disabled. Logs: `.tmp/d3-observer-wiring-boundary.log`,
+`.tmp/d3-observer-wiring-preparation.log`, `.tmp/d3-observer-wiring-env-development.log`,
+`.tmp/d3-observer-wiring-env-staging.log`. These are synthetic-provider checks, not effective IAM,
+queue retention or managed delivery evidence. No publication, deployment or activation occurred.
+The current-source six-artifact family still requires rebuilding before publication.
