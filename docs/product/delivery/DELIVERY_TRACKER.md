@@ -1,5 +1,12 @@
 # Delivery Tracker
 
+2026-10-06 D3-079 verifies native original read admission in the actual immutable production image:
+all five positive/refusal cases pass, including sealed-read refusal and version two; cold default-off
+entrypoint refuses. The exact new harness inventory fixes the first conformance rejection without
+changing the image. All 28 signed Gateway/temporary-material SQL cases pass.
+[Evidence](evidence/d3-native-read-admission-2026-10-06.md). Full clean verification remains;
+D1/D3 In progress, no cloud activation, Docker/WSL stopped and PC on.
+
 2026-10-06 D3-079 wires the default-off Gateway scalar authorization switch and original task
 admission around every native packet proof. All 29 focused, 33 Linux and four emitted isolation
 checks pass; real HTTPS refuses a file after sealing without generated content. Gateway typecheck

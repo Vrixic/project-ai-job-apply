@@ -27,6 +27,30 @@ Local checks:
   process before supervisor fallback. Remote owner/provider/identity ports are synthetic.
 
 The source image harness adds the same sealed-read scenario against the actual immutable runtime
-image. Fresh production image and clean full verification remain pending at this checkpoint.
+image. Actual image evidence follows below; clean full verification remains pending.
 Managed routing/target/IAM/key/provider/client/ATS and accountable acceptance remain open. No cloud
 activation, frontend feature change, new PR, hosted CI/CD or phase completion is asserted.
+
+## Signed Gateway and actual production image
+
+All 28 existing signed Gateway/temporary-material PostgreSQL cases pass in the newly owned
+loopback tmpfs fixture. Actual Identity/Profile/Applications/Documents migrations and packet
+stores are used; JWT issuer, KMS and provider/owner replies are synthetic. This verifies the
+scalar route with actual persistence, not live managed sign-in or a deployed flag change.
+
+Production image `sha256:0f469b512f17b4a769305f81be8a92aa3076179fe3b308aef80d12909ccfa1e8`
+is built from clean `64192061` source. All five actual-image scenarios pass: positive original
+reads, sealed-read refusal, version-two original reads, secret-version refusal and TLS-host
+refusal. Real PDF/DOCX and authenticated TLS 1.3 run in the image-owned runtime; original kernel
+SIGKILL is observed before supervisor fallback, without diagnostics or extra work. Remote ports
+remain synthetic. The actual cold production entrypoint separately refuses default-off with
+exit 1 and exactly `NativeImageConfigurationUnavailable`.
+
+The first image conformance run failed because the outer verifier retained the old four-scenario
+inventory. Adding the exact fifth scenario/row count resolves it on the unchanged immutable image;
+no runtime, timeout or diagnostic guard is weakened. Image source remains `64192061` and is not
+relabeled as a later harness commit. Logs: `.tmp/d3-native-read-admission-image-proof-final.log`,
+`.tmp/d3-native-read-admission-gateway-sql.log` and `.tmp/d3-native-read-admission-linux.log`.
+
+The owned SQL fixture is removed after exact-label validation. Shared volumes remain untouched;
+Docker/WSL are stopped and the PC remains on. No image publication or cloud activation is performed.

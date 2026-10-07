@@ -197,12 +197,13 @@ try {
     .map((row) => JSON.parse(row));
   const expected = [
     "runtime-image",
+    "runtime-image-read-sealed",
     "runtime-image-version-two",
     "runtime-image-secret-refused",
     "runtime-image-tls-refused",
   ];
   if (
-    rows.length !== 4 ||
+    rows.length !== 5 ||
     rows.some(
       (row, i) => JSON.stringify(row) !== JSON.stringify({ scenario: expected[i], passed: true }),
     )
