@@ -4764,3 +4764,11 @@ observation records retirement. No new launch/stop authority. Workflows compiles
 81 focused handler/observer/launch cases pass with synthetic ECS responses.
 [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#lost-launch-response-recovered-from-original-stopped-event).
 No deployment; routing/managed acceptance remain. D1/D3 In progress, CI/CD deferred and PC on.
+
+
+2026-10-07 D1-013/D3-015 aligns migration-image and publisher executable boundaries with
+Documents 0015: exact 73-migration/93-relation inventory and required SQL filename. All 181
+runtime-smoke cases and OCI publisher guards pass. The first combined verifier was stopped on
+finding the stale pins; a fresh clean-source pass and updated actual image remain.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#observation-migration-package-alignment-2026-10-07).
+No cloud action; D1/D3 In progress, CI/CD deferred, PC on.

@@ -56,3 +56,17 @@ After verification, the maintained local launcher restored web against the live 
 API. Local root returns 200; unauthenticated Resume returns its expected 307 sign-in redirect.
 Only the two inspected Next-generated development import changes were restored. These readiness
 checks add no authenticated resume/preference acceptance or cloud state change.
+
+
+## Observation migration package alignment (2026-10-07)
+
+Documents 0015 advanced the owning restore manifest to 73 migrations/93 relations. The container
+build smoke, publisher runtime smoke and their strict fixtures still expected 72 migrations and
+omitted the new required SQL file. They now require the exact new filename and count; all existing
+owner/schema/file/checksum checks remain in force. No base image, dependency or cloud setting changed.
+
+All 181 executable runtime-smoke cases and the maintained OCI publisher guard suite pass locally.
+Logs: `.tmp/d3-observation-migration-smoke.log` and `.tmp/d3-observation-migration-publisher.log`.
+The first combined verifier at `254bde13` was deliberately stopped after discovering this guaranteed
+later failure; it is not a full pass. A fresh clean-source verifier and actual updated image build
+remain to run. No publication, vulnerability-scan, deployed migration or phase completion claim.

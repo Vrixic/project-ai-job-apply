@@ -944,3 +944,11 @@ connectivity. Ten mocked cases and both environment validations pass.
 [Evidence](evidence/d1-retention-live-configuration-2026-10-07.md#private-maintenance-connectivity-correction).
 Read-only native prerequisite inventory finds zero resume task definitions and two existing NATs;
 no live invocation, policy apply or phase completion is claimed. D1/D3 In progress, PC on.
+
+
+2026-10-07 D1-013/D3-015 aligns migration-image and publisher executable boundaries with
+Documents 0015: exact 73-migration/93-relation inventory and required SQL filename. All 181
+runtime-smoke cases and OCI publisher guards pass. The first combined verifier was stopped on
+finding the stale pins; a fresh clean-source pass and updated actual image remain.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#observation-migration-package-alignment-2026-10-07).
+No cloud action; D1/D3 In progress, CI/CD deferred, PC on.
