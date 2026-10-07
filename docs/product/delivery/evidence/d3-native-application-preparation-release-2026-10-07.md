@@ -228,3 +228,28 @@ Local logs/inventory: `.tmp/d3-preparation-family-current-build.log`,
 `backend/workflows/dist/native-preparation-family`. No fresh audit, cloud deployment or managed
 acceptance is claimed. Native task/launcher/owner/route infrastructure still needs composition;
 D1/D3 remain In progress. Docker/WSL remain stopped; PC on and CI/CD deferred.
+
+## Native cover-letter task composition
+
+A new `native-material-task` module registers the original digest-pinned cover-letter task and
+bounded task/execution roles, exposed through empty-by-default development/staging release maps.
+The task uses the existing native image entrypoint, unprivileged UID, init, read-only root,
+dropped capabilities, no core dumps and no persisted/logged content. Task IAM admits one exact
+numeric owner RPC and distinct provider/TLS secret versions; each key decrypt grant is limited
+to Secrets Manager and that secret's context. Execution IAM pulls only the named image repository.
+No ECS service, launcher invocation, route, runtime flag or provider activation is added.
+
+Eight mock Terraform scenarios pass: absence, task/role envelope, foreign account/environment,
+registered-revision mismatch, unpinned provider secret, duplicate secrets and owner alias refusal.
+The actual mocked task definition was translated into the AWS SDK response shape and accepted
+by compiled `validateNativeTaskDefinition`; a resume entrypoint substituted into it was rejected.
+Module and both environment configurations validate with Terraform 1.16.2/AWS provider 6.58.0.
+Formatting, serverless infrastructure validation and diff whitespace checks pass. Ignored local
+fixtures: `.tmp/d3-native-material-task-tests.jsonl` and
+`.tmp/d3-native-material-task-projection.json` (synthetic metadata only).
+
+This is source/mock compatibility, not an ECS registration, image run or effective IAM proof.
+Native launcher/owner/task-event Lambdas, endpoint/secret policies, provider egress and read-route
+composition plus managed acceptance remain. Original roles/secrets/keys must outlive their work;
+a mismatched task revision is detected after registration and does not undo it. No AWS action,
+publication, deployment or activation; Docker/WSL stopped, PC on, CI/CD deferred. D1/D3 In progress.

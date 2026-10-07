@@ -4931,3 +4931,10 @@ and intake-disabled drain. Dependency compilation, bundled refusal checks, five 
 checks and sixteen-file source/hash/SBOM verification pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#current-recovery-artifact-family).
 Artifacts remain unpublished; native task/launcher/owner/route composition and managed acceptance
 remain. D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 native cover-letter task/roles are composed in optional development/staging release
+maps: exact owner RPC, pinned provider/TLS versions, immutable image and no content persistence.
+Eight mock scenarios and actual launcher-validator compatibility pass; both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-cover-letter-task-composition).
+No cloud activation. Launcher/owner/event Lambdas, network/secret policies, route and managed
+acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
