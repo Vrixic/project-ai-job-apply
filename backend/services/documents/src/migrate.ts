@@ -22,6 +22,7 @@ const migrationVersions = [
   "0011_native_material_allocations",
   "0012_native_material_launch_claim",
   "0013_native_material_ready",
+  "0014_native_resume_generations",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -90,6 +91,7 @@ try {
           (to_regclass('documents.cover_letter_work_authorizations') IS NOT NULL)::int +
           (to_regclass('documents.cover_letter_provider_responses') IS NOT NULL)::int +
           (to_regclass('documents.native_material_admission') IS NOT NULL)::int +
+          (to_regclass('documents.native_resume_generations') IS NOT NULL)::int +
           (to_regclass('documents.native_material_allocations') IS NOT NULL)::int +
           (to_regclass('documents.schema_migrations') IS NOT NULL)::int
         )::int AS "tableCount",
@@ -145,7 +147,7 @@ try {
           AND conname='cover_letters_material_ready_ck' AND convalidated) AS "readyConstraintCount"
     `;
     if (
-      verification?.tableCount !== 11 ||
+      verification?.tableCount !== 12 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.triggerCount !== 2 ||
       verification.workTriggerCount !== 1 ||

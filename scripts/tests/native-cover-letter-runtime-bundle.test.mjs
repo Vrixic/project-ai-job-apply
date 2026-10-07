@@ -280,3 +280,63 @@ test("native resume session emits memory/render capability without model, SQL or
     /TemporaryMaterialUnavailable/u,
   );
 });
+
+test("native resume generation owner emits scalar SQL control without content, model or task clients", async () => {
+  const result = await build({
+    absWorkingDir: root,
+    entryPoints: ["backend/services/documents/dist/src/native-resume-generation-store.js"],
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "cjs",
+    write: false,
+    metafile: true,
+  });
+  const inputs = Object.values(result.metafile.outputs).flatMap((output) =>
+    Object.entries(output.inputs)
+      .filter(([, entry]) => entry.bytesInOutput > 0)
+      .map(([name]) => name.replaceAll("\\", "/")),
+  );
+  for (const forbidden of [
+    "@aws-sdk/",
+    "ai-sdk",
+    "render/",
+    "parsing/",
+    "native-resume-session.js",
+    "temporary-materials.js",
+    "cover-letter-work-store",
+    "native-memory-transport",
+    "backend/workflows",
+  ])
+    assert.ok(!inputs.some((name) => name.includes(forbidden)), forbidden);
+  for (const required of [
+    "native-resume-generation-store.js",
+    "native-task-allocation.js",
+    "packages/domain/dist/temporary-material.js",
+  ])
+    assert.ok(
+      inputs.some((name) => name.includes(required)),
+      required,
+    );
+  const module = { exports: {} };
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    createRequire(path.join(root, "package.json")),
+  );
+  let effects = 0;
+  const owner = async () => {
+    effects++;
+  };
+  const sql = {
+    begin: async () => {
+      effects++;
+    },
+  };
+  const store = new module.exports.PostgresNativeResumeGenerationStore(sql, {
+    application: owner,
+    job: owner,
+  });
+  await assert.rejects(store.reserve({}), /^Error: NativeResumeGenerationUnavailable$/u);
+  assert.equal(effects, 0);
+});

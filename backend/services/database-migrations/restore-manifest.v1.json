@@ -138,6 +138,10 @@
         {
           "version": "0013_native_material_ready",
           "checksum": "e9bd7709515e49c8fb5e56a7521a57f8746327cb40f375ee6dd070bc9c3d6d8f"
+        },
+        {
+          "version": "0014_native_resume_generations",
+          "checksum": "436e78ba6a12fa93941a4200586196cedd48db11f38b8f36f08b96846c9e4d40"
         }
       ],
       "relations": [
@@ -148,6 +152,7 @@
         "documents.idempotency_keys",
         "documents.native_material_admission",
         "documents.native_material_allocations",
+        "documents.native_resume_generations",
         "documents.processing_dispositions",
         "documents.processing_receipts",
         "documents.resume_documents",

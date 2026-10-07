@@ -140,6 +140,13 @@
           "items": {
             "$ref": "#/$defs/nativeMaterialAllocation"
           }
+        },
+        "nativeResumeGenerations": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/nativeResumeGeneration"
+          }
         }
       },
       "additionalProperties": false
@@ -2428,6 +2435,79 @@
         }
       },
       "additionalProperties": false
+    },
+    "nativeResumeGeneration": {
+      "type": "object",
+      "required": [
+        "id",
+        "applicationId",
+        "version",
+        "baseDocumentId",
+        "baseVersion",
+        "baseSha256",
+        "jobContextSha256",
+        "state",
+        "createdAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "applicationId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "baseDocumentId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "baseVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "completedAtMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expiresAtMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "baseSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "jobContextSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "contentSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "readyAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "state": {
+          "type": "string",
+          "enum": ["pending", "bound", "retired", "abandoned"]
+        }
+      },
+      "additionalProperties": false,
+      "dependentRequired": {
+        "contentSha256": ["completedAtMs", "expiresAtMs"],
+        "completedAtMs": ["contentSha256", "expiresAtMs"],
+        "expiresAtMs": ["contentSha256", "completedAtMs"],
+        "readyAt": ["contentSha256", "completedAtMs", "expiresAtMs"]
+      }
     }
   }
 }

@@ -506,7 +506,9 @@ export class PostgresNativeMaterialRegistry {
           Array<{ complete: boolean }>
         >`SELECT (sealed_at IS NOT NULL AND epoch_id = ${epochId}
           AND NOT EXISTS (SELECT 1 FROM documents.native_material_allocations a
-            WHERE a.user_id = h.user_id AND a.application_id = h.application_id AND a.state <> 'retired')) AS complete
+            WHERE a.user_id = h.user_id AND a.application_id = h.application_id AND a.state <> 'retired')
+          AND NOT EXISTS (SELECT 1 FROM documents.native_resume_generations r
+            WHERE r.user_id=h.user_id AND r.application_id=h.application_id AND r.state NOT IN ('retired','abandoned'))) AS complete
           FROM documents.native_material_admission h WHERE user_id = ${owner} AND application_id = ${app} FOR UPDATE`;
         this.check();
         return result?.complete === true;

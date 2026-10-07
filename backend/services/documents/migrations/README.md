@@ -50,3 +50,14 @@ This is source/local validation only, not a deployed migration or production ret
 The same release must synchronize both private deletion-restore validators and their synthetic
 contract fixture to the exact new restore-manifest SHA. Prior snapshots require their original
 source/artifact boundary; do not relax the current manifest identity to accept old receipts.
+
+`0014_native_resume_generations` owns scalar original deterministic generation, task binding,
+completion/readiness and retirement metadata. It shares the existing application admission fence
+with cover-letter allocations, blocks reopening/deletion before retirement, and permits known
+no-launch abandonment only while no launch claim exists. Candidate export gains optional closed
+`nativeResumeGenerations`; deploy current strict consumers before applying the migration. Deploy
+the owner store afterward, retaining default-off until authenticated resume task/RPC/source/Jobs/
+packet/launcher/stop and managed acceptance. Rollback code must keep new inventory/deletion guards.
+No backfill, generated content, public route or live activation. The exact restore boundary becomes
+71 migrations/93 relations; old-source receipts remain historical. See
+[generation ledger evidence](../../../../docs/product/delivery/evidence/d3-native-resume-generation-ledger-2026-10-07.md).

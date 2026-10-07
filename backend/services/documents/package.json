@@ -119,6 +119,10 @@
     "./native-resume-session": {
       "types": "./dist/src/native-resume-session.d.ts",
       "default": "./dist/src/native-resume-session.js"
+    },
+    "./native-resume-generation-store": {
+      "types": "./dist/src/native-resume-generation-store.d.ts",
+      "default": "./dist/src/native-resume-generation-store.js"
     }
   },
   "scripts": {

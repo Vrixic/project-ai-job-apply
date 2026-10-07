@@ -734,3 +734,12 @@ The private `./native-evidence-binding` validator and registry `checkEvidenceAdm
 original task/work/current unsealed admission before owner evidence reads. Admission locks end
 before reading facts/job; it never consumes work or proves task liveness. Existing original
 work-claim guards remain final authority. See [evidence](../../../docs/product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
+
+Private `./native-resume-generation-store` supplies a default-off Documents-owned original
+resume ledger, independent of cover-letter provider consent. Applications/Jobs owner ports run
+on the same transaction; parsed-source hashes, one launch claim, exact task/config binding,
+original completion/ready metadata and positive retirement are scalar-only. Shared admission
+prevents cross-kind overlap and false disposal acknowledgement. Migration 0014, strict export
+consumer rollout and current restore boundary are required before store deployment. Authenticated
+resume RPC/source/Jobs/task/packet/image/client/ATS composition remains unfinished. See
+[evidence](../../../docs/product/delivery/evidence/d3-native-resume-generation-ledger-2026-10-07.md).

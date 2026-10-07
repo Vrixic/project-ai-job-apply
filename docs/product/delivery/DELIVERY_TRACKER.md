@@ -4347,3 +4347,12 @@ pass. [Evidence](evidence/d3-native-resume-owner-admission-2026-10-06.md). Ownin
 generation/task/completion ledger and preparation/read wiring remain; D1/D3 stay In progress.
 No new PR, main merge, deployment/activation or hosted CI/CD. Development web restored,
 owned fixture removed, shared volumes retained, Docker/WSL stopped and PC stays on.
+
+2026-10-07 D3-064/D3-079 adds the default-off Documents native-resume generation ledger:
+exact source/packet/job intent, one launch claim, immutable task/completion/ready/retirement,
+shared cross-kind fence and scalar export/deletion coverage. Fifteen real SQL cases, 25 existing
+native cover-letter SQL cases, six emitted checks and actual 71-migration/93-relation logical
+restore pass. [Evidence](evidence/d3-native-resume-generation-ledger-2026-10-07.md). Full clean
+verification follows. Authenticated resume RPC/Jobs/source/launcher/packet/image/client/ATS and
+managed/accountable acceptance remain; D1/D3 stay In progress. No cloud activation, new PR or
+CI/CD. Owned tmpfs fixtures removed, shared volumes retained, Docker/WSL stopped and PC on.

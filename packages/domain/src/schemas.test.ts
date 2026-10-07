@@ -717,6 +717,41 @@ describe("domain schema registry", () => {
 
     expect(validate(exported)).toBe(true);
     expect(validateCandidateDataExportV1(exported)).toBe(true);
+    const nativeResume = {
+      id: exported.exportId,
+      applicationId: exported.exportId,
+      version: 1,
+      baseDocumentId: exported.exportId,
+      baseVersion: 1,
+      baseSha256: "a".repeat(64),
+      jobContextSha256: "b".repeat(64),
+      state: "bound",
+      createdAt: exported.generatedAt,
+      contentSha256: "c".repeat(64),
+      completedAtMs: 1,
+      expiresAtMs: 1_800_001,
+    };
+    const withResume = (generation: object = nativeResume) => ({
+      ...exported,
+      documents: { ...exported.documents, nativeResumeGenerations: [generation] },
+    });
+    expect(validateCandidateDataExportV1(withResume())).toBe(true);
+    expect(validateCandidateDataExportV1(withResume({ ...nativeResume, state: "abandoned" }))).toBe(
+      true,
+    );
+    for (const forbidden of ["taskArn", "clusterArn", "configurationSha256", "blocks", "text"])
+      expect(
+        validateCandidateDataExportV1(withResume({ ...nativeResume, [forbidden]: "synthetic" })),
+      ).toBe(false);
+    expect(validateCandidateDataExportV1(withResume({ ...nativeResume, state: "missing" }))).toBe(
+      false,
+    );
+    expect(validateCandidateDataExportV1(withResume({ ...nativeResume, baseVersion: 0 }))).toBe(
+      false,
+    );
+    const partialResume: Record<string, unknown> = { ...nativeResume };
+    delete partialResume.contentSha256;
+    expect(validateCandidateDataExportV1(withResume(partialResume))).toBe(false);
     const nativeAdmission = {
       applicationId: exported.exportId,
       epochId: exported.exportId,
