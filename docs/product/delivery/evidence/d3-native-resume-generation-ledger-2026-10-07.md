@@ -87,3 +87,14 @@ cases and 697 replay guard checks pass with zero cloud calls. Local evidence lin
 scoped source formatting/lint passes. Both exact labeled SQL containers are removed; Docker/WSL
 are stopped. The development web listener is already absent before the full verifier; restore
 it afterward. No PC shutdown is performed.
+
+## Exact release inventory correction
+
+The first full run at `6da8ea28` stops at the coordinated release guard, which still admits
+Documents only through 0013. The guard now explicitly admits the exact 0014 suffix; historical
+boundaries retain their original lists, and unknown/duplicate/missing/reordered 0014 variants
+refuse. All 273 release-guard assertions pass. The migration publisher's executable smoke now
+requires exactly 71 migrations/93 relations and the named 0014 file, with manifest checksum
+verification unchanged. Its current-image smoke tests and the document migration operator's
+current 0014 success marker are synchronized. This changes inventory recognition, not deployment
+approval or cloud state. A corrected committed-source full rerun follows.
