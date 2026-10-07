@@ -259,3 +259,23 @@ rejection of incomplete, duplicated or mixed twenty-object receipts. Existing do
 control families retain their exact roots/inventories. Five-artifact actual build/readback checks
 follow on committed source. This closes release packaging only; enabled-image conformance and
 managed/client/ATS/accountable acceptance remain. D1/D3 stay In progress and ADR-040 Proposed.
+
+
+The full package build passes on clean `5690191d71dea1e7ee93a1efeeb34e30b4845209`, including its dependency
+compilation and all five bundled default-off checks. The existing publisher's actual local
+artifact readers accept all twenty ZIP/manifest/SBOM/checksum files and exact source markers.
+A second emission of all five artifacts matches every companion-file fingerprint. This proves
+local reproducibility/readback, not cloud publication, dependency-audit currency or managed
+release acceptance. Logs: `.tmp/d3-resume-publication-build.log`,
+`.tmp/d3-resume-publication-readback.log`; scalar receipt:
+`.tmp/d3-resume-publication-local-receipt.json`.
+
+| Artifact | ZIP SHA-256 | Bytes |
+| --- | --- | ---: |
+| native-resume-owner-rpc-lambda | `ce87c90e1f26c57f105278d69d05d0e3afdd84370c7c20f04d799a96695129b7` | 158277 |
+| native-resume-source-rpc-lambda | `63de5566dc1413e8cf25d9b9d0353bfae86b2b0b07a878cedd367c1f534b0b92` | 393567 |
+| native-resume-preparation-control-lambda | `04f913da95f4e157bb7469f9ee99e14f124a34ca871ba37fd53f37f0fd5f511d` | 381537 |
+| native-resume-preparation-durable-lambda | `c5a68d38e3705b1e6ccdba126c839bbc9cf6d5eb15e08a54470833eb3b90e465` | 265659 |
+| native-resume-request-dispatch-lambda | `02bb145a718f7c365cec55d4a5f10923292378bfaf8632160d7430d8b37fbf3d` | 515890 |
+
+No Docker runtime or cloud call was needed. Existing development web remains running; PC stays on.

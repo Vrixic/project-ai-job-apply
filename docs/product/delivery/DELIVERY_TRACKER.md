@@ -4521,3 +4521,11 @@ roots and one build command. Pure guards pass for complete inventory and mixed/d
 receipt rejection. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Actual
 frozen-source family build follows. No publication, deployment, schedule or IAM activation.
 D1/D3 remain In progress; ADR-040 Proposed. CI/CD deferred until launch, PC on.
+
+
+2026-10-07 D3-064/D3-079 complete native resume release family at clean `5690191d` passes
+the real package build and default-off bundle checks. The guarded publisher reads all twenty
+local files and exact source markers; second artifact emission is byte-identical across all
+companions. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Zero cloud calls;
+no publication, deployment or activation. Enabled-image and managed/client/ATS/accountable gates
+remain. D1/D3 In progress, ADR-040 Proposed, CI/CD deferred until launch and PC on.
