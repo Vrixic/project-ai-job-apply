@@ -2345,3 +2345,9 @@ connected. Sixteen bootstrap and six runtime mock cases pass; PowerShell 5/7 fam
 guards pass. Publisher/terraform key layout mismatch was corrected. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#material-control-bootstrap-and-publisher).
 No cloud publication or activation; actual family packaging, platform event/network integration
 and managed acceptance remain. D1/D3 In progress, Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 actual native material control family builds at `483498f2`: all three artifacts,
+twelve release companions, bundled refusal checks and seventeen emitted capability tests pass.
+Source/hash/SBOM integrity verified; artifacts remain unpublished. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#built-native-material-control-family).
+Platform event/network and managed image/read-route acceptance remain. D1/D3 In progress,
+CI/CD deferred, Docker/WSL stopped and PC on.

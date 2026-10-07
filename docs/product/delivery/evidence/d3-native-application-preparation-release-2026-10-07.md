@@ -304,3 +304,24 @@ next local check; no build/provenance claim is made by these selection tests alo
 Terraform bootstrap validation, formatting, serverless infrastructure validation and whitespace
 checks pass. No AWS action or CI/CD execution. Platform event/failure retention/alarms, private
 network permissions and native image/read-route acceptance remain; D1/D3 In progress.
+
+## Built native material control family
+
+The new family command compiles Workflow and owning dependencies and builds all three original
+artifacts at clean source `483498f21f364ed510399dbce591371d7995c34f`. All original builders'
+bundled refusal checks pass; seventeen emitted control/owner/resume capability-boundary tests
+pass. Independent inspection verifies all twelve companions, exact manifest/embedded source,
+ZIP byte lengths/SHA256/base64 digests, bundle hashes and SBOM hashes/component counts.
+
+| Artifact | ZIP SHA256 | Bytes | Components |
+|---|---|---:|---:|
+| native-material-launch-lambda | `75f919bfd63bb9b74f5a86ea04a5d7e7654fb86a23c285a0d97fdca581119cd7` | 297876 | 28 |
+| native-owner-rpc-lambda | `6ed299c14b7f802da9aec92304faf6586731cc838851578d95055f7e2e5e11bb` | 369458 | 36 |
+| native-material-task-event-lambda | `4ef7ad0408ffc3e0e2ed513f145bf1d4f530c37518aa05c4521b9759e8fe8d04` | 265071 | 25 |
+
+Artifacts remain local under Workflow `dist/native-material-control-family`. Logs/inventory:
+`.tmp/d3-native-material-control-family-build.log` and
+`.tmp/d3-material-control-family-integrity.json`. One qualified family build is proven, not
+repeated clean reproducibility, a fresh dependency audit or publisher cloud execution. Platform
+event/failure retention/alarms and private network integration remain before image/read-route
+managed acceptance. D1/D3 In progress; no cloud action, CI/CD deferred, Docker/WSL stopped, PC on.
