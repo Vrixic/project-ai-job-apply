@@ -326,4 +326,3 @@ run "restore_binds_exact_encrypted_snapshot" {
     error_message = "Restore must use the retained snapshot, protect the database and preserve future final snapshots."
   }
 }
-
