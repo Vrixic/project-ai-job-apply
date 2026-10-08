@@ -723,3 +723,50 @@ and the pre/postapply state backups. The current complete input baseline is
 and must not be used alone. Terraform prevents accidental zone destruction.
 Full application verification remains at e71aedc6; this DNS-only change was verified by Terraform
 validation, exact plan inspection, actual create and a zero-drift plan. D1/D3 remain In progress.
+
+
+## Delegation and trusted development TLS (2026-10-08)
+
+After the owner added the four Cloudflare NS records, public resolver 1.1.1.1 returned all four
+exact Route 53 nameservers for materials.dev.applydash.ai. The direct Cloudflare lookup transiently
+returned SERVFAIL, so public resolution plus successful external CA DNS validation are the stronger
+positive evidence. No registrar or parent nameserver change was needed.
+
+Issued a Let's Encrypt ECDSA P-256 wildcard certificate for *.materials.dev.applydash.ai, after a
+successful staging-CA rehearsal. Both actual DNS-01 challenges completed and their TXT records were
+removed. The trusted leaf expires 2027-01-06T15:50:13Z; SHA-256:
+`cf0d002746872ab9be33b77690536ef9a7fcae9f53c4359b55ebeb8b4511cf6e`.
+A real local TLS connection in the issuance container verified the chain against default trusted
+roots and an allocation-shaped hostname. The actual compiled Documents nativeImageTls loader also
+accepted the exact pinned managed secret and wildcard hostname. This is certificate/loader evidence,
+not a deployed native task or browser download.
+
+Used official certbot/dns-route53 pinned at
+`sha256:38fdfaed25f1e2554b22b835d257756afcfe3acacb8f943ec0884c251e561130`.
+The one-off container had a read-only root, dropped capabilities, no-new-privileges, memory/PID bounds,
+and tmpfs-only Certbot configuration, account/private keys and logs. Short-lived development SSO
+credentials were supplied through the child process environment without command-line values or
+credential files. All container fixtures were removed, Docker Desktop stopped and WSL shut down.
+The PC remains on. The initial staging wrapper filename shadowed Python's operator module; corrected
+before any issuance, then the staging and trusted CA runs both passed. The first native-loader check
+used an incorrect dist path; the corrected dist/src import passed without application changes.
+
+Stored the certificate/private-key JSON in Secrets Manager at
+ai-job-apply/development/native-material/tls and the ACME account archive separately at
+ai-job-apply/development/native-material/acme-account, encrypted with the development platform KMS
+key. Exact ARN and immutable version metadata are in ignored .tmp/native-tls-bindings.json.
+Version-pinned certificate readback matched. No private key, account key or AWS credentials were
+written to source or host artifact files. These two secret metadata resources were created by the
+one-off operator, outside Terraform state; state remains 406. Record/import metadata before claiming
+complete Terraform ownership; never import secret values into state.
+
+Local issuance scripts and receipts: .tmp/run-native-tls.py, .tmp/native-tls-container.py,
+.tmp/native-tls-staging.log, .tmp/native-tls-production.log and
+.tmp/native-tls-runtime-validation.log. The trusted CA receipt calls its stage production; this
+refers only to the CA endpoint, not an application production deployment. The first-issuance
+operator refuses existing TLS/account secrets and is not a renewal implementation.
+
+Remaining: managed renewal/expiry monitoring and rollout of renewed pinned secret versions;
+provider secret and accepted retention, immutable native function/task/image bindings, managed
+route/download/disposal journey and accountable acceptance. No native runtime activated, candidate
+content processed or new human journey test requested. D1/D3 remain In progress; CI/CD deferred.

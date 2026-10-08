@@ -5359,3 +5359,12 @@ validation and postapply zero-drift plan pass, platform state 405 -> 406. Cloudf
 records are ready for the owner; no DNS write connection is available here. Wildcard TLS and native
 runtime release/acceptance remain. [DNS evidence](evidence/d3-native-application-disposal-2026-10-07.md#development-download-dns-2026-10-08).
 No application activation, phase completion or CI/CD work; D1/D3 In progress, PC on.
+
+
+2026-10-08 Cloudflare delegation is publicly verified and both staging/trusted Let's Encrypt
+DNS challenges pass. The development wildcard certificate is stored in KMS-encrypted Secrets
+Manager; trusted TLS handshake, exact version readback and actual native TLS loader pass.
+[DNS/TLS evidence](evidence/d3-native-application-disposal-2026-10-07.md#delegation-and-trusted-development-tls-2026-10-08).
+Expiry is 2027-01-06; managed renewal/monitoring and pinned-version rollout remain. Native runtime
+bindings/provider and managed journey remain unfinished. No runtime activation; D1/D3 In progress,
+Docker/WSL stopped and PC on.
