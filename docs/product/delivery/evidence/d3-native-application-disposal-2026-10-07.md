@@ -297,3 +297,25 @@ Existing main, audit, bucket, checksum and exact-version receipt guards remain. 
 pass, including mixed-case family selection and incomplete/foreign receipt rejection; no cloud calls.
 The package command and release ordering are documented. Exact-source package qualification follows.
 Publication/deployment and managed acceptance remain; D1/D3 In progress, CI/CD deferred and PC on.
+
+
+## Qualified cleanup publisher and refreshed Gateway (2026-10-08)
+
+Clean source `101aa9e19ed854b2c54e279525f571c3ebc41cf5` passes the full cleanup package command,
+including Gateway/dependency compilation. The actual publisher's extracted pure Get-ArtifactSet
+validates the artifact, and Get-ArtifactFingerprint confirms all four companions reproduce exactly
+across a second bundle build. Both builds invoke the bundled default-off refusal assertion.
+
+- Cleanup ZIP: 404,463 bytes, 34 components, SHA-256
+  `26b7da69a2a34465c94f85b75115a14ea459940163d789ad99f0a3685cfe1950`.
+- Refreshed Gateway ZIP: 1,679,031 bytes, 158 components, SHA-256
+  `f842d6323af8d67df1ae669069912bdf3097f6fa9ef18f77a91f366e90880233`.
+
+Independent checks pass for both source bindings, sole ZIP entry, byte count, archive digest,
+bundle digest and SBOM digest/component count. This Gateway supersedes the local `18698f7f`
+package for withdrawal/cleanup source coverage; it is not deployed or a fresh live journey result.
+Logs: `.tmp/native-cleanup-publisher-build-one.log` and
+`.tmp/native-cleanup-publisher-qualification.log`. Publisher pure guard tests also pass, including
+all existing families and cleanup receipt rejection. The live Publish action, its dependency audit,
+remote main/account/bucket checks and cloud version readback were not executed. No audit waiver.
+Current 78-migration image/recovery, managed acceptance and web hookup remain outstanding.

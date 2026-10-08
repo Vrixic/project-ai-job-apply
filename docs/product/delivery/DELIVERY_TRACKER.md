@@ -5246,3 +5246,10 @@ Existing main, audit, bucket, checksum and exact-version receipt guards remain. 
 pass, including mixed-case family selection and incomplete/foreign receipt rejection; no cloud calls.
 The package command and release ordering are documented. Exact-source package qualification follows.
 Publication/deployment and managed acceptance remain; D1/D3 In progress, CI/CD deferred and PC on.
+
+
+Clean `101aa9e1` passes cleanup package compilation, actual pure publisher artifact validation and
+four-companion deterministic rebuild. Its refreshed Gateway ZIP includes current withdrawal/cleanup
+source. Independent source/archive/bundle/SBOM checks pass for both artifacts.
+[Qualification](evidence/d3-native-application-disposal-2026-10-07.md#qualified-cleanup-publisher-and-refreshed-gateway-2026-10-08).
+No live publication/audit/deployment; 78-migration image/recovery and managed acceptance remain.
