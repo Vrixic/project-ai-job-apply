@@ -501,3 +501,33 @@ Logs: .tmp/dependency-fixes-builds.log, .tmp/dependency-fixes-tests-sequential.l
 .tmp/dependency-fixes-security-tests.log, .tmp/dependency-fixes-final-audit.json and
 .tmp/dependency-fixes-central-audit.log. These are local results, not hosted CI or a deployed release.
 D1/D3 remain In progress. CI/CD remains deferred; no Docker/WSL start or PC shutdown occurred.
+
+
+## Node-forge Node runtime backport (2026-10-08)
+
+Backported the lib/rsa.js change from the still-open upstream
+[forge PR 1152](https://github.com/digitalbazaar/forge/pull/1152), commit ceba344.
+The nested DigestAlgorithm sequence must contain exactly the OID and optional NULL, matching
+what the ASN.1 validator consumed. Extra children are rejected before digest comparison.
+The package remains node-forge 1.4.0; this is a local pnpm patch, not an upstream fixed release.
+Patch SHA-256: 4fa957cddb4b4601a48b535053d0fec7ed013f9d075660a38365f285fc830fe0.
+Both Expo dependency edges in the lockfile resolve the patched snapshot. The change targets the
+Node lib entry used by Expo; prebuilt browser bundles are not changed or claimed remediated.
+
+The new maintained node-forge-security.test.mjs uses ephemeral 2048-bit RSA keys and actual
+Node crypto signing/forge verification, with exponents 3/65537 and SHA-256/384/512. It checks
+normal signatures, wrong digests, optional NULL compatibility, extra children after OID/NULL,
+duplicate NULL, nested sequence garbage and the existing outer-sequence rejection. It does not
+claim to construct a forgery without a private key. Before patching, 24 malformed-input assertions
+failed and 24 controls passed. After resolving/installing the patch, all 48 pass. The initial
+patch-commit wrote metadata but did not update the installed tree; the regression remained red
+until a normal non-frozen install regenerated the lockfile and installed the patched snapshot.
+A subsequent frozen install passes. Full maintained dependency-security suite: 190/190 pass;
+mobile unit tests: 3/3 pass; mobile TypeScript build passes. No Docker needed.
+Logs: .tmp/node-forge-before-patch.log, .tmp/node-forge-after-patch.log,
+.tmp/node-forge-frozen-install.log and .tmp/node-forge-security-suite.log.
+
+Audit recognition is deliberately unchanged: no advisory is waived based only on a patch label.
+Braces remediation and exact installed-tree/advisory verification remain necessary before the
+central release audit can pass. No browser, cloud publication or managed acceptance performed.
+D1/D3 remain In progress; CI/CD deferred and PC on.

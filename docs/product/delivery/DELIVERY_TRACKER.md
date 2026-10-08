@@ -5305,3 +5305,11 @@ node-forge and braces); the central audit still fails without exceptions. Browse
 unavailable; no live UI/deployment claim and no repeat request for accepted manual checks.
 [Dependency fix evidence](evidence/d3-native-application-disposal-2026-10-07.md#released-dependency-fixes-2026-10-08).
 D1/D3 remain In progress; CI/CD deferred and PC on.
+
+
+2026-10-08 backports the upstream-proposed node-forge nested DigestAlgorithm check through a
+hash-pinned pnpm patch. Real RSA regressions reproduce 24 malformed acceptances before the fix;
+all 48 checks pass after installation. Frozen install, 190 dependency-security checks, three mobile
+tests and mobile build pass. This covers the Expo Node entry, not prebuilt browser bundles.
+[Backport evidence](evidence/d3-native-application-disposal-2026-10-07.md#node-forge-node-runtime-backport-2026-10-08).
+Audit policy is unchanged; braces and installed-tree audit integration remain. D1/D3 In progress.
