@@ -1120,3 +1120,84 @@ Its superseded rebuild is stopped before publication so the combined corrected o
 candidate can be built once from the next exact merged source. Full image scan/publication,
 successful managed baseline capture and SQL execution remain unclaimed. D1/D3 stay In progress;
 CI/CD deferred and PC on.
+
+## Verified current migration image 2026-10-08
+
+PR #574 merged the optional-drift correction as
+`38d79a3f4da53c978dfafab64cd0ee510e2ac0bf`. The current migration publisher completes two clean,
+byte-identical Linux/amd64 builds, the dependency audit and actual hardened container inventory
+smoke. Its eleven prerequisite test tasks pass from cache. The image contains seven owners,
+twelve schemas, 95 relations and 78 checksum-bound migrations; this checks package contents,
+not executed SQL against a database.
+
+The exact immutable ECR image passes a **COMPLETE scan with zero High and zero Critical findings**,
+resolving the earlier zlib scan rejection. A separate checksum-bound `Verify` action authenticates
+the immutable index/platform readback and repeats the scan gate successfully.
+
+| Binding | Value |
+| --- | --- |
+| Platform digest | `sha256:965716b29bae466eeb04aa963623d36d97bf44bae056ba6bcd8b66b61c79cb79` |
+| Index digest | `sha256:038bce83b86d63692ce3f7c081666bcfeefed04975d138fe56f3e3fa5e3c8d6e` |
+| Configuration digest | `sha256:4eb3ea8eeddb972950fc6d2c52fc6ed5c2b4f983ce70a0073cb525c678205379` |
+| Receipt SHA-256 | `c6cf47ee4ae0c4e75d1ee41f4af18babcdda0841f75077ed62e48861269ba7ac` |
+
+Private publication receipt:
+`infrastructure/terraform/environments/development/.terraform/development-migration-image/receipt-38d79a3f4da5.json`.
+Private outer logs: `.tmp/migration-38d79a3f-{publish,verify}.log`; build/runtime logs stay below
+the ignored migration-image directory. The failed `771f6548` image remains unaccepted and undeployed.
+The superseded `039cf9c6` build was intentionally stopped before publication; it is not a scan result.
+
+A supported **schema-7 baseline capture succeeds at state 420** with zero meaningful changes and
+no cloud mutation. The first capture using JSON-file inputs found 22 booleans represented as exact
+lowercase strings after Terraform's native environment serialization. Review proves every boolean
+is equivalent and all planned values are byte-structurally equal. The generated zero-change plan,
+without changing its bytes, becomes the reviewed seed for a second successful capture. No sidecar
+is relabeled and no comparison or drift guard is relaxed.
+
+Baseline plan `baseline-38d79a3f4da5-20261008-145423.tfplan` SHA-256:
+`611431927ab4c047393b6bb44bf90486f9073c525045bea27fee3f4f96ee95c2`.
+Adjacent metadata SHA-256:
+`765f10651a9da58d130b7fa12d7c7c62a54008dc2086e0de582dffac6955006c`.
+Both remain private under the development gateway-release directory. The baseline still binds the
+actual older document publication separately; it does not claim the documents were republished.
+
+The final encrypted recovery snapshot is verified available under the exact platform KMS key.
+A separate lifecycle restore plan passes its scope guard: create one private protected Single-AZ
+PostgreSQL instance with 35-day backups, update its public-reader IAM/configuration, and refresh
+only the existing connection-secret version. Plan SHA-256:
+`d541afe9c6457976db321ee1386612824dccde59018482702256de463ff36d3c`.
+**It is not applied** and must be regenerated if state changes. No database, migration execution,
+public route, native task or provider call is enabled by image publication or baseline capture.
+Docker Desktop and WSL stop after independent image verification; the PC remains on. D1/D3
+remain In progress, with managed migration/restore replay and native integration/acceptance open.
+
+The supported `PlanTask`/`ApplyTask` handoff now succeeds. Exact plan SHA-256
+`b41f077188497fb207517332f9a33a798c9f3ab3d529f9f47b0b18b13369f35e` and adjacent metadata
+SHA-256 `4d1c5ec77920e1136d80482546412ecea00d4b39925d19614e55b65c35eccc49` replace only
+the migration task definition's image. Review compares all container fields after removing only
+empty provider-default collections; all other fields are unchanged. The image's digest-bound OCI
+configuration supplies UID/GID 65532; no task-level user override is present. The task retains its
+read-only root filesystem and Fargate/awsvpc boundary.
+
+The deployed task is numeric revision **61**, and platform state advances **420 -> 421**. The
+operator verifies the actual definition, zero active migration tasks and zero continuous ECS
+services. A separate exact-input refresh-backed plan has zero changes. **No SQL migration is
+executed.** The previously prepared state-420 database restore plan is now stale and must not be
+applied; regenerate it from the new complete inputs for the next testing session.
+
+Latest private full input file: `.tmp/development-planning-current-421.tfvars.json`. Every one of
+138 previous input values is preserved; only `migration_image` changes. Its SHA-256 is
+`64adc37ba74c38b2bbdda33dbf49b5072a994c591fb28df2b802885447b04d56`. The canonical encrypted,
+versioned recovery archive is updated with an ETag precondition and verified by exact-version
+byte/KMS readback at **2026-10-08T19:11:32Z**; previous versions remain recoverable. Private
+receipt: `.tmp/dormant-archive-421-receipt.json`. Task plan/apply records remain under the ignored
+migration-operator directory, with `.tmp/migration-38d79a3f-{task-review,postapply-state}.json`
+and postapply plan logs locally.
+
+At **2026-10-08T19:11:49Z**, fresh development readback confirms zero RDS instances, API routes,
+enabled EventBridge rules/mappings, NAT gateways, interface endpoints and non-stopped ECS tasks.
+Both manual encrypted recovery snapshots are available. Definitions, storage, security and DNS
+remain retained and can still incur charges; staging access remains unresolved. Docker Desktop
+and WSL are stopped, and the PC stays on. Remaining work includes snapshot restore and current
+SQL/recovery replay, configured native images/tasks/client origin, cover-letter provider binding,
+and live acceptance. D1/D3 remain In progress; hosted CI/CD remains deferred.
