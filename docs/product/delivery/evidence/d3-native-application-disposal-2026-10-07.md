@@ -1201,3 +1201,55 @@ remain retained and can still incur charges; staging access remains unresolved. 
 and WSL are stopped, and the PC stays on. Remaining work includes snapshot restore and current
 SQL/recovery replay, configured native images/tasks/client origin, cover-letter provider binding,
 and live acceptance. D1/D3 remain In progress; hosted CI/CD remains deferred.
+
+
+## Deferred Terraform values correction 2026-10-08
+
+Merged source `5d834f687bdd66d4882e365f884d191797a282b6` passes the dependency audit,
+eleven cached prerequisite test tasks, two byte-identical clean Linux/amd64 builds, hardened
+runtime inventory smoke, publication and independent immutable readback. ECR scan is COMPLETE
+with zero High/Critical findings. Platform digest:
+`sha256:685b02a4615c289d949314900c51f8196fedbae02522cad83093baa935fc8f05`.
+Publication receipt SHA-256:
+`993810419299c8e7e9d6440d55ed4327af0af55eb4d3e7509347c2073ac7edc6`.
+Private handoff: `.tmp/migration-5d834f68-release-handoff.json`. This is package/publication
+proof, not executed SQL.
+
+The latest state-427 recovery archive is read back by exact version with checksum/KMS verification.
+The reviewed restore creates a private protected database with 35-day backups and PITR; state
+advances to 429. An independently reviewed metadata-only reconciliation advances to 430 without
+resource changes. Supported schema-7 capture succeeds with zero meaningful changes and retains
+the actual older document release binding. Application traffic and background work remain off.
+
+`PlanTask` then exposes an operator defect: Terraform omits `values` for two deferred native-resume
+identity/region data sources. The shared resource-map reader dereferences the absent property
+under strict mode. The plan is saved but no accepted task metadata, task apply or SQL execution
+occurs. Migration task revision **61** remains deployed and idle.
+
+The reader now uses the existing optional-property helper, retaining null for unknown values.
+It does not fabricate an empty resource or skip required identity validation. Omitted/null nested
+data-source regressions pass, and omitted/null required KMS identities remain rejected. The
+actual saved plan passes the corrected exact-task guard **unchanged**, without applying it or
+relaxing a resource/drift allowlist. This stale plan must not be reused after shutdown.
+
+Validation passes: document staged guards/operator, 654 Gateway guard cases, 136 candidate-rights
+activity assertions, migration operator/baseline and schema-7/schema-8 adversarial/round-trip
+suites, serverless infrastructure validation and `git diff --check`. Cloud execution of the
+corrected operator remains pending its merged release; no D1/D3 exit criterion is closed.
+
+Mandatory cleanup completes after the failed planning test. A new encrypted safety snapshot is
+physically restored to the exact private restorecheck instance; availability, original KMS key
+and zero temporary backup retention are verified. Reviewed preparation/dormancy plans remove
+only the original database, preserving a new final snapshot and automated backups. The temporary
+restorecheck is then removed. State **434** preserves all **289 other managed resource identities**;
+the final exact-input plan has no changes.
+
+At **2026-10-08T23:42:44.851873+00:00**, live development readback has zero RDS instances, routes,
+enabled rules/mappings, NATs, interface endpoints and non-stopped ECS tasks. All six encrypted
+manual recovery snapshots are available. Storage, backup, DNS and security charges remain;
+this is not a zero-cost claim. Physical restore is not SQL/application/privacy replay acceptance.
+Latest complete inputs: `.tmp/sqlattempt-dormant.tfvars.json`, SHA-256 `1291919333e8f268f94c659f4b801c81b6e982b09ab18bbcb06ad2e79194fd96`.
+Canonical versioned recovery inputs/proof/manifest are refreshed with explicit KMS encryption,
+ETag conditions and exact-version byte readback; local manifest is
+`.tmp/sqlattempt-recovery-manifest.json`. These supersede state-427/423/421 inputs.
+Docker/WSL are stopped and the PC stays on. D1/D3 remain In progress; CI/CD remains owner-deferred.

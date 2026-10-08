@@ -1133,3 +1133,14 @@ encrypted exact-version recovery-input archive verification pass. Fresh 19:11:49
 readback confirms all test runtimes remain off and both encrypted recovery snapshots available.
 The old restore plan is stale; use complete state-421 inputs for a fresh plan. D1/D3 remain
 In progress; [release/shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#verified-current-migration-image-2026-10-08).
+
+
+2026-10-08 publishes and independently verifies the current migration image from merged 5d834f68,
+then restores development with traffic off. A real migration plan exposes omitted Terraform
+resource `values`; the shared reader is corrected with unknown-identity rejection retained.
+Focused suites and the actual unchanged saved plan pass. No task apply or SQL execution occurs.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#deferred-terraform-values-correction-2026-10-08).
+Fresh physical restore and mandatory shutdown complete at state 434: zero databases/active runtime,
+six encrypted snapshots, 289 other managed identities preserved, zero drift and verified updated
+recovery archive. Current inputs supersede state 427 and older. D1/D3 remain In progress;
+fresh migration release, managed SQL and native journey/acceptance remain. Docker/WSL stopped, PC on.
