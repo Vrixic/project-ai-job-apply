@@ -85,5 +85,7 @@ Previous 75-migration/93-relation image execution and logical recovery evidence 
 [local migration verification](../../../docs/product/delivery/evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).
 This remains local synthetic evidence; managed restore and release acceptance are separate.
 
-The new Documents 0016 disposal migration raises the current source inventory to 76. The prior
-image and logical recovery evidence do not cover this addition; refresh before release.
+Documents 0016 raises the source inventory to 76. The refreshed local image passes fresh/replayed
+migrations and packaged verification of all 76 migrations/93 relations. See the
+[current image evidence](../../../docs/product/delivery/evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-image-execution).
+Logical recovery, managed execution and publication acceptance remain separate release work.

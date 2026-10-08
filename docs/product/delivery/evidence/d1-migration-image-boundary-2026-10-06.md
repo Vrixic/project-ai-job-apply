@@ -147,3 +147,30 @@ This is one local cold build and logical recovery proof. Reproducible publicatio
 scan/disposition, cloud migration, managed PITR/RTO/RPO and runtime activation remain pending.
 The known production dependency audit failure is not waived, and the publisher's complete release
 gate was not run or claimed. D1/D3 remain In progress; CI/CD remains deferred.
+
+
+## Current 76-migration image execution
+
+2026-10-07 refreshes the local image after Documents 0016. Clean source
+`18698f7f3232e6b3c626069f8057ddab1c496302` was archived without workstation files and built
+for Linux/amd64 with `--pull`, the committed `SOURCE_DATE_EPOCH=1791426941`, and its source label.
+This build may reuse unchanged Docker layers; no cold-build or reproducibility claim is made.
+
+Tag `ai-job-apply-migration:local-18698f7f` has inspected image ID
+`sha256:cbad1b26d8552a2807afd952b9817cccdb5ef19aa6ceba0eae987d5353320c56`, platform manifest
+`sha256:55f1d27230d71c18b8d25576599f0258a91256191bc9c98abe1cf557ff134476`, and image config
+`sha256:4992e9bfc975c99176ba80d855de58259bd7ca1fbb18c204c39b444fb75fc42f`.
+Inspection verifies exact source label, Linux/amd64 and UID/GID 65532:65532.
+
+The publisher's current runtime smoke passes with networking disabled, read-only root, all
+capabilities dropped and no-new-privileges. The actual image then applies all seven owners to a
+fresh disposable PostgreSQL 16.14 database and replays successfully. Both passes emit seven
+owner success markers and aggregate success. Its packaged read-only verifier confirms exactly
+76 checksum-bound migrations and 93 relations. Execution shares the database's network-none
+namespace; data is tmpfs and credentials are synthetic. No managed TLS or AWS identity is used.
+
+Logs: `.tmp/migration-18698f7f-{build,smoke,fresh,replay,verify}.log`; image inspection:
+`.tmp/migration-18698f7f-inspect.json`. The disposable database was removed and Docker/WSL stopped.
+This refreshes local image execution evidence, not the earlier logical dump/restore drill,
+managed PITR, vulnerability disposition, reproducible publication or release approval.
+D1/D3 remain In progress, CI/CD deferred and PC on.

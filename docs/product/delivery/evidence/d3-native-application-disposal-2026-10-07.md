@@ -54,3 +54,16 @@ verifier remains limited by its port-3000 session fixture conflict with the runn
 server. Combined real database/native approval, live original-task cleanup, managed recovery and
 client/ATS acceptance remain separate unfinished requirements. CI/CD is deferred to production
 launch by the owner. Docker/WSL are stopped; PC stays on.
+
+
+## Refreshed Gateway artifact
+
+From clean `18698f7f3232e6b3c626069f8057ddab1c496302`, Gateway dependency compilation and the
+Lambda artifact builder pass. Independent inspection verifies the ZIP bytes/SHA256/base64,
+embedded source marker, bundled index hash, checksum companion and SBOM hash/component count.
+`gateway-lambda.zip`: 1,675,518 bytes,
+SHA256 `80014c84e1d10e430e8d39f406fa9b49cd8c3a1062d2c6a39e9ca6e4af4b795f`,
+158 SBOM components. Logs: `.tmp/native-disposal-gateway-release-build.log` and
+`.tmp/native-disposal-gateway-artifact.log`. This is one local build/integrity check, not hosted
+Lambda acceptance, vulnerability clearance or reproducibility. Nothing was published.
+The current [76-migration image also executes successfully](d1-migration-image-boundary-2026-10-06.md#current-76-migration-image-execution).

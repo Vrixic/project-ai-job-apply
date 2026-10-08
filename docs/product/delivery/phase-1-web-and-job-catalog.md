@@ -1013,3 +1013,10 @@ pins; its real dump/restore, all 93 exact row sets and restored behavior pass. B
 databases are removed; Docker/WSL stopped, PC on. Image remains unpublished; scan/disposition,
 managed migration/PITR and acceptance remain. D1/D3 stay In progress, CI/CD deferred.
 [Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).
+
+2026-10-07 clean `18698f7f` produces a locally verified Gateway artifact and current migration
+image. The actual hardened image passes fresh and replayed seven-owner migrations and packaged
+read-only verification: 76 migrations/93 relations. No cloud publication, vulnerability clearance
+or new logical-recovery claim. [Image evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-image-execution),
+[Gateway evidence](evidence/d3-native-application-disposal-2026-10-07.md#refreshed-gateway-artifact).
+D1/D3 remain In progress; disposable database removed, Docker/WSL stopped, PC on, CI/CD deferred.
