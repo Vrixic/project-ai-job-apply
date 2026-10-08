@@ -5033,3 +5033,12 @@ Terraform set passes 34 scenarios.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-routed-preparation-family).
 Artifacts unpublished; managed original image/provider/TLS/network and acceptance remain.
 D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 connected PostgreSQL verification passes all 25 cases, including durable staging,
+propagation-gated original attachment, observed retirement and exact DNS removal with synthetic
+AWS transport. Workflow typecheck passes. Corrected stale D3-079/D3-068–071 implementation gaps;
+managed acceptance remains open.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#connected-postgresql-route-lifecycle).
+No runtime-source/cloud/frontend changes. D1/D3 In progress; CI/CD deferred, Docker/WSL stopped,
+PC on. Existing accepted D1 sign-in/search/Profile/save-reload checks are not reopened.

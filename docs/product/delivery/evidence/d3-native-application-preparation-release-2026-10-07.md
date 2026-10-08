@@ -572,3 +572,30 @@ Local build/integrity logs: `.tmp/d3-preparation-routed-family-build.log` and
 image/provider/TLS/network binding, managed synthetic end-to-end/recovery/drain/disposal evidence
 and accountable client/ATS/security acceptance remain. D1/D3 remain In progress. Docker/WSL were
 not started; PC on, hosted CI/CD deferred and no cloud mutations.
+
+
+## Connected PostgreSQL route lifecycle
+
+The existing original-owner SQL integration now continues through the actual preparation
+activity, installed durable SDK, owning route admission, DNS adapter, atomic packet attachment,
+location lookup and retirement observer. Staging replays against real PostgreSQL without packet
+completion. At DNS creation, the operation is still running. Attachment follows propagated DNS,
+recovers the exact staged reference and makes the current location available. Simulated
+AWS transport supplies an exact STOPPED observation; the real retirement observer validates it,
+the owning registry records it, and the durable route lifecycle removes that exact A record.
+SDK replay produces one stage invocation, one creation, one attachment and one removal. No extra
+task or generation is permitted. Retired/sealed material becomes unavailable.
+
+All 25 real PostgreSQL 16.14 integration cases pass, including this connected case, and Workflow
+typecheck passes. The first run exposed the local SDK's global fake timers disagreeing with SQL
+wall-clock deadlines; this integration now explicitly uses real timers. Production timeouts and
+validation are unchanged. Lambda transport, task/ENI metadata, DNS replies, STS, provider output
+and packet protection are synthetic; no real AWS task, provider call, DNS write, user browser or
+physical-purge acceptance is claimed. Runtime source and qualified artifact identities remain
+unchanged. Full verification was not repeated for this test-only change; the previously recorded
+port-3000 conflict and broad typecheck/test/build evidence remain the applicable limits.
+
+D3-079 and D3-068 through D3-071 now distinguish implemented release composition from unfinished
+managed acceptance instead of listing already implemented components as missing. Prior component
+history stays intact. The owned temporary PostgreSQL container was removed; Docker Desktop/WSL
+stopped and PC on. D1/D3 remain In progress. No cloud action or CI/CD work.

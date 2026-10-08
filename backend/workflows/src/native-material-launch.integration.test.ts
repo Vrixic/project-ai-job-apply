@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { coverLetterContext } from "@ai-job-apply/ai-sdk";
@@ -26,17 +27,22 @@ import {
   type NativeMaterialLaunchScope,
   PostgresNativeMaterialRegistry,
 } from "@ai-job-apply/documents-service/native-material-registry";
+import { validateNativeMaterialRouteControlInput } from "@ai-job-apply/documents-service/native-material-route-control-contract";
 import { createNativeOwnerControlStore } from "@ai-job-apply/documents-service/native-owner-control-store";
 import { createNativeOwnerEvidenceClient } from "@ai-job-apply/documents-service/native-owner-evidence-client";
 import { createNativeOwnerRpcClient } from "@ai-job-apply/documents-service/native-owner-rpc-client";
 import { nativeOwnerJson } from "@ai-job-apply/documents-service/native-owner-rpc-contract";
+import { createNativeResumeDnsRoute } from "@ai-job-apply/documents-service/native-resume-dns-route";
 import { nativeTaskLaunchConfiguration } from "@ai-job-apply/documents-service/native-task-launch";
+import { createNativeTaskRetirement } from "@ai-job-apply/documents-service/native-task-retirement";
 import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import {
   createDatabase,
   PostgresProfileStore,
   profileFactToGraphFact,
 } from "@ai-job-apply/profile-service";
+import { withDurableExecution } from "@aws/durable-execution-sdk-js";
+import { ExecutionStatus, LocalDurableTestRunner } from "@aws/durable-execution-sdk-js-testing";
 import { type InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -46,12 +52,14 @@ import {
   createNativeMaterialLaunchLambda,
   createNativeMaterialLaunchRuntime,
 } from "./native-material-launch-lambda.js";
+import { createNativeMaterialRouteOwner } from "./native-material-route-owner.js";
 import {
   createNativeOwnerRpcLambda,
   createNativeOwnerRpcRuntime,
 } from "./native-owner-rpc-lambda.js";
-
 import { createNativePreparationRouteActivity } from "./native-preparation-route-activity.js";
+import { validateNativePreparationRouteInput } from "./native-preparation-route-contract.js";
+import { createNativePreparationRouteWorkflow } from "./native-preparation-route-durable.js";
 
 const requested = process.env.NATIVE_MATERIAL_LAUNCH_INTEGRATION === "1";
 const url = process.env.NATIVE_MATERIAL_LAUNCH_TEST_DATABASE_URL;
@@ -104,6 +112,8 @@ describe.runIf(requested)(
     });
     const runtimes: Array<{ close(): Promise<void> }> = [];
     beforeAll(async () => {
+      // SQL expiry and signed request timestamps must share the actual wall clock.
+      await LocalDurableTestRunner.setupTestEnvironment({ skipTime: false });
       const environment = Object.fromEntries(
         Object.entries(process.env).filter(([key]) =>
           /^(?:path|systemroot|windir|temp|tmp|pathext|comspec|userprofile)$/iu.test(key),
@@ -126,6 +136,7 @@ describe.runIf(requested)(
     afterAll(async () => {
       await Promise.all(runtimes.map((runtime) => runtime.close()));
       await sql.end();
+      await LocalDurableTestRunner.teardownTestEnvironment();
     });
     async function original(
       consentLifetimeMs = 900_000,
@@ -773,7 +784,7 @@ describe.runIf(requested)(
         transport.mockRestore();
       }
     });
-    it("authenticates the original task through real owner SQL claim, settlement, completion and sealed refusal", async () => {
+    it("connects original owner SQL generation to durable routing, attachment and observed retirement", async () => {
       const profilePool = createDatabase(url ?? "postgres://invalid", { maxConnections: 1 });
       runtimes.push({ close: () => profilePool.client.end() });
       const profile = new PostgresProfileStore(profilePool);
@@ -1189,54 +1200,237 @@ describe.runIf(requested)(
       expect(await activity(stage)).toEqual(staged);
       if (!staged.original) throw Error("SyntheticStagedOriginalMissing");
       const attach = { ...stage, action: "attach" as const, original: staged.original };
-      expect(await activity(attach)).toEqual({
-        schemaVersion: 1,
-        request: attach,
-        outcome: "attached",
-        original: null,
-      });
-      const accepted = await activityStore.getPreparationForEvent(
-        preparationEvent.id,
-        request.original.documentId,
-      );
-      expect(accepted.state).toBe("succeeded");
-      const locationService = new ApplicationsService({
-        store: activityStore,
-        packets: {
-          prepare: async () => {
-            throw Error("SyntheticPreparationForbidden");
-          },
-        },
-        bindings: {
-          resolve: async () => {
-            throw Error("SyntheticBindingsForbidden");
-          },
-        },
-        jobs: { isActive: async () => false },
-        nativeReadAuthorizationsEnabled: () => true,
-        nativeMaterialLocations: {
-          resolve: createNativeMaterialLocationReader({
-            baseHost: "materials.example.test",
-            enabled: () => true,
-            readAllocation: readyStore.readAllocation.bind(readyStore),
-          }),
-        },
-      });
-      expect(
-        await locationService.temporaryMaterialLocation(
-          request.ownerUserId,
-          request.applicationId,
+      async function assertAttachedLocation() {
+        const accepted = await activityStore.getPreparationForEvent(
+          stage.eventId,
           request.original.documentId,
-        ),
-      ).toMatchObject({
-        schemaVersion: 1,
-        origin: `https://${binding.scope.allocationId}.materials.example.test:8443`,
-        temporaryMaterial: {
-          generationId: request.original.documentId,
-          version: bootstrap.documentVersion,
+        );
+        expect(accepted.state).toBe("succeeded");
+        const locationService = new ApplicationsService({
+          store: activityStore,
+          packets: {
+            prepare: async () => {
+              throw Error("SyntheticPreparationForbidden");
+            },
+          },
+          bindings: {
+            resolve: async () => {
+              throw Error("SyntheticBindingsForbidden");
+            },
+          },
+          jobs: { isActive: async () => false },
+          nativeReadAuthorizationsEnabled: () => true,
+          nativeMaterialLocations: {
+            resolve: createNativeMaterialLocationReader({
+              baseHost: "materials.example.test",
+              enabled: () => true,
+              readAllocation: readyStore.readAllocation.bind(readyStore),
+            }),
+          },
+        });
+        expect(
+          await locationService.temporaryMaterialLocation(
+            request.ownerUserId,
+            request.applicationId,
+            request.original.documentId,
+          ),
+        ).toMatchObject({
+          schemaVersion: 1,
+          origin: `https://${binding.scope.allocationId}.materials.example.test:8443`,
+          temporaryMaterial: {
+            generationId: request.original.documentId,
+            version: bootstrap.documentVersion,
+          },
+        });
+      }
+      const activityArn = "arn:aws:lambda:us-east-2:123456789012:function:private-preparation:7";
+      const effects: string[] = [];
+      let dnsRecord: unknown;
+      const registry = evidenceRegistry();
+      const routeOwner = createNativeMaterialRouteOwner({
+        registry,
+        binding,
+        reference: ready.material,
+        configurationSha256: createHash("sha256")
+          .update(JSON.stringify({ protocol: "native-material-launch.v1", ...config }))
+          .digest("hex"),
+        route: { hostedZoneId: "ZSYNTHETIC123", baseHost: "materials.example.test" },
+        enabled: () => true,
+        address: {
+          read: async ({ scope, reference }) => {
+            expect(scope).toEqual(binding.scope);
+            expect(await readyStore.readAllocation(reference)).toBe(scope.allocationId);
+            return {
+              allocationId: scope.allocationId,
+              taskArn: binding.allocation.taskArn,
+              networkInterfaceId: "eni-0123456789abcdef0",
+              publicIp: "54.0.0.1",
+              expiresAtMs: reference.expiresAtMs,
+            };
+          },
         },
       });
-
+      const observeRetirement = createNativeTaskRetirement({
+        allocation: binding.allocation,
+        enabled: () => true,
+        testClient: {
+          send: async (command) => {
+            expect(command.constructor.name).toBe("DescribeTasksCommand");
+            effects.push("observe-stopped");
+            return {
+              tasks: [
+                {
+                  ...binding.allocation,
+                  startedBy: binding.scope.allocationId,
+                  lastStatus: "STOPPED",
+                  desiredStatus: "STOPPED",
+                  stoppedAt: new Date(Date.now() - 1),
+                  containers: [
+                    {
+                      name: config.containerName,
+                      taskArn: binding.allocation.taskArn,
+                      lastStatus: "STOPPED",
+                    },
+                  ],
+                },
+              ],
+              failures: [],
+            };
+          },
+        },
+      });
+      const workflow = createNativePreparationRouteWorkflow({
+        activityArn,
+        controlArn: target,
+        enabled: () => true,
+        creationEnabled: () => true,
+        testActivityClient: {
+          send: async (command) => {
+            expect(command.input.FunctionName).toBe(activityArn);
+            if (!(command.input.Payload instanceof Uint8Array))
+              throw Error("SyntheticPayloadMissing");
+            const input: unknown = JSON.parse(new TextDecoder().decode(command.input.Payload));
+            if (!validateNativePreparationRouteInput(input)) throw Error("SyntheticInputInvalid");
+            expect(input).toEqual(attach);
+            expect(effects).toContain("propagated");
+            effects.push("attach");
+            const result = await activity(input);
+            expect(result.outcome).toBe("attached");
+            await assertAttachedLocation();
+            return {
+              StatusCode: 200,
+              ExecutedVersion: "7",
+              Payload: new TextEncoder().encode(JSON.stringify(result)),
+            };
+          },
+        },
+        testControlClient: {
+          send: async (command) => {
+            expect(command.input.FunctionName).toBe(target);
+            if (!(command.input.Payload instanceof Uint8Array))
+              throw Error("SyntheticPayloadMissing");
+            const input: unknown = JSON.parse(new TextDecoder().decode(command.input.Payload));
+            if (!validateNativeMaterialRouteControlInput(input))
+              throw Error("SyntheticInputInvalid");
+            expect(input.binding).toEqual(binding);
+            expect(input.reference).toEqual(ready.material);
+            effects.push(input.action);
+            let outcome: "captured" | "admitted" | "retired";
+            let route: Awaited<ReturnType<typeof routeOwner.capture>> | null = null;
+            if (input.action === "capture") {
+              route = await routeOwner.capture(input.binding.scope);
+              outcome = "captured";
+            } else if (input.action === "admit") {
+              expect(await routeOwner.admit(input.binding.scope, input.route)).toBe(true);
+              outcome = "admitted";
+            } else {
+              expect(await routeOwner.retired(input.binding.scope)).toBe(false);
+              const stopped = await observeRetirement.observe(input.binding.scope);
+              await registry.recordRetirement(stopped);
+              expect(await routeOwner.retired(input.binding.scope)).toBe(true);
+              outcome = "retired";
+            }
+            return {
+              StatusCode: 200,
+              ExecutedVersion: "9",
+              Payload: new TextEncoder().encode(
+                JSON.stringify({ schemaVersion: 1, request: input, outcome, route }),
+              ),
+            };
+          },
+        },
+        testRoute: (intent) =>
+          createNativeResumeDnsRoute({
+            intent,
+            enabled: () => true,
+            creationEnabled: () => true,
+            testClient: {
+              send: async (command) => {
+                if ("ChangeBatch" in command.input) {
+                  const change = command.input.ChangeBatch?.Changes?.[0];
+                  expect(command.input.HostedZoneId).toBe("ZSYNTHETIC123");
+                  expect(change?.ResourceRecordSet?.ResourceRecords).toEqual([
+                    { Value: "54.0.0.1" },
+                  ]);
+                  if (change?.Action === "CREATE") {
+                    expect(
+                      (
+                        await activityStore.getPreparationForEvent(
+                          stage.eventId,
+                          stage.preparationId,
+                        )
+                      ).state,
+                    ).toBe("running");
+                    effects.push("create");
+                    dnsRecord = change.ResourceRecordSet;
+                  } else {
+                    expect(change?.Action).toBe("DELETE");
+                    expect(effects).toContain("observe-stopped");
+                    expect(change?.ResourceRecordSet).toEqual(dnsRecord);
+                    effects.push("remove");
+                    dnsRecord = undefined;
+                  }
+                  return {
+                    ChangeInfo: {
+                      Id: dnsRecord ? "/change/CCREATE" : "/change/CDELETE",
+                      Status: "PENDING",
+                    },
+                  };
+                }
+                if ("Id" in command.input) {
+                  effects.push("propagated");
+                  return { ChangeInfo: { Id: command.input.Id, Status: "INSYNC" } };
+                }
+                return { ResourceRecordSets: dnsRecord ? [dnsRecord] : [], IsTruncated: false };
+              },
+            },
+          }),
+      });
+      const runner = new LocalDurableTestRunner({
+        handlerFunction: withDurableExecution(workflow),
+      });
+      runner.registerFunction(activityArn, async (input) => {
+        if (!validateNativePreparationRouteInput(input)) throw Error("SyntheticInputInvalid");
+        expect(input).toEqual(stage);
+        effects.push("stage");
+        return activity(input);
+      });
+      const result = await runner.run({
+        payload: {
+          schemaVersion: 1,
+          eventId: stage.eventId,
+          eventType: "application.packet-preparation.requested.v1",
+          data: { preparationId: stage.preparationId },
+        },
+      });
+      expect(result.getStatus()).toBe(ExecutionStatus.SUCCEEDED);
+      expect(result.getInvocations().length).toBeGreaterThan(1);
+      expect(effects.filter((effect) => effect === "stage")).toHaveLength(1);
+      expect(effects.filter((effect) => effect === "attach")).toHaveLength(1);
+      expect(effects.filter((effect) => effect === "create")).toHaveLength(1);
+      expect(effects.filter((effect) => effect === "remove")).toHaveLength(1);
+      expect(dnsRecord).toBeUndefined();
+      expect(await readyStore.readAllocation(ready.material)).toBeNull();
       expect((await activity(attach)).outcome).toBe("terminal");
       await new PostgresNativeMaterialRegistry(sql, () => true).sealApplication(
         request.ownerUserId,
