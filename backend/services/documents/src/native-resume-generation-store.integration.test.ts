@@ -15,6 +15,8 @@ import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PostgresCoverLetterStore } from "./cover-letter-store.js";
 import { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
+import { PostgresNativeApplicationDisposalStore } from "./native-application-disposal-store.js";
+import { createNativeMaterialDisposal } from "./native-material-disposal.js";
 import { createNativeResumeLocationReader } from "./native-material-location.js";
 import { PostgresNativeMaterialRegistry } from "./native-material-registry.js";
 import { nativeOwnerJson } from "./native-owner-rpc-contract.js";
@@ -1918,6 +1920,68 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       requestSha256: result.authorization.requestSha256,
     };
   }
+  it("disposes an unclaimed resume without inventing a stopped-task receipt", async () => {
+    const s = store(),
+      r = await s.reserve(input);
+    const registry = new PostgresNativeApplicationDisposalStore(sql, () => true);
+    const retire = vi.fn(async () => {
+      throw Error("Unexpected task access");
+    });
+    const disposer = createNativeMaterialDisposal({
+      registry,
+      enabled: () => true,
+      testRetire: retire,
+    });
+    expect(
+      await disposer.discardApplication(input.identity.ownerUserId, input.identity.applicationId),
+    ).toBe("discarded");
+    expect(retire).not.toHaveBeenCalled();
+    const [row] =
+      await sql`SELECT state,stopped_at_ms,task_arn FROM documents.native_resume_generations WHERE id=${r.reservation.identity.generationId}`;
+    expect(row).toMatchObject({ state: "abandoned", stopped_at_ms: null, task_arn: null });
+    await expect(s.claimLaunch(scope(r), config)).rejects.toThrow();
+  });
+  it("records exact positive resume retirement through the shared application disposer", async () => {
+    const { r } = await bound();
+    const registry = new PostgresNativeApplicationDisposalStore(sql, () => true);
+    const retire = vi.fn(async (allocation) => {
+      const [at] =
+        await sql`SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS now`;
+      return {
+        schemaVersion: 1 as const,
+        kind: "native_task_stopped" as const,
+        allocationId: allocation.allocationId,
+        generationId: allocation.generationId,
+        ownerUserId: allocation.ownerUserId,
+        applicationId: allocation.applicationId,
+        taskArn: allocation.taskArn,
+        clusterArn: allocation.clusterArn,
+        taskDefinitionArn: allocation.taskDefinitionArn,
+        stoppedAtEpochMs: Number(at?.now),
+        observedAtEpochMs: Number(at?.now),
+      };
+    });
+    const disposer = createNativeMaterialDisposal({
+      registry,
+      enabled: () => true,
+      testRetire: retire,
+    });
+    expect(
+      await disposer.discardApplication(input.identity.ownerUserId, input.identity.applicationId),
+    ).toBe("discarded");
+    expect(
+      await disposer.discardApplication(input.identity.ownerUserId, input.identity.applicationId),
+    ).toBe("discarded");
+    expect(retire).toHaveBeenCalledOnce();
+    expect(
+      await registry.confirmApplicationDisposed(
+        input.identity.ownerUserId,
+        input.identity.applicationId,
+        r.epochId,
+      ),
+    ).toBe(true);
+  });
+
   it("serializes both native material kinds and refuses false application disposal while resume metadata is unretired", async () => {
     const s = store(),
       r = await s.reserve(input),

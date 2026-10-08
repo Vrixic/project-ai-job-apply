@@ -16,3 +16,26 @@ locals {
     }
   }]
 }
+
+variable "gateway_native_disposal_clusters" {
+  description = "Retained exact native task clusters for Gateway terminal application cleanup only."
+  type        = set(string)
+  default     = []
+  nullable    = false
+  validation {
+    condition = length(var.gateway_native_disposal_clusters) <= 8 && alltrue([for cluster in var.gateway_native_disposal_clusters :
+      var.aws_region == "us-east-2" && can(regex("^arn:aws:ecs:us-east-2:${data.aws_caller_identity.current.account_id}:cluster/[A-Za-z0-9_-]{1,255}$", cluster))
+    ])
+    error_message = "Use at most eight exact same-account us-east-2 native task clusters."
+  }
+}
+locals {
+  gateway_disposal_boundary_statements = [for index, cluster in sort(tolist(var.gateway_native_disposal_clusters)) : {
+    Sid      = "GatewayNativeDisposal${index}", Effect = "Allow", Action = ["ecs:DescribeTasks", "ecs:StopTask"],
+    Resource = "${replace(cluster, ":cluster/", ":task/")}/*",
+    Condition = { ArnEquals = {
+      "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-gateway-lambda",
+      "ecs:cluster"      = cluster
+    } }
+  }]
+}

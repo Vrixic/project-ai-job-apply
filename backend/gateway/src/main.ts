@@ -1,4 +1,5 @@
 import { nativeMaterialAvailabilityFromEnvironment } from "./native-material-availability.js";
+import { nativeMaterialDisposalFromEnvironment } from "./native-material-disposal-runtime.js";
 import "reflect-metadata";
 import {
   createApplicationsDatabase,
@@ -197,6 +198,10 @@ const nativeResumeLocations = nativeResumeLocationsFromEnvironment(
   process.env,
   () => packetProtection?.enabled() === true,
 );
+const nativeMaterialDisposal = nativeMaterialDisposalFromEnvironment(
+  config.DATABASE_URL,
+  process.env,
+);
 const applications =
   process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
@@ -211,6 +216,7 @@ const applications =
           nativeMaterialLocations,
           nativeResumeLocations,
         ),
+        ...(nativeMaterialDisposal ? { nativeMaterialDisposal } : {}),
         nativeCoverLetterPreparationEnabled: () =>
           process.env.NATIVE_COVER_LETTER_PREPARATION_ENABLED === "true" &&
           process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&

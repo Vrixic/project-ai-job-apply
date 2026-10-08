@@ -1,6 +1,8 @@
 variable "gateway_native_materials" {
   description = "Optional native candidate API configuration. Provisioning grants packet access; all runtime switches default off."
   type = object({
+    disposal_enabled                 = optional(bool, false)
+    disposal_deployments             = optional(list(object({ cluster_arn = string, task_definition_arn = string, container_name = string })), [])
     availability_enabled             = optional(bool, false)
     packet_protection_enabled        = optional(bool, false)
     read_authorizations_enabled      = optional(bool, false)
@@ -15,6 +17,14 @@ variable "gateway_native_materials" {
   validation {
     condition = var.gateway_native_materials == null ? true : (
       var.restricted_packet_keys_provisioned && var.deploy_gateway_lambda &&
+      length(var.gateway_native_materials.disposal_deployments) <= 8 &&
+      (length(var.gateway_native_materials.disposal_deployments) == 0 || var.persistent_data_plane_enabled) &&
+      (!var.gateway_native_materials.disposal_enabled || length(var.gateway_native_materials.disposal_deployments) > 0) &&
+      alltrue([for deployment in var.gateway_native_materials.disposal_deployments :
+        can(regex("^arn:aws:ecs:us-east-2:${data.aws_caller_identity.current.account_id}:cluster/[A-Za-z0-9_-]{1,255}$", deployment.cluster_arn)) &&
+        can(regex("^arn:aws:ecs:us-east-2:${data.aws_caller_identity.current.account_id}:task-definition/${var.name}-${var.environment}-native-(material|resume):[1-9][0-9]{0,8}$", deployment.task_definition_arn)) &&
+        contains(["native-material", "native-resume"], deployment.container_name)
+      ]) &&
       (!var.gateway_native_materials.availability_enabled || (
         var.private_application_networking && var.gateway_native_materials.read_authorizations_enabled &&
         (var.gateway_native_materials.cover_letter_locations_enabled || var.gateway_native_materials.resume_locations_enabled) &&
@@ -44,9 +54,13 @@ locals {
     Principal = "*", Condition = merge(statement.Condition, { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-gateway-lambda" } })
   })]
   gateway_native_material_environment = !local.gateway_native_configured ? {} : merge({
-    RESTRICTED_PACKET_PROTECTION_ENABLED        = tostring(var.gateway_native_materials.packet_protection_enabled)
-    RESTRICTED_PACKET_ENCRYPTION_KEY_ARN        = aws_kms_key.restricted_packet_encryption[0].arn
-    RESTRICTED_PACKET_FINGERPRINT_KEY_ARN       = aws_kms_key.restricted_packet_fingerprint[0].arn
+    RESTRICTED_PACKET_PROTECTION_ENABLED  = tostring(var.gateway_native_materials.packet_protection_enabled)
+    RESTRICTED_PACKET_ENCRYPTION_KEY_ARN  = aws_kms_key.restricted_packet_encryption[0].arn
+    RESTRICTED_PACKET_FINGERPRINT_KEY_ARN = aws_kms_key.restricted_packet_fingerprint[0].arn
+    NATIVE_APPLICATION_DISPOSAL_ENABLED   = tostring(var.gateway_native_materials.disposal_enabled)
+    NATIVE_APPLICATION_DISPOSAL_DEPLOYMENTS = jsonencode([for deployment in var.gateway_native_materials.disposal_deployments : {
+      clusterArn = deployment.cluster_arn, taskDefinitionArn = deployment.task_definition_arn, containerName = deployment.container_name
+    }])
     NATIVE_MATERIAL_AVAILABILITY_ENABLED        = tostring(var.gateway_native_materials.availability_enabled)
     NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED = tostring(var.gateway_native_materials.read_authorizations_enabled)
     NATIVE_MATERIAL_READ_LOCATIONS_ENABLED      = tostring(var.gateway_native_materials.cover_letter_locations_enabled)

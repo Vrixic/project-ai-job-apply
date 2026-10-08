@@ -178,3 +178,25 @@ run "availability_network" {
     error_message = "Availability requires exact NAT source access to the native HTTPS task group."
   }
 }
+
+run "disposal_without_retained_deployment" {
+  command = plan
+  variables { gateway_native_materials = { disposal_enabled = true } }
+  expect_failures = [var.gateway_native_materials]
+}
+run "disposal_exact_task_authority" {
+  command = plan
+  variables { gateway_native_materials = {
+    disposal_enabled     = true
+    disposal_deployments = [{ cluster_arn = "arn:aws:ecs:us-east-2:111122223333:cluster/native-materials", task_definition_arn = "arn:aws:ecs:us-east-2:111122223333:task-definition/ai-job-apply-development-native-material:7", container_name = "native-material" }]
+  } }
+  assert {
+    condition     = local.gateway_native_material_environment.NATIVE_APPLICATION_DISPOSAL_ENABLED == "true" && length(aws_iam_role_policy.gateway_native_disposal) == 1 && length(aws_vpc_endpoint.native_resume_api) == 1 && toset(local.gateway_disposal_statements[0].Action) == toset(["ecs:DescribeTasks", "ecs:StopTask"]) && local.gateway_disposal_statements[0].Resource == "arn:aws:ecs:us-east-2:111122223333:task/native-materials/*" && local.gateway_disposal_statements[0].Condition.ArnEquals["ecs:cluster"] == "arn:aws:ecs:us-east-2:111122223333:cluster/native-materials"
+    error_message = "Terminal cleanup needs private ECS reachability and exact retained cluster task authority."
+  }
+}
+run "disposal_foreign_cluster" {
+  command = plan
+  variables { gateway_native_materials = { disposal_deployments = [{ cluster_arn = "arn:aws:ecs:us-east-2:999900001111:cluster/native-materials", task_definition_arn = "arn:aws:ecs:us-east-2:111122223333:task-definition/ai-job-apply-development-native-material:7", container_name = "native-material" }] } }
+  expect_failures = [var.gateway_native_materials]
+}

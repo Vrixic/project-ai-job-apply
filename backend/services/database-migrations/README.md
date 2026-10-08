@@ -9,7 +9,7 @@ another service's tables.
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
   after Trust): twelve owned schemas (including the empty-table `jobs_public` projection schema and separate
-  `applications_restricted` storage), 93 regular relations, and 75 checksum-bound migrations
+  `applications_restricted` storage), 93 regular relations, and 76 checksum-bound migrations
   (Profile through `0011`; Jobs through `0027`; Applications through `0012`; Documents through `0015`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
   purges Applications data in an isolated local cluster.
@@ -37,7 +37,7 @@ orchestrator, checks the disposable-container ownership guards, and uses a uniqu
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.
 
-The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 75-migration
+The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 76-migration
 seven-owner boundary while retaining its D2-focused generated-data and behavior assertions,
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through
@@ -81,6 +81,9 @@ comparison includes the private claim columns; this is local logical recovery, n
 recovery, image publication, production grants or deployed PITR acceptance.
 
 
-Current 75-migration/93-relation image execution and logical recovery evidence is recorded in the
+Previous 75-migration/93-relation image execution and logical recovery evidence is recorded in the
 [local migration verification](../../../docs/product/delivery/evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).
 This remains local synthetic evidence; managed restore and release acceptance are separate.
+
+The new Documents 0016 disposal migration raises the current source inventory to 76. The prior
+image and logical recovery evidence do not cover this addition; refresh before release.

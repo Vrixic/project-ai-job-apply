@@ -791,3 +791,12 @@ for HEAD, and HEAD on file or unknown paths is rejected. The Gateway uses this o
 point-in-time binding check; it is not a content lease, lifetime extension or disposal proof.
 Deploy updated native images before enabling Gateway availability. Source/local evidence is in
 [the delivery record](../../../docs/product/delivery/evidence/d3-native-material-availability-2026-10-07.md).
+
+## Shared terminal application disposal
+
+`./native-application-disposal-store` seals both native material kinds in one Documents-owned
+transaction. Only an unclaimed original allocation can be abandoned without task observation.
+Claimed unknown launches remain unresolved; bound allocations require positive original-task
+retirement. Migration 0016 is required. Gateway composes this after its owner-scoped terminal
+application mutation, behind a separate default-off switch and retained-deployment allowlist.
+See [local evidence](../../../docs/product/delivery/evidence/d3-native-application-disposal-2026-10-07.md).

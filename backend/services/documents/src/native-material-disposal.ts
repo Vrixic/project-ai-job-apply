@@ -18,6 +18,10 @@ type Retire = (allocation: NativeTaskAllocation) => Promise<NativeTaskRetirement
 export function createNativeMaterialDisposal(options: {
   registry: Registry;
   enabled?: () => boolean;
+  /** Original deployments retained by the caller's release; when supplied, no other task is stopped. */
+  deployments?: ReadonlyArray<
+    Pick<NativeTaskAllocation, "clusterArn" | "taskDefinitionArn" | "containerName">
+  >;
   /** Test-only; production always uses the exact signed managed task observer. */
   testRetire?: Retire;
 }) {
@@ -25,6 +29,7 @@ export function createNativeMaterialDisposal(options: {
   const testRetire = options.testRetire;
   if (testRetire && process.env.NODE_ENV !== "test")
     throw Error("NativeMaterialDisposalUnavailable");
+  const deployments = options.deployments?.map((deployment) => Object.freeze({ ...deployment }));
   const active = new Set<string>();
   const permitted = () => {
     if (!enabled() || (testRetire && process.env.NODE_ENV !== "test"))
@@ -54,6 +59,16 @@ export function createNativeMaterialDisposal(options: {
             intent.allocation.ownerUserId !== owner ||
             intent.allocation.applicationId !== application ||
             intent.allocation.generationId !== intent.generationId
+          )
+            throw Error();
+          if (
+            deployments &&
+            !deployments.some(
+              (deployment) =>
+                deployment.clusterArn === intent.allocation?.clusterArn &&
+                deployment.taskDefinitionArn === intent.allocation?.taskDefinitionArn &&
+                deployment.containerName === intent.allocation?.containerName,
+            )
           )
             throw Error();
           permitted();

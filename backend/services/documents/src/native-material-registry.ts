@@ -15,7 +15,7 @@ export interface NativeMaterialIntent {
   applicationId: string;
   generationId: string;
   epochId: string;
-  state: "pending" | "bound" | "retired";
+  state: "pending" | "bound" | "retired" | "abandoned";
   allocation: NativeTaskAllocation | null;
 }
 export type NativeMaterialLaunchScope = Pick<
@@ -188,7 +188,7 @@ export class PostgresNativeMaterialRegistry {
           WHERE id = ${fixed.allocationId} AND user_id = ${fixed.ownerUserId}
             AND application_id = ${fixed.applicationId} AND document_id = ${fixed.generationId}
             AND epoch_id = ${fixed.epochId} FOR UPDATE`;
-        if (!row || row.state === "retired") throw unavailable();
+        if (!row || row.state === "retired" || row.state === "abandoned") throw unavailable();
         if (row.launch_claimed_at) {
           if (row.launch_configuration_sha256 !== configurationSha256) throw unavailable();
           this.check();
@@ -319,6 +319,7 @@ export class PostgresNativeMaterialRegistry {
             head.sealed_at ||
             head.epoch_id !== existing.epoch_id ||
             existing.state === "retired" ||
+            existing.state === "abandoned" ||
             existing.application_id !== fixed.applicationId ||
             existing.work_id !== fixed.original.id ||
             existing.request_sha256 !== fixed.original.requestSha256 ||
@@ -392,6 +393,7 @@ export class PostgresNativeMaterialRegistry {
             AND application_id = ${fixed.applicationId} FOR UPDATE`;
         if (
           !row ||
+          row.state === "abandoned" ||
           row.document_id !== fixed.generationId ||
           row.cluster_arn !== fixed.clusterArn ||
           row.task_definition_arn !== fixed.taskDefinitionArn ||
@@ -430,7 +432,7 @@ export class PostgresNativeMaterialRegistry {
           WHERE user_id = ${owner} AND application_id = ${app} RETURNING epoch_id`;
         if (!head) throw unavailable();
         const rows = await tx<Row[]>`SELECT * FROM documents.native_material_allocations
-          WHERE user_id = ${owner} AND application_id = ${app} AND state <> 'retired' ORDER BY id`;
+          WHERE user_id = ${owner} AND application_id = ${app} AND state NOT IN ('retired','abandoned') ORDER BY id`;
         this.check();
         return { epochId: head.epoch_id, intents: rows.map(intent) };
       });
@@ -506,7 +508,7 @@ export class PostgresNativeMaterialRegistry {
           Array<{ complete: boolean }>
         >`SELECT (sealed_at IS NOT NULL AND epoch_id = ${epochId}
           AND NOT EXISTS (SELECT 1 FROM documents.native_material_allocations a
-            WHERE a.user_id = h.user_id AND a.application_id = h.application_id AND a.state <> 'retired')
+            WHERE a.user_id = h.user_id AND a.application_id = h.application_id AND a.state NOT IN ('retired','abandoned'))
           AND NOT EXISTS (SELECT 1 FROM documents.native_resume_generations r
             WHERE r.user_id=h.user_id AND r.application_id=h.application_id AND r.state NOT IN ('retired','abandoned'))) AS complete
           FROM documents.native_material_admission h WHERE user_id = ${owner} AND application_id = ${app} FOR UPDATE`;

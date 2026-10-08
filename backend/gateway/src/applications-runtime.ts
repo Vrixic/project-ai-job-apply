@@ -47,6 +47,7 @@ export interface ApplicationsRuntimeOptions {
   coverLetters?: ApplicationCoverLetters;
   /** Owned memory availability only. No generation, persistence or refreshed reference. */
   temporaryMaterials?: ApplicationTemporaryMaterials;
+  nativeMaterialDisposal?: Pick<ApplicationTemporaryMaterials, "discardApplication">;
   /** Default false. Enable only with compatible migrations and the owned dispatch/recovery runtime. */
   coverLetterPreparationEnabled?: boolean;
   nativeCoverLetterPreparationEnabled?: () => boolean;
@@ -371,7 +372,14 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     jobs,
     resumes,
     ...(options.coverLetters ? { coverLetters: options.coverLetters } : {}),
-    ...(options.temporaryMaterials ? { temporaryMaterials: options.temporaryMaterials } : {}),
+    ...(options.temporaryMaterials
+      ? {
+          temporaryMaterials: {
+            ...options.temporaryMaterials,
+            ...options.nativeMaterialDisposal,
+          },
+        }
+      : {}),
     ...(options.nativeReadAuthorizationsEnabled
       ? { nativeReadAuthorizationsEnabled: options.nativeReadAuthorizationsEnabled }
       : {}),

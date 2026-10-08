@@ -158,6 +158,10 @@
         {
           "version": "0015_native_resume_observation",
           "checksum": "d52dfc757baac272e37f5b162765cea06573152e20f024aaa8aa99e1eaf4a419"
+        },
+        {
+          "version": "0016_native_application_disposal",
+          "checksum": "431c17af6bdf9b7719fe0d5c0ace7dc6bba3f7dbcb333d9d63d3036bba978215"
         }
       ],
       "relations": [

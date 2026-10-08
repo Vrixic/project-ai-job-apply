@@ -2518,3 +2518,18 @@ The independent switch remains off. Combined database/native approval, cancellat
 disposal, refreshed images/artifacts and managed/client/ATS acceptance remain. Full verification
 stopped at the existing port-3000 candidate-rights fixture conflict. D1/D3 remain In progress;
 no deployment or CI/CD activation, PC on.
+
+2026-10-07 owner directs implementation in connected launch batches, followed by exercising the
+working flow, fixing failures and adding focused regressions; optional polish and CI/CD remain
+deferred. Shared native application disposal is implemented locally and remains uncommitted and
+default-off pending Gateway/infrastructure checks. Fresh PostgreSQL checks pass: 42 cover-letter
+registry cases and 68 resume ledger cases. These use synthetic task responses, not managed ECS.
+The batch fixes an existing candidate-export omission and updates the launch fixture to include
+required container init. No deployment or phase completion is claimed. Combined native approval,
+Gateway/Terraform checks and release acceptance remain. PC stays on.
+
+2026-10-07 native terminal-disposal local checks pass: 110 PostgreSQL cases, 24 Gateway,
+16 Documents disposal, 32 Applications, 50 migration/restore tests, 19 mocked Terraform plans
+and all 38 workspace typecheck tasks. The runtime remains default-off; packaging checks and
+combined native approval/managed acceptance remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md).
+D1/D3 remain In progress, CI/CD deferred and PC on.

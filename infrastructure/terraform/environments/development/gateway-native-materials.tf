@@ -1,6 +1,8 @@
 variable "gateway_native_materials" {
   description = "Optional native candidate API configuration. Provisioning grants packet access; all runtime switches default off."
   type = object({
+    disposal_enabled                 = optional(bool, false)
+    disposal_deployments             = optional(list(object({ cluster_arn = string, task_definition_arn = string, container_name = string })), [])
     availability_enabled             = optional(bool, false)
     packet_protection_enabled        = optional(bool, false)
     read_authorizations_enabled      = optional(bool, false)

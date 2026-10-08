@@ -4,6 +4,7 @@ import {
 } from "@ai-job-apply/applications-service";
 import { restrictedPacketWriterFromEnvironment } from "@ai-job-apply/applications-service/restricted-packet-runtime";
 import { nativeMaterialAvailabilityFromEnvironment } from "./native-material-availability.js";
+import { nativeMaterialDisposalFromEnvironment } from "./native-material-disposal-runtime.js";
 import "reflect-metadata";
 import { randomBytes } from "node:crypto";
 import {
@@ -1175,6 +1176,7 @@ async function createConfiguredApplication(
     process.env,
     () => packetProtection?.enabled() === true,
   );
+  const nativeMaterialDisposal = nativeMaterialDisposalFromEnvironment(databaseUrl, process.env);
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
     profile: store,
@@ -1187,6 +1189,7 @@ async function createConfiguredApplication(
       nativeMaterialLocations,
       nativeResumeLocations,
     ),
+    ...(nativeMaterialDisposal ? { nativeMaterialDisposal } : {}),
     nativeCoverLetterPreparationEnabled: () =>
       process.env.NATIVE_COVER_LETTER_PREPARATION_ENABLED === "true" &&
       process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&

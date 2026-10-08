@@ -247,6 +247,10 @@
     "./native-resume-preparation-control-client": {
       "types": "./dist/src/native-resume-preparation-control-client.d.ts",
       "default": "./dist/src/native-resume-preparation-control-client.js"
+    },
+    "./native-application-disposal-store": {
+      "types": "./dist/src/native-application-disposal-store.d.ts",
+      "default": "./dist/src/native-application-disposal-store.js"
     }
   },
   "scripts": {
