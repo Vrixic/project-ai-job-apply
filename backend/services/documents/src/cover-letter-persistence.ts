@@ -77,7 +77,10 @@ export function createNativeCoverLetterPersistence(
         return work.issue(structuredClone(input));
       },
     }),
-    ready: Object.freeze({ read: ready.read.bind(ready) }),
+    ready: Object.freeze({
+      read: ready.read.bind(ready),
+      readBinding: ready.readBinding.bind(ready),
+    }),
     admission: Object.freeze({ readPreviousEpoch: admission.readPreviousEpoch.bind(admission) }),
     close: async () => {
       await Promise.all([documentsPool.end(), workPool.end(), leasePool.end()]);

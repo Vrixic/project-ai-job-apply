@@ -472,3 +472,46 @@ packaging pass, not repeated clean reproducibility, fresh dependency audit or ma
 Local logs: `.tmp/d3-material-route-control-build.log` and
 `.tmp/d3-material-route-control-integrity.json`. Artifacts remain unpublished. Durable original
 route dispatch, propagation-gated attachment, cloud/managed acceptance remain; D1/D3 In progress.
+
+
+## Connected preparation staging and attachment
+
+The original preparation activity now has an optional private stage/attach protocol. Staging
+uses the existing single generation claim and ready receipt but does not complete the packet.
+Attachment recovers that same material, reloads current context/vault references, compares the
+original allocation/work/reference, and calls the existing atomic packet completion. A changed
+reference, missing original claim or terminal operation cannot cause fresh generation.
+Documents provides a read-only original binding lookup with current readiness rechecks.
+
+The existing preparation durable entrypoint optionally checkpoints staged scalar metadata,
+invokes the original private route control, waits for DNS propagation and then attaches through
+the numeric preparation activity. It uses the existing event/execution binding and shared DNS
+cleanup lifecycle. Lost attachment acknowledgement does not cause another attachment; cleanup
+still runs. Separate creation shutdown preserves cleanup. Existing non-routing behavior stays
+available; the new mode defaults off and cannot use legacy advance to bypass propagation.
+
+Local PostgreSQL 16.14 integration passes all 25 cases, including original binding lookup,
+stage/replay without completion, attachment, terminal replay and sealed-reference refusal.
+Lambda/ECS/provider and packet protection in that suite are synthetic. The connected local SDK,
+activity/bootstrap and shared lifecycle suites pass 104 cases; twelve emitted capability checks
+pass. The durable bundle permits only enumerated pure Documents metadata modules, numeric Lambda
+transport and DNS adapter, retaining exclusions for SQL, models, content, ECS/EC2 and KMS clients.
+Workflows compiles. These results do not establish managed AWS behavior or UI acceptance.
+
+Cloud wiring remains: preparation Route53 permissions and bootstrap ceiling, routing flags,
+longer durable timeout for cleanup, environment composition, rebuilt immutable preparation
+artifacts and managed acceptance. Nothing was published, deployed or activated. D1/D3 remain
+In progress. Per owner direction, implement connected batches, exercise them, then fix failures
+and add focused regressions; defer hosted CI/CD until production launch.
+
+
+Batch-wide verification: 38 workspace typecheck tasks, 39 workspace test tasks and 23 build tasks
+pass (32/35/19 respectively served from valid task cache). Repository formatting passes;
+lint has no errors and retains 15 warnings/58 informational diagnostics. The one full
+`verify-phase0.ps1` attempt stops at candidate-rights session fixtures: their exclusive
+127.0.0.1:3000 listener cannot bind while the existing development service occupies that port.
+A separate local bind probe confirms EADDRINUSE. The server was preserved. This is not a full
+verifier pass; subsequent typecheck/test/build commands ran separately. Logs are
+`.tmp/d3-preparation-stage-{verify,typecheck,tests,build,format,lint}.log`.
+The owned temporary PostgreSQL container was removed; Docker Desktop and WSL are stopped.
+The PC remains on. No browser sign-in or previously accepted human checks were repeated.

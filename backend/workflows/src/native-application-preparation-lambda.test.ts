@@ -134,3 +134,57 @@ describe("dedicated native preparation bootstrap", () => {
     expect(f.resolveDatabaseUrl).not.toHaveBeenCalled();
   });
 });
+
+it("refuses route commands by default and legacy advance under routing before initialization", async () => {
+  const f = fixture();
+  const route = {
+    schemaVersion: 1,
+    protocol: "native-preparation-route.v1",
+    eventId: input.eventId,
+    preparationId: input.preparationId,
+    action: "stage",
+  };
+  expect(await f.handler(route, { invokedFunctionArn: target })).toMatchObject({
+    outcome: "pending",
+    original: null,
+  });
+  expect(f.resolveDatabaseUrl).not.toHaveBeenCalled();
+  f.env.NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED = "true";
+  expect(await f.handler(input, { invokedFunctionArn: target })).toMatchObject({
+    errorCode: "store_unavailable",
+  });
+  expect(f.resolveDatabaseUrl).not.toHaveBeenCalled();
+});
+it("routes metadata through the pinned runtime and validates its exact request", async () => {
+  const f = fixture();
+  f.env.NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED = "true";
+  const route = {
+    schemaVersion: 1 as const,
+    protocol: "native-preparation-route.v1" as const,
+    eventId: input.eventId,
+    preparationId: input.preparationId,
+    action: "stage" as const,
+  };
+  const runRoute = vi.fn(async () => ({
+    schemaVersion: 1 as const,
+    request: route,
+    outcome: "terminal" as const,
+    original: null,
+  }));
+  const handler = createNativeApplicationPreparationLambda({
+    environment: () => f.env,
+    resolveDatabaseUrl: f.resolveDatabaseUrl,
+    createRuntime: () => ({ run: f.run, runRoute, close: async () => undefined }),
+  });
+  expect(await handler(route, { invokedFunctionArn: target })).toEqual(await runRoute());
+  expect(f.run).not.toHaveBeenCalled();
+  runRoute.mockResolvedValue({
+    schemaVersion: 1,
+    request: { ...route, eventId: input.preparationId },
+    outcome: "terminal",
+    original: null,
+  });
+  expect(await handler(route, { invokedFunctionArn: target })).toMatchObject({
+    outcome: "pending",
+  });
+});

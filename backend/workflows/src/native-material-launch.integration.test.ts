@@ -6,7 +6,6 @@ import {
   type ApplicationStoreOptions,
   ApplicationsService,
   createApplicationsDatabase,
-  createPreparationActivity,
   defaultFieldDefinitions,
   PostgresApplicationStore,
 } from "@ai-job-apply/applications-service";
@@ -51,6 +50,8 @@ import {
   createNativeOwnerRpcLambda,
   createNativeOwnerRpcRuntime,
 } from "./native-owner-rpc-lambda.js";
+
+import { createNativePreparationRouteActivity } from "./native-preparation-route-activity.js";
 
 const requested = process.env.NATIVE_MATERIAL_LAUNCH_INTEGRATION === "1";
 const url = process.env.NATIVE_MATERIAL_LAUNCH_TEST_DATABASE_URL;
@@ -1084,6 +1085,10 @@ describe.runIf(requested)(
       };
       expect(await readyStore.read(readyIdentity)).toEqual(ready);
       expect(await readyStore.readAllocation(ready.material)).toBe(binding.scope.allocationId);
+      expect(await readyStore.readBinding(ready.material)).toEqual(binding);
+      expect(
+        await readyStore.readBinding({ ...ready.material, version: ready.material.version + 1 }),
+      ).toBeNull();
       let enabledChecks = 0;
       expect(
         await new PostgresNativeMaterialReadyStore(sql, () => ++enabledChecks === 1).readAllocation(
@@ -1162,10 +1167,33 @@ describe.runIf(requested)(
       const [preparationEvent] = await sql<Array<{ id: string }>>`
         SELECT id FROM applications.preparation_outbox WHERE preparation_id=${request.original.documentId}`;
       if (!preparationEvent) throw Error("SyntheticPreparationEventMissing");
-      const activity = createPreparationActivity(activityStore, nativePreparation);
-      expect(await activity(preparationEvent.id, request.original.documentId)).toEqual({
+      const activity = createNativePreparationRouteActivity({
+        store: activityStore,
+        documents: nativePreparation,
+        ready: readyStore,
+        enabled: () => true,
+      });
+      const stage = {
+        schemaVersion: 1 as const,
+        protocol: "native-preparation-route.v1" as const,
+        eventId: preparationEvent.id,
         preparationId: request.original.documentId,
-        outcome: "completed",
+        action: "stage" as const,
+      };
+      const staged = await activity(stage);
+      expect(staged.outcome).toBe("ready");
+      expect(staged.original).toEqual({ binding, reference: ready.material });
+      expect(
+        (await activityStore.getPreparationForEvent(stage.eventId, stage.preparationId)).state,
+      ).toBe("running");
+      expect(await activity(stage)).toEqual(staged);
+      if (!staged.original) throw Error("SyntheticStagedOriginalMissing");
+      const attach = { ...stage, action: "attach" as const, original: staged.original };
+      expect(await activity(attach)).toEqual({
+        schemaVersion: 1,
+        request: attach,
+        outcome: "attached",
+        original: null,
       });
       const accepted = await activityStore.getPreparationForEvent(
         preparationEvent.id,
@@ -1209,16 +1237,14 @@ describe.runIf(requested)(
         },
       });
 
-      expect(await activity(preparationEvent.id, request.original.documentId)).toEqual({
-        preparationId: request.original.documentId,
-        outcome: "completed",
-      });
+      expect((await activity(attach)).outcome).toBe("terminal");
       await new PostgresNativeMaterialRegistry(sql, () => true).sealApplication(
         request.ownerUserId,
         request.applicationId,
       );
       expect(await readyStore.read(readyIdentity)).toBeNull();
       expect(await readyStore.readAllocation(ready.material)).toBeNull();
+      expect(await readyStore.readBinding(ready.material)).toBeNull();
       expect(await epochReader.readPreviousEpoch(request.ownerUserId, request.applicationId)).toBe(
         binding.scope.epochId,
       );

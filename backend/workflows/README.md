@@ -322,3 +322,15 @@ are unchanged. The route path pins managed database/task/DNS configuration and n
 original numeric deployment and owning admission/address checks, without fresh launch, packet
 attachment or DNS mutation. Its sender has only scalar Lambda invocation capability. Preparation
 dispatch still needs to bind one original route execution and attach after propagation.
+
+
+`native-preparation-route-activity.ts` and `native-preparation-route-durable.ts` connect optional
+cover-letter staging to the existing original preparation execution. With
+`NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED=true`, stage recovers the original ready material
+without packet mutation; attachment reloads current context and compares the exact staged
+reference after DNS propagation. The durable runtime requires the original numeric
+`NATIVE_MATERIAL_LAUNCH_FUNCTION_ARN`; `NATIVE_MATERIAL_ROUTE_CREATION_ENABLED` independently gates
+new DNS writes while preserving cleanup. Flags default off. Routing refuses legacy advance.
+Preparation Terraform/Route53 ceiling and longer execution timeout are not wired yet; do not
+activate this mode with the existing 900-second deployment configuration. See
+[local evidence](../../docs/product/delivery/evidence/d3-native-application-preparation-release-2026-10-07.md#connected-preparation-staging-and-attachment).

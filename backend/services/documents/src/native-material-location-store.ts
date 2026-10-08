@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { type NativeEvidenceBinding, nativeEvidenceBinding } from "./native-evidence-binding.js";
 import {
   type TemporaryMaterialReference,
   validateTemporaryMaterialReference,
@@ -51,6 +52,57 @@ export class PostgresNativeMaterialLocationStore {
         const [fresh] = await tx<Array<{ available: boolean }>>`
           SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint < ${fixed.expiresAtMs} AS available`;
         return fresh?.available && this.enabled() ? row.id : null;
+      });
+    } catch {
+      throw Error("NativeMaterialReadyUnavailable");
+    }
+  }
+  /** Scalar original binding for a current ready reference. No grant, claim or content read. */
+  async readBinding(reference: TemporaryMaterialReference): Promise<NativeEvidenceBinding | null> {
+    try {
+      const fixed = structuredClone(reference);
+      const allocationId = await this.readAllocation(fixed);
+      if (!allocationId || !this.enabled()) return null;
+      const [row] = await this.sql<
+        Array<{
+          epoch_id: string;
+          work_id: string;
+          request_sha256: string;
+          cluster_arn: string;
+          task_arn: string;
+          task_definition_arn: string;
+          container_name: string;
+        }>
+      >`SELECT epoch_id, work_id, request_sha256, cluster_arn, task_arn, task_definition_arn, container_name
+        FROM documents.native_material_allocations WHERE id=${allocationId}
+          AND user_id=${fixed.ownerUserId} AND application_id=${fixed.applicationId}
+          AND document_id=${fixed.generationId} AND state='bound' AND task_arn IS NOT NULL`;
+      if (!row || !this.enabled() || (await this.readAllocation(fixed)) !== allocationId)
+        return null;
+      return nativeEvidenceBinding({
+        scope: {
+          allocationId,
+          ownerUserId: fixed.ownerUserId,
+          applicationId: fixed.applicationId,
+          generationId: fixed.generationId,
+          epochId: row.epoch_id,
+        },
+        allocation: {
+          allocationId,
+          ownerUserId: fixed.ownerUserId,
+          applicationId: fixed.applicationId,
+          generationId: fixed.generationId,
+          clusterArn: row.cluster_arn,
+          taskArn: row.task_arn,
+          taskDefinitionArn: row.task_definition_arn,
+          containerName: row.container_name,
+        },
+        original: {
+          id: row.work_id,
+          documentId: fixed.generationId,
+          purpose: "provider_dispatch",
+          requestSha256: row.request_sha256,
+        },
       });
     } catch {
       throw Error("NativeMaterialReadyUnavailable");

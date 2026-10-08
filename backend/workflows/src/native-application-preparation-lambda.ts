@@ -21,17 +21,26 @@ import {
   validateApplicationPreparationActivityInput,
 } from "./application-preparation-contract.js";
 import { createNativeCoverLetterPreparationPort } from "./application-preparation-native.js";
+import { createNativePreparationRouteActivity } from "./native-preparation-route-activity.js";
+import {
+  type NativePreparationRouteOutput,
+  validateNativePreparationRouteInput,
+  validateNativePreparationRouteOutput,
+} from "./native-preparation-route-contract.js";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 export interface NativePreparationConfiguration {
   target: string;
   secretId: string;
   launcher: string;
+  routing?: true;
   packet: { encryptionKeyArn: string; fingerprintKeyArn: string; historicalKeysJson?: string };
 }
 function configuration(env: Environment): NativePreparationConfiguration | undefined {
   if (
     env.NATIVE_APPLICATION_PREPARATION_ENABLED !== "true" ||
+    (env.NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED !== undefined &&
+      !["true", "false"].includes(env.NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED)) ||
     env.AWS_REGION !== "us-east-2" ||
     !/^[0-9]{12}$/u.test(env.PLATFORM_AWS_ACCOUNT_ID ?? "") ||
     !/^[A-Za-z0-9_-]{1,64}$/u.test(env.AWS_LAMBDA_FUNCTION_NAME ?? "") ||
@@ -89,6 +98,9 @@ function configuration(env: Environment): NativePreparationConfiguration | undef
     target,
     secretId,
     launcher,
+    ...(env.NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED === "true"
+      ? { routing: true as const }
+      : {}),
     packet: {
       encryptionKeyArn,
       fingerprintKeyArn,
@@ -99,6 +111,7 @@ function configuration(env: Environment): NativePreparationConfiguration | undef
   };
 }
 type Runtime = {
+  runRoute?: ReturnType<typeof createNativePreparationRouteActivity>;
   run: ReturnType<typeof createApplicationPreparationActivityHandler>;
   close(): Promise<void>;
 };
@@ -155,6 +168,17 @@ export function createNativeApplicationPreparationRuntime(
     }),
   });
   return {
+    ...(config.routing
+      ? {
+          runRoute: createNativePreparationRouteActivity({
+            store: applications,
+            documents: port,
+            ready: persistence.ready,
+            vault: { readCurrentReference: vault.readCurrentReference.bind(vault) },
+            enabled,
+          }),
+        }
+      : {}),
     run: createApplicationPreparationActivityHandler(
       applications,
       port,
@@ -198,21 +222,31 @@ export function createNativeApplicationPreparationLambda(
   return async (
     raw: unknown,
     context: { invokedFunctionArn: string },
-  ): Promise<ApplicationPreparationActivityResult> => {
-    if (!validateApplicationPreparationActivityInput(raw))
+  ): Promise<ApplicationPreparationActivityResult | NativePreparationRouteOutput> => {
+    const routed = validateNativePreparationRouteInput(raw);
+    if (!routed && !validateApplicationPreparationActivityInput(raw))
       throw Error("ApplicationPreparationActivityInputRejected");
     const input = structuredClone(raw);
-    const unavailable: ApplicationPreparationActivityResult = {
-      schemaVersion: 1,
-      action: input.action,
-      preparationId: input.preparationId,
-      outcome: "retryable_failure",
-      errorCode: "store_unavailable",
-    };
+    const unavailable: ApplicationPreparationActivityResult | NativePreparationRouteOutput =
+      validateNativePreparationRouteInput(input)
+        ? { schemaVersion: 1, request: input, outcome: "pending", original: null }
+        : {
+            schemaVersion: 1,
+            action: input.action,
+            preparationId: input.preparationId,
+            outcome: "retryable_failure",
+            errorCode: "store_unavailable",
+          };
     try {
       const env = environment(),
         config = configuration(env);
-      if (!config || context?.invokedFunctionArn !== config.target || (pinned && !enabled()))
+      if (
+        !config ||
+        context?.invokedFunctionArn !== config.target ||
+        (pinned && !enabled()) ||
+        (routed && !config.routing) ||
+        (!routed && config.routing && input.action === "advance")
+      )
         return unavailable;
       if (!initialization) {
         pinned = config;
@@ -236,6 +270,16 @@ export function createNativeApplicationPreparationLambda(
         return unavailable;
       }
       if (!enabled()) return unavailable;
+      if (validateNativePreparationRouteInput(input)) {
+        if (!config.routing || !runtime.runRoute) return unavailable;
+        const result = await runtime.runRoute(input);
+        return enabled() &&
+          validateNativePreparationRouteOutput(result) &&
+          JSON.stringify(result.request) === JSON.stringify(input)
+          ? result
+          : unavailable;
+      }
+      if (config.routing && input.action === "advance") return unavailable;
       const result = await runtime.run(input);
       return enabled() ? result : unavailable;
     } catch {

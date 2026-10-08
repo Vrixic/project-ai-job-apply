@@ -2398,3 +2398,16 @@ pass original bundled refusal and independent source/hash/SBOM integrity checks.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-route-capable-control-family).
 Unpublished; durable route dispatch/attachment and managed acceptance remain. D1/D3 In progress;
 CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 connected original preparation staging, propagation-gated attachment and DNS cleanup
+in the existing durable execution. Real PostgreSQL passes 25 cases; focused local SDK/activity
+checks pass 104 cases and twelve emitted capability checks pass.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#connected-preparation-staging-and-attachment).
+Cloud permissions/configuration, artifact rebuild and managed acceptance remain; D1/D3 In progress.
+Owner directs connected implementation batches followed by exercise, fixes and focused tests;
+hosted CI/CD stays deferred until production launch. No cloud action; PC stays on.
+
+Batch-wide local typecheck/test/build passed (38/39/23 tasks); full verifier stopped on the
+existing development server's port-3000 collision with sign-in fixtures. Server preserved.
+Docker/WSL stopped; PC remains on. See the linked staging/attachment evidence for limits.
