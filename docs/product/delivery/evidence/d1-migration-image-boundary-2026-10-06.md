@@ -174,3 +174,29 @@ Logs: `.tmp/migration-18698f7f-{build,smoke,fresh,replay,verify}.log`; image ins
 This refreshes local image execution evidence, not the earlier logical dump/restore drill,
 managed PITR, vulnerability disposition, reproducible publication or release approval.
 D1/D3 remain In progress, CI/CD deferred and PC on.
+
+## Current 76-migration logical recovery
+
+2026-10-07 runs the maintained `pnpm test:d2-recovery` against runtime source `a697d91d`,
+with a focused extension of the synthetic native-launch fixture. The new case creates a
+never-claimed allocation through the owning registry and abandons it through the shared
+application-disposal store before taking the dump. No production code or migration changed.
+
+The run passes all 14 build tasks, 15 container-boundary cases, fresh/replayed seven-owner
+migrations, actual custom-format `pg_dump`/`pg_restore`, and the aggregate verifier for
+76 migrations, 93 relations and 12 schemas. All 93 exact sorted relation row sets match;
+the 18 required D2 relations are populated. Existing temporary/restricted packet, response,
+consent, owner-isolation and dispatch recovery behavior passes.
+
+Four native launch states survive restore: claimed but unresolved, bound, positively retired,
+and abandoned before any launch claim. The new case verifies that the restored owner API
+refuses launch/recovery, the SQL terminal guard refuses resurrection, and export preserves
+the abandoned scalar record without fabricating a stopped-task timestamp. Original provider
+grants remain unsettled; unknown launches remain unresolved. No ECS/provider call or live
+candidate content is involved. This covers the named generated scenarios, not every state
+of every relation or managed PITR/RTO/RPO.
+
+Source rows remain unchanged and owned-container cleanup succeeds. Log:
+`.tmp/migration-76-logical-recovery.log`. Fixture formatting/lint and whitespace checks pass.
+Docker Desktop and WSL are stopped after verification; the PC stays on. Publication, managed
+recovery, logout integration and accountable acceptance remain open; D1/D3 are In progress.

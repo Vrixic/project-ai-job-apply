@@ -1020,3 +1020,12 @@ read-only verification: 76 migrations/93 relations. No cloud publication, vulner
 or new logical-recovery claim. [Image evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-image-execution),
 [Gateway evidence](evidence/d3-native-application-disposal-2026-10-07.md#refreshed-gateway-artifact).
 D1/D3 remain In progress; disposable database removed, Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 the current 76-migration logical recovery drill passes: actual pg_dump/pg_restore,
+seven owners, all 93 exact relation row sets and restored behavior. A new generated case proves
+never-launched abandoned native work remains terminal after restore, preserves export metadata,
+and cannot fabricate task retirement or reissue a launch. All 14 builds and 15 container-boundary
+checks pass; source rows are unchanged and fixture cleanup succeeds.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-logical-recovery).
+No production source, migration, deployment or phase completion change. Logout integration and
+managed/accountable acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped, PC on.

@@ -2561,3 +2561,12 @@ bodyless HEAD with the original reference. All 42 shared Linux process/transport
 Logout admission withdrawal/original-task retirement and its web hook are explicitly unfinished;
 the hook is outside the current backend-only scope pending the owner response. Managed/client/ATS
 acceptance remains. D1/D3 stay In progress, CI/CD deferred, PC on; no publication or activation.
+
+2026-10-07 the current 76-migration logical recovery drill passes: actual pg_dump/pg_restore,
+seven owners, all 93 exact relation row sets and restored behavior. A new generated case proves
+never-launched abandoned native work remains terminal after restore, preserves export metadata,
+and cannot fabricate task retirement or reissue a launch. All 14 builds and 15 container-boundary
+checks pass; source rows are unchanged and fixture cleanup succeeds.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-logical-recovery).
+No production source, migration, deployment or phase completion change. Logout integration and
+managed/accountable acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped, PC on.
