@@ -2775,3 +2775,15 @@ Fresh development inspection now finds zero databases, routes, enabled triggers,
 endpoints and non-stopped ECS tasks after separate #570 recovery work; two encrypted snapshots remain.
 Staging still denies role access. Images, runtime/IAM bindings, migration/restore and live acceptance
 remain; provider-key location is pending. D1/D3 In progress, CI/CD deferred and PC on.
+
+
+2026-10-08 deploys the two private native-resume owner/source functions at numeric version 1 from
+published e4bc0d54. Exact plan creates six resources and narrowly updates one S3 gateway policy;
+state 417 -> 419, actual unauthenticated refusal checks and postapply zero drift pass. No database,
+route, trigger or native task activation. Fixes the container allowlist for two required dependency
+patches; real Linux native-resume build and 24 image assertions pass with synthetic external ports.
+[Deployment/image evidence](evidence/d3-native-application-disposal-2026-10-07.md#private-resume-access-deployment-and-image-packaging-2026-10-08).
+A fresh runtime read remains dormant with two encrypted recovery snapshots. The latest complete
+inputs are private state-419 inputs; old dormant inputs are stale. Configured HTTPS client origin,
+provider key, image/task/runtime composition and managed acceptance remain. D1/D3 In progress;
+CI/CD deferred, Docker/WSL stopped and PC on.

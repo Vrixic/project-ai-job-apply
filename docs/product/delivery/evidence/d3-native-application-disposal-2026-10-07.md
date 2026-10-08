@@ -987,3 +987,65 @@ managed journey and accountable D1/D3 acceptance remain. Development secret meta
 TLS but no provider-key secret under the project path; the owner was asked for an existing key's
 location, never its value in chat. No provider call or cover-letter activation occurred. D1 and
 D3 remain In progress; hosted CI/CD remains owner-deferred.
+
+
+## Private resume access deployment and image packaging 2026-10-08
+
+The isolated `feat/native-resume-managed-release` branch incorporates the exact #570 dormancy
+source and #571 publication evidence. A refresh-backed baseline using the reviewed dormant inputs
+has zero drift before this release. The historical stopped-database baseline must not be reused.
+
+An exact reviewed plan creates six resources: the private native-resume owner/source Lambda
+functions, their two roles and two policies. Its only update adds one exact-principal
+`s3:GetObjectVersion` statement for normalized `resume.json` versions to the existing S3 gateway
+endpoint policy; every existing statement and every other endpoint attribute is preserved.
+No database, paid networking, public route, dispatcher, schedule, task or task definition is created.
+The handlers are enabled behind their original task authentication boundary, with no automatic
+caller or public ingress. The intended original task revision is 1; ACTIVE and INACTIVE inventories
+contained no native-resume revision, and actual registration must later match the pinned binding.
+
+Saved plan SHA-256:
+`8184e59ad27b6cdda89fff0ecc71a134d27e1215841381f887e4da3a9e4f7574`.
+The apply moves platform state **417 -> 419**; same-input postapply planning has zero drift.
+Both functions publish numeric version **1** with ZIP hashes matching the verified
+`e4bc0d5467f5901baa496f4a37cae0a6495f5216` artifacts and the exact private subnet/security-group
+configuration. Actual managed invocations using empty unauthenticated requests return the expected
+`NativeResumeOwnerUnavailable` and `NativeResumeSourceUnavailable` errors. These are real
+Lambda configuration/cold-handler/refusal checks, not successful owner/source reads: the database
+remains absent, no task runs, and no candidate data or provider call is involved.
+
+Private evidence: `.tmp/native-resume-r1-source-access-{review,verification}.json`, exact plan,
+apply log, before/after state and postapply plan log. Numeric bindings are in
+`.tmp/native-resume-r1-bindings.json`. The **latest complete applied inputs** are
+`.tmp/development-planning-current-419.tfvars.json`; older dormant inputs omit these functions
+and must not be blindly applied.
+
+Image preparation found that `.dockerignore` admitted only the original image-size patch, while
+the frozen installation also requires the reviewed node-forge and braces patches. Commit
+`5e8750e26510c8fbb50e4110dcd105fdf7134f82` adds only those exact files. The existing infrastructure
+guard now derives required exact entries from declared `pnpm.patchedDependencies` and rejects
+broad or undeclared patch inclusions. Four negative probes (each missing new patch, wildcard and
+undeclared patch) are rejected; the correct allowlist and infrastructure validator pass.
+Biome formatting/check passes with five pre-existing warnings; diff whitespace checks pass.
+
+An actual Linux/amd64 `Dockerfile.native-resume` build passes the frozen install, contract generation,
+compilation, native kernel build and final packaging. Local image digest:
+`sha256:f3faf857ffced8f4e56b31f1014f4d54cb88a1aa602dfbeba44ebd1e69f90705`.
+The maintained image verifier passes **24 runtime assertions** and two actual generated files,
+using synthetic external ports, no network, read-only root and UID 65532. Its expected kernel-stop
+exit is 137 with `oomKilled=false`. This uses the default disabled configuration; it is local
+packaging/runtime-fixture evidence, not a configured live image, registry publication or a managed
+browser download. Private build/smoke logs: `.tmp/native-resume-5e8750e2-image-{build,smoke}.log`.
+
+At **2026-10-08T18:15:14Z**, fresh development reads still find zero database instances, API routes,
+enabled event rules/mappings, NAT gateways, interface endpoints and non-stopped ECS tasks. Both
+manual encrypted recovery snapshots are available. New Lambda definitions are retained without
+triggers. Snapshot/storage/security/DNS costs remain; staging access is still unresolved. The
+image test container was removed, Docker Desktop stopped and WSL shut down; PC remains on.
+
+The currently signed-in local web configuration uses `http://localhost:3000`; native transport
+requires an exact HTTPS client origin. No configured HTTPS frontend was found in this checkout,
+so its actual URL/setup remains an integration prerequisite, alongside the pending provider-key
+location for cover letters. Full client/native read integration, configured image and original task
+registration, runtime/IAM bindings, current migrations/restore replay, live managed journey and
+accountable acceptance remain. D1/D3 stay In progress; hosted CI/CD stays deferred.
