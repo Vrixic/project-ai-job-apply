@@ -2661,3 +2661,12 @@ all 48 checks pass after installation. Frozen install, 190 dependency-security c
 tests and mobile build pass. This covers the Expo Node entry, not prebuilt browser bundles.
 [Backport evidence](evidence/d3-native-application-disposal-2026-10-07.md#node-forge-node-runtime-backport-2026-10-08).
 Audit policy is unchanged; braces and installed-tree audit integration remain. D1/D3 In progress.
+
+
+2026-10-08 fixes braces recursion and integrates exact node-forge/braces installed-source checks
+into the release audit. All 285 dependency-security checks, three mobile tests, mobile build and
+frozen install pass. The complete-lockfile central audit passes with four verified local source
+remediations across 20 mobile build paths; no risk exceptions or weakened severity policy.
+[Audit and regression evidence](evidence/d3-native-application-disposal-2026-10-07.md#braces-and-verified-release-audit-2026-10-08).
+The local dependency-audit blocker is resolved. Native managed bindings/release/acceptance remain;
+D1/D3 In progress, CI/CD deferred and PC on. No deployment or repeated manual UI request.

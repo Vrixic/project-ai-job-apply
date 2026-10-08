@@ -23,6 +23,9 @@ overrides:
   xcode@3.0.1>uuid: 11.1.1
 
 patchedDependencies:
+  braces@3.0.3:
+    hash: 816530fe94f297f2ae23f1d98d9c4795b4898b9720e81fa900f0a89b84a1d707
+    path: patches/braces@3.0.3.patch
   image-size@1.2.1:
     hash: 37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608
     path: patches/image-size@1.2.1.patch
@@ -7574,7 +7577,7 @@ snapshots:
     dependencies:
       balanced-match: 4.0.4
 
-  braces@3.0.3:
+  braces@3.0.3(patch_hash=816530fe94f297f2ae23f1d98d9c4795b4898b9720e81fa900f0a89b84a1d707):
     dependencies:
       fill-range: 7.1.1
 
@@ -8750,7 +8753,7 @@ snapshots:
 
   micromatch@4.0.8:
     dependencies:
-      braces: 3.0.3
+      braces: 3.0.3(patch_hash=816530fe94f297f2ae23f1d98d9c4795b4898b9720e81fa900f0a89b84a1d707)
       picomatch: 2.3.2
 
   mime-db@1.52.0: {}

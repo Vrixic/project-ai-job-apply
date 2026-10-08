@@ -531,3 +531,39 @@ Audit recognition is deliberately unchanged: no advisory is waived based only on
 Braces remediation and exact installed-tree/advisory verification remain necessary before the
 central release audit can pass. No browser, cloud publication or managed acceptance performed.
 D1/D3 remain In progress; CI/CD deferred and PC on.
+
+
+## Braces and verified release audit (2026-10-08)
+
+The local braces 3.0.3 patch adds a fixed 128-level nesting bound before parser stack growth and
+inside compile/expand/stringify recursive traversal. It covers parentheses, braces, mixed patterns,
+unclosed patterns and direct AST child traversal. Normal ranges, alternatives, escaping, quoting,
+deduplication and 128-level balanced nesting remain compatible. The intentional behavior change is
+a SyntaxError on excessive nesting; this is not general protection against exponential expansion,
+malicious getters or arbitrary parent-pointer graphs supplied as ASTs.
+[Advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+Patch SHA-256: 816530fe94f297f2ae23f1d98d9c4795b4898b9720e81fa900f0a89b84a1d707.
+
+The installed package tests reproduce 43 failing excessive-depth assertions and 13 passing controls
+before the patch; all 56 pass afterward. The root maintained security suite now runs 285 passing
+checks, including 48 node-forge cases and 39 new installed-remediation/audit cases. The latter
+refuse modified patches, installed entrypoints/auxiliary files, lock hashes/edges/snapshots,
+unregistered patches, wrong versions/importers/installation locations, unknown or changed CVEs,
+advisory IDs, parents, fixed ranges, empty findings, duplicate records, incorrect totals and hidden
+suppression configuration. Missing patches also refuse when registry records are absent.
+
+The central audit now verifies full installed node-forge/braces package-tree hashes and all returned
+mobile Expo dependency paths, in addition to the existing image-size checks. Only exact reviewed
+CVE/GHSA/version/path/range records are recognized after installed-source verification. Actual
+Expo CLI and code-signing-certificates source imports the node-forge Node main; no prebuilt browser
+bundle remediation is claimed. The raw complete-lockfile report still has four high records.
+The central audit passes: four verified source remediations across 20 mobile build paths, zero
+registry-omitted records and no risk exceptions. This resolves the local dependency-audit blocker.
+
+Verification: frozen pnpm install, 285 dependency-security checks, three mobile tests, mobile
+TypeScript build, scoped Biome and diff whitespace checks pass on the worktree based on 0147f424.
+Logs: .tmp/braces-before-patch.log, .tmp/braces-after-patch.log,
+.tmp/additional-remediations-tests.log, .tmp/braces-security-suite.log,
+.tmp/braces-frozen-install.log and .tmp/braces-central-audit.log. No new UI or hosted CI claim.
+No Docker/WSL start, cloud publication, migration or runtime activation. D1/D3 remain In progress;
+managed native bindings, runtime release and acceptance remain. PC stays on.
