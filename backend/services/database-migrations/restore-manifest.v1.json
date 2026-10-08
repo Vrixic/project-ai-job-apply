@@ -58,6 +58,10 @@
         {
           "version": "0013_native_material_withdrawals",
           "checksum": "80909bec73e9bb66c1499f3cdd7d7dafd9636c9825abc873c86d8922ebb414ca"
+        },
+        {
+          "version": "0014_native_material_cleanup_queue",
+          "checksum": "f93f78f95b7236c0e85cc5bcf4f90e08f1d3575b127c124f3d9ae7fd1eafc714"
         }
       ],
       "relations": [
@@ -66,6 +70,7 @@
         "applications.attempts",
         "applications.command_receipts",
         "applications.history",
+        "applications.native_material_cleanup_queue",
         "applications.native_material_withdrawals",
         "applications.outbox",
         "applications.packet_preparations",

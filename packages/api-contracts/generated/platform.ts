@@ -1150,6 +1150,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/material-withdrawals/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Read this owner's original native cleanup request. */
+        get: operations["getNativeMaterialWithdrawal"];
+        /** @description Withdraw prior native application materials without changing submission status. The caller retains the same request UUIDv7 on retry. No request body or query parameters. Cleanup continues asynchronously after sign-out. */
+        put: operations["requestNativeMaterialWithdrawal"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2587,6 +2605,14 @@ export interface components {
             packetHash: string;
             temporaryMaterial: components["schemas"]["ApplicationTemporaryMaterial"];
             origin: string;
+        };
+        NativeMaterialWithdrawal: {
+            /** Format: uuid */
+            requestId: string;
+            /** Format: date-time */
+            requestedAt: string;
+            /** @enum {string} */
+            state: "pending" | "native_tasks_settled";
         };
     };
     responses: {
@@ -5229,6 +5255,68 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getNativeMaterialWithdrawal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped native task cleanup status; not proof of provider or all-copy disposal */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeMaterialWithdrawal"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    requestNativeMaterialWithdrawal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped native task cleanup status; not proof of provider or all-copy disposal */
+            202: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeMaterialWithdrawal"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

@@ -7,6 +7,7 @@ import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FieldDefinition } from "./field-policy.js";
 import { lockNativePreparationLaunchAdmission } from "./native-material-admission.js";
+import { PostgresNativeMaterialCleanupQueue } from "./native-material-cleanup-queue.js";
 import { PostgresNativeMaterialWithdrawalStore } from "./native-material-withdrawal.js";
 import { readNativePreparationBootstrap } from "./native-preparation-bootstrap.js";
 import { PreparationNotFoundError, type PreparationRequest } from "./preparation.js";
@@ -288,6 +289,44 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
       });
     },
   );
+  it("durably leases withdrawal cleanup and refuses expired or replaced completion", async () => {
+    await withApplication(async (owner, _app) => {
+      const withdrawals = new PostgresNativeMaterialWithdrawalStore(client, () => true);
+      const queue = new PostgresNativeMaterialCleanupQueue(client, () => true);
+      const requestId = uuidv7();
+      await withdrawals.withdraw(owner, requestId);
+      expect(await queue.read(uuidv7(), requestId)).toBeNull();
+      const claims = await Promise.all([queue.claim(), queue.claim()]);
+      expect(claims.filter(Boolean)).toHaveLength(1);
+      const first = claims.find(Boolean);
+      if (!first) throw Error("SyntheticClaimMissing");
+      expect(first).toMatchObject({ ownerUserId: owner, requestId, afterApplicationId: null });
+      await client`UPDATE applications.native_material_cleanup_queue SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE request_id=${requestId}`;
+      const result = { state: "native_tasks_settled" as const, nextApplicationId: null };
+      expect(await queue.finish(first, result)).toBe(false);
+      const replacement = await queue.claim();
+      if (!replacement) throw Error("SyntheticReplacementMissing");
+      expect(replacement.claimToken).not.toBe(first.claimToken);
+      expect(await queue.finish(first, result)).toBe(false);
+      const cursor = uuidv7();
+      expect(await queue.finish(replacement, { state: "pending", nextApplicationId: cursor })).toBe(
+        true,
+      );
+      const next = await queue.claim();
+      expect(next?.afterApplicationId).toBe(cursor);
+      if (!next) throw Error("SyntheticNextMissing");
+      expect(await queue.finish(next, result)).toBe(true);
+      await withdrawals.withdraw(owner, requestId);
+      expect(await queue.read(owner, requestId)).toMatchObject({ state: "native_tasks_settled" });
+      expect(await queue.claim()).toBeNull();
+      await expect(
+        client`UPDATE applications.native_material_cleanup_queue SET state='pending',completed_at=NULL WHERE request_id=${requestId}`,
+      ).rejects.toMatchObject({ code: "55000" });
+      await expect(
+        client`DELETE FROM applications.native_material_cleanup_queue WHERE request_id=${requestId}`,
+      ).rejects.toMatchObject({ code: "55000" });
+    });
+  });
   async function dispatchFor(owner: string, app: string) {
     const queued = await store.queuePreparation(command(owner, app));
     const event = await eventId(queued.preparation.id);

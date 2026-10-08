@@ -299,12 +299,18 @@ class SyntheticAssuranceModeration implements JobModeration {
   }
 }
 
-export async function createSyntheticAssuranceApplication() {
+export async function createSyntheticAssuranceApplication(
+  options: Pick<
+    import("./application.js").GatewayApplicationOptions,
+    "nativeMaterialWithdrawals"
+  > = {},
+) {
   const issuer = await createTestTokenIssuer();
   const store = new SyntheticAssuranceProfileStore();
   const catalog = new SyntheticAssuranceCatalog();
   const jobReports = new SyntheticAssuranceJobReports();
   const app = await createGatewayApplication({
+    ...options,
     store,
     catalog,
     jobReports,

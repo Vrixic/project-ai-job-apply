@@ -95,3 +95,27 @@ They are not a legal, security, or privacy disposition, and every reviewer recor
 Reviewer name and accountable role, scope and artifact commit reviewed, jurisdiction and source-policy
 versions, permitted and prohibited behaviors, conditions with owners and closure evidence, revalidation
 trigger, and the product owner's acknowledgement of conditions, as required by the legal review register.
+
+
+## Engineering delta: owner material withdrawal (2026-10-08)
+
+The preceding September implementation inventory is historical. Current delivery evidence is in
+[the D3 phase record](../product/delivery/phase-3-application-preparation.md). This delta is an
+engineering record, not an accountable approval.
+
+The new `PUT /v1/material-withdrawals/{requestId}` derives the candidate from authenticated
+`applications:write` context; `GET` requires `applications:read`. The UUIDv7 path is the replay key.
+Neither route accepts an owner, task identifier, body or query. Withdrawal and its leased cleanup
+queue commit together in Applications. Both tables contain internal identifiers/timing/control
+metadata only, are omitted from portable candidate content, and are deleted by the authorized
+candidate-deletion function. Foreign reads return 404; operational failures use fixed problem text.
+
+A private IAM-invoked numeric worker accepts only a versioned drain action, reads the original
+receipt, and attempts exact allowlisted native task retirement without generation/body-read
+capabilities. Queue leases fence stale completions. Accepted cleanup can continue after sign-out
+or quarantine; that authority grants no new candidate read or preparation. Task settlement is not
+provider retention, route deletion or all-copy disposal. Older requests cannot seal newer native
+generations. Application revision/submission status and ambiguous-attempt evidence are unchanged.
+
+The endpoint and worker are default-off. Worker artifact/schedule/IAM configuration, managed
+acceptance, the web hook and accountable provider/privacy dispositions remain release gates.

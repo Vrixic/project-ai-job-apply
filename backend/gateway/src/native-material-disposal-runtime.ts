@@ -1,3 +1,4 @@
+import { PostgresNativeMaterialCleanupQueue } from "@ai-job-apply/applications-service/native-material-cleanup-queue";
 import { PostgresNativeMaterialWithdrawalStore } from "@ai-job-apply/applications-service/native-material-withdrawal";
 import { PostgresNativeApplicationDisposalStore } from "@ai-job-apply/documents-service/native-application-disposal-store";
 import { createNativeMaterialDisposal } from "@ai-job-apply/documents-service/native-material-disposal";
@@ -53,15 +54,56 @@ export function nativeMaterialDisposalFromEnvironment(url: string, environment: 
   const disposal = createNativeMaterialDisposal({ registry, deployments, enabled });
   const ownerEnabled = () =>
     enabled() && environment.NATIVE_OWNER_MATERIAL_CLEANUP_ENABLED === "true";
+  const queue = new PostgresNativeMaterialCleanupQueue(sql, ownerEnabled);
+  const withdrawals = new PostgresNativeMaterialWithdrawalStore(sql, ownerEnabled);
   const ownerCleanup = createNativeOwnerMaterialCleanup({
     enabled: ownerEnabled,
-    withdrawals: new PostgresNativeMaterialWithdrawalStore(sql, ownerEnabled),
+    withdrawals: {
+      withdraw: async (owner, requestId) => {
+        const receipt = await queue.read(owner, requestId);
+        if (!receipt) throw Error("NativeOwnerMaterialCleanupUnavailable");
+        return receipt;
+      },
+    },
     inventory: registry,
     disposal,
   });
   return Object.freeze({
     ...disposal,
     ownerCleanup,
+    ownerRequests: {
+      async create(owner: string, requestId: string) {
+        await withdrawals.withdraw(owner, requestId);
+        const status = await queue.read(owner, requestId);
+        if (!status) throw Error("NativeOwnerMaterialCleanupUnavailable");
+        return {
+          requestId,
+          requestedAt: new Date(status.requestedAtMs).toISOString(),
+          state: status.state,
+        };
+      },
+      async get(owner: string, requestId: string) {
+        const status = await queue.read(owner, requestId);
+        return status
+          ? {
+              requestId,
+              requestedAt: new Date(status.requestedAtMs).toISOString(),
+              state: status.state,
+            }
+          : null;
+      },
+    },
+    async runOwnerCleanup() {
+      const claim = await queue.claim();
+      if (!claim) return { state: "idle" as const };
+      const result = await ownerCleanup.step(
+        claim.ownerUserId,
+        claim.requestId,
+        claim.afterApplicationId,
+      );
+      const recorded = await queue.finish(claim, result);
+      return { state: recorded ? result.state : ("lease_lost" as const) };
+    },
     close: () => sql.end(),
   });
 }

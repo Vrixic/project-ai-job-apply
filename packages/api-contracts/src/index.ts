@@ -161,3 +161,5 @@ export function formatValidationErrors(errors: ErrorObject[] | null | undefined)
 }
 
 export { contract };
+
+export type NativeMaterialWithdrawal = components["schemas"]["NativeMaterialWithdrawal"];

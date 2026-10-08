@@ -9,8 +9,8 @@ another service's tables.
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
   after Trust): twelve owned schemas (including the empty-table `jobs_public` projection schema and separate
-  `applications_restricted` storage), 94 regular relations, and 77 checksum-bound migrations
-  (Profile through `0011`; Jobs through `0027`; Applications through `0013`; Documents through `0016`). The
+  `applications_restricted` storage), 95 regular relations, and 78 checksum-bound migrations
+  (Profile through `0011`; Jobs through `0027`; Applications through `0014`; Documents through `0016`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
   purges Applications data in an isolated local cluster.
 
@@ -37,12 +37,12 @@ orchestrator, checks the disposable-container ownership guards, and uses a uniqu
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.
 
-The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 77-migration
+The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 78-migration
 seven-owner boundary while retaining its D2-focused generated-data and behavior assertions,
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through
 the existing stores. A real custom-format `pg_dump` and `pg_restore` run inside tmpfs only.
-The source/target aggregate verifier results and exact sorted full-row JSON for all 94 relations
+The source/target aggregate verifier results and exact sorted full-row JSON for all 95 relations
 must match; 18 Phase 2 relations must contain generated data. Restored behavioral checks cover
 owner isolation, current/revoked/cancelled consent, lease immutability and concurrent renewal,
 stale-lease refusal, and idempotent publication. No rows or dump files are retained on the host.
@@ -91,3 +91,5 @@ migrations and packaged verification of all 76 migrations/93 relations. See the
 Logical recovery, managed execution and publication acceptance remain separate release work.
 
 Applications 0013 adds internal native-material withdrawal receipts, bringing source to 77 migrations/94 relations. The retained 76-migration image does not include this change and must be refreshed before release.
+
+Applications 0014 adds the identifier-only leased native cleanup queue, with backfill and authorized candidate deletion. The current source boundary is 78 migrations/95 relations. Prior image/recovery evidence remains historical.

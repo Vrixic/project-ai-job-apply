@@ -5218,3 +5218,13 @@ checks pass with builds/typecheck; AWS/provider transports are simulated.
 [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#bounded-owner-cleanup-orchestration-2026-10-08).
 Authenticated initiation, durable continuation, web hookup and managed acceptance remain. No new
 migration/public route or deployment; D1/D3 In progress, CI/CD deferred and PC on.
+
+
+2026-10-08 connects authenticated owner withdrawal/status to an atomic durable cleanup queue and
+private numeric worker entry. Replay keeps the original cutoff; leased pagination survives crashes
+and owner quarantine without changing submission state. Applications 0014 advances source inventory
+to 78 migrations/95 relations. 105 contract, 138 Gateway, 33 real PostgreSQL, 50 manifest, 191 migration
+smoke and 697 replay checks pass, plus builds and all 38 workspace typecheck tasks.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#authenticated-withdrawal-and-durable-continuation-2026-10-08).
+Worker packaging/schedule/IAM, web hookup and managed/accountable acceptance remain; D1/D3 In progress.
+No deployment; CI/CD deferred, Docker/WSL stopped and PC on.

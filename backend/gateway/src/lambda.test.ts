@@ -1375,6 +1375,8 @@ describe("Applications routes at the Lambda boundary", () => {
   it.each([
     ["POST", "/v1/applications", "{}"],
     ["POST", "/v1/applications/search", "{}"],
+    ["PUT", `/v1/material-withdrawals/${id}`, undefined],
+    ["GET", `/v1/material-withdrawals/${id}`, undefined],
     ["GET", `/v1/applications/${id}`, undefined],
     ["GET", `/v1/applications/${id}/history`, undefined],
     ["GET", `/v1/applications/${id}/resume`, undefined],
@@ -1399,6 +1401,8 @@ describe("Applications routes at the Lambda boundary", () => {
 
   it.each([
     ["wrong method", "GET", "/v1/applications"],
+    ["withdrawal wrong method", "POST", `/v1/material-withdrawals/${id}`],
+    ["withdrawal invalid id", "PUT", "/v1/material-withdrawals/not-an-id"],
     ["non-v7 identifier", "GET", "/v1/applications/00000000-0000-1000-8000-000000000001"],
     ["traversal", "GET", `/v1/applications/${id}/../me`],
     ["unknown suffix", "POST", `/v1/applications/${id}/delete`],
@@ -1415,6 +1419,10 @@ describe("Applications routes at the Lambda boundary", () => {
 
   it("requires a body on commands and refuses one on reads and dispatch", async () => {
     const { inject, handler } = dispatcher();
+    expect(
+      (await invoke(handler, invocation("PUT", `/v1/material-withdrawals/${id}`, { body: "{}" })))
+        .statusCode,
+    ).toBe(400);
     expect(
       (await invoke(handler, invocation("POST", `/v1/applications/${id}/cancel`))).statusCode,
     ).toBe(400);

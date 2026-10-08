@@ -207,3 +207,49 @@ scope remains pending. No deployment, image refresh, managed acceptance or all-c
 D1/D3 remain In progress. CI/CD remains deferred and the PC stays on.
 
 Final changed-file formatting and whitespace checks pass. The owned PostgreSQL container was removed; Docker Desktop and WSL stopped after SQL verification. The PC remains on.
+
+
+## Authenticated withdrawal and durable continuation (2026-10-08)
+
+The local HTTP path is now connected: `PUT /v1/material-withdrawals/{requestId}` resolves the
+`applications:write` owner, validates the UUIDv7 path and absence of body/query, and atomically
+commits withdrawal plus cleanup queue entry. Repeated requests preserve the original cutoff and
+status. `GET` requires `applications:read`, is owner-scoped and returns 404 for another owner.
+The additive v1 response exposes request ID, timestamp and pending/native-task-settled state only;
+all responses are no-store and operational errors are fixed/sanitized. Both normal Gateway and
+Lambda composition include the default-off port; the Lambda adapter rejects bodies and wrong routes.
+
+Applications 0014 adds the leased identifier-only queue and backfills existing withdrawals. Claims
+use SKIP LOCKED, a unique token and a five-minute lease. A valid original lease alone may advance
+the page cursor or record immutable settlement. Exhausted pages back off 30 seconds; a crash or
+expired lease is retryable. Candidate deletion removes queue rows before receipts. A private numeric
+Lambda entry accepts exactly schemaVersion 1/action drain, resolves the managed secret and processes
+one claim. Its authority is IAM; no caller owner/task fields are accepted. It reads the accepted
+original receipt rather than requiring fresh candidate activity, allowing cleanup after quarantine.
+No public API invokes task I/O inline.
+
+The source migration/restore boundary is 78 migrations, 95 relations, seven owners and 12 schemas.
+Manifest SHA-256: `5d6caf504bfdfc13a96a932062bd948df805340251e05f68a5b8d4aa4aef50a1`.
+The Docker recipe, publisher guard, replay contract and fixtures match it. Prior 76-migration images
+and recovery evidence remain historical; there is no new image or deployment in this batch.
+
+Validation: 105 API contract tests, 138 focused Gateway/HTTP/Lambda/worker/composition cases, 32
+Applications PostgreSQL cases and one connected Gateway/PostgreSQL case pass. Queue SQL proves one
+concurrent claim, expired/replaced lease refusal, cursor continuation, immutable completion/replay
+and authorized deletion. Connected HTTP uses synthetic signed authentication with actual owning SQL:
+accept/replay returns pending, worker completes after owner quarantine, subsequent run is idle and
+GET returns settled. No native allocation exists in this connected case, so it performs no AWS task
+I/O; prior bounded-cleanup evidence covers persisted positive native retirement with simulated AWS.
+
+Gateway/dependency builds, final Gateway typecheck and all 38 workspace typecheck tasks pass. Contract
+regeneration is stable. All 50 restore-manifest, 191 executable migration smoke and 697 deletion-replay
+boundary checks pass, as do publisher OCI guards and changed-file formatting/whitespace checks.
+The source-bound migration operator guard runs after commit because it reads git HEAD. An initial
+Gateway build found a missing exception import; it was fixed before successful build/typechecks.
+Logs: `.tmp/native-cleanup-{queue-gateway-build,contract-tests,queue-http,queue-sql,connected-sql,
+gateway-final,adapter-final,typecheck,workspace-typecheck,manifest-tests,replay-tests,migration-smoke,
+publisher}.log`. The isolated PostgreSQL container was removed; Docker Desktop and WSL stopped.
+
+This proves backend source behavior, not live logout. Worker packaging, schedule/IAM deployment,
+managed recovery/drain acceptance and the web sign-out hook remain. ADR-040 remains Proposed; no
+all-copy disposal, production clearance or phase completion is claimed. CI/CD deferred; PC on.

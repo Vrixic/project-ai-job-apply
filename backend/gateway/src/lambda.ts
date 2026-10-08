@@ -322,6 +322,11 @@ function allowedRoute(
   if (method === "GET" && PUBLIC_PATHS.has(path)) {
     return { acceptsBody: false, protected: false };
   }
+  if (
+    (method === "PUT" || method === "GET") &&
+    new RegExp(`^/v1/material-withdrawals/${APPLICATION_ID}$`, "u").test(path)
+  )
+    return { acceptsBody: false, protected: true };
   if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
     return { acceptsBody: method === "PUT" || method === "POST", protected: true };
   }
@@ -1235,6 +1240,9 @@ async function createConfiguredApplication(
       : {}),
     savedJobs,
     applications,
+    ...(nativeMaterialDisposal
+      ? { nativeMaterialWithdrawals: nativeMaterialDisposal.ownerRequests }
+      : {}),
     privateSavedPageCaptures,
     matchAssessments,
     entitlements,

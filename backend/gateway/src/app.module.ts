@@ -81,7 +81,10 @@ import type {
   WithdrawTrustContributionRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
-import type { ApplicationsApi } from "@ai-job-apply/applications-service";
+import {
+  type ApplicationsApi,
+  ApplicationsUnavailableError,
+} from "@ai-job-apply/applications-service";
 import {
   type AccessTokenVerifier,
   AuthenticationError,
@@ -209,6 +212,7 @@ import {
   projectApplicationsFailure,
 } from "./applications-http.js";
 import { withNativeMaterialCredential } from "./native-material-availability.js";
+import type { NativeMaterialWithdrawalApi } from "./native-owner-material-cleanup.js";
 import { temporaryMaterialRequestSignal } from "./temporary-material-http.js";
 import {
   type OidcTrustReviewerAuthority,
@@ -227,6 +231,7 @@ const JOB_MODERATION = Symbol("JOB_MODERATION");
 const PRIVILEGED_MODERATION_AUDIT = Symbol("PRIVILEGED_MODERATION_AUDIT");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
 const APPLICATIONS = Symbol("APPLICATIONS");
+const NATIVE_MATERIAL_WITHDRAWALS = Symbol("NATIVE_MATERIAL_WITHDRAWALS");
 const PRIVATE_SAVED_PAGE_CAPTURES = Symbol("PRIVATE_SAVED_PAGE_CAPTURES");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
@@ -352,6 +357,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/saved-job-captures",
   "/v1/saved-job-captures/:captureId",
   "/v1/entitlements",
+  "/v1/material-withdrawals/:requestId",
   "/v1/applications",
   "/v1/applications/search",
   "/v1/applications/:applicationId",
@@ -3126,6 +3132,47 @@ class ApplicationsController {
   }
 }
 
+@Controller("/v1/material-withdrawals")
+@UseFilters(ProblemDetailsFilter)
+class NativeMaterialWithdrawalsController {
+  constructor(
+    @Inject(RequestIdentity) private readonly identity: RequestIdentity,
+    @Inject(NATIVE_MATERIAL_WITHDRAWALS)
+    private readonly withdrawals: NativeMaterialWithdrawalApi | null,
+  ) {}
+
+  @Put("/:requestId")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Header("cache-control", "no-store")
+  async create(@Req() request: AuthenticatedRequest, @Param("requestId") requestId: string) {
+    const user = await this.identity.resolve(request, "applications:write");
+    requireApplicationsRead(request);
+    requireApplicationPath(requestId);
+    try {
+      if (!this.withdrawals) throw Error();
+      return await this.withdrawals.create(user.id, requestId);
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+  }
+  @Get("/:requestId")
+  @Header("cache-control", "no-store")
+  async get(@Req() request: AuthenticatedRequest, @Param("requestId") requestId: string) {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationsRead(request);
+    requireApplicationPath(requestId);
+    let result: Awaited<ReturnType<NativeMaterialWithdrawalApi["get"]>>;
+    try {
+      if (!this.withdrawals) throw Error();
+      result = await this.withdrawals.get(user.id, requestId);
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    if (!result) throw new HttpException("Material withdrawal not found", HttpStatus.NOT_FOUND);
+    return result;
+  }
+}
+
 export interface AppModuleOptions {
   store: ProfileStore;
   restrictedAnswerVault?: RestrictedAnswerVaultStore;
@@ -3139,6 +3186,7 @@ export interface AppModuleOptions {
   privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   savedJobs: SavedJobs;
   applications: ApplicationsApi;
+  nativeMaterialWithdrawals?: NativeMaterialWithdrawalApi;
   privateSavedPageCaptures: PrivateSavedPageCaptures;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
@@ -3163,6 +3211,7 @@ export class AppModule {
         CandidateController,
         OwnerTrustController,
         ApplicationsController,
+        NativeMaterialWithdrawalsController,
         AdminModerationController,
         AdminTrustController,
         ...(options.contributionCapabilityPolicy
@@ -3191,6 +3240,10 @@ export class AppModule {
         },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
         { provide: APPLICATIONS, useValue: options.applications },
+        {
+          provide: NATIVE_MATERIAL_WITHDRAWALS,
+          useValue: options.nativeMaterialWithdrawals ?? null,
+        },
         { provide: PRIVATE_SAVED_PAGE_CAPTURES, useValue: options.privateSavedPageCaptures },
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },

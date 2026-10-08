@@ -55,7 +55,7 @@ $currentSuccessMarkers = @(
   "Matching migrations through 0003_private_saved_page_captures applied and verified.",
   "Billing migrations through 0002_candidate_rights applied and verified.",
   "Trust migrations through 0005_development_test_removal applied and verified.",
-  "Applications migrations through 0013_native_material_withdrawals applied and verified.",
+  "Applications migrations through 0014_native_material_cleanup_queue applied and verified.",
   "All service-owned database migrations applied and verified."
 )
 if (@([regex]::Matches($source, 'AggregateSuccessLogCount\s+= \$stoppedTask.AggregateSuccessLogCount')).Count -ne 3 -or

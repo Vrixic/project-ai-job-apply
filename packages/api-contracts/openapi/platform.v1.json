@@ -5133,6 +5133,140 @@
           }
         }
       }
+    },
+    "/material-withdrawals/{requestId}": {
+      "put": {
+        "operationId": "requestNativeMaterialWithdrawal",
+        "security": [
+          {
+            "oidc": ["applications:write"]
+          }
+        ],
+        "description": "Withdraw prior native application materials without changing submission status. The caller retains the same request UUIDv7 on retry. No request body or query parameters. Cleanup continues asynchronously after sign-out.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "202": {
+            "description": "Owner-scoped native task cleanup status; not proof of provider or all-copy disposal",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeMaterialWithdrawal"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getNativeMaterialWithdrawal",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "description": "Read this owner's original native cleanup request.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "200": {
+            "description": "Owner-scoped native task cleanup status; not proof of provider or all-copy disposal",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeMaterialWithdrawal"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10557,6 +10691,26 @@
           }
         },
         "additionalProperties": false
+      },
+      "NativeMaterialWithdrawal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId", "requestedAt", "state"],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["pending", "native_tasks_settled"]
+          }
+        }
       }
     }
   }

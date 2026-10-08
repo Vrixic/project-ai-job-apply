@@ -33,6 +33,7 @@ import {
   applyRequestContext,
   type CandidateDataExportDownloadSigner,
 } from "./app.module.js";
+import type { NativeMaterialWithdrawalApi } from "./native-owner-material-cleanup.js";
 import { installTemporaryMaterialResponseGuards } from "./temporary-material-http.js";
 import {
   OidcTrustReviewerAuthority,
@@ -52,6 +53,7 @@ export interface GatewayApplicationOptions {
   privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   savedJobs: SavedJobs;
   applications?: ApplicationsApi;
+  nativeMaterialWithdrawals?: NativeMaterialWithdrawalApi;
   privateSavedPageCaptures?: PrivateSavedPageCaptures;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
@@ -138,6 +140,9 @@ export async function createGatewayApplication(
         : {}),
       savedJobs: options.savedJobs,
       applications: options.applications ?? unavailableApplications(),
+      ...(options.nativeMaterialWithdrawals
+        ? { nativeMaterialWithdrawals: options.nativeMaterialWithdrawals }
+        : {}),
       privateSavedPageCaptures:
         options.privateSavedPageCaptures ??
         ({

@@ -291,18 +291,28 @@ runtime flag is not composed. See
 [authorization evidence](../../docs/product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).
 
 
-### Private owner material cleanup
+### Owner material withdrawal and durable cleanup
 
-`nativeMaterialDisposalFromEnvironment` includes an owner cleanup worker step behind the additional
-`NATIVE_OWNER_MATERIAL_CLEANUP_ENABLED=true` gate. It also requires the existing application-disposal
-gate and exact retained task deployments. This is private composition, with no public route or web
-sign-out hook yet. The caller must derive the owner from authenticated context and retain the original
-UUIDv7 request ID across retries.
+`PUT /v1/material-withdrawals/{requestId}` accepts an authenticated `applications:write` caller and a
+UUIDv7 request ID with no body or query parameters. Reuse that ID on retries. It atomically withdraws
+older native work and queues cleanup, returning 202 with `pending` or the original settled status.
+`GET` on the same resource requires `applications:read` and resolves only the authenticated owner.
+Neither route accepts an owner/task identifier or changes application submission status.
 
-`ownerCleanup.step(owner, requestId, afterApplicationId)` commits the owner withdrawal, then processes
-at most five old applications. Follow `nextApplicationId` across pages; when it is null but state is
-`pending`, retry from the beginning after original launch recovery. `native_tasks_settled` means no
-unretired native generation remains through that request's exact database cutoff. It does not certify
-provider retention, route deletion or all-copy disposal. Task failures remain pending, application
-submission state stays unchanged, and an old retry cannot seal a generation newer than the cutoff.
-Applications 0013 must be installed before enabling this composition. No cloud activation is supplied.
+Both routes remain default-off behind `NATIVE_OWNER_MATERIAL_CLEANUP_ENABLED=true`, the existing
+`NATIVE_APPLICATION_DISPOSAL_ENABLED` gate, and retained exact task deployments. Apply Applications
+0014 before enabling. The queue contains identifiers, timestamps, a lease token and pagination state;
+no material content. Accepted cleanup survives sign-out or later owner quarantine. Expired leases
+recover after five minutes; pending full scans back off for 30 seconds. Completion is immutable.
+
+`native-material-cleanup-worker.handler` is the private numeric-version worker entry point. Its
+scheduled input is exactly `{ "schemaVersion": 1, "action": "drain" }`; IAM provides invocation
+authority. One invocation claims one request and processes at most five applications. It records the
+next cursor or settlement only while its original lease is valid. It uses the managed database secret
+and exact task deployment allowlist; it does not accept HTTP/candidate/task input. Package/schedule/IAM
+composition and managed acceptance remain release work; this batch adds no cloud activation.
+
+`native_tasks_settled` means no unretired native generation remains through the original exact
+cutoff. It does not certify provider retention, route deletion or all-copy disposal. Unknown original
+launches require the existing task recovery path. Newer explicit generations survive old request
+replay. The web sign-out hook remains outside the current backend scope.

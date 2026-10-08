@@ -50,6 +50,8 @@ export class PostgresNativeMaterialWithdrawalStore {
           await tx`
           INSERT INTO applications.preparation_audit(id,preparation_id,owner_user_id,action,occurred_at)
           VALUES (${uuidv7()},${row.id},${ownerUserId},'failed',${row.updated_at})`;
+        await tx`INSERT INTO applications.native_material_cleanup_queue(request_id,owner_user_id)
+          VALUES (${requestId},${ownerUserId}) ON CONFLICT(request_id) DO NOTHING`;
         check();
         return {
           requestId,

@@ -264,6 +264,9 @@ const app = await createGatewayApplication({
     : {}),
   savedJobs,
   ...(applications ? { applications } : {}),
+  ...(nativeMaterialDisposal
+    ? { nativeMaterialWithdrawals: nativeMaterialDisposal.ownerRequests }
+    : {}),
   privateSavedPageCaptures,
   matchAssessments,
   entitlements,

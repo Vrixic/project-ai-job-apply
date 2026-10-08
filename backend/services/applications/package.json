@@ -27,6 +27,10 @@
     "./native-material-withdrawal": {
       "types": "./dist/src/native-material-withdrawal.d.ts",
       "default": "./dist/src/native-material-withdrawal.js"
+    },
+    "./native-material-cleanup-queue": {
+      "types": "./dist/src/native-material-cleanup-queue.d.ts",
+      "default": "./dist/src/native-material-cleanup-queue.js"
     }
   },
   "scripts": {
