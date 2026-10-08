@@ -454,3 +454,24 @@ or triggers activated, and no migration/application release or staging change oc
 would require a separately reviewed plan; repositories are deliberately retained for the next
 release stage. DNS/TLS/provider bindings, image/artifact release and managed journey acceptance
 remain. D1/D3 are In progress; CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+## Next publication prerequisites after storage (2026-10-08)
+
+Both native Dockerfiles default NATIVE_CONFIGURATION to their committed configuration.disabled.json.
+Those configurations contain enabled=false and synthetic account/task/function/secret/origin/host
+bindings. The previously verified default-off images therefore cannot be treated as configured
+managed runtime releases. Before enabled images are built, retain published original numeric owner
+(and resume-source) functions, reviewed provider/TLS secret version references, exact task revision,
+API/issuer/audience/client origin and download host. Rebuilding with those bindings is necessary;
+retagging a disabled image does not supply runtime authority. No new build or publication ran here.
+
+The retained 2026-10-08 production audit report identifies registry fixes for source-map-js >=1.2.2,
+sharp >=0.35.5, shell-quote >=1.11.0 and Next >=16.3.8. It reports no patched range for node-forge
+1.4.0 or braces 3.0.3 (the registry's <0.0.0 sentinel); compatible remediation needs investigation.
+These are report contents, not a verified upgrade plan or a current upstream-release guarantee.
+The two image-size records remain subject to the existing installed-tree remediation checks.
+Affected paths are admin/mobile. Targeted dependency-remediation scope was requested because the
+current backend-only instruction excludes those paths. No dependency, audit rule or risk waiver was
+changed. The pending DNS/hostname and web-hook decisions remain independent. Storage is deployed;
+artifacts/native runtime activation and D1/D3 acceptance are not complete.
