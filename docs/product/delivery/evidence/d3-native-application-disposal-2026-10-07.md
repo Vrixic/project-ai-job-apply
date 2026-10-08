@@ -423,3 +423,34 @@ serial 404 after planning. No repository/image/task/runtime mutation occurred.
 Log: `.tmp/native-repositories-development-plan.log`; local test/validation logs use the
 `.tmp/native-repositories-` prefix. Applying this concrete storage-only plan requires separate
 owner authorization; current permission covers inspection/planning only. D1/D3 remain In progress.
+
+
+## Approved native image storage applied (2026-10-08)
+
+The owner explicitly approved the two-repository plan. Before applying, exact plan SHA-256
+`1d16736583830970390785bce8c99173e5836ecd415d89ce89cd9a99f93b641a`, clean checkout,
+unchanged Terraform/toolchain source since `f9653438`, development STS/account, backend KMS/account,
+encryption/lockfile and byte-identical reviewed state were verified. The saved plan still contained
+only the two expected ECR creates. Terraform 1.16.2 applied that saved artifact once: two added,
+zero changed, zero destroyed. Platform state advanced 404 to 405.
+
+Live ECR readback confirms both native repositories are empty, immutable, scanned on push and
+bound to the exact platform KMS key. Gateway stays on unweighted version 86; health/live and
+health/ready both return 200. An initial readback script assumed an optional RoutingConfig property;
+its missing-property error was corrected to accept the actual unweighted response, then checks
+completed successfully. The apply itself succeeded without retry.
+
+A fresh refresh-backed saved plan returns exit 0, no resource changes, with repositories enabled.
+Verification plan `.tmp/native-repositories-development-verify.tfplan` SHA-256:
+`19231a155524b2a838587f34aa0f834afdea3d5535ee89a738d0c6f18cfaa8c2`.
+The full post-apply input baseline is preserved privately in
+`.tmp/development-planning-current-405.tfvars.json`; subsequent plans must retain the true repository
+gate instead of using the earlier 404 input set by itself. Receipt:
+`.tmp/native-repositories-apply-verification.json`. Apply/verify logs use the matching
+`.tmp/native-repositories-development-` prefix. Do not reapply the consumed creation plan.
+
+This completes development image storage only. No images were published, no native tasks/functions
+or triggers activated, and no migration/application release or staging change occurred. Rollback
+would require a separately reviewed plan; repositories are deliberately retained for the next
+release stage. DNS/TLS/provider bindings, image/artifact release and managed journey acceptance
+remain. D1/D3 are In progress; CI/CD deferred, Docker/WSL stopped and PC on.

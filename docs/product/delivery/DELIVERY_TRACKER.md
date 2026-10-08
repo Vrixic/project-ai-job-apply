@@ -5287,3 +5287,11 @@ refresh-backed development plan proposes exactly two repository creates, no upda
 and preserves 111 baseline inputs. State remains byte-identical at 404. No apply or publication.
 [Concrete storage plan](evidence/d3-native-application-disposal-2026-10-07.md#native-image-repository-prerequisite-2026-10-08).
 Storage-only apply authorization is pending; DNS/TLS/provider/release and managed acceptance remain.
+
+
+2026-10-08 owner-approved exact native image storage plan applied once: two repositories added,
+zero changed/destroyed, state 404 to 405. Live readback confirms empty immutable platform-KMS
+repositories with push scanning. Gateway remains unweighted 86 with health/readiness 200; fresh
+saved verification plan has zero changes. Current private input baseline retains storage enabled.
+[Applied storage evidence](evidence/d3-native-application-disposal-2026-10-07.md#approved-native-image-storage-applied-2026-10-08).
+No image publication, native activation or application/migration release. D1/D3 In progress; PC on.
