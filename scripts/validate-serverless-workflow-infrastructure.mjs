@@ -700,12 +700,21 @@ const dockerIgnore = ".dockerignore";
 for (const required of ["**/node_modules/", "**/dist/", "**/.env", "**/.env.*"]) {
   requireText(dockerIgnore, required, `container context exclusion is missing: ${required}`);
 }
-requireText(
-  dockerIgnore,
-  "!patches/image-size@1.2.1.patch",
-  "the frozen migration build must include its reviewed dependency patch",
-);
-forbidText(dockerIgnore, "!patches/**", "only the reviewed dependency patch may enter the context");
+const dependencyPatches = Object.values(JSON.parse(read("package.json")).pnpm.patchedDependencies);
+const allowedPatchRules = new Set(["!patches/", ...dependencyPatches.map((patch) => `!${patch}`)]);
+const contextRules = read(dockerIgnore)
+  .split(/\r?\n/u)
+  .map((line) => line.trim());
+for (const patch of dependencyPatches) {
+  if (!contextRules.includes(`!${patch}`)) {
+    failures.push(`${dockerIgnore}: the frozen build must include its declared patch ${patch}`);
+  }
+}
+for (const rule of contextRules.filter((line) => line.startsWith("!patches/"))) {
+  if (!allowedPatchRules.has(rule)) {
+    failures.push(`${dockerIgnore}: only exact declared dependency patches may enter the context`);
+  }
+}
 for (const retired of ["Dockerfile.gateway", "Dockerfile.worker", "ai-job-apply/worker"]) {
   forbidText(publishWorkflow, retired, `retired container publisher remains: ${retired}`);
 }

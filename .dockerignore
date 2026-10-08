@@ -8,9 +8,11 @@
 !turbo.json
 !tsconfig.base.json
 
-# The frozen workspace install applies this exact reviewed dependency patch.
+# The frozen workspace install applies these exact reviewed dependency patches.
 !patches/
 !patches/image-size@1.2.1.patch
+!patches/node-forge@1.4.0.patch
+!patches/braces@3.0.3.patch
 
 !backend/
 !backend/**
