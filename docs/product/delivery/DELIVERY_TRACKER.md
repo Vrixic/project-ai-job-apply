@@ -5139,3 +5139,10 @@ Gateway/Terraform checks and release acceptance remain. PC stays on.
 and all 38 workspace typecheck tasks. The runtime remains default-off; packaging checks and
 combined native approval/managed acceptance remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md).
 D1/D3 remain In progress, CI/CD deferred and PC on.
+
+2026-10-07 the combined local native cover-letter/PostgreSQL approval check passes against
+runtime `5fe0a92e`: real Linux session/TLS HEAD, current SQL packet authorization and persisted
+approval with original expiry. Credentials are test-signed; provider/KMS/catalog and file render
+responses are synthetic, and the authorization callback is in process. This does not complete
+the managed preparation workflow or tailored-resume acceptance. [Evidence](evidence/d3-native-postgresql-approval-2026-10-07.md).
+D1/D3 remain In progress; no deployment, CI/CD deferred, Docker/WSL stopped, PC on.

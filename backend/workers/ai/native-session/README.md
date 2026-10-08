@@ -106,3 +106,14 @@ abort and native process expiry clear platform-held output. Source/owner/complet
 required trusted ports; resume-owning SQL/RPC/packet metadata, authenticated transport/bootstrap,
 image/client/managed acceptance remain. No new live path or persistent generated artifact exists.
 See [resume source evidence](../../../../docs/product/delivery/evidence/d3-native-resume-memory-session-2026-10-06.md).
+
+## PostgreSQL approval composition
+
+`node scripts/verify-native-postgresql-approval.mjs --enable-local-approval-test --image <local-sha256>
+--database-container <exact-id>` runs a separate synthetic native cover-letter/SQL approval check.
+It requires a caller-owned disposable PostgreSQL container labeled `codex.task=native-approval`,
+network `none`, database `native_approval`, user `synthetic`, and password `synthetic_local_only`.
+Use tmpfs data and no published ports. The test container shares only this isolated network
+namespace and uses production owner migrations. The caller must remove its disposable database
+and stop Docker/WSL afterward. The original kernel suite remains separate and unchanged.
+See [scope and local evidence](../../../../docs/product/delivery/evidence/d3-native-postgresql-approval-2026-10-07.md).
