@@ -202,3 +202,30 @@ original numeric owner. SQL ingress includes declared preparation/control groups
 precondition rejecting material task groups that overlap these or the shared application group.
 Task registration may precede control composition with no admitted task group; it is not evidence
 that a task is ready to launch. Retain original bindings until drain is verified.
+
+
+## Native task HTTPS reads and image pulls
+
+Development and staging expose optional `native_material_read_networks` entries for
+`cover_letter` and `resume`. Each creates a separate task security group in the existing VPC.
+An empty `client_ipv4_cidrs` set explicitly closes ingress; reviewed canonical IPv4 ranges
+admit only TCP 8443. Public client access requires explicitly selecting `0.0.0.0/0`.
+Outbound access permits TCP 443; this is a port restriction, not a hostname firewall.
+Runtime destination validation and exact role permissions remain separate controls.
+
+Provision the groups first, review `native_material_read_network_bindings`, and copy the
+returned existing public subnet IDs and dedicated group IDs into the original control or
+resume preparation release. Task launch must use the returned `assign_public_ip = ENABLED`.
+These outputs do not launch tasks, create DNS records or grant SQL access. Keep original groups
+and release entries until their tasks drain. TLS identity, managed reachability and candidate
+read authorization still require acceptance before activation.
+
+Environment composition also derives `native_material_image_access` from retained task releases
+and matching launch groups. When migration ECR endpoints exist, their private DNS intercepts
+native image requests too. Exact original execution roles now receive registry authorization
+and pull access only to their declared repositories through those endpoints. A separate endpoint
+security group admits TCP 443 from original native task groups; it is attached only to ECR API
+and registry endpoints. Migration logging access remains unchanged. No additional ECR endpoints
+are created when migration endpoints are absent. Task registration can precede launch composition
+with no admitted task group; that is not evidence of runnable tasks. The existing regional ECR
+layer S3 path remains unchanged.

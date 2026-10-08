@@ -44,6 +44,19 @@ provider "aws" {
 }
 
 module "platform" {
+  native_material_image_access = merge(
+    { for id, r in var.native_material_task_releases : "material-${id}" => {
+      execution_role_arn = "arn:aws:iam::${split(":", r.expected_task_definition_arn)[4]}:role/ai-job-apply-staging-native-material-${id}-execution"
+      repository_arn     = "arn:aws:ecr:us-east-2:${split(":", r.expected_task_definition_arn)[4]}:repository/${r.image_repository}"
+      security_group_ids = toset(flatten([for c in var.native_material_control_releases : c.release.task_security_group_ids if c.release.task_definition_arn == r.expected_task_definition_arn]))
+    } },
+    { for id, item in var.native_resume_task_releases : "resume-r${element(reverse(split(":", item.release.expected_task_definition_arn)), 0)}" => {
+      execution_role_arn = "arn:aws:iam::${split(":", item.release.expected_task_definition_arn)[4]}:role/ai-job-apply-staging-native-resume-r${element(reverse(split(":", item.release.expected_task_definition_arn)), 0)}-execution"
+      repository_arn     = "arn:aws:ecr:us-east-2:${split(":", item.release.expected_task_definition_arn)[4]}:repository/${item.release.image_repository}"
+      security_group_ids = toset(flatten([for p in var.native_resume_preparation_releases : p.release.task_security_group_ids if p.release.task_definition_arn == item.release.expected_task_definition_arn]))
+    } }
+  )
+  native_material_read_networks = var.native_material_read_networks
   native_material_control_network = { for id, r in var.native_material_control_releases : id => {
     address_lookup      = r.route != null
     task_definition_arn = r.release.task_definition_arn

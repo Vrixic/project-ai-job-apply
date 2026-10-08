@@ -982,6 +982,32 @@ data "aws_iam_policy_document" "migration_ecr_endpoint" {
       identifiers = [aws_iam_role.execution.arn]
     }
   }
+  dynamic "statement" {
+    for_each = var.native_material_image_access
+    content {
+      sid       = "NativeRegistryAuthorization${replace(statement.key, "-", "")}"
+      effect    = "Allow"
+      actions   = ["ecr:GetAuthorizationToken"]
+      resources = ["*"]
+      principals {
+        type        = "AWS"
+        identifiers = [statement.value.execution_role_arn]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = var.native_material_image_access
+    content {
+      sid       = "NativeRepositoryPull${replace(statement.key, "-", "")}"
+      effect    = "Allow"
+      actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+      resources = [statement.value.repository_arn]
+      principals {
+        type        = "AWS"
+        identifiers = [statement.value.execution_role_arn]
+      }
+    }
+  }
 }
 
 resource "aws_vpc_endpoint" "migration_ecr_api" {
@@ -991,7 +1017,7 @@ resource "aws_vpc_endpoint" "migration_ecr_api" {
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
   subnet_ids          = [aws_subnet.private[0].id]
-  security_group_ids  = [aws_security_group.migration_aws_endpoints[0].id]
+  security_group_ids  = concat([aws_security_group.migration_aws_endpoints[0].id], aws_security_group.native_material_image_endpoint[*].id)
   policy              = data.aws_iam_policy_document.migration_ecr_endpoint[0].json
 }
 
@@ -1002,7 +1028,7 @@ resource "aws_vpc_endpoint" "migration_ecr_dkr" {
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
   subnet_ids          = [aws_subnet.private[0].id]
-  security_group_ids  = [aws_security_group.migration_aws_endpoints[0].id]
+  security_group_ids  = concat([aws_security_group.migration_aws_endpoints[0].id], aws_security_group.native_material_image_endpoint[*].id)
   policy              = data.aws_iam_policy_document.migration_ecr_endpoint[0].json
 }
 

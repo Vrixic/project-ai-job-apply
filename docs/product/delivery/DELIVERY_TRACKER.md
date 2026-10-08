@@ -5042,3 +5042,11 @@ managed acceptance remains open.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#connected-postgresql-route-lifecycle).
 No runtime-source/cloud/frontend changes. D1/D3 In progress; CI/CD deferred, Docker/WSL stopped,
 PC on. Existing accepted D1 sign-in/search/Profile/save-reload checks are not reopened.
+
+
+2026-10-07 D3-079 closes local native task HTTPS/image reachability gaps: separate opt-in task
+read groups and exact native image access through existing ECR private endpoints. All 22 focused
+network cases pass; development/staging validate. AWS resources are mocked; no live deployment
+or candidate-read acceptance is claimed. Actual managed bindings and acceptance remain. D1/D3
+stay In progress; CI/CD deferred, Docker/WSL stopped and PC on.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-https-and-image-reachability).

@@ -599,3 +599,31 @@ D3-079 and D3-068 through D3-071 now distinguish implemented release composition
 managed acceptance instead of listing already implemented components as missing. Prior component
 history stays intact. The owned temporary PostgreSQL container was removed; Docker Desktop/WSL
 stopped and PC on. D1/D3 remain In progress. No cloud action or CI/CD work.
+
+
+## Native HTTPS and image reachability
+
+The connected implementation review found two network gaps: original native tasks lacked a
+dedicated candidate HTTPS security group, and migration ECR private DNS intercepted their image
+pulls while admitting only the migration execution role. Platform composition now provides
+optional separate cover-letter/resume task groups, explicit reviewed IPv4 TCP 8443 ingress,
+TCP 443 egress and outputs for the existing public subnets plus required public-IP launch mode.
+Empty ranges explicitly close ingress. Provisioning does not launch or activate a task or route.
+
+Development/staging derive exact original execution-role/repository grants and task groups from
+retained release maps. Existing ECR endpoints admit those image pulls through a separate TLS
+endpoint group; the migration log endpoint and its original security group remain unchanged.
+No SQL grants, NAT, DNS records or duplicate ECR endpoints are introduced. Task registration may
+precede launch configuration. Retain original entries through drain. TCP 443 egress is not a
+hostname firewall. The [platform instructions](../../../../infrastructure/terraform/modules/platform/README.md#native-task-https-reads-and-image-pulls)
+describe provisioning first and copying reviewed scalar bindings into original releases.
+
+The 22 focused Terraform scenarios pass, including exact image principals/resources, ECR-only
+endpoint attachment, retained migration isolation, invalid role/account refusal, separate read
+groups, closed defaults and invalid client ranges. Development/staging validate and the serverless
+infrastructure guard passes. All 51 existing serverless runtime scenarios also pass, for 73
+relevant Terraform cases in this batch. Terraform uses mocked AWS resources: this proves local configuration,
+not image-pull success, public-IP/TLS/provider reachability or candidate browser acceptance.
+Runtime source and qualified artifact identities remain unchanged. Actual managed inputs and
+synthetic end-to-end acceptance remain before activation. D1/D3 remain In progress; no cloud
+mutation, hosted CI/CD or Docker work occurred, and the PC remains on.
