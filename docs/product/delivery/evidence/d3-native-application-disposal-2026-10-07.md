@@ -159,7 +159,12 @@ no browser, managed authentication, provider, AWS or production acceptance is cl
 
 An intermediate restore test run exposed historical fixture relations inheriting the new table;
 the fixture now excludes it with its migration and all 50 tests pass. The source-bound migration
-operator test must run after committing because it reads git HEAD rather than working-tree files.
+operator tests also pass against committed source `66b7b248`, including schema-8 and schema-7
+round-trip/adversarial checks. They read git HEAD, so the pre-commit run correctly rejected the
+then-older committed migration boundary.
 Logs: `.tmp/native-withdrawal-{build-final,typecheck,unit-final,resume-final,migrations-final,
 runtime-smoke,publisher,deletion-replay}.log` and `.tmp-native-withdrawal-integration.log`.
 D1/D3 remain In progress. CI/CD stays deferred; no cloud publication, deployment or activation.
+
+The owned PostgreSQL container was removed after SQL verification. Docker Desktop and WSL were
+stopped; no WSL distribution remained running. The PC remains on.
