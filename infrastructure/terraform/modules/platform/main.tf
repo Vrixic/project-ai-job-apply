@@ -27,7 +27,7 @@ locals {
   platform_kms_key_arn           = "arn:aws:kms:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:key/${aws_kms_key.platform.key_id}"
   database_metric_identifier = (
     var.persistent_data_plane_enabled
-    ? aws_db_instance.postgres[0].identifier
+    ? "${var.name}-${var.environment}"
     : "${var.name}-${var.environment}-dormant"
   )
   public_job_route_enabled = (
@@ -758,7 +758,7 @@ resource "aws_db_subnet_group" "this" {
 
 # ADR-013 keeps prelaunch environments Single-AZ until launch review or measured demand.
 resource "aws_db_instance" "postgres" { # nosemgrep: semgrep-rules.terraform.aws.best-practice.aws-rds-multiaz-not-enabled
-  count                               = var.persistent_data_plane_enabled ? 1 : 0
+  count                               = local.database_provisioned ? 1 : 0
   identifier                          = "${var.name}-${var.environment}"
   engine                              = "postgres"
   engine_version                      = var.database_engine_version
@@ -778,11 +778,12 @@ resource "aws_db_instance" "postgres" { # nosemgrep: semgrep-rules.terraform.aws
   vpc_security_group_ids              = [aws_security_group.data.id]
   backup_retention_period             = var.database_backup_retention_days
   copy_tags_to_snapshot               = true
-  deletion_protection                 = var.database_deletion_protection
+  deletion_protection                 = var.development_database_mode != "snapshot-prepared" && var.database_deletion_protection
   performance_insights_enabled        = var.database_performance_insights
-  skip_final_snapshot                 = !var.retain_database_snapshot_on_destroy
-  final_snapshot_identifier           = var.retain_database_snapshot_on_destroy ? "${var.name}-${var.environment}-final" : null
-  delete_automated_backups            = !var.retain_database_snapshot_on_destroy
+  skip_final_snapshot                 = var.development_database_mode == "retained" && !var.retain_database_snapshot_on_destroy
+  final_snapshot_identifier           = var.development_database_recovery != null ? var.development_database_recovery.final_snapshot_identifier : (var.retain_database_snapshot_on_destroy ? "${var.name}-${var.environment}-final" : null)
+  snapshot_identifier                 = try(var.development_database_recovery.restore_snapshot_identifier, null)
+  delete_automated_backups            = var.development_database_mode == "retained" && !var.retain_database_snapshot_on_destroy
 }
 
 resource "aws_elasticache_subnet_group" "this" {
@@ -894,8 +895,8 @@ resource "aws_secretsmanager_secret_version" "database_url" {
   secret_string = format(
     "postgres://platform:%s@%s:%s/ai_job_apply?sslmode=require",
     urlencode(random_password.database.result),
-    aws_db_instance.postgres[0].address,
-    aws_db_instance.postgres[0].port
+    local.retained_database_address,
+    local.retained_database_port
   )
 }
 
@@ -1248,7 +1249,7 @@ resource "aws_cloudwatch_metric_alarm" "database_cpu" {
   ok_actions          = [aws_sns_topic.operational_alerts.arn]
   alarm_description   = "Database CPU has remained high. Runbook: ${local.observability_runbook_url}"
   dimensions = {
-    DBInstanceIdentifier = aws_db_instance.postgres[0].identifier
+    DBInstanceIdentifier = "${var.name}-${var.environment}"
   }
 }
 
@@ -1267,7 +1268,7 @@ resource "aws_cloudwatch_metric_alarm" "database_free_storage" {
   ok_actions          = [aws_sns_topic.operational_alerts.arn]
   alarm_description   = "Database free storage has remained below 5 GiB. Runbook: ${local.observability_runbook_url}"
   dimensions = {
-    DBInstanceIdentifier = aws_db_instance.postgres[0].identifier
+    DBInstanceIdentifier = "${var.name}-${var.environment}"
   }
 }
 
@@ -1574,7 +1575,7 @@ data "aws_iam_policy_document" "public_job_lambda" {
     sid       = "ConnectAsExactPublicJobReader"
     effect    = "Allow"
     actions   = ["rds-db:connect"]
-    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.postgres[0].resource_id}/ai_job_apply_public_job_reader"]
+    resources = ["arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${local.retained_database_resource_id}/ai_job_apply_public_job_reader"]
   }
   statement {
     sid       = "DecryptLambdaEnvironmentAtColdStart"
@@ -2196,9 +2197,9 @@ resource "aws_lambda_function" "public_job_projection" {
       NODE_EXTRA_CA_CERTS              = "/var/runtime/ca-cert.pem"
       RELEASE_SHA                      = var.public_job_projection_artifact_sha256
       LOG_LEVEL                        = "info"
-      PUBLIC_JOB_DATABASE_HOST         = aws_db_instance.postgres[0].address
-      PUBLIC_JOB_DATABASE_PORT         = tostring(aws_db_instance.postgres[0].port)
-      PUBLIC_JOB_DATABASE_NAME         = aws_db_instance.postgres[0].db_name
+      PUBLIC_JOB_DATABASE_HOST         = local.retained_database_address
+      PUBLIC_JOB_DATABASE_PORT         = tostring(local.retained_database_port)
+      PUBLIC_JOB_DATABASE_NAME         = local.retained_database_name
       PUBLIC_JOB_DATABASE_USER         = "ai_job_apply_public_job_reader"
       PUBLIC_JOB_CACHE_CAPACITY        = "128"
       PUBLIC_JOB_CACHE_TTL_MS          = "15000"
