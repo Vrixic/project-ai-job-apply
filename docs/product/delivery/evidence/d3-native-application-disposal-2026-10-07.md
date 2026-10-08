@@ -37,6 +37,10 @@ retain the migration and deployment authority needed to drain existing tasks.
 - Exact migration publisher/runtime smoke: 187 tests pass.
 - Deletion replay: 697 PowerShell assertions and 299 workflow tests pass.
 - Development/staging Terraform validation and repository formatting pass.
+- Committed runtime `3c3d3646`: Gateway build, exact-source migration operator path/baseline
+  and schema-7/schema-8 adversarial checks pass; release guards repeat successfully.
+- New disposal files lint clean. The repository lint run had zero errors; its one added test
+  non-null assertion warning was fixed and checked, leaving the prior warnings outside this batch.
 
 Local logs: `.tmp/native-disposal-{registry-fixed,resume-fixed,gateway-tests,application-tests,
 migration-tests,platform-tf,bootstrap-tf,typecheck,release-tests}.log`.
