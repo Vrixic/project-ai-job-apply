@@ -1300,7 +1300,7 @@ function Assert-DevelopmentDocumentRetainedBaselinePlan {
     throw "The retained document baseline contains a meaningful resource or output change."
   }
 
-  $drift = @($Plan.resource_drift | Where-Object { $null -ne $_ })
+  $drift = @((Get-OptionalTerraformChangeValue $Plan "resource_drift") | Where-Object { $null -ne $_ })
   if ($drift.Count -ne 0) {
     Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift -RootModule $Plan.planned_values.root_module
   }
@@ -1705,7 +1705,7 @@ function Assert-DevelopmentDocumentKmsPrerequisiteVariables {
 
 function Assert-DevelopmentDocumentKmsPrerequisitePlan {
   param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$AccountId)
-  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift) -RootModule $Plan.planned_values.root_module
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @((Get-OptionalTerraformChangeValue $Plan "resource_drift")) -RootModule $Plan.planned_values.root_module
   $nonNoop = @($Plan.resource_changes | Where-Object { (@($_.change.actions) -join ",") -ne "no-op" })
   $data = @($nonNoop | Where-Object mode -eq "data")
   if ($data.Count -ne 0) { throw "The KMS prerequisite plan must not defer any data reads." }
@@ -2104,7 +2104,7 @@ function Assert-DevelopmentDocumentDarkPlan {
   $expected = Get-DevelopmentDocumentStageExpectedActions -Stage $Stage `
     -ParserSourceTransition:$ParserSourceTransition -CompleteDarkParserRefresh:$CompleteDarkParserRefresh `
     -CompleteDarkProcessorRefresh:$CompleteDarkProcessorRefresh
-  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @($Plan.resource_drift) -RootModule $Plan.planned_values.root_module
+  Assert-DevelopmentDocumentAcceptedResourceDrift -Records @((Get-OptionalTerraformChangeValue $Plan "resource_drift")) -RootModule $Plan.planned_values.root_module
   $kmsRecords = @($Plan.resource_changes | Where-Object { [string]$_.address -ceq "module.platform.aws_kms_key.platform" })
   if ($kmsRecords.Count -ne 1 -or [string]$kmsRecords[0].mode -cne "managed" -or
     [string]$kmsRecords[0].type -cne "aws_kms_key" -or (@($kmsRecords[0].change.actions) -join ",") -cne "no-op" -or

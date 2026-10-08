@@ -1094,3 +1094,29 @@ baseline before the next task release.
 D1/D3 remain In progress. Current managed SQL execution, native task/image integration, HTTPS
 frontend origin, provider-key location and live acceptance remain. CI/CD stays deferred. Docker
 Desktop and WSL were stopped after the runtime check; the PC stays on.
+
+## Empty-drift baseline correction 2026-10-08
+
+After the reviewed metadata refresh, the current state-420 seed plan has zero resource/output
+changes and Terraform omits `resource_drift` entirely. Gateway baseline capture incorrectly read
+that optional property directly under strict PowerShell mode and failed. Gateway, document and
+migration drift readers now use their existing optional-property helpers; existing nonempty drift
+validation and change rejection remain intact. No plan JSON or sidecar is rewritten to work around
+the error, and no resource-drift allowlist is expanded.
+
+Validation passes: 654 Gateway guard cases, the document dark guards, the migration operator path
+and baseline suite, and schema-7/schema-8 round-trip/adversarial tests. Added regressions cover
+omitted/null drift and ensure real resource/output changes still fail. Both corrected retained
+baseline guards also accept the actual saved `039cf9c6` state-420 plan without changing its bytes.
+The encrypted versioned recovery-input archive is refreshed to state 420 with unchanged input
+SHA-256 `854161ceb15620ba1bc518a5027a23e2fe2f514fed7ff13bc6ca7f35f72c16b5`; exact-version
+readback passes and earlier versions remain retained.
+
+At **2026-10-08T18:47:36Z**, fresh development inspection confirms zero databases, routes, enabled
+rules/mappings, NATs, interface endpoints and non-stopped ECS tasks; both encrypted manual recovery
+snapshots are available. Retained storage/security costs remain. Staging role access remains
+unresolved. PR #573 merged the zlib correction as `039cf9c6c447daa42490fbac9353e8b75cc2f820`.
+Its superseded rebuild is stopped before publication so the combined corrected operator/image
+candidate can be built once from the next exact merged source. Full image scan/publication,
+successful managed baseline capture and SQL execution remain unclaimed. D1/D3 stay In progress;
+CI/CD deferred and PC on.

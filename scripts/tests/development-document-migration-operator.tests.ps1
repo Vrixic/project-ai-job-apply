@@ -1191,6 +1191,13 @@ Assert-RetainedMigrationBaselinePlan -Plan $retainedPlan
 $currentVersionBaseline = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $currentVersionBaseline.terraform_version = "1.16.2"
 Assert-RetainedMigrationBaselinePlan -Plan $currentVersionBaseline
+foreach ($shape in @("omitted", "null", "empty")) {
+  $emptyDriftBaseline = $currentVersionBaseline | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  if ($shape -ceq "omitted") { $emptyDriftBaseline.PSObject.Properties.Remove("resource_drift") }
+  elseif ($shape -ceq "null") { $emptyDriftBaseline.resource_drift = $null }
+  else { $emptyDriftBaseline.resource_drift = @() }
+  Assert-RetainedMigrationBaselinePlan -Plan $emptyDriftBaseline
+}
 foreach ($invalidVersion in @("1.9.9", "1.16.1", "1.16.3", "1.16.2 ", "")) {
   $versionPlan = $retainedPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
   $versionPlan.terraform_version = $invalidVersion
