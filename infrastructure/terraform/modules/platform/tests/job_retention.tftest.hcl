@@ -115,4 +115,3 @@ run "schedule_requires_runtime" {
   variables { job_retention_schedule_enabled = true }
   expect_failures = [var.job_retention_schedule_enabled]
 }
-
