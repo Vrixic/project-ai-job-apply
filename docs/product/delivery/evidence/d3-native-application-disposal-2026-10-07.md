@@ -618,3 +618,41 @@ verification does not bypass that gate or promote the source. Actual download ho
 reviewed TLS/provider secret versions, original numeric RPC/task bindings, managed deployment and
 journey acceptance remain. The hostname/DNS information question is pending; already accepted
 basic/manual user checks are not reopened. D1/D3 remain In progress, ADR-040 Proposed, CI/CD deferred.
+
+
+## Web sign-out withdrawal hookup (2026-10-08)
+
+Following the owner's direction to proceed with recommendations without routine approval prompts,
+implemented the outstanding web sign-out hookup in the isolated worktree. The existing Settings
+link and direct /auth/logout navigation now enter a server-only cleanup hook when the default-off
+NATIVE_MATERIAL_LOGOUT_ENABLED flag is true. Unchanged login/callback/ordinary-page requests remain
+with the Auth0 SDK. Same-origin/direct navigation is allowed; cross-site/same-site or mismatched
+origin/referrer requests are refused before owner effects.
+
+The hook reads the existing encrypted server session's access token; it deliberately never refreshes
+credentials during sign-out, avoiding refresh work that could race the bounded cleanup and SDK
+revocation. It sends a bodyless owner-scoped UUIDv7 withdrawal request, with no caller-provided
+principal or target. A generated-contract receipt must match the request ID, success status and JSON
+type, fit within 4 KiB and complete within five seconds including session/stream waits. Timeouts,
+missing/expired authorization, invalid receipts and backend errors still permit SDK OIDC logout.
+The fixed /signed-out notice says requested or unconfirmed, never completed deletion. The display
+query is not a trusted disposal receipt. No token, withdrawal ID, candidate content or raw error
+enters that notice. Cache/storage clearing is requested via Clear-Site-Data; downloaded files,
+other services, open-tab memory and browser support are explicitly outside this local proof.
+
+An initial full-web run exposed an unnecessary build-environment change. The flag is now kept as a
+runtime setting and included in the existing test that proves runtime settings do not enter Turbo
+build hashes. A test-only Headers iterator type error was corrected without widening compiler
+libraries. Final validation: all 781 web tests/62 files pass (31 new hook/routing/notice cases),
+35 focused cases pass, Next 16.3.8 production build/typecheck passes, scoped Biome and diff checks
+pass. An isolated production Next HTTP server renders requested, unconfirmed and unexpected display
+states as uncached pages with the fixed warnings and home link; the fixture server was terminated.
+
+Auth0 and platform responses in hook tests are simulated. The HTTP rendering fixture disables
+identity and makes no live API request. Browser-control tooling is unavailable; no browser interaction,
+managed Auth0 logout, deployed withdrawal or all-copy erasure claim is made. No repeated owner
+sign-in/search/Profile/save/manual-Apply test is requested. Logs: .tmp/native-logout-focused.log,
+.tmp/native-logout-web-tests-final.log, .tmp/native-logout-build-final.log and
+.tmp/native-logout-http-proof.log. Full repository phase-zero verification was not rerun for this
+web-only batch. The runtime flag remains off; deployment requires the accepted withdrawal route,
+worker/schedule and Applications scopes. D1/D3 In progress; CI/CD deferred and PC on.

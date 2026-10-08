@@ -5331,3 +5331,13 @@ image repositories remain empty. This is local qualification, not merged-main pu
 activation. [Release evidence](evidence/d3-native-application-disposal-2026-10-07.md#current-native-lambda-release-qualification-2026-10-08).
 Hostname/DNS, pinned TLS/provider and numeric runtime bindings, managed release and acceptance remain.
 D1/D3 In progress; CI/CD deferred, Docker/WSL stopped, PC on.
+
+
+2026-10-08 implements the default-off web sign-out withdrawal hook. It submits a bounded,
+server-token owner cleanup request before SDK logout, rejects cross-site requests, and reports
+requested versus unconfirmed cleanup without claiming deletion. It never refreshes during logout.
+All 781 web tests, 35 focused checks, production build/typecheck and isolated Next HTTP notice
+rendering pass. Auth/API tests are simulated; browser/live managed acceptance remains.
+[Sign-out evidence](evidence/d3-native-application-disposal-2026-10-07.md#web-sign-out-withdrawal-hookup-2026-10-08).
+The implementation scope question is resolved by the owner's instruction to proceed with
+recommendations. No runtime activation or repeat of accepted human checks. D1/D3 In progress.
