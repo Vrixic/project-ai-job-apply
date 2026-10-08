@@ -5,10 +5,12 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { NativeMaterialAdmissionQuery } from "./native-material-admission.js";
+import { PostgresNativeMaterialWithdrawalStore } from "./native-material-withdrawal.js";
 import {
   lockNativeResumePreparationAdmission,
   type NativeResumePreparationScope,
 } from "./native-resume-admission.js";
+import { PostgresNativeResumeRequestStore } from "./native-resume-request-store.js";
 
 const requested = process.env.NATIVE_RESUME_ADMISSION_INTEGRATION === "1";
 const url = process.env.NATIVE_RESUME_ADMISSION_TEST_DATABASE_URL;
@@ -84,6 +86,42 @@ describe.runIf(requested)(
       expect(
         await sql`SELECT id FROM applications.approvals WHERE application_id=${scope.applicationId}`,
       ).toHaveLength(0);
+    });
+    it("withdraws the original resume packet without mutating its application revision or status", async () => {
+      await admit();
+      await new PostgresNativeMaterialWithdrawalStore(sql, () => true).withdraw(
+        scope.ownerUserId,
+        uuidv7(),
+      );
+      await expect(admit()).rejects.toThrow("NativeResumeAdmissionUnavailable");
+      const [row] =
+        await sql`SELECT status,revision::integer FROM applications.applications WHERE id=${scope.applicationId}`;
+      expect(row).toEqual({ status: "review_required", revision: 2 });
+    });
+    it("withholds a withdrawn resume from both pending discovery and direct delivery claim", async () => {
+      const eventId = uuidv7();
+      await sql`INSERT INTO applications.outbox
+        (id,application_id,owner_user_id,application_revision,event_type,subject,payload,occurred_at,available_at,resume_packet_id)
+        VALUES (${eventId},${scope.applicationId},${scope.ownerUserId},2,
+          'application.resume-preparation.requested.v1',${`application/${scope.applicationId}`},
+          ${sql.json({ applicationId: scope.applicationId, userId: scope.ownerUserId, revision: 2, status: "review_required" })},
+          clock_timestamp(),clock_timestamp(),${scope.packetId})`;
+      const requests = new PostgresNativeResumeRequestStore(sql, () => true);
+      expect(await requests.pending()).toContain(eventId);
+      await new PostgresNativeMaterialWithdrawalStore(sql, () => true).withdraw(
+        scope.ownerUserId,
+        uuidv7(),
+      );
+      expect(await requests.pending()).not.toContain(eventId);
+      expect(
+        await requests.claim(
+          eventId,
+          "arn:aws:lambda:us-east-2:123456789012:function:synthetic-resume-durable:9",
+        ),
+      ).toBeNull();
+      const [event] =
+        await sql`SELECT status,attempt_count,resume_workflow_arn FROM applications.outbox WHERE id=${eventId}`;
+      expect(event).toEqual({ status: "pending", attempt_count: 0, resume_workflow_arn: null });
     });
     it("refuses neighboring owner/job/packet/hash/revision without substituting current metadata", async () => {
       for (const input of [

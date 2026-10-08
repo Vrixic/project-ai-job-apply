@@ -23,6 +23,10 @@
     "./native-resume-request-store": {
       "types": "./dist/src/native-resume-request-store.d.ts",
       "default": "./dist/src/native-resume-request-store.js"
+    },
+    "./native-material-withdrawal": {
+      "types": "./dist/src/native-material-withdrawal.d.ts",
+      "default": "./dist/src/native-material-withdrawal.js"
     }
   },
   "scripts": {

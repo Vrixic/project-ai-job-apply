@@ -63,6 +63,8 @@ export async function lockNativeResumePreparationAdmission(
       WHERE a.id=${fixed.applicationId} AND a.owner_user_id=${fixed.ownerUserId}
         AND a.canonical_job_id=${fixed.canonicalJobId} AND a.revision=${fixed.expectedRevision}
         AND a.status='review_required' AND p.id=${fixed.packetId}
+      AND NOT EXISTS (SELECT 1 FROM applications.native_material_withdrawals w
+        WHERE w.owner_user_id=${fixed.ownerUserId} AND w.requested_at >= p.created_at)
         AND p.packet_hash=${fixed.packetHash} AND p.job_revision=${fixed.jobRevision}
       FOR UPDATE OF a FOR SHARE OF p`;
     if (!enabled() || row?.admitted !== 1) throw unavailable();

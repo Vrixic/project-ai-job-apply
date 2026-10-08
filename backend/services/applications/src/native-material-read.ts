@@ -31,6 +31,8 @@ async function authorize(input: Input, kind: "cover_letter" | "tailored_resume")
   if (
     input.signal.aborted ||
     clock().getTime() >= reference.expiresAtMs ||
+    (view.nativeMaterialsWithdrawnAtMs !== undefined &&
+      reference.completedAtMs <= view.nativeMaterialsWithdrawnAtMs) ||
     view.application.ownerUserId !== reference.ownerUserId ||
     view.application.id !== reference.applicationId ||
     view.application.status === "applied" ||

@@ -54,6 +54,10 @@
         {
           "version": "0012_native_resume_execution_observation",
           "checksum": "5b0313126aec5a45d5905bf733af0aa19db7a368217010c841bdcd2913375249"
+        },
+        {
+          "version": "0013_native_material_withdrawals",
+          "checksum": "80909bec73e9bb66c1499f3cdd7d7dafd9636c9825abc873c86d8922ebb414ca"
         }
       ],
       "relations": [
@@ -62,6 +66,7 @@
         "applications.attempts",
         "applications.command_receipts",
         "applications.history",
+        "applications.native_material_withdrawals",
         "applications.outbox",
         "applications.packet_preparations",
         "applications.packets",

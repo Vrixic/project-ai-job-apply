@@ -2605,3 +2605,13 @@ the application remains in review; existing launch recovery is separate. All 28 
 [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#original-preparation-launch-admission-2026-10-08).
 This is a logout prerequisite, not completed logout: owner-wide withdrawal, resume handling,
 retirement and web hookup remain. D1/D3 In progress; no deployment, CI/CD deferred, PC on.
+
+
+2026-10-08 adds a private, default-off owner withdrawal cutoff: older cover-letter preparation,
+resume queue delivery and native material reads refuse without changing application/submission
+state. Replay and candidate deletion are covered. Applications 0013 advances source inventory to
+77 migrations/94 relations; prior packaged images remain historical. 398 unit, 40 real SQL, 50
+manifest, 189 migration-smoke and 697 replay checks pass, with build/typecheck and OCI guards.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#owner-withdrawal-admission-cutoff-2026-10-08).
+Owner cleanup orchestration, positive task retirement and the web hook remain unfinished.
+D1/D3 In progress; no deployment, CI/CD deferred, PC on.

@@ -128,3 +128,38 @@ The web-hook scope question remains pending. Existing packaged private runtimes 
 and require refresh in the final packaging batch. D1/D3 remain In progress; nothing deployed.
 Final Workflow typecheck and whitespace checks pass. The owned database container was removed;
 Docker Desktop and WSL stopped after verification. The PC remains on.
+
+
+## Owner withdrawal admission cutoff (2026-10-08)
+
+Applications now owns an immutable, replayable owner withdrawal receipt. A new request waits for
+existing preparation mutations before recording its database timestamp, fails older queued/running
+cover-letter preparations once, and leaves application revision, submission status and attempts
+unchanged. Replays retain the original cutoff; another owner cannot reuse the request identity.
+Older preparation bootstrap/launch admission and resume packet admission refuse. Resume outbox
+selection and direct claim exclude withdrawn requests without inventing an execution receipt.
+Application material reads refuse references completed at or before the owner's cutoff.
+
+This private port defaults off and is not yet composed into an authenticated logout operation.
+It does not seal Documents generations, revoke routes, stop tasks or certify all-copy disposal.
+Concurrent work already admitted still requires the pending owner cleanup coordinator and positive
+original-task retirement. The frontend sign-out hook remains outside the authorized backend scope.
+
+Applications migration 0013 adds identifier/timestamp-only receipts and includes them in authorized
+candidate deletion. The source restore inventory is now 77 migrations, 94 relations, seven owners
+and 12 schemas. Manifest, replay contract, image recipe and source guards agree. Previously retained
+76-migration images/recovery results remain historical; no new image or managed release is claimed.
+
+Local validation: Applications build/typecheck, 398 unit tests, 31 real PostgreSQL preparation tests,
+nine real PostgreSQL resume admission/delivery tests, 50 restore-manifest tests, 189 executable
+migration smoke cases, publisher OCI guards and 697 deletion-replay boundary checks pass. The SQL
+cases include concurrent replay, foreign-owner refusal, immutable/direct-delete refusal, guarded
+candidate deletion and queue discovery/direct-claim refusal. SQL is local synthetic PostgreSQL;
+no browser, managed authentication, provider, AWS or production acceptance is claimed.
+
+An intermediate restore test run exposed historical fixture relations inheriting the new table;
+the fixture now excludes it with its migration and all 50 tests pass. The source-bound migration
+operator test must run after committing because it reads git HEAD rather than working-tree files.
+Logs: `.tmp/native-withdrawal-{build-final,typecheck,unit-final,resume-final,migrations-final,
+runtime-smoke,publisher,deletion-replay}.log` and `.tmp-native-withdrawal-integration.log`.
+D1/D3 remain In progress. CI/CD stays deferred; no cloud publication, deployment or activation.

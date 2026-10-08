@@ -49,6 +49,8 @@ export async function readNativePreparationBootstrap(
           AND p.notice_version='openai-cover-letter.v1' AND p.provider='openai'
           AND p.model='gpt-6-luna' AND p.purpose='cover_letter'
           AND p.categories='["profile_facts","job_posting"]'::jsonb
+      AND NOT EXISTS (SELECT 1 FROM applications.native_material_withdrawals w
+        WHERE w.owner_user_id=${fixed.ownerUserId} AND w.requested_at >= p.approved_at)
           AND p.approved_at <= clock_timestamp() AND p.expires_at > clock_timestamp()
           AND p.expires_at=p.approved_at + interval '15 minutes'
         FOR SHARE OF p,a`;

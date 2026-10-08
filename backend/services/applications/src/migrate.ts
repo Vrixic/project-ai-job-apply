@@ -19,6 +19,7 @@ const migrationVersions = [
   "0010_native_resume_requests",
   "0011_native_resume_execution_receipts",
   "0012_native_resume_execution_observation",
+  "0013_native_material_withdrawals",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {

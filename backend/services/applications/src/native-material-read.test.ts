@@ -57,6 +57,26 @@ it("returns only a detached original scalar packet/reference proof", async () =>
   expect(proof?.reference).not.toBe(test.reference);
 });
 
+it.each(["cover_letter", "tailored_resume"] as const)(
+  "refuses withdrawn %s material even while the packet remains current",
+  async (kind) => {
+    const test = input();
+    test.reference.kind = kind;
+    const current = view();
+    if (!current.currentPacket) throw Error("SyntheticPacketMissing");
+    current.currentPacket.temporaryMaterials = [{ ...test.reference }];
+    current.currentPacket.artifactHashes = {
+      [kind === "cover_letter" ? "coverLetter" : "resume"]: reference.contentSha256,
+    };
+    test.store.getApplication.mockResolvedValue(current);
+    const authorize =
+      kind === "cover_letter" ? authorizeNativeMaterialRead : authorizeNativeResumeRead;
+    expect(await authorize(test)).not.toBeNull();
+    current.nativeMaterialsWithdrawnAtMs = reference.completedAtMs;
+    expect(await authorize(test)).toBeNull();
+  },
+);
+
 it.each([
   "owner",
   "application",

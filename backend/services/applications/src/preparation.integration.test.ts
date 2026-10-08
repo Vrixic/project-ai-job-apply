@@ -7,6 +7,7 @@ import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FieldDefinition } from "./field-policy.js";
 import { lockNativePreparationLaunchAdmission } from "./native-material-admission.js";
+import { PostgresNativeMaterialWithdrawalStore } from "./native-material-withdrawal.js";
 import { readNativePreparationBootstrap } from "./native-preparation-bootstrap.js";
 import { PreparationNotFoundError, type PreparationRequest } from "./preparation.js";
 import { PreparationDispatchError, type PreparationTerminalInput } from "./preparation-dispatch.js";
@@ -228,6 +229,65 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
       });
     },
   );
+  it.each([false, true])(
+    "withdraws original preparation idempotently without changing application state (claimed: %s)",
+    async (claimed) => {
+      await withApplication(async (owner, app) => {
+        const [at] = await client<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+        if (!at) throw Error("SyntheticClockMissing");
+        now = at.now;
+        const queued = await store.queuePreparation(command(owner, app));
+        if (claimed)
+          await store.claimPreparationGeneration(
+            await eventId(queued.preparation.id),
+            queued.preparation.id,
+            context,
+          );
+        const before = await store.getApplication(owner, app);
+        const withdrawals = new PostgresNativeMaterialWithdrawalStore(client, () => true);
+        const requestId = uuidv7();
+        const first = await withdrawals.withdraw(owner, requestId);
+        for (const replay of await Promise.all([
+          withdrawals.withdraw(owner, requestId),
+          withdrawals.withdraw(owner, requestId),
+        ]))
+          expect(replay).toEqual(first);
+        const after = await store.getApplication(owner, app);
+        expect(after.application).toEqual(before.application);
+        expect(after.attempts).toEqual(before.attempts);
+        expect(after.nativeMaterialsWithdrawnAtMs).toBe(first.requestedAtMs);
+        expect((await store.getPreparation(owner, app, queued.preparation.id)).state).toBe(
+          "failed",
+        );
+        const audit =
+          await client`SELECT id FROM applications.preparation_audit WHERE preparation_id=${queued.preparation.id} AND action='failed'`;
+        expect(audit).toHaveLength(1);
+        await expect(
+          launchAdmission({
+            ownerUserId: owner,
+            applicationId: app,
+            generationId: queued.preparation.id,
+          }),
+        ).rejects.toThrow();
+        await expect(
+          client`UPDATE applications.native_material_withdrawals SET requested_at=clock_timestamp() WHERE id=${requestId}`,
+        ).rejects.toMatchObject({ code: "55000" });
+        await expect(
+          client`DELETE FROM applications.native_material_withdrawals WHERE id=${requestId}`,
+        ).rejects.toMatchObject({ code: "55000" });
+        await expect(
+          new PostgresNativeMaterialWithdrawalStore(client).withdraw(owner, uuidv7()),
+        ).rejects.toThrow("NativeMaterialWithdrawalUnavailable");
+        // A replay keeps its original cutoff and cannot withdraw a later explicit preparation.
+        now = new Date(first.requestedAtMs + 1000);
+        const later = command(owner, app);
+        later.request.expectedRevision = after.application.revision;
+        const next = await store.queuePreparation(later);
+        await withdrawals.withdraw(owner, requestId);
+        expect((await store.getPreparation(owner, app, next.preparation.id)).state).toBe("queued");
+      });
+    },
+  );
   async function dispatchFor(owner: string, app: string) {
     const queued = await store.queuePreparation(command(owner, app));
     const event = await eventId(queued.preparation.id);
@@ -289,6 +349,22 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
       await expect(store.getPreparation(uuidv7(), app, first.preparation.id)).rejects.toThrow(
         PreparationNotFoundError,
       );
+    });
+  });
+  it("does not accept another owner's withdrawal request identity", async () => {
+    await withApplication(async (owner, app) => {
+      const withdrawals = new PostgresNativeMaterialWithdrawalStore(client, () => true);
+      const requestId = uuidv7();
+      await withdrawals.withdraw(owner, requestId);
+      await withApplication(async (foreign, foreignApp) => {
+        await expect(withdrawals.withdraw(foreign, requestId)).rejects.toThrow(
+          "NativeMaterialWithdrawalUnavailable",
+        );
+        expect(
+          (await store.getApplication(foreign, foreignApp)).nativeMaterialsWithdrawnAtMs,
+        ).toBeUndefined();
+      });
+      expect((await store.getApplication(owner, app)).nativeMaterialsWithdrawnAtMs).toBeDefined();
     });
   });
 

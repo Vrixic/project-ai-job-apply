@@ -128,6 +128,8 @@ export interface HistoryEntry {
 }
 
 export interface ApplicationView {
+  /** Internal native read fence; never serialized into public application responses. */
+  nativeMaterialsWithdrawnAtMs?: number;
   application: ApplicationRecord;
   currentPacket: ApplicationPacket | null;
   approval: ApprovalRecord | null;
@@ -1676,6 +1678,23 @@ export class PostgresApplicationStore {
       );
       if (preparation.state === "succeeded" || preparation.state === "failed")
         return { kind: "terminal", preparation };
+      const [withdrawal] = await tx`SELECT id FROM applications.native_material_withdrawals
+        WHERE owner_user_id=${target.ownerUserId} AND requested_at >= ${preparation.approvedAt} LIMIT 1`;
+      if (withdrawal) {
+        const now = this.clock();
+        await this.failPreparationRow(
+          tx,
+          preparation,
+          "application_changed",
+          Number.isFinite(now.getTime()) && now >= preparation.updatedAt
+            ? now
+            : preparation.updatedAt,
+        );
+        return {
+          kind: "terminal",
+          preparation: await this.readPreparation(tx, target.ownerUserId, app.id, preparationId),
+        };
+      }
       if (preparation.state === "running") {
         const original = await this.loadCurrentPacket(tx, {
           ...app,
@@ -2655,8 +2674,11 @@ export class PostgresApplicationStore {
     const packet = await this.loadCurrentPacket(tx, row);
     const approval = await this.loadLiveApproval(tx, row.id);
     const attempts = await this.loadAttempts(tx, row.id);
+    const [withdrawal] = await tx<Array<{ at: Date | null }>>`
+      SELECT max(requested_at) AS at FROM applications.native_material_withdrawals WHERE owner_user_id=${ownerUserId}`;
     const now = this.clock();
     return {
+      ...(withdrawal?.at ? { nativeMaterialsWithdrawnAtMs: withdrawal.at.getTime() } : {}),
       application: toApplication(row),
       currentPacket: packet,
       approval,

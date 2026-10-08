@@ -54,6 +54,7 @@ it("captures scalar intent before an owning identity await", async () => {
     scope.canonicalJobId,
     scope.expectedRevision,
     scope.packetId,
+    scope.ownerUserId,
     scope.packetHash,
     scope.jobRevision,
   ]);

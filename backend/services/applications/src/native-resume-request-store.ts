@@ -64,6 +64,7 @@ export class PostgresNativeResumeRequestStore {
       JOIN applications.applications a ON a.id=e.application_id AND a.owner_user_id=e.owner_user_id
       WHERE e.event_type='application.resume-preparation.requested.v1'
         AND a.current_packet_id=e.resume_packet_id AND a.revision=e.application_revision AND a.status='review_required'
+        AND NOT EXISTS (SELECT 1 FROM applications.native_material_withdrawals w WHERE w.owner_user_id=e.owner_user_id AND w.requested_at >= e.occurred_at)
         AND e.attempt_count < 5 AND e.available_at <= clock_timestamp()
         AND (e.status='pending' OR (e.status='processing' AND e.lease_expires_at <= clock_timestamp()))
       ORDER BY e.occurred_at,e.id LIMIT ${limit}`;
@@ -103,6 +104,7 @@ export class PostgresNativeResumeRequestStore {
         JOIN applications.packets p ON p.id=e.resume_packet_id AND p.application_id=a.id AND p.owner_user_id=a.owner_user_id
         WHERE e.id=${eventId} AND e.event_type='application.resume-preparation.requested.v1'
           AND a.current_packet_id=p.id AND a.revision=e.application_revision AND a.status='review_required'
+          AND NOT EXISTS (SELECT 1 FROM applications.native_material_withdrawals w WHERE w.owner_user_id=e.owner_user_id AND w.requested_at >= e.occurred_at)
           AND e.attempt_count < 5 AND e.available_at <= clock_timestamp()
           AND (e.status='pending' OR (e.status='processing' AND e.lease_expires_at <= clock_timestamp()))
         FOR UPDATE OF e`;

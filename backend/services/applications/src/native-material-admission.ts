@@ -39,6 +39,8 @@ export async function lockNativePreparationLaunchAdmission(
       AND a.status='review_required' AND a.current_packet_id=p.base_packet_id
       AND a.revision=p.expected_revision AND p.state='running'
       AND p.generation_claimed_at IS NOT NULL AND p.result_packet_id IS NULL AND p.error_code IS NULL
+      AND NOT EXISTS (SELECT 1 FROM applications.native_material_withdrawals w
+        WHERE w.owner_user_id=${ownerUserId} AND w.requested_at >= p.approved_at)
       AND p.approved_at <= clock_timestamp() AND p.expires_at > clock_timestamp()
     FOR UPDATE OF a FOR SHARE OF p`;
   if (row?.admitted !== 1) throw Error("NativePreparationLaunchUnavailable");
