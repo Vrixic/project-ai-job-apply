@@ -253,3 +253,7 @@ publisher}.log`. The isolated PostgreSQL container was removed; Docker Desktop a
 This proves backend source behavior, not live logout. Worker packaging, schedule/IAM deployment,
 managed recovery/drain acceptance and the web sign-out hook remain. ADR-040 remains Proposed; no
 all-copy disposal, production clearance or phase completion is claimed. CI/CD deferred; PC on.
+
+The source-bound migration operator guard passes against committed source `02726ccf`, including
+schema-8 two-receipt and schema-7 migration/Gateway round-trip adversarial checks. Log:
+`.tmp/native-cleanup-operator-final.log`.
