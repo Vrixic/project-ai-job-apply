@@ -114,6 +114,12 @@ export class PostgresNativeMaterialRegistry {
     private readonly sql: postgres.Sql,
     private readonly enabled: () => boolean = () => false,
     private readonly applicationAdmission?: NativeRegistryApplicationAdmission,
+    private readonly preparationAdmission?: (
+      owner: string,
+      application: string,
+      generation: string,
+      query: NativeRegistryAdmissionQuery,
+    ) => Promise<void>,
   ) {}
 
   private check() {
@@ -195,6 +201,16 @@ export class PostgresNativeMaterialRegistry {
           return { claimed: false, record: launchRecord(row) };
         }
         if (row.state !== "pending") throw unavailable();
+        await this.preparationAdmission?.(
+          fixed.ownerUserId,
+          fixed.applicationId,
+          fixed.generationId,
+          async <Rows extends Record<string, unknown>[]>(
+            parts: TemplateStringsArray,
+            ...values: unknown[]
+          ) => await tx<Rows>(parts, ...(values as postgres.ParameterOrFragment<never>[])),
+        );
+        this.check();
         const [claimed] = await tx<Row[]>`UPDATE documents.native_material_allocations
           SET launch_claimed_at = clock_timestamp(), launch_configuration_sha256 = ${configurationSha256}
           WHERE id = ${row.id} RETURNING *`;
@@ -342,6 +358,16 @@ export class PostgresNativeMaterialRegistry {
           this.check();
           return intent(existing);
         }
+        await this.preparationAdmission?.(
+          fixed.ownerUserId,
+          fixed.applicationId,
+          fixed.original.documentId,
+          async <Rows extends Record<string, unknown>[]>(
+            parts: TemplateStringsArray,
+            ...values: unknown[]
+          ) => await tx<Rows>(parts, ...(values as postgres.ParameterOrFragment<never>[])),
+        );
+        this.check();
         const [grant] = await tx<Array<{ fresh: boolean }>>`SELECT
           (h.minimum_work_issued_at IS NULL OR w.issued_at > h.minimum_work_issued_at) AS fresh
           FROM documents.cover_letters d JOIN documents.cover_letter_work_authorizations w ON w.document_id = d.id

@@ -152,14 +152,18 @@ describe.runIf(requested)(
       await sql`INSERT INTO identity.users (id) VALUES (${owner})`;
       const seeded = await seedEvidence?.(owner);
       let expiry = new Date(Date.now() + consentLifetimeMs);
-      if (prepare && seeded) {
+      const originalContext = seeded?.context ?? {
+        jobContextHash: "a".repeat(64),
+        confirmedFactsHash: "b".repeat(64),
+      };
+      {
         const applicationStore = new PostgresApplicationStore(sql, () => new Date(), {
           definitions: defaultFieldDefinitions(),
           restrictedPackets: packetProtection.options,
         });
         const created = await applicationStore.createApplication({
           ownerUserId: owner,
-          canonicalJobId: seeded.jobId,
+          canonicalJobId: seeded?.jobId ?? uuidv7(),
           idempotencyKey: `create-${uuidv7()}`,
         });
         application = created.view.application.id;
@@ -167,7 +171,7 @@ describe.runIf(requested)(
           ownerUserId: owner,
           applicationId: application,
           idempotencyKey: `prepare-${uuidv7()}`,
-          context: seeded.context,
+          context: originalContext,
           request: {
             expectedRevision: 1,
             coverLetter: {
@@ -175,26 +179,26 @@ describe.runIf(requested)(
             },
           },
           packet: {
-            jobRevision: seeded.context.jobContextHash,
+            jobRevision: originalContext.jobContextHash,
             form: null,
             fields: [],
             artifactHashes: { resume: "a".repeat(64) },
           },
         });
         document = queued.preparation.id;
-        expiry = queued.preparation.expiresAt;
+        expiry = prepare
+          ? queued.preparation.expiresAt
+          : new Date(Math.min(expiry.getTime(), queued.preparation.expiresAt.getTime()));
         const [event] = await sql<
           Array<{ id: string }>
         >`SELECT id FROM applications.preparation_outbox WHERE preparation_id=${document}`;
         if (
           !event ||
-          (await applicationStore.claimPreparationGeneration(event.id, document, seeded.context))
+          (await applicationStore.claimPreparationGeneration(event.id, document, originalContext))
             .kind !== "claimed"
         )
           throw Error("SyntheticPreparationClaimMissing");
-      } else
-        await sql`INSERT INTO applications.applications (id,owner_user_id,canonical_job_id,status,created_at,updated_at)
-      VALUES (${application},${owner},${seeded?.jobId ?? uuidv7()},'preparing',clock_timestamp(),clock_timestamp())`;
+      }
       if (prepare)
         await documents.reserve({
           id: uuidv7(),
@@ -355,6 +359,41 @@ describe.runIf(requested)(
     }
     const evidenceRegistry = () =>
       new PostgresNativeMaterialRegistry(sql, () => true, lockNativeMaterialApplicationAdmission);
+    it.each([false, true])(
+      "refuses withdrawn preparation before a new launch (intent already admitted: %s)",
+      async (admitted) => {
+        const request = await original();
+        if (admitted)
+          await evidenceRegistry().admit({
+            ownerUserId: request.ownerUserId,
+            applicationId: request.applicationId,
+            original: request.original,
+            previousEpochId: null,
+            deployment: {
+              clusterArn: config.clusterArn,
+              taskDefinitionArn: config.taskDefinitionArn,
+              containerName: config.containerName,
+            },
+          });
+        const [event] = await sql<
+          Array<{ id: string }>
+        >`SELECT id FROM applications.preparation_outbox
+        WHERE preparation_id=${request.original.documentId}`;
+        if (!event) throw Error("SyntheticPreparationMissing");
+        await new PostgresApplicationStore(sql).failPreparation(
+          event.id,
+          request.original.documentId,
+          "application_changed",
+        );
+        const f = fixture();
+        await expect(f.client.launch(request)).rejects.toThrow();
+        expect(f.commands).not.toContain("RunTaskCommand");
+        const [application] =
+          await sql`SELECT status FROM applications.applications WHERE id=${request.applicationId}`;
+        expect(application?.status).toBe("review_required");
+        await unchangedWork(request);
+      },
+    );
     it("admits exact bound evidence metadata and releases owning locks without consuming provider work", async () => {
       const request = await original();
       const captured = await fixture().client.launch(request);

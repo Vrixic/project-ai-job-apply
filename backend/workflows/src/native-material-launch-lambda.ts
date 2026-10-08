@@ -1,6 +1,7 @@
 import {
   createApplicationsDatabase,
   lockNativeMaterialApplicationAdmission,
+  lockNativePreparationLaunchAdmission,
 } from "@ai-job-apply/applications-service/native-material-runtime";
 import {
   type NativeLaunchControlInput,
@@ -41,6 +42,7 @@ export function createNativeMaterialLaunchRuntime(
     pool,
     enabled,
     lockNativeMaterialApplicationAdmission,
+    lockNativePreparationLaunchAdmission,
   );
   const control = createNativeTaskLaunch({
     registry,

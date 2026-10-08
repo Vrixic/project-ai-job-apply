@@ -2597,3 +2597,11 @@ material-lifetime criterion and records all 13 criteria in order. Vault/preparat
 and accepted manual-flow checks are no longer presented as missing engineering. Logout integration,
 current connected journey, release packaging and external acceptance remain open. No runtime or
 acceptance status changes; D1/D3 remain In progress and CI/CD deferred.
+
+2026-10-08 adds original Applications preparation admission to native cover-letter allocation
+and first launch claim. Failed/stale/expired preparation cannot gain a new launch merely because
+the application remains in review; existing launch recovery is separate. All 28 Applications SQL,
+27 connected launcher SQL and 51 focused runtime cases pass, with simulated external transports.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#original-preparation-launch-admission-2026-10-08).
+This is a logout prerequisite, not completed logout: owner-wide withdrawal, resume handling,
+retirement and web hookup remain. D1/D3 In progress; no deployment, CI/CD deferred, PC on.

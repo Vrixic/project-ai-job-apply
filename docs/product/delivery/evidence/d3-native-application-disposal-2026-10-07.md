@@ -93,3 +93,38 @@ fixture was removed, Docker Desktop/WSL stopped, and the PC remains on. No fresh
 browser acceptance is claimed. The earlier Gateway ZIP predates this fix; rebuild it in the
 release packaging batch. D1/D3 remain In progress, with logout integration and managed/client
 acceptance still unfinished. CI/CD remains deferred.
+
+## Original preparation launch admission (2026-10-08)
+
+The existing application-status check alone could admit a new native cover-letter allocation or
+consume its first launch claim after the original preparation had failed, while the application
+remained in review. This would undermine a future logout withdrawal of queued preparation.
+
+Applications now supplies a launch-only owning check for the exact owner/application/preparation,
+claimed running state, original packet/revision and unexpired disclosure. Documents executes it
+on the same allocation/first-launch-claim transaction, retaining the owning locks until commit.
+All three production registry compositions supply this check. Existing launch receipts and
+positive task recovery remain separate; this check does not authorize a replacement launch.
+No new public API, migration, generation authority or cloud activation is added.
+
+Workflow/dependency compilation and changed-file formatting/lint pass. Local evidence:
+
+- 28 real PostgreSQL Applications preparation tests pass, now also checking launch admission
+  before claim and refusal after expiry, future approval, failure, revision or packet changes.
+- 27 connected native-launch PostgreSQL tests pass. Two new cases withdraw the original
+  preparation before allocation or after allocation but before launch, leave the application
+  in review, and verify zero RunTask calls. Existing original recovery, routing, attachment
+  and observed-retirement cases remain covered.
+- 51 focused launch/route-control runtime cases pass.
+
+One intermediate launcher run failed because the updated synthetic fixture shortened the original
+consent expiry. Restoring its exact preparation expiry makes all 27 cases pass; production
+consent validation was preserved. Logs: `.tmp/native-original-preparation-{build,applications,
+launch,launch-final,unit,typecheck}.log`. SQL is real; AWS, provider and KMS transports are synthetic.
+
+This is a backend prerequisite, not completed logout cleanup. The owner-wide withdrawal operation,
+original task retirement, queued-resume handling and web sign-out hook still need integration.
+The web-hook scope question remains pending. Existing packaged private runtimes predate this fix
+and require refresh in the final packaging batch. D1/D3 remain In progress; nothing deployed.
+Final Workflow typecheck and whitespace checks pass. The owned database container was removed;
+Docker Desktop and WSL stopped after verification. The PC remains on.

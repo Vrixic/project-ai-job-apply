@@ -6,6 +6,7 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FieldDefinition } from "./field-policy.js";
+import { lockNativePreparationLaunchAdmission } from "./native-material-admission.js";
 import { readNativePreparationBootstrap } from "./native-preparation-bootstrap.js";
 import { PreparationNotFoundError, type PreparationRequest } from "./preparation.js";
 import { PreparationDispatchError, type PreparationTerminalInput } from "./preparation-dispatch.js";
@@ -124,6 +125,23 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
     return event.id;
   }
   const functionArn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-preparation:7";
+  const launchAdmission = (scope: {
+    ownerUserId: string;
+    applicationId: string;
+    generationId: string;
+  }) =>
+    client.begin(async (tx) =>
+      lockNativePreparationLaunchAdmission(
+        scope.ownerUserId,
+        scope.applicationId,
+        scope.generationId,
+        async <Rows extends Record<string, unknown>[]>(
+          parts: TemplateStringsArray,
+          ...values: unknown[]
+        ) => await tx<Rows>(parts, ...(values as postgres.ParameterOrFragment<never>[])),
+      ),
+    );
+
   it("reads only the original claimed preparation without changing approval or creating work", async () => {
     await withApplication(async (owner, app) => {
       const [time] = await client<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
@@ -135,7 +153,9 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
       await expect(readNativePreparationBootstrap(client, scope, () => true)).rejects.toThrow(
         "NativePreparationBootstrapUnavailable",
       );
+      await expect(launchAdmission(scope)).rejects.toThrow("NativePreparationLaunchUnavailable");
       await store.claimPreparationGeneration(await eventId(id), id, context);
+      await expect(launchAdmission(scope)).resolves.toBeUndefined();
       const before = await store.getPreparation(owner, app, id);
       const expected = {
         id,
@@ -195,6 +215,9 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
             idempotencyKey: `packet-${uuidv7()}`,
             packet: command(owner, app).packet,
           });
+        await expect(
+          launchAdmission({ ownerUserId: owner, applicationId: app, generationId: id }),
+        ).rejects.toThrow("NativePreparationLaunchUnavailable");
         await expect(
           readNativePreparationBootstrap(
             client,

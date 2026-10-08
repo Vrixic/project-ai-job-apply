@@ -5,6 +5,7 @@ import {
 } from "@ai-job-apply/applications-service";
 import {
   lockNativeMaterialApplicationAdmission,
+  lockNativePreparationLaunchAdmission,
   readNativePreparationBootstrap,
 } from "@ai-job-apply/applications-service/native-material-runtime";
 import { nativeLaunchControlVersion } from "@ai-job-apply/documents-service/native-launch-control";
@@ -124,6 +125,7 @@ export function createNativeOwnerRpcRuntime(
     applicationPool,
     enabled,
     lockNativeMaterialApplicationAdmission,
+    lockNativePreparationLaunchAdmission,
   );
   const checkAdmission = registry.checkEvidenceAdmission.bind(registry);
   return Object.freeze({

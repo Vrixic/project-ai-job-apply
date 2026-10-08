@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   createApplicationsDatabase,
   lockNativeMaterialApplicationAdmission,
+  lockNativePreparationLaunchAdmission,
 } from "@ai-job-apply/applications-service/native-material-runtime";
 import { PostgresNativeMaterialLocationStore } from "@ai-job-apply/documents-service/native-material-location-store";
 import { PostgresNativeMaterialRegistry } from "@ai-job-apply/documents-service/native-material-registry";
@@ -44,6 +45,7 @@ export function createNativeMaterialRouteControlRuntime(
     pool,
     enabled,
     lockNativeMaterialApplicationAdmission,
+    lockNativePreparationLaunchAdmission,
   );
   const ready = new PostgresNativeMaterialLocationStore(pool, enabled);
   const address = createNativeMaterialTaskAddressReader({
