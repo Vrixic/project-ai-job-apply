@@ -5184,3 +5184,10 @@ builds, seven real PostgreSQL integration cases and 24 focused Gateway checks pa
 responses are synthetic. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#cleanup-independent-of-read-availability-2026-10-08).
 The previous Gateway artifact predates this fix and needs the release packaging refresh. Logout
 integration and managed acceptance remain; D1/D3 In progress, CI/CD deferred and PC on.
+
+2026-10-08 reconciles D3's stale exit-criteria summary against current native intake/image,
+PostgreSQL approval, terminal cleanup, recovery and protected-packet evidence. Restores the omitted
+material-lifetime criterion and records all 13 criteria in order. Vault/preparation implementation
+and accepted manual-flow checks are no longer presented as missing engineering. Logout integration,
+current connected journey, release packaging and external acceptance remain open. No runtime or
+acceptance status changes; D1/D3 remain In progress and CI/CD deferred.

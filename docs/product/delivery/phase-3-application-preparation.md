@@ -384,24 +384,36 @@ deployed acceptance, Applications reuse, or D3-012. D1 and D3 remain In progress
 - [ ] Security, privacy, accessibility, AI evaluation, workflow replay, and product acceptance evidence is complete.
 - [ ] Every enabled application adapter has current authorized provider fixtures, sanitization and scan evidence, and separate QA representativeness acceptance.
 
-## Exit-criteria status (updated 2026-09-18; no box is ticked)
+## Exit-criteria status (updated 2026-10-08; no box is ticked)
 
-A box is ticked only when its whole wording has linked, inspected evidence. Local synthetic evidence below is not deployed, real-data, or approved evidence.
+This replaces the stale 2026-09-18 summary. Numbers now follow all 13 criteria above,
+including the subsequently added temporary-material lifetime requirement. Local evidence does
+not establish managed, real-data or accountable acceptance. Historical work logs remain below.
 
-| # | Criterion | Local evidence | What is still missing |
+| # | Criterion | Implemented or accepted evidence | Remaining requirement |
 |---|---|---|---|
-| 1 | Generated claims grounded or reviewed | Fact graph, ai-sdk unsupported-claim checks, always-reviewed `generated` fields | Wiring generation into packet preparation; real-model evaluation (D3-012) |
-| 2 | Sensitive answers follow mandatory review | Field policy, packet approval requiring acknowledgement, review UI | Vault persistence and separate key (D3-015, D3-R4); counsel/security disposition |
-| 3 | Rendered documents preserve content and pass checks | Re-parse verification for DOCX and PDF, verbatim tailoring | Deploying the connection of tailoring to Prepare (D3-016, code done and locally verified), real-resume behavior, human quality review |
-| 4 | Approval bound to an immutable packet and expires on change | Packet hash, approval binding, expiry, invalidation on start | API-level synthetic acceptance passed in development 2026-09-19 with no resume, cover letter, or extension in the path (wrong-hash approval refused, changed form invalidates approval); the changed-posting case stays covered by local integration tests; real-token and browser proof still open |
-| 5 | Supported ATS variants meet agreed thresholds | Threshold proposal in the fixture request | D3-013 fixtures, adapters, agreed thresholds, measurement |
-| 6 | Ambiguous responses cannot cause blind duplicate submission | DB guard, write-ahead dispatch, crash recovery, concurrency race tests | Extension executor and live confirmation detection |
-| 7 | Owner-scoped reads authorized, durable, observable, recoverable, ending at `applied` | Store, API, gateway routes, history, metrics | Deployed to development (schema and Gateway, 2026-09-18); API-level synthetic lifecycle acceptance passed 2026-09-19 (24/24 steps, exact cleanup; no resume, cover letter, or extension in the path); real-token sign-in verified 2026-09-19 (create 201, packet 201, hosted web enabled on the protected Production target); alarms, restore, and candidate-rights activation still open (D3-014, D3-015) |
-| 8 | No post-submission hiring outcome collected or inferred | Closed history vocabulary, contract/event/UI guards | Repository-wide and deployed confirmation at exit review |
-| 9 | Unsupported variants degrade to safe assisted/manual completion | Assisted-manual planner | Extension integration and real-browser test |
-| 10 | Correction, adapter failure, model quality, confirmation metrics observable by version | Versioned metrics and rate functions | Production sink, dashboards, thresholds |
-| 11 | Security, privacy, accessibility, AI evaluation, workflow replay, product acceptance evidence | Partial (D3-011) | Independent review, workflow replay, real-browser/AT, product acceptance |
-| 12 | Every enabled adapter has authorized provider fixtures and QA acceptance | Registry gate that rejects anything else | D3-013 |
+| 1 | Generated claims grounded or reviewed | Grounding/mandatory-review policy and [native Prepare intake](evidence/d3-native-cover-letter-intake-2026-10-07.md) are implemented locally | Managed preparation journey, provider retention approval and real-model evaluation (D3-012) |
+| 2 | Sensitive answers follow mandatory review | Vault persistence/key adapter, version binding and [protected packet storage](evidence/d3-restricted-packet-storage-2026-10-05.md) have local evidence | Exact deployed keys/roles, legacy disposition and security/privacy acceptance; this is not missing vault implementation |
+| 3 | Rendered documents preserve content | Actual native image PDF/DOCX and verification [checks pass](evidence/d3-native-material-availability-2026-10-07.md#refreshed-native-images) on synthetic input | Real-resume authorization, output-quality review and current managed/client journey |
+| 4 | One-off material lifetime and no persistence | Native expiry/read checks, terminal disposal and [76-migration recovery](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-logical-recovery) pass locally | Logout admission withdrawal plus original-task retirement and web hook; idle-browser cleanup, managed disposal and provider-retention acceptance. ADR-040 remains Proposed |
+| 5 | Immutable approval and change invalidation | [Both material types pass real PostgreSQL/native approval and packet-replacement refusal](evidence/d3-native-postgresql-approval-2026-10-07.md#tailored-resume-and-packet-replacement) | Complete managed preparation/approval and client handoff on the exact current release |
+| 6 | ATS accuracy/confirmation thresholds | Provider fixture gate and proposed thresholds exist | Authorized Greenhouse-first fixtures, QA representativeness and enabled-adapter measurement; Lever/Ashby remain fast-follow |
+| 7 | No blind duplicate submission | Write-ahead attempts, SQL uniqueness, ambiguous-state handling and recovery checks exist | Current journey acceptance; automated executor/confirmation acceptance separately depends on fixtures |
+| 8 | Owner-scoped technical reads through applied | Prior development lifecycle evidence; current local SQL/recovery and restricted-packet evidence | Exact-release managed rights/recovery/authorization and applicable observability acceptance |
+| 9 | No post-submission hiring outcomes | Closed lifecycle/history vocabulary and contract guards | Frozen-release scope review; preserve confirmed submission as the product boundary |
+| 10 | Safe assisted/manual completion | D3-018 manual submitted/not-submitted human acceptance recorded 2026-10-02 | Current native-material end-to-end journey. Do not repeat the already accepted manual-only check or require extension completion for the first journey pass |
+| 11 | Versioned quality/failure metrics | Versioned metric definitions/rate functions exist | Production sink/dashboard/threshold work remains owner-deferred off the candidate-journey critical path; eventual criterion unchanged |
+| 12 | Security/privacy/accessibility/evaluation/product acceptance | Layer checks and historical scoped acceptance are retained | Independent exact-release dispositions, real-model/authorized-data evaluation, assistive-technology and complete journey acceptance |
+| 13 | Authorized fixtures for enabled adapters | Registry refuses unaccepted variants | D3-013 provider authorization, sanitization/scan and independent QA acceptance |
+
+Next implementation batch: complete the backend logout admission/cleanup integration; its web
+sign-out connection is outside the current backend-only scope and the scope question is pending.
+Then exercise the connected candidate journey and fix observed failures. Package the final source
+once that batch is ready: the Gateway ZIP at `18698f7f` predates cleanup fix `611658f8`.
+Cloud publication/activation and accountable reviews remain separate, currently unexecuted gates.
+Do not turn this updated summary into phase completion or an assertion that every backend path
+has been exhaustively audited.
+
 
 ## Work log
 
@@ -2578,3 +2590,10 @@ builds, seven real PostgreSQL integration cases and 24 focused Gateway checks pa
 responses are synthetic. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#cleanup-independent-of-read-availability-2026-10-08).
 The previous Gateway artifact predates this fix and needs the release packaging refresh. Logout
 integration and managed acceptance remain; D1/D3 In progress, CI/CD deferred and PC on.
+
+2026-10-08 reconciles D3's stale exit-criteria summary against current native intake/image,
+PostgreSQL approval, terminal cleanup, recovery and protected-packet evidence. Restores the omitted
+material-lifetime criterion and records all 13 criteria in order. Vault/preparation implementation
+and accepted manual-flow checks are no longer presented as missing engineering. Logout integration,
+current connected journey, release packaging and external acceptance remain open. No runtime or
+acceptance status changes; D1/D3 remain In progress and CI/CD deferred.
