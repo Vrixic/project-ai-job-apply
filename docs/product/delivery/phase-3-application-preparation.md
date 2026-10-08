@@ -2787,3 +2787,12 @@ A fresh runtime read remains dormant with two encrypted recovery snapshots. The 
 inputs are private state-419 inputs; old dormant inputs are stale. Configured HTTPS client origin,
 provider key, image/task/runtime composition and managed acceptance remain. D1/D3 In progress;
 CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-08 merges #572 and archives complete dormant inputs with encrypted exact-version readback.
+The current 78-migration image builds identically twice and passes runtime inventory checks, but
+ECR reports one High zlib finding, so publication stops before deployment. The runtime now pins
+Alpine's corrected zlib package/checksum; 191 runtime regressions, publisher guards and a real
+restricted runtime-layer smoke pass. A reviewed no-op metadata refresh advances state 419 -> 420;
+no resource mutation or guard relaxation. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#migration-image-scan-remediation-2026-10-08).
+Fresh full-image publication/scan and baseline capture remain. D1/D3 In progress; CI/CD deferred,
+Docker/WSL stopped after testing and PC on.
