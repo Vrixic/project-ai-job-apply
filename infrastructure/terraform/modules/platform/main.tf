@@ -1011,7 +1011,7 @@ data "aws_iam_policy_document" "migration_ecr_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "migration_ecr_api" {
-  count               = local.migration_task_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && (local.migration_task_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.ecr.api"
   vpc_endpoint_type   = "Interface"
@@ -1022,7 +1022,7 @@ resource "aws_vpc_endpoint" "migration_ecr_api" {
 }
 
 resource "aws_vpc_endpoint" "migration_ecr_dkr" {
-  count               = local.migration_task_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && (local.migration_task_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.ecr.dkr"
   vpc_endpoint_type   = "Interface"
@@ -1048,7 +1048,7 @@ data "aws_iam_policy_document" "migration_logs_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "migration_logs" {
-  count               = local.migration_task_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && (local.migration_task_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.logs"
   vpc_endpoint_type   = "Interface"
@@ -2001,7 +2001,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
-    var.persistent_data_plane_enabled && (
+    var.private_service_endpoints_enabled && var.persistent_data_plane_enabled && (
       local.material_private_configured || local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || local.native_cleanup_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
     )
   ) ? 1 : 0
@@ -2813,7 +2813,7 @@ data "aws_iam_policy_document" "outbox_sqs_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "sqs" {
-  count               = (local.native_resume_reconciliation_configured || local.preparation_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && ((local.native_resume_reconciliation_configured || local.preparation_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed) && var.persistent_data_plane_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
   vpc_endpoint_type   = "Interface"
@@ -3001,7 +3001,7 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "lambda" {
-  count               = (local.material_task_rpc_configured || local.preparation_configured || local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && ((local.material_task_rpc_configured || local.preparation_configured || local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.lambda"
   vpc_endpoint_type   = "Interface"
@@ -3037,7 +3037,7 @@ data "aws_iam_policy_document" "document_sts_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "sts" {
-  count               = local.document_complete_dark_enabled && var.persistent_data_plane_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && (local.document_complete_dark_enabled && var.persistent_data_plane_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sts"
   vpc_endpoint_type   = "Interface"

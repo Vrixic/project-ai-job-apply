@@ -44,6 +44,7 @@ provider "aws" {
 }
 
 module "platform" {
+  private_service_endpoints_enabled    = var.private_service_endpoints_enabled
   native_material_repositories_enabled = var.native_material_repositories_enabled
   native_cleanup_release               = var.native_cleanup_release
   native_cleanup_enabled               = var.native_cleanup_enabled

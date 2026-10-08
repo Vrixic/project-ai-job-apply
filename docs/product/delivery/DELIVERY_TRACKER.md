@@ -5386,3 +5386,12 @@ zero drift passes, state 407 -> 412. RDS is stopping, seven interface endpoints 
 seven-day RDS restart is unresolved. Staging has no SSO token. Full shutdown is explicitly incomplete;
 no data deletion or zero-cost claim. [Shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#prelaunch-development-quiescence-2026-10-08).
 D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-08 removes all seven development interface endpoints independently of retained data.
+All 57 focused Terraform tests, exact seven-delete plan review and postapply zero drift pass;
+state 412 -> 415. RDS is confirmed stopped but will automatically restart October 15; durable
+shutdown remains unfinished. Staging SSO login succeeds but role credentials are denied.
+[Endpoint shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#independent-endpoint-shutdown-2026-10-08).
+Development has zero active event rules/mappings, NATs and interface endpoints. Retained storage,
+security and DNS still incur charges. D1/D3 In progress, Docker/WSL stopped and PC on.

@@ -1,7 +1,7 @@
 # Development prelaunch shutdown
 
 The prelaunch shutdown rule in AGENTS.md supersedes the older assumption that development runs
-continuously. This procedure covers reversible traffic/trigger quiescence and disposable NAT removal.
+continuously. This procedure covers reversible traffic/trigger quiescence and disposable NAT/interface-endpoint removal.
 It does not yet implement a persistent, data-preserving dormant database lifecycle.
 
 ## Preserve data while quiescing
@@ -24,6 +24,10 @@ Prepare a saved, refresh-backed plan from the complete baseline:
 - Once work is drained, set private_application_networking=false to remove the disposable NAT.
 - Preserve database deletion protection, persistent_data_plane_enabled, encryption, backups,
   buckets, queues, secrets, native DNS/TLS metadata and all recovery/security resources.
+- After quiescence and verified drain, separately set private_service_endpoints_enabled=false.
+  Its reviewed plan must delete only the seven interface endpoints. Retain the gateway endpoints
+  and security/policy resources. The flag defaults true and refuses active-runtime removal.
+  Restore these endpoints before starting any subsequent database, migration or native-task test.
 
 The retained candidate-rights and attempt-recovery maintenance rules now follow
 serverless_runtime_enabled. Candidate-rights validation permits retained resources with runtime off
@@ -39,12 +43,12 @@ Run a same-input refresh-backed plan and require zero drift.
 
 Stopping the retained RDS instance reduces immediate compute usage but is temporary: AWS can restart
 it after seven days. It does not satisfy the strict no-automatic-restart requirement. Database storage,
-backups and retained private interface endpoints continue to incur charges. Do not describe this as
+backups and any interface endpoints not yet removed continue to incur charges. Do not describe this as
 complete shutdown or zero cost.
 
 The staging dormant lifecycle deletes its synthetic database and cannot be reused for development
-data. A development dormant lifecycle still needs a verified backup/restore path and separate
-endpoint control before permanent compute removal. Report that incomplete work and retained costs.
+data. Separate interface-endpoint control is implemented; a development dormant lifecycle still
+needs a verified backup/restore path before permanent database compute removal. Report that incomplete work and retained costs.
 Keep the database protected; do not delete it merely to satisfy a shutdown report.
 
 Before the next authorized test session, inspect current state and plan reactivation from the full

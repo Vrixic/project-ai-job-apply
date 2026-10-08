@@ -845,3 +845,39 @@ No new API/backend implementation test or broad phase-zero rerun was needed for 
 changes; actual plan/apply, focused lifecycle tests and zero drift provide the scoped evidence.
 D1/D3 remain In progress; native release/journey and persistent shutdown gaps remain. Docker/WSL
 remain stopped and PC stays on.
+
+
+## Independent endpoint shutdown (2026-10-08)
+
+Added private_service_endpoints_enabled, default true, to the platform and development composition.
+It affects only the seven hourly interface endpoints: migration ECR API/DKR/logs, Secrets Manager,
+SQS, Lambda and STS. Gateway endpoints, IAM/security policies, database, credential value, storage
+and protected recovery resources are retained. Removal is rejected outside development or while
+public runtime, ingestion, document scan, D2 or maintenance workers are enabled. Operators must
+also verify drain before removal; this variable alone does not prove absence of native tasks.
+
+Development validation and all 57 focused Terraform tests pass, including endpoint removal with
+protected data retained, refusal while active and refusal of the staging override. The real
+refresh-backed plan contains exactly seven interface endpoint deletes and no other managed-resource
+change. Reviewed saved plan SHA-256:
+`7bbb3dd5e731adcfd6cfba7c84416e740af46c31b0f80bc059019d14d0594bf8`.
+Applied the exact plan after development identity/backend verification and private state backup.
+State advanced 412 to 415. Postapply refresh-backed plan exits zero with no differences.
+
+Live inspection confirms zero remaining interface endpoints, NAT gateways, enabled project event
+rules and enabled Lambda mappings. RDS is now stopped, remains private/deletion-protected, and reports
+automatic restart at 2026-10-15T17:17:09.952Z. The installed CLI has no db-instance-stopped waiter;
+a bounded read-only status poll confirmed the terminal stopped state instead. No second stop was
+issued. Database storage/backups, KMS, Secrets Manager, Route 53 and retained storage/observability
+still incur charges; neither zero cost nor permanent shutdown is claimed.
+
+Staging SSO login completed successfully, but GetRoleCredentials returns ForbiddenException:
+No access. This is now a role-assignment/access blocker, not a missing SSO token. Staging state
+remains unverified and no staging resource was changed. Permanent data-preserving development
+shutdown/restore and staging access are outstanding mandatory cleanup work.
+
+Private plan/apply/verify/state/receipt artifacts use .tmp/development-endpoints-off-*; tests are in
+.tmp/endpoints-off-tests.log. The current complete applied baseline is
+.tmp/development-planning-current-415.tfvars.json. The development shutdown runbook now documents
+endpoint removal and reactivation ordering. Native runtime publication/journey, TLS renewal and
+D1/D3 acceptance remain open. Docker/WSL stayed stopped and PC remains on.
