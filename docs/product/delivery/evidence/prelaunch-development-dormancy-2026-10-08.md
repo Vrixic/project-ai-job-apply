@@ -1,7 +1,6 @@
 # Development billing and data-preserving shutdown — 2026-10-08
 
-Development shutdown is deployed and independently verified. Staging verification remains blocked
-by `GetRoleCredentials: ForbiddenException: No access` after fresh SSO authentication.
+Development shutdown is deployed and independently verified. The initial staging access denial was resolved later on 2026-10-08; see the final staging verification below.
 
 ## Billing finding
 
@@ -57,5 +56,30 @@ no hosted test result is claimed and no billing limits or CI configuration were 
 
 Retained snapshots/automated backups, S3 objects, ECR images, KMS keys, Secrets Manager secrets,
 logs/alarms and DNS may continue incurring charges. This is not a zero-cost claim. Already accrued
-October costs remain payable. Staging's current resources cannot be independently enumerated until
-its AWS account assignment is restored; that mandatory verification remains incomplete.
+October costs remain payable. Staging verification was initially blocked by account assignment; the final evidence below closes that blocker.
+
+## Staging access restored and dormancy verified — 2026-10-08
+
+The owner corrected the account assignment. After explicit SSO logout and fresh authentication,
+STS confirmed the expected staging account. Independent live reads in us-east-2 at approximately
+19:40 UTC found zero RDS instances, NAT gateways, allocated Elastic IPs, VPC endpoints, EC2
+instances or EBS volumes. The retained ECS cluster has zero running/pending tasks and zero services.
+There are zero API routes, enabled application EventBridge rules, EventBridge Scheduler schedules
+or running profile-readiness durable executions. The outbox mapping is Disabled. All three project
+queues have aggregate visible, in-flight and delayed depth zero. No cloud mutation was necessary.
+
+The legacy lifecycle Status helper could not finish: it inferred an optional document processor
+from a successful empty event-mapping response, then required that absent feature's event rules.
+No lifecycle Status success or fresh Terraform drift plan is claimed. Direct successful AWS reads
+enumerated all functions, mappings, rules, routes and project queues independently; the deployed
+function inventory does not contain a document processor.
+
+The repository cost operator also passed `-VerifyDormantStaging` for 2026-10-07 through 2026-10-08
+(exclusive): zero RDS instance-hours and zero VPC endpoint-hours. Estimated total was $0.1228,
+principally KMS $0.0645, CloudWatch $0.0452 and Secrets Manager $0.0129, with small ECR/S3 charges.
+The $5 budget and export controls remain present; the CUR export is healthy. Retained security,
+monitoring and storage costs are intentional; this is not zero cost.
+
+OPS-003's access/verification blocker is closed. At the owner's request, AWS SSO was explicitly
+logged out after this verification and a fresh development login was initiated. No runtime was
+reactivated. The development lifecycle implementation in PR #570 is now merged.
