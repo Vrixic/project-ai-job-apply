@@ -911,6 +911,12 @@ Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedBaselinePlan
 $currentBaselineVersion = $retainedBaselinePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 $currentBaselineVersion.terraform_version = "1.16.2"
 Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $currentBaselineVersion
+foreach ($shape in @("omitted", "null")) {
+  $emptyDriftBaseline = $currentBaselineVersion | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  if ($shape -ceq "omitted") { $emptyDriftBaseline.PSObject.Properties.Remove("resource_drift") }
+  else { $emptyDriftBaseline.resource_drift = $null }
+  Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $emptyDriftBaseline
+}
 foreach ($invalidVersion in @("1.9.9", "1.16.1", "1.16.3", "1.16.2 ", "")) {
   $versionPlan = $retainedBaselinePlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
   $versionPlan.terraform_version = $invalidVersion

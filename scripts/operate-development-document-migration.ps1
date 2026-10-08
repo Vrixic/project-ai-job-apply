@@ -1765,7 +1765,7 @@ function Get-MeaningfulChanges {
 function Assert-AcceptedMigrationProviderDrift {
   param([Parameter(Mandatory)][object]$Plan)
 
-  $drift = @($Plan.resource_drift | Where-Object { $null -ne $_ })
+  $drift = @((Get-OptionalProperty $Plan "resource_drift") | Where-Object { $null -ne $_ })
   if ($drift.Count -eq 0) { return }
   Assert-DevelopmentDocumentAcceptedResourceDrift -Records $drift `
     -RootModule $Plan.planned_values.root_module

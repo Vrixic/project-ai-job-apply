@@ -940,7 +940,7 @@ function Assert-RestrictedExportRoleInlinePolicyRefreshDrift {
 function Assert-AcceptedGatewayProviderDrift {
   param([Parameter(Mandatory)][object]$Plan)
 
-  $drift = @($Plan.resource_drift | Where-Object { $null -ne $_ })
+  $drift = @((Get-GatewayOptionalProperty $Plan "resource_drift") | Where-Object { $null -ne $_ })
   if ($drift.Count -eq 0) { return }
   $plannedValues = Get-GatewayOptionalProperty $Plan "planned_values"
   $rootModule = Get-GatewayOptionalProperty $plannedValues "root_module"

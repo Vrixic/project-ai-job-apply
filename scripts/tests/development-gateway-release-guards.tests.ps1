@@ -674,6 +674,18 @@ $baselinePlan = [pscustomobject]@{
 $null = Assert-RetainedGatewayBaselinePlan $baselinePlan @($baselineVariables.PSObject.Properties | ForEach-Object Name); $passed++
 $currentBaseline = Copy-Fixture $baselinePlan; $currentBaseline.terraform_version = "1.16.2"
 $null = Assert-RetainedGatewayBaselinePlan $currentBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name); $passed++
+foreach ($shape in @("omitted", "null")) {
+  $emptyDriftBaseline = Copy-Fixture $currentBaseline
+  if ($shape -ceq "omitted") { $emptyDriftBaseline.PSObject.Properties.Remove("resource_drift") }
+  else { $emptyDriftBaseline.resource_drift = $null }
+  $null = Assert-RetainedGatewayBaselinePlan $emptyDriftBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name); $passed++
+  $changedWithoutDrift = Copy-Fixture $emptyDriftBaseline
+  $changedWithoutDrift.resource_changes = @([pscustomobject]@{ change = [pscustomobject]@{ actions = @("update") } })
+  Assert-Rejected { Assert-RetainedGatewayBaselinePlan $changedWithoutDrift @($baselineVariables.PSObject.Properties | ForEach-Object Name) } "Empty provider drift bypassed a real resource change."
+  $changedWithoutDrift = Copy-Fixture $emptyDriftBaseline
+  $changedWithoutDrift.output_changes.stable.actions = @("update")
+  Assert-Rejected { Assert-RetainedGatewayBaselinePlan $changedWithoutDrift @($baselineVariables.PSObject.Properties | ForEach-Object Name) } "Empty provider drift bypassed a real output change."
+}
 foreach ($invalidVersion in @("1.9.9", "1.16.1", "1.16.3", "1.16.2 ", "")) {
   $badBaseline = Copy-Fixture $baselinePlan; $badBaseline.terraform_version = $invalidVersion
   Assert-Rejected { Assert-RetainedGatewayBaselinePlan $badBaseline @($baselineVariables.PSObject.Properties | ForEach-Object Name) } "An unapproved retained Terraform version was accepted."

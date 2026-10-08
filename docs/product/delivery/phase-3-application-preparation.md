@@ -2796,3 +2796,11 @@ restricted runtime-layer smoke pass. A reviewed no-op metadata refresh advances 
 no resource mutation or guard relaxation. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#migration-image-scan-remediation-2026-10-08).
 Fresh full-image publication/scan and baseline capture remain. D1/D3 In progress; CI/CD deferred,
 Docker/WSL stopped after testing and PC on.
+
+2026-10-08 fixes strict-mode readers of Terraform's optional `resource_drift` field after a real
+zero-drift seed exposed the error. Existing change/drift guards remain intact. 654 Gateway cases,
+document/migration and schema-7/schema-8 suites pass; both corrected guards accept the actual
+saved plan unchanged. Recovery inputs are archived at state 420; fresh development reads remain
+dormant with two encrypted snapshots. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#empty-drift-baseline-correction-2026-10-08).
+The zlib-only rebuild is superseded by the combined candidate before publication. Full merged image
+scan, managed capture and SQL execution remain. D1/D3 In progress; CI/CD deferred and PC on.
