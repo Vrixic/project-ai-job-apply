@@ -2540,3 +2540,9 @@ approval with original expiry. Credentials are test-signed; provider/KMS/catalog
 responses are synthetic, and the authorization callback is in process. This does not complete
 the managed preparation workflow or tailored-resume acceptance. [Evidence](evidence/d3-native-postgresql-approval-2026-10-07.md).
 D1/D3 remain In progress; no deployment, CI/CD deferred, Docker/WSL stopped, PC on.
+
+2026-10-07 extends the combined PostgreSQL/native approval runner to tailored resumes with real
+PDF/DOCX rendering on synthetic input. Both material types pass credential-bound approval,
+original expiry and refusal after replacing the SQL packet. Managed generation/HTTP callback,
+release artifacts and acceptance remain. [Evidence](evidence/d3-native-postgresql-approval-2026-10-07.md#tailored-resume-and-packet-replacement).
+D1/D3 remain In progress; no deployment or CI/CD activation.

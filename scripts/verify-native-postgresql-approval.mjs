@@ -110,7 +110,7 @@ try {
       "sh",
       args[2],
       "-c",
-      'node -e \'if(process.versions.node.split(".")[0] !== "24") process.exit(1)\' && node /input/profile/dist/src/migrate.mjs && node /input/documents/dist/src/migrate.mjs && node /input/applications/dist/src/migrate.mjs && gcc -std=c11 -O2 -Wall -Wextra -Werror -shared -fPIC -I/usr/local/include/node /input/kernel-deadline.c -o /native/kernel-deadline.node -lrt -lm && openssl req -x509 -newkey rsa:2048 -nodes -keyout /native/key.pem -out /native/cert.pem -days 1 -subj /CN=material.test.invalid -addext subjectAltName=DNS:material.test.invalid,DNS:*.material.test.invalid 2>/dev/null && cp /input/fixture.mjs /native/fixture.mjs && NODE_EXTRA_CA_CERTS=/native/cert.pem NODE_ENV=test node /native/fixture.mjs /native/kernel-deadline.node',
+      'node -e \'if(process.versions.node.split(".")[0] !== "24") process.exit(1)\' && node /input/profile/dist/src/migrate.mjs && node /input/documents/dist/src/migrate.mjs && node /input/applications/dist/src/migrate.mjs && gcc -std=c11 -O2 -Wall -Wextra -Werror -shared -fPIC -I/usr/local/include/node /input/kernel-deadline.c -o /native/kernel-deadline.node -lrt -lm && openssl req -x509 -newkey rsa:2048 -nodes -keyout /native/key.pem -out /native/cert.pem -days 1 -subj /CN=material.test.invalid -addext subjectAltName=DNS:material.test.invalid,DNS:*.material.test.invalid 2>/dev/null && cp /input/fixture.mjs /native/fixture.mjs && NODE_EXTRA_CA_CERTS=/native/cert.pem NODE_ENV=test node /native/fixture.mjs /native/kernel-deadline.node cover_letter && NODE_EXTRA_CA_CERTS=/native/cert.pem NODE_ENV=test node /native/fixture.mjs /native/kernel-deadline.node tailored_resume',
     ],
     { cwd: root, stdio: "inherit", timeout: 180_000 },
   );

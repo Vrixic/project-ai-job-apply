@@ -44,3 +44,20 @@ database and stopped Docker/WSL afterward. PC remains on.
 
 D1/D3 remain In progress. Full managed preparation/approval, resume composition, refreshed release
 artifacts and the existing deployment/client/ATS acceptance requirements remain unfinished.
+
+
+## Tailored resume and packet replacement
+
+The same isolated runner now executes cover-letter and tailored-resume checks in separate native
+processes. Both pass on PostgreSQL 16.14 and Linux Node 24.21.0. The resume case uses the real
+native tailoring session and its actual PDF/DOCX rendering/verification on a synthetic base
+resume. Source/admission/completion authorities, KMS, catalog/Profile and signed identity remain
+synthetic. This does not exercise the managed generation ledger workflow or hosted HTTP callback.
+
+Both cases also reopen the approved application and prepare a replacement packet through the
+owning API. The old material's TLS HEAD request is refused and SQL has no current approval.
+The original expiry remains the successful approval's exact expiry. Output:
+`native-postgresql-approval:cover_letter:ok` and `native-postgresql-approval:tailored_resume:ok`.
+Log: `.tmp/native-postgresql-both-approval.log`. PDF text verification passes despite the known
+optional canvas/Path2D warnings in the bundled test environment; no canvas rendering is claimed.
+The three changed harness files pass Biome check. No production code changed.

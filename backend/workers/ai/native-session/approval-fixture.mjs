@@ -14,9 +14,11 @@ import { createApplicationsDatabase } from "../../../services/applications/src/d
 import { createRestrictedPacketKmsCipher } from "../../../services/applications/src/restricted-packet-runtime.ts";
 import { PostgresApplicationStore } from "../../../services/applications/src/store.ts";
 import { createNativeMemoryTransport } from "../../../services/documents/src/native-memory-transport.ts";
+import { createNativeResumeTransport } from "../../../services/documents/src/native-resume-transport.ts";
 
-export async function prepareNativeApproval(ids) {
+export async function prepareNativeApproval(ids, kind = "cover_letter") {
   assert.equal(process.env.NODE_ENV, "test");
+  assert.ok(["cover_letter", "tailored_resume"].includes(kind));
   // biome-ignore lint/suspicious/noUndeclaredEnvVars: uncached explicit local runner, never a workspace task.
   assert.equal(process.env.NATIVE_APPROVAL_DATABASE, "synthetic-local-only");
   const owner = randomUUID();
@@ -69,7 +71,7 @@ export async function prepareNativeApproval(ids) {
   let enabled = true;
   const availability = createNativeMaterialAvailability({
     enabled: () => enabled,
-    coverLetter: {
+    [kind === "cover_letter" ? "coverLetter" : "resume"]: {
       baseHost: "material.test.invalid",
       resolve: async () => `https://${nativeHost}:8443`,
     },
@@ -126,7 +128,9 @@ export async function prepareNativeApproval(ids) {
           form,
           fields: [],
           temporaryMaterials: [generated.reference],
-          artifactHashes: { coverLetter: generated.reference.contentSha256 },
+          artifactHashes: {
+            [kind === "cover_letter" ? "coverLetter" : "resume"]: generated.reference.contentSha256,
+          },
         },
       });
       const issuer = await createTestTokenIssuer();
@@ -134,7 +138,10 @@ export async function prepareNativeApproval(ids) {
         scope: "applications:read applications:write",
       });
       let authorizations = 0;
-      server = createNativeMemoryTransport({
+      const transport =
+        kind === "cover_letter" ? createNativeMemoryTransport : createNativeResumeTransport;
+      server = transport({
+        ...(kind === "tailored_resume" ? { tailoringVersion: generated.tailoringVersion } : {}),
         session,
         reference: generated.reference,
         enabled: () => true,
@@ -150,12 +157,11 @@ export async function prepareNativeApproval(ids) {
         authorize: async (owner, application, reference, signal, forwardedToken) => {
           assert.equal(forwardedToken, token);
           authorizations++;
-          const proof = await api.temporaryMaterialAuthorization(
-            owner,
-            application,
-            reference.generationId,
-            signal,
-          );
+          const authorize =
+            kind === "cover_letter"
+              ? api.temporaryMaterialAuthorization.bind(api)
+              : api.resumeMaterialAuthorization.bind(api);
+          const proof = await authorize(owner, application, reference.generationId, signal);
           return {
             schemaVersion: 1,
             packetId: proof.packetId,
@@ -198,13 +204,27 @@ export async function prepareNativeApproval(ids) {
         (await store.getApplication(ids[0], app.id)).approval.packetHash,
         request.packetHash,
       );
+      const reopened = await api.reopen(ids[0], app.id, approved.revision, randomUUID());
+      await api.preparePacket(
+        ids[0],
+        app.id,
+        { expectedRevision: reopened.revision, form },
+        randomUUID(),
+      );
+      await assert.rejects(
+        withNativeMaterialCredential(ids[0], app.id, token, () =>
+          availability.current(ids[0], app.id, generated.reference),
+        ),
+        /NativeMaterialAvailabilityUnavailable/u,
+      );
+      assert.equal((await store.getApplication(ids[0], app.id)).approval, null);
       enabled = false;
       await assert.rejects(
         withNativeMaterialCredential(ids[0], app.id, token, () =>
           availability.current(ids[0], app.id, generated.reference),
         ),
       );
-      process.stdout.write("native-postgresql-approval:ok\n");
+      process.stdout.write(`native-postgresql-approval:${kind}:ok\n`);
     } finally {
       dns.lookup = originalLookup;
       if (server) await new Promise((resolve) => server.close(resolve));

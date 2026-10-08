@@ -110,7 +110,7 @@ See [resume source evidence](../../../../docs/product/delivery/evidence/d3-nativ
 ## PostgreSQL approval composition
 
 `node scripts/verify-native-postgresql-approval.mjs --enable-local-approval-test --image <local-sha256>
---database-container <exact-id>` runs a separate synthetic native cover-letter/SQL approval check.
+--database-container <exact-id>` runs separate synthetic native cover-letter and tailored-resume SQL approval checks.
 It requires a caller-owned disposable PostgreSQL container labeled `codex.task=native-approval`,
 network `none`, database `native_approval`, user `synthetic`, and password `synthetic_local_only`.
 Use tmpfs data and no published ports. The test container shares only this isolated network
