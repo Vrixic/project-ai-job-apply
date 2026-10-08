@@ -1166,6 +1166,32 @@ $retainedFullDriftPlan.planned_values.root_module = $plannedDriftRoot
 $retainedFullDriftPlan.resource_drift = $driftRecords
 Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $retainedFullDriftPlan
 
+# Deferred data reads may omit values entirely. They must not break traversal of
+# unrelated known resources or manufacture a required plan-owned identity.
+foreach ($shape in @("omitted", "null")) {
+  $deferredPlan = $retainedFullDriftPlan | ConvertTo-Json -Depth 100 | ConvertFrom-Json
+  $deferredAddress = 'module.native_resume_source_access["resume-r1"].data.aws_caller_identity.current[0]'
+  $deferredResource = [pscustomobject]@{ address = $deferredAddress; mode = "data" }
+  if ($shape -ceq "null") { $deferredResource | Add-Member values $null }
+  $deferredPlan.planned_values.root_module | Add-Member child_modules @(
+    [pscustomobject]@{ resources = @($deferredResource) }
+  ) -Force
+  $deferredMap = Get-TerraformStateResourceMap $deferredPlan.planned_values.root_module
+  if (-not $deferredMap.ContainsKey($deferredAddress) -or $null -ne $deferredMap[$deferredAddress]) {
+    throw "Unknown data-source values were lost or fabricated ($shape)."
+  }
+  Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $deferredPlan
+
+  $requiredKey = @($deferredPlan.planned_values.root_module.resources |
+      Where-Object address -eq "module.platform.aws_kms_key.platform")[0]
+  $requiredKey.PSObject.Properties.Remove("values")
+  if ($shape -ceq "null") { $requiredKey | Add-Member values $null }
+  $missingIdentityRejected = $false
+  try { Assert-DevelopmentDocumentRetainedBaselinePlan -Plan $deferredPlan }
+  catch { $missingIdentityRejected = $true }
+  if (-not $missingIdentityRejected) { throw "Unknown required KMS identity was accepted ($shape)." }
+}
+
 $s3EndpointAddress = "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
 $s3EndpointBeforeCidrs = @("192.0.2.0/24", "198.51.100.0/24")
 $s3EndpointAfterCidrs = @($s3EndpointBeforeCidrs + "203.0.113.0/24")

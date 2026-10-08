@@ -1315,7 +1315,10 @@ function Get-TerraformStateResourceMap {
     if ($null -ne $resourcesProperty) {
       foreach ($resource in @($resourcesProperty.Value)) {
         if ($null -ne $resource -and -not [string]::IsNullOrWhiteSpace([string]$resource.address)) {
-          $map[[string]$resource.address] = $resource.values
+          # Terraform omits values when every attribute is unknown (for example,
+          # a deferred data source). Preserve that absence rather than inventing
+          # values; consumers must still validate identities they require.
+          $map[[string]$resource.address] = Get-OptionalTerraformChangeValue $resource "values"
         }
       }
     }
