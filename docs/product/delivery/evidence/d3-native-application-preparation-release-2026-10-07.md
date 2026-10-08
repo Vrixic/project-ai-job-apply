@@ -452,3 +452,23 @@ Local checks: 68 private receiver/launch/owner cases and 37 affected Documents c
 compile and touched-file Biome/whitespace checks pass. Nine emitted capability checks pass.
 Production remains disabled/unpublished. Original durable dispatch, propagation-gated attachment,
 Route53 composition, managed image/provider/routing and accountable acceptance remain.
+
+
+## Rebuilt route-capable control family
+
+All three original control artifacts were rebuilt from clean source
+`c71cdaad4e7026a2c7fa8c0cf0363834c49e93dd`, using the just-compiled Documents/Workflows output.
+Bundled refusal checks include the new route protocol through the actual combined entrypoint.
+Independent inspection verifies all twelve companions, exact source/embedded marker, ZIP
+bytes/SHA256/base64, bundle SHA256 and SBOM hash/component count. This is one qualified local
+packaging pass, not repeated clean reproducibility, fresh dependency audit or managed acceptance.
+
+| Artifact | ZIP SHA256 | Bytes | Components |
+|---|---|---:|---:|
+| native-material-launch-lambda | `20e1dfa4c178297d20aaa18698e6f24dc4e0b74f71a9866f32590e8d739dca42` | 619545 | 30 |
+| native-owner-rpc-lambda | `c4d796d084dcb9c5ab85567091650dc793c39475f21b845d869a8fba84ab3196` | 369437 | 36 |
+| native-material-task-event-lambda | `198cf5ff01121396e8e19135db899b90f1c5b0efb4ac5308db299a837877ee66` | 265068 | 25 |
+
+Local logs: `.tmp/d3-material-route-control-build.log` and
+`.tmp/d3-material-route-control-integrity.json`. Artifacts remain unpublished. Durable original
+route dispatch, propagation-gated attachment, cloud/managed acceptance remain; D1/D3 In progress.

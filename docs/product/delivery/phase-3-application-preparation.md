@@ -2391,3 +2391,10 @@ route configuration and original-launcher EC2 endpoint access are wired in both 
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#private-material-route-control).
 Durable dispatch/attachment and managed acceptance remain. D1/D3 In progress; no cloud action,
 CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 route-capable control family rebuilt at `c71cdaad`: three artifacts/twelve companions
+pass original bundled refusal and independent source/hash/SBOM integrity checks.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-route-capable-control-family).
+Unpublished; durable route dispatch/attachment and managed acceptance remain. D1/D3 In progress;
+CI/CD deferred, Docker/WSL stopped and PC on.
