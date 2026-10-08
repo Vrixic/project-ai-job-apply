@@ -265,7 +265,7 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
-2026-10-08 owner-authorized [prelaunch cloud lifecycle follow-up](phase-0-prelaunch-shutdown.md) is In progress. Development NAT/EIPs and seven paid interface endpoints are removed by #568; database-only encrypted snapshot/restore dormancy is under verification. Staging verification is blocked by missing account assignment despite fresh SSO sign-in. This does not reopen historical D0 acceptance or activate product features.
+2026-10-08 owner-authorized [prelaunch cloud lifecycle follow-up](phase-0-prelaunch-shutdown.md) is Blocked only on staging verification. Development NAT/EIPs and seven paid interface endpoints are removed by #568; database dormancy is deployed with a verified encrypted physical restore, zero remaining RDS instances, no-change Terraform plan and privately archived recovery inputs. [Final evidence](evidence/prelaunch-development-dormancy-2026-10-08.md). Staging verification is blocked by missing account assignment despite fresh SSO sign-in. This does not reopen historical D0 acceptance or activate product features.
 
 2026-10-04 owner D3-064 starts one-off generated-material enforcement on fresh main e48bdf3 plus exact #547 25f0ca05. Accepted ADR-038/#546 controls retention; the pending vault proposal is ADR-039 and historical isolated-bootstrap task is now D3-078. First backend path prevents material text entering packet persistence; full temporary-memory, 30-minute expiry, browser/provider and deployed acceptance remain. [Evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md). Encryption D3-077 remains open. No D1/D3 completion or activation; CI/CD deferred until production launch.
 
