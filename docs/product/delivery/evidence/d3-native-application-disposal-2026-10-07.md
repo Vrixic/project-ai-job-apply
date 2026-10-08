@@ -567,3 +567,54 @@ Logs: .tmp/braces-before-patch.log, .tmp/braces-after-patch.log,
 .tmp/braces-frozen-install.log and .tmp/braces-central-audit.log. No new UI or hosted CI claim.
 No Docker/WSL start, cloud publication, migration or runtime activation. D1/D3 remain In progress;
 managed native bindings, runtime release and acceptance remain. PC stays on.
+
+
+## Current native Lambda release qualification (2026-10-08)
+
+Clean source ca6527cf580d626ee34f98e7da7dfc3cf1a6702e, including the now-passing centralized
+dependency remediation gate, builds the full Gateway/Workflows dependency graph successfully.
+All four native families were then built twice: three material controls, six resume controls,
+four application preparation handlers and one cleanup worker. Their maintained builders execute
+bundled handler/default-off refusal checks. The actual publisher Get-ArtifactSet helpers verify
+source markers, checksums, manifest identities and CycloneDX format. All 56 companion files
+(ZIP, manifest, SBOM and checksum for 14 artifacts) match byte-for-byte across both builds.
+
+The first local qualification attempt omitted ARTIFACT_SOURCE_SHA, so the publisher helper
+correctly rejected the resulting sourceSha=local manifests. The temporary harness was corrected
+to supply the exact clean commit; both complete qualification passes then succeeded. No validation
+was weakened. Independent ZIP inspection verifies the sole index.mjs member, exact bundle hash,
+source marker, ZIP hash/byte length, SBOM hash and component count for every artifact.
+
+Receipt .tmp/native-release-ca6527cf-receipt.json SHA-256:
+5f4e170528eab53923e5cb8ad22483ce581cf28cbdf25287eaf642e9ba5205f0.
+Build and qualification logs: .tmp/native-release-ca6527cf-build.log and
+.tmp/native-release-ca6527cf-qualification.log. Artifact ZIP identities:
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| native-material-launch-lambda | 620201 | `bae5ee6f83ca101cb5674cfdb3634b290dddf54ebe1d1b51497433ea3f71fa5c` |
+| native-owner-rpc-lambda | 371001 | `f991c77bc8609b9e8d7bd249a96e6d488264d4a50c5c602fafea023a63342687` |
+| native-material-task-event-lambda | 265068 | `118987e3d6e1a2ee244edb8528f246a0f89950fe6bfdca2f2a0fff0888e4cd60` |
+| native-resume-owner-rpc-lambda | 158901 | `f07a489f8124209af0d9a6aa538675d56cf1db132cc6b50bcdc213a12d6abb0f` |
+| native-resume-source-rpc-lambda | 432735 | `120b0c48a1df5ddccecddb599ff06062510df7c004fc1f5faa54052f9b0de567` |
+| native-resume-preparation-control-lambda | 741648 | `e921aa1c6c4c1b68911754a84f3d525b6cd56454ed7695ba752e033c2a3a1af3` |
+| native-resume-preparation-durable-lambda | 421286 | `e77dc888cfd2a66d9c823315411c62b8490506e1ed6c94419e0e68ee43ba6303` |
+| native-resume-request-dispatch-lambda | 557123 | `abeea99380a9bc8b7e2ae1228627a7896f5d679c8eac55102b25ed14171aa347` |
+| native-resume-task-observer-lambda | 477978 | `3d6d026d300aa380ef64f1ea427b952e18c0cc2031dabfdda673977e90fac023` |
+| native-application-preparation-lambda | 679202 | `16a73e832edb83d7c142b91a971fb73ac8dc789fca9c0f7da86b57043ffdd7b0` |
+| application-preparation-durable-lambda | 482704 | `3e5050b1d16ebb60060fe1d0254910b9ff38185f7fd5b3d34862e2c4eb8c8a0e` |
+| application-preparation-starter-lambda | 440878 | `ca504f1b8df7e55c6fc99d8dad96afbca13b77ec821499ac6f67368f2df4d9f7` |
+| application-preparation-recovery-lambda | 454687 | `d71ecf4bffdde3a8a5fbbc030750f915b52e9a2f549d45266fe48475a289e0fe` |
+| native-material-cleanup-worker-lambda | 404463 | `6d0151e48b87495bfc1c089e6fca6bd75df7fb864def93687f121dab9622accd` |
+
+
+Read-only AWS inspection verified the configured development account identity and confirmed both
+native ECR repositories remain empty. No cloud objects were written, no images built/published,
+no task/functions activated and no migration applied. Docker/WSL remain stopped and PC stays on.
+
+These artifacts are exact branch-source qualifications, not merged-main publication receipts.
+The maintained publication operator still requires a clean checkout matching origin/main; this
+verification does not bypass that gate or promote the source. Actual download hostname/DNS,
+reviewed TLS/provider secret versions, original numeric RPC/task bindings, managed deployment and
+journey acceptance remain. The hostname/DNS information question is pending; already accepted
+basic/manual user checks are not reopened. D1/D3 remain In progress, ADR-040 Proposed, CI/CD deferred.

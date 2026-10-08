@@ -5322,3 +5322,12 @@ remediations across 20 mobile build paths; no risk exceptions or weakened severi
 [Audit and regression evidence](evidence/d3-native-application-disposal-2026-10-07.md#braces-and-verified-release-audit-2026-10-08).
 The local dependency-audit blocker is resolved. Native managed bindings/release/acceptance remain;
 D1/D3 In progress, CI/CD deferred and PC on. No deployment or repeated manual UI request.
+
+
+2026-10-08 qualifies all 14 native Lambda artifacts at clean ca6527cf after dependency remediation.
+Two builds produce 56 identical companion files; actual publisher validation and independent ZIP,
+source, manifest and SBOM verification pass. Development account identity is verified; both native
+image repositories remain empty. This is local qualification, not merged-main publication or runtime
+activation. [Release evidence](evidence/d3-native-application-disposal-2026-10-07.md#current-native-lambda-release-qualification-2026-10-08).
+Hostname/DNS, pinned TLS/provider and numeric runtime bindings, managed release and acceptance remain.
+D1/D3 In progress; CI/CD deferred, Docker/WSL stopped, PC on.
