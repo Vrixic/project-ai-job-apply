@@ -1,8 +1,8 @@
 # Prelaunch cloud lifecycle follow-up
 
-- Status: Blocked
+- Status: Complete
 - Start: 2026-10-08
-- Completion: Not completed
+- Completion: 2026-10-08
 - Owner: Platform engineering
 - Last updated: 2026-10-08
 
@@ -14,7 +14,7 @@ test session. Follow [ADR-042](../../adr/042-data-preserving-development-dormanc
 |---|---|---|---|
 | OPS-001 | Quiesce development and remove NAT/EIPs and paid interface endpoints while retaining data. | Complete | Other session's `c24c02b1` and `d3e53ff2`, merged in #568; independently read back zero NAT/EIPs/interface endpoints, application rules and queue consumers on 2026-10-08. |
 | OPS-002 | Remove development's automatic RDS restart exposure using verified encrypted snapshots and a restore path. | Complete | Encrypted current snapshot restored to a private available instance; original and restore instances removed, final snapshot available. [Evidence](evidence/prelaunch-development-dormancy-2026-10-08.md). |
-| OPS-003 | Independently verify staging is dormant. | Blocked | Fresh SSO sign-in succeeds, but AWS `GetRoleCredentials` returns `ForbiddenException: No access`; the identity's account list contains development only. Correct staging assignment is required. |
+| OPS-003 | Independently verify staging is dormant. | Complete | Account assignment corrected; fresh sign-in followed by independent live runtime/queue checks and a passing dormant-day billing check. [Evidence](evidence/prelaunch-development-dormancy-2026-10-08.md#staging-access-restored-and-dormancy-verified--2026-10-08). |
 | OPS-004 | Record latest dormant inputs, reactivation and mandatory return-to-dormancy procedure. | Complete | Exact-input dormant plan has no changes; recovery inputs/proof archived and verified in versioned KMS-encrypted state storage. [Evidence](evidence/prelaunch-development-dormancy-2026-10-08.md). |
 
 ## Work log
@@ -31,7 +31,9 @@ test session. Follow [ADR-042](../../adr/042-data-preserving-development-dormanc
 - [x] Original and temporary restore database instances are absent; final snapshot is available.
 - [x] Development has zero paid runtime networking and no active application triggers/tasks.
 - [x] Latest dormant Terraform plan is resource-change free and recovery inputs are retained privately.
-- [ ] Staging live dormancy is independently verified with valid access.
+- [x] Staging live dormancy is independently verified with valid access.
 - [x] Retained billable security, data and recovery resources are disclosed.
 
 2026-10-08: Development live shutdown, physical restore and recovery archival completed; [final evidence](evidence/prelaunch-development-dormancy-2026-10-08.md). Overall completion remains blocked solely on staging access and verification.
+
+2026-10-08 completion: Staging access restored and live dormancy independently verified; all operational acceptance criteria satisfied. No staging mutation was needed. Development lifecycle PR #570 is merged. Retained resource costs remain disclosed; historical application/privacy acceptance is unchanged.
