@@ -798,3 +798,50 @@ Managed renewal/expiry monitoring and renewed-version rollout remain unfinished.
 publication, exact function/task/image bindings and managed journey remain open. Application artifact
 publication still enforces clean main exactly matching origin/main; no guard was bypassed here.
 No native task/content route was activated. D1/D3 remain In progress, CI/CD deferred and PC on.
+
+
+## Prelaunch development quiescence (2026-10-08)
+
+Fetched and merged main f5e56237 (#567), which adds the strict AWS shutdown handoff requirement.
+The merge changes only AGENTS.md. The earlier continuous-development assumption is superseded.
+No application publication or main-branch merge of this feature work was performed.
+
+The first shutdown draft was rejected without apply: setting candidate_rights_enabled=false would
+remove export/recovery buckets and other retained resources. Keeping it true initially failed a
+validation that required active traffic and NAT. Fixed that coupling: inactive runtime may retain
+rights resources without NAT, while active runtime still requires private egress and all existing
+policy/prerequisite inputs. Candidate-rights and attempt-recovery maintenance rules now follow the
+existing serverless_runtime_enabled gate. All 54 focused serverless Terraform tests pass, including
+three new cases for retained storage/disabled maintenance, active maintenance and rejection of
+active rights without private egress. Terraform formatting/diff checks pass.
+
+Before apply, development had nine enabled project event rules, three enabled mappings, no ECS tasks,
+empty queues/DLQs and no running executions returned for the inspected current durable versions.
+The reviewed retained-data plan contains 31 deletes and 19 updates: 23 routes; the D2 schedule,
+target, permission and mapping; two NAT gateways and two EIPs; and bounded route/trigger/environment,
+alias and policy updates. No database, bucket, queue, key or secret is deleted, replaced or changed.
+Saved plan SHA-256:
+`3e4f17b15d13b8e041fdc5ed08dd3549b32a53f347045801c8a06d53346a7e46`.
+Applied the exact plan under the new shutdown instruction using the verified development account and
+locked encrypted backend. State advanced 407 to 412. Postapply refresh-backed planning exits zero.
+
+Live postapply inspection: zero API routes, enabled project EventBridge rules, enabled mappings or
+non-deleted NAT gateways. Seven available private interface endpoints remain. The exact retained
+RDS instance was requested to stop and still reports stopping at this checkpoint. Its storage/backups
+remain protected. AWS's seven-day automatic restart remains unresolved; this temporary stop does
+not satisfy full shutdown. Retained endpoint, storage, snapshot/backup, KMS, Secrets Manager,
+Route 53 and observability resources can still incur charges. No zero-cost or complete-shutdown claim.
+
+Staging verification is blocked: its SSO token does not exist. No staging mutation was attempted.
+The existing staging dormant procedure deletes its database and cannot safely be reused for
+preserved development data. A data-preserving development dormant/restore lifecycle with separate
+endpoint removal is still required. This is incomplete mandatory cleanup work, not an accepted waiver.
+[Development procedure](../../../../infrastructure/runbooks/deployments/development-prelaunch-shutdown.md).
+
+Private evidence uses .tmp/development-quiesce-*; the current complete applied baseline is
+.tmp/development-planning-current-412.tfvars.json. Keep the previous active baseline only as restart
+reference, never as an automatically replayable plan. Local test log: .tmp/quiesced-runtime-tests.log.
+No new API/backend implementation test or broad phase-zero rerun was needed for these infrastructure
+changes; actual plan/apply, focused lifecycle tests and zero drift provide the scoped evidence.
+D1/D3 remain In progress; native release/journey and persistent shutdown gaps remain. Docker/WSL
+remain stopped and PC stays on.

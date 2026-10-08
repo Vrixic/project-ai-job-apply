@@ -5377,3 +5377,12 @@ state. Postapply zero drift passes, state 406 -> 407.
 [TLS metadata evidence](evidence/d3-native-application-disposal-2026-10-07.md#tls-secret-metadata-ownership-2026-10-08).
 Managed renewal and native runtime release/journey remain. No content route activation or phase
 completion; D1/D3 In progress, Docker/WSL stopped and PC on.
+
+
+2026-10-08 adopts main's mandatory prelaunch AWS shutdown rule and fixes candidate-rights quiescence
+so storage is retained while maintenance follows the global runtime gate. All 54 focused Terraform
+cases pass. Reviewed development shutdown apply removes traffic, active triggers and both NATs;
+zero drift passes, state 407 -> 412. RDS is stopping, seven interface endpoints remain, and automatic
+seven-day RDS restart is unresolved. Staging has no SSO token. Full shutdown is explicitly incomplete;
+no data deletion or zero-cost claim. [Shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#prelaunch-development-quiescence-2026-10-08).
+D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.

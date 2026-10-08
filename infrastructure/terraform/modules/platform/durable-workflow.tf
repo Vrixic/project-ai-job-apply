@@ -285,7 +285,7 @@ resource "aws_cloudwatch_event_rule" "candidate_rights_maintenance" {
   name                = local.candidate_rights_maintenance_rule_name
   description         = "Delete exact expired candidate-export versions and settle their database state"
   schedule_expression = "rate(5 minutes)"
-  state               = "ENABLED"
+  state               = var.serverless_runtime_enabled ? "ENABLED" : "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "candidate_rights_maintenance" {
