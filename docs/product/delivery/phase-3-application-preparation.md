@@ -2744,3 +2744,14 @@ shutdown remains unfinished. Staging SSO login succeeds but role credentials are
 [Endpoint shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#independent-endpoint-shutdown-2026-10-08).
 Development has zero active event rules/mappings, NATs and interface endpoints. Retained storage,
 security and DNS still incur charges. D1/D3 In progress, Docker/WSL stopped and PC on.
+
+
+2026-10-08 opens [draft release PR #568](https://github.com/Vrixic/project-ai-job-apply/pull/568)
+for the connected native preparation/cleanup implementation and supporting infrastructure/security
+work. GitHub reports mergeable; the PR remains draft and no merge/publication/activation occurred.
+Application source, scripts, packages, dependency patches and lockfile are unchanged from the full
+verification at e71aedc6; subsequent infrastructure is covered by 57 focused cases and current
+serverless policy validation. Patch-file whitespace is intentional unified-diff context and was
+preserved with its pinned hashes; an unrelated trailing blank line in a Terraform test was removed.
+Hosted CI/CD remains owner-deferred. Development RDS is still stopped with the October 15 automatic
+restart unresolved; staging role credentials remain denied. D1/D3 In progress; PC on.
