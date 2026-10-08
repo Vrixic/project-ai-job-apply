@@ -3,7 +3,7 @@ param(
   [ValidateSet("Status", "Publish", "Verify")]
   [string]$Action = "Status",
 
-  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery", "PrivateDocumentControls", "NativeResume", "NativePreparation", "NativeMaterialControls", "PrivilegedAuditRetention", "JobRetention")]
+  [ValidateSet("Document", "CoreWorkflow", "Ingestion", "PublicJob", "ApplicationsRecovery", "PrivateDocumentControls", "NativeResume", "NativePreparation", "NativeMaterialControls", "PrivilegedAuditRetention", "JobRetention", "NativeMaterialCleanup")]
   [string]$ArtifactFamily = "Document",
 
   [string]$AwsProfile = "ai-job-apply-development-admin",
@@ -73,6 +73,9 @@ It uses dedicated output/key/receipt roots and does not activate audit capture o
 
 JobRetention selects one private Jobs expiry artifact/four objects without enabling maintenance.
 
+NativeMaterialCleanup selects one private cleanup worker/four objects with dedicated roots.
+Publication does not enable owner withdrawal, deploy the worker or activate its schedule.
+
 Receipts and command logs remain below the ignored development .terraform directory. Do not copy
 account IDs, bucket names, KMS identifiers, raw object content, or command logs into shared evidence.
 "@
@@ -98,6 +101,7 @@ $isNativePreparation = $ArtifactFamily -eq "NativePreparation"
 $isNativeMaterialControls = $ArtifactFamily -eq "NativeMaterialControls"
 $isPrivilegedAuditRetention = $ArtifactFamily -eq "PrivilegedAuditRetention"
 $isJobRetention = $ArtifactFamily -eq "JobRetention"
+$isNativeMaterialCleanup = $ArtifactFamily -eq "NativeMaterialCleanup"
 $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-workflow-artifacts"
 } elseif ($isIngestion) {
@@ -118,6 +122,8 @@ $operatorDirectoryName = if ($isCoreWorkflow) {
   "development-privileged-audit-retention-artifacts"
 } elseif ($isJobRetention) {
   "development-job-retention-artifacts"
+} elseif ($isNativeMaterialCleanup) {
+  "development-native-material-cleanup-artifacts"
 } else {
   "development-document-artifacts"
 }
@@ -139,6 +145,8 @@ $artifactDirectory = if ($isCoreWorkflow -or $isIngestion -or $isApplicationsRec
   Join-Path $repositoryRoot "backend/services/profile/dist/audit-retention-lambda"
 } elseif ($isJobRetention) {
   Join-Path $repositoryRoot "backend/workflows/dist/job-retention-lambda"
+} elseif ($isNativeMaterialCleanup) {
+  Join-Path $repositoryRoot "backend/gateway/dist/native-cleanup-lambda"
 } else {
   Join-Path $repositoryRoot "backend\services\documents\dist\lambda"
 }
@@ -164,6 +172,8 @@ $artifactNames = @(
     @("privileged-moderation-audit-retention-lambda")
   } elseif ($isJobRetention) {
     @("job-retention-lambda")
+  } elseif ($isNativeMaterialCleanup) {
+    @("native-material-cleanup-worker-lambda")
   } else {
     @("document-processor-lambda", "document-parser-lambda")
   }
@@ -188,6 +198,8 @@ $artifactKeyRoot = if ($isCoreWorkflow) {
   "lambda/profile/audit-retention"
 } elseif ($isJobRetention) {
   "lambda/jobs/retention"
+} elseif ($isNativeMaterialCleanup) {
+  "lambda/native-material/cleanup"
 } else {
   "lambda/documents"
 }
@@ -211,6 +223,8 @@ $receiptKind = if ($isCoreWorkflow) {
   "development-privileged-audit-retention-lambda-publication"
 } elseif ($isJobRetention) {
   "development-job-retention-lambda-publication"
+} elseif ($isNativeMaterialCleanup) {
+  "development-native-material-cleanup-lambda-publication"
 } else {
   "development-document-lambda-publication"
 }
@@ -234,6 +248,8 @@ $artifactLabel = if ($isCoreWorkflow) {
   "privileged audit retention"
 } elseif ($isJobRetention) {
   "job retention"
+} elseif ($isNativeMaterialCleanup) {
+  "native material cleanup"
 } else {
   "document"
 }
@@ -638,7 +654,7 @@ if ($Action -eq "Publish") {
     Invoke-LocalGate -Name "Profile tests" -LogPath $testLog -Command {
       pnpm --filter @ai-job-apply/profile-service test
     }
-  } elseif ($isPublicJob) {
+  } elseif ($isPublicJob -or $isNativeMaterialCleanup) {
     Invoke-LocalGate -Name "Gateway tests" -LogPath $testLog -Command {
       pnpm --filter @ai-job-apply/gateway test
     }
@@ -662,6 +678,7 @@ if ($Action -eq "Publish") {
       elseif ($isNativeResume) { pnpm --filter @ai-job-apply/workflows build:lambda:native-resume }
       elseif ($isPrivilegedAuditRetention) { pnpm --filter @ai-job-apply/profile-service build:lambda:audit-retention }
       elseif ($isJobRetention) { pnpm --filter @ai-job-apply/workflows build:lambda:job-retention }
+      elseif ($isNativeMaterialCleanup) { pnpm --filter @ai-job-apply/gateway build:lambda:native-cleanup }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $first = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)
@@ -677,6 +694,7 @@ if ($Action -eq "Publish") {
       elseif ($isNativeResume) { pnpm --filter @ai-job-apply/workflows build:lambda:native-resume }
       elseif ($isPrivilegedAuditRetention) { pnpm --filter @ai-job-apply/profile-service build:lambda:audit-retention }
       elseif ($isJobRetention) { pnpm --filter @ai-job-apply/workflows build:lambda:job-retention }
+      elseif ($isNativeMaterialCleanup) { pnpm --filter @ai-job-apply/gateway build:lambda:native-cleanup }
       else { pnpm --filter @ai-job-apply/documents-service build:lambda }
     }
     $second = @(Get-ArtifactSet -ExpectedSourceSha $SourceSha)

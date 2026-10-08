@@ -5238,3 +5238,11 @@ mock-provider cases, bootstrap/development/staging validation and Gateway builds
 Exact clean source `9d0c681d` also builds the 404,464-byte worker ZIP with 34 SBOM components;
 bundled default-off refusal and independent artifact integrity checks pass. Publication/deployment,
 web hookup and managed acceptance remain. D1/D3 In progress; no cloud activation, CI/CD deferred and PC on.
+
+
+2026-10-08 adds the guarded `NativeMaterialCleanup` publisher family: one worker/four immutable
+companions, dedicated key/output/receipt roots, Gateway test gate and two deterministic builds.
+Existing main, audit, bucket, checksum and exact-version receipt guards remain. Pure operator tests
+pass, including mixed-case family selection and incomplete/foreign receipt rejection; no cloud calls.
+The package command and release ordering are documented. Exact-source package qualification follows.
+Publication/deployment and managed acceptance remain; D1/D3 In progress, CI/CD deferred and PC on.

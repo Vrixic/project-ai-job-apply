@@ -130,3 +130,23 @@ validate and each has three mocked tests for default absence, separate source pu
 explicit task/preparation binding forwarding. Backend initialization is disabled in these checks;
 no refresh-backed managed plan or actual apply is claimed. DNS/TLS, ingress, original route
 cleanup, managed permissions/runtime and client/ATS acceptance still block activation.
+
+
+### Native owner cleanup release
+
+`native_cleanup_release` selects the immutable worker ZIP/version/checksum, built with
+`pnpm --filter @ai-job-apply/gateway build:lambda:native-cleanup`. The guarded development
+publisher family `NativeMaterialCleanup` isolates its four objects under
+`lambda/native-material/cleanup/<source>/<digest>/` and uses a separate receipt directory.
+Its existing exact-main, dependency audit, deterministic-build and versioned readback gates apply.
+Building locally is supported on a clean feature commit; cloud publication retains its main gate.
+
+Before activation, apply Applications 0014, retain exact original task deployments in
+`native_cleanup_deployments`, and match their clusters in bootstrap `native_cleanup_clusters`.
+The optional release alone leaves `native_cleanup_enabled` and `native_cleanup_schedule_enabled`
+false. Enable the worker and its numeric schedule before enabling Gateway owner cleanup; Terraform
+rejects Gateway activation unless the worker covers every Gateway disposal deployment. Preserve
+retained deployment entries while corresponding queue/native work is unresolved. Managed acceptance
+must verify lease recovery, original task retirement and eventual status through authenticated reads;
+`native_tasks_settled` does not prove provider or client-copy deletion. No release is activated by
+these source defaults. Existing publication/deployment authorization requirements still apply.

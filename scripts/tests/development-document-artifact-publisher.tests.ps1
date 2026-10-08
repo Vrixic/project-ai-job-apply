@@ -177,13 +177,13 @@ $configurationAssignments = @($ast.FindAll({
     param($node)
     $node -is [Management.Automation.Language.AssignmentStatementAst] -and
     $node.Left.Extent.Text -in @('$isCoreWorkflow', '$isIngestion', '$isPublicJob', '$isApplicationsRecovery',
-      '$isPrivateDocumentControls', '$isNativeResume', '$isNativePreparation', '$isNativeMaterialControls', '$isPrivilegedAuditRetention', '$isJobRetention', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
+      '$isPrivateDocumentControls', '$isNativeResume', '$isNativePreparation', '$isNativeMaterialControls', '$isPrivilegedAuditRetention', '$isJobRetention', '$isNativeMaterialCleanup', '$operatorDirectoryName', '$artifactDirectory', '$artifactNames',
       '$artifactKeyRoot', '$receiptKind', '$artifactLabel', '$expectedObjectCount')
   }, $false) | Sort-Object { $_.Extent.StartOffset })
-if ($configurationAssignments.Count -ne 17) { throw "Unexpected publication family-selection inventory." }
+if ($configurationAssignments.Count -ne 18) { throw "Unexpected publication family-selection inventory." }
 $preparationNames = @("native-application-preparation-lambda", "application-preparation-durable-lambda", "application-preparation-starter-lambda", "application-preparation-recovery-lambda")
 $resumeNames = @("native-resume-owner-rpc-lambda", "native-resume-source-rpc-lambda", "native-resume-preparation-control-lambda", "native-resume-preparation-durable-lambda", "native-resume-request-dispatch-lambda", "native-resume-task-observer-lambda")
-foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME", "NativePreparation", "nativepreparation", "NATIVEPREPARATION", "NativeMaterialControls", "nativematerialcontrols", "NATIVEMATERIALCONTROLS", "PrivilegedAuditRetention", "privilegedauditretention", "PRIVILEGEDAUDITRETENTION", "JobRetention", "jobretention", "JOBRETENTION")) {
+foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcontrols", "PRIVATEDOCUMENTCONTROLS", "NativeResume", "nativeresume", "NATIVERESUME", "NativePreparation", "nativepreparation", "NATIVEPREPARATION", "NativeMaterialControls", "nativematerialcontrols", "NATIVEMATERIALCONTROLS", "PrivilegedAuditRetention", "privilegedauditretention", "PRIVILEGEDAUDITRETENTION", "JobRetention", "jobretention", "JOBRETENTION", "NativeMaterialCleanup", "nativematerialcleanup", "NATIVEMATERIALCLEANUP")) {
   $ArtifactFamily = $family
   foreach ($assignment in $configurationAssignments) { Invoke-Expression $assignment.Extent.Text }
   if ($family -eq "PrivateDocumentControls") {
@@ -225,6 +225,14 @@ foreach ($family in @("Document", "PrivateDocumentControls", "privatedocumentcon
         $operatorDirectoryName -cne 'development-privileged-audit-retention-artifacts' -or
         $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/services/profile/dist/audit-retention-lambda')) {
       throw "Audit retention family escaped its dedicated boundary."
+    }
+  } elseif ($family -eq "NativeMaterialCleanup") {
+    if (($artifactNames -join ',') -cne 'native-material-cleanup-worker-lambda' -or $expectedObjectCount -ne 4 -or
+        $receiptKind -cne 'development-native-material-cleanup-lambda-publication' -or
+        $artifactKeyRoot -cne 'lambda/native-material/cleanup' -or
+        $operatorDirectoryName -cne 'development-native-material-cleanup-artifacts' -or
+        $artifactDirectory -cne (Join-Path $repositoryRoot 'backend/gateway/dist/native-cleanup-lambda')) {
+      throw 'Native cleanup escaped its dedicated family.'
     }
   } elseif ($family -eq "JobRetention") {
     if (($artifactNames -join ',') -cne 'job-retention-lambda' -or $expectedObjectCount -ne 4 -or
@@ -335,3 +343,16 @@ foreach ($invalid in @(
   if (-not $refused) { throw 'Mixed, duplicate or incomplete material control receipt accepted.' }
 }
 Write-Host 'Native material control family and twelve-object receipt guards passed; no cloud calls.'
+
+$cleanupNames = @('native-material-cleanup-worker-lambda')
+$cleanupObjects = @('zip', 'cdx.json', 'manifest.json', 'sha256') | ForEach-Object {
+  [pscustomobject]@{ artifactName = $cleanupNames[0]; artifactSha256 = $digest; suffix = $_ }
+}
+$null = Assert-CanonicalReceiptMatrix -Artifacts $cleanupObjects -ExpectedArtifactNames $cleanupNames
+foreach ($bad in @(@($cleanupObjects[0]), @($cleanupObjects + $canonicalArtifacts[0]))) {
+  $refused = $false
+  try { $null = Assert-CanonicalReceiptMatrix -Artifacts $bad -ExpectedArtifactNames $cleanupNames }
+  catch { $refused = $true }
+  if (-not $refused) { throw 'Cleanup publication accepted incomplete or foreign-family objects.' }
+}
+Write-Host 'Native cleanup family and isolated four-object receipt guards passed; no cloud calls.'

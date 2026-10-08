@@ -406,10 +406,10 @@ not establish managed, real-data or accountable acceptance. Historical work logs
 | 12 | Security/privacy/accessibility/evaluation/product acceptance | Layer checks and historical scoped acceptance are retained | Independent exact-release dispositions, real-model/authorized-data evaluation, assistive-technology and complete journey acceptance |
 | 13 | Authorized fixtures for enabled adapters | Registry refuses unaccepted variants | D3-013 provider authorization, sanitization/scan and independent QA acceptance |
 
-Next implementation batch: package and compose the private cleanup worker/schedule; its web
-sign-out connection is outside the current backend-only scope and the scope question is pending.
-Then exercise the connected candidate journey and fix observed failures. Package the final source
-once that batch is ready: the Gateway ZIP at `18698f7f` predates cleanup fix `611658f8`.
+Cleanup worker packaging, default-off infrastructure and guarded publication-family source are now
+implemented locally. Web sign-out remains outside backend scope with its scope question pending.
+Next release preparation: refresh the Gateway artifact and 78-migration image/recovery evidence,
+then exercise the authorized managed candidate journey and fix observed failures.
 Cloud publication/activation and accountable reviews remain separate, currently unexecuted gates.
 Do not turn this updated summary into phase completion or an assertion that every backend path
 has been exhaustively audited.

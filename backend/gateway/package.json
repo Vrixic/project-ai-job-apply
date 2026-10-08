@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "build:lambda": "pnpm --filter @ai-job-apply/gateway... build && node ../../scripts/build-gateway-lambda.mjs",
+    "build:lambda:native-cleanup": "pnpm --filter @ai-job-apply/gateway... build && node ../../scripts/build-native-material-cleanup-worker-lambda.mjs",
     "build:public-job-lambda": "pnpm --filter @ai-job-apply/gateway... build && node ../../scripts/build-public-job-lambda.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "dev": "node --watch --env-file-if-exists=../../.env --import tsx src/start.ts",

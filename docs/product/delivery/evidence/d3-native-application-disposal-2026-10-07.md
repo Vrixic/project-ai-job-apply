@@ -289,3 +289,11 @@ The build invokes the actual bundled handler and confirms default-off refusal. I
 verify source commit, ZIP's sole index.mjs entry, archive size/SHA/base64 SHA, bundle digest/source
 marker, checksum companion and SBOM digest/component count. Log: `.tmp/native-cleanup-artifact.log`.
 The artifact is local only; source provenance does not imply deployment or live acceptance.
+
+
+2026-10-08 adds the guarded `NativeMaterialCleanup` publisher family: one worker/four immutable
+companions, dedicated key/output/receipt roots, Gateway test gate and two deterministic builds.
+Existing main, audit, bucket, checksum and exact-version receipt guards remain. Pure operator tests
+pass, including mixed-case family selection and incomplete/foreign receipt rejection; no cloud calls.
+The package command and release ordering are documented. Exact-source package qualification follows.
+Publication/deployment and managed acceptance remain; D1/D3 In progress, CI/CD deferred and PC on.
