@@ -372,9 +372,14 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     jobs,
     resumes,
     ...(options.coverLetters ? { coverLetters: options.coverLetters } : {}),
-    ...(options.temporaryMaterials
+    ...(options.temporaryMaterials || options.nativeMaterialDisposal
       ? {
           temporaryMaterials: {
+            // Read withdrawal must not withdraw cleanup for already-admitted work.
+            // A disposal-only composition has no material availability authority.
+            current: async () => {
+              throw new ApplicationsUnavailableError();
+            },
             ...options.temporaryMaterials,
             ...options.nativeMaterialDisposal,
           },

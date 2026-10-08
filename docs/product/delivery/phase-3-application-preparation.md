@@ -2570,3 +2570,11 @@ checks pass; source rows are unchanged and fixture cleanup succeeds.
 [Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-logical-recovery).
 No production source, migration, deployment or phase completion change. Logout integration and
 managed/accountable acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped, PC on.
+
+2026-10-08 fixes Gateway terminal cleanup composition: disabling native reads no longer drops
+an independently enabled disposer. Without a ready packet, cleanup errors now remain visible;
+replaying cancellation retries cleanup without another application revision. Gateway/dependency
+builds, seven real PostgreSQL integration cases and 24 focused Gateway checks pass. Remote cleanup
+responses are synthetic. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#cleanup-independent-of-read-availability-2026-10-08).
+The previous Gateway artifact predates this fix and needs the release packaging refresh. Logout
+integration and managed acceptance remain; D1/D3 In progress, CI/CD deferred and PC on.

@@ -67,3 +67,29 @@ SHA256 `80014c84e1d10e430e8d39f406fa9b49cd8c3a1062d2c6a39e9ca6e4af4b795f`,
 `.tmp/native-disposal-gateway-artifact.log`. This is one local build/integrity check, not hosted
 Lambda acceptance, vulnerability clearance or reproducibility. Nothing was published.
 The current [76-migration image also executes successfully](d1-migration-image-boundary-2026-10-06.md#current-76-migration-image-execution).
+
+## Cleanup independent of read availability (2026-10-08)
+
+Inspection found the Gateway composed native terminal disposal only when a temporary-material
+reader was also supplied. A release disabling reads while retaining cleanup would therefore
+drop cleanup. A cancelled application without a ready packet could return success without
+calling the enabled disposer; a packet with temporary references instead stayed unavailable.
+
+`createApplicationsRuntime` now composes the cleanup port independently. A disposal-only
+composition refuses material availability. Existing owner-scoped terminal mutation and
+idempotency semantics are unchanged; no logout hook, new route, migration or cloud switch was added.
+
+Gateway and dependency compilation pass. Seven real PostgreSQL integration cases pass,
+including two new cases exercising the actual composed Applications runtime without a reader:
+both a cleanup refusal and a thrown cleanup error propagate as unavailable after the cancellation
+commits. Replaying the original cancellation retries cleanup and succeeds without a second
+revision change. The cases intentionally have no ready packet, covering in-flight preparation.
+Cleanup task responses are synthetic; SQL mutation/replay is real. The existing 24 focused Gateway
+configuration, availability, dispatch and entry-point composition cases also pass. Changed-file
+formatting/lint and `git diff --check` pass.
+
+Logs: `.tmp/native-disposal-independent-{build,sql,tests}.log`. The disposable PostgreSQL
+fixture was removed, Docker Desktop/WSL stopped, and the PC remains on. No fresh managed or
+browser acceptance is claimed. The earlier Gateway ZIP predates this fix; rebuild it in the
+release packaging batch. D1/D3 remain In progress, with logout integration and managed/client
+acceptance still unfinished. CI/CD remains deferred.
