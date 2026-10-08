@@ -395,7 +395,7 @@ not establish managed, real-data or accountable acceptance. Historical work logs
 | 1 | Generated claims grounded or reviewed | Grounding/mandatory-review policy and [native Prepare intake](evidence/d3-native-cover-letter-intake-2026-10-07.md) are implemented locally | Managed preparation journey, provider retention approval and real-model evaluation (D3-012) |
 | 2 | Sensitive answers follow mandatory review | Vault persistence/key adapter, version binding and [protected packet storage](evidence/d3-restricted-packet-storage-2026-10-05.md) have local evidence | Exact deployed keys/roles, legacy disposition and security/privacy acceptance; this is not missing vault implementation |
 | 3 | Rendered documents preserve content | Actual native image PDF/DOCX and verification [checks pass](evidence/d3-native-material-availability-2026-10-07.md#refreshed-native-images) on synthetic input | Real-resume authorization, output-quality review and current managed/client journey |
-| 4 | One-off material lifetime and no persistence | Native expiry/read checks, terminal disposal and [76-migration recovery](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-logical-recovery) pass locally | Worker publication/deployment and web hook; default-off packaging/schedule/IAM source implemented; authenticated withdrawal and leased continuation pass locally; idle-browser cleanup, managed disposal and provider-retention acceptance. ADR-040 remains Proposed |
+| 4 | One-off material lifetime and no persistence | Native expiry/read checks, terminal disposal and [78-migration recovery](evidence/d1-migration-image-boundary-2026-10-06.md#current-78-migration-logical-recovery) pass locally | Worker publication/deployment and web hook; default-off packaging/schedule/IAM source implemented; authenticated withdrawal and leased continuation pass locally; idle-browser cleanup, managed disposal and provider-retention acceptance. ADR-040 remains Proposed |
 | 5 | Immutable approval and change invalidation | [Both material types pass real PostgreSQL/native approval and packet-replacement refusal](evidence/d3-native-postgresql-approval-2026-10-07.md#tailored-resume-and-packet-replacement) | Complete managed preparation/approval and client handoff on the exact current release |
 | 6 | ATS accuracy/confirmation thresholds | Provider fixture gate and proposed thresholds exist | Authorized Greenhouse-first fixtures, QA representativeness and enabled-adapter measurement; Lever/Ashby remain fast-follow |
 | 7 | No blind duplicate submission | Write-ahead attempts, SQL uniqueness, ambiguous-state handling and recovery checks exist | Current journey acceptance; automated executor/confirmation acceptance separately depends on fixtures |
@@ -408,8 +408,8 @@ not establish managed, real-data or accountable acceptance. Historical work logs
 
 Cleanup worker packaging, default-off infrastructure and guarded publication-family source are now
 implemented locally. Web sign-out remains outside backend scope with its scope question pending.
-Next release preparation: refresh the Gateway artifact and 78-migration image/recovery evidence,
-then exercise the authorized managed candidate journey and fix observed failures.
+The Gateway artifact and 78-migration image/recovery evidence are refreshed locally.
+Next: prepare the authorized managed candidate journey and fix observed failures.
 Cloud publication/activation and accountable reviews remain separate, currently unexecuted gates.
 Do not turn this updated summary into phase completion or an assertion that every backend path
 has been exhaustively audited.
@@ -2634,3 +2634,12 @@ smoke and 697 replay checks pass, plus builds and all 38 workspace typecheck tas
 [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#authenticated-withdrawal-and-durable-continuation-2026-10-08).
 Worker packaging/schedule/IAM, web hookup and managed/accountable acceptance remain; D1/D3 In progress.
 No deployment; CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-08 refreshes the local 78-migration image from clean `0d2b3e42`. Actual hardened-image
+smoke, fresh/replayed seven-owner migrations and packaged 95-relation verification pass. The
+maintained logical recovery drill passes all 14 builds, 15 container guards, exact 95-row-set
+comparison and restored behavior, including three populated cleanup records, original cutoffs,
+expired-lease recovery and stale-claim rejection. Source rows stay unchanged; fixtures removed.
+[Image and recovery evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-78-migration-logical-recovery).
+Docker/WSL stopped, PC on. No publication/deployment or vulnerability waiver; D1/D3 In progress.

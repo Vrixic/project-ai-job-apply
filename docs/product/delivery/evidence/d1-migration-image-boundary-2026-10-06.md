@@ -200,3 +200,47 @@ Source rows remain unchanged and owned-container cleanup succeeds. Log:
 `.tmp/migration-76-logical-recovery.log`. Fixture formatting/lint and whitespace checks pass.
 Docker Desktop and WSL are stopped after verification; the PC stays on. Publication, managed
 recovery, logout integration and accountable acceptance remain open; D1/D3 are In progress.
+
+
+## Current 78-migration logical recovery
+
+2026-10-08 runs `pnpm test:d2-recovery` against runtime source `0d2b3e42`, with a focused
+synthetic cleanup fixture added to the maintained harness. All 14 build tasks and 15 container
+boundary checks pass. Actual PostgreSQL dump/restore preserves 78 migrations, 95 exact relation
+row sets, seven owners and 12 schemas; all 18 required D2 relations remain populated.
+
+Three withdrawal/queue records are created through the owning stores: completed, processing with
+an expired lease and saved cursor, and pending. After restore, original cutoff microseconds and
+owner isolation hold. Replaying withdrawal preserves the records. Recovery replaces the expired
+claim token and retains its cursor, refuses the old claim, processes pending work and leaves no
+claimable request. Completed records remain immutable. These cases have no native task allocation;
+queue settlement here proves queue recovery, not external task or provider disposal.
+Existing native launch, packet, response, consent and D2 behavior checks also pass. Source rows
+remain unchanged and the runner removes its owned disposable container. Log:
+`.tmp/migration-78-logical-recovery.log`. Fixture Biome and whitespace checks pass.
+This is local logical recovery with generated data, not managed PITR/RTO/RPO or production acceptance.
+
+
+## Current 78-migration image execution
+
+2026-10-08 builds clean archived source `0d2b3e42a3feb789e16a13b4ad8d9a92fb74cd48`,
+Linux/amd64, with --pull and committed SOURCE_DATE_EPOCH 1791464639. Unchanged layers may be
+cached; this is not a reproducibility or cold-build claim. Tag:
+`ai-job-apply-migration:local-0d2b3e42`.
+
+- Inspected image ID: `sha256:72df6ce84cf39fa642e77121e4390e4398d30ab20c57b59ffc0837729e9f795f`.
+- Platform manifest: `sha256:c29d1f7b2fe7823d1a38ef13bc19616d5eeaa6e7cc471fc875a38ad509aab055`.
+- Config: `sha256:23b6f72eb4a54295fcc9c9fa8557da8ced71c2c2fde3233ee9721ed627c6d2ae`.
+
+Inspection confirms source label, platform and UID/GID 65532:65532. The actual image passes the
+publisher runtime smoke with network none, read-only root, all capabilities dropped and
+no-new-privileges. It applies and replays seven-owner migrations against isolated synthetic
+PostgreSQL 16.14, sharing only the disposable database's network-none namespace. Its packaged
+read-only verifier confirms 78 migrations and 95 relations. Database storage is tmpfs; exact
+container identity/label/mount checks precede removal. No AWS identity or managed TLS is exercised.
+
+Logs: `.tmp/migration-0d2b3e42-{build,smoke,fresh,replay,verify}.log`, inspection JSON with the
+same prefix, and `.tmp/migration-78-execution.log`. Both image and logical-recovery fixtures are
+removed. Docker/WSL stopped after the last Docker step; PC stays on. Current local image/recovery
+now includes Applications 0013/0014. Publication, vulnerability disposition, managed migration/PITR,
+client integration and accountable acceptance remain. D1/D3 In progress; CI/CD deferred.

@@ -20,6 +20,7 @@ import {
   requiredNonemptyD2Relations,
   seedD2RecoveryFixtures,
 } from "./fixtures.mjs";
+import { exerciseRestoredNativeCleanup, seedNativeCleanup } from "./native-cleanup.mjs";
 import { exerciseRestoredNativeLaunches, seedNativeLaunches } from "./native-launches.mjs";
 import {
   exerciseRestoredResponseInventory,
@@ -253,6 +254,7 @@ try {
   stage = "seed-generated-restricted-packets";
   const restrictedFixtures = await seedRestrictedPackets(sourceApplications, protection);
   const nativeFixtures = await seedNativeLaunches(sourceApplications, fixtures.ownerUserId);
+  const cleanupFixtures = await seedNativeCleanup(sourceApplications);
   stage = "source-aggregate-and-row-snapshot";
   const sourceAggregate = await verifyRestoreDatabase(sourceReader, source);
   const sourceRows = await exactRows(sourceReader, source.manifest);
@@ -326,6 +328,7 @@ try {
     restrictedFixtures,
   );
   const nativeBehavior = await exerciseRestoredNativeLaunches(targetApplications, nativeFixtures);
+  const cleanupBehavior = await exerciseRestoredNativeCleanup(targetApplications, cleanupFixtures);
   stage = "restored-d2-behavior";
   const behavior = await exerciseRestoredD2(targetStore, targetProfile, fixtures, (value) => {
     stage = value;
@@ -347,6 +350,7 @@ try {
     ...packetBehavior,
     ...restrictedBehavior,
     ...nativeBehavior,
+    ...cleanupBehavior,
     ...behavior,
   };
 } catch (error) {

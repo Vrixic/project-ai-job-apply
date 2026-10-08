@@ -1029,3 +1029,12 @@ checks pass; source rows are unchanged and fixture cleanup succeeds.
 [Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-logical-recovery).
 No production source, migration, deployment or phase completion change. Logout integration and
 managed/accountable acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped, PC on.
+
+
+2026-10-08 refreshes the local 78-migration image from clean `0d2b3e42`. Actual hardened-image
+smoke, fresh/replayed seven-owner migrations and packaged 95-relation verification pass. The
+maintained logical recovery drill passes all 14 builds, 15 container guards, exact 95-row-set
+comparison and restored behavior, including three populated cleanup records, original cutoffs,
+expired-lease recovery and stale-claim rejection. Source rows stay unchanged; fixtures removed.
+[Image and recovery evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-78-migration-logical-recovery).
+Docker/WSL stopped, PC on. No publication/deployment or vulnerability waiver; D1/D3 In progress.
