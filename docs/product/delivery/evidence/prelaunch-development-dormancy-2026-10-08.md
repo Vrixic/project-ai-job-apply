@@ -83,3 +83,42 @@ monitoring and storage costs are intentional; this is not zero cost.
 OPS-003's access/verification blocker is closed. At the owner's request, AWS SSO was explicitly
 logged out after this verification and a fresh development login was initiated. No runtime was
 reactivated. The development lifecycle implementation in PR #570 is now merged.
+
+## Repeated development shutdown after interrupted testing — 2026-10-08
+
+A later test session restored development's database, then lost its own network/write access before
+cleanup. A fresh live check found the database available again. The owning session confirmed no
+active test/apply and no SQL execution, and transferred exclusive cleanup ownership. The earlier
+shutdown evidence remains historical; this entry records the new final state.
+
+At approximately 20:34 UTC, independent AWS reads confirm **zero RDS instances**, including the
+original and temporary restore check; zero NAT gateways, allocated Elastic IPs, paid interface
+endpoints, EC2 instances and EBS volumes. The lifecycle drain checks passed before planning and
+applying: no application routes, enabled schedules/queue mappings, project ECS tasks or running
+durable workflows, and empty queues. Development SSO remains signed in for subsequent work;
+authentication does not reactivate runtime capacity.
+
+The latest full inputs from state 424 were reconciled with actual restored database metadata.
+Only database lifecycle mode/recovery metadata changed; the original restore-snapshot binding and
+all feature inputs were preserved. A new encrypted safety snapshot physically restored to a private,
+available database with matching KMS key. The exact preparation plan changed only deletion
+protection and the new final-snapshot name. The exact dormant plan removed only the database,
+required an encrypted final snapshot and retained automated backups. After the final snapshot was
+available and the original absent, the exact temporary restore instance was removed. This was
+physical RDS recovery verification, not SQL/application/privacy acceptance.
+
+State advanced **424 -> 427**. Identity comparison found only the database removed, with all
+**289 other managed resource identities unchanged**. The final exact-input plan reports
+**No changes**. Versioned KMS-encrypted recovery inputs, restore proof and manifest were refreshed
+and checked by exact-version byte readback; older snapshots and archive versions remain retained.
+The existing recovery runbook applies to the new final snapshot. Storage/security costs remain.
+
+| Artifact | SHA-256 |
+|---|---|
+| Applied preparation plan | `8a283b5b58cd30e8c437a590c68fa7a8060cf02e1d820e85932c102094184ec2` |
+| Applied dormant plan | `e6c9decb1c2cf6d1ea81f020a93607af1feab4bc83ad8cf3537daa20eb0df239` |
+| Final no-change plan | `4649fc673735d9ed8ef9f91bef8ee957df1443e01dcc389002e5ab41949a1f8f` |
+| New archived dormant inputs | `39745c94c1dcb0933ead6ac40881556374d89e2e172b154b569161daa7a29a29` |
+
+The other session was notified that the database cleanup warning is resolved and that reactivation
+requires a subsequent authorized testing session, followed by the same mandatory shutdown gate.
