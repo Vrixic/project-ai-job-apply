@@ -1830,7 +1830,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = local.native_resume_reconciliation_configured || local.material_private_configured || local.preparation_configured || local.native_resume_rpc_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count       = local.native_resume_reconciliation_configured || local.material_private_configured || local.preparation_configured || local.native_resume_rpc_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || local.native_cleanup_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1850,7 +1850,7 @@ resource "aws_security_group" "secrets_endpoint" {
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = local.material_private_configured || local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count = local.material_private_configured || local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || local.native_cleanup_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
   dynamic "statement" {
     for_each = local.material_secret_access
     content {
@@ -1958,7 +1958,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
   }
 
   dynamic "statement" {
-    for_each = anytrue([local.audit_retention_deployed, local.job_retention_deployed, var.deploy_gateway_lambda, var.deploy_serverless_outbox, var.deploy_profile_readiness_durable, var.candidate_deletion_restore_role_enabled, local.document_complete_dark_enabled, var.deploy_ingestion_runtime, local.d2_community_deployed, var.applications_attempt_recovery_enabled]) ? [1] : []
+    for_each = anytrue([local.audit_retention_deployed, local.job_retention_deployed, local.native_cleanup_deployed, var.deploy_gateway_lambda, var.deploy_serverless_outbox, var.deploy_profile_readiness_durable, var.candidate_deletion_restore_role_enabled, local.document_complete_dark_enabled, var.deploy_ingestion_runtime, local.d2_community_deployed, var.applications_attempt_recovery_enabled]) ? [1] : []
     content {
       sid       = "ExactLambdaRolesDatabaseSecretOnly"
       effect    = "Allow"
@@ -1978,6 +1978,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
         values = compact([
           local.audit_retention_deployed ? aws_iam_role.audit_retention[0].arn : "",
           local.job_retention_deployed ? aws_iam_role.job_retention[0].arn : "",
+          local.native_cleanup_deployed ? aws_iam_role.native_cleanup[0].arn : "",
           var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : "",
           var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
           var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
@@ -2001,7 +2002,7 @@ data "aws_iam_policy_document" "secrets_endpoint" {
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
     var.persistent_data_plane_enabled && (
-      local.material_private_configured || local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
+      local.material_private_configured || local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || local.native_cleanup_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
     )
   ) ? 1 : 0
   vpc_id              = aws_vpc.this.id

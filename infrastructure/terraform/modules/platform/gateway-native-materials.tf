@@ -1,6 +1,7 @@
 variable "gateway_native_materials" {
   description = "Optional native candidate API configuration. Provisioning grants packet access; all runtime switches default off."
   type = object({
+    owner_cleanup_enabled            = optional(bool, false)
     disposal_enabled                 = optional(bool, false)
     disposal_deployments             = optional(list(object({ cluster_arn = string, task_definition_arn = string, container_name = string })), [])
     availability_enabled             = optional(bool, false)
@@ -17,6 +18,7 @@ variable "gateway_native_materials" {
   validation {
     condition = var.gateway_native_materials == null ? true : (
       var.restricted_packet_keys_provisioned && var.deploy_gateway_lambda &&
+      (!var.gateway_native_materials.owner_cleanup_enabled || (var.gateway_native_materials.disposal_enabled && var.native_cleanup_enabled && var.native_cleanup_schedule_enabled && alltrue([for d in var.gateway_native_materials.disposal_deployments : contains(var.native_cleanup_deployments, d)]))) &&
       length(var.gateway_native_materials.disposal_deployments) <= 8 &&
       (length(var.gateway_native_materials.disposal_deployments) == 0 || var.persistent_data_plane_enabled) &&
       (!var.gateway_native_materials.disposal_enabled || length(var.gateway_native_materials.disposal_deployments) > 0) &&
@@ -38,7 +40,7 @@ variable "gateway_native_materials" {
       (!var.gateway_native_materials.resume_preparation_enabled || var.gateway_native_materials.resume_locations_enabled) &&
       (!var.gateway_native_materials.cover_letter_preparation_enabled || var.gateway_native_materials.cover_letter_locations_enabled)
     )
-    error_message = "Native candidate API requires the Gateway and retained packet keys, reviewed DNS hostnames, protection before authorization, authorization before locations and matching material locations before intake; availability also requires private application NAT and matching native task groups."
+    error_message = "Native candidate API requires the Gateway and retained packet keys, reviewed DNS hostnames, protection before authorization, authorization before locations and matching material locations before intake; availability also requires private application NAT and matching native task groups. Owner withdrawal additionally requires an enabled scheduled worker retaining every Gateway disposal deployment."
   }
 }
 
@@ -57,6 +59,7 @@ locals {
     RESTRICTED_PACKET_PROTECTION_ENABLED  = tostring(var.gateway_native_materials.packet_protection_enabled)
     RESTRICTED_PACKET_ENCRYPTION_KEY_ARN  = aws_kms_key.restricted_packet_encryption[0].arn
     RESTRICTED_PACKET_FINGERPRINT_KEY_ARN = aws_kms_key.restricted_packet_fingerprint[0].arn
+    NATIVE_OWNER_MATERIAL_CLEANUP_ENABLED = tostring(var.gateway_native_materials.owner_cleanup_enabled)
     NATIVE_APPLICATION_DISPOSAL_ENABLED   = tostring(var.gateway_native_materials.disposal_enabled)
     NATIVE_APPLICATION_DISPOSAL_DEPLOYMENTS = jsonencode([for deployment in var.gateway_native_materials.disposal_deployments : {
       clusterArn = deployment.cluster_arn, taskDefinitionArn = deployment.task_definition_arn, containerName = deployment.container_name

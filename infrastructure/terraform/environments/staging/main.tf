@@ -44,6 +44,10 @@ provider "aws" {
 }
 
 module "platform" {
+  native_cleanup_release           = var.native_cleanup_release
+  native_cleanup_enabled           = var.native_cleanup_enabled
+  native_cleanup_schedule_enabled  = var.native_cleanup_schedule_enabled
+  native_cleanup_deployments       = var.native_cleanup_deployments
   restricted_packet_export_enabled = var.restricted_packet_export_enabled
   gateway_native_materials         = var.gateway_native_materials
   native_material_image_access = merge(

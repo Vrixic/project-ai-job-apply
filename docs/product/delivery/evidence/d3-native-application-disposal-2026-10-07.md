@@ -257,3 +257,26 @@ all-copy disposal, production clearance or phase completion is claimed. CI/CD de
 The source-bound migration operator guard passes against committed source `02726ccf`, including
 schema-8 two-receipt and schema-7 migration/Gateway round-trip adversarial checks. Log:
 `.tmp/native-cleanup-operator-final.log`.
+
+
+## Cleanup worker release composition (2026-10-08)
+
+The standalone builder emits a source-bound Node 24 ZIP, checksum, manifest and CycloneDX inventory
+and checks the bundled handler refuses execution by default. Terraform composes an optional immutable
+release in development/staging, private concurrency-one Lambda with a 240-second timeout beneath the
+five-minute SQL lease, and numeric-version minute schedule. Runtime and schedule remain off by default.
+API activation requires an enabled worker/schedule retaining every Gateway disposal deployment.
+
+Permissions scope task observation/stop to retained clusters and managed-secret access to the database.
+Private ECS/Secrets endpoints include the exact worker principal. The role explicitly denies launch,
+interactive execution, S3, role passing, Lambda invocation and secret writes. Bootstrap boundary task
+authority is scoped to the exact worker principal and clusters. Execution/delivery alarms use the
+existing operations topic; no queue-age monitoring is claimed.
+
+Local Terraform 1.16.2 validates bootstrap/development/staging. Mock-provider tests pass 26 unique
+cases: 15 Gateway, six worker and five private-network cases. Gateway/dependency builds and changed
+script/config Biome checks pass. Logs: `.tmp/native-cleanup-tf-tests-windows.log`,
+`.tmp/native-cleanup-tf-gateway-final.log`, `.tmp/native-cleanup-tf-{development,staging,bootstrap}.log`
+and `.tmp/native-cleanup-package-build.log`. Exact-source artifact verification follows this commit.
+No AWS calls, publication, plan/apply, migration or managed acceptance occurred. Web hookup remains
+outside backend scope. D1/D3 remain In progress; CI/CD deferred, Docker/WSL stopped and PC on.

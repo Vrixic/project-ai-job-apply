@@ -309,8 +309,11 @@ recover after five minutes; pending full scans back off for 30 seconds. Completi
 scheduled input is exactly `{ "schemaVersion": 1, "action": "drain" }`; IAM provides invocation
 authority. One invocation claims one request and processes at most five applications. It records the
 next cursor or settlement only while its original lease is valid. It uses the managed database secret
-and exact task deployment allowlist; it does not accept HTTP/candidate/task input. Package/schedule/IAM
-composition and managed acceptance remain release work; this batch adds no cloud activation.
+and exact task deployment allowlist; it does not accept HTTP/candidate/task input. Build with `node scripts/build-native-material-cleanup-worker-lambda.mjs` after the Gateway build.
+The default-off Terraform release supplies a private, concurrency-one worker with a 240-second
+timeout, numeric scheduled target and exact retained-cluster task permissions. Gateway withdrawal
+activation requires the enabled schedule and worker coverage of every retained Gateway deployment.
+Immutable artifact publication, deployment and managed acceptance remain; no cloud activation occurred.
 
 `native_tasks_settled` means no unretired native generation remains through the original exact
 cutoff. It does not certify provider retention, route deletion or all-copy disposal. Unknown original

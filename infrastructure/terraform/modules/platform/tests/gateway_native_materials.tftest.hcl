@@ -200,3 +200,15 @@ run "disposal_foreign_cluster" {
   variables { gateway_native_materials = { disposal_deployments = [{ cluster_arn = "arn:aws:ecs:us-east-2:999900001111:cluster/native-materials", task_definition_arn = "arn:aws:ecs:us-east-2:111122223333:task-definition/ai-job-apply-development-native-material:7", container_name = "native-material" }] } }
   expect_failures = [var.gateway_native_materials]
 }
+
+run "owner_withdrawal_requires_scheduled_cleanup" {
+  command = plan
+  variables {
+    gateway_native_materials = {
+      owner_cleanup_enabled = true
+      disposal_enabled      = true
+      disposal_deployments  = [{ cluster_arn = "arn:aws:ecs:us-east-2:111122223333:cluster/synthetic", task_definition_arn = "arn:aws:ecs:us-east-2:111122223333:task-definition/ai-job-apply-development-native-material:7", container_name = "native-material" }]
+    }
+  }
+  expect_failures = [var.gateway_native_materials]
+}

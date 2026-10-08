@@ -5228,3 +5228,12 @@ smoke and 697 replay checks pass, plus builds and all 38 workspace typecheck tas
 [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#authenticated-withdrawal-and-durable-continuation-2026-10-08).
 Worker packaging/schedule/IAM, web hookup and managed/accountable acceptance remain; D1/D3 In progress.
 No deployment; CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-08 adds standalone cleanup-worker packaging and default-off private Terraform runtime,
+minute schedule, scoped task/endpoint/boundary permissions and execution/delivery alarms. API
+activation requires a scheduled worker covering all retained Gateway deployments. All 26 selected
+mock-provider cases, bootstrap/development/staging validation and Gateway builds pass locally.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#cleanup-worker-release-composition-2026-10-08).
+Exact-source artifact verification follows; publication/deployment, web hookup and managed acceptance
+remain. D1/D3 In progress; no cloud activation, CI/CD deferred and PC on.
