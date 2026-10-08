@@ -2755,3 +2755,13 @@ serverless policy validation. Patch-file whitespace is intentional unified-diff 
 preserved with its pinned hashes; an unrelated trailing blank line in a Terraform test was removed.
 Hosted CI/CD remains owner-deferred. Development RDS is still stopped with the October 15 automatic
 restart unresolved; staging role credentials remain denied. D1/D3 In progress; PC on.
+
+
+2026-10-08 verifies merged #568 at e4bc0d54 and publishes the six native-resume Lambda artifacts
+plus 18 companion objects from exact clean main. All 1,910 workflow cases pass (123 database cases
+skipped), the dependency audit passes, both builds match, and a separate exact-version S3 readback
+passes. [Publication evidence](evidence/d3-native-application-disposal-2026-10-07.md#merged-main-native-resume-publication-2026-10-08).
+No runtime activation; remaining native families/images, managed bindings/journey and acceptance
+remain. D1/D3 In progress. Fresh development reads show zero routes/rules/mappings, but concurrent
+recovery work has one database available and a second creating: full AWS shutdown remains incomplete.
+Staging access remains unresolved; CI/CD deferred, Docker/WSL not started and PC on.

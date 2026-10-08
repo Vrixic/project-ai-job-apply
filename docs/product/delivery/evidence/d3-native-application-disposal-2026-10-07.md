@@ -881,3 +881,52 @@ Private plan/apply/verify/state/receipt artifacts use .tmp/development-endpoints
 .tmp/development-planning-current-415.tfvars.json. The development shutdown runbook now documents
 endpoint removal and reactivation ordering. Native runtime publication/journey, TLS renewal and
 D1/D3 acceptance remain open. Docker/WSL stayed stopped and PC remains on.
+
+
+## Merged-main native resume publication 2026-10-08
+
+[PR #568](https://github.com/Vrixic/project-ai-job-apply/pull/568) merged as
+`e4bc0d5467f5901baa496f4a37cae0a6495f5216`; its complete tree matches the previously
+verified PR head. Hosted quality was prevented from starting by GitHub billing. CI/CD remains
+owner-deferred; no hosted-green claim or repository-protection override was made here.
+
+The unchanged guarded publisher ran from clean main matching origin/main, using the development
+temporary SSO identity, Terraform 1.16.2, Node 24 and pnpm 10.24.0. It validated the exact
+Terraform-owned artifact bucket, region, versioning, public-access block and customer KMS key.
+Workflow tests passed 1,910 cases; 123 database-dependent cases were skipped. The centralized
+dependency audit passed with four exactly verified local advisory remediations and no risk
+exceptions. Two source-bound builds produced identical artifacts.
+
+Six native-resume Lambda artifacts and their checksum, manifest and CycloneDX companion objects
+were published: 24 immutable S3 versions total. Each was verified during publication, followed
+by a separate receipt-bound Verify invocation with successful exact-version readback.
+
+| Artifact | ZIP SHA-256 |
+| --- | --- |
+| Owner RPC | `60578db351af9baef67bcb0c41de30a7107dcc7827165dc108381fb9b7650d09` |
+| Source RPC | `4ebd2d1fd85f96603f64f1c67efa0edffd8b415fa71bfcc7ac8949274af33131` |
+| Preparation control | `ffd54e1127174c2a4abf9dd32af4dd903cb8b50e5407a5873005b21aaedff7db` |
+| Durable preparation | `44c7147be16d89e46f0cf85438b11c2bc4f50469e74e467855c4b3121024c039` |
+| Request dispatcher | `edd4045cb28bf1aa9f7c5fcff7b0cfb92e297864a04c7c7dafc557c5f1b6a67b` |
+| Task observer | `17ec119a0397381e288eb43de3706561e7975cbef4bd8530432fe5933f5c9ede` |
+
+Private receipt: development `.terraform/development-native-resume-artifacts/receipt-e4bc0d5467f5-20261008-132952.json`.
+Receipt SHA-256: `33db93de2e1fe2fad0fd61205b0f8c5d9028e2416cb05340ac9c647feec1f577`.
+Private logs: `.tmp/native-resume-publish-e4bc0d54.log` and
+`.tmp/native-resume-verify-e4bc0d54.log`. The initial separate Verify invocation rejected a
+repository-relative receipt path; the corrected absolute path passed without changing the guard.
+
+No Lambda code, task definition, route or trigger was deployed or activated. NativePreparation,
+NativeMaterialControls and NativeMaterialCleanup publication, configured images, managed runtime
+bindings, live journey and accountable acceptance remain. Certificate renewal remains separate.
+This publication does not complete D1 or D3.
+
+A fresh read-only development observation at `2026-10-08T17:38:32Z` found zero API routes,
+enabled event rules and enabled Lambda mappings. It also found one protected database available
+and a second database creating during concurrent database-dormancy/recovery work in the separate
+cost-shutdown checkout. This supersedes the earlier stopped-database observation: AWS shutdown
+is incomplete at this observation, and these billable operations were not interrupted. The
+publisher made no runtime or Terraform-state mutation. Staging role access remains unverified
+since the earlier No access denial. Durable storage, artifact versions, snapshots, secrets,
+security and DNS retain charges; no zero-cost or full-shutdown claim. Docker/WSL were not started
+for publication, and the PC stays on.
