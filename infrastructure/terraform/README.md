@@ -158,3 +158,12 @@ tags, platform KMS encryption, push scanning and force deletion disabled. No lif
 configured: retained original task digests must stay available for recovery. This storage stage does
 not publish images, register tasks, create secrets, configure DNS or activate processing. Review the
 saved environment plan before applying; source defaults remain off.
+
+## Prelaunch shutdown
+
+Development is on demand under [ADR-042](../../docs/adr/042-data-preserving-development-dormancy.md).
+Follow [runtime shutdown](../runbooks/deployments/development-prelaunch-shutdown.md) and
+[data-preserving database dormancy](../runbooks/deployments/development-database-dormancy.md).
+Keep the latest full lifecycle inputs; old feature-release plans are not a safe reactivation baseline.
+The development database defaults to dormant and refuses missing recovery metadata. A stopped RDS
+instance can restart automatically and is not completed shutdown.
