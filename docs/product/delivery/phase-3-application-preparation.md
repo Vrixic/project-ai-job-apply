@@ -2467,3 +2467,11 @@ with actual emitted import/handler and refusal smoke. Artifacts remain unpublish
 pass does not prove live API/export behavior, reproducibility or vulnerability clearance.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#current-gateway-and-candidate-rights-artifacts).
 D1/D3 remain In progress; managed/client acceptance remains, CI/CD deferred and PC on.
+
+
+2026-10-07 refreshes release dependency evidence at `9ee6f2a8`: the production registry report
+contains 13 advisory records, all on frontend/mobile or frontend/admin paths, including one
+critical mobile dependency. The centralized repository audit exits 1; existing image-size patch
+validation remains distinct from raw registry findings. No dependency/exemption changes were made
+in this backend-only branch. D1/D3 remain In progress and no release security clearance is claimed.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#current-dependency-release-check).

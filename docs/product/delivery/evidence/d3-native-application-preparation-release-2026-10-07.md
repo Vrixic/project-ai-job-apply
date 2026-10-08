@@ -720,3 +720,34 @@ re-encrypt them. Therefore no additional resume-controller KMS capability was in
 this check. Actual managed image/provider/TLS/network/key binding, publication/migrations,
 rights/route/recovery acceptance and client/ATS integration remain. D1/D3 remain In progress;
 CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+## Current dependency release check
+
+A fresh `pnpm audit --prod --json` at clean `9ee6f2a8` reports 13 advisory records across
+804 production dependencies: one critical, seven high, four moderate and one low. Every returned
+finding path was inspected and is frontend-rooted. The raw inventory is:
+
+| Dependency | Advisory records | Reported root |
+|---|---:|---|
+| shell-quote | 1 critical | frontend/mobile |
+| node-forge | 1 high | frontend/mobile |
+| braces | 1 high | frontend/mobile |
+| image-size | 2 high | frontend/mobile |
+| source-map-js | 1 high | frontend/admin |
+| sharp | 1 high | frontend/admin |
+| next | 6 (1 high, 4 moderate, 1 low) | frontend/admin |
+
+The repository's authoritative `pnpm audit:dependencies` also exits 1. Its exact local image-size
+patch validation remains the authority for that already addressed package; raw registry records
+alone do not show that patch failing. The other advisories are not waived. No shared lockfile,
+frontend dependency or exemption was changed under the backend-only task. This registry snapshot
+does not prove absence of backend vulnerabilities or replace independent launch review.
+
+Ignored local records are `.tmp/d3-current-production-audit.json`,
+`.tmp/d3-current-production-audit-paths.json` and `.tmp/d3-current-dependency-audit.log`.
+Production dependency remediation belongs with the corresponding frontend release work. Backend
+managed image/domain/TLS/key inputs and publication/acceptance remain pending. Original terminal
+recovery has a manual runbook and private bounded inspection; automatic missed-event reconciliation
+remains a separately identified local follow-up. CI/CD remains deferred and no hosted run, cloud
+mutation, frontend edit or Docker work occurred. D1/D3 remain In progress; PC on.
