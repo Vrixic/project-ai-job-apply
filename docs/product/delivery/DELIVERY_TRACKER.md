@@ -5351,3 +5351,11 @@ skipped in this run. Existing lint remains 15 warnings/58 informational notes, z
 Corrected stale D3 summaries: the default-off web sign-out hook is implemented; managed acceptance
 remains. No publication/activation or phase completion. D1/D3 In progress; CI/CD deferred,
 Docker/WSL stopped and PC on.
+
+
+2026-10-08 provisions the dedicated development DNS zone materials.dev.applydash.ai after the
+owner supplied the Cloudflare-managed domain. Exact saved plan creates one zone only; development
+validation and postapply zero-drift plan pass, platform state 405 -> 406. Cloudflare delegation
+records are ready for the owner; no DNS write connection is available here. Wildcard TLS and native
+runtime release/acceptance remain. [DNS evidence](evidence/d3-native-application-disposal-2026-10-07.md#development-download-dns-2026-10-08).
+No application activation, phase completion or CI/CD work; D1/D3 In progress, PC on.

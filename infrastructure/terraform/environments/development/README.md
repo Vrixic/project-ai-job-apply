@@ -54,3 +54,20 @@ mode and reaches only Gateway and scheduled processing. For global-only Lever, o
 separately accepted hosted Ashby host. Provider registration and extension detector activation
 remain independent; this setting changes no immutable descriptor, migration, identity, or Trust
 authority.
+
+
+## Native download DNS
+
+`native_material_dns_enabled` defaults false. Enabling it creates only the public Route 53 zone
+`materials.dev.applydash.ai`. The `native_material_dns` output supplies the exact zone ID and four
+nameservers. In Cloudflare's `applydash.ai` DNS records, add four NS records named `materials.dev`,
+one for each output nameserver. Keep the parent domain's Cloudflare nameservers unchanged.
+The dedicated zone is protected against Terraform destruction and nonempty forced deletion.
+
+The runtime creates allocation-specific records below this base host through its existing scoped
+Route 53 permissions. Zone creation/delegation does not enable runtime routes or launch tasks.
+A browser-trusted certificate covering `*.materials.dev.applydash.ai`, its pinned managed-secret
+version, immutable task/function bindings and verified runtime release remain required. A Cloudflare
+Origin CA certificate alone is insufficient for the direct browser-to-task HTTPS connection.
+Retain `native_material_dns_enabled=true` in subsequent complete deployment input baselines after
+creation; omitting it proposes removal and is refused by the resource's destruction protection.

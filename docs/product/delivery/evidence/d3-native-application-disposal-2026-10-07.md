@@ -683,3 +683,43 @@ The current D3 task and exit-gate summaries now correctly distinguish the implem
 web hook from outstanding managed acceptance. No cloud publication, migration, activation or
 phase completion is claimed. Native hostname/DNS, trusted TLS/provider and numeric runtime
 bindings, managed journey and accountable acceptance remain. D1/D3 remain In progress.
+
+
+## Development download DNS (2026-10-08)
+
+The owner supplied applydash.ai, confirmed Cloudflare Registrar/DNS, and showed its active
+registration. Public resolution subsequently returned mack.ns.cloudflare.com and
+mia.ns.cloudflare.com. The recommended native base host is materials.dev.applydash.ai.
+
+Added the default-off development-only native_material_dns_enabled input and protected Route 53
+zone. Terraform 1.16.2 formatting and development validation pass. After verifying the development
+SSO account and locked encrypted platform.tfstate backend, the refresh-backed saved plan contained
+exactly one create (aws_route53_zone.native_material[0]), no existing-resource changes/deletes, and
+one public delegation output. Reviewed plan SHA-256:
+`161ff600aeb548c8a466ba533152c194179179ecf0cae10f50b4010718a0df75`.
+Applied that exact plan under the owner's direction to proceed with recommendations without routine
+approval prompts. Platform state advanced 405 to 406. Postapply refresh-backed planning exits zero
+with no differences. This infrastructure change was applied from the isolated feature worktree;
+it is not a merged-main application artifact publication or an application activation.
+
+Actual zone: Z0016104CRY30UCG9QTA, materials.dev.applydash.ai. Required Cloudflare parent records:
+
+| Type | Name in applydash.ai | Target |
+|---|---|---|
+| NS | materials.dev | ns-1374.awsdns-43.org |
+| NS | materials.dev | ns-1819.awsdns-35.co.uk |
+| NS | materials.dev | ns-30.awsdns-03.com |
+| NS | materials.dev | ns-968.awsdns-57.net |
+
+These parent records have not been created: no Cloudflare DNS write connection is available.
+No certificate, native image/function, content route or task was created by this plan. Browser-trusted
+wildcard TLS and pinned secret versions, immutable runtime bindings, provider/managed/client
+acceptance remain. Keep the parent domain on Cloudflare; only this subdomain is delegated.
+
+Ignored operator artifacts: .tmp/native-dns-development.tfplan, native-dns-development-plan.json,
+native-dns-development-apply.log, native-dns-development-verify.log, native-dns-delegation.json,
+and the pre/postapply state backups. The current complete input baseline is
+.tmp/development-planning-current-406.tfvars.json; older serial-405 input files omit DNS enablement
+and must not be used alone. Terraform prevents accidental zone destruction.
+Full application verification remains at e71aedc6; this DNS-only change was verified by Terraform
+validation, exact plan inspection, actual create and a zero-drift plan. D1/D3 remain In progress.
