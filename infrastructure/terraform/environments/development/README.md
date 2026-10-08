@@ -71,3 +71,18 @@ version, immutable task/function bindings and verified runtime release remain re
 Origin CA certificate alone is insufficient for the direct browser-to-task HTTPS connection.
 Retain `native_material_dns_enabled=true` in subsequent complete deployment input baselines after
 creation; omitting it proposes removal and is refused by the resource's destruction protection.
+
+
+`native_material_tls_managed` independently opts in to metadata ownership for the development
+`native-material/tls` and `native-material/acme-account` Secrets Manager entries. Existing entries
+must be adopted with `native_material_tls_imports` mapping `tls` and `acme-account` to their exact
+ARNs. Review the saved import plan before applying. Only metadata is modeled: no secret-version
+resource or secret-value data source belongs in this configuration. Both entries use the platform
+KMS key, a 30-day recovery window and destruction protection. This does not grant a task access,
+rotate a certificate or enable runtime traffic. Retain this flag in future full input baselines.
+
+Certificate renewal is a separate operation. An original release pins a TLS secret version; updating
+AWSCURRENT alone does not update existing image configurations. Before expiry, renew using the
+retained ACME account, verify the wildcard/chain/key, stage the new immutable secret version, and
+build/deploy new original releases while retaining old releases until their work is drained.
+The current one-off issuance receipt does not establish automated renewal or expiry alerting.

@@ -770,3 +770,31 @@ Remaining: managed renewal/expiry monitoring and rollout of renewed pinned secre
 provider secret and accepted retention, immutable native function/task/image bindings, managed
 route/download/disposal journey and accountable acceptance. No native runtime activated, candidate
 content processed or new human journey test requested. D1/D3 remain In progress; CI/CD deferred.
+
+
+## TLS secret metadata ownership (2026-10-08)
+
+Added default-off development Terraform ownership for the existing TLS and ACME account secret
+metadata, with exact-name ARN validation for declarative imports. Both entries use the existing
+platform KMS key, destruction protection and a 30-day recovery window. No secret-version resource
+or secret-value data source was introduced. Original task releases still pin reviewed TLS versions.
+
+Terraform 1.16.2 formatting and validation pass. The refresh-backed saved plan imports exactly
+aws_secretsmanager_secret.native_material_tls["tls"] and ["acme-account"], then normalizes only
+force_overwrite_replica_secret=false, recovery_window_in_days=30 and the ManagedBy=terraform tag.
+No name, key, value, runtime or other existing resource changes. Reviewed plan SHA-256:
+`b2b3f84cd1a1f6cddebf77f1960fb6963be7f42947d8dad78ebf960031624fc3`.
+Applied that exact plan using the verified development account and locked encrypted backend.
+State advanced 406 to 407; the postapply refresh-backed plan exits zero with no differences.
+
+Postapply inspection verifies both imported resources contain metadata only, the actual TLS secret
+retains the original pinned version as AWSCURRENT, and its KMS key is unchanged. Both original
+secret values remain outside Terraform. The complete current baseline is
+.tmp/development-planning-current-407.tfvars.json; retain DNS and TLS management inputs for future
+plans. Saved plan, private JSON inspection, apply/verify logs and pre/postapply state backups use
+.tmp/native-tls-metadata-* paths. This supersedes the prior unmanaged-metadata limitation only.
+
+Managed renewal/expiry monitoring and renewed-version rollout remain unfinished. Native runtime
+publication, exact function/task/image bindings and managed journey remain open. Application artifact
+publication still enforces clean main exactly matching origin/main; no guard was bypassed here.
+No native task/content route was activated. D1/D3 remain In progress, CI/CD deferred and PC on.

@@ -5368,3 +5368,12 @@ Manager; trusted TLS handshake, exact version readback and actual native TLS loa
 Expiry is 2027-01-06; managed renewal/monitoring and pinned-version rollout remain. Native runtime
 bindings/provider and managed journey remain unfinished. No runtime activation; D1/D3 In progress,
 Docker/WSL stopped and PC on.
+
+
+2026-10-08 imports native TLS and ACME account secret metadata into development Terraform, with
+KMS binding, destruction protection and 30-day recovery. Exact reviewed plan changes only the two
+imported metadata resources; existing TLS version remains current and secret values stay outside
+state. Postapply zero drift passes, state 406 -> 407.
+[TLS metadata evidence](evidence/d3-native-application-disposal-2026-10-07.md#tls-secret-metadata-ownership-2026-10-08).
+Managed renewal and native runtime release/journey remain. No content route activation or phase
+completion; D1/D3 In progress, Docker/WSL stopped and PC on.
