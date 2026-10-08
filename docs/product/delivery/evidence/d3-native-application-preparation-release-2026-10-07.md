@@ -776,19 +776,45 @@ and execution-scan rules. Two observations/minute is a bounded launch capacity, 
 backlog guarantee. Follow the [terminal recovery runbook](../../../../infrastructure/runbooks/observability/native-resume-terminal-recovery.md#scheduled-receipt-reconciliation)
 for the synthetic managed drill and original-history retention deadline.
 
-Local verification: 47 focused workflow cases, 22 preparation and three platform Terraform
-cases, both development/staging configuration validations, 50 migration/restore unit cases and
-185 executable migration-package cases pass. Real PostgreSQL initially exposed the published
-outbox trigger conflict; after the fix all 66 cases passed. Final null-safe guard refinement is
-under recheck; a subsequent concurrent-build run passed the new observation case but hit an
-existing five-second RPC fixture timeout and its following configuration case. Broader local
-checks and exact-commit artifact qualification are pending at this implementation checkpoint.
-AWS metadata/queue responses are simulated; no managed recovery or activation is claimed.
+Local verification completes across `5a098b9a`, `7ba4ee92` and final runtime source
+`7cef5f10a701cbe8c033a626c7c9d07cd06e25d2`:
+
+- 47 focused workflow cases; the final workspace run passes all 39 test tasks (37 cached),
+  including 1,910 Workflow cases. An initially stale restore-manifest checksum was updated in
+  both runtimes and the framed synthetic fixture; all 251 affected cases and 697 PowerShell
+  deletion-replay assertions pass after that fix.
+- All 66 real PostgreSQL cases pass on a fresh disposable fixture, including concurrent receipt
+  rotation, stale claim fencing, immutable positive acknowledgements and preserved published
+  payload/dispatch state. The first run found the existing published-outbox guard conflict and
+  prompted the narrow metadata exception. Reruns under competing compilation hit fixture
+  timeouts; reusing retained fixture rows also caused cross-run interference. Final acceptance
+  uses a fresh database and a 15-second integration-test timeout. AWS responses remain simulated.
+- 22 preparation plus three platform Terraform cases pass, as do development/staging validation
+  and the infrastructure guard. These use mocked providers, not deployed AWS resources.
+- 50 migration/restore unit cases, 185 executable migration-package cases, OCI publisher guards
+  and the exact-commit migration operator checks pass. Restore contract identity now binds the
+  final 75-migration manifest bytes.
+- All 38 typecheck tasks pass (34 cached); all 23 build tasks pass (18 cached). Formatting passes;
+  lint has zero errors and the existing 15 warnings/58 informational notes.
+- The full Phase 0 command was attempted and stops in candidate-rights session fixtures at
+  `EADDRINUSE 127.0.0.1:3000`. The running development server was preserved. This is not a full
+  verifier pass; the workspace checks above were completed separately.
+
+The updated observer was built from clean `7cef5f10`. Its actual emitted handler rejects the
+new action when disabled without network effects. Independent inspection checks ZIP/index bytes,
+SHA-256/base64 digest, byte length, embedded source SHA, SBOM checksum/component count and checksum
+companion. Four publication companions are valid: 477,552-byte ZIP, SHA-256
+`6cc7fd6fe2606addc3558056cb1d0d4f288fcec758d1845783354ce6e5bb17ad`, 36 dependency components.
+This is one local artifact build, not reproducibility, vulnerability clearance or publication.
+
+Ignored local logs use `.tmp/d3-execution-observation-*`, including `postgres-final.log`,
+`tests-final.log`, `typecheck.log`, `build.log`, `verify.log`, `artifact.log` and
+`artifact-integrity.json`. No managed recovery or activation is claimed.
 
 The source/package inventory is now **75 migrations, 93 relations, 12 schemas, seven owners**.
 Apply migration 0012 before enabling the new observer. Old writers leave the additive observation
 columns null; rollback disables the schedule and retains the migration/positive observations.
-The prior 74-migration image and prior observer artifact do not cover this batch. New clean-source
-observer packaging and migration-image qualification/publication remain release work. The
-migration operator fixture reads committed source, so its new inventory assertion requires the
-implementation commit before verification. D1/D3 remain In progress; CI/CD deferred, PC on.
+The prior 74-migration image does not cover this batch: a fresh migration-image build and managed
+publication/drill remain release work. The observer artifact is refreshed locally but unpublished.
+D1/D3 remain In progress; CI/CD deferred. The owned disposable PostgreSQL container is removed,
+Docker Desktop and WSL are stopped, and the PC remains on.

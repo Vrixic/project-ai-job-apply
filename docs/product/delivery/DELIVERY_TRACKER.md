@@ -5090,3 +5090,13 @@ package now contains 75 migrations/93 relations; previous image/artifacts requir
 Focused workflow, Terraform, restore and package checks pass; final SQL/repository checks and
 clean-source packaging are in progress. Managed recovery drill/activation remain pending.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).
+
+
+2026-10-07 D1-013/D3-079 completes local scheduled execution-reconciliation verification at
+runtime `7cef5f10`: 66 fresh PostgreSQL cases, 39 workspace test tasks, 38 typecheck tasks,
+23 builds, 25 relevant Terraform cases and both environment validations pass. The refreshed
+observer artifact passes emitted refusal and independent integrity checks. The full verifier
+still encounters the existing port-3000 session-fixture conflict; the development server remains
+running. Migration image refresh, publication and managed recovery acceptance remain. D1/D3 stay
+In progress; Docker/WSL stopped, PC on, CI/CD deferred.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).
