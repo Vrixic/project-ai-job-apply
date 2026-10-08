@@ -687,3 +687,36 @@ whitespace checks pass. AWS plans are mocked. Runtime source, SQL and artifacts 
 prior runtime export/restore evidence remains applicable, but no live KMS/export/deletion proof
 is added. Managed publication, exact key binding and synthetic rights acceptance remain. D1/D3
 remain In progress. No AWS mutation, frontend edit, CI/CD or Docker work; PC stays on.
+
+
+## Current Gateway and candidate rights artifacts
+
+The retained Gateway and rights artifacts were built from older `b5a7a2cf` source. The current
+Gateway, rights activity and rights durable artifacts were rebuilt from clean source
+`063d4ea9800a761538005aa39407078ef8debd0e` after dependency compilation. Independent verification
+checks all twelve publication companions: source/embedded marker, actual ZIP bytes and SHA256,
+base64 digest, bundled `index.mjs` hash/equality, SBOM hash/component count and checksum file.
+The actual emitted modules import successfully and export their declared handlers. The rights
+activity rejects an invalid envelope; terminal/maintenance entrypoints reject missing required
+configuration. Gateway native location/protection and rights export configuration markers are
+present in the bundles. No valid authenticated invocation, database call or AWS access was used
+for this smoke; it is not end-to-end runtime acceptance.
+
+| Artifact | ZIP SHA256 | Bytes | Components |
+|---|---|---:|---:|
+| gateway-lambda.zip | `8145d593440a76dc636d48083f54f15467c07726f35a6361631fea57b39f90e7` | 1627787 | 157 |
+| profile-readiness-activity-lambda.zip | `a7d4c329e59c3ff19ff4da214929ffa72d37297ccf7ca25d01af036dc5f8987c` | 675938 | 109 |
+| profile-readiness-durable-lambda.zip | `3fe255dbaaf1e01608702e948357ce97846f01f2a89927ac1dd05f199086074a` | 364076 | 31 |
+
+This is one local packaging pass, not repeated clean reproducibility or a fresh vulnerability
+assessment. Existing dependency findings remain unwaived. Local logs/checks are
+`.tmp/d3-gateway-rights-build.log`, `.tmp/d3-gateway-rights-integrity.json` and
+`.tmp/d3-gateway-rights-smoke.mjs`. Artifacts remain unpublished. Existing preparation and native
+control families retain their separately recorded source identities.
+
+The resume control inspection confirms it only attaches scalar ready metadata and preserves
+protected fields through the owning store's existing packet-copy path; it does not decrypt or
+re-encrypt them. Therefore no additional resume-controller KMS capability was introduced during
+this check. Actual managed image/provider/TLS/network/key binding, publication/migrations,
+rights/route/recovery acceptance and client/ATS integration remain. D1/D3 remain In progress;
+CI/CD deferred, Docker/WSL stopped and PC on.

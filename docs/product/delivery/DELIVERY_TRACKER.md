@@ -5065,3 +5065,11 @@ retained key and private KMS path, independent of generation releases and defaul
 relevant Terraform cases and both environment validations pass. Managed key/release and candidate
 rights acceptance remain; no phase completion or activation. Docker/WSL remain stopped, PC on.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#protected-packet-export-release-wiring).
+
+
+2026-10-07 D3-077/D3-079 qualifies current Gateway and candidate-rights activity/durable
+artifacts at clean `063d4ea9`: three ZIPs/twelve publication companions independently verified,
+with actual emitted import/handler and refusal smoke. Artifacts remain unpublished; one build
+pass does not prove live API/export behavior, reproducibility or vulnerability clearance.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#current-gateway-and-candidate-rights-artifacts).
+D1/D3 remain In progress; managed/client acceptance remains, CI/CD deferred and PC on.
