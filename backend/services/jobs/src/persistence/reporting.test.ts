@@ -40,6 +40,14 @@ function clientWithRows(...rows: Record<string, unknown>[]): postgres.Sql {
 }
 
 describe("moderation persistence timestamp projection", () => {
+  it("refuses absent or malformed pause state instead of granting source execution", async () => {
+    for (const value of [undefined, "false", null, 0]) {
+      const moderation = new PostgresJobModerationStore(clientWithRows({ paused: value }));
+      await expect(moderation.isSourcePaused(source)).rejects.toThrow(
+        "source pause state is unavailable",
+      );
+    }
+  });
   it("normalizes PostgreSQL timestamp strings returned by bundled runtimes", async () => {
     const resolved = row({
       status: "resolved",

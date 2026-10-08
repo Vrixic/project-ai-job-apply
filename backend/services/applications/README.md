@@ -266,3 +266,10 @@ metadata after normal owner resolution. The independent `nativeReadAuthorization
 defaults off; the capability does not call memory, rendering, model or object ports and does not
 claim physical availability, approval or deadline renewal. Native transport rechecks it before
 sending; other private launch/control adapters remain unfinished.
+
+Native resume delivery now requires migration `0011_native_resume_execution_receipts` before the
+new store. Publication atomically retains the original named numeric execution ARN or an explicit
+no-source result. Legacy/null outcomes remain unknown. Private recovery can scan at most 25
+scalar receipts for an exact version with event-ID keyset pagination, independently of candidate
+activity; cycle full passes so late receipts are revisited. This reader does not reconcile AWS
+state or authorize replacement work. Candidate deletion retains the existing outbox deletion path.

@@ -4,11 +4,32 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { Worker } from "node:worker_threads";
 import { coverLetterContext } from "../../../../packages/ai-sdk/src/index.ts";
+import { createCoverLetterProviderControlHandler } from "../../../services/documents/src/cover-letter-provider-control-handler.ts";
+import { createNativeMaterialControls } from "../../../services/documents/src/native-material-controls.ts";
 import { createNativeMemorySession } from "../../../services/documents/src/native-memory-session.ts";
+import { prepareOriginalCoverLetterRequest } from "../../../services/documents/src/original-cover-letter-generation.ts";
+import { createTemporaryMaterialCompletionHandler } from "../../../services/documents/src/temporary-material-completion-handler.ts";
 
 const require = createRequire(import.meta.url);
 const mode = process.argv[2];
 const kernelPath = process.argv[3];
+if (mode.startsWith("resume-runtime")) {
+  const { exerciseResumeRuntime } = await import("./resume-runtime-fixture.mjs");
+  await exerciseResumeRuntime(mode, kernelPath);
+  process.exit(0);
+}
+if (mode.startsWith("resume-")) {
+  const { exerciseNativeResume } = await import("./resume-fixture.mjs");
+  await exerciseNativeResume(mode, kernelPath);
+  process.exit(0);
+}
+if (mode.startsWith("runtime")) {
+  const { exerciseNativeRuntime } = await import("./runtime-fixture.mjs");
+  await exerciseNativeRuntime(mode, kernelPath);
+  // Pre-content refusal scenarios return after assertions. Never fall through into the
+  // separate legacy kernel/session fixture and admit a second synthetic generation.
+  process.exit(0);
+}
 const kernel = require(kernelPath);
 if (!/Max core file size\s+0\s+0\s+bytes/u.test(readFileSync("/proc/self/limits", "utf8")))
   throw Error("SyntheticCoreGuardMissing");
@@ -66,6 +87,7 @@ const provider = {
   },
 };
 const options = {
+  documentVersion: 1,
   identity,
   provider,
   kernel,
@@ -115,6 +137,67 @@ const options = {
     contentBase64: "eA==",
   }),
 };
+let controlInvocations = 0;
+if (mode === "controls") {
+  const prepared = prepareOriginalCoverLetterRequest(identity, { facts, job, now: new Date(now) });
+  if (!prepared) throw Error("SyntheticOriginalBindingMissing");
+  const original = {
+    id: ids[4],
+    documentId: ids[2],
+    purpose: "provider_dispatch",
+    requestSha256: prepared.requestSha256,
+  };
+  prepared.request.system = "";
+  prepared.request.user = "";
+  const workTarget = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-original-work:9";
+  const completionTarget =
+    "arn:aws:lambda:us-east-2:123456789012:function:synthetic-original-completion:7";
+  const workHandler = createCoverLetterProviderControlHandler({
+    functionArn: workTarget,
+    work: options.work,
+    enabled: () => true,
+  });
+  const completionHandler = createTemporaryMaterialCompletionHandler({
+    functionArn: completionTarget,
+    store: options.completion,
+    enabled: () => true,
+  });
+  const controls = createNativeMaterialControls({
+    allocation: {
+      allocationId: "019a4000-0000-7000-8000-000000000001",
+      ownerUserId: ids[0],
+      applicationId: ids[1],
+      generationId: ids[2],
+      clusterArn: "arn:aws:ecs:us-east-2:123456789012:cluster/native",
+      taskArn: `arn:aws:ecs:us-east-2:123456789012:task/native/${"a".repeat(32)}`,
+      taskDefinitionArn: "arn:aws:ecs:us-east-2:123456789012:task-definition/native:3",
+      containerName: "material",
+    },
+    original,
+    consentExpiresAt: identity.expiresAt.toISOString(),
+    workFunctionArn: workTarget,
+    completionFunctionArn: completionTarget,
+    enabled: () => true,
+    testClient: {
+      send: async (command) => {
+        controlInvocations++;
+        const target = command.input.FunctionName;
+        const input = JSON.parse(new TextDecoder().decode(command.input.Payload));
+        const result =
+          target === workTarget
+            ? await workHandler(input, { invokedFunctionArn: target })
+            : await completionHandler(input, { invokedFunctionArn: target });
+        return {
+          StatusCode: 200,
+          ExecutedVersion: target === workTarget ? "9" : "7",
+          Payload: new TextEncoder().encode(JSON.stringify(result)),
+        };
+      },
+    },
+  });
+  options.work = controls.work;
+  options.completion = controls.completion;
+}
 const session = createNativeMemorySession(options);
 if (mode === "multiple") {
   try {
@@ -148,6 +231,7 @@ process.stdout.write(
     originalCompletion: generated.reference.completedAtMs,
     originalExpiry: generated.reference.expiresAtMs,
     providerCalls: calls,
+    ...(mode === "controls" ? { controlInvocations } : {}),
     ...(transportAssertions ? { transportAssertions } : {}),
   })}\n`,
 );

@@ -51,6 +51,133 @@ locals {
 }
 
 data "aws_iam_policy_document" "platform_kms" {
+  dynamic "statement" {
+    for_each = var.native_preparation_releases
+    content {
+      sid       = "PreparationState${statement.key}"
+      effect    = "Allow"
+      actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["lambda.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-prep-durable-${statement.key}"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:aws:lambda:FunctionArn"
+        values   = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-prep-durable-${statement.key}"]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = var.native_material_observation_releases
+    content {
+      sid       = "MaterialEventFailure${statement.key}"
+      effect    = "Allow"
+      actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = [local.material_event_rules[statement.key]]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = var.native_preparation_releases
+    content {
+      sid       = "PreparationFailure${statement.key}"
+      effect    = "Allow"
+      actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = local.preparation_rules[statement.key]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.native_resume_dispatch_revisions
+    content {
+      sid       = "OriginalResumeDurableEncryption${statement.value}"
+      effect    = "Allow"
+      actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["lambda.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceArn"
+        values   = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-resume-durable-r${statement.value}"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "kms:EncryptionContext:aws:lambda:FunctionArn"
+        values   = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-resume-durable-r${statement.value}"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = length(var.native_resume_observation_releases) > 0 ? [1] : []
+    content {
+      sid       = "OriginalResumeObservationFailureEncryption"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+      resources = ["*"]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = concat(values(local.native_resume_observer_rules), values(local.native_resume_terminal_rules), values(local.native_resume_sweep_rules), values(local.native_resume_execution_rules))
+      }
+    }
+  }
   statement {
     sid       = "EnableAccountIAMPermissions"
     effect    = "Allow"
@@ -606,7 +733,7 @@ resource "aws_security_group" "data" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.application.id]
+    security_groups = sort(distinct(concat([aws_security_group.application.id], local.preparation_security_groups, local.material_control_groups)))
   }
   dynamic "ingress" {
     for_each = var.enable_redis ? [1] : []
@@ -855,27 +982,53 @@ data "aws_iam_policy_document" "migration_ecr_endpoint" {
       identifiers = [aws_iam_role.execution.arn]
     }
   }
+  dynamic "statement" {
+    for_each = var.native_material_image_access
+    content {
+      sid       = "NativeRegistryAuthorization${replace(statement.key, "-", "")}"
+      effect    = "Allow"
+      actions   = ["ecr:GetAuthorizationToken"]
+      resources = ["*"]
+      principals {
+        type        = "AWS"
+        identifiers = [statement.value.execution_role_arn]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = var.native_material_image_access
+    content {
+      sid       = "NativeRepositoryPull${replace(statement.key, "-", "")}"
+      effect    = "Allow"
+      actions   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+      resources = [statement.value.repository_arn]
+      principals {
+        type        = "AWS"
+        identifiers = [statement.value.execution_role_arn]
+      }
+    }
+  }
 }
 
 resource "aws_vpc_endpoint" "migration_ecr_api" {
-  count               = local.migration_task_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && (local.migration_task_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.ecr.api"
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
   subnet_ids          = [aws_subnet.private[0].id]
-  security_group_ids  = [aws_security_group.migration_aws_endpoints[0].id]
+  security_group_ids  = concat([aws_security_group.migration_aws_endpoints[0].id], aws_security_group.native_material_image_endpoint[*].id)
   policy              = data.aws_iam_policy_document.migration_ecr_endpoint[0].json
 }
 
 resource "aws_vpc_endpoint" "migration_ecr_dkr" {
-  count               = local.migration_task_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && (local.migration_task_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.ecr.dkr"
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
   subnet_ids          = [aws_subnet.private[0].id]
-  security_group_ids  = [aws_security_group.migration_aws_endpoints[0].id]
+  security_group_ids  = concat([aws_security_group.migration_aws_endpoints[0].id], aws_security_group.native_material_image_endpoint[*].id)
   policy              = data.aws_iam_policy_document.migration_ecr_endpoint[0].json
 }
 
@@ -895,7 +1048,7 @@ data "aws_iam_policy_document" "migration_logs_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "migration_logs" {
-  count               = local.migration_task_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && (local.migration_task_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.logs"
   vpc_endpoint_type   = "Interface"
@@ -1677,7 +1830,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count       = local.native_resume_reconciliation_configured || local.material_private_configured || local.preparation_configured || local.native_resume_rpc_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || local.native_cleanup_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -1686,12 +1839,90 @@ resource "aws_security_group" "secrets_endpoint" {
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = [aws_security_group.application.id]
+    security_groups = sort(distinct(concat([aws_security_group.application.id], sort(tolist(var.native_resume_secret_security_group_ids)), local.preparation_security_groups, local.material_control_groups, local.material_task_groups)))
+  }
+  lifecycle {
+    precondition {
+      condition     = length(setintersection(toset(local.material_task_groups), toset(concat([aws_security_group.application.id], local.preparation_security_groups, local.material_control_groups)))) == 0
+      error_message = "Material task security groups must not share SQL-authorized application, preparation or control groups."
+    }
   }
 }
 
 data "aws_iam_policy_document" "secrets_endpoint" {
-  count = var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count = local.material_private_configured || local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || local.native_cleanup_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  dynamic "statement" {
+    for_each = local.material_secret_access
+    content {
+      sid       = "MaterialSecret${statement.key}"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value.secret]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [statement.value.role]
+      }
+      dynamic "condition" {
+        for_each = statement.value.version == null ? [] : [statement.value.version]
+        content {
+          test     = "StringEquals"
+          variable = "secretsmanager:VersionId"
+          values   = [condition.value]
+        }
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = local.preparation_secrets
+    content {
+      sid       = "PreparationSecret${statement.key}"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value.secret]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [statement.value.role]
+      }
+    }
+  }
+
+
+  dynamic "statement" {
+    for_each = var.native_resume_secret_readers
+    content {
+      sid       = replace(statement.key, "-", "")
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [statement.value.secret_arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${statement.key}"]
+      }
+      dynamic "condition" {
+        for_each = statement.value.version_id == null ? [] : [statement.value.version_id]
+        content {
+          test     = "StringEquals"
+          variable = "secretsmanager:VersionId"
+          values   = [condition.value]
+        }
+      }
+    }
+  }
 
   statement {
     sid       = "ExactMigrationExecutionRoleDatabaseSecret"
@@ -1726,46 +1957,52 @@ data "aws_iam_policy_document" "secrets_endpoint" {
     }
   }
 
-  statement {
-    sid       = "ExactLambdaRolesDatabaseSecretOnly"
-    effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.database_url.arn]
+  dynamic "statement" {
+    for_each = anytrue([local.audit_retention_deployed, local.job_retention_deployed, local.native_cleanup_deployed, var.deploy_gateway_lambda, var.deploy_serverless_outbox, var.deploy_profile_readiness_durable, var.candidate_deletion_restore_role_enabled, local.document_complete_dark_enabled, var.deploy_ingestion_runtime, local.d2_community_deployed, var.applications_attempt_recovery_enabled]) ? [1] : []
+    content {
+      sid       = "ExactLambdaRolesDatabaseSecretOnly"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [aws_secretsmanager_secret.database_url.arn]
 
-    # Avoid IAM principal-propagation races while retaining an exact-role endpoint boundary.
-    # For an assumed role request, aws:PrincipalArn contains the IAM role ARN, not the session ARN.
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
+      # Avoid IAM principal-propagation races while retaining an exact-role endpoint boundary.
+      # For an assumed role request, aws:PrincipalArn contains the IAM role ARN, not the session ARN.
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
 
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:PrincipalArn"
-      values = compact([
-        var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : "",
-        var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
-        var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
-        var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_activity[0].arn : "",
-        var.candidate_deletion_restore_role_enabled ? local.candidate_deletion_restore_role_arn : "",
-        var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : "",
-        local.document_complete_dark_enabled ? local.document_processor_role_arn : "",
-        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["coordinator"].arn : "",
-        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["starter"].arn : "",
-        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["activity"].arn : "",
-        var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["terminal"].arn : "",
-        local.d2_community_deployed ? aws_iam_role.d2_community_scheduled[0].arn : "",
-        local.d2_community_deployed ? aws_iam_role.d2_trust_signal[0].arn : "",
-        var.applications_attempt_recovery_enabled ? aws_iam_role.applications_attempt_recovery[0].arn : ""
-      ])
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values = compact([
+          local.audit_retention_deployed ? aws_iam_role.audit_retention[0].arn : "",
+          local.job_retention_deployed ? aws_iam_role.job_retention[0].arn : "",
+          local.native_cleanup_deployed ? aws_iam_role.native_cleanup[0].arn : "",
+          var.deploy_gateway_lambda ? aws_iam_role.gateway_lambda[0].arn : "",
+          var.deploy_serverless_outbox ? aws_iam_role.outbox_starter[0].arn : "",
+          var.deploy_serverless_outbox ? aws_iam_role.outbox_reconciler[0].arn : "",
+          var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_activity[0].arn : "",
+          var.candidate_deletion_restore_role_enabled ? local.candidate_deletion_restore_role_arn : "",
+          var.deploy_profile_readiness_durable ? aws_iam_role.profile_readiness_terminal[0].arn : "",
+          local.document_complete_dark_enabled ? local.document_processor_role_arn : "",
+          var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["coordinator"].arn : "",
+          var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["starter"].arn : "",
+          var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["activity"].arn : "",
+          var.deploy_ingestion_runtime ? aws_iam_role.ingestion_runtime["terminal"].arn : "",
+          local.d2_community_deployed ? aws_iam_role.d2_community_scheduled[0].arn : "",
+          local.d2_community_deployed ? aws_iam_role.d2_trust_signal[0].arn : "",
+          var.applications_attempt_recovery_enabled ? aws_iam_role.applications_attempt_recovery[0].arn : ""
+        ])
+      }
     }
   }
 }
 
 resource "aws_vpc_endpoint" "secretsmanager" {
   count = (
-    var.persistent_data_plane_enabled && (
-      var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
+    var.private_service_endpoints_enabled && var.persistent_data_plane_enabled && (
+      local.material_private_configured || local.preparation_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || local.native_cleanup_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed
     )
   ) ? 1 : 0
   vpc_id              = aws_vpc.this.id
@@ -1808,6 +2045,10 @@ resource "aws_lambda_function" "gateway" {
         OIDC_ISSUER        = var.oidc_issuer
         OIDC_AUDIENCE      = var.oidc_audience
       },
+      local.gateway_native_material_environment,
+      var.privileged_moderation_audit_enabled ? {
+        PRIVILEGED_MODERATION_AUDIT_ENABLED = "true"
+      } : {},
       var.deploy_serverless_outbox ? {
         OUTBOX_DISPATCH_TARGET = "lambda_durable"
         OUTBOX_QUEUE_URL       = aws_sqs_queue.events.url
@@ -1880,6 +2121,8 @@ resource "aws_lambda_function" "gateway" {
 
   depends_on = [
     aws_iam_role_policy.gateway_lambda,
+    aws_iam_role_policy.gateway_native_packet,
+    aws_vpc_endpoint.native_preparation_kms,
     aws_vpc_endpoint.secretsmanager
   ]
 }
@@ -2425,7 +2668,44 @@ resource "aws_iam_role_policy" "outbox_reconciler" {
 }
 
 data "aws_iam_policy_document" "outbox_sqs_endpoint" {
-  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed ? 1 : 0
+  count = local.native_resume_reconciliation_configured || local.preparation_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed ? 1 : 0
+  dynamic "statement" {
+    for_each = local.native_resume_reconciliation_releases
+    content {
+      sid       = "ResumeExecutionNotice${statement.key}"
+      effect    = "Allow"
+      actions   = ["sqs:SendMessage"]
+      resources = [statement.value.queue_arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-observer-r${statement.key}"]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = local.preparation_queue_access
+    content {
+      sid       = "PreparationQueue${statement.key}"
+      effect    = "Allow"
+      actions   = statement.value.actions
+      resources = statement.value.resources
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [statement.value.role]
+      }
+    }
+  }
+
 
   dynamic "statement" {
     for_each = var.deploy_serverless_outbox ? [1] : []
@@ -2533,7 +2813,7 @@ data "aws_iam_policy_document" "outbox_sqs_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "sqs" {
-  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && ((local.native_resume_reconciliation_configured || local.preparation_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed) && var.persistent_data_plane_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
   vpc_endpoint_type   = "Interface"
@@ -2549,7 +2829,100 @@ resource "aws_vpc_endpoint" "sqs" {
 }
 
 data "aws_iam_policy_document" "outbox_lambda_endpoint" {
-  count = var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count = local.material_task_rpc_configured || local.preparation_configured || local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  dynamic "statement" {
+    for_each = var.native_material_task_access
+    content {
+      sid       = "MaterialOwnerRpc${statement.key}"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [statement.value.owner_function_arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [local.material_task_roles[statement.key]]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = local.preparation_rpc
+    content {
+      sid       = "PreparationRpc${statement.key}"
+      effect    = "Allow"
+      actions   = statement.value.actions
+      resources = statement.value.resources
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [statement.value.role]
+      }
+    }
+  }
+
+
+  dynamic "statement" {
+    for_each = var.native_resume_dispatch_revisions
+    content {
+      sid       = "OriginalResumeExecutionMetadata${statement.value}"
+      effect    = "Allow"
+      actions   = ["lambda:GetDurableExecution"]
+      resources = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-resume-durable-r${statement.value}:*/durable-execution/*"]
+      principals {
+        type        = "AWS"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-observer-r${statement.value}"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.native_resume_task_rpc_bindings
+    content {
+      sid       = "OriginalResumeTaskRpc${statement.key}"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [statement.value.owner_function_arn, statement.value.source_function_arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-native-resume-r${statement.key}-task"]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = var.native_resume_dispatch_revisions
+    content {
+      sid       = "OriginalResumeDispatch${statement.value}"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = ["arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-resume-durable-r${statement.value}:*"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-dispatch-r${statement.value}"]
+      }
+    }
+  }
 
   dynamic "statement" {
     for_each = var.deploy_serverless_outbox ? [1] : []
@@ -2628,7 +3001,7 @@ data "aws_iam_policy_document" "outbox_lambda_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "lambda" {
-  count               = (var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && ((local.material_task_rpc_configured || local.preparation_configured || local.native_resume_rpc_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime) && var.persistent_data_plane_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.lambda"
   vpc_endpoint_type   = "Interface"
@@ -2664,7 +3037,7 @@ data "aws_iam_policy_document" "document_sts_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "sts" {
-  count               = local.document_complete_dark_enabled && var.persistent_data_plane_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && (local.document_complete_dark_enabled && var.persistent_data_plane_enabled) ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sts"
   vpc_endpoint_type   = "Interface"

@@ -11,11 +11,26 @@ const wireLimit = 4096;
 /** Normal authenticated Gateway metadata only. No generated body, token persistence, SQL,
  * model, grant issuance, request retries or lifetime renewal. Trust the configured HTTPS origin,
  * never an address received in a candidate request or authorization response. */
-export function createNativeReadAuthorizationClient(options: {
+type Options = {
   apiOrigin: string;
   enabled?: () => boolean;
   fetch?: typeof fetch;
-}): NativeMemoryTransportOptions["authorize"] {
+};
+export function createNativeReadAuthorizationClient(
+  options: Options,
+): NativeMemoryTransportOptions["authorize"] {
+  return createClient(options, "cover_letter", "cover-letter");
+}
+export function createNativeResumeReadAuthorizationClient(
+  options: Options,
+): NativeMemoryTransportOptions["authorize"] {
+  return createClient(options, "tailored_resume", "resume");
+}
+function createClient(
+  options: Options,
+  kind: "cover_letter" | "tailored_resume",
+  route: "cover-letter" | "resume",
+): NativeMemoryTransportOptions["authorize"] {
   const enabled = options.enabled ?? (() => false);
   let origin: URL;
   try {
@@ -41,7 +56,7 @@ export function createNativeReadAuthorizationClient(options: {
         !enabled() ||
         signal.aborted ||
         !validateTemporaryMaterialReference(reference) ||
-        reference.kind !== "cover_letter" ||
+        reference.kind !== kind ||
         reference.ownerUserId !== ownerUserId ||
         reference.applicationId !== applicationId ||
         Date.now() >= reference.expiresAtMs ||
@@ -52,7 +67,7 @@ export function createNativeReadAuthorizationClient(options: {
         throw Error();
       const fixed = Object.freeze({ ...reference });
       const response = await fetcher(
-        `${apiOrigin}/v1/applications/${applicationId}/cover-letter/authorization?generationId=${fixed.generationId}`,
+        `${apiOrigin}/v1/applications/${applicationId}/${route}/authorization?generationId=${fixed.generationId}`,
         {
           method: "GET",
           headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },

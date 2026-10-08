@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/events/application.resume-preparation.requested.v1.json",
+  "title": "application.resume-preparation.requested.v1",
+  "type": "object",
+  "required": ["applicationId", "userId", "revision", "status"],
+  "properties": {
+    "applicationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "userId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "status": {
+      "const": "review_required"
+    }
+  },
+  "additionalProperties": false
+}

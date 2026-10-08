@@ -1,0 +1,24 @@
+FROM node:24.18.0-trixie-slim@sha256:5301bbf5e8046148348b1dea15436326f43c579031f8d76654a631225bdfe467 AS build
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable
+WORKDIR /workspace
+COPY . .
+ARG SOURCE_SHA
+ARG NATIVE_CONFIGURATION=backend/workers/ai/native-resume/configuration.disabled.json
+RUN pnpm install --frozen-lockfile \
+  && pnpm contracts:generate \
+  && pnpm --filter @ai-job-apply/documents-service... build \
+  && gcc -std=c11 -O2 -Wall -Wextra -Werror -shared -fPIC -I/usr/local/include/node \
+    backend/workers/ai/native-session/kernel-deadline.c -o /tmp/kernel-deadline.node -lrt -lm \
+  && mkdir /image \
+  && node backend/workers/ai/native-resume/build.mjs "$SOURCE_SHA" "$NATIVE_CONFIGURATION" /tmp/kernel-deadline.node /image/native-resume
+
+FROM node:24.18.0-trixie-slim@sha256:5301bbf5e8046148348b1dea15436326f43c579031f8d76654a631225bdfe467 AS runtime
+ENV NODE_ENV=production
+WORKDIR /materials
+COPY --from=build --chown=65532:65532 /image/native-resume /materials/native-resume
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/node"]
+CMD ["native-resume/main.mjs"]

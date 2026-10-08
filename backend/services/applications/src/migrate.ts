@@ -16,6 +16,11 @@ const migrationVersions = [
   "0007_document_field_hashes",
   "0008_temporary_material_bindings",
   "0009_restricted_packet_values",
+  "0010_native_resume_requests",
+  "0011_native_resume_execution_receipts",
+  "0012_native_resume_execution_observation",
+  "0013_native_material_withdrawals",
+  "0014_native_material_cleanup_queue",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -70,6 +75,10 @@ try {
         restrictedTriggerCount: number;
         restrictedConstraintCount: number;
         restrictedDeleteBodyCount: number;
+        resumeRequestConstraintCount: number;
+        resumeExecutionGuardCount: number;
+        resumeObservationGuardCount: number;
+        resumeRequestTriggerCount: number;
       }[]
     >`
       SELECT
@@ -165,7 +174,22 @@ try {
         ) AS "restrictedConstraintCount",
         (SELECT count(*)::int FROM pg_proc WHERE oid = to_regprocedure('applications.delete_candidate_data(uuid,uuid)')
           AND prosecdef AND pg_get_functiondef(oid) LIKE '%DELETE FROM applications_restricted.packet_values%'
-        ) AS "restrictedDeleteBodyCount"
+        ) AS "restrictedDeleteBodyCount",
+        (SELECT count(*)::int FROM pg_constraint WHERE conrelid='applications.outbox'::regclass
+          AND convalidated AND conname IN ('outbox_resume_packet_fk','outbox_resume_scope_ck'))
+          AS "resumeRequestConstraintCount",
+        ((SELECT count(*)::int FROM pg_constraint WHERE conrelid='applications.outbox'::regclass
+          AND convalidated AND conname='outbox_resume_execution_ck') +
+         (SELECT count(*)::int FROM pg_trigger WHERE tgrelid='applications.outbox'::regclass
+          AND tgenabled='O' AND tgname='outbox_native_resume_execution_guard') +
+         (to_regclass('applications.outbox_native_resume_execution_scan') IS NOT NULL)::int) AS "resumeExecutionGuardCount",
+        ((SELECT count(*)::int FROM pg_constraint WHERE conrelid='applications.outbox'::regclass
+          AND convalidated AND conname='outbox_resume_observation_ck') +
+         (SELECT count(*)::int FROM pg_trigger WHERE tgrelid='applications.outbox'::regclass
+          AND tgenabled='O' AND tgname='outbox_resume_execution_observation_guard') +
+         (to_regclass('applications.outbox_resume_execution_observation_due') IS NOT NULL)::int) AS "resumeObservationGuardCount",
+        (SELECT count(*)::int FROM pg_trigger WHERE tgrelid='applications.outbox'::regclass
+          AND tgenabled='O' AND tgname='outbox_native_resume_binding_guard') AS "resumeRequestTriggerCount"
     `;
     if (
       verification?.relationCount !== 13 ||
@@ -181,7 +205,11 @@ try {
       verification.temporaryMaterialTriggerCount !== 3 ||
       verification.restrictedTriggerCount !== 6 ||
       verification.restrictedConstraintCount !== 4 ||
-      verification.restrictedDeleteBodyCount !== 1
+      verification.restrictedDeleteBodyCount !== 1 ||
+      verification.resumeRequestConstraintCount !== 2 ||
+      verification.resumeExecutionGuardCount !== 3 ||
+      verification.resumeObservationGuardCount !== 3 ||
+      verification.resumeRequestTriggerCount !== 1
     ) {
       throw new Error(
         `Applications migration verification failed: ${JSON.stringify(verification)}`,

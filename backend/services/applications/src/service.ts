@@ -12,8 +12,10 @@ import type {
   ApplicationSubmissionResultRequest,
   ApplicationSubmissionStart,
   ApplicationTemporaryMaterialAuthorization,
+  ApplicationTemporaryMaterialLocation,
   ReconcileApplicationAttemptRequest,
 } from "@ai-job-apply/api-contracts";
+import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
 import type {
   AdapterSubmissionResult,
@@ -28,7 +30,7 @@ import {
   safeRecord,
   versionToken,
 } from "./metrics.js";
-import { authorizeNativeMaterialRead } from "./native-material-read.js";
+import { authorizeNativeMaterialRead, authorizeNativeResumeRead } from "./native-material-read.js";
 import {
   type ArtifactHashes,
   type CurrentBindings,
@@ -52,6 +54,8 @@ import {
   readBoundTemporaryCoverLetter,
 } from "./temporary-cover-letter-read.js";
 import { temporaryMaterialReasons } from "./temporary-material.js";
+
+const validateMaterialLocation = compileComponentValidator("ApplicationTemporaryMaterialLocation");
 
 /** The subset of the store the service needs; a fake implements it in unit tests. */
 export type ApplicationStorePort = Pick<
@@ -164,7 +168,25 @@ export class InvalidApplicationCursorError extends Error {
 
 /** Owner-scoped API used by the gateway. Every method takes the authenticated owner. */
 export interface ApplicationsApi {
+  temporaryMaterialLocation?(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal?: AbortSignal,
+  ): Promise<ApplicationTemporaryMaterialLocation>;
+  resumeMaterialLocation?(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal?: AbortSignal,
+  ): Promise<ApplicationTemporaryMaterialLocation>;
   temporaryMaterialAuthorization?(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal?: AbortSignal,
+  ): Promise<ApplicationTemporaryMaterialAuthorization>;
+  resumeMaterialAuthorization?(
     ownerUserId: string,
     applicationId: string,
     generationId: string,
@@ -295,9 +317,17 @@ export interface ApplicationsServiceDependencies {
   /** Absent until preparation persistence and owned Documents context/read boundaries are wired. */
   preparations?: ApplicationPreparations;
   coverLetters?: ApplicationCoverLetters;
+  /** Context-only intake; does not grant generated-content read capabilities. */
+  preparationContext?: ApplicationCoverLetters["context"];
   temporaryMaterials?: ApplicationTemporaryMaterials;
   /** Scalar native-read authorization only; independent of content ports, default off. */
   nativeReadAuthorizationsEnabled?: () => boolean;
+  nativeResumeLocations?: {
+    resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
+  };
+  nativeMaterialLocations?: {
+    resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
+  };
   /** Optional privacy-safe measurement sink. Failures never affect a request. */
   metrics?: MetricSink;
   clock?: () => Date;
@@ -310,20 +340,127 @@ export class ApplicationsService implements ApplicationsApi {
     this.clock = dependencies.clock ?? (() => new Date());
   }
 
+  async temporaryMaterialLocation(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal = new AbortController().signal,
+  ): Promise<ApplicationTemporaryMaterialLocation> {
+    const locations = this.dependencies.nativeMaterialLocations;
+    if (!locations) throw new ApplicationsUnavailableError();
+    const proof = await this.temporaryMaterialAuthorization(
+      ownerUserId,
+      applicationId,
+      generationId,
+      signal,
+    );
+    let origin: string | null;
+    try {
+      origin = await locations.resolve(
+        { ...proof.temporaryMaterial, ownerUserId, applicationId },
+        signal,
+      );
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    if (!origin || signal.aborted) throw new ApplicationsUnavailableError();
+    const current = await this.temporaryMaterialAuthorization(
+      ownerUserId,
+      applicationId,
+      generationId,
+      signal,
+    );
+    if (JSON.stringify(proof) !== JSON.stringify(current))
+      throw new StalePacketError(["temporary_material_changed"]);
+    const result = { ...current, origin };
+    if (!validateMaterialLocation(result)) throw new ApplicationsUnavailableError();
+    return result;
+  }
+
+  async resumeMaterialLocation(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal = new AbortController().signal,
+  ): Promise<ApplicationTemporaryMaterialLocation> {
+    const locations = this.dependencies.nativeResumeLocations;
+    if (!locations) throw new ApplicationsUnavailableError();
+    const proof = await this.resumeMaterialAuthorization(
+      ownerUserId,
+      applicationId,
+      generationId,
+      signal,
+    );
+    let origin: string | null;
+    try {
+      origin = await locations.resolve(
+        { ...proof.temporaryMaterial, ownerUserId, applicationId },
+        signal,
+      );
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    if (!origin || signal.aborted) throw new ApplicationsUnavailableError();
+    const current = await this.resumeMaterialAuthorization(
+      ownerUserId,
+      applicationId,
+      generationId,
+      signal,
+    );
+    if (JSON.stringify(proof) !== JSON.stringify(current))
+      throw new StalePacketError(["temporary_material_changed"]);
+    const result = { ...current, origin };
+    if (!validateMaterialLocation(result)) throw new ApplicationsUnavailableError();
+    return result;
+  }
+
   async temporaryMaterialAuthorization(
     ownerUserId: string,
     applicationId: string,
     generationId: string,
     signal = new AbortController().signal,
   ): Promise<ApplicationTemporaryMaterialAuthorization> {
+    return this.authorizeTemporaryMaterial(
+      ownerUserId,
+      applicationId,
+      generationId,
+      "cover_letter",
+      signal,
+    );
+  }
+
+  async resumeMaterialAuthorization(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    signal = new AbortController().signal,
+  ): Promise<ApplicationTemporaryMaterialAuthorization> {
+    return this.authorizeTemporaryMaterial(
+      ownerUserId,
+      applicationId,
+      generationId,
+      "tailored_resume",
+      signal,
+    );
+  }
+
+  private async authorizeTemporaryMaterial(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+    kind: "cover_letter" | "tailored_resume",
+    signal: AbortSignal,
+  ): Promise<ApplicationTemporaryMaterialAuthorization> {
     const enabled = this.dependencies.nativeReadAuthorizationsEnabled ?? (() => false);
     if (!enabled() || signal.aborted) throw new ApplicationsUnavailableError();
     const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
     const reference = view.currentPacket?.temporaryMaterials?.find(
-      (ref) => ref.kind === "cover_letter" && ref.generationId === generationId,
+      (ref) => ref.kind === kind && ref.generationId === generationId,
     );
     if (!reference) throw new StalePacketError(["temporary_material_changed"]);
-    const proof = await authorizeNativeMaterialRead({
+    const authorize =
+      kind === "cover_letter" ? authorizeNativeMaterialRead : authorizeNativeResumeRead;
+    const proof = await authorize({
       store: this.dependencies.store,
       ownerUserId,
       reference,
@@ -431,11 +568,13 @@ export class ApplicationsService implements ApplicationsApi {
     const prior = await preparations.replayPreparation(command);
     if (prior) return toApiPreparation(prior);
     const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
-    const letters = this.dependencies.coverLetters;
-    if (!letters) throw new ApplicationsUnavailableError();
+    const readContext =
+      this.dependencies.preparationContext ??
+      this.dependencies.coverLetters?.context.bind(this.dependencies.coverLetters);
+    if (!readContext) throw new ApplicationsUnavailableError();
     let context: PreparationContext;
     try {
-      context = await letters.context({ ownerUserId, applicationId });
+      context = await readContext({ ownerUserId, applicationId });
     } catch {
       throw new ApplicationsUnavailableError();
     }

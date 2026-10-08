@@ -1,5 +1,37 @@
 # Durable Workflows
 
+`native-application-preparation-lambda.ts` provides the dedicated native activity composition.
+`NATIVE_APPLICATION_PREPARATION_ENABLED` defaults off; the separate launch flag permits fresh
+reservation/dispatch while recovery needs only the overall switch. The managed secret, exact
+numeric native launcher and existing packet protection/key ring are mandatory; legacy object/
+provider settings refuse. Build its separate unpublished artifact with
+`pnpm --filter @ai-job-apply/workflows build:lambda:native-preparation`.
+See [runtime evidence](../../docs/product/delivery/evidence/d3-native-preparation-runtime-2026-10-06.md).
+
+`application-preparation-native.ts` supplies a default-off preparation port for one original
+native generation. It uses owner evidence and a canonical memory-only request digest, reserves
+one document, issues one dispatch grant and calls the private launcher once. Recovery only reads
+the exact original admitted scalar receipt into Applications completion. It has no provider-object,
+model or launch-on-replay path. Managed runtime selection and activation remain pending.
+See [local flow evidence](../../docs/product/delivery/evidence/d3-native-preparation-flow-2026-10-06.md).
+
+The private native bootstrap now returns the original Documents version alongside the eight
+Applications approval/context scalars, and checks that version again before replying. This private
+shape requires a matching numeric receiver/image rollout. See
+[version evidence](../../docs/product/delivery/evidence/d3-native-document-version-2026-10-06.md).
+
+Private native owner RPC additionally reads the original claimed preparation's approval/context
+through Applications and checks Documents' exact original work expiry. The strict eight-scalar
+reply grants no renewal or work creation capability. See [bootstrap evidence](../../docs/product/delivery/evidence/d3-native-approved-bootstrap-2026-10-06.md).
+
+Private native owner RPC source now connects task authentication before lazy owner access,
+original reviewed evidence/consent, owning admission and scalar work/completion. It defaults off,
+requires a numeric receiver and explicit original task deployment, and never accepts standalone
+scalar requests as a fallback. Proof headers are ephemeral and never enter owner adapters or
+responses. See [configuration and local evidence](../../docs/product/delivery/evidence/d3-native-owner-rpc-2026-10-06.md).
+Native image/bootstrap/IAM/routing/managed/provider/client acceptance still gates activation.
+
+
 This directory contains durable workflow definitions for multi-step processes that must survive crashes, deploys, provider outages, and long user waits.
 
 ## Planned subfolders
@@ -248,3 +280,57 @@ Build an unpublished source-bound artifact with `ARTIFACT_SOURCE_SHA=<committed 
 `pnpm --filter @ai-job-apply/workflows build:lambda:native-task-event`. Reviewed event routing,
 IAM, original-version retention, retries/DLQ and managed task conformance remain gates; see
 [local evidence](../../docs/product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
+
+The default-off `createNativeOwnedCoverLetterEvidenceSource` wraps existing Applications/Jobs/
+Profile owner evidence with exact original native admission checks before and after reads and
+fixed original job/fact context comparison. It is source-only; authenticated private task
+transport and managed bootstrap remain gates. See [evidence](../../docs/product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
+
+
+`pnpm --filter @ai-job-apply/workflows build:lambda:native-owner-rpc` builds the source-bound
+private receiver artifact from clean committed source. Its default-off bundled refusal check
+performs no secret, SQL or cloud access. This does not publish, deploy or enable the receiver.
+
+`native-resume-route-lifecycle.ts` adds a default-off private durable component for original
+route capture, one DNS creation attempt, propagated readiness, owner attachment and exact cleanup.
+It uses the existing SDK's checkpoint-before-execution semantics plus disabled retries for both
+DNS writes; all clock/I/O decisions are checkpointed. Unknown acknowledgements stay unresolved.
+It requires one owning allocation-bound execution and supplied private owner ports. Preparation
+Lambda composition, longer execution timeout and terminal reconciliation are still required; see
+[local lifecycle evidence](../../docs/product/delivery/evidence/d3-native-resume-route-lifecycle-2026-10-07.md).
+
+The preparation control and durable entrypoint now compose those owner ports behind separate
+route-owner, lifecycle and creation switches (all default off). Attachment interruptions remain
+unresolved while cleanup continues. Release timeout/IAM/configuration and terminal reconciliation
+are still required. See [owner integration evidence](../../docs/product/delivery/evidence/d3-native-resume-route-owner-2026-10-07.md)
+for configuration, local verification and remaining managed acceptance.
+
+
+Cover-letter route groundwork uses `native-material-route-owner.ts` to pin one original work
+binding and ready reference. It checks current owning admission before/after address capture;
+positive original retirement remains observable after admission is sealed. The material lifecycle
+uses the shared `native-route-lifecycle.ts` implementation with `material-route.*` checkpoints;
+resume retains its existing `resume-route.*` names. Both are default-off and retain uncertain DNS
+writes/attachments for reconciliation rather than retrying mutations. Material private invocation,
+one-original-execution dispatch, packet attachment and deployment/IAM composition remain unwired.
+
+
+`native-material-launch-lambda.ts` now multiplexes the new closed `native-material-route.v1`
+private envelope to `native-material-route-control-lambda.ts`. Existing launch/recovery inputs
+are unchanged. The route path pins managed database/task/DNS configuration and needs its own
+`NATIVE_MATERIAL_ROUTE_CONTROL_ENABLED` switch as well as control enablement. It reuses the
+original numeric deployment and owning admission/address checks, without fresh launch, packet
+attachment or DNS mutation. Its sender has only scalar Lambda invocation capability. Preparation
+dispatch still needs to bind one original route execution and attach after propagation.
+
+
+`native-preparation-route-activity.ts` and `native-preparation-route-durable.ts` connect optional
+cover-letter staging to the existing original preparation execution. With
+`NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED=true`, stage recovers the original ready material
+without packet mutation; attachment reloads current context and compares the exact staged
+reference after DNS propagation. The durable runtime requires the original numeric
+`NATIVE_MATERIAL_LAUNCH_FUNCTION_ARN`; `NATIVE_MATERIAL_ROUTE_CREATION_ENABLED` independently gates
+new DNS writes while preserving cleanup. Flags default off. Routing refuses legacy advance.
+Preparation Terraform now supplies a separate durable Route53 ceiling and a 3600-second
+execution window when routing is configured. All flags remain off until managed acceptance. See
+[local evidence](../../docs/product/delivery/evidence/d3-native-application-preparation-release-2026-10-07.md#connected-preparation-staging-and-attachment).

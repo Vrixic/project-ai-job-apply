@@ -760,6 +760,25 @@ resource "aws_security_group" "document_parser" {
 data "aws_iam_policy_document" "candidate_documents_s3_endpoint" {
   count = local.document_parser_dark_enabled ? 1 : 0
   dynamic "statement" {
+    for_each = var.native_resume_normalized_buckets
+    content {
+      sid       = "OriginalResumeNormalizedVersion${statement.key}"
+      effect    = "Allow"
+      actions   = ["s3:GetObjectVersion"]
+      resources = ["arn:aws:s3:::${statement.value}/normalized/*/*/*/resume.json"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-source-r${statement.key}"]
+      }
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.candidate_deletion_restore_role_enabled ? [1] : []
     content {
       sid       = "RestoreOnlyRetainedVersionInventory"

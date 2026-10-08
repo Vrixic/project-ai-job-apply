@@ -19,6 +19,44 @@ function expectedRelations(source: RestoreManifestSource): string[] {
   return source.manifest.contributors.flatMap((contributor) => contributor.relations).sort();
 }
 
+function preReportRetentionManifest(source: RestoreManifestSource) {
+  return {
+    ...source.manifest,
+    contributors: source.manifest.contributors.map((contributor) => ({
+      ...contributor,
+      migrations: contributor.migrations.filter(
+        (migration) =>
+          ![
+            "0025_job_report_retention",
+            "0026_moderation_case_retention",
+            "0027_candidate_report_export_status",
+            "0013_native_material_ready",
+            "0014_native_resume_generations",
+            "0015_native_resume_observation",
+            "0016_native_application_disposal",
+            "0010_native_resume_requests",
+            "0011_native_resume_execution_receipts",
+            "0012_native_resume_execution_observation",
+            "0013_native_material_withdrawals",
+            "0014_native_material_cleanup_queue",
+          ].includes(migration.version),
+      ),
+      relations: contributor.relations.filter(
+        (relation) =>
+          ![
+            "documents.native_resume_generations",
+            "applications.native_material_withdrawals",
+            "applications.native_material_cleanup_queue",
+            "jobs.job_report_case_links",
+            "jobs.job_report_retention_totals",
+            "jobs.job_moderation_blocks",
+            "jobs.source_moderation_pauses",
+          ].includes(relation),
+      ),
+    })),
+  };
+}
+
 function successfulExecutor(source: RestoreManifestSource, count = "0"): RestoreSqlExecutor {
   const relations = expectedRelations(source);
   const schemas = [
@@ -94,13 +132,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(88);
+    expect(expectedRelations(source)).toHaveLength(95);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(66);
+    ).toBe(78);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -252,8 +290,8 @@ describe("read-only aggregate restore verification", () => {
         "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
       ownerCount: 7,
-      relationCount: 88,
-      migrationCount: 66,
+      relationCount: 95,
+      migrationCount: 78,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -417,8 +455,10 @@ describe("read-only aggregate restore verification", () => {
       const current = loadCurrentRestoreManifest();
       const historicalManifest = parseRestoreManifest({
         ...current.manifest,
-        contributors: current.manifest.contributors
-          .filter((contributor) => migrationCount === 52 || contributor.owner !== "applications")
+        contributors: preReportRetentionManifest(current)
+          .contributors.filter(
+            (contributor) => migrationCount === 52 || contributor.owner !== "applications",
+          )
           .map((contributor) => ({
             ...contributor,
             schemas: contributor.schemas.filter((schema) => schema !== "applications_restricted"),
@@ -494,7 +534,7 @@ describe("read-only aggregate restore verification", () => {
       const restrictedAbsent = missing === "0009_restricted_packet_values";
       const manifest = parseRestoreManifest({
         ...current.manifest,
-        contributors: current.manifest.contributors.map((contributor) => ({
+        contributors: preReportRetentionManifest(current).contributors.map((contributor) => ({
           ...contributor,
           schemas: contributor.schemas.filter(
             (schema) => !restrictedAbsent || schema !== "applications_restricted",
@@ -527,7 +567,7 @@ describe("read-only aggregate restore verification", () => {
     const current = loadCurrentRestoreManifest();
     const manifest = parseRestoreManifest({
       ...current.manifest,
-      contributors: current.manifest.contributors.map((contributor) => ({
+      contributors: preReportRetentionManifest(current).contributors.map((contributor) => ({
         ...contributor,
         schemas: contributor.schemas.filter((schema) => schema !== "applications_restricted"),
         relations: contributor.relations.filter(
@@ -564,7 +604,7 @@ describe("read-only aggregate restore verification", () => {
       const current = loadCurrentRestoreManifest();
       const manifest = parseRestoreManifest({
         ...current.manifest,
-        contributors: current.manifest.contributors.map((contributor) => ({
+        contributors: preReportRetentionManifest(current).contributors.map((contributor) => ({
           ...contributor,
           schemas: contributor.schemas.filter((schema) => schema !== "applications_restricted"),
           relations: contributor.relations.filter(
@@ -610,7 +650,7 @@ describe("read-only aggregate restore verification", () => {
     const current = loadCurrentRestoreManifest();
     const manifest = parseRestoreManifest({
       ...current.manifest,
-      contributors: current.manifest.contributors.map((contributor) => ({
+      contributors: preReportRetentionManifest(current).contributors.map((contributor) => ({
         ...contributor,
         schemas: contributor.schemas.filter((schema) => schema !== "applications_restricted"),
         migrations: contributor.migrations.filter(

@@ -20,6 +20,7 @@ import {
   requiredNonemptyD2Relations,
   seedD2RecoveryFixtures,
 } from "./fixtures.mjs";
+import { exerciseRestoredNativeCleanup, seedNativeCleanup } from "./native-cleanup.mjs";
 import { exerciseRestoredNativeLaunches, seedNativeLaunches } from "./native-launches.mjs";
 import {
   exerciseRestoredResponseInventory,
@@ -200,8 +201,8 @@ try {
   const source = loadCurrentRestoreManifest();
   assert.equal(source.manifest.contributors.length, 7);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 12);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 88);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 66);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 95);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 78);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
@@ -253,6 +254,7 @@ try {
   stage = "seed-generated-restricted-packets";
   const restrictedFixtures = await seedRestrictedPackets(sourceApplications, protection);
   const nativeFixtures = await seedNativeLaunches(sourceApplications, fixtures.ownerUserId);
+  const cleanupFixtures = await seedNativeCleanup(sourceApplications);
   stage = "source-aggregate-and-row-snapshot";
   const sourceAggregate = await verifyRestoreDatabase(sourceReader, source);
   const sourceRows = await exactRows(sourceReader, source.manifest);
@@ -326,6 +328,7 @@ try {
     restrictedFixtures,
   );
   const nativeBehavior = await exerciseRestoredNativeLaunches(targetApplications, nativeFixtures);
+  const cleanupBehavior = await exerciseRestoredNativeCleanup(targetApplications, cleanupFixtures);
   stage = "restored-d2-behavior";
   const behavior = await exerciseRestoredD2(targetStore, targetProfile, fixtures, (value) => {
     stage = value;
@@ -334,10 +337,10 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 66,
+    migrationCount: 78,
     ownerCount: 7,
     schemaCount: 12,
-    exactRelationRowSetsMatched: 88,
+    exactRelationRowSetsMatched: 95,
     nonemptyD2RelationsMatched: requiredNonemptyD2Relations.length,
     aggregateVerifierMatched: true,
     sourceUnchanged: true,
@@ -347,6 +350,7 @@ try {
     ...packetBehavior,
     ...restrictedBehavior,
     ...nativeBehavior,
+    ...cleanupBehavior,
     ...behavior,
   };
 } catch (error) {

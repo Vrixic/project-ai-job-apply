@@ -27,6 +27,7 @@ Invoke-CheckedCommand "D2 immutable artifact source binding" { pnpm test:d2-arti
 Invoke-CheckedCommand "Development document dark guard validation" { & scripts/tests/development-document-dark-guards.tests.ps1 }
 Invoke-CheckedCommand "Development document dark operator validation" { & scripts/tests/development-document-dark-operator.tests.ps1 }
 Invoke-CheckedCommand "Development document migration operator path validation" { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/development-document-migration-operator.tests.ps1 }
+Invoke-CheckedCommand "Executable migration runtime package validation" { node --test scripts/tests/development-migration-runtime-smoke.test.mjs }
 Invoke-CheckedCommand "Admin Auth0 authorization profile setup" { & scripts/tests/configure-auth0-admin-local.tests.ps1 }
 Invoke-CheckedCommand "Formatting" { pnpm format:check }
 Invoke-CheckedCommand "Private Documents artifact publication guards" { & scripts/tests/development-document-artifact-publisher.tests.ps1 }
@@ -35,6 +36,7 @@ Invoke-CheckedCommand "Type checking" { pnpm typecheck }
 Invoke-CheckedCommand "Dependency security regressions" { pnpm test:dependency-security }
 Invoke-CheckedCommand "Tests" { pnpm test }
 Invoke-CheckedCommand "Build" { pnpm build }
+Invoke-CheckedCommand "Privileged moderation audit maintenance isolation" { node --test scripts/tests/privileged-moderation-audit-retention-bundle.test.mjs }
 Invoke-CheckedCommand "Isolated provider bundle dependency isolation" { node --test scripts/tests/isolated-provider-bundle.test.mjs }
 Invoke-CheckedCommand "Response maintenance bundle dependency isolation" { node --test scripts/tests/response-maintenance-bundle.test.mjs }
 Invoke-CheckedCommand "Private preparation port model isolation" { node --test scripts/tests/private-preparation-port-bundle.test.mjs }
@@ -43,7 +45,11 @@ Invoke-CheckedCommand "Preparation starter actor isolation" { node --test script
 Invoke-CheckedCommand "Preparation recovery actor isolation" { node --test scripts/tests/preparation-recovery-bundle.test.mjs }
 Invoke-CheckedCommand "Cover-letter export read isolation" { node --test scripts/tests/cover-letter-export-bundle.test.mjs }
 Invoke-CheckedCommand "Native task retirement control isolation" { node --test scripts/tests/native-task-retirement-bundle.test.mjs }
+Invoke-CheckedCommand "Native content runtime composition isolation" { node --test scripts/tests/native-cover-letter-runtime-bundle.test.mjs }
+Invoke-CheckedCommand "Native task caller authentication isolation" { node --test scripts/tests/native-task-caller-bundle.test.mjs }
+Invoke-CheckedCommand "Authenticated native owner RPC isolation" { node --test scripts/tests/native-owner-rpc-bundle.test.mjs }
 Invoke-CheckedCommand "Native launch control composition isolation" { node --test scripts/tests/native-launch-control-bundle.test.mjs }
+Invoke-CheckedCommand "Native preparation composition isolation" { node --test scripts/tests/native-preparation-bundle.test.mjs }
 Invoke-CheckedCommand "Compose validation" { docker compose config --quiet }
 
 $legacy = rg -n -i `

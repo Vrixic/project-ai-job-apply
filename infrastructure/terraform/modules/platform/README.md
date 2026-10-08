@@ -175,3 +175,98 @@ The exact sitemap route is created by the same activation expression as public j
 absent under repository defaults. Its separate route metrics and alarms retain the same frozen
 rate/burst and generic availability boundary; adding the source does not enable indexing or
 crawling.
+
+## Native resume control API network
+
+`native_resume_control_network` supplies original revision, cluster and Lambda security groups.
+The persistent data plane adds one private-DNS ECS interface endpoint and, for original address
+lookup, one EC2 endpoint. Empty inputs and dormant mode add neither. TCP 443 ingress admits only
+the supplied groups. Endpoint policies restrict launch/observation/address reads to original
+roles and resources; they never grant task stop or interface mutation. Role IAM remains required.
+Development/staging derive these inputs from their preparation releases, with address lookup
+selected by the optional route configuration.
+
+Retain original entries until drain. Check caller-owned outbound TLS rules, VPC membership and
+other ECS/EC2 callers affected by private DNS before activation. Existing platform application
+security groups permit outbound TLS. This is source configuration; managed DNS/reachability and
+effective permission verification remain required. See
+[local evidence](../../../../docs/product/delivery/evidence/d3-native-resume-private-network-2026-10-07.md).
+
+
+Native material private access uses `native_material_control_network` and
+`native_material_task_access`, both empty by default. Environment composition derives them from
+retained control/task releases. The existing ECS, Secrets Manager and Lambda endpoints are shared
+with the resume/preparation flows; no duplicate private DNS endpoint is added. Control roles read
+only their database secret. Task roles read their exact provider/TLS versions and invoke only the
+original numeric owner. SQL ingress includes declared preparation/control groups, with a
+precondition rejecting material task groups that overlap these or the shared application group.
+Task registration may precede control composition with no admitted task group; it is not evidence
+that a task is ready to launch. Retain original bindings until drain is verified.
+
+
+## Native task HTTPS reads and image pulls
+
+Development and staging expose optional `native_material_read_networks` entries for
+`cover_letter` and `resume`. Each creates a separate task security group in the existing VPC.
+An empty `client_ipv4_cidrs` set explicitly closes ingress; reviewed canonical IPv4 ranges
+admit only TCP 8443. Public client access requires explicitly selecting `0.0.0.0/0`.
+Outbound access permits TCP 443; this is a port restriction, not a hostname firewall.
+Runtime destination validation and exact role permissions remain separate controls.
+
+Provision the groups first, review `native_material_read_network_bindings`, and copy the
+returned existing public subnet IDs and dedicated group IDs into the original control or
+resume preparation release. Task launch must use the returned `assign_public_ip = ENABLED`.
+These outputs do not launch tasks, create DNS records or grant SQL access. Keep original groups
+and release entries until their tasks drain. TLS identity, managed reachability and candidate
+read authorization still require acceptance before activation.
+
+Environment composition also derives `native_material_image_access` from retained task releases
+and matching launch groups. When migration ECR endpoints exist, their private DNS intercepts
+native image requests too. Exact original execution roles now receive registry authorization
+and pull access only to their declared repositories through those endpoints. A separate endpoint
+security group admits TCP 443 from original native task groups; it is attached only to ECR API
+and registry endpoints. Migration logging access remains unchanged. No additional ECR endpoints
+are created when migration endpoints are absent. Task registration can precede launch composition
+with no admitted task group; that is not evidence of runnable tasks. The existing regional ECR
+layer S3 path remains unchanged.
+
+
+## Gateway native material release
+
+`gateway_native_materials` is null by default in development/staging. Supplying `{}` wires the
+existing Gateway to the separately provisioned packet encryption/HMAC keys and private KMS path,
+with every native API switch false. It requires `restricted_packet_keys_provisioned` and the
+Gateway deployment. Gateway publication waits for its packet policy and KMS endpoint resources.
+No generated document body passes through the location/authorization routes.
+
+Before activation, copy the exact `restricted_packet_key_bindings.fingerprint_key_arn` into
+bootstrap's `gateway_packet_fingerprint_key_arn`; its workload-boundary addition allows only
+`kms:GenerateMac` by the existing Gateway role, against that key, using HMAC-SHA-256. Encryption
+and data-key operations continue under the existing tagged-key boundary and the new exact-key,
+purpose-bound Gateway role policy. The private KMS endpoint preserves existing caller grants and
+adds only the Gateway's exact packet-key operations. Provision keys first; no secret values belong
+in these inputs.
+
+Set `packet_protection_enabled` only after compatible Gateway/preparation/export/rights releases
+and migrations are accepted. `read_authorizations_enabled` requires protection. Candidate reads
+add `cover_letter_base_host`/`resume_base_host` matching the respective original image and route
+configuration, plus the corresponding `*_locations_enabled` switch. Resume intake additionally
+requires `resume_preparation_enabled` and enabled resume locations. This composition does not
+activate vault reuse, publish images, provide DNS/TLS identities, authorize a provider or prove
+managed end-to-end behavior. Initial keys remain retained; changing key identity requires a
+separately reviewed historical-key transition, not replacing these retained resources.
+
+
+Protected packet export uses the separate `restricted_packet_export_enabled` switch, false by
+default. It requires retained packet keys and an enabled candidate-rights activity whose accepted
+owner inventory includes Applications. The existing rights activity receives export configuration,
+the exact encryption key and fingerprint identity. IAM and the private KMS endpoint grant only
+purpose-bound `kms:Decrypt` on the encryption key; fingerprint identity does not grant MAC access.
+The existing tagged-key workload ceiling already admits decryption, so no new bootstrap grant is
+needed for this reader. Its publication waits for the reader policy and KMS endpoint.
+
+This read path works independently of native generation/preparation releases so candidate export
+can remain available during a generation pause. Keep the original keys and reader capability for
+retained protected packets. Enable and verify the compatible export release before starting
+protected packet writes. Historical key replacement and deployed export/deletion acceptance are
+separate release work; no flag supplies those proofs.

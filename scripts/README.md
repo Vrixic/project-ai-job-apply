@@ -52,6 +52,13 @@ both AWS environments accepted the steady-state serverless runtime.
   `lib/terraform-toolchain.ps1`; current plans/applies require 1.16.2 and an exact encrypted,
   S3-locking backend. Excluded GitHub Actions retain their historical pin and are not the current
   cloud-planning path. `pnpm test:terraform-toolchain` runs the offline regression boundary.
+- `start-development-web.ps1 -ApiOrigin <verified-development-api-origin>` — Runs local candidate
+  web against an explicit healthy Gateway using existing ignored Auth0 settings. The API origin
+  changes only in the child process; identity settings stay intact. `-CheckOnly` verifies local
+  configuration and matching live/ready releases without starting web. No deployment or Docker
+  start is performed. Use regular Chrome for Google sign-in; keep the configured localhost
+  callback and port aligned. Stop local web before the full verifier: its session fixtures also
+  use localhost:3000. Restart afterward; the launcher preserves the identity configuration.
 - `start-local.ps1` — Starts PostgreSQL, Redis, and the OpenTelemetry collector. Workflow execution
   uses the local Lambda durable adapter; no external workflow service is required.
 - `configure-auth0-local.ps1` — Writes ignored local Auth0 web settings with compatibility-safe
@@ -133,6 +140,8 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
   and metadata, and emits a checksum-reviewed ignored receipt without deploying either Lambda.
   `-ArtifactFamily PrivateDocumentControls` selects the dedicated four-artifact/sixteen-object
   family with isolated receipt/key roots and unchanged audit/source/KMS/immutable-write guards.
+  `-ArtifactFamily NativeResume` packages all six resume owner/source/control/durable/dispatch/observer
+  entrypoints as twenty-four immutable objects; local build command is Workflows `build:lambda:native-resume`.
 - `publish-development-migration-image.ps1` — Provides the corresponding fail-closed development
   fallback for the migration-only container. Its cloud-independent `LocalBuild` action proves two
   source-bound `linux/amd64` builds have identical configuration and rootfs identities and passes a
@@ -332,7 +341,8 @@ Both are included in maintained infrastructure and full repository verification.
 - `validate-serverless-workflow-infrastructure.mjs` — Enforces the steady-state Lambda durable,
   migration-only container, and retired-path absence policies.
 - `audit-dependencies.mjs` — Audits the complete lockfile and verifies the exact local
-  `image-size@1.2.1` remediation: patch, lock binding, installed package bytes, and mobile-only
+  `image-size@1.2.1`, `node-forge@1.4.0`, and `braces@3.0.3` remediations: patches, lock bindings,
+  installed package bytes, and mobile-only
   dependency paths. No vulnerability exception or expiry renewal is used. Unexpected advisories
   and registry/tool failures remain blocking.
 - `pnpm test:dependency-security` — Runs bounded parser regressions and applied-remediation audit
@@ -415,3 +425,25 @@ capabilities and is included in the maintained full verifier.
 artifact at `backend/workflows/dist/native-task-event-lambda` with bundled default-off refusal.
 Set `ARTIFACT_SOURCE_SHA` to the committed source for source-bound evidence. It publishes nothing
 and supplies no EventBridge rule, IAM permission, queue/retry/DLQ routing or activation.
+
+`node scripts/build-native-resume-owner-rpc-lambda.mjs` builds the separate default-off
+native-resume scalar owner RPC after Workflows compilation. Set `ARTIFACT_SOURCE_SHA`
+to the exact clean committed source for provenance. Output stays in
+`backend/workflows/dist/native-resume-lambda`; the builder performs no
+publication/deployment and verifies default-off refusal without network effects.
+See [local evidence](../docs/product/delivery/evidence/d3-native-resume-owner-rpc-2026-10-07.md).
+
+`node scripts/build-native-resume-source-rpc-lambda.mjs` builds the separate default-off
+retained resume source receiver after Workflows compilation. Set `ARTIFACT_SOURCE_SHA`
+to the clean committed source. Output is isolated under
+`backend/workflows/dist/native-resume-lambda`; no publication occurs.
+See [local evidence](../docs/product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).
+
+`build-native-preparation-family.mjs` runs the four existing native activity/durable/starter/
+recovery builders after one workflow compilation. It preserves standalone outputs and assembles
+sixteen release companions under Workflow `dist/native-preparation-family`. The guarded document
+publisher's `NativePreparation` family uses dedicated local receipt, source/hash-bound
+`lambda/applications/native-preparation` keys and exact four-member receipts, matching the native
+application preparation Terraform module. Existing source/merge, dependency audit, double-build,
+bucket/KMS/version and independent readback gates remain required. Building does not publish,
+deploy or activate; cloud publication still requires separate authorization.

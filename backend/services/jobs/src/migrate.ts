@@ -33,6 +33,9 @@ const migrationVersions = [
   "0022_development_contribution_provider_leases",
   "0023_contribution_verification_refresh",
   "0024_contribution_appeal_restoration",
+  "0025_job_report_retention",
+  "0026_moderation_case_retention",
+  "0027_candidate_report_export_status",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -713,11 +716,11 @@ try {
             ('jobs.job_reports'::regclass, 'job_reports_guard',
               'jobs.guard_job_report()'::regprocedure, 23::smallint),
             ('jobs.moderation_cases'::regclass, 'moderation_cases_guard',
-              'jobs.guard_moderation_case()'::regprocedure, 31::smallint),
+              'jobs.guard_moderation_case()'::regprocedure, 23::smallint),
             ('jobs.moderation_cases'::regclass, 'moderation_cases_append_event',
               'jobs.append_moderation_event()'::regprocedure, 21::smallint),
             ('jobs.moderation_events'::regclass, 'moderation_events_append_only',
-              'jobs.guard_moderation_event()'::regprocedure, 31::smallint)
+              'jobs.guard_moderation_event()'::regprocedure, 23::smallint)
           ) expected(table_oid, trigger_name, function_oid, trigger_type)
             ON expected.table_oid = trigger.tgrelid
            AND expected.trigger_name = trigger.tgname
@@ -1260,6 +1263,115 @@ try {
     "CHECK (updated_at >= created_at AND capability_expires_at > capability_evaluated_at AND (capability_evaluated_at <= created_at OR kind = 'publication'::text AND (capability_policy_version = 'd2-development-greenhouse-v1'::text AND capability_configuration_digest_sha256 = '8405c7ba82d4d5d127b9bfb0f2f753533d6709d0b89e148a02a1db89c03f1f3b'::text OR capability_policy_version = 'd2-development-lever-v1'::text AND capability_configuration_digest_sha256 = '73a8de43f172d1af75c19e355774ccbb63c10d08485b5cabeb8df524571c3d5c'::text OR capability_policy_version = 'd2-development-ashby-v1'::text AND capability_configuration_digest_sha256 = '5b03a431328af9850b9c08bd8f1508089e4de2d2c31f91b490ebb63a573ae8f5'::text) AND capability_evaluated_at <= updated_at AND capability_expires_at = (capability_evaluated_at + '00:01:00'::interval)))";
   if (!leaseChronology?.validated || leaseChronology.definition !== expectedLeaseChronology) {
     throw new Error("Development contribution operation lease chronology verification failed");
+  }
+  const reportRetentionMigration = migrations.find(
+    (migration) => migration.version === "0025_job_report_retention",
+  );
+  const moderationRetentionMigration = migrations.find(
+    (migration) => migration.version === "0026_moderation_case_retention",
+  );
+  if (!reportRetentionMigration || !moderationRetentionMigration)
+    throw new Error("The Jobs retention migration source is missing");
+  const retentionFunctions = [
+    "lock_job_report_retention",
+    "guard_job_report_case_link",
+    "link_job_report_case",
+    "job_report_retention_due",
+    "guard_candidate_job_report_delete",
+    "purge_expired_job_reports",
+    "guard_moderation_control",
+    "append_moderation_control",
+    "moderation_case_retention_due",
+    "guard_expired_moderation_delete",
+    "purge_expired_moderation_cases",
+  ];
+  for (const functionName of retentionFunctions) {
+    const retentionMigration = functionName.includes("moderation")
+      ? moderationRetentionMigration
+      : reportRetentionMigration;
+    const expectedBody = new RegExp(
+      `CREATE (?:OR REPLACE )?FUNCTION jobs\\.${functionName}\\([\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`,
+      "u",
+    ).exec(retentionMigration.sql)?.[1];
+    const [actual] = await client<
+      { body: string; definer: boolean; settings: string[]; publicExecute: boolean }[]
+    >`
+      SELECT procedure.prosrc AS body, procedure.prosecdef AS definer,
+        procedure.proconfig AS settings,
+        EXISTS (SELECT 1 FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS grant_entry
+          WHERE grant_entry.grantee = 0 AND grant_entry.privilege_type = 'EXECUTE') AS "publicExecute"
+      FROM pg_proc AS procedure JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'jobs' AND procedure.proname = ${functionName}
+    `;
+    if (
+      !expectedBody ||
+      actual?.body !== expectedBody ||
+      JSON.stringify(actual.settings) !==
+        JSON.stringify(["search_path=pg_catalog, jobs, privacy"]) ||
+      actual.definer !== functionName.startsWith("purge_expired_") ||
+      actual.publicExecute
+    ) {
+      throw new Error("Job report retention function verification failed");
+    }
+  }
+  const [retentionSchema] = await client<
+    { tables: number; triggers: number; foreignKeys: number }[]
+  >`
+    SELECT (
+      (to_regclass('jobs.job_report_case_links') IS NOT NULL)::int +
+      (to_regclass('jobs.job_report_retention_totals') IS NOT NULL)::int
+    ) AS tables, (
+      SELECT count(*)::int FROM pg_trigger AS trigger
+      JOIN (VALUES
+        ('jobs.job_reports'::regclass, 'job_reports_retention_lock', 'jobs.lock_job_report_retention()'::regprocedure, 7::smallint),
+        ('jobs.moderation_cases'::regclass, 'moderation_cases_report_retention_lock', 'jobs.lock_job_report_retention()'::regprocedure, 7::smallint),
+        ('jobs.job_reports'::regclass, 'job_reports_link_case', 'jobs.link_job_report_case()'::regprocedure, 5::smallint),
+        ('jobs.moderation_cases'::regclass, 'moderation_cases_link_reports', 'jobs.link_job_report_case()'::regprocedure, 5::smallint),
+        ('jobs.job_report_case_links'::regclass, 'job_report_case_links_guard', 'jobs.guard_job_report_case_link()'::regprocedure, 31::smallint),
+        ('jobs.job_reports'::regclass, 'job_reports_candidate_delete_guard', 'jobs.guard_candidate_job_report_delete()'::regprocedure, 11::smallint)
+      ) AS expected(table_oid, name, function_oid, trigger_type)
+      ON trigger.tgrelid = expected.table_oid AND trigger.tgname = expected.name
+        AND trigger.tgfoid = expected.function_oid AND trigger.tgtype = expected.trigger_type
+      WHERE NOT trigger.tgisinternal AND trigger.tgenabled = 'O'
+    ) AS triggers, (
+      SELECT count(*)::int FROM pg_constraint WHERE contype = 'f' AND convalidated
+        AND conrelid IN ('jobs.job_report_case_links'::regclass, 'jobs.job_report_retention_totals'::regclass)
+    ) AS "foreignKeys"
+  `;
+  if (
+    retentionSchema?.tables !== 2 ||
+    retentionSchema.triggers !== 6 ||
+    retentionSchema.foreignKeys !== 3
+  ) {
+    throw new Error("Job report retention schema verification failed");
+  }
+  const [moderationRetentionSchema] = await client<
+    { tables: number; triggers: number; primaryKeys: number; foreignKeys: number }[]
+  >`
+    SELECT ((to_regclass('jobs.job_moderation_blocks') IS NOT NULL)::int +
+      (to_regclass('jobs.source_moderation_pauses') IS NOT NULL)::int) AS tables,
+      (SELECT count(*)::int FROM pg_trigger AS trigger JOIN (VALUES
+        ('jobs.job_moderation_blocks'::regclass, 'job_moderation_blocks_guard', 'jobs.guard_moderation_control()'::regprocedure, 31::smallint),
+        ('jobs.source_moderation_pauses'::regclass, 'source_moderation_pauses_guard', 'jobs.guard_moderation_control()'::regprocedure, 31::smallint),
+        ('jobs.moderation_cases'::regclass, 'moderation_cases_append_control', 'jobs.append_moderation_control()'::regprocedure, 17::smallint),
+        ('jobs.moderation_cases'::regclass, 'moderation_cases_retention_delete_guard', 'jobs.guard_expired_moderation_delete()'::regprocedure, 11::smallint),
+        ('jobs.moderation_events'::regclass, 'moderation_events_retention_delete_guard', 'jobs.guard_expired_moderation_delete()'::regprocedure, 11::smallint)
+      ) AS expected(table_oid, name, function_oid, trigger_type)
+      ON trigger.tgrelid = expected.table_oid AND trigger.tgname = expected.name
+        AND trigger.tgfoid = expected.function_oid AND trigger.tgtype = expected.trigger_type
+      WHERE NOT trigger.tgisinternal AND trigger.tgenabled = 'O') AS triggers,
+      (SELECT count(*)::int FROM pg_constraint WHERE contype = 'p' AND convalidated
+        AND conrelid IN ('jobs.job_moderation_blocks'::regclass, 'jobs.source_moderation_pauses'::regclass)) AS "primaryKeys",
+      (SELECT count(*)::int FROM pg_constraint WHERE contype = 'f' AND convalidated
+        AND conrelid IN ('jobs.job_moderation_blocks'::regclass, 'jobs.source_moderation_pauses'::regclass)) AS "foreignKeys"
+  `;
+  if (
+    moderationRetentionSchema?.tables !== 2 ||
+    moderationRetentionSchema.triggers !== 5 ||
+    moderationRetentionSchema.primaryKeys !== 2 ||
+    moderationRetentionSchema.foreignKeys !== 1
+  ) {
+    throw new Error("Moderation retention schema verification failed");
   }
   console.log(`Jobs migrations through ${migrationVersions.at(-1)} applied and verified.`);
 } finally {

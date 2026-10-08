@@ -27,6 +27,7 @@ test("native launch emits only fixed ECS control and refuses both default-off ef
     inputs.filter((name) => name.startsWith("backend/") || name.startsWith("packages/")).sort(),
     [
       "backend/services/documents/dist/src/native-task-allocation.js",
+      "backend/services/documents/dist/src/native-task-launch-policy.js",
       "backend/services/documents/dist/src/native-task-launch.js",
     ],
   );
@@ -142,12 +143,22 @@ test("native retirement emits only its control owner and refuses default-off bun
     containerName: "materials",
   };
   const client = module.exports.createNativeTaskRetirement({ allocation });
-  assert.deepEqual(Object.keys(client), ["retire"]);
+  assert.deepEqual(Object.keys(client), ["retire", "observe"]);
   await assert.rejects(client.retire(allocation), /^Error: NativeTaskRetirementUnavailable$/u);
+  await assert.rejects(client.observe(allocation), /^Error: NativeTaskRetirementUnavailable$/u);
 });
 
 for (const [entrypoint, ownerFiles, requiredSdk] of [
-  ["native-material-registry", ["native-material-registry", "native-task-allocation"], false],
+  [
+    "native-material-registry",
+    [
+      "native-material-registry",
+      "native-task-allocation",
+      "native-evidence-binding",
+      "native-launch-control-contract",
+    ],
+    false,
+  ],
   [
     "native-material-disposal",
     ["native-material-disposal", "native-task-allocation", "native-task-retirement"],

@@ -21,6 +21,10 @@ const migrationVersions = [
   "0010_temporary_material_completion",
   "0011_native_material_allocations",
   "0012_native_material_launch_claim",
+  "0013_native_material_ready",
+  "0014_native_resume_generations",
+  "0015_native_resume_observation",
+  "0016_native_application_disposal",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -73,6 +77,9 @@ try {
         nativeTriggerCount: number;
         launchColumnCount: number;
         launchConstraintCount: number;
+        readyColumnCount: number;
+        readyGuardCount: number;
+        readyConstraintCount: number;
       }>
     >`
       SELECT
@@ -86,6 +93,7 @@ try {
           (to_regclass('documents.cover_letter_work_authorizations') IS NOT NULL)::int +
           (to_regclass('documents.cover_letter_provider_responses') IS NOT NULL)::int +
           (to_regclass('documents.native_material_admission') IS NOT NULL)::int +
+          (to_regclass('documents.native_resume_generations') IS NOT NULL)::int +
           (to_regclass('documents.native_material_allocations') IS NOT NULL)::int +
           (to_regclass('documents.schema_migrations') IS NOT NULL)::int
         )::int AS "tableCount",
@@ -133,10 +141,15 @@ try {
         (SELECT count(*)::int FROM information_schema.columns WHERE table_schema = 'documents'
           AND table_name = 'native_material_allocations' AND column_name IN ('launch_claimed_at', 'launch_configuration_sha256')) AS "launchColumnCount",
         (SELECT count(*)::int FROM pg_constraint WHERE conrelid = 'documents.native_material_allocations'::regclass
-          AND conname = 'native_material_launch_claim_ck' AND convalidated) AS "launchConstraintCount"
+          AND conname = 'native_material_launch_claim_ck' AND convalidated) AS "launchConstraintCount",
+        (SELECT count(*)::int FROM information_schema.columns WHERE table_schema='documents'
+          AND table_name='cover_letters' AND column_name IN ('material_source_fact_ids', 'material_confidence')) AS "readyColumnCount",
+        (SELECT count(*)::int FROM pg_trigger WHERE NOT tgisinternal AND tgname='cover_letters_native_ready_guard') AS "readyGuardCount",
+        (SELECT count(*)::int FROM pg_constraint WHERE conrelid='documents.cover_letters'::regclass
+          AND conname='cover_letters_material_ready_ck' AND convalidated) AS "readyConstraintCount"
     `;
     if (
-      verification?.tableCount !== 11 ||
+      verification?.tableCount !== 12 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.triggerCount !== 2 ||
       verification.workTriggerCount !== 1 ||
@@ -147,7 +160,10 @@ try {
       verification.materialTriggerCount !== 2 ||
       verification.nativeTriggerCount !== 5 ||
       verification.launchColumnCount !== 2 ||
-      verification.launchConstraintCount !== 1
+      verification.launchConstraintCount !== 1 ||
+      verification.readyColumnCount !== 2 ||
+      verification.readyGuardCount !== 1 ||
+      verification.readyConstraintCount !== 1
     ) {
       throw new Error("Documents migration verification failed");
     }

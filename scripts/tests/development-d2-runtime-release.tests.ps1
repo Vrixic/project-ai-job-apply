@@ -281,7 +281,7 @@ $declaredRootNames = @([regex]::Matches($rootVariablesSource,'(?m)^variable "([a
 Assert-True ($declaredRootNames -ccontains 'deploy_applications' -and $declaredRootNames -ccontains 'serverless_runtime_enabled' -and
   $declaredRootNames -ccontains 'deploy_gateway_lambda' -and $declaredRootNames -cnotcontains 'runtime_activation_allowed') 'Fixtures drifted from actual root authority variable shape.'
 $messages = @(Get-D2RuntimeMigrationMessages $repositoryRoot $head)
-Assert-True ($messages.Count -eq 7 -and $messages[1] -ceq 'Jobs migrations through 0024_contribution_appeal_restoration applied and verified.' -and
+Assert-True ($messages.Count -eq 7 -and $messages[1] -ceq 'Jobs migrations through 0027_candidate_report_export_status applied and verified.' -and
   $messages[5] -cin @('Trust migrations through 0004_accepted_independent_evidence applied and verified.','Trust migrations through 0005_development_test_removal applied and verified.')) 'Actual source is not a supported exact migration boundary.'
 $inventory = [ordered]@{}
 foreach ($owner in @('profile','jobs','documents','matching','billing','trust')) {
@@ -292,7 +292,7 @@ foreach ($owner in @('profile','jobs','documents','matching','billing','trust'))
 Assert-D2RuntimeMigrationInventory $inventory; $passed++
 $modern51 = [ordered]@{}
 foreach ($owner in $inventory.Keys) { $modern51[$owner] = @($inventory[$owner]) }
-$modern51.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses', '0009_cover_letter_provider_failure', '0010_temporary_material_completion', '0011_native_material_allocations', '0012_native_material_launch_claim') })
+$modern51.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses', '0009_cover_letter_provider_failure', '0010_temporary_material_completion', '0011_native_material_allocations', '0012_native_material_launch_claim', '0013_native_material_ready', '0014_native_resume_generations', '0015_native_resume_observation', '0016_native_application_disposal') })
 Assert-D2RuntimeMigrationInventory $modern51; $passed++
 $modern52 = [ordered]@{}
 foreach ($owner in $modern51.Keys) { $modern52[$owner] = @($modern51[$owner]) }
@@ -318,6 +318,44 @@ $modern57 = [ordered]@{}
 foreach ($owner in $modern56.Keys) { $modern57[$owner] = @($modern56[$owner]) }
 $modern57.documents += '0012_native_material_launch_claim'
 Assert-D2RuntimeMigrationInventory $modern57; $passed++
+$modern58 = [ordered]@{}
+foreach ($owner in $modern57.Keys) { $modern58[$owner] = @($modern57[$owner]) }
+$modern58.documents += '0013_native_material_ready'
+Assert-D2RuntimeMigrationInventory $modern58; $passed++
+$modern59 = [ordered]@{}
+foreach ($owner in $modern58.Keys) { $modern59[$owner] = @($modern58[$owner]) }
+$modern59.documents += '0014_native_resume_generations'
+Assert-D2RuntimeMigrationInventory $modern59; $passed++
+$modern60 = [ordered]@{}
+foreach ($owner in $modern59.Keys) { $modern60[$owner] = @($modern59[$owner]) }
+$modern60.documents += '0015_native_resume_observation'
+Assert-D2RuntimeMigrationInventory $modern60; $passed++
+$modern61 = [ordered]@{}
+foreach ($owner in $modern60.Keys) { $modern61[$owner] = @($modern60[$owner]) }
+$modern61.documents += '0016_native_application_disposal'
+Assert-D2RuntimeMigrationInventory $modern61; $passed++
+foreach ($mutation in @(
+    { param($x) $x.documents[-1] = '0014_unknown_resume' },
+    { param($x) $x.documents = @($x.documents | Where-Object { $_ -cne '0013_native_material_ready' }) },
+    { param($x) $x.documents += '0014_native_resume_generations' },
+    { param($x) $x.documents[-2] = '0014_native_resume_generations'; $x.documents[-1] = '0013_native_material_ready' }
+  )) {
+  $badResumeInventory = [ordered]@{}
+  foreach ($owner in $modern59.Keys) { $badResumeInventory[$owner] = @($modern59[$owner]) }
+  & $mutation $badResumeInventory
+  Assert-Rejected { Assert-D2RuntimeMigrationInventory $badResumeInventory } 'Native resume boundary must preserve exact names, order and completeness.'
+}
+
+foreach ($mutation in @(
+    { param($x) $x.documents[-1] = '0013_unknown_ready' },
+    { param($x) $x.documents = @($x.documents | Where-Object { $_ -cne '0012_native_material_launch_claim' }) },
+    { param($x) $x.documents += '0013_native_material_ready' }
+  )) {
+  $badInventory = [ordered]@{}
+  foreach ($owner in $modern58.Keys) { $badInventory[$owner] = @($modern58[$owner]) }
+  & $mutation $badInventory
+  Assert-Rejected { Assert-D2RuntimeMigrationInventory $badInventory } 'Unknown, incomplete or duplicate native-ready inventory accepted.'
+}
 foreach ($mutation in @(
     { param($x) $x.documents[-1] = '0012_unknown_claim' },
     { param($x) $x.documents = @($x.documents | Where-Object { $_ -cne '0011_native_material_allocations' }) },
@@ -364,7 +402,7 @@ foreach ($mutation in @(
 $legacy49 = [ordered]@{}
 foreach ($owner in $inventory.Keys) { $legacy49[$owner] = @($inventory[$owner]) }
 $legacy49.profile = @($inventory.profile | Where-Object { $_ -cne '0011_active_candidate_lease' })
-$legacy49.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0006_cover_letters', '0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses', '0009_cover_letter_provider_failure', '0010_temporary_material_completion', '0011_native_material_allocations', '0012_native_material_launch_claim') })
+$legacy49.documents = @($inventory.documents | Where-Object { $_ -cnotin @('0006_cover_letters', '0007_cover_letter_work_authorizations', '0008_cover_letter_provider_responses', '0009_cover_letter_provider_failure', '0010_temporary_material_completion', '0011_native_material_allocations', '0012_native_material_launch_claim', '0013_native_material_ready', '0014_native_resume_generations', '0015_native_resume_observation', '0016_native_application_disposal') })
 Assert-D2RuntimeMigrationInventory $legacy49; $passed++
 $legacy48 = [ordered]@{}
 foreach ($owner in $legacy49.Keys) { $legacy48[$owner] = @($legacy49[$owner]) }

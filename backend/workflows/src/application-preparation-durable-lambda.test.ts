@@ -172,3 +172,19 @@ describe("installed SDK through native durable entrypoint", () => {
     );
   });
 });
+
+it.each([
+  undefined,
+  activity,
+  target,
+  "arn:aws:lambda:us-east-2:123456789012:function:material-control:alias",
+])("rejects routing with invalid control %s before SDK access", async (control) => {
+  const env: Record<string, string | undefined> = {
+    ...environment(),
+    NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED: "true",
+    NATIVE_MATERIAL_LAUNCH_FUNCTION_ARN: control,
+  };
+  await expect(
+    createNativeApplicationPreparationDurableHandler({ environment: () => env })(raw, context),
+  ).rejects.toThrow("ApplicationPreparationWorkflowUnavailable");
+});

@@ -1,6 +1,7 @@
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import type { CoverLetterWorkReference } from "./cover-letter-work-store.js";
+import { type NativeEvidenceBinding, nativeEvidenceBinding } from "./native-evidence-binding.js";
 import {
   type NativeTaskAllocation,
   type NativeTaskRetirementReceipt,
@@ -14,7 +15,7 @@ export interface NativeMaterialIntent {
   applicationId: string;
   generationId: string;
   epochId: string;
-  state: "pending" | "bound" | "retired";
+  state: "pending" | "bound" | "retired" | "abandoned";
   allocation: NativeTaskAllocation | null;
 }
 export type NativeMaterialLaunchScope = Pick<
@@ -113,10 +114,32 @@ export class PostgresNativeMaterialRegistry {
     private readonly sql: postgres.Sql,
     private readonly enabled: () => boolean = () => false,
     private readonly applicationAdmission?: NativeRegistryApplicationAdmission,
+    private readonly preparationAdmission?: (
+      owner: string,
+      application: string,
+      generation: string,
+      query: NativeRegistryAdmissionQuery,
+    ) => Promise<void>,
   ) {}
 
   private check() {
     if (!this.enabled()) throw unavailable();
+  }
+
+  /** Fresh explicit preparation may name a sealed prior epoch; this read grants no launch. */
+  async readPreviousEpoch(owner: string, app: string): Promise<string | null> {
+    return this.guarded(async () => {
+      if (!validScope(owner, app)) throw unavailable();
+      return this.sql.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${owner}::uuid)`;
+        const [head] = await tx<Array<{ epoch_id: string; sealed_at: Date | null }>>`
+          SELECT epoch_id, sealed_at FROM documents.native_material_admission
+          WHERE user_id=${owner} AND application_id=${app}`;
+        this.check();
+        if (head && (!head.sealed_at || !uuid.test(head.epoch_id))) throw unavailable();
+        return head?.epoch_id ?? null;
+      });
+    });
   }
   private async guarded<T>(run: () => Promise<T>): Promise<T> {
     try {
@@ -171,13 +194,23 @@ export class PostgresNativeMaterialRegistry {
           WHERE id = ${fixed.allocationId} AND user_id = ${fixed.ownerUserId}
             AND application_id = ${fixed.applicationId} AND document_id = ${fixed.generationId}
             AND epoch_id = ${fixed.epochId} FOR UPDATE`;
-        if (!row || row.state === "retired") throw unavailable();
+        if (!row || row.state === "retired" || row.state === "abandoned") throw unavailable();
         if (row.launch_claimed_at) {
           if (row.launch_configuration_sha256 !== configurationSha256) throw unavailable();
           this.check();
           return { claimed: false, record: launchRecord(row) };
         }
         if (row.state !== "pending") throw unavailable();
+        await this.preparationAdmission?.(
+          fixed.ownerUserId,
+          fixed.applicationId,
+          fixed.generationId,
+          async <Rows extends Record<string, unknown>[]>(
+            parts: TemplateStringsArray,
+            ...values: unknown[]
+          ) => await tx<Rows>(parts, ...(values as postgres.ParameterOrFragment<never>[])),
+        );
+        this.check();
         const [claimed] = await tx<Row[]>`UPDATE documents.native_material_allocations
           SET launch_claimed_at = clock_timestamp(), launch_configuration_sha256 = ${configurationSha256}
           WHERE id = ${row.id} RETURNING *`;
@@ -204,6 +237,44 @@ export class PostgresNativeMaterialRegistry {
         throw unavailable();
       this.check();
       return launchRecord(row);
+    });
+  }
+
+  /** Point-in-time owning evidence admission, separate from recovery after sealing. This
+   * transaction ends before owner evidence reads; callers must recheck after their awaits.
+   * It grants no work, liveness, credentials, retirement or generated-copy authority. */
+  async checkEvidenceAdmission(input: NativeEvidenceBinding): Promise<void> {
+    return this.guarded(async () => {
+      const fixed = nativeEvidenceBinding(input);
+      if (!this.applicationAdmission) throw unavailable();
+      await this.sql.begin(async (tx) => {
+        await tx`SELECT identity.require_active_candidate(${fixed.scope.ownerUserId}::uuid)`;
+        await this.applicationAdmission?.(
+          fixed.scope.ownerUserId,
+          fixed.scope.applicationId,
+          async <Rows extends Record<string, unknown>[]>(
+            parts: TemplateStringsArray,
+            ...values: unknown[]
+          ) => await tx<Rows>(parts, ...(values as postgres.ParameterOrFragment<never>[])),
+        );
+        await this.lock(tx, fixed.scope.ownerUserId, fixed.scope.applicationId);
+        const [row] = await tx`
+          SELECT a.id FROM documents.native_material_allocations a
+          JOIN documents.native_material_admission h ON h.user_id = a.user_id AND h.application_id = a.application_id
+          JOIN documents.cover_letter_work_authorizations w ON w.id = a.work_id AND w.document_id = a.document_id AND w.user_id = a.user_id
+          WHERE a.id = ${fixed.scope.allocationId} AND a.user_id = ${fixed.scope.ownerUserId}
+            AND a.application_id = ${fixed.scope.applicationId} AND a.document_id = ${fixed.scope.generationId}
+            AND a.epoch_id = ${fixed.scope.epochId} AND h.epoch_id = a.epoch_id AND h.sealed_at IS NULL
+            AND a.state = 'bound' AND a.launch_claimed_at IS NOT NULL AND a.launch_configuration_sha256 IS NOT NULL
+            AND a.task_arn = ${fixed.allocation.taskArn} AND a.cluster_arn = ${fixed.allocation.clusterArn}
+            AND a.task_definition_arn = ${fixed.allocation.taskDefinitionArn} AND a.container_name = ${fixed.allocation.containerName}
+            AND a.work_id = ${fixed.original.id} AND a.request_sha256 = ${fixed.original.requestSha256}
+            AND w.purpose = 'provider_dispatch' AND w.request_sha256 = a.request_sha256
+            AND w.state IN ('issued', 'running', 'settled') AND (w.state <> 'issued' OR w.expires_at > clock_timestamp())
+          FOR UPDATE OF a, h`;
+        this.check();
+        if (!row) throw unavailable();
+      });
     });
   }
 
@@ -264,6 +335,7 @@ export class PostgresNativeMaterialRegistry {
             head.sealed_at ||
             head.epoch_id !== existing.epoch_id ||
             existing.state === "retired" ||
+            existing.state === "abandoned" ||
             existing.application_id !== fixed.applicationId ||
             existing.work_id !== fixed.original.id ||
             existing.request_sha256 !== fixed.original.requestSha256 ||
@@ -286,6 +358,16 @@ export class PostgresNativeMaterialRegistry {
           this.check();
           return intent(existing);
         }
+        await this.preparationAdmission?.(
+          fixed.ownerUserId,
+          fixed.applicationId,
+          fixed.original.documentId,
+          async <Rows extends Record<string, unknown>[]>(
+            parts: TemplateStringsArray,
+            ...values: unknown[]
+          ) => await tx<Rows>(parts, ...(values as postgres.ParameterOrFragment<never>[])),
+        );
+        this.check();
         const [grant] = await tx<Array<{ fresh: boolean }>>`SELECT
           (h.minimum_work_issued_at IS NULL OR w.issued_at > h.minimum_work_issued_at) AS fresh
           FROM documents.cover_letters d JOIN documents.cover_letter_work_authorizations w ON w.document_id = d.id
@@ -337,6 +419,7 @@ export class PostgresNativeMaterialRegistry {
             AND application_id = ${fixed.applicationId} FOR UPDATE`;
         if (
           !row ||
+          row.state === "abandoned" ||
           row.document_id !== fixed.generationId ||
           row.cluster_arn !== fixed.clusterArn ||
           row.task_definition_arn !== fixed.taskDefinitionArn ||
@@ -375,7 +458,7 @@ export class PostgresNativeMaterialRegistry {
           WHERE user_id = ${owner} AND application_id = ${app} RETURNING epoch_id`;
         if (!head) throw unavailable();
         const rows = await tx<Row[]>`SELECT * FROM documents.native_material_allocations
-          WHERE user_id = ${owner} AND application_id = ${app} AND state <> 'retired' ORDER BY id`;
+          WHERE user_id = ${owner} AND application_id = ${app} AND state NOT IN ('retired','abandoned') ORDER BY id`;
         this.check();
         return { epochId: head.epoch_id, intents: rows.map(intent) };
       });
@@ -451,7 +534,9 @@ export class PostgresNativeMaterialRegistry {
           Array<{ complete: boolean }>
         >`SELECT (sealed_at IS NOT NULL AND epoch_id = ${epochId}
           AND NOT EXISTS (SELECT 1 FROM documents.native_material_allocations a
-            WHERE a.user_id = h.user_id AND a.application_id = h.application_id AND a.state <> 'retired')) AS complete
+            WHERE a.user_id = h.user_id AND a.application_id = h.application_id AND a.state NOT IN ('retired','abandoned'))
+          AND NOT EXISTS (SELECT 1 FROM documents.native_resume_generations r
+            WHERE r.user_id=h.user_id AND r.application_id=h.application_id AND r.state NOT IN ('retired','abandoned'))) AS complete
           FROM documents.native_material_admission h WHERE user_id = ${owner} AND application_id = ${app} FOR UPDATE`;
         this.check();
         return result?.complete === true;

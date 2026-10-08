@@ -297,3 +297,20 @@ certifies candidate-wide/all-copy deletion. Existing authorized privacy deletion
 still apply. Optional portability metadata excludes deployment ARNs, work grants, request hashes
 and candidate content. Private launcher/managed IAM/RPCs and actual host/client/ATS/provider
 conformance remain release gates. [Local evidence](../product/delivery/evidence/d3-native-material-registry-2026-10-05.md).
+
+
+## D1 accepted-policy implementation checkpoint — 2026-10-07
+
+D1P-06's accepted reporting/moderation schedule now has local implementation and release
+composition: Jobs report/case/control expiry and Profile's privileged audit expiry are separate
+bounded private Lambdas, with default-disabled schedules and counts-only outputs. Capture is
+separately gated. This does not establish the broad provisional public audit schedule, alter its
+accepted durations or authorize real candidate data. See the [Jobs release evidence](../product/delivery/evidence/d1-job-report-retention-2026-10-06.md#private-managed-maintenance)
+and [privileged audit release evidence](../product/delivery/evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#optional-release-composition).
+
+Fresh [development configuration readback](../product/delivery/evidence/d1-retention-live-configuration-2026-10-07.md)
+confirms encrypted 30-day application logs, but both new maintenance functions are absent. The
+alert topic has one confirmed email subscription, no configured delivery-feedback role and no
+message archive policy. Recipient mailbox/incident-system deletion remains unverified; encrypted
+logs alone do not prove the accepted 30-day alert-metadata lifetime. No notification contents or
+inbox were read, and no cloud state was changed.

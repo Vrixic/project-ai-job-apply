@@ -1375,6 +1375,8 @@ describe("Applications routes at the Lambda boundary", () => {
   it.each([
     ["POST", "/v1/applications", "{}"],
     ["POST", "/v1/applications/search", "{}"],
+    ["PUT", `/v1/material-withdrawals/${id}`, undefined],
+    ["GET", `/v1/material-withdrawals/${id}`, undefined],
     ["GET", `/v1/applications/${id}`, undefined],
     ["GET", `/v1/applications/${id}/history`, undefined],
     ["GET", `/v1/applications/${id}/resume`, undefined],
@@ -1399,6 +1401,8 @@ describe("Applications routes at the Lambda boundary", () => {
 
   it.each([
     ["wrong method", "GET", "/v1/applications"],
+    ["withdrawal wrong method", "POST", `/v1/material-withdrawals/${id}`],
+    ["withdrawal invalid id", "PUT", "/v1/material-withdrawals/not-an-id"],
     ["non-v7 identifier", "GET", "/v1/applications/00000000-0000-1000-8000-000000000001"],
     ["traversal", "GET", `/v1/applications/${id}/../me`],
     ["unknown suffix", "POST", `/v1/applications/${id}/delete`],
@@ -1415,6 +1419,10 @@ describe("Applications routes at the Lambda boundary", () => {
 
   it("requires a body on commands and refuses one on reads and dispatch", async () => {
     const { inject, handler } = dispatcher();
+    expect(
+      (await invoke(handler, invocation("PUT", `/v1/material-withdrawals/${id}`, { body: "{}" })))
+        .statusCode,
+    ).toBe(400);
     expect(
       (await invoke(handler, invocation("POST", `/v1/applications/${id}/cancel`))).statusCode,
     ).toBe(400);
@@ -1484,11 +1492,12 @@ describe("Applications routes at the Lambda boundary", () => {
         .replace("{attemptId}", attempt)
         .replace("{preparationId}", attempt);
       const { handler } = dispatcher();
-      const query = path.endsWith("/authorization")
-        ? `generationId=${attempt}`
-        : path.endsWith("/file")
-          ? "format=pdf"
-          : "";
+      const query =
+        path.endsWith("/authorization") || path.endsWith("/location")
+          ? `generationId=${attempt}`
+          : path.endsWith("/file")
+            ? "format=pdf"
+            : "";
       const commandBody = method === "POST" && !path.endsWith("/dispatch") ? "{}" : undefined;
       const response = await invoke(
         handler,
@@ -1510,20 +1519,27 @@ describe("Applications routes at the Lambda boundary", () => {
     ["owner override", `generationId=${attempt}&ownerUserId=${id}`],
     ["oversized", `generationId=${"a".repeat(300)}`],
   ])("refuses %s material authorization queries before dispatch", async (_label, query) => {
-    const { handler, inject } = dispatcher();
-    const response = await invoke(
-      handler,
-      invocation("GET", `/v1/applications/${id}/cover-letter/authorization`, {
-        rawQueryString: query,
-      }),
-    );
-    expect(response.statusCode).toBe(400);
-    expect(inject).not.toHaveBeenCalled();
+    for (const kind of ["cover-letter", "resume"]) {
+      const { handler, inject } = dispatcher();
+      const response = await invoke(
+        handler,
+        invocation("GET", `/v1/applications/${id}/${kind}/authorization`, {
+          rawQueryString: query,
+        }),
+      );
+      expect(response.statusCode).toBe(400);
+      expect(inject).not.toHaveBeenCalled();
+    }
   });
 
-  it("forwards only authenticated body-free material authorization reads", async () => {
+  it.each([
+    "cover-letter/authorization",
+    "cover-letter/location",
+    "resume/authorization",
+    "resume/location",
+  ])("forwards authenticated body-free material %s reads", async (route) => {
     const { handler, inject } = dispatcher();
-    const path = `/v1/applications/${id}/cover-letter/authorization`;
+    const path = `/v1/applications/${id}/${route}`;
     const extra = { rawQueryString: `generationId=${attempt}` };
     const anonymous = invocation("GET", path, extra);
     delete anonymous.requestContext.authorizer;

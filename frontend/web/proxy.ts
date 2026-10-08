@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAuth0Client, isAuth0Configured } from "./lib/auth0";
 
 export async function proxy(request: Request) {
@@ -16,7 +16,15 @@ export async function proxy(request: Request) {
     }
     return NextResponse.next();
   }
-  return getAuth0Client().middleware(request);
+  const client = getAuth0Client();
+  if (
+    process.env.NATIVE_MATERIAL_LOGOUT_ENABLED === "true" &&
+    new URL(request.url).pathname === "/auth/logout"
+  ) {
+    const { nativeMaterialLogout } = await import("./lib/native-material-logout");
+    return nativeMaterialLogout(new NextRequest(request), client, process.env);
+  }
+  return client.middleware(request);
 }
 
 export const config = {

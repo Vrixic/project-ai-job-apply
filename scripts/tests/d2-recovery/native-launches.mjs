@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { lockNativeMaterialApplicationAdmission } from "../../../backend/services/applications/dist/src/index.js";
 import { PostgresCoverLetterStore } from "../../../backend/services/documents/dist/src/cover-letter-store.js";
 import { PostgresCoverLetterWorkStore } from "../../../backend/services/documents/dist/src/cover-letter-work-store.js";
+import { PostgresNativeApplicationDisposalStore } from "../../../backend/services/documents/dist/src/native-application-disposal-store.js";
 import { PostgresNativeMaterialRegistry } from "../../../backend/services/documents/dist/src/native-material-registry.js";
 
 const dependency = createRequire(
@@ -39,7 +40,7 @@ export async function seedNativeLaunches(sql, ownerUserId) {
   const work = new PostgresCoverLetterWorkStore(sql, () => true);
   const owner = registry(sql);
   const fixtures = [];
-  for (const state of ["pending", "bound", "retired"]) {
+  for (const state of ["pending", "bound", "retired", "abandoned"]) {
     const applicationId = uuidv7(),
       generationId = uuidv7();
     await sql`INSERT INTO applications.applications (id,owner_user_id,canonical_job_id,status,created_at,updated_at)
@@ -74,6 +75,14 @@ export async function seedNativeLaunches(sql, ownerUserId) {
       deployment,
     });
     const fixed = scope(intent);
+    if (state === "abandoned") {
+      const disposal = new PostgresNativeApplicationDisposalStore(sql, () => true);
+      const sealed = await disposal.sealApplication(ownerUserId, applicationId);
+      assert.equal(sealed.epochId, intent.epochId);
+      assert.deepEqual(sealed.intents, []);
+      fixtures.push({ scope: fixed, original, abandoned: true });
+      continue;
+    }
     const claimed = await owner.claimLaunch(fixed, digest);
     assert.equal(claimed.claimed, true);
     if (state !== "pending") {
@@ -115,6 +124,57 @@ export async function seedNativeLaunches(sql, ownerUserId) {
 export async function exerciseRestoredNativeLaunches(sql, fixtures) {
   const owner = registry(sql);
   for (const fixture of fixtures) {
+    if (fixture.abandoned) {
+      const [row] = await sql`SELECT state,launch_claimed_at,launch_configuration_sha256,task_arn,
+        stopped_at_ms,observed_at_ms FROM documents.native_material_allocations
+        WHERE id=${fixture.scope.allocationId} AND user_id=${fixture.scope.ownerUserId}`;
+      assert.deepEqual(
+        { ...row },
+        {
+          state: "abandoned",
+          launch_claimed_at: null,
+          launch_configuration_sha256: null,
+          task_arn: null,
+          stopped_at_ms: null,
+          observed_at_ms: null,
+        },
+      );
+      await assert.rejects(
+        owner.claimLaunch(fixture.scope, digest),
+        /^Error: NativeMaterialRegistryUnavailable$/u,
+      );
+      await assert.rejects(
+        owner.readLaunch(fixture.scope, digest),
+        /^Error: NativeMaterialRegistryUnavailable$/u,
+      );
+      assert.equal(
+        await owner.confirmApplicationDisposed(
+          fixture.scope.ownerUserId,
+          fixture.scope.applicationId,
+          fixture.scope.epochId,
+        ),
+        true,
+      );
+      // The restored immutable terminal guard must refuse resurrection, not just the TS caller.
+      await assert.rejects(
+        sql`UPDATE documents.native_material_allocations SET state='pending'
+        WHERE id=${fixture.scope.allocationId}`,
+        { code: "55000" },
+      );
+      const [portable] =
+        await sql`SELECT documents.export_candidate_data(${fixture.scope.ownerUserId}::uuid) AS data`;
+      const exported = portable.data.documents.nativeMaterialAllocations.find(
+        (item) => item.id === fixture.scope.allocationId,
+      );
+      assert.equal(exported?.state, "abandoned");
+      assert.equal(exported?.applicationId, fixture.scope.applicationId);
+      assert.equal(exported?.generationId, fixture.scope.generationId);
+      assert.equal(Object.hasOwn(exported, "stoppedAtEpochMs"), false);
+      const [grant] = await sql`SELECT state FROM documents.cover_letter_work_authorizations
+        WHERE id=${fixture.original.id}`;
+      assert.equal(grant.state, "issued");
+      continue;
+    }
     assert.deepEqual(await owner.readLaunch(fixture.scope, digest), fixture.record);
     await assert.rejects(
       owner.readLaunch(fixture.scope, "e".repeat(64)),
@@ -134,7 +194,7 @@ export async function exerciseRestoredNativeLaunches(sql, fixtures) {
       await sql`SELECT state FROM documents.cover_letter_work_authorizations WHERE id=${fixture.original.id}`;
     assert.equal(grant.state, "issued");
   }
-  const pending = fixtures.find((f) => f.record.intent.state === "pending");
+  const pending = fixtures.find((f) => f.record?.intent.state === "pending");
   assert.ok(pending);
   assert.equal(
     await owner.confirmApplicationDisposed(
@@ -144,7 +204,7 @@ export async function exerciseRestoredNativeLaunches(sql, fixtures) {
     ),
     false,
   );
-  const retired = fixtures.find((f) => f.record.intent.state === "retired");
+  const retired = fixtures.find((f) => f.record?.intent.state === "retired");
   assert.ok(retired);
   assert.equal(
     await owner.confirmApplicationDisposed(
@@ -159,5 +219,6 @@ export async function exerciseRestoredNativeLaunches(sql, fixtures) {
     nativeRestoredLaunchReissues: 0,
     nativeUnknownLaunchStillUnresolved: true,
     nativeProviderGrantsUnsettled: true,
+    nativeAbandonedLaunchesStillTerminal: fixtures.filter((f) => f.abandoned).length,
   };
 }

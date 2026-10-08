@@ -80,3 +80,21 @@ other service may modify these tables.
   one accepted appeal after an applied takedown. It preserves the original publication/removal and
   provider truth, wakes only exact unconsumed accepted appeal decisions, and backfills affected
   completed queue rows through the same guarded predicate.
+- `0025_job_report_retention.sql` — Links candidate reports once to an exact same-job review
+  interval and backfills historical intervals. A database-clock, execute-restricted bounded
+  maintenance function removes expired reporter/request/idempotency data after the later of
+  receipt + 90 days and case closure + 30 days, preserving only fixed-reason totals. Open cases
+  retain their reports; authorized candidate deletion stays immediate and creates no aggregate.
+  Requires migration-before-reader and reader-before-maintenance rollout; it does not schedule
+  cleanup or implement case/control/audit/alert expiry.
+- `0026_moderation_case_retention.sql` — Backfills minimal non-operator block/pause controls
+  from resolved cases and updates them on subsequent explicit resolutions. Guarded bounded
+  maintenance removes case details and decision events 365 days after closure, once linked
+  reports expire and needed controls exist. Retains required controls to prevent resurrection;
+  no job unblock/source resume authority is added. Deploy the control-aware source pause reader
+  before separately enabling moderation cleanup. Privileged audit and alert expiry remain open.
+- `0027_candidate_report_export_status.sql` — Adds the retained owner report's exact linked case
+  status to portable exports, preserving contribution and creation-audit projections. No linked
+  case is received; open is under_review; closed is resolved, without accuracy or decision claims.
+  Excludes operator/case identity and all report hashes. Deploy the optional-field schema-aware
+  export consumer before this migration; older strict validators refuse the additive field.

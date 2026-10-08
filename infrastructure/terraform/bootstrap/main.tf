@@ -96,7 +96,7 @@ locals {
 
   github_deploy_policy = {
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid      = "TerraformStateBucket"
         Effect   = "Allow"
@@ -148,7 +148,7 @@ locals {
           "cloudformation:ListStackResources",
           "cloudformation:UpdateStack"
         ]
-        Resource = "arn:aws:cloudformation:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-profile-readiness-durable/*"
+        Resource = jsondecode(length(local.preparation_stack_arns) == 0 ? jsonencode("arn:aws:cloudformation:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-profile-readiness-durable/*") : jsonencode(concat(["arn:aws:cloudformation:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-profile-readiness-durable/*"], local.preparation_stack_arns)))
       },
       {
         Sid      = "ValidateDurableTemplate"
@@ -203,7 +203,7 @@ locals {
         Resource = local.workload_role_arn
         Condition = {
           StringEquals = {
-            "iam:PermissionsBoundary" = local.workload_boundary_arn
+            "iam:PermissionsBoundary" = jsondecode(length(local.additional_runtime_boundary_arns) == 0 ? jsonencode(local.workload_boundary_arn) : jsonencode(concat([local.workload_boundary_arn], local.additional_runtime_boundary_arns)))
           }
         }
       },
@@ -241,10 +241,10 @@ locals {
         Sid    = "ReadApprovedPolicies"
         Effect = "Allow"
         Action = ["iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"]
-        Resource = [
+        Resource = concat([
           local.workload_boundary_arn,
           "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-        ]
+        ], local.additional_runtime_boundary_arns)
       },
       {
         Sid      = "PassWorkloadRolesToApprovedServices"
@@ -276,7 +276,7 @@ locals {
           }
         }
       }
-    ]
+    ], local.native_resume_deploy_statements)
   }
 }
 
@@ -474,7 +474,7 @@ resource "aws_iam_policy" "workload_boundary" {
         Resource  = "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*",
         Condition = { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-development-deletion-restore" } }
       }
-    ] : [])
+    ] : [], local.gateway_packet_boundary_statements, local.gateway_disposal_boundary_statements, local.native_cleanup_boundary_statements)
   })
 }
 

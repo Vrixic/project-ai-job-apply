@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { coverLetterContext } from "@ai-job-apply/ai-sdk/context";
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import {
   ApplicationsUnavailableError,
@@ -191,6 +192,138 @@ suite("Applications selected vault owner composition", () => {
     const prepared = await api.preparePacket(owner, app.id, request, key());
     return { owner, command, api, app: prepared, selection, request };
   }
+  it("queues native HTTP preparation with owner evidence and replays after intake withdrawal", async () => {
+    let enabled = true;
+    const job = {
+      id: jobId,
+      status: "active",
+      title: "Synthetic backend role",
+      company: { name: "Synthetic employer" },
+      description: "Synthetic full posting",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const native = createApplicationsRuntime({
+      client: appDb,
+      profile: realProfile,
+      catalog: { ...catalog, getActiveJob: async () => job as never },
+      definitions: defaultFieldDefinitions(),
+      restrictedPackets: packetProtection.options,
+      nativeCoverLetterPreparationEnabled: () => enabled,
+    });
+    const issuer = await createTestTokenIssuer();
+    const app = await createGatewayApplication({
+      store: realProfile,
+      catalog: catalog as never,
+      jobReports: {} as never,
+      jobContributions: {} as never,
+      moderation: {} as never,
+      savedJobs: {} as never,
+      matchAssessments: {} as never,
+      entitlements: {} as never,
+      documents: {} as never,
+      applications: native,
+      verifier: issuer.verifier,
+      releaseSha: "test",
+    });
+    try {
+      const token = await issuer.issue(`synthetic-native-${uuidv7()}`, {
+        scope: "applications:read applications:write",
+      });
+      const headers = { authorization: `Bearer ${token}`, "idempotency-key": key() };
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/applications",
+        headers,
+        payload: { jobId },
+      });
+      expect(created.statusCode).toBe(201);
+      const application = created.json<{ id: string; revision: number }>();
+      const request = {
+        method: "POST" as const,
+        url: `/v1/applications/${application.id}/packets`,
+        headers: { ...headers, "idempotency-key": key() },
+        payload: {
+          expectedRevision: application.revision,
+          coverLetter: {
+            disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+          },
+        },
+      };
+      const prepared = await app.inject(request);
+      expect(prepared.statusCode).toBe(202);
+      expect(prepared.headers["cache-control"]).toBe("no-store");
+      const operation = prepared.json<{ id: string }>();
+      const [row] =
+        await appDb`SELECT job_context_hash, confirmed_facts_hash FROM applications.packet_preparations WHERE id = ${operation.id}::uuid`;
+      const expected = coverLetterContext({
+        facts: [],
+        now: new Date(),
+        job: { title: job.title, company: job.company.name, description: job.description },
+      });
+      expect(row).toMatchObject({
+        job_context_hash: expected.jobContextHash,
+        confirmed_facts_hash: expected.confirmedFactsHash,
+      });
+      enabled = false;
+      const replay = await app.inject(request);
+      expect(replay.statusCode).toBe(202);
+      expect(replay.json()).toEqual(prepared.json());
+      const [count] =
+        await appDb`SELECT count(*)::int AS total FROM applications.preparation_outbox WHERE preparation_id = ${operation.id}::uuid`;
+      expect(count?.total).toBe(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each(["disabled", "withdrawn", "expired", "foreign"] as const)(
+    "refuses native context (%s) without enqueueing",
+    async (failure) => {
+      const f = await fixture();
+      let enabled = failure !== "disabled";
+      const native = createApplicationsRuntime({
+        client: appDb,
+        profile: {
+          listProfileFacts: async (owner) => {
+            const facts = await realProfile.listProfileFacts(owner);
+            if (failure === "withdrawn") enabled = false;
+            return facts;
+          },
+        },
+        catalog: {
+          ...catalog,
+          getActiveJob: async () =>
+            ({
+              status: "active",
+              title: "Synthetic",
+              company: { name: "Synthetic" },
+              description: "Synthetic",
+              expiresAt: new Date(Date.now() + (failure === "expired" ? -1 : 60_000)),
+            }) as never,
+        },
+        definitions: defaultFieldDefinitions(),
+        restrictedPackets: packetProtection.options,
+        nativeCoverLetterPreparationEnabled: () => enabled,
+      });
+      await expect(
+        native.prepareCoverLetter(
+          failure === "foreign" ? uuidv7() : f.owner,
+          f.app.id,
+          {
+            expectedRevision: f.app.revision,
+            coverLetter: {
+              disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            },
+          },
+          key(),
+        ),
+      ).rejects.toThrow();
+      const [count] =
+        await appDb`SELECT count(*)::int AS total FROM applications.packet_preparations WHERE application_id = ${f.app.id}::uuid`;
+      expect(count?.total).toBe(0);
+    },
+  );
+
   async function refusedCandidateMetadata(f: Awaited<ReturnType<typeof fixture>>) {
     // A stale selected answer cannot be projected through the candidate value-read port.
     await expect(f.api.get(f.owner, f.app.id)).rejects.toBeInstanceOf(ApplicationsUnavailableError);

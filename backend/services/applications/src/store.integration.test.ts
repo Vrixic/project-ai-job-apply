@@ -68,7 +68,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const first = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const replay = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const expected =
-      "Applications migrations through 0009_restricted_packet_values applied and verified.";
+      "Applications migrations through 0011_native_resume_execution_receipts applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
     await store.ping();

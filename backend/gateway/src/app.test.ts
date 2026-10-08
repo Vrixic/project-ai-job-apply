@@ -13,6 +13,7 @@ import {
   RestrictedPacketStoreUnavailableError,
   StalePacketError,
 } from "@ai-job-apply/applications-service";
+import type { PrivilegedModerationAuditWriter } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import "reflect-metadata";
 import { createHash } from "node:crypto";
 import type {
@@ -949,6 +950,7 @@ async function createApp(
     applications?: ApplicationsApi;
     documents?: DocumentStore;
     restrictedAnswerVault?: RestrictedAnswerVaultStore;
+    privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   } = {},
 ) {
   const issuer = await createTestTokenIssuer();
@@ -1004,6 +1006,9 @@ async function createApp(
     ugcContributionConsents,
     ugcContributionPolicyVersion: "d2-synthetic-policy.v1",
     moderation,
+    ...(options.privilegedModerationAudit
+      ? { privilegedModerationAudit: options.privilegedModerationAudit }
+      : {}),
     matchAssessments,
     entitlements,
     documents,
@@ -3736,6 +3741,36 @@ describe("Applications routes", () => {
   }
 
   const applications: ApplicationsApi = {
+    temporaryMaterialLocation: record("temporaryMaterialLocation", {
+      schemaVersion: 1,
+      packetId: jobId,
+      packetHash: hash,
+      temporaryMaterial: {
+        schemaVersion: 1,
+        kind: "cover_letter",
+        generationId: attemptId,
+        version: 1,
+        contentSha256: hash,
+        completedAtMs: 1000,
+        expiresAtMs: 1_801_000,
+      },
+      origin: `https://${attemptId}.materials.example.test:8443`,
+    } as const),
+    resumeMaterialLocation: record("resumeMaterialLocation", {
+      schemaVersion: 1,
+      packetId: jobId,
+      packetHash: hash,
+      temporaryMaterial: {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: attemptId,
+        version: 1,
+        contentSha256: hash,
+        completedAtMs: 1000,
+        expiresAtMs: 1_801_000,
+      },
+      origin: `https://${attemptId}.materials.example.test:8443`,
+    } as const),
     temporaryMaterialAuthorization: record("temporaryMaterialAuthorization", {
       schemaVersion: 1,
       packetId: jobId,
@@ -3743,6 +3778,20 @@ describe("Applications routes", () => {
       temporaryMaterial: {
         schemaVersion: 1,
         kind: "cover_letter",
+        generationId: attemptId,
+        version: 1,
+        contentSha256: hash,
+        completedAtMs: 1000,
+        expiresAtMs: 1_801_000,
+      },
+    } as const),
+    resumeMaterialAuthorization: record("resumeMaterialAuthorization", {
+      schemaVersion: 1,
+      packetId: jobId,
+      packetHash: hash,
+      temporaryMaterial: {
+        schemaVersion: 1,
+        kind: "tailored_resume",
         generationId: attemptId,
         version: 1,
         contentSha256: hash,
@@ -3960,10 +4009,15 @@ describe("Applications routes", () => {
     }
   });
 
-  it("serves scalar native authorization with resolved owner and no-store", async () => {
+  it.each([
+    "cover-letter/authorization",
+    "cover-letter/location",
+    "resume/authorization",
+    "resume/location",
+  ])("serves scalar native %s with resolved owner and no-store", async (route) => {
     const result = await app.inject({
       method: "GET",
-      url: `/v1/applications/${applicationId}/cover-letter/authorization?generationId=${attemptId}`,
+      url: `/v1/applications/${applicationId}/${route}?generationId=${attemptId}`,
       headers: { authorization: `Bearer ${await token("applications:read")}` },
     });
     expect(result.statusCode).toBe(200);
@@ -3972,13 +4026,25 @@ describe("Applications routes", () => {
     expect(result.json()).not.toHaveProperty("data");
     expect(calls).toEqual([
       {
-        method: "temporaryMaterialAuthorization",
+        method:
+          route === "cover-letter/location"
+            ? "temporaryMaterialLocation"
+            : route === "resume/location"
+              ? "resumeMaterialLocation"
+              : route === "resume/authorization"
+                ? "resumeMaterialAuthorization"
+                : "temporaryMaterialAuthorization",
         args: [expect.any(String), applicationId, attemptId, expect.any(AbortSignal)],
       },
     ]);
   });
 
-  it("rejects malformed scalar authorization queries before owner service access", async () => {
+  it.each([
+    "cover-letter/authorization",
+    "cover-letter/location",
+    "resume/authorization",
+    "resume/location",
+  ])("rejects malformed scalar %s queries before owner service access", async (route) => {
     for (const suffix of [
       "",
       "?generationId=bad",
@@ -3987,7 +4053,7 @@ describe("Applications routes", () => {
     ]) {
       const result = await app.inject({
         method: "GET",
-        url: `/v1/applications/${applicationId}/cover-letter/authorization${suffix}`,
+        url: `/v1/applications/${applicationId}/${route}${suffix}`,
         headers: { authorization: `Bearer ${await token("applications:read")}` },
       });
       expect(result.statusCode).toBe(400);
@@ -3995,8 +4061,13 @@ describe("Applications routes", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("requires the normal authenticated applications read scope for scalar authorization", async () => {
-    const url = `/v1/applications/${applicationId}/cover-letter/authorization?generationId=${attemptId}`;
+  it.each([
+    "cover-letter/authorization",
+    "cover-letter/location",
+    "resume/authorization",
+    "resume/location",
+  ])("requires authenticated read scope for scalar %s", async (route) => {
+    const url = `/v1/applications/${applicationId}/${route}?generationId=${attemptId}`;
     expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
     expect(
       (
@@ -5801,6 +5872,119 @@ describe("restricted answer vault routes (D3-001)", () => {
       expect(JSON.stringify(restrictedAnswerVault.saveCalls)).toContain(secret);
     } finally {
       await app.close();
+    }
+  });
+});
+
+describe("bounded privileged moderation audit boundary", () => {
+  it("records fixed access/attempt metadata for all four authenticated operations", async () => {
+    const record = vi.fn<PrivilegedModerationAuditWriter["record"]>(async () => undefined);
+    const f = await createApp({ privilegedModerationAudit: { record } });
+    try {
+      const rawSubject = "auth0|synthetic-audit-operator";
+      const headers = {
+        authorization: `Bearer ${await f.issuer.issue(rawSubject, { scope: "jobs:moderate" })}`,
+      };
+      const opened = await f.app.inject({
+        method: "POST",
+        url: "/v1/admin/moderation/cases",
+        headers,
+        payload: {
+          target: { kind: "job", jobId: f.catalog.job.id },
+          reasonCode: "candidate_reports",
+        },
+      });
+      expect(opened.statusCode).toBe(201);
+      const caseId = opened.json().id;
+      expect(
+        (
+          await f.app.inject({
+            method: "POST",
+            url: "/v1/admin/moderation/cases/search",
+            headers,
+            payload: { status: "open" },
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await f.app.inject({
+            method: "GET",
+            url: `/v1/admin/moderation/jobs/${f.catalog.job.id}/report-summary`,
+            headers,
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await f.app.inject({
+            method: "POST",
+            url: `/v1/admin/moderation/cases/${caseId}/resolve`,
+            headers,
+            payload: {
+              expectedVersion: 0,
+              resolution: "no_action",
+              reasonCode: "insufficient_evidence",
+            },
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(record.mock.calls.map(([r]) => r.action)).toEqual([
+        "jobs.moderation.case_open.attempt",
+        "jobs.moderation.case_search.access",
+        "jobs.moderation.report_summary.access",
+        "jobs.moderation.case_resolve.attempt",
+      ]);
+      for (const [r] of record.mock.calls) {
+        expect(Object.keys(r).sort()).toEqual(["action", "operatorId", "resourceId"]);
+        expect(r.operatorId).toMatch(/^oidc:[a-f0-9]{64}$/);
+        expect(JSON.stringify(r)).not.toContain(rawSubject);
+      }
+    } finally {
+      await f.app.close();
+    }
+  });
+  it("does not record unauthorized or invalid requests and denies work when audit fails", async () => {
+    const record = vi.fn<PrivilegedModerationAuditWriter["record"]>(async () => {
+      throw Error("synthetic private audit failure");
+    });
+    const f = await createApp({ privilegedModerationAudit: { record } });
+    try {
+      const url = "/v1/admin/moderation/cases/search";
+      expect(
+        (await f.app.inject({ method: "POST", url, payload: { status: "open" } })).statusCode,
+      ).toBe(401);
+      const headers = {
+        authorization: `Bearer ${await f.issuer.issue("auth0|synthetic-audit", { scope: "jobs:moderate" })}`,
+      };
+      expect(
+        (await f.app.inject({ method: "POST", url, headers, payload: { status: "invalid" } }))
+          .statusCode,
+      ).toBe(400);
+      expect(record).not.toHaveBeenCalled();
+      const response = await f.app.inject({
+        method: "POST",
+        url,
+        headers,
+        payload: { status: "open" },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.body).not.toContain("synthetic private audit failure");
+      expect(record).toHaveBeenCalledOnce();
+      const openCase = vi.spyOn(f.moderation, "openCase");
+      const blockedWrite = await f.app.inject({
+        method: "POST",
+        url: "/v1/admin/moderation/cases",
+        headers,
+        payload: {
+          target: { kind: "job", jobId: f.catalog.job.id },
+          reasonCode: "candidate_reports",
+        },
+      });
+      expect(blockedWrite.statusCode).toBe(503);
+      expect(openCase).not.toHaveBeenCalled();
+    } finally {
+      await f.app.close();
     }
   });
 });

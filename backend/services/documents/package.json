@@ -4,6 +4,62 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-material-location-store": {
+      "types": "./dist/src/native-material-location-store.d.ts",
+      "default": "./dist/src/native-material-location-store.js"
+    },
+    "./native-material-route-control-client": {
+      "types": "./dist/src/native-material-route-control-client.d.ts",
+      "default": "./dist/src/native-material-route-control-client.js"
+    },
+    "./native-material-route-control-contract": {
+      "types": "./dist/src/native-material-route-control-contract.d.ts",
+      "default": "./dist/src/native-material-route-control-contract.js"
+    },
+    "./temporary-material-reference": {
+      "types": "./dist/src/temporary-material-reference.d.ts",
+      "default": "./dist/src/temporary-material-reference.js"
+    },
+    "./native-material-task-address": {
+      "types": "./dist/src/native-material-task-address.d.ts",
+      "default": "./dist/src/native-material-task-address.js"
+    },
+    "./native-resume-route-policy": {
+      "types": "./dist/src/native-resume-route-policy.d.ts",
+      "default": "./dist/src/native-resume-route-policy.js"
+    },
+    "./native-resume-dns-route": {
+      "types": "./dist/src/native-resume-dns-route.d.ts",
+      "default": "./dist/src/native-resume-dns-route.js"
+    },
+    "./native-resume-task-address": {
+      "types": "./dist/src/native-resume-task-address.d.ts",
+      "default": "./dist/src/native-resume-task-address.js"
+    },
+    "./native-task-bootstrap": {
+      "types": "./dist/src/native-task-bootstrap.d.ts",
+      "default": "./dist/src/native-task-bootstrap.js"
+    },
+    "./native-task-metadata": {
+      "types": "./dist/src/native-task-metadata.d.ts",
+      "default": "./dist/src/native-task-metadata.js"
+    },
+    "./native-task-caller-client": {
+      "types": "./dist/src/native-task-caller-client.d.ts",
+      "default": "./dist/src/native-task-caller-client.js"
+    },
+    "./native-task-caller-verifier": {
+      "types": "./dist/src/native-task-caller-verifier.d.ts",
+      "default": "./dist/src/native-task-caller-verifier.js"
+    },
+    "./native-task-caller-contract": {
+      "types": "./dist/src/native-task-caller-contract.d.ts",
+      "default": "./dist/src/native-task-caller-contract.js"
+    },
+    "./native-cover-letter-runtime": {
+      "types": "./dist/src/native-cover-letter-runtime.d.ts",
+      "default": "./dist/src/native-cover-letter-runtime.js"
+    },
     "./native-task-retirement": {
       "types": "./dist/src/native-task-retirement.d.ts",
       "default": "./dist/src/native-task-retirement.js"
@@ -59,6 +115,142 @@
     "./native-task-allocation": {
       "types": "./dist/src/native-task-allocation.d.ts",
       "default": "./dist/src/native-task-allocation.js"
+    },
+    "./native-material-controls": {
+      "types": "./dist/src/native-material-controls.d.ts",
+      "default": "./dist/src/native-material-controls.js"
+    },
+    "./native-evidence-binding": {
+      "types": "./dist/src/native-evidence-binding.d.ts",
+      "default": "./dist/src/native-evidence-binding.js"
+    },
+    "./native-owner-rpc-contract": {
+      "types": "./dist/src/native-owner-rpc-contract.d.ts",
+      "default": "./dist/src/native-owner-rpc-contract.js"
+    },
+    "./native-owner-rpc-client": {
+      "types": "./dist/src/native-owner-rpc-client.d.ts",
+      "default": "./dist/src/native-owner-rpc-client.js"
+    },
+    "./native-owner-rpc-handler": {
+      "types": "./dist/src/native-owner-rpc-handler.d.ts",
+      "default": "./dist/src/native-owner-rpc-handler.js"
+    },
+    "./native-owner-control-store": {
+      "types": "./dist/src/native-owner-control-store.d.ts",
+      "default": "./dist/src/native-owner-control-store.js"
+    },
+    "./native-owner-evidence-client": {
+      "types": "./dist/src/native-owner-evidence-client.d.ts",
+      "default": "./dist/src/native-owner-evidence-client.js"
+    },
+    "./native-material-location": {
+      "types": "./dist/src/native-material-location.d.ts",
+      "default": "./dist/src/native-material-location.js"
+    },
+    "./native-resume-session": {
+      "types": "./dist/src/native-resume-session.d.ts",
+      "default": "./dist/src/native-resume-session.js"
+    },
+    "./native-resume-generation-store": {
+      "types": "./dist/src/native-resume-generation-store.d.ts",
+      "default": "./dist/src/native-resume-generation-store.js"
+    },
+    "./native-resume-task-binding": {
+      "types": "./dist/src/native-resume-task-binding.d.ts",
+      "default": "./dist/src/native-resume-task-binding.js"
+    },
+    "./native-resume-task-caller-client": {
+      "types": "./dist/src/native-resume-task-caller-client.d.ts",
+      "default": "./dist/src/native-resume-task-caller-client.js"
+    },
+    "./native-resume-task-caller-verifier": {
+      "types": "./dist/src/native-resume-task-caller-verifier.d.ts",
+      "default": "./dist/src/native-resume-task-caller-verifier.js"
+    },
+    "./native-resume-owner-rpc-contract": {
+      "types": "./dist/src/native-resume-owner-rpc-contract.d.ts",
+      "default": "./dist/src/native-resume-owner-rpc-contract.js"
+    },
+    "./native-resume-owner-rpc-handler": {
+      "types": "./dist/src/native-resume-owner-rpc-handler.d.ts",
+      "default": "./dist/src/native-resume-owner-rpc-handler.js"
+    },
+    "./native-resume-owner-rpc-client": {
+      "types": "./dist/src/native-resume-owner-rpc-client.d.ts",
+      "default": "./dist/src/native-resume-owner-rpc-client.js"
+    },
+    "./native-resume-owner-controls": {
+      "types": "./dist/src/native-resume-owner-controls.d.ts",
+      "default": "./dist/src/native-resume-owner-controls.js"
+    },
+    "./native-resume-source": {
+      "types": "./dist/src/native-resume-source.d.ts",
+      "default": "./dist/src/native-resume-source.js"
+    },
+    "./native-resume-source-store": {
+      "types": "./dist/src/native-resume-source-store.d.ts",
+      "default": "./dist/src/native-resume-source-store.js"
+    },
+    "./native-resume-source-rpc-client": {
+      "types": "./dist/src/native-resume-source-rpc-client.d.ts",
+      "default": "./dist/src/native-resume-source-rpc-client.js"
+    },
+    "./native-resume-source-rpc-contract": {
+      "types": "./dist/src/native-resume-source-rpc-contract.d.ts",
+      "default": "./dist/src/native-resume-source-rpc-contract.js"
+    },
+    "./native-resume-source-rpc-handler": {
+      "types": "./dist/src/native-resume-source-rpc-handler.d.ts",
+      "default": "./dist/src/native-resume-source-rpc-handler.js"
+    },
+    "./normalized-document-reader": {
+      "types": "./dist/src/normalized-document-reader.d.ts",
+      "default": "./dist/src/normalized-document-reader.js"
+    },
+    "./native-resume-transport": {
+      "types": "./dist/src/native-resume-transport.d.ts",
+      "default": "./dist/src/native-resume-transport.js"
+    },
+    "./native-resume-runtime": {
+      "types": "./dist/src/native-resume-runtime.d.ts",
+      "default": "./dist/src/native-resume-runtime.js"
+    },
+    "./native-resume-task-metadata": {
+      "types": "./dist/src/native-resume-task-metadata.d.ts",
+      "default": "./dist/src/native-resume-task-metadata.js"
+    },
+    "./native-resume-task-bootstrap": {
+      "types": "./dist/src/native-resume-task-bootstrap.d.ts",
+      "default": "./dist/src/native-resume-task-bootstrap.js"
+    },
+    "./native-resume-image-runtime": {
+      "types": "./dist/src/native-resume-image-runtime.d.ts",
+      "default": "./dist/src/native-resume-image-runtime.js"
+    },
+    "./native-task-launch-policy": {
+      "types": "./dist/src/native-task-launch-policy.d.ts",
+      "default": "./dist/src/native-task-launch-policy.js"
+    },
+    "./native-resume-task-observer": {
+      "types": "./dist/src/native-resume-task-observer.d.ts",
+      "default": "./dist/src/native-resume-task-observer.js"
+    },
+    "./native-resume-task-launch": {
+      "types": "./dist/src/native-resume-task-launch.d.ts",
+      "default": "./dist/src/native-resume-task-launch.js"
+    },
+    "./native-resume-preparation-control-contract": {
+      "types": "./dist/src/native-resume-preparation-control-contract.d.ts",
+      "default": "./dist/src/native-resume-preparation-control-contract.js"
+    },
+    "./native-resume-preparation-control-client": {
+      "types": "./dist/src/native-resume-preparation-control-client.d.ts",
+      "default": "./dist/src/native-resume-preparation-control-client.js"
+    },
+    "./native-application-disposal-store": {
+      "types": "./dist/src/native-application-disposal-store.d.ts",
+      "default": "./dist/src/native-application-disposal-store.js"
     }
   },
   "scripts": {
@@ -80,9 +272,12 @@
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
+    "@aws-sdk/client-ec2": "3.1133.0",
     "@aws-sdk/client-ecs": "3.1133.0",
     "@aws-sdk/client-lambda": "3.1133.0",
+    "@aws-sdk/client-route-53": "3.1133.0",
     "@aws-sdk/client-s3": "3.1133.0",
+    "@aws-sdk/client-secrets-manager": "3.1133.0",
     "@aws-sdk/client-sts": "3.1133.0",
     "@aws-sdk/s3-presigned-post": "3.1133.0",
     "@thednp/dommatrix": "3.1.2",

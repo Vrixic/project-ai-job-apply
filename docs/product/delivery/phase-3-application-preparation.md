@@ -4,10 +4,172 @@
 - Start: 2026-09-18
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-10-06
+- Last updated: 2026-10-07
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d3--high-quality-application-preparation)
 
 ## Objective
+
+2026-10-07 D3-064/D3-079 connects Prepare to an atomic resume request in the existing
+Applications outbox, owner-checked source capture and private scheduled durable dispatch. All
+46 PostgreSQL checks pass, plus 236 Gateway checks (three skips), 50 restore, 20 event and eight
+emitted capability checks. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#atomic-prepare-producer-and-scheduled-dispatcher).
+The new forward migration brings the inventory to 72 migrations/93 relations. Full frozen-source
+verification, combined workflow/SQL smoke, artifact/image and managed/client/ATS acceptance remain;
+all new runtime switches default off. D1/D3 remain In progress, Docker/WSL stopped and PC on.
+
+2026-10-07 D3-064/D3-079 adds the resume durable caller: checkpoint original reservation,
+poll the original scope, and return only a ready packet. Seven local durable SDK cases and seven
+emitted control checks pass; Workflows compiles. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#durable-caller-follow-up).
+The atomic Prepare request queue, owner snapshot and dispatcher remain next. Existing cover-letter
+consent/outbox cannot authorize resume work. Source remains uncommitted and default-off; no
+managed activation or CI/CD work, D1/D3 remain In progress and PC stays on.
+
+2026-10-07 D3-064/D3-079 connects original resume launch, atomic ready packet attachment,
+private preparation invocation and scalar resume location. Local checks pass: 41 PostgreSQL,
+seven private client/handler and six emitted capability cases; earlier batch checks cover
+60 Documents, 42 Applications and 236 Gateway cases (three existing skips).
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Prepare/durable invocation,
+full frozen-source verification, built image and managed/client/ATS acceptance remain. Work is
+uncommitted and not deployed; D1/D3 stay In progress. Continue connected implementation batches,
+then smoke-test/fix/focused regressions. Hosted CI/CD remains deferred; Docker/WSL stopped, PC on.
+
+2026-10-06 D3-064/D3-079 native deterministic-resume session passes full clean verification at
+`b849cac4` (38 typecheck/39 test/23 builds, unchanged lint and all emitted isolation). Separate
+37 actual Linux process scenarios pass twice. [Evidence](evidence/d3-native-resume-memory-session-2026-10-06.md).
+Source inspection confirms owner-issued resume generation/completion/task metadata is next:
+existing provider/cover-letter consent cannot supply renderer authority. Packet/transport/image/
+managed/client/ATS/accountable acceptance remain; D1/D3 stay In progress. Development web restored,
+Docker/WSL stopped and PC on; no deployment, activation, new PR or CI/CD work.
+
+2026-10-06 D3-064/D3-079 adds a default-off dedicated native deterministic-resume session:
+one original generation, fixed completion, memory-only preview/render inputs, verified PDF/DOCX,
+held-output release/cancellation and exact-reference reads. Shared process admission prevents
+mixing cover-letter/resume allocations. All 37 Linux/kernel scenarios pass again on final source; five emitted
+isolation checks pass. Full clean-source verification remains.
+[Evidence](evidence/d3-native-resume-memory-session-2026-10-06.md). Owning resume completion/
+packet bindings, authenticated resume transport/bootstrap, image/routing/client/ATS acceptance
+remain unfinished. No current Lambda route, schema, frontend, cloud activation or CI/CD change;
+D1/D3 stay In progress and PC stays on.
+
+2026-10-06 D3-079 scalar native read-location handoff passes full clean verification at `0df9bd0b`
+(38 typecheck/39 test/23 builds, unchanged lint and native artifact isolation). All 25 actual SQL
+cases and focused Gateway/contract/owner checks pass. [Evidence](evidence/d3-native-read-location-2026-10-06.md).
+Managed routing/client/provider/accountable acceptance remains; D1/D3 stay In progress, no cloud
+activation, development web restored, Docker/WSL stopped and PC on.
+
+2026-10-06 D3-079 connects default-off scalar native read-location discovery through a separate
+v1 route, current packet checks before/after Documents lookup, fixed HTTPS origin derivation and
+owning native pool. 220 Gateway, 104 contract, 31 Documents, 20 Applications, 28 domain/20 event
+and 25 actual SQL cases pass; generation is stable. [Evidence](evidence/d3-native-read-location-2026-10-06.md).
+Full clean verification and managed routing/client/provider/accountable acceptance remain;
+D1/D3 stay In progress, with no deployment or activation.
+
+2026-10-06 D3-079 original allocation discovery passes full clean verification at `4c708af8`
+(38 typecheck/39 test/23 builds; unchanged lint and artifact isolation). All 25 actual PostgreSQL
+owner/launcher cases pass, including withdrawal and original reference mismatch refusal.
+[Evidence](evidence/d3-native-read-allocation-2026-10-06.md). Gateway endpoint handoff and managed
+routing/client/provider/accountable gates remain; D1/D3 stay In progress, Docker/WSL stopped, PC on.
+
+2026-10-06 D3-079 adds Documents-owned original allocation discovery for an exact current-packet
+material reference. Default-off lookup requires active identity, successful settled work, immutable
+readiness, bound original task and unsealed admission; only the allocation ID leaves the owner.
+All 25 actual PostgreSQL launcher/owner cases pass, including reference drift and sealing refusal.
+[Evidence](evidence/d3-native-read-allocation-2026-10-06.md). Full clean verification and Gateway
+metadata handoff/routing/client/provider/accountable acceptance remain; D1/D3 stay In progress.
+
+2026-10-06 D3-079 original native read admission passes full clean verification at `3f576cc4`
+(38 typecheck/39 test/23 builds, unchanged lint and native isolation). Separate 29 focused,
+28 signed Gateway SQL, 33 Linux and five actual-image cases pass. Production image source remains
+`64192061`; only the outer exact scenario inventory and records differ.
+[Evidence](evidence/d3-native-read-admission-2026-10-06.md). Managed routing/client/provider/
+accountable gates remain; D1/D3 In progress, web restored, Docker/WSL stopped and PC on.
+
+2026-10-06 D3-079 verifies native original read admission in the actual immutable production image:
+all five positive/refusal cases pass, including sealed-read refusal and version two; cold default-off
+entrypoint refuses. The exact new harness inventory fixes the first conformance rejection without
+changing the image. All 28 signed Gateway/temporary-material SQL cases pass.
+[Evidence](evidence/d3-native-read-admission-2026-10-06.md). Full clean verification remains;
+D1/D3 In progress, no cloud activation, Docker/WSL stopped and PC on.
+
+2026-10-06 D3-079 wires the default-off Gateway scalar authorization switch and original task
+admission around every native packet proof. All 29 focused, 33 Linux and four emitted isolation
+checks pass; real HTTPS refuses a file after sealing without generated content. Gateway typecheck
+passes. [Evidence](evidence/d3-native-read-admission-2026-10-06.md). Actual-image/full verification
+and managed routing/client/provider/accountable gates remain; D1/D3 stay In progress.
+
+2026-10-06 D3-079 dedicated native preparation runtime passes full verification at clean `6d34cbd5`
+(38 typecheck/39 test/23 builds, unchanged lint and native artifact isolation). Two identical
+unpublished ZIP builds pass default-off checks. The actual fresh-flow/lost-ACK recovery uses
+existing packet protection with synthetic KMS; managed key/role/IAM/target/routing/provider/client
+acceptance remains. [Evidence](evidence/d3-native-preparation-runtime-2026-10-06.md).
+D1/D3 In progress; isolated web restored, Docker/WSL stopped, PC on and CI/CD deferred.
+
+2026-10-06 D3-079 adds a dedicated default-off native preparation activity and separate artifact.
+Exact numeric private targets/managed secret/current packet protection are pinned; fresh-launch
+shutdown preserves receipt recovery. All 77 focused and 25 real PostgreSQL cases pass, including
+fresh reservation/launch and lost-ACK recovery into the actual packet, one grant/task and no slots.
+[Evidence](evidence/d3-native-preparation-runtime-2026-10-06.md). Full clean/artifact verification
+and managed target selection/IAM/routing/client/provider/accountable gates remain; D1/D3 In progress.
+
+2026-10-06 D3-079 native preparation flow passes full verification at clean `e8b4775b`
+(38 typecheck/39 test/23 builds, unchanged lint and emitted native checks). The port-3000 owning
+Next.js parent conflict is resolved; all 101 session checks and the unchanged-source rerun pass.
+[Evidence](evidence/d3-native-preparation-flow-2026-10-06.md). Managed native activity composition
+is next; activation/client/provider/accountable gates remain. D1/D3 stay In progress, CI/CD deferred.
+
+2026-10-06 D3-079 implements default-off native preparation initializer and original receipt
+recovery: current owning evidence, canonical memory request digest, one reservation/grant/launch,
+then original version/citations into Applications completion. 33 focused cases and all 24 actual
+PostgreSQL integration cases pass, including actual preparation completion/replay with no launch.
+[Evidence](evidence/d3-native-preparation-flow-2026-10-06.md). Full verification and managed runtime
+selection/activation/client/provider/accountable gates remain; D1/D3 stay In progress.
+
+2026-10-06 D3-079 authenticated scalar readiness passes full verification at `481d5d9f`
+(38 typecheck/39 test/23 build tasks, unchanged lint). All 122 focused, 24 real SQL, 31 Linux,
+11 emitted checks and four actual-image scenarios pass. Migration 0013 is bound into the exact
+70-migration restore/release boundary, including cross-runtime configuration hashes.
+[Evidence](evidence/d3-native-ready-receipt-2026-10-06.md). Native preparation consumption and
+managed acceptance remain open. D1/D3 In progress; Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-06 D3-079 actual-image conformance passes at clean source `44c0c354`: versions 1/2
+render and serve PDF/DOCX over authenticated HTTPS; the image-owned kernel retires both processes.
+Secret-version/TLS-host refusals and three production startup refusals pass, with no warnings.
+All 31 Linux regressions and full verification pass (38/39/23 tasks; unchanged lint).
+[Evidence](evidence/d3-native-image-conformance-2026-10-06.md). Managed acceptance stays open;
+D1/D3 remain In progress, CI/CD deferred, Docker/WSL stopped and PC stays on.
+
+2026-10-06 D3-079 fixes and locally verifies native second-generation version handling: Documents'
+original version is pinned through bootstrap, memory generation, completion and direct reads.
+All 183 focused checks, 24 real SQL cases, 31 Linux scenarios, six emitted checks and three actual-
+image startup refusals pass. Clean source `1b826b5c` passes full verification (38/39/23 tasks,
+unchanged lint); the matching owner artifact reproduces identically.
+[Evidence](evidence/d3-native-document-version-2026-10-06.md). Managed publication/IAM/routing/
+provider/client/ATS/accountable acceptance stays open. No deployment/activation, main merge, third
+PR or CI/CD work; D1/D3 remain In progress. Docker/WSL stopped; PC stays on.
+
+2026-10-06 D3-079 implements and locally verifies the dedicated native image with actual foreground
+provider, exact-version secret/TLS ports and authenticated owning principal projection. All 126
+focused checks, 24 real SQL cases, 30 Linux scenarios and six emitted checks pass. Clean source
+`214371ca` passes full verification: 38 typecheck, 39 test and 23 build tasks with unchanged lint.
+The source-labelled image builds and passes three hardened startup refusals.
+[Evidence](evidence/d3-native-image-runtime-2026-10-06.md). Managed publication/IAM/routing/provider/
+client/accountable acceptance stays open. D1/D3 remain In progress; no cloud activation, main merge,
+third PR or CI/CD work. Docker/WSL stopped; PC on.
+
+2026-10-06 D3-079 connects original native task startup: own ECS metadata -> authenticated stored
+approval -> trusted ports -> kernel/content runtime. All 72 focused, 27 Linux and five emitted
+checks pass; full clean-source verification passes at `0565ecda` (38 typecheck/39 test/23 build
+tasks and unchanged lint). [Evidence](evidence/d3-native-task-bootstrap-2026-10-06.md).
+Executable image/real image configuration/managed/client/provider acceptance remain. D1/D3 stay
+In progress; no deployment, activation, third PR or CI/CD work. Docker/WSL stopped; PC on.
+
+2026-10-06 D3-079 adds authenticated original preparation bootstrap metadata: Applications reads
+the stored approval/context and Documents checks the exact original work consent. All 41 RPC,
+27 preparation SQL, 24 native-owner SQL and seven emitted isolation checks pass; full clean-source
+verification passes at `97938b73` (38 typecheck/39 test/23 build tasks, unchanged lint). The receiver
+artifact reproduces identically. [Evidence](evidence/d3-native-approved-bootstrap-2026-10-06.md).
+ECS self-metadata/executable image/managed/provider/client gates remain; D1/D3 stay In progress.
+No deployment, activation, third PR or CI/CD work; PC stays on.
 
 Deliver fact-grounded, review-by-exception application preparation, measured assisted submission,
 and authoritative owner-scoped technical history through confirmed submission for supported ATS
@@ -32,18 +194,18 @@ or phase-exit acceptance is claimed.
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
-| D3-079 | Supply the native one-candidate material-session runtime, authenticated transport and positive process/task retirement. | In progress | Vrij Patel; engineering | D3-064; D3-012 | Started 2026-10-05 on exact #554. Default-off session/core kernel source; local child-process evidence only. [Evidence](evidence/d3-native-memory-session-2026-10-05.md), [proposed ADR-040](../../adr/040-native-temporary-material-processes.md). [Native HTTPS source](evidence/d3-native-memory-transport-2026-10-05.md) is locally verified at aed4b391. [Scalar Gateway/native client source](evidence/d3-native-read-authorization-2026-10-05.md) is locally verified at a5c29ef7, including Lambda routing. [Exact task retirement source](evidence/d3-native-task-retirement-2026-10-05.md) is locally verified at ba58619c with offline AWS transport. [Owning launch registry/disposal source](evidence/d3-native-material-registry-2026-10-05.md) is locally verified at dda86480 with full verifier, 19 real SQL cases and logical restore. [One-attempt launcher source](evidence/d3-native-task-launch-2026-10-05.md) adds immutable claims and positive original-task recovery with local SQL/restore evidence and full clean combined verification at 97cc9c52, including merged #561. [Private launch runtime](evidence/d3-native-launch-control-2026-10-06.md) adds strict signed sender and managed-secret owning composition with ten real SQL cases, full verification and source-bound artifact integrity at 228bd75d. [Private event recovery](evidence/d3-native-task-event-recovery-2026-10-06.md) adds scalar-only positive recovery hints with 49 cases and full clean combined source/artifact evidence. Native image, authenticated private adapters/release IAM, managed routing/actual stop conformance and full content routing remain gates. No live provider/deployment or phase completion. |
-| D3-064 | Enforce one-off generated cover-letter and improved/tailored-resume lifetimes without persisted content. | In progress | Vrij Patel; engineering | D3-003; D3-004; D3-005; D3-012 | Started 2026-10-04 on fresh main e48bdf3 plus exact #547 25f0ca05. Backend persistence guards begin first; full temporary-memory/provider/expiry lifecycle remains. [Persistence evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md); [memory replacement evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md); [native completion evidence](evidence/d3-original-material-completion-2026-10-04.md); [packet binding evidence](evidence/d3-temporary-packet-binding-2026-10-05.md); [temporary read evidence](evidence/d3-temporary-material-reads-2026-10-05.md); [held copy/disposal evidence](evidence/d3-held-temporary-content-2026-10-05.md); [original actor evidence](evidence/d3-original-memory-generation-2026-10-05.md). Owner policy accepted 2026-10-04 in [ADR-038](../../adr/038-one-off-generated-application-materials.md). Maximum 1,800 seconds from generation completion; no sliding extension, database/packet-field copies, stored files, durable payloads, or persistent browser copies. Add owner/application-bound temporary content, no-store responses, idle/error/logout/cancel/submission cleanup, expiry checks and approval invalidation before ATS handoff; retain hashes/technical state only and preserve ambiguous-submission safety. Verify no generated content enters packet/idempotency/history/export records, boundary-time expiry, regeneration with fresh approval, restart loss, renderer failure, and actual idle-browser cleanup. D3-012 must verify provider retention/training terms. Current deterministic tailoring avoids content persistence. Locally verified proposal/packet/schema/SQL guards refuse persisted generated document material. Managed-memory expiry, exact-reference reads, native immutable completion metadata/private RPC, and packet identity/expiry admission are locally verified in default-off source; the full content/actor/client/packet/provider lifecycle is not evidenced. Revise the current source-only encrypted saved-draft/provider-slot persistence and export/read consumers before activation, preserving positive remote-settlement and writer fencing. Hosted browser acceptance remains human-only after agent automated/browser checks. |
+| D3-079 | Supply the native one-candidate material-session runtime, authenticated transport and positive process/task retirement. | In progress | Vrij Patel; engineering | D3-064; D3-012 | Current checkpoint 2026-10-07: resume and cover-letter native owner/task, preparation, original dispatch/recovery and direct-route lifecycle are implemented locally. Cover-letter Terraform composition is now present, including scoped durable DNS permission, cleanup timeout and retained numeric activity access. Default-off original resume terminal reconciliation is implemented and locally verified, with a refreshed observer artifact at `7cef5f10`; managed recovery acceptance remains. Its preparation family is qualified locally at `c194a979` (four artifacts/sixteen companions), and the route-control family at `c71cdaad` (three/twelve). The connected PostgreSQL check exercises original generation recovery, durable staging, propagation-gated attachment and retirement-driven DNS removal; AWS transport is simulated. [Current cover-letter evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#connected-postgresql-route-lifecycle); [resume evidence](evidence/d1-d3-connected-verification-2026-10-07.md). Both native images now pass local bodyless availability checks at runtime `18698f7f`; combined PostgreSQL/native approval passes for both material types, and terminal application disposal is implemented locally. [Current availability/image evidence](evidence/d3-native-material-availability-2026-10-07.md#refreshed-native-images). Owner-wide admission withdrawal is now implemented and locally verified as a private default-off port; a bounded private cleanup worker now records original-task retirement locally. Authenticated initiation and leased continuation are now locally verified. Worker packaging and default-off schedule/IAM source are implemented. The default-off [web sign-out withdrawal hook](evidence/d3-native-application-disposal-2026-10-07.md#web-sign-out-withdrawal-hookup-2026-10-08) is now implemented and locally verified; publication/deployment and managed web-hook acceptance remain. Actual managed image/provider/TLS/domain/network bindings, publication/migration and task/route recovery/drain/disposal acceptance, direct client/ATS integration and accountable acceptance remain. ADR-040 remains Proposed; no deployment or all-copy-disposal claim. Earlier work-log entries retain component history. |
+| D3-064 | Enforce one-off generated cover-letter and improved/tailored-resume lifetimes without persisted content. | In progress | Vrij Patel; engineering | D3-003; D3-004; D3-005; D3-012 | Started 2026-10-04 on fresh main e48bdf3 plus exact #547 25f0ca05. Backend persistence guards begin first; full temporary-memory/provider/expiry lifecycle remains. [Persistence evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md); [memory replacement evidence](evidence/d3-one-off-memory-runtime-2026-10-04.md); [native completion evidence](evidence/d3-original-material-completion-2026-10-04.md); [packet binding evidence](evidence/d3-temporary-packet-binding-2026-10-05.md); [temporary read evidence](evidence/d3-temporary-material-reads-2026-10-05.md); [held copy/disposal evidence](evidence/d3-held-temporary-content-2026-10-05.md); [original actor evidence](evidence/d3-original-memory-generation-2026-10-05.md). Owner policy accepted 2026-10-04 in [ADR-038](../../adr/038-one-off-generated-application-materials.md). Maximum 1,800 seconds from generation completion; no sliding extension, database/packet-field copies, stored files, durable payloads, or persistent browser copies. Add owner/application-bound temporary content, no-store responses, idle/error/logout/cancel/submission cleanup, expiry checks and approval invalidation before ATS handoff; retain hashes/technical state only and preserve ambiguous-submission safety. Verify no generated content enters packet/idempotency/history/export records, boundary-time expiry, regeneration with fresh approval, restart loss, renderer failure, and actual idle-browser cleanup. Authenticated owner withdrawal, durable cleanup continuation and the default-off [web sign-out hook](evidence/d3-native-application-disposal-2026-10-07.md#web-sign-out-withdrawal-hookup-2026-10-08) are implemented and locally verified. The owner authorized proceeding with recommendations. Managed activation, positive task-retirement acceptance and actual idle-browser cleanup remain; queued preparation must not recreate material after logout. D3-012 must verify provider retention/training terms. Current deterministic tailoring avoids content persistence. Locally verified proposal/packet/schema/SQL guards refuse persisted generated document material. Managed-memory expiry, exact-reference reads, native immutable completion metadata/private RPC, and packet identity/expiry admission are locally verified in default-off source; the full content/actor/client/packet/provider lifecycle is not evidenced. Revise the current source-only encrypted saved-draft/provider-slot persistence and export/read consumers before activation, preserving positive remote-settlement and writer fencing. Hosted browser acceptance remains human-only after agent automated/browser checks. |
 | D3-077 | Protect restricted packet values with their required separate encryption/storage boundary before saved-answer reuse activation. | In progress | Vrij Patel; engineering | D3-076; D3-012 | Started 2026-10-05 on fresh main 2b6f59aa. Private WIP has packet commitments/keyed receipts, atomic ciphertext, audited candidate-review reads and original preparation carry-forward; 314 units and 27 owned PostgreSQL cases pass with offline crypto; exact historical export, privacy deletion and Profile-backed correction/deletion/expiry races have focused evidence. Expanded logical restore, metadata-only SQL role refusal and actual deletion-verifier inventory/replay pass locally. All 92 maintained Applications and 56 targeted Gateway SQL cases now pass with explicit offline protection. All 39 targeted Workflow SQL cases pass; exact lifecycle cleanup includes restricted ciphertext/audit. Native protected carry now passes all 11 isolated preparation SQL cases without cipher authority, with five emitted isolation checks. Eight real legacy migration refusal/rollback and compatible ordinary-transition cases pass. Clean 61b2719f passes full verification (38 typechecks/39 test tasks/23 builds; unchanged lint). Default-off Gateway/export authority now composes privately; 377 Applications/318 Gateway/1,613 Workflow units, three builds and three SQL composition cases pass. Bounded historical-key runtime and two-epoch logical restore pass locally. Clean a6da6b3f passes full verification and four source-bound artifact families build twice byte-identically. Thirty concurrent key-transition SQL cases pass (33 runtime cases total) with bounded original-key recheck. Current clean b5a7a2cf passes full verification; four artifact families/20 files build twice identically and retain their hashes afterward. The actual-adapter SQL recheck and corrected test-spy facade pass. Draft [PR #561](https://github.com/Vrixic/project-ai-job-apply/pull/561) is open; source review, prohibited legacy inventory/disposition, production role/key and accountable acceptance remain unfinished. [Storage evidence](evidence/d3-restricted-packet-storage-2026-10-05.md). Discovered 2026-10-04: existing Applications packet JSON stores field values, including selected restricted answers, outside the vault key boundary. Architecture 12.3 and ADR-010 require separate keys/storage and just-in-time access. Default-off D3-076 proves selection/admission semantics only; its switch must stay false until this protection, retention/export/deletion tests and accountable review pass. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). |
 | D3-076 | Bind explicitly selected saved answers to immutable packets and serialize version checks with candidate corrections at approval, start, dispatch and preparation admission. | In progress | Vrij Patel; engineering | D3-075; D3-005; D3-012 | Started 2026-10-04 on exact #545 57d7b057. Default-off backend selection, mandatory review, hash metadata, stale-version refusal and migration 0006 implemented locally. Same-transaction Profile metadata locking passes 23 real SQL regressions; original 67 Applications and 46 Profile cases plus 39 preparation/native and five Gateway cases pass. Full verifier passes on clean 21594bc4: 38 typechecks, 39 test tasks, 23 builds; unchanged lint. Native artifact builds twice byte-identically and refuses default-off work. Docker/WSL stopped. D3-077 restricted packet-value protection, UI, review and deployed/accountable acceptance remain required; reuse stays false. [Evidence](evidence/d3-vault-packet-binding-2026-10-04.md). No activation, frontend change or phase completion; CI/CD deferred until production launch. |
 | D3-075 | Bind private Profile reads to a candidate-selected answer revision and expose a value-free current-reference deadline for packet admission. | In progress | Vrij Patel; engineering | D3-074; D3-001; D3-005; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact #544 8f72e13b. Exact selected reads never refresh to a newer revision; metadata checks require latest active owner/field/context/version and expiry without KMS. 48 focused units and all 46 Profile SQL cases pass (eight new SQL cases); build/scoped format pass. [Evidence](evidence/d3-vault-selected-read-port-2026-10-04.md). Full verifier passes on clean fb8010b3: 38 typechecks, 39 test tasks, 23 builds; Profile 120 units, unchanged lint. Docker/WSL stopped; packet/API selection and hash/version invalidation, review UI, key activation and accountable/deployed acceptance remain. No Applications consumer, deployment/activation or phase exit. |
 | D3-074 | Recheck approval and current owner bindings before issuing a submission dispatch receipt. | In progress | Vrij Patel; engineering | D3-073; D3-005; D3-009; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact #543 3ee4d2c1. Five real SQL regressions reproduce stale dispatch; source now refuses under lock and commits no-effect settlement, approval invalidation, two history entries and one review status event without intermediate approval. 120 Applications units, 67 Applications SQL, five Gateway SQL and sanitized authenticated HTTP tests pass; build/typecheck/formatting pass. [Evidence](evidence/d3-pre-dispatch-approval-recheck-2026-10-04.md). Full verifier passes on clean adf46c8a: 38 typechecks, 39 test tasks, 23 builds; unchanged lint. Docker/WSL stopped; review/merge and deployed/ATS/browser acceptance remain. No deployment/activation or phase completion. |
 | D3-073 | Pin original restricted-answer export metadata across asynchronous SQL/KMS reads. | In progress | Vrij Patel; engineering | D3-072; D3-001; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #542 bf50b565. Two unit regressions reproduce caller-reference drift; seven reader cases and 26 real PostgreSQL vault cases pass after scalar snapshotting. Original correction/deletion cannot be hidden by a live neighbour. Clean 03c6d294 passes the full verifier (38 typecheck tasks, 39 test tasks, 23 builds; Profile 96 units; unchanged lint). Docker/WSL stopped; review/merge and compatible release remain. [Evidence](evidence/d3-vault-export-reference-snapshot-2026-10-04.md). No deployment/activation or phase completion; Applications reuse and accountable/deployed acceptance remain. |
 | D3-072 | Include verified saved cover-letter paragraphs in the candidate portable export through exact Documents reads. | In progress | Vrij Patel; engineering | D3-071; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #541 9918aeec. Optional ready-only paragraphs/review metadata preserve old exports; exact ID/version/owner/object reads never regenerate. Default-off native export composition uses an independent owner pool. 79 Documents, 47 Workflow privacy, 24 Domain, 83 API and 20 event cases plus seven real PostgreSQL cases pass; typecheck/build/formatting and emitted read isolation pass. Clean 22a4568e passes full verifier (38 typechecks, 39 test tasks, 23 builds; 1,174 Documents/1,588 Workflow units; unchanged lint) and two unpublished existing core artifacts with independent integrity and actual activity refusal checks. [Evidence](evidence/d3-cover-letter-export-content-2026-10-04.md). Release/IAM/retention/drain/restore and accountable/deployed acceptance remain; no deployment/activation or phase completion. |
-| D3-071 | Bootstrap native preparation terminal and scheduled recovery with metadata-only AWS verification and source-bound artifact. | In progress | Vrij Patel; engineering | D3-070; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #540 14371d70. Default-off qualified managed-secret/native owner composition preserves original retained versions; strict input precedes I/O. Recovery remains enabled independently of new nudges. 82 focused (39 new), twelve real PostgreSQL cases, typecheck/build and emitted actor isolation pass. Clean 38b3891f passes full verifier (38 typechecks, 39 test tasks, 23 builds; 1,578 Workflow units; unchanged lint) and one unpublished local artifact with actual refusal/independent integrity checks (31 components). [Evidence](evidence/d3-preparation-recovery-bootstrap-2026-10-04.md). Release/IAM/scheduling/retention/drain and accountable/deployed acceptance remain; no publication/deployment/activation or phase completion. |
-| D3-070 | Bootstrap native preparation SQS starter with original dispatch binding and source-bound artifact. | In progress | Vrij Patel; engineering | D3-069; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #539 212e6e2. Default-off qualified queue/target/secret composition, warm binding and discrete same-function retained versions preserve original dispatch identity. 48 focused, seven real PostgreSQL cases, typecheck/build and emitted actor isolation pass. Clean 893e5cfe passes full verifier (38 typechecks, 39 test tasks, 23 builds; 1,539 Workflow units; unchanged lint) and one unpublished artifact with actual refusal and independent integrity checks (31 components). [Evidence](evidence/d3-preparation-starter-bootstrap-2026-10-04.md). Native terminal recovery/release, IAM/scheduling/retention/drain and accountable/deployed acceptance remain; no deployment/activation or phase completion. |
-| D3-069 | Bootstrap qualified native preparation durable entrypoint and source-bound orchestration-only artifact. | In progress | Vrij Patel; engineering | D3-068; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #538 c493a7ef. Default-off numeric same-account target/activity qualification and warm binding stay outside deterministic SDK workflow code; private/provider configuration refuses before SDK state handling. 49 focused tests (31 native) including five installed SDK runner cases and emitted orchestration isolation pass; clean 6986b2b passes full verifier (38 typechecks, 39 test tasks, 23 builds; unchanged lint) and one unpublished source-bound local artifact with actual default-off/wrong-version and independent integrity checks (27 components). [Evidence](evidence/d3-preparation-durable-bootstrap-2026-10-04.md). Native dispatch/recovery/release, IAM/scheduling/retention/drain and accountable/deployed acceptance remain; no publication/deployment/activation or phase completion. |
-| D3-068 | Bootstrap native private preparation activity with managed database credentials, owner codecs, controlled object/Invoke ports and source-bound local artifact. | In progress | Vrij Patel; engineering | D3-067; D3-078; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 with exact open #537 b516611. Default-off exact numeric target/configuration precedes managed-secret setup. Independent native Documents/lease/work and owner pools preserve codecs; no model/key. 81 focused, five persistence units, 283 AI SDK units and 11 real PostgreSQL cases (four native) pass; both emitted isolation checks pass after unchanged pure-validator extraction. Clean a7fb9ba passes full verifier (38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint) and one unpublished source-bound artifact with actual refusal/integrity checks (41 components). [Evidence](evidence/d3-preparation-activity-bootstrap-2026-10-04.md). Native durable/dispatch/recovery/release, IAM/scheduling, retention/drain and accountable/deployed acceptance remain; no activation or phase completion. |
+| D3-071 | Bootstrap native preparation terminal and scheduled recovery with metadata-only AWS verification and source-bound artifact. | In progress | Vrij Patel; engineering | D3-070; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #540 14371d70. Default-off qualified managed-secret/native owner composition preserves original retained versions; strict input precedes I/O. Recovery remains enabled independently of new nudges. 82 focused (39 new), twelve real PostgreSQL cases, typecheck/build and emitted actor isolation pass. Clean 38b3891f passes full verifier (38 typechecks, 39 test tasks, 23 builds; 1,578 Workflow units; unchanged lint) and one unpublished local artifact with actual refusal/independent integrity checks (31 components). [Evidence](evidence/d3-preparation-recovery-bootstrap-2026-10-04.md). Current 2026-10-07: native durable/starter/recovery and release/IAM/scheduling composition are implemented locally; the complete four-artifact family is qualified at `c194a979`. [Updated evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-routed-preparation-family). Managed publication, effective IAM/network behavior, original recovery/drain and accountable acceptance remain; no deployment/activation or phase completion. |
+| D3-070 | Bootstrap native preparation SQS starter with original dispatch binding and source-bound artifact. | In progress | Vrij Patel; engineering | D3-069; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #539 212e6e2. Default-off qualified queue/target/secret composition, warm binding and discrete same-function retained versions preserve original dispatch identity. 48 focused, seven real PostgreSQL cases, typecheck/build and emitted actor isolation pass. Clean 893e5cfe passes full verifier (38 typechecks, 39 test tasks, 23 builds; 1,539 Workflow units; unchanged lint) and one unpublished artifact with actual refusal and independent integrity checks (31 components). [Evidence](evidence/d3-preparation-starter-bootstrap-2026-10-04.md). Current 2026-10-07: native durable/starter/recovery and release/IAM/scheduling composition are implemented locally; the complete four-artifact family is qualified at `c194a979`. [Updated evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-routed-preparation-family). Managed publication, effective IAM/network behavior, original recovery/drain and accountable acceptance remain; no deployment/activation or phase completion. |
+| D3-069 | Bootstrap qualified native preparation durable entrypoint and source-bound orchestration-only artifact. | In progress | Vrij Patel; engineering | D3-068; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #538 c493a7ef. Default-off numeric same-account target/activity qualification and warm binding stay outside deterministic SDK workflow code; private/provider configuration refuses before SDK state handling. 49 focused tests (31 native) including five installed SDK runner cases and emitted orchestration isolation pass; clean 6986b2b passes full verifier (38 typechecks, 39 test tasks, 23 builds; unchanged lint) and one unpublished source-bound local artifact with actual default-off/wrong-version and independent integrity checks (27 components). [Evidence](evidence/d3-preparation-durable-bootstrap-2026-10-04.md). Current 2026-10-07: native durable/starter/recovery and release/IAM/scheduling composition are implemented locally; the complete four-artifact family is qualified at `c194a979`. [Updated evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-routed-preparation-family). Managed publication, effective IAM/network behavior, original recovery/drain and accountable acceptance remain; no deployment/activation or phase completion. |
+| D3-068 | Bootstrap native private preparation activity with managed database credentials, owner codecs, controlled object/Invoke ports and source-bound local artifact. | In progress | Vrij Patel; engineering | D3-067; D3-078; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 with exact open #537 b516611. Default-off exact numeric target/configuration precedes managed-secret setup. Independent native Documents/lease/work and owner pools preserve codecs; no model/key. 81 focused, five persistence units, 283 AI SDK units and 11 real PostgreSQL cases (four native) pass; both emitted isolation checks pass after unchanged pure-validator extraction. Clean a7fb9ba passes full verifier (38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint) and one unpublished source-bound artifact with actual refusal/integrity checks (41 components). [Evidence](evidence/d3-preparation-activity-bootstrap-2026-10-04.md). Current 2026-10-07: native durable/starter/recovery and release/IAM/scheduling composition are implemented locally; the complete four-artifact family is qualified at `c194a979`. [Updated evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-routed-preparation-family). Managed publication, effective IAM/network behavior, original recovery/drain and accountable acceptance remain; no deployment/activation or phase completion. |
 | D3-067 | Connect Applications preparation activity to owned evidence, controlled initialization, isolated dispatch and original draft recovery. | In progress | Vrij Patel; engineering | D3-066; D3-078; D3-038; D3-017; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #536 source 2a69030. Default-off private port connects owning APIs and separate supported persistence/lease clients; recovery has no initializer/Invoke capability. 43 focused and seven real PostgreSQL cases pass, including a durable SDK run, post-disclosure recovery, lost ACKs, immutable grants and quarantine. Final clean-source full verification passes at 869f0fc (38 typecheck tasks, 39 test tasks, 23 builds; unchanged lint). Exact frozen capabilities and private_slots-only initializer ledger guard pass focused/SQL/build/typecheck/isolation. [Evidence](evidence/d3-private-preparation-port-2026-10-04.md). Native activity bootstrap/artifacts, IAM/scheduling, retention, abandonment/writer drain and accountable/deployed acceptance remain. No phase-exit/deployment/activation claim. |
 | D3-066 | Compose native internet response maintenance with owning private eligibility, fence and disposal controls. | In progress | Vrij Patel; engineering | D3-065; D3-078; D3-050; D3-012 | Started 2026-10-04 from fresh main bde17d9 plus exact open #535 0c91183. [PR #536](https://github.com/Vrixic/project-ai-job-apply/pull/536) is open, stacked on #535. Source-only default-off Lambda separates failed/completed capabilities, qualifies distinct private numeric targets and defers managed-key access until eligibility. 49 focused and 141 connected response-inventory cases (nine new) pass; emitted bundle excludes SQL/S3/rendering/model creation. Full maintained verification passes at a63233a: 38 typecheck tasks, 39 test tasks, 23 builds and all 1,155 Documents units; unchanged lint baseline. Source-bound local artifact/integrity and both default-off selectors pass, unpublished. [Evidence](evidence/d3-response-maintenance-bootstrap-2026-10-04.md). Reviewed IAM/scheduling, retention, abandonment, original writer drain and accountable/deployed acceptance remain; no activation or phase completion. |
 | D3-065 | Require owning immutable original-failure proof before failed-response maintenance fencing or provider effects. | In progress | Vrij Patel; engineering | D3-063; D3-078; D3-049; D3-012 | Source/local verification complete at e071d9e; review/merge and rollout remain. Forward-only nullable failure metadata performs no backfill, original closure is atomic, and owned readFailed/additive private v1 read_failed precede fencing. Active/successful/old NULL/generic-fenced work and unknown identity refuse. All 1,106 Documents units, 308 real PostgreSQL cases, 1,412 workflow units and 42 restore units pass. Full maintained verifier: 38 typecheck tasks, 39 test tasks, 23 builds; lint baseline unchanged. The 59-migration restore replay retains both immutable failure proofs across 84 exact relations. Local migration image/runtime smoke and five exact-source artifact sets pass, unpublished. [Evidence](evidence/d3-failed-response-eligibility-2026-10-04.md). Migration-before-code/current-source restore release, IAM, scheduling, ambiguous abandonment, writer drain, retention and accountable/deployed acceptance remain. No deployment/activation or phase-exit claim. |
@@ -222,26 +384,45 @@ deployed acceptance, Applications reuse, or D3-012. D1 and D3 remain In progress
 - [ ] Security, privacy, accessibility, AI evaluation, workflow replay, and product acceptance evidence is complete.
 - [ ] Every enabled application adapter has current authorized provider fixtures, sanitization and scan evidence, and separate QA representativeness acceptance.
 
-## Exit-criteria status (updated 2026-09-18; no box is ticked)
+## Exit-criteria status (updated 2026-10-08; no box is ticked)
 
-A box is ticked only when its whole wording has linked, inspected evidence. Local synthetic evidence below is not deployed, real-data, or approved evidence.
+This replaces the stale 2026-09-18 summary. Numbers now follow all 13 criteria above,
+including the subsequently added temporary-material lifetime requirement. Local evidence does
+not establish managed, real-data or accountable acceptance. Historical work logs remain below.
 
-| # | Criterion | Local evidence | What is still missing |
+| # | Criterion | Implemented or accepted evidence | Remaining requirement |
 |---|---|---|---|
-| 1 | Generated claims grounded or reviewed | Fact graph, ai-sdk unsupported-claim checks, always-reviewed `generated` fields | Wiring generation into packet preparation; real-model evaluation (D3-012) |
-| 2 | Sensitive answers follow mandatory review | Field policy, packet approval requiring acknowledgement, review UI | Vault persistence and separate key (D3-015, D3-R4); counsel/security disposition |
-| 3 | Rendered documents preserve content and pass checks | Re-parse verification for DOCX and PDF, verbatim tailoring | Deploying the connection of tailoring to Prepare (D3-016, code done and locally verified), real-resume behavior, human quality review |
-| 4 | Approval bound to an immutable packet and expires on change | Packet hash, approval binding, expiry, invalidation on start | API-level synthetic acceptance passed in development 2026-09-19 with no resume, cover letter, or extension in the path (wrong-hash approval refused, changed form invalidates approval); the changed-posting case stays covered by local integration tests; real-token and browser proof still open |
-| 5 | Supported ATS variants meet agreed thresholds | Threshold proposal in the fixture request | D3-013 fixtures, adapters, agreed thresholds, measurement |
-| 6 | Ambiguous responses cannot cause blind duplicate submission | DB guard, write-ahead dispatch, crash recovery, concurrency race tests | Extension executor and live confirmation detection |
-| 7 | Owner-scoped reads authorized, durable, observable, recoverable, ending at `applied` | Store, API, gateway routes, history, metrics | Deployed to development (schema and Gateway, 2026-09-18); API-level synthetic lifecycle acceptance passed 2026-09-19 (24/24 steps, exact cleanup; no resume, cover letter, or extension in the path); real-token sign-in verified 2026-09-19 (create 201, packet 201, hosted web enabled on the protected Production target); alarms, restore, and candidate-rights activation still open (D3-014, D3-015) |
-| 8 | No post-submission hiring outcome collected or inferred | Closed history vocabulary, contract/event/UI guards | Repository-wide and deployed confirmation at exit review |
-| 9 | Unsupported variants degrade to safe assisted/manual completion | Assisted-manual planner | Extension integration and real-browser test |
-| 10 | Correction, adapter failure, model quality, confirmation metrics observable by version | Versioned metrics and rate functions | Production sink, dashboards, thresholds |
-| 11 | Security, privacy, accessibility, AI evaluation, workflow replay, product acceptance evidence | Partial (D3-011) | Independent review, workflow replay, real-browser/AT, product acceptance |
-| 12 | Every enabled adapter has authorized provider fixtures and QA acceptance | Registry gate that rejects anything else | D3-013 |
+| 1 | Generated claims grounded or reviewed | Grounding/mandatory-review policy and [native Prepare intake](evidence/d3-native-cover-letter-intake-2026-10-07.md) are implemented locally | Managed preparation journey, provider retention approval and real-model evaluation (D3-012) |
+| 2 | Sensitive answers follow mandatory review | Vault persistence/key adapter, version binding and [protected packet storage](evidence/d3-restricted-packet-storage-2026-10-05.md) have local evidence | Exact deployed keys/roles, legacy disposition and security/privacy acceptance; this is not missing vault implementation |
+| 3 | Rendered documents preserve content | Actual native image PDF/DOCX and verification [checks pass](evidence/d3-native-material-availability-2026-10-07.md#refreshed-native-images) on synthetic input | Real-resume authorization, output-quality review and current managed/client journey |
+| 4 | One-off material lifetime and no persistence | Native expiry/read checks, terminal disposal and [78-migration recovery](evidence/d1-migration-image-boundary-2026-10-06.md#current-78-migration-logical-recovery) pass locally | Worker publication/deployment and managed web-hook acceptance; default-off web hookup and packaging/schedule/IAM source implemented; authenticated withdrawal and leased continuation pass locally; idle-browser cleanup, managed disposal and provider-retention acceptance. ADR-040 remains Proposed |
+| 5 | Immutable approval and change invalidation | [Both material types pass real PostgreSQL/native approval and packet-replacement refusal](evidence/d3-native-postgresql-approval-2026-10-07.md#tailored-resume-and-packet-replacement) | Complete managed preparation/approval and client handoff on the exact current release |
+| 6 | ATS accuracy/confirmation thresholds | Provider fixture gate and proposed thresholds exist | Authorized Greenhouse-first fixtures, QA representativeness and enabled-adapter measurement; Lever/Ashby remain fast-follow |
+| 7 | No blind duplicate submission | Write-ahead attempts, SQL uniqueness, ambiguous-state handling and recovery checks exist | Current journey acceptance; automated executor/confirmation acceptance separately depends on fixtures |
+| 8 | Owner-scoped technical reads through applied | Prior development lifecycle evidence; current local SQL/recovery and restricted-packet evidence | Exact-release managed rights/recovery/authorization and applicable observability acceptance |
+| 9 | No post-submission hiring outcomes | Closed lifecycle/history vocabulary and contract guards | Frozen-release scope review; preserve confirmed submission as the product boundary |
+| 10 | Safe assisted/manual completion | D3-018 manual submitted/not-submitted human acceptance recorded 2026-10-02 | Current native-material end-to-end journey. Do not repeat the already accepted manual-only check or require extension completion for the first journey pass |
+| 11 | Versioned quality/failure metrics | Versioned metric definitions/rate functions exist | Production sink/dashboard/threshold work remains owner-deferred off the candidate-journey critical path; eventual criterion unchanged |
+| 12 | Security/privacy/accessibility/evaluation/product acceptance | Layer checks and historical scoped acceptance are retained | Independent exact-release dispositions, real-model/authorized-data evaluation, assistive-technology and complete journey acceptance |
+| 13 | Authorized fixtures for enabled adapters | Registry refuses unaccepted variants | D3-013 provider authorization, sanitization/scan and independent QA acceptance |
+
+Cleanup worker packaging, default-off infrastructure and guarded publication-family source are now
+implemented locally. The default-off web sign-out hook is implemented and locally verified;
+managed sign-out/withdrawal acceptance remains. The owner resolved the implementation scope question.
+The Gateway artifact and 78-migration image/recovery evidence are refreshed locally.
+Next: prepare the authorized managed candidate journey and fix observed failures.
+Cloud publication/activation and accountable reviews remain separate, currently unexecuted gates.
+Do not turn this updated summary into phase completion or an assertion that every backend path
+has been exhaustively audited.
+
 
 ## Work log
+
+2026-10-06 D3-079 implements original-task caller authentication before future private owner/control RPC admission: fixed ECS credentials, SDK-signed allocation/recipient/request context and strict regional STS identity match. All 57 new/91 regression cases and two emitted isolation/default-off checks pass; transports/credentials are synthetic and full clean verification remains. [Evidence](evidence/d3-native-task-caller-proof-2026-10-06.md). RPC/image/bootstrap/reviewed IAM/managed/client/provider/accountable gates remain; no deployment/activation, third PR or CI/CD. Docker/WSL stopped, PC on.
+
+2026-10-06 clean source `c33691ba` passes the full maintained verifier: 38 typecheck, 39 test and 23 build tasks, unchanged lint baseline, all operator/security/isolation/Compose/scope checks. Separate 72 focused checks and all 21 actual Linux process scenarios pass. [Evidence](evidence/d3-native-runtime-composition-2026-10-06.md). Native image/bootstrap/approved adapters/routing/managed/client/ATS/provider/accountable gates remain; D1/D3 stay In progress. No deployment/activation or third PR; PC stays on.
+
+2026-10-06 D3-079 connects the dedicated cover-letter runtime with fixed original admission/controls, memory generation, real PDF/DOCX and HTTPS. All 21 Linux/kernel scenarios, 72 focused checks and emitted isolation/default-off proof pass. Full combined-source verification remains; native image/bootstrap/approved adapters/routing/managed/client/ATS/provider/accountable gates remain. [Evidence](evidence/d3-native-runtime-composition-2026-10-06.md). No deployment/activation or hosted CI/CD; Docker/WSL stopped, PC on.
 
 
 | Date | Update | Tasks | Evidence |
@@ -1495,3 +1676,1082 @@ implementation `0ee4c377` and exact combined tree `82ea96c9` are unchanged by la
 records. One authored draft PR is open. Managed event/routing/IAM/retry/DLQ/native task and
 client/ATS/provider/accountable gates remain; D1/D3 stay In progress. No authored main merge,
 artifact publication, deployment, activation or hosted CI/CD work. Docker/WSL remain stopped.
+
+2026-10-06 D3-079 starts allocation-bound native scalar work/completion adapters on fresh
+main `88f8ae84` plus exact open #564 `bd23437c`. One original claim/settlement/completion,
+fixed signed numeric transport and retained pending-call admission expose no issuer or other
+phase/task authority. 50 new/108 regression cases and four emitted isolation checks pass;
+all 17 actual Linux kernel scenarios pass, including connected scalar controls and one provider
+call before observed SIGKILL. SQL/provider/render/transport ports are synthetic; not managed
+acceptance. [Evidence](evidence/d3-native-material-controls-2026-10-06.md). Full clean verification
+remains before review; image/entrypoint/private admission/IAM/routing/client/ATS/provider/accountable
+gates remain. Owned fixture removed, shared volumes retained and Docker/WSL stopped. No frontend,
+SQL schema, deployment or activation; D1/D3 stay In progress and CI/CD stays deferred.
+
+2026-10-06 D3-079 clean `4b6ba6d8` passes the full maintained verifier: 38 typecheck,
+39 test and 23 build tasks, unchanged lint baseline and all four emitted isolation checks.
+50 adapter cases pass inside the full run; the separate 108 focused regressions and all
+17 actual Linux/kernel scenarios remain local evidence. Existing Documents 0011 bound/unsealed
+owning work-claim guard is unchanged; input equality does not replace authenticated task admission.
+[Evidence](evidence/d3-native-material-controls-2026-10-06.md). No standalone production image
+or artifact/managed composition is claimed for this private factory. Image/entrypoint/evidence/
+private admission/IAM/routing/client/ATS/provider/accountable gates remain. D1/D3 stay In progress;
+no authored main merge, publication/deployment/activation or CI/CD work. Docker/WSL are stopped.
+
+2026-10-06 D3-079 allocation-bound native scalar controls are reviewable in draft
+[PR #565](https://github.com/Vrixic/project-ai-job-apply/pull/565), stacked on exact open
+#564 `bd23437c`. Verified implementation `4b6ba6d8` is unchanged; later commits record delivery
+and review evidence only. Two authored draft PRs are open. Native image/entrypoint/evidence/
+private admission/IAM/routing/client/ATS/provider/accountable gates remain; D1/D3 stay In progress.
+No authored main merge, publication/deployment/activation or hosted CI/CD work. Exact owned Linux
+fixture/staging cleanup completed, shared volumes retained and Docker/WSL stopped.
+
+2026-10-06 D3-079 adds default-off original native owner-evidence admission on fresh main
+`88f8ae84` plus exact #565 `b8bbd0c3`. Short owning SQL checks surround lease-bound owner
+reads, compare fixed original context and release locks before evidence awaits. 38 focused units,
+23 actual PostgreSQL launcher/evidence cases, owner/workflow builds/typechecks and four emitted
+bundle checks pass. No work issue/renew/consumption, body/model/listener, schema or frontend change.
+[Evidence](evidence/d3-native-evidence-admission-2026-10-06.md). Full clean verification remains
+before review. Authenticated private task transport/bootstrap/IAM, managed task/client/ATS/provider/
+accountable gates remain; D1/D3 stay In progress. Owned SQL fixture removed, volumes unchanged,
+Docker/WSL stopped; PC stays on. No deployment/activation or hosted CI/CD work.
+
+2026-10-06 D3-079 clean `34d13ab6` passes full maintained verification: 38 typecheck,
+39 test and 23 build tasks, unchanged lint baseline and all eight native emitted bundle checks.
+The initial full run caught the standalone registry's added pure validators; exact-file assertion
+correction changes no source guard or capability exclusion. Separate 38 owner-evidence units and
+23 real PostgreSQL cases pass. [Evidence](evidence/d3-native-evidence-admission-2026-10-06.md).
+Authenticated task transport/managed bootstrap/client/ATS/provider/accountable gates remain.
+D1/D3 stay In progress; no deployment/activation/main merge or CI/CD work. Docker/WSL stopped,
+owned fixture removed, shared volumes unchanged and PC stays on.
+
+2026-10-06 owner prioritizes a working launch over further product perfection. Implement larger
+complete-flow batches first, exercise the actual flow, fix failures, then add focused regression
+coverage. Targeted checks run during implementation and the maintained verifier runs at batch
+handoff. Prioritize the D1 candidate flow and concrete blockers over optional D3 hardening;
+preserve truthfulness/privacy/submission safeguards and honest deployment/acceptance status.
+
+
+2026-10-06 D3-079 caller authentication source `bffe650b` passes the full maintained verifier:
+38 typecheck, 39 test and 23 build tasks; zero lint errors with unchanged 15 warnings/58 infos,
+and all operator/security/isolation/Compose/scope checks. The original session exits zero on
+an unchanged tracked tree. Separate 57 new/91 regression and two emitted checks pass with
+synthetic credentials/transport. [Evidence](evidence/d3-native-task-caller-proof-2026-10-06.md).
+Authenticated private RPC composition, native image/bootstrap, reviewed IAM and managed/client/
+provider/accountable acceptance remain; D1/D3 stay In progress. No deployment/activation,
+third PR, main merge or CI/CD work. Docker/WSL remain stopped and the PC stays on.
+
+
+2026-10-06 D3-079 starts authenticated owner RPC composition on the verified caller-proof branch.
+A closed private version-one envelope binds task/operation/numeric recipient, authenticates before
+secret/owner creation, checks native admission around owner awaits and checks original approved
+context/consent around evidence reads. Original work/completion controls use the new envelope
+without fallback; 140 focused checks pass. Real SQL/final emitted/full clean verification follows.
+[Evidence](evidence/d3-native-owner-rpc-2026-10-06.md). Native image/bootstrap/IAM/routing/managed/
+client/provider/accountable gates remain; D1/D3 stay In progress. No deployment/activation, third
+PR, main merge or CI/CD work. PC stays on; owned temporary SQL fixture only, shared volumes retained.
+
+
+2026-10-06 D3-079 authenticated owner RPC has 24 passing real PostgreSQL cases, including lazy
+authentication-before-secret access, original approved Profile/job evidence, claim/settlement/
+completion and sealed refusal. All 140 focused, eight emitted and 21 actual Linux process checks
+pass. Initial fixture projection/immutable-identity mistakes are corrected by owning reads and
+proper original fixture construction; no production guards are weakened.
+[Evidence](evidence/d3-native-owner-rpc-2026-10-06.md). Full clean committed-source verification
+follows. Owned tmpfs SQL fixture removed, shared volumes unchanged, Docker/WSL stopped and PC on.
+D1/D3 remain In progress; no deployment/activation, third PR, main merge or CI/CD work.
+
+
+2026-10-06 D3-079 authenticated private owner RPC source `576f0ac9` passes the full maintained
+verifier: 38 typecheck, 39 test and 23 build tasks; zero lint errors, 17 warnings/58 infos,
+and all operator/security/isolation/Compose/scope checks. Two new builder environment-access
+warnings are corrected using the existing fixed-flag convention; the rerun follows. The original session exits zero on an
+unchanged tracked tree. Two separate receiver-artifact builds reproduce identical 363,458-byte
+ZIPs with source-bound manifest/SBOM and bundled default-off/no-network refusal proof.
+[Evidence](evidence/d3-native-owner-rpc-2026-10-06.md). Native image/bootstrap/reviewed IAM/private
+STS reachability/routing/managed/client/provider/accountable gates remain; D1/D3 stay In progress.
+PR #564/#565 remain open; no third PR, main merge, deployment/activation or CI/CD work.
+Owned fixtures removed, shared volumes retained, Docker/WSL stopped and PC stays on.
+
+
+2026-10-06 D3-079 corrected source `64df6d7a` passes full maintained verification with 38
+typecheck, 39 test and 23 build tasks, all operator/security/isolation/Compose/scope checks,
+zero lint errors and the restored 15-warning/58-info baseline. The builder's fixed flag-name
+convention changes no owner/RPC/runtime behavior; the original corrected-source run exits zero
+on an unchanged tree. Its separate 363,457-byte receiver artifact reproduces identically with
+updated exact-source manifest/SBOM. [Evidence](evidence/d3-native-owner-rpc-2026-10-06.md).
+Native image/bootstrap/IAM/private STS reachability/routing/managed/client/provider/accountable
+acceptance remain; D1/D3 stay In progress. No deployment/activation, third PR, main merge or
+CI/CD work. Owned fixtures removed, shared volumes retained, Docker/WSL stopped; PC stays on.
+
+2026-10-06 D3-079 clean source `214371ca0282d4110e4d8313d5a417e0cf2b6a98` passes full maintained
+verification: 38 typecheck tasks, 39 test tasks, 23 builds, zero lint errors/15 warnings/58 infos,
+all operator/security/isolation/Compose/scope checks, unchanged tracked source. The executable
+native image builds locally and its hardened default-off/extra-argument/environment-key refusals
+pass; 126 focused, 24 SQL, 30 Linux and six emitted checks pass. Image publication, managed IAM/TLS/
+routing, actual provider/client/ATS and accountable approval stay open. No third PR/main merge,
+cloud activation or hosted CI/CD work. [Evidence](evidence/d3-native-image-runtime-2026-10-06.md).
+
+2026-10-06 D3-079 clean `1b826b5cbf21e000831dee2a588187d46f22259c` passes full maintained
+verification: 38 typecheck tasks, 39 test tasks, 23 builds, zero lint errors/15 warnings/58 infos,
+operator/security/isolation/Compose/scope checks and unchanged tracked source. The original version
+fix also passes 183 focused, 24 SQL, 31 Linux and six emitted checks. Its exact-source image builds
+and passes three hardened startup refusals; the matching owner ZIP reproduces byte-identically.
+No hosted CI/CD, main merge, third PR, publication or deployment/activation. D1/D3 stay In progress;
+managed IAM/TLS/routing/provider/client/ATS/accountable gates remain. Docker/WSL stopped, PC on.
+[Evidence](evidence/d3-native-document-version-2026-10-06.md).
+
+2026-10-06 D3-079 completes local scalar ready receipt verification at clean `481d5d9f`.
+Grounding metadata crosses authenticated RPC after render verification, remains bound to immutable
+original completion/settled work and is included in candidate export. The native preparation
+initializer/recovery is the next source gap. [Evidence](evidence/d3-native-ready-receipt-2026-10-06.md).
+No phase completion, cloud activation, new PR or hosted CI/CD; isolated web restored and PC on.
+
+2026-10-06 D3-064/D3-079 adds default-off scalar Applications resume admission on the
+caller's same transaction: exact active owner/current review packet/revision and application/
+packet locks. Three focused checks and seven actual PostgreSQL checks pass, including migration
+replay and lock lifetime. [Evidence](evidence/d3-native-resume-owner-admission-2026-10-06.md).
+Full frozen-source verification follows. Documents generation/task/completion ledger and
+preparation/read wiring remain; D1/D3 stay In progress. No deployment, activation, new PR or
+hosted CI/CD work. Owned tmpfs fixture removed, shared volumes retained, Docker/WSL stopped;
+PC stays on.
+
+2026-10-06 D3-064/D3-079 scalar resume Applications admission at clean `c81c2ba7` passes
+full maintained verification: 38 typecheck, 39 test and 23 build tasks, unchanged lint and
+all artifact/operator/security checks. Separate three focused and seven actual SQL checks
+pass. [Evidence](evidence/d3-native-resume-owner-admission-2026-10-06.md). Owning Documents
+generation/task/completion ledger and preparation/read wiring remain; D1/D3 stay In progress.
+No new PR, main merge, deployment/activation or hosted CI/CD. Development web restored,
+owned fixture removed, shared volumes retained, Docker/WSL stopped and PC stays on.
+
+2026-10-07 D3-064/D3-079 adds the default-off Documents native-resume generation ledger:
+exact source/packet/job intent, one launch claim, immutable task/completion/ready/retirement,
+shared cross-kind fence and scalar export/deletion coverage. Fifteen real SQL cases, 25 existing
+native cover-letter SQL cases, six emitted checks and actual 71-migration/93-relation logical
+restore pass. [Evidence](evidence/d3-native-resume-generation-ledger-2026-10-07.md). Full clean
+verification follows. Authenticated resume RPC/Jobs/source/launcher/packet/image/client/ATS and
+managed/accountable acceptance remain; D1/D3 stay In progress. No cloud activation, new PR or
+CI/CD. Owned tmpfs fixtures removed, shared volumes retained, Docker/WSL stopped and PC on.
+
+2026-10-07 D3-064/D3-079 native-resume ledger at clean `dcf4a3e0` passes full maintained
+verification: 38 typecheck, 39 test and 23 build tasks, unchanged lint and all emitted/operational
+checks. Exact migration inventories, 177 runtime-smoke cases and 273 release guards include
+0014; separate 15/25 actual SQL suites and 71-migration/93-relation logical restore pass.
+[Evidence](evidence/d3-native-resume-generation-ledger-2026-10-07.md). Authenticated resume
+RPC/Jobs/source/task/packet/image/client/ATS and managed/accountable acceptance remain; D1/D3
+stay In progress. Development web restored, Docker/WSL stopped, shared volumes retained, PC on.
+No deployment/activation, new PR, main merge or hosted CI/CD work.
+
+2026-10-07 D3-064/D3-079 replaces the native-resume ledger's synthetic Jobs authority
+with actual same-transaction Jobs canonical/source/revision/context admission and
+Applications/Jobs owner composition. All 22 actual PostgreSQL ledger cases, two
+focused and two emitted preparation checks pass; full clean verification follows.
+[Evidence](evidence/d3-native-resume-jobs-admission-2026-10-07.md). Authenticated resume
+RPC/source/task/preparation/packet/image/client/ATS and managed/accountable acceptance
+remain; D1/D3 stay In progress and ADR-040 Proposed. No deployment/activation, new PR,
+main merge or hosted CI/CD. Owned fixture removed, shared volumes retained,
+Docker/WSL stopped; PC remains on.
+
+2026-10-07 D3-064/D3-079 native-resume Jobs admission at clean frozen `3ff94848`
+passes full maintained verification: 38 typecheck, 39 test and 23 build tasks,
+operator/security/artifact isolation/Compose/scope checks. Actual Applications/Jobs
+composition passes all 22 PostgreSQL ledger checks. A post-run unused type-only
+SQL-test import cleanup restores the existing lint baseline (15 warnings/58 infos);
+Documents rebuild passes with byte-identical emitted test JavaScript. Runtime source
+remains the fully verified build. [Evidence](evidence/d3-native-resume-jobs-admission-2026-10-07.md).
+Authenticated resume RPC/source/task/preparation/packet/image/client/ATS and managed/
+accountable gates remain; D1/D3 stay In progress. No deployment/activation, new PR,
+main merge or hosted CI/CD. Development web restored; Docker/WSL stopped, shared
+volumes retained and PC remains on.
+
+2026-10-07 D3-064/D3-079 connects a separate authenticated resume task scope to private
+owner RPC and the actual Documents ledger with Applications/Jobs admission. Original
+bootstrap/completion/ready controls and Profile principal projection are scalar-only;
+shared signing/transport preserve cover-letter framing. All 138 focused, 26 actual SQL
+and eight emitted checks pass. [Evidence](evidence/d3-native-resume-owner-rpc-2026-10-07.md).
+Exact-source artifact/full verification follow. Source loading/task/image/launch/
+preparation/packet/client/ATS and managed/accountable acceptance remain; D1/D3 stay
+In progress. No publication/deployment, new PR, main merge or hosted CI/CD. Owned SQL
+fixture removed, shared volumes retained, Docker/WSL stopped; PC remains on.
+
+2026-10-07 D3-064/D3-079 authenticated resume owner RPC verification records runtime
+source `460039eb`: 138 focused and 26 real PostgreSQL cases, reproducible Lambda ZIP,
+38 typecheck/39 test/23 build tasks and existing lint baseline. The full run stopped
+at a stale exact bundle inventory; a two-path test-only correction and all six
+remaining launch/preparation bundle checks, Compose and scope checks passed. Runtime
+source is unchanged; this is segmented verification, not an uninterrupted full pass.
+[Evidence](evidence/d3-native-resume-owner-rpc-2026-10-07.md). Development web restored
+(anonymous root 200/resume 307). Source loading/task/image/launch/preparation/packet/
+client/ATS and managed/accountable gates remain; D1/D3 stay In progress, ADR-040
+Proposed. No deployment/activation, new PR, main merge or hosted CI/CD. Docker/WSL
+stopped, shared volumes retained, PC on.
+
+2026-10-07 D3-064/D3-079 connects separate authenticated original resume source RPC
+through the actual Documents ledger/candidate lease, Jobs projection and narrow retained
+normalized-object reader. Generated content stays outside this path. All 66 focused,
+32 real PostgreSQL and 15 emitted checks pass; lint remains 15 warnings/58 infos.
+[Evidence](evidence/d3-native-resume-source-rpc-2026-10-07.md). Artifact/full frozen-source
+verification follow. Task/image/bootstrap/launch/preparation/packet/client/ATS and
+managed/accountable gates remain; D1/D3 stay In progress and ADR-040 Proposed. No new PR,
+main merge, publication/deployment or hosted CI/CD. Owned fixture removed, Docker/WSL
+stopped, shared volumes retained, PC on.
+
+2026-10-07 D3-064/D3-079 original resume source at clean frozen `b9e912b2` passes the
+full verifier: 38 typecheck/39 test/23 build tasks, operational/security/bundle/Compose/
+scope checks and unchanged lint baseline. Two source Lambda ZIP builds are identical;
+66 focused, 32 real PostgreSQL and 15 emitted cases provide the separate local evidence.
+[Evidence](evidence/d3-native-resume-source-rpc-2026-10-07.md). Development web restored
+(anonymous root 200/resume 307). Native resume task/image/bootstrap/launch and current
+packet/read/client/ATS integration plus managed/accountable gates remain. D1/D3 stay
+In progress and ADR-040 Proposed. No new PR, main merge, deployment/activation or hosted
+CI/CD. Owned fixture removed, Docker/WSL stopped, shared volumes retained, PC on.
+
+2026-10-07 D3-064/D3-079 connects native resume runtime/task/image startup and authenticated
+current-packet direct reads. OpenAPI/Gateway add scalar resume authorization and optional
+original temporary-material metadata. All 42 actual Linux process cases, 89 focused Documents,
+28 Applications, seven emitted bundle checks and 220 Gateway checks pass (3 existing skips).
+Cloud/identity/store responses are synthetic.
+[Evidence](evidence/d3-native-resume-runtime-2026-10-07.md). Frozen-source full verification
+follows. Resume launch/preparation/packet/location/client/ATS and actual image/managed gates
+remain. D1/D3 stay In progress; ADR-040 Proposed. No new PR, merge, deployment/activation or
+hosted CI/CD. Owned fixture removed; Docker/WSL stopped, shared volumes retained and PC on.
+
+2026-10-07 D3-064/D3-079 native resume runtime source `14bad3bd` passes full-verifier
+stages through 38 typecheck tasks and the existing zero-error/15-warning/58-info lint baseline.
+Two stale API route inventories stopped workspace tests. Test-only `d62d58fd` corrects them
+and proves optional native/legacy resume response compatibility; all 105 contract tests pass.
+The maintained verifier remainder then passes all 39 test/23 build tasks and isolation,
+Compose and scope checks on frozen source. This is segmented verification, not an uninterrupted
+full run. [Evidence](evidence/d3-native-resume-runtime-2026-10-07.md). Runtime source unchanged;
+launch/preparation/packet/location/client/ATS and actual-image/managed gates remain. D1/D3 stay
+In progress; ADR-040 Proposed. No new PR, main merge, deployment/activation or hosted CI/CD.
+Docker/WSL stopped, shared volumes retained, PC on.
+
+Development web restored after this batch: anonymous root 200/resume 307; no new signed-in acceptance claimed.
+
+
+2026-10-07 D3-064/D3-079 connects atomic resume Prepare requests, original source capture,
+private scheduled dispatch, durable preparation, ready packet attachment and scalar location
+reads. Built-image smoke found PID 1 prevented the kernel deadline; both native launch paths
+now require an init process. The same image exits automatically with init. Fixed stale restore
+checksum after the full verifier reached workspace tests. Focused checks pass: 46 resume and
+25 cover-letter real PostgreSQL cases, 59 launcher/control and 214 restore/durable units,
+697 PowerShell assertions. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Remaining verifier stages and corrected private artifact builds follow. D1/D3 stay In progress;
+ADR-040 Proposed. Managed activation and combined/client/ATS acceptance remain. CI/CD deferred
+until launch; no new PR, main merge or deployment. PC remains on.
+
+
+2026-10-07 D3-064/D3-079 corrected runtime `12c58461` passes 38 typecheck, 39 workspace test
+and 23 build tasks plus formatting/lint. Test-only `ff17d209` updates one extracted-module
+inventory; remaining isolation/Compose/scope stages pass. Verification is segmented. Three
+private resume artifacts rebuilt on corrected source, with no publication or deployment.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Combined-flow/enabled-image,
+managed/client/ATS acceptance and queue exhaustion handling remain. D1/D3 stay In progress;
+ADR-040 Proposed. CI/CD deferred until launch. Owned SQL fixtures removed, Docker/WSL stopped,
+shared volumes retained, PC on.
+
+Development web restored after verification: anonymous `/` returns 200 and `/resume` returns 307. No new signed-in acceptance is claimed.
+
+
+2026-10-07 D3-064/D3-079 closes exhausted native resume queue delivery in the existing outbox
+and reports bounded failure counts without declaring task/workflow death or regenerating.
+The combined local durable SDK + owning SQL path now passes Prepare/source capture/one launch/
+poll/ready attachment/receipt. All 48 PostgreSQL cases and eight emitted checks pass; three
+owning workspaces compile. Cloud transports and generated readiness remain simulated.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Focused verification follows
+the owner's implementation-first cadence; no repeated full verifier. Enabled-image and managed/
+client/ATS/accountable gates remain. D1/D3 In progress, ADR-040 Proposed; CI/CD deferred until
+launch and PC remains on.
+
+Updated dispatcher ZIP built from clean `4cded260`; no publication/deployment. Owned SQL fixture removed, Docker/WSL stopped, development web root 200 and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds the complete native resume publication family to the existing
+guarded operator: five private artifacts, twenty companion files, dedicated output/key/receipt
+roots and one build command. Pure guards pass for complete inventory and mixed/duplicate/missing
+receipt rejection. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Actual
+frozen-source family build follows. No publication, deployment, schedule or IAM activation.
+D1/D3 remain In progress; ADR-040 Proposed. CI/CD deferred until launch, PC on.
+
+
+2026-10-07 D3-064/D3-079 complete native resume release family at clean `5690191d` passes
+the real package build and default-off bundle checks. The guarded publisher reads all twenty
+local files and exact source markers; second artifact emission is byte-identical across all
+companions. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Zero cloud calls;
+no publication, deployment or activation. Enabled-image and managed/client/ATS/accountable gates
+remain. D1/D3 In progress, ADR-040 Proposed, CI/CD deferred until launch and PC on.
+
+
+2026-10-07 D3-064/D3-079 actual built resume image passes 23 render/read assertions, real PDF
+and DOCX output, authenticated TLS checks and automatic native deadline under init/read-only/
+UID65532/network-none restrictions. Docker confirms no OOM kill. Image-owned bundle/kernel hashes
+match source `0af30d5d`; external ports and identity remain synthetic through a test entrypoint.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Enabled production main,
+managed transport/routing and client/ATS/accountable acceptance remain; D1/D3 In progress,
+ADR-040 Proposed. No publication/deployment, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds an unattached, default-empty native resume task/IAM module with
+immutable image, init/read-only/non-root envelope, revision-qualified bounded roles and pinned
+RPC/TLS permissions. Terraform validation and five mocked cases pass; emitted task shape is
+accepted by the actual Documents launch validator with synthetic ECS observation.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). No environment composition or
+cloud action. Managed release/routing/client/ATS/accountable gates remain; D1/D3 In progress,
+ADR-040 Proposed. CI/CD deferred until launch, Docker/WSL stopped and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds the unattached private owner/source Lambda module with exact
+artifact/task bindings, separate bounded roles and disabled runtime defaults. Terraform validation
+and five mocked tests pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+No cloud deployment or activation; preparation-control/durable/dispatcher composition and managed
+routing/acceptance remain. D1/D3 In progress, ADR-040 Proposed, CI/CD deferred and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds an unattached connected preparation release: private control,
+CMK-encrypted durable workflow, SQL-outbox dispatcher and disabled numeric-version schedule.
+Runtime, new-launch and schedule gates remain separate and off. Terraform validation and six
+mocked cases pass; emitted launch JSON passes the actual Documents configuration validator.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Managed boundary/deployment-role
+updates, network/TLS routing, release composition and acceptance remain; no cloud action.
+D1/D3 In progress, ADR-040 Proposed, CI/CD deferred and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds opt-in bootstrap IAM for original native resume controls: a separate
+principal/task/cluster-bound ceiling and exact role-creation/durable-stack deployment permissions.
+The shared workload boundary is unchanged; empty input adds nothing. Seven bootstrap checks and
+six preparation checks pass, including original-role scope and policy size. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+No cloud or CI/CD action. Environment composition, effective IAM, routing and managed acceptance
+remain; D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 D3-064/D3-079 corrects the preparation release's hard-coded private-only task network:
+`task_assign_public_ip` is now an explicit validated release input. Eight Terraform cases and
+the actual launcher validator accept emitted ENABLED/DISABLED configurations; invalid modes fail.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Browser-accessible DNS/TLS/ingress
+is still unimplemented, and a development DNS-zone question is pending. No cloud activation;
+D1/D3 In progress, ADR-040 Proposed, CI/CD deferred and PC on.
+
+
+2026-10-07 D3-064/D3-079 wires source/task/preparation modules into development and staging
+through separate default-empty release maps and scalar binding outputs. Both environment roots
+validate with AWS provider 6.58.0; three mocked cases per environment pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+No release input was populated, backend contacted or cloud resource changed. DNS/TLS/routing,
+managed release/runtime and acceptance remain; D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 D3-064/D3-079 connects original resume metadata to positive task observation and
+owning retirement persistence. The shared ECS adapter now exposes observation without StopTask;
+running/missing/error responses remain unresolved, and stored retirement replays without AWS.
+57 focused cases, Documents typecheck/build and changed-file Biome pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+ECS and registry ports were simulated; managed receiver/scheduling, live SQL-connected acceptance
+and routing remain. No deployment; D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 D3-064/D3-079 adds the private numeric-version resume observer Lambda and standalone
+artifact builder. Strict scope/configuration validation precedes managed secret access; the
+runtime exposes only observation and positive retirement persistence. Eleven bootstrap cases,
+Workflows typecheck/build and changed-file Biome pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Frozen-source artifact verification follows; managed receiver/IAM/event routing and SQL-connected
+acceptance remain. No deployment; D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 D3-064/D3-079 observer artifact builds from clean `c862e288`; emitted default-off and
+forged-input refusal checks pass. ZIP SHA-256 `330feeb77478f3770311f1724a94b1137886ab914f4f32533afa7195b0104bd8`,
+369857 bytes. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Artifact remains local;
+publication/IAM/event delivery and managed/SQL-connected acceptance remain. D1/D3 In progress.
+
+
+2026-10-07 D3-064/D3-079 real PostgreSQL observer acceptance finds and fixes a production wiring
+bug: Profile's camelCase-transforming connection could not serve the raw Documents ledger.
+Observer now uses the existing raw Applications SQL helper. All 51 ledger cases and 11 bootstrap
+cases pass, including real Lambda-to-SQL retirement and lost-ACK replay with simulated ECS.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Fresh artifact follows; no cloud
+deployment. D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 corrected observer artifact from clean `59a82593` passes emitted-bundle refusal checks;
+ZIP SHA-256 `611b833b02072aac300a4f945b43cdf3656603d5216fbc11a7adf47611b48fe0` (384731 bytes).
+This supersedes the earlier observer artifact. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Docker/WSL stopped, PC on; artifact remains unpublished and D1/D3 In progress.
+
+
+2026-10-07 D3-064/D3-079 adds the observer to the maintained NativeResume build/publication
+family: six artifacts and twenty-four companion objects. Publisher guards reject the old
+observer-less receipt and incomplete/mixed/duplicate sets. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Frozen-source family build/readback follows. No publication or deployment; D1/D3 In progress.
+
+
+2026-10-07 the six-artifact NativeResume family builds from clean `d0c036dd` and passes actual
+publisher local readback of all twenty-four files. Second emission is byte-identical, including
+the corrected observer. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md).
+Zero cloud calls; publication, observer IAM/delivery and managed acceptance remain. D1/D3 In progress.
+
+
+2026-10-07 D3-064/D3-079 connects strict stopped-task event hints to the private observer. Account,
+cluster, original definition, six launch overrides and configuration hash are checked before
+secret access; the hinted task must match SQL before fresh ECS observation. Eighteen Lambda and
+58 observer/retirement cases pass with Documents/Workflows builds and changed-file Biome.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). EventBridge rule/IAM/delivery and
+managed acceptance remain; no cloud activation, D1/D3 In progress and PC on.
+
+
+2026-10-07 observer event-capable artifact builds from clean `717c09b0`; emitted default-off
+checks pass. ZIP SHA-256 `c7ec6dd82bca4a5b57094eb3a04832684f9cf0a73d1d388a086a09c57ea27e03`,
+386142 bytes. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md). Only this artifact
+was refreshed; a complete current-source family rebuild is required before publication.
+
+
+2026-10-07 D3-064/D3-079 adds the numeric observer Lambda, dedicated observation-only boundary
+and default-disabled original STOPPED-event rule to optional release composition. Both event
+delivery and execution failures reference a required existing dead-letter queue. Terraform
+validation and 23 mocked cases pass (bootstrap 7, preparation 10, development 3, staging 3).
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#observer-release-wiring).
+Queue/resource/key policies, retention/monitoring, missed-event recovery and managed acceptance
+remain unverified. No cloud action; D1/D3 In progress, ADR-040 Proposed and PC on.
+
+
+2026-10-07 D3-064/D3-079 provisions original observer failure queues through optional platform
+composition: fourteen-day customer-key retention, TLS enforcement, original-rule SQS/KMS grants,
+delete protection and three failure alarms. Preparation waits for platform prerequisites.
+Two platform mocked cases and three per environment pass; environment validation passes.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#observer-failure-retention).
+Effective managed permissions/alert delivery and missed-event recovery remain unverified.
+No cloud action; D1/D3 remain In progress and PC on.
+
+
+2026-10-07 D3-064/D3-079 rebuilds the complete six-artifact NativeResume family from clean
+`15185a12`. Compilation, emitted refusal checks, actual publisher readback of 24 files and
+byte-identical repeat emission pass. The event-capable observer now shares the family source.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#consistent-six-artifact-release-checkpoint).
+No cloud calls or fresh audit claim; managed routing/release/acceptance remain. D1/D3 In progress.
+
+
+2026-10-07 D3-064/D3-079 connects original database-reader roles and version-pinned task TLS
+reads through the shared private Secrets endpoint, including reviewed caller security groups.
+Four native and ten maintenance mocked cases plus three per environment pass; roots validate.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-resume-secret-endpoint-composition).
+Dormant staging stays disabled. RPC/S3 endpoint and managed acceptance remain; no cloud mutation.
+
+
+2026-10-07 D3-064/D3-079 connects original task RPCs, original durable dispatch and retained
+normalized-source reads through existing private endpoints. Numeric task recipients and exact
+source-role/path restrictions are preserved; dispatcher IAM pins the numeric version within its
+original-function endpoint scope. Sixty mocked Terraform cases pass; both roots validate.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-resume-rpc-and-normalized-source-endpoint-composition).
+No cloud mutation; managed key/network/routing/acceptance remain. D1/D3 In progress, PC on.
+
+
+2026-10-07 D3-064/D3-079 adds the original resume durable function's missing checkpoint-key
+service grant, bound to account, source function and matching encryption context. Removes the
+unneeded execution-role GenerateDataKey grant; existing exact-key Decrypt remains. Twelve focused
+mocked Terraform cases pass. [Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#original-durable-checkpoint-key).
+No deployment or live encryption claim; D1/D3 remain In progress. Continue connected implementation,
+flow checks, fixes and focused regressions; CI/CD deferred and PC stays on.
+
+
+2026-10-07 D3-064/D3-079 adds bounded scheduled recovery of missed stopped-task events through
+original observer -> Documents claim -> exact ECS observation -> retirement. Two attempts per
+minute rotate with persisted cooldown; running/unknown tasks remain bound. Documents migration
+0015 advances restore inventory to 73 migrations/93 relations. 54 real SQL, 226 focused workflow,
+50 restore and 20 mocked Terraform cases pass; both environment roots validate.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#bounded-recovery-of-missed-stopped-task-events).
+Source/default-off only; managed migration, routing/release/capacity and acceptance remain. D1/D3
+stay In progress. Docker/WSL stopped, PC on; CI/CD deferred.
+
+
+2026-10-07 D3-064/D3-079 connects stopped-event recovery for an original launch whose response
+was lost. Fresh ECS metadata must match the persisted claim before binding; separate terminal
+observation records retirement. No new launch/stop authority. Workflows compiles; 57 real SQL and
+81 focused handler/observer/launch cases pass with synthetic ECS responses.
+[Evidence](evidence/d3-native-resume-launch-packet-2026-10-07.md#lost-launch-response-recovered-from-original-stopped-event).
+No deployment; routing/managed acceptance remain. D1/D3 In progress, CI/CD deferred and PC on.
+
+
+2026-10-07 D1-013/D3-015 aligns migration-image and publisher executable boundaries with
+Documents 0015: exact 73-migration/93-relation inventory and required SQL filename. All 181
+runtime-smoke cases and OCI publisher guards pass. The first combined verifier was stopped on
+finding the stale pins; a fresh clean-source pass and updated actual image remain.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#observation-migration-package-alignment-2026-10-07).
+No cloud action; D1/D3 In progress, CI/CD deferred, PC on.
+
+
+2026-10-07 D1-013/D3-064/D3-079 completes the maintained local verification stages across
+clean checkpoints `65976e15`, `66a2c3d1` and `5065427a`, with two stale test fixtures corrected
+between segments. Runtime source is unchanged across those fixture corrections. Results: 38
+typecheck tasks, 39 test tasks, 23 builds, emitted isolation, Compose/scope and unchanged lint
+baseline. The cold Linux migration image passes hardened runtime smoke at the exact 73-migration/
+93-relation boundary. [Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#observation-migration-package-alignment-2026-10-07)
+and [recovery verification](evidence/d3-native-resume-launch-packet-2026-10-07.md#combined-recovery-verification-checkpoint).
+Development web is restored (root 200; anonymous Resume 307). No new signed-in acceptance, cloud
+publication or deployment; D1/D3 remain In progress. Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 D3-064/D3-079 implements private original task address lookup with exact running
+task/image/override/interface checks and a final task/ledger recheck. Documents build, 113
+focused tests and compiled default-off isolation pass with simulated AWS/ledger. Dependency
+regression tests pass (142), but the current registry audit fails on five pre-existing dependency
+versions, including critical shell-quote. [Evidence](evidence/d3-native-resume-task-address-2026-10-07.md).
+DNS registration/cleanup, domain/TLS/ingress, managed composition and acceptance remain; the new
+reader alone grants no candidate authorization or DNS readiness. D1/D3 In progress, PC on.
+
+2026-10-07 D3-064/D3-079 adds the default-off original Route 53 DNS transport: immutable
+allocation A record, exact create/inspect/delete and separate propagation status, with no upsert
+or automatic write retry. Documents build, 78 focused cases, compiled DNS/address isolation and
+frozen installation pass. [Evidence](evidence/d3-native-resume-dns-transport-2026-10-07.md).
+Owning durable intent/write recovery, preparation/retirement wiring, hostname/TLS/ingress and
+managed acceptance remain. Prior dependency audit findings remain open. D1/D3 In progress, no
+cloud/frontend/CI/CD action, Docker/WSL not started and PC on.
+
+2026-10-07 D3-064/D3-079 implements the private checkpointed route lifecycle: original intent,
+one-attempt DNS creation, propagation, owner attachment and exact deletion. Existing durable SDK
+checkpoints avoid another SQL migration. Documents/Workflows build, 22 focused SDK tests and
+compiled dependency/default-off checks pass with simulated owner/AWS ports.
+[Evidence](evidence/d3-native-resume-route-lifecycle-2026-10-07.md). Private runtime integration,
+extended execution timeout, terminal reconciliation and managed/client acceptance remain.
+D1/D3 In progress, prior dependency findings open; no cloud/frontend/CI/CD changes, PC on.
+
+2026-10-07 D3-064/D3-079 connects private owner route admission and the original preparation
+execution to DNS lifecycle/attachment/cleanup, with all new switches default off. Local builds,
+86 contract/address/DNS tests, 24 workflow tests, 64 real-SQL cases and eight bundle checks pass.
+[Evidence](evidence/d3-native-resume-route-owner-2026-10-07.md). AWS ports were simulated;
+release configuration/timeout/IAM, terminal reconciliation, hostname/TLS and managed acceptance
+remain. D1/D3 In progress; dependency findings open, CI/CD deferred, PC on.
+
+2026-10-07 D3-064/D3-079 wires default-off route configuration through development/staging,
+extends durable execution to 2,400 seconds, and adds exact-zone DNS IAM plus an original-principal
+bootstrap ceiling. Sixteen preparation and eight bootstrap mocked Terraform cases pass; both
+environments validate. [Evidence](evidence/d3-native-resume-route-release-2026-10-07.md).
+Private control network reachability, hostname/TLS, terminal reconciliation and managed acceptance
+remain; no cloud action. D1/D3 In progress, CI/CD deferred and PC on.
+
+2026-10-07 D3-064/D3-079 adds original-role ECS and optional EC2 private API endpoints derived
+from preparation releases in both environments. Twelve mocked network/RPC/secret cases pass and
+both environments validate. [Evidence](evidence/d3-native-resume-private-network-2026-10-07.md).
+No live reachability or managed IAM claim; hostname/TLS, unresolved-route reconciliation and
+managed acceptance remain. D1/D3 In progress, CI/CD deferred, Docker/WSL off and PC on.
+
+2026-10-07 D3-064/D3-079 makes unresolved routed preparation fail visibly after checkpointing
+its scalar outcome and running cleanup. Default-off original-version terminal events feed the
+existing encrypted queue; added execution/delivery alarms and an operator recovery runbook.
+Build, 26 workflow tests, eight bundle checks, 19 mocked Terraform cases and both environment
+validations pass. [Evidence](evidence/d3-native-resume-terminal-signals-2026-10-07.md).
+Managed recovery drill and missed-event reconciliation remain; no activation. D1/D3 In progress.
+
+2026-10-07 D1-013/D3-064/D3-079 retains original resume execution acknowledgements atomically
+in Applications and adds bounded exact-version recovery reads. Forward migration 0011 advances
+the source migration/restore inventory to 74 migrations/93 relations. Applications/Workflows
+builds, 65 real SQL cases and 50 restore tests pass.
+[Evidence](evidence/d3-native-resume-execution-receipts-2026-10-07.md). No image publication or
+managed migration; AWS reconciliation and remaining launch acceptance stay open. D1/D3 In progress.
+
+2026-10-07 D3-064/D3-079 connects original execution receipts to metadata-only AWS inspection
+inside the existing private observer. Two receipts/page, explicit retained numeric versions,
+default-off configuration and scoped role/boundary/endpoint access are implemented. Builds,
+41 focused tests, 65 real SQL cases and 31 mocked Terraform cases pass; both environments validate.
+[Evidence](evidence/d3-native-resume-execution-inspection-2026-10-07.md). This is inspection, not
+recovery settlement or managed acceptance. D1/D3 In progress; no cloud action, PC on.
+
+2026-10-07 connected D1/D3 backend verification passes after correcting deletion replay's
+stale restore-manifest binding. All 38 typecheck/39 test/23 build tasks and remaining packaged
+checks pass; 207 restore-contract, 697 replay and 908 role checks pass. The frozen `0bfe741c`
+74-migration image passes hardened runtime smoke. [Evidence](evidence/d1-d3-connected-verification-2026-10-07.md)
+distinguishes the initial failure, corrected `dd61044a` run and unpublished image. D1/D3 remain
+In progress; managed/live acceptance and existing advisories remain open. Development web
+restored, Docker/WSL stopped, PC on; CI/CD deferred.
+
+2026-10-07 the complete six-artifact resume Lambda family builds twice identically from clean
+`baab1463`, including original execution inspection and routing. All 24 companion files pass
+source/ZIP/checksum/SBOM integrity checks. [Evidence](evidence/d1-d3-connected-verification-2026-10-07.md#consistent-six-artifact-resume-family).
+Artifacts remain local and unpublished; native task-image and managed acceptance remain open.
+D1/D3 stay In progress; CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 current native resume image from frozen `5b45fd12` passes production default-off
+refusal and the immutable-image smoke: 23 assertions, real PDF/DOCX and authenticated TLS reads,
+five-second accelerated native deadline, exit 137 with no OOM. [Evidence](evidence/d1-d3-connected-verification-2026-10-07.md#current-native-resume-image)
+distinguishes synthetic external ports from actual image behavior. Image remains unpublished;
+managed runtime/client/ATS and accountable acceptance remain open. D1/D3 In progress,
+Docker/WSL stopped, PC on; CI/CD deferred.
+
+2026-10-07 critical-path review reconciles D3-079 with the current artifacts and immutable-image
+proof, replacing obsolete remaining bootstrap/image claims. The resume release module exists at
+`infrastructure/terraform/modules/native-resume-preparation`; the cover-letter preparation
+activity, durable, starter and recovery builders exist in `backend/workflows/package.json`,
+but Terraform contains no corresponding native application-preparation runtime composition.
+Next backend batch is that connected default-off cover-letter release path, using the existing
+ports/artifacts and preserving migration, original-work recovery and private network boundaries.
+This is a source inventory finding, not a completed release or a reason to repeat resume builds.
+Managed configuration, client/ATS and accountable acceptance remain; D1/D3 stay In progress.
+
+2026-10-07 D3-017/D3-068–D3-071/D3-079 adds the standalone default-off native application
+preparation release module: activity, durable, SQS starter and separate terminal/scheduled
+recovery with numeric bindings and independent intake/recovery gates. Terraform validate and
+seven mocked scenarios pass; serverless policy validation passes. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md).
+Bootstrap/publisher/queue/network/environment integration and managed acceptance remain; no
+cloud action or runtime TypeScript change. D1/D3 In progress; Docker/WSL stopped, PC on.
+
+2026-10-07 native application preparation adds a guarded four-artifact/sixteen-object publisher
+family matching its runtime module. PowerShell 5/7 receipt/family guards pass. Actual bundles
+build at `e95e4eca`; all sixteen files pass independent integrity and repeated packaging checks.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#guarded-artifact-family).
+No publication or fresh audit; bootstrap/platform/environment integration and managed acceptance
+remain. D1/D3 In progress, Docker/WSL stopped, PC on; CI/CD deferred.
+
+2026-10-07 native preparation bootstrap is connected to the runtime module's exact original
+release boundary. Principal conditions isolate all five roles; optional deployment authority
+names only the approved boundaries/stacks. A combined resume/DNS plus preparation test exposed
+IAM policy size pressure, resolved with one principal-conditioned boundary per original release.
+All 12 bootstrap and seven runtime Terraform mock cases pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#bootstrap-composition).
+Queue/network/outbox/alarms/environment wiring and managed acceptance remain. No cloud change;
+D1/D3 In progress, Docker/WSL stopped and PC on.
+
+2026-10-07 native preparation platform/environment wiring now includes optional development
+and staging releases, encrypted retained queues, exact private service policies and nineteen
+failure/backlog alarms per original release. Three focused and twelve affected existing
+Terraform mock cases pass; both environments validate. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#platform-and-environment-composition).
+Original-release SQL claim scoping and disabled-intake drain need correction before activation;
+KMS private-DNS coexistence and managed launcher/task/route acceptance remain. No cloud action,
+CI/CD deferred, D1/D3 In progress; Docker/WSL stopped and PC on.
+
+2026-10-07 preparation recovery now filters retained original numeric releases before SQL
+leasing. A separate default-off drain switch retries bound work with intake disabled; the
+starter refuses unbound or unretained work under the owning lock. 53 PostgreSQL integration
+cases, 101 existing unit cases and eight Terraform mock scenarios pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#original-release-recovery-and-drain).
+AWS calls/secrets were simulated; managed launcher/task/route and acceptance remain. D1/D3
+In progress, no cloud action, CI/CD deferred; temporary SQL removed, Docker/WSL stopped, PC on.
+
+2026-10-07 preparation KMS private-DNS policy now preserves existing vault/export and
+candidate-deletion locator callers with exact role/key/purpose/action restrictions. A combined
+coexistence plan and six preparation/restore mock scenarios pass; both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#kms-private-dns-coexistence).
+No cloud action; packet keys and managed native task/owner/route composition remain. D1/D3
+In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 development/staging can separately provision retained packet envelope and HMAC
+fingerprint keys, default off, with exact output bindings, purpose/algorithm restrictions and
+Terraform destruction protection. Three key and four preparation/coexistence mock scenarios
+pass; both environments validate. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#retained-packet-key-provisioning).
+No keys provisioned or runtime activated. Native packet-owner/task/route composition and managed
+acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 preparation artifacts rebuilt at `14bffe94`, incorporating original-release recovery
+and intake-disabled drain. Dependency compilation, bundled refusal checks, five bundle-boundary
+checks and sixteen-file source/hash/SBOM verification pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#current-recovery-artifact-family).
+Artifacts remain unpublished; native task/launcher/owner/route composition and managed acceptance
+remain. D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 native cover-letter task/roles are composed in optional development/staging release
+maps: exact owner RPC, pinned provider/TLS versions, immutable image and no content persistence.
+Eight mock scenarios and actual launcher-validator compatibility pass; both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-cover-letter-task-composition).
+No cloud activation. Launcher/owner/event Lambdas, network/secret policies, route and managed
+acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 native launcher/owner/task-event Lambdas now have optional development/staging
+composition with separated roles, original task/role/version bindings and independent recovery.
+Six mock scenarios and runtime configuration validation pass; both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-launcher-owner-and-task-event-composition).
+Bootstrap/publisher/platform event/network integration and managed acceptance remain. No cloud
+action; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+2026-10-07 native material control bootstrap and guarded three-artifact publisher family are
+connected. Sixteen bootstrap and six runtime mock cases pass; PowerShell 5/7 family/receipt
+guards pass. Publisher/terraform key layout mismatch was corrected. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#material-control-bootstrap-and-publisher).
+No cloud publication or activation; actual family packaging, platform event/network integration
+and managed acceptance remain. D1/D3 In progress, Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 actual native material control family builds at `483498f2`: all three artifacts,
+twelve release companions, bundled refusal checks and seventeen emitted capability tests pass.
+Source/hash/SBOM integrity verified; artifacts remain unpublished. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#built-native-material-control-family).
+Platform event/network and managed image/read-route acceptance remain. D1/D3 In progress,
+CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 native material task-event delivery now targets the original numeric handler, with
+separate delivery/execution retries, encrypted fourteen-day failure retention and ten alarms.
+Six control and three platform mock scenarios pass; both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-task-event-delivery).
+Private-network/image/read-route composition and managed acceptance remain. D1/D3 In progress;
+no cloud activation, CI/CD deferred, PC on. Implementation proceeds in connected batches,
+followed by functional checks, fixes and focused regression tests per the owner's direction.
+
+
+2026-10-07 native material private network composition now shares ECS, Secrets Manager and Lambda
+endpoints with retained resume/preparation releases. Exact original role/resource/version grants
+and SQL separation are implemented. Seven new scenarios plus fifteen affected existing scenarios
+pass; development/staging validate locally. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-private-network).
+Managed reachability, image/provider/read-route acceptance remain. D1/D3 In progress; no cloud
+activation, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 native material address discovery binds the current cover-letter receipt and original
+launch to signed task/ENI metadata, sharing resume network validation. Original work, admission
+and task identity are rechecked after observation. Public task IP configuration is explicitly
+optional/default-off. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-address-discovery).
+Route-owner/DNS lifecycle and managed composition remain; D1/D3 In progress. No cloud action,
+CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 native material route ownership and durable lifecycle are implemented locally: exact
+original binding/reference admission, separate material checkpoints and shared resume DNS recovery.
+Seventeen owner and thirty-two lifecycle scenarios pass. [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-material-route-owner-and-lifecycle).
+Private handler/dispatcher, attachment/cloud composition and managed acceptance remain; D1/D3
+In progress. No cloud action, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 the existing numeric material control now handles separate private route capture,
+admission and retirement envelopes; launch/recovery compatibility is preserved. Optional
+route configuration and original-launcher EC2 endpoint access are wired in both environments.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#private-material-route-control).
+Durable dispatch/attachment and managed acceptance remain. D1/D3 In progress; no cloud action,
+CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 route-capable control family rebuilt at `c71cdaad`: three artifacts/twelve companions
+pass original bundled refusal and independent source/hash/SBOM integrity checks.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-route-capable-control-family).
+Unpublished; durable route dispatch/attachment and managed acceptance remain. D1/D3 In progress;
+CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 connected original preparation staging, propagation-gated attachment and DNS cleanup
+in the existing durable execution. Real PostgreSQL passes 25 cases; focused local SDK/activity
+checks pass 104 cases and twelve emitted capability checks pass.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#connected-preparation-staging-and-attachment).
+Cloud permissions/configuration, artifact rebuild and managed acceptance remain; D1/D3 In progress.
+Owner directs connected implementation batches followed by exercise, fixes and focused tests;
+hosted CI/CD stays deferred until production launch. No cloud action; PC stays on.
+
+Batch-wide local typecheck/test/build passed (38/39/23 tasks); full verifier stopped on the
+existing development server's port-3000 collision with sign-in fixtures. Server preserved.
+Docker/WSL stopped; PC remains on. See the linked staging/attachment evidence for limits.
+
+
+2026-10-07 preparation release now wires routed staging/attachment flags, scoped durable DNS
+permissions, a full cleanup timeout and retained numeric activity access. All 22 affected
+Terraform scenarios pass and both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#preparation-routing-release-composition).
+No cloud action or activation; artifact rebuilding and managed acceptance remain. D1/D3 In progress;
+CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 rebuilt the routed preparation family from `c194a979`: four artifacts/sixteen companions
+pass bundled refusal and independent source/hash/SBOM integrity checks. The complete affected
+Terraform set passes 34 scenarios.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-routed-preparation-family).
+Artifacts unpublished; managed original image/provider/TLS/network and acceptance remain.
+D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 connected PostgreSQL verification passes all 25 cases, including durable staging,
+propagation-gated original attachment, observed retirement and exact DNS removal with synthetic
+AWS transport. Workflow typecheck passes. Corrected stale D3-079/D3-068–071 implementation gaps;
+managed acceptance remains open.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#connected-postgresql-route-lifecycle).
+No runtime-source/cloud/frontend changes. D1/D3 In progress; CI/CD deferred, Docker/WSL stopped,
+PC on. Existing accepted D1 sign-in/search/Profile/save-reload checks are not reopened.
+
+
+2026-10-07 D3-079 closes local native task HTTPS/image reachability gaps: separate opt-in task
+read groups and exact native image access through existing ECR private endpoints. All 22 focused
+network cases pass; development/staging validate. AWS resources are mocked; no live deployment
+or candidate-read acceptance is claimed. Actual managed bindings and acceptance remain. D1/D3
+stay In progress; CI/CD deferred, Docker/WSL stopped and PC on.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-https-and-image-reachability).
+
+
+2026-10-07 D3-079 connects the existing candidate Gateway to native location/authorization,
+packet encryption and HMAC permissions through optional default-off release configuration.
+The missing environment/IAM/private-KMS wiring is implemented locally; 23 Terraform checks and
+both environment validations pass. Actual key/host binding and managed candidate-flow acceptance
+remain before activation. D1/D3 remain In progress; CI/CD deferred and PC on.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#gateway-native-material-release-wiring).
+
+
+2026-10-07 D3-077/D3-079 connects the existing protected-packet export reader to its exact
+retained key and private KMS path, independent of generation releases and default off. Fourteen
+relevant Terraform cases and both environment validations pass. Managed key/release and candidate
+rights acceptance remain; no phase completion or activation. Docker/WSL remain stopped, PC on.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#protected-packet-export-release-wiring).
+
+
+2026-10-07 D3-077/D3-079 qualifies current Gateway and candidate-rights activity/durable
+artifacts at clean `063d4ea9`: three ZIPs/twelve publication companions independently verified,
+with actual emitted import/handler and refusal smoke. Artifacts remain unpublished; one build
+pass does not prove live API/export behavior, reproducibility or vulnerability clearance.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#current-gateway-and-candidate-rights-artifacts).
+D1/D3 remain In progress; managed/client acceptance remains, CI/CD deferred and PC on.
+
+
+2026-10-07 refreshes release dependency evidence at `9ee6f2a8`: the production registry report
+contains 13 advisory records, all on frontend/mobile or frontend/admin paths, including one
+critical mobile dependency. The centralized repository audit exits 1; existing image-size patch
+validation remains distinct from raw registry findings. No dependency/exemption changes were made
+in this backend-only branch. D1/D3 remain In progress and no release security clearance is claimed.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#current-dependency-release-check).
+
+
+2026-10-07 D1-013/D3-079 implements default-off scheduled original resume execution observation,
+with leased/token-fenced SQL claims and retained positive failures before scalar queue delivery.
+It preserves original published receipts and does not replay or perform cleanup. The migration
+package now contains 75 migrations/93 relations; previous image/artifacts require refresh.
+Focused workflow, Terraform, restore and package checks pass; final SQL/repository checks and
+clean-source packaging are in progress. Managed recovery drill/activation remain pending.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).
+
+
+2026-10-07 D1-013/D3-079 completes local scheduled execution-reconciliation verification at
+runtime `7cef5f10`: 66 fresh PostgreSQL cases, 39 workspace test tasks, 38 typecheck tasks,
+23 builds, 25 relevant Terraform cases and both environment validations pass. The refreshed
+observer artifact passes emitted refusal and independent integrity checks. The full verifier
+still encounters the existing port-3000 session-fixture conflict; the development server remains
+running. Migration image refresh, publication and managed recovery acceptance remain. D1/D3 stay
+In progress; Docker/WSL stopped, PC on, CI/CD deferred.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).
+
+
+2026-10-07 D1-013/D3-079 refreshes the migration image from frozen `437794fc` and verifies the
+actual hardened image against fresh and replayed PostgreSQL migrations: all seven owners and
+75 migrations/93 relations pass. Corrected the existing logical recovery harness's stale 66/88
+pins; its real dump/restore, all 93 exact row sets and restored behavior pass. Both disposable
+databases are removed; Docker/WSL stopped, PC on. Image remains unpublished; scan/disposition,
+managed migration/PITR and acceptance remain. D1/D3 stay In progress, CI/CD deferred.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).
+
+2026-10-07 D3 native cover-letter intake is wired in both Gateway entry points, default-off,
+using leased owner context reads and the existing atomic preparation/outbox. Local evidence:
+28 PostgreSQL, 293 AI SDK, 396 Applications and nine Terraform tests pass; Gateway builds and
+passes typecheck. [Evidence](evidence/d3-native-cover-letter-intake-2026-10-07.md).
+Live native availability at approval and managed/client/ATS acceptance remain unfinished.
+D1/D3 remain In progress; CI/CD deferred and PC on.
+
+2026-10-07 native availability is composed into Gateway approval/submission bindings through
+bodyless authenticated HTTPS HEAD. Local Gateway regressions and 21 Terraform cases pass;
+42 Linux process/transport cases pass. [Evidence](evidence/d3-native-material-availability-2026-10-07.md).
+The independent switch remains off. Combined database/native approval, cancellation/terminal
+disposal, refreshed images/artifacts and managed/client/ATS acceptance remain. Full verification
+stopped at the existing port-3000 candidate-rights fixture conflict. D1/D3 remain In progress;
+no deployment or CI/CD activation, PC on.
+
+2026-10-07 owner directs implementation in connected launch batches, followed by exercising the
+working flow, fixing failures and adding focused regressions; optional polish and CI/CD remain
+deferred. Shared native application disposal is implemented locally and remains uncommitted and
+default-off pending Gateway/infrastructure checks. Fresh PostgreSQL checks pass: 42 cover-letter
+registry cases and 68 resume ledger cases. These use synthetic task responses, not managed ECS.
+The batch fixes an existing candidate-export omission and updates the launch fixture to include
+required container init. No deployment or phase completion is claimed. Combined native approval,
+Gateway/Terraform checks and release acceptance remain. PC stays on.
+
+2026-10-07 native terminal-disposal local checks pass: 110 PostgreSQL cases, 24 Gateway,
+16 Documents disposal, 32 Applications, 50 migration/restore tests, 19 mocked Terraform plans
+and all 38 workspace typecheck tasks. The runtime remains default-off; packaging checks and
+combined native approval/managed acceptance remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md).
+D1/D3 remain In progress, CI/CD deferred and PC on.
+
+2026-10-07 the combined local native cover-letter/PostgreSQL approval check passes against
+runtime `5fe0a92e`: real Linux session/TLS HEAD, current SQL packet authorization and persisted
+approval with original expiry. Credentials are test-signed; provider/KMS/catalog and file render
+responses are synthetic, and the authorization callback is in process. This does not complete
+the managed preparation workflow or tailored-resume acceptance. [Evidence](evidence/d3-native-postgresql-approval-2026-10-07.md).
+D1/D3 remain In progress; no deployment, CI/CD deferred, Docker/WSL stopped, PC on.
+
+2026-10-07 extends the combined PostgreSQL/native approval runner to tailored resumes with real
+PDF/DOCX rendering on synthetic input. Both material types pass credential-bound approval,
+original expiry and refusal after replacing the SQL packet. Managed generation/HTTP callback,
+release artifacts and acceptance remain. [Evidence](evidence/d3-native-postgresql-approval-2026-10-07.md#tailored-resume-and-packet-replacement).
+D1/D3 remain In progress; no deployment or CI/CD activation.
+
+2026-10-07 clean `18698f7f` produces a locally verified Gateway artifact and current migration
+image. The actual hardened image passes fresh and replayed seven-owner migrations and packaged
+read-only verification: 76 migrations/93 relations. No cloud publication, vulnerability clearance
+or new logical-recovery claim. [Image evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-image-execution),
+[Gateway evidence](evidence/d3-native-application-disposal-2026-10-07.md#refreshed-gateway-artifact).
+D1/D3 remain In progress; disposable database removed, Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 both native material images built from frozen `18698f7f` pass actual-image checks:
+five cover-letter scenarios and 24 resume assertions, including real rendering and authenticated
+bodyless HEAD with the original reference. All 42 shared Linux process/transport cases pass.
+[Evidence](evidence/d3-native-material-availability-2026-10-07.md#refreshed-native-images).
+Logout admission withdrawal/original-task retirement and its web hook are explicitly unfinished;
+the hook is outside the current backend-only scope pending the owner response. Managed/client/ATS
+acceptance remains. D1/D3 stay In progress, CI/CD deferred, PC on; no publication or activation.
+
+2026-10-07 the current 76-migration logical recovery drill passes: actual pg_dump/pg_restore,
+seven owners, all 93 exact relation row sets and restored behavior. A new generated case proves
+never-launched abandoned native work remains terminal after restore, preserves export metadata,
+and cannot fabricate task retirement or reissue a launch. All 14 builds and 15 container-boundary
+checks pass; source rows are unchanged and fixture cleanup succeeds.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-logical-recovery).
+No production source, migration, deployment or phase completion change. Logout integration and
+managed/accountable acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped, PC on.
+
+2026-10-08 fixes Gateway terminal cleanup composition: disabling native reads no longer drops
+an independently enabled disposer. Without a ready packet, cleanup errors now remain visible;
+replaying cancellation retries cleanup without another application revision. Gateway/dependency
+builds, seven real PostgreSQL integration cases and 24 focused Gateway checks pass. Remote cleanup
+responses are synthetic. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#cleanup-independent-of-read-availability-2026-10-08).
+The previous Gateway artifact predates this fix and needs the release packaging refresh. Logout
+integration and managed acceptance remain; D1/D3 In progress, CI/CD deferred and PC on.
+
+2026-10-08 reconciles D3's stale exit-criteria summary against current native intake/image,
+PostgreSQL approval, terminal cleanup, recovery and protected-packet evidence. Restores the omitted
+material-lifetime criterion and records all 13 criteria in order. Vault/preparation implementation
+and accepted manual-flow checks are no longer presented as missing engineering. Logout integration,
+current connected journey, release packaging and external acceptance remain open. No runtime or
+acceptance status changes; D1/D3 remain In progress and CI/CD deferred.
+
+2026-10-08 adds original Applications preparation admission to native cover-letter allocation
+and first launch claim. Failed/stale/expired preparation cannot gain a new launch merely because
+the application remains in review; existing launch recovery is separate. All 28 Applications SQL,
+27 connected launcher SQL and 51 focused runtime cases pass, with simulated external transports.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#original-preparation-launch-admission-2026-10-08).
+This is a logout prerequisite, not completed logout: owner-wide withdrawal, resume handling,
+retirement and web hookup remain. D1/D3 In progress; no deployment, CI/CD deferred, PC on.
+
+
+2026-10-08 adds a private, default-off owner withdrawal cutoff: older cover-letter preparation,
+resume queue delivery and native material reads refuse without changing application/submission
+state. Replay and candidate deletion are covered. Applications 0013 advances source inventory to
+77 migrations/94 relations; prior packaged images remain historical. 398 unit, 40 real SQL, 50
+manifest, 189 migration-smoke and 697 replay checks pass, with build/typecheck and OCI guards.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#owner-withdrawal-admission-cutoff-2026-10-08).
+Owner cleanup orchestration, positive task retirement and the web hook remain unfinished.
+D1/D3 In progress; no deployment, CI/CD deferred, PC on.
+
+
+2026-10-08 connects private owner withdrawal to bounded native task cleanup. Shared admission locking,
+exact microsecond cutoff checks and paginated retirement preserve newer explicit generations and keep
+unknown original tasks pending. 110 real PostgreSQL, 398 Applications unit, 16 disposal and 12 Gateway
+checks pass with builds/typecheck; AWS/provider transports are simulated.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#bounded-owner-cleanup-orchestration-2026-10-08).
+Authenticated initiation, durable continuation, web hookup and managed acceptance remain. No new
+migration/public route or deployment; D1/D3 In progress, CI/CD deferred and PC on.
+
+
+2026-10-08 connects authenticated owner withdrawal/status to an atomic durable cleanup queue and
+private numeric worker entry. Replay keeps the original cutoff; leased pagination survives crashes
+and owner quarantine without changing submission state. Applications 0014 advances source inventory
+to 78 migrations/95 relations. 105 contract, 138 Gateway, 33 real PostgreSQL, 50 manifest, 191 migration
+smoke and 697 replay checks pass, plus builds and all 38 workspace typecheck tasks.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#authenticated-withdrawal-and-durable-continuation-2026-10-08).
+Worker packaging/schedule/IAM, web hookup and managed/accountable acceptance remain; D1/D3 In progress.
+No deployment; CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-08 refreshes the local 78-migration image from clean `0d2b3e42`. Actual hardened-image
+smoke, fresh/replayed seven-owner migrations and packaged 95-relation verification pass. The
+maintained logical recovery drill passes all 14 builds, 15 container guards, exact 95-row-set
+comparison and restored behavior, including three populated cleanup records, original cutoffs,
+expired-lease recovery and stale-claim rejection. Source rows stay unchanged; fixtures removed.
+[Image and recovery evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-78-migration-logical-recovery).
+Docker/WSL stopped, PC on. No publication/deployment or vulnerability waiver; D1/D3 In progress.
+
+
+2026-10-08 owner authorizes recommended work without routine approval prompts. Targeted Next,
+sharp, shell-quote and source-map-js upgrades remove nine raw production registry findings.
+All five selected client/dependency builds, 927 sequential client tests and 142 dependency-security
+checks pass locally. Four raw high findings remain (two image-size records locally remediated,
+node-forge and braces); the central audit still fails without exceptions. Browser control is
+unavailable; no live UI/deployment claim and no repeat request for accepted manual checks.
+[Dependency fix evidence](evidence/d3-native-application-disposal-2026-10-07.md#released-dependency-fixes-2026-10-08).
+D1/D3 remain In progress; CI/CD deferred and PC on.
+
+
+2026-10-08 backports the upstream-proposed node-forge nested DigestAlgorithm check through a
+hash-pinned pnpm patch. Real RSA regressions reproduce 24 malformed acceptances before the fix;
+all 48 checks pass after installation. Frozen install, 190 dependency-security checks, three mobile
+tests and mobile build pass. This covers the Expo Node entry, not prebuilt browser bundles.
+[Backport evidence](evidence/d3-native-application-disposal-2026-10-07.md#node-forge-node-runtime-backport-2026-10-08).
+Audit policy is unchanged; braces and installed-tree audit integration remain. D1/D3 In progress.
+
+
+2026-10-08 fixes braces recursion and integrates exact node-forge/braces installed-source checks
+into the release audit. All 285 dependency-security checks, three mobile tests, mobile build and
+frozen install pass. The complete-lockfile central audit passes with four verified local source
+remediations across 20 mobile build paths; no risk exceptions or weakened severity policy.
+[Audit and regression evidence](evidence/d3-native-application-disposal-2026-10-07.md#braces-and-verified-release-audit-2026-10-08).
+The local dependency-audit blocker is resolved. Native managed bindings/release/acceptance remain;
+D1/D3 In progress, CI/CD deferred and PC on. No deployment or repeated manual UI request.
+
+
+2026-10-08 qualifies all 14 native Lambda artifacts at clean ca6527cf after dependency remediation.
+Two builds produce 56 identical companion files; actual publisher validation and independent ZIP,
+source, manifest and SBOM verification pass. Development account identity is verified; both native
+image repositories remain empty. This is local qualification, not merged-main publication or runtime
+activation. [Release evidence](evidence/d3-native-application-disposal-2026-10-07.md#current-native-lambda-release-qualification-2026-10-08).
+Hostname/DNS, pinned TLS/provider and numeric runtime bindings, managed release and acceptance remain.
+D1/D3 In progress; CI/CD deferred, Docker/WSL stopped, PC on.
+
+
+2026-10-08 implements the default-off web sign-out withdrawal hook. It submits a bounded,
+server-token owner cleanup request before SDK logout, rejects cross-site requests, and reports
+requested versus unconfirmed cleanup without claiming deletion. It never refreshes during logout.
+All 781 web tests, 35 focused checks, production build/typecheck and isolated Next HTTP notice
+rendering pass. Auth/API tests are simulated; browser/live managed acceptance remains.
+[Sign-out evidence](evidence/d3-native-application-disposal-2026-10-07.md#web-sign-out-withdrawal-hookup-2026-10-08).
+The implementation scope question is resolved by the owner's instruction to proceed with
+recommendations. No runtime activation or repeat of accepted human checks. D1/D3 In progress.
+
+
+2026-10-08 full repository verification passes at implementation e71aedc6: 38 typecheck tasks,
+39 test tasks, 23 builds and all operational/security/bundle/Compose/scope gates. This includes
+781 web tests and 285 dependency-security regressions; database integration cases are explicitly
+skipped in this run. Existing lint remains 15 warnings/58 informational notes, zero errors.
+[Combined verification evidence](evidence/d3-native-application-disposal-2026-10-07.md#combined-repository-verification-2026-10-08).
+Corrected stale D3 summaries: the default-off web sign-out hook is implemented; managed acceptance
+remains. No publication/activation or phase completion. D1/D3 In progress; CI/CD deferred,
+Docker/WSL stopped and PC on.
+
+
+2026-10-08 provisions the dedicated development DNS zone materials.dev.applydash.ai after the
+owner supplied the Cloudflare-managed domain. Exact saved plan creates one zone only; development
+validation and postapply zero-drift plan pass, platform state 405 -> 406. Cloudflare delegation
+records are ready for the owner; no DNS write connection is available here. Wildcard TLS and native
+runtime release/acceptance remain. [DNS evidence](evidence/d3-native-application-disposal-2026-10-07.md#development-download-dns-2026-10-08).
+No application activation, phase completion or CI/CD work; D1/D3 In progress, PC on.
+
+
+2026-10-08 Cloudflare delegation is publicly verified and both staging/trusted Let's Encrypt
+DNS challenges pass. The development wildcard certificate is stored in KMS-encrypted Secrets
+Manager; trusted TLS handshake, exact version readback and actual native TLS loader pass.
+[DNS/TLS evidence](evidence/d3-native-application-disposal-2026-10-07.md#delegation-and-trusted-development-tls-2026-10-08).
+Expiry is 2027-01-06; managed renewal/monitoring and pinned-version rollout remain. Native runtime
+bindings/provider and managed journey remain unfinished. No runtime activation; D1/D3 In progress,
+Docker/WSL stopped and PC on.
+
+
+2026-10-08 imports native TLS and ACME account secret metadata into development Terraform, with
+KMS binding, destruction protection and 30-day recovery. Exact reviewed plan changes only the two
+imported metadata resources; existing TLS version remains current and secret values stay outside
+state. Postapply zero drift passes, state 406 -> 407.
+[TLS metadata evidence](evidence/d3-native-application-disposal-2026-10-07.md#tls-secret-metadata-ownership-2026-10-08).
+Managed renewal and native runtime release/journey remain. No content route activation or phase
+completion; D1/D3 In progress, Docker/WSL stopped and PC on.
+
+
+2026-10-08 adopts main's mandatory prelaunch AWS shutdown rule and fixes candidate-rights quiescence
+so storage is retained while maintenance follows the global runtime gate. All 54 focused Terraform
+cases pass. Reviewed development shutdown apply removes traffic, active triggers and both NATs;
+zero drift passes, state 407 -> 412. RDS is stopping, seven interface endpoints remain, and automatic
+seven-day RDS restart is unresolved. Staging has no SSO token. Full shutdown is explicitly incomplete;
+no data deletion or zero-cost claim. [Shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#prelaunch-development-quiescence-2026-10-08).
+D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-08 removes all seven development interface endpoints independently of retained data.
+All 57 focused Terraform tests, exact seven-delete plan review and postapply zero drift pass;
+state 412 -> 415. RDS is confirmed stopped but will automatically restart October 15; durable
+shutdown remains unfinished. Staging SSO login succeeds but role credentials are denied.
+[Endpoint shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#independent-endpoint-shutdown-2026-10-08).
+Development has zero active event rules/mappings, NATs and interface endpoints. Retained storage,
+security and DNS still incur charges. D1/D3 In progress, Docker/WSL stopped and PC on.
+
+
+2026-10-08 opens [draft release PR #568](https://github.com/Vrixic/project-ai-job-apply/pull/568)
+for the connected native preparation/cleanup implementation and supporting infrastructure/security
+work. GitHub reports mergeable; the PR remains draft and no merge/publication/activation occurred.
+Application source, scripts, packages, dependency patches and lockfile are unchanged from the full
+verification at e71aedc6; subsequent infrastructure is covered by 57 focused cases and current
+serverless policy validation. Patch-file whitespace is intentional unified-diff context and was
+preserved with its pinned hashes; an unrelated trailing blank line in a Terraform test was removed.
+Hosted CI/CD remains owner-deferred. Development RDS is still stopped with the October 15 automatic
+restart unresolved; staging role credentials remain denied. D1/D3 In progress; PC on.

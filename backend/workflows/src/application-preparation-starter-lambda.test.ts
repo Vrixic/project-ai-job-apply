@@ -22,6 +22,7 @@ const batch = () => {
 const unavailable = { batchItemFailures: [{ itemIdentifier: "synthetic-1" }] };
 const environment = () => ({
   APPLICATION_PREPARATION_STARTER_ENABLED: "true",
+  APPLICATION_PREPARATION_INTAKE_ENABLED: "true",
   AWS_REGION: "us-east-2",
   PLATFORM_AWS_ACCOUNT_ID: "123456789012",
   AWS_LAMBDA_FUNCTION_NAME: "preparation-starter",

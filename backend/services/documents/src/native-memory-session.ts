@@ -1,9 +1,9 @@
-import { isMainThread } from "node:worker_threads";
 import { ModelGateway, type ModelProvider } from "@ai-job-apply/ai-sdk";
 import type {
   CoverLetterEvidenceSource,
   CoverLetterPreparationIdentity,
 } from "./cover-letter-generation.js";
+import { claimNativeMaterialProcess } from "./native-material-process.js";
 import { OriginalCoverLetterGenerationActor } from "./original-cover-letter-generation.js";
 import { TemporaryCoverLetterService } from "./temporary-cover-letter.js";
 import {
@@ -22,6 +22,7 @@ export interface KernelMemoryDeadline {
 }
 
 export interface NativeMemorySessionOptions {
+  documentVersion: number;
   identity: CoverLetterPreparationIdentity;
   source: CoverLetterEvidenceSource;
   provider: ModelProvider;
@@ -36,19 +37,19 @@ export interface NativeMemorySessionOptions {
   render?: ConstructorParameters<typeof TemporaryCoverLetterService>[5];
 }
 
-let allocated = false;
-
 /** One native allocation and one immutable candidate/application/generation. No auth bypass,
  * issuer, database/object capability, listener, durable content or task-stop certificate.
  * Private authenticated transport/launcher must bind this allocation before activation. */
 export function createNativeMemorySession(options: NativeMemorySessionOptions) {
   const enabled = options.enabled ?? (() => false);
   if (!enabled()) throw Error("NativeMemorySessionUnavailable");
-  if (process.platform !== "linux" || !isMainThread || allocated)
-    throw Error("NativeMemorySessionUnavailable");
   const lifetime = options.maximumLifetimeMs ?? GENERATED_MATERIAL_LIFETIME_MS;
+  const documentVersion = options.documentVersion;
   const bootBudget = options.bootBudgetMs ?? 50_000;
   if (
+    !Number.isSafeInteger(documentVersion) ||
+    documentVersion < 1 ||
+    documentVersion > 2_147_483_647 ||
     !Number.isSafeInteger(lifetime) ||
     lifetime < 1 ||
     lifetime > GENERATED_MATERIAL_LIFETIME_MS ||
@@ -57,9 +58,9 @@ export function createNativeMemorySession(options: NativeMemorySessionOptions) {
     bootBudget > 50_000
   )
     throw Error("NativeMemorySessionUnavailable");
+  claimNativeMaterialProcess();
   // The boot deadline is already armed by native module initialization. This can only shorten it.
   options.kernel.shortenBoot(bootBudget);
-  allocated = true;
   const identity = structuredClone(options.identity);
   const memory = new TemporaryMaterialStore();
   const temporary = new TemporaryCoverLetterService(
@@ -81,6 +82,8 @@ export function createNativeMemorySession(options: NativeMemorySessionOptions) {
     options.work,
     temporary,
     enabled,
+    () => new Date(),
+    documentVersion,
   );
   const reader = temporary.reader();
   const scoped = (owner: string, application: string) => {

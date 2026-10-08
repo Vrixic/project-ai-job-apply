@@ -1081,7 +1081,7 @@ variable "profile_readiness_retention_days" {
 }
 
 variable "candidate_rights_enabled" {
-  description = "Activate the candidate data-export and account-deletion runtime after accountable policy review and secret population."
+  description = "Provision candidate data-export/account-deletion resources after policy review; retain them while serverless_runtime_enabled is false."
   type        = bool
   default     = false
 
@@ -1091,8 +1091,7 @@ variable "candidate_rights_enabled" {
       var.deploy_document_intake &&
       var.deploy_serverless_outbox &&
       var.deploy_profile_readiness_durable &&
-      var.serverless_runtime_enabled &&
-      var.private_application_networking &&
+      (!var.serverless_runtime_enabled || var.private_application_networking) &&
       var.candidate_rights_auth0_secret_provisioned &&
       var.candidate_rights_id_token_audience != "" &&
       var.candidate_rights_policy_version != "" &&
@@ -1110,7 +1109,7 @@ variable "candidate_rights_enabled" {
       var.candidate_rights_recent_auth_max_age_seconds != null &&
       var.candidate_rights_export_lifecycle_days != null
     )
-    error_message = "Candidate rights require the active gateway/document/outbox/durable runtime, private NAT egress, an exact accountable policy inventory, and explicit timing and lifecycle values."
+    error_message = "Candidate rights require deployed gateway/document/outbox/durable resources, private NAT egress when the runtime is active, an exact accountable policy inventory, and explicit timing/lifecycle values. Retain storage while quiesced."
   }
 }
 

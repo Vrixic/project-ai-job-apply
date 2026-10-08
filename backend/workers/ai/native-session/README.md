@@ -1,7 +1,23 @@
 # Native temporary material process
 
+Latest local checkpoint: the separate [native image](../native-material/README.md) now supplies the
+executable entrypoint and real provider/pinned-secret/TLS ports. All 30 Linux scenarios and full
+source verification pass. Historical checkpoints below describe their earlier boundaries; managed
+publication, IAM/routing/provider/client approval remains open. See
+[image evidence](../../../../docs/product/delivery/evidence/d3-native-image-runtime-2026-10-06.md).
+
 Source/local evidence only; no production launcher, bound endpoint, cloud deployment or activation.
 See [proposed ADR-040](../../../../docs/adr/040-native-temporary-material-processes.md).
+
+Documents' private `./native-cover-letter-runtime` now connects a fixed admitted allocation,
+original scalar controls, memory-only generation, actual in-process PDF/DOCX rendering and the
+authenticated HTTPS server. The trusted launcher still owns binding the listener and supplying
+approved source/admission/provider/TLS adapters. It returns immutable non-content metadata and a
+termination request, with no raw session reader or death acknowledgement. Defaults remain off.
+The Linux verifier includes connected real-file reads and actual kernel retirement. Its existing
+compiler image lacks optional raster canvas support: only two exact source-only startup warnings
+are accepted; unknown or document-derived diagnostics fail. Per-document PDF verbosity is zero.
+This is not the reviewed production native image or managed routing/adapter conformance.
 
 `kernel-deadline.c` is a Linux Node-API module for a dedicated material-bearing process. Load it
 only after private launch admission and the default-off switch have passed. Loading it immediately
@@ -63,3 +79,41 @@ one persisted claim/RunTask. Positive original task observation can capture lost
 without reissuing RunTask or settling work. Both controls default off; managed image/entrypoint,
 authenticated issuer/private adapters, durable task-event routing and actual task conformance
 remain required. See [source evidence](../../../../docs/product/delivery/evidence/d3-native-task-launch-2026-10-05.md).
+
+
+Documents' private `./native-material-controls` supplies frozen work/completion ports bound to
+one trusted original task, owner/application/generation/work/consent. It signs fixed numeric
+Lambda calls, admits one claim and settlement/completion attempt, and retains active transport
+until actual settlement despite timeout/abort. The Linux `controls` fixture connects these ports
+and existing private handlers to the actual native actor/session and observes kernel SIGKILL.
+Ports still require reviewed IAM/per-task admission and production owner/provider/bootstrap;
+local bindings or process death certify neither remote settlement nor all-copy purge. See
+[local evidence](../../../../docs/product/delivery/evidence/d3-native-material-controls-2026-10-06.md).
+# Native task startup checkpoint — 2026-10-06
+
+The maintained Linux fixture now connects actual task bootstrap metadata/signed approval to
+the kernel/content runtime, with delayed binding, revocation and pre-content refusal coverage.
+Transport/provider/owning replies remain synthetic. See [startup evidence](../../../../docs/product/delivery/evidence/d3-native-task-bootstrap-2026-10-06.md).
+
+## Native deterministic resume source
+
+The default-off Documents `./native-resume-session` entrypoint uses the same one-process admission
+as cover letters, original deterministic tailoring, bounded encoded preview/render inputs and
+actual PDF/DOCX verification. It binds original completion before async rendering/private control,
+returns only fixed scalar generation metadata, and serves held original outputs through active
+leases. No source re-read or generation occurs during a file read. Explicit release, request/lease
+abort and native process expiry clear platform-held output. Source/owner/completion adapters are
+required trusted ports; resume-owning SQL/RPC/packet metadata, authenticated transport/bootstrap,
+image/client/managed acceptance remain. No new live path or persistent generated artifact exists.
+See [resume source evidence](../../../../docs/product/delivery/evidence/d3-native-resume-memory-session-2026-10-06.md).
+
+## PostgreSQL approval composition
+
+`node scripts/verify-native-postgresql-approval.mjs --enable-local-approval-test --image <local-sha256>
+--database-container <exact-id>` runs separate synthetic native cover-letter and tailored-resume SQL approval checks.
+It requires a caller-owned disposable PostgreSQL container labeled `codex.task=native-approval`,
+network `none`, database `native_approval`, user `synthetic`, and password `synthetic_local_only`.
+Use tmpfs data and no published ports. The test container shares only this isolated network
+namespace and uses production owner migrations. The caller must remove its disposable database
+and stop Docker/WSL afterward. The original kernel suite remains separate and unchanged.
+See [scope and local evidence](../../../../docs/product/delivery/evidence/d3-native-postgresql-approval-2026-10-07.md).

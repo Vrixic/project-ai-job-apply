@@ -110,7 +110,7 @@ describeClient("Jobs queued contribution intake persistence (%s client)", (mode)
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(result.stdout.trim()).toBe(
-      "Jobs migrations through 0024_contribution_appeal_restoration applied and verified.",
+      "Jobs migrations through 0027_candidate_report_export_status applied and verified.",
     );
     await store.ping();
   });

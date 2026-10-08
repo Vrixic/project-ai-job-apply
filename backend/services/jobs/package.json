@@ -4,9 +4,17 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-resume-admission": {
+      "types": "./dist/src/native-resume-admission.d.ts",
+      "default": "./dist/src/native-resume-admission.js"
+    },
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
+    },
+    "./retention-runtime": {
+      "types": "./dist/src/retention-runtime.d.ts",
+      "default": "./dist/src/retention-runtime.js"
     }
   },
   "scripts": {

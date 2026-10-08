@@ -51,6 +51,46 @@ describe("Applications OpenAPI contract", () => {
     expect(request({ expectedRevision: 1, temporaryMaterials: [reference] })).toBe(false);
   });
 
+  it("accepts legacy and native resume responses while refusing private metadata", () => {
+    const temporaryMaterial = {
+      schemaVersion: 1,
+      kind: "tailored_resume",
+      generationId: randomUUID(),
+      version: 1,
+      contentSha256: hash,
+      completedAtMs: 1000,
+      expiresAtMs: 1801000,
+    };
+    for (const [name, response] of [
+      ["ApplicationResumePreview", { status: "ready", matchesPacket: true, contentSha256: hash }],
+      [
+        "ApplicationResumeFile",
+        {
+          format: "pdf",
+          mediaType: "application/pdf",
+          fileName: "resume.pdf",
+          sha256: hash,
+          sizeBytes: 4,
+          contentSha256: hash,
+          contentBase64: "dGVzdA==",
+        },
+      ],
+    ] as const) {
+      const validate = compileComponentValidator(name);
+      expect(validate(response)).toBe(true);
+      expect(validate({ ...response, temporaryMaterial })).toBe(true);
+      expect(
+        validate({
+          ...response,
+          temporaryMaterial: { ...temporaryMaterial, ownerUserId: randomUUID() },
+        }),
+      ).toBe(false);
+      expect(
+        validate({ ...response, temporaryMaterial: { ...temporaryMaterial, generationId: "bad" } }),
+      ).toBe(false);
+    }
+  });
+
   it("accepts explicit bounded question/context selections and refuses unconfirmed or unbound requests", () => {
     const validate = compileComponentValidator("PrepareApplicationPacketRequest");
     const selection = {
@@ -144,7 +184,7 @@ describe("Applications OpenAPI contract", () => {
     const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
       path.startsWith("/applications"),
     );
-    expect(applicationPaths.length).toBe(19);
+    expect(applicationPaths.length).toBe(22);
     for (const [, item] of applicationPaths) {
       for (const operation of Object.values(item) as Array<{
         security: Array<{ oidc: string[] }>;
@@ -178,10 +218,13 @@ describe("Applications OpenAPI contract", () => {
       "GET /applications/{applicationId}/cover-letter",
       "GET /applications/{applicationId}/cover-letter/authorization",
       "GET /applications/{applicationId}/cover-letter/file",
+      "GET /applications/{applicationId}/cover-letter/location",
       "GET /applications/{applicationId}/history",
       "GET /applications/{applicationId}/packet-preparations/{preparationId}",
       "GET /applications/{applicationId}/resume",
+      "GET /applications/{applicationId}/resume/authorization",
       "GET /applications/{applicationId}/resume/file",
+      "GET /applications/{applicationId}/resume/location",
       "POST /applications/search",
       "POST /applications/{applicationId}/attempts/{attemptId}/dispatch",
     ]);

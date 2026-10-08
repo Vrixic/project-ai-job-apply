@@ -18,6 +18,7 @@ type Configuration = {
   queue: string;
   secret: string;
   retained: readonly string[];
+  intake: boolean;
 };
 const numeric =
   /^arn:aws:lambda:us-east-2:[0-9]{12}:function:[A-Za-z0-9_-]{1,64}:[1-9][0-9]{0,8}$/u;
@@ -76,7 +77,14 @@ function configuration(env: Environment): Configuration | undefined {
     (raw !== undefined && JSON.stringify(retained) !== raw)
   )
     return;
-  return { target, durable, queue, secret, retained: Object.freeze([...retained].sort()) };
+  return {
+    target,
+    durable,
+    queue,
+    secret,
+    retained: Object.freeze([...retained].sort()),
+    intake: env.APPLICATION_PREPARATION_INTAKE_ENABLED === "true",
+  };
 }
 type Runtime = { start: (value: unknown) => Promise<void>; close: () => Promise<void> };
 
@@ -100,7 +108,10 @@ export function createApplicationPreparationStarterRuntime(
         ...args: Parameters<typeof applications.claimPreparationDispatch>
       ) => {
         if (!enabled()) throw new PreparationDispatchError();
-        return applications.claimPreparationDispatch(...args);
+        return applications.claimPreparationDispatch(args[0], args[1], args[2], {
+          allowUnbound: config.intake,
+          retained: config.retained,
+        });
       },
       // A positively acknowledged original dispatch may finish its owning receipt after withdrawal.
       markPreparationStarted: applications.markPreparationStarted.bind(applications),

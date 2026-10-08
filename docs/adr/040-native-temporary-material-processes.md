@@ -3,6 +3,38 @@
 Status: Proposed; default-off source and local kernel evidence only
 Date: 2026-10-05
 
+2026-10-06 executable image checkpoint: dedicated Node/kernel entrypoint and actual pinned-secret,
+provider/TLS/read-authorization ports now exist locally. Profile owns the authenticated original
+principal projection. Managed publication, IAM/routing/provider/client/accountable approval stay open;
+this ADR remains Proposed. [Evidence](../product/delivery/evidence/d3-native-image-runtime-2026-10-06.md).
+
+2026-10-06 startup source checkpoint: the private task factory binds ECS self metadata to original
+launch scalars, waits only for the original owning bind, reads stored approval over signed RPC
+and starts the kernel/content runtime after trusted ports/admission. Local Linux scenarios cover
+real rendering/HTTPS/retirement with synthetic AWS/owner/provider/identity ports. Executable image,
+real image-owned configuration and managed/client/provider acceptance remain; this proposal stays
+Proposed. [Evidence](../product/delivery/evidence/d3-native-task-bootstrap-2026-10-06.md).
+
+2026-10-06 original approval source checkpoint: the authenticated owner RPC reads the immutable
+Applications preparation's original approval/context and verifies Documents' exact work expiry.
+No renewal or work creation is exposed. Real local PostgreSQL and signed synthetic transport
+checks pass; ECS self-metadata/executable image and managed/provider/client gates remain. This
+proposal stays Proposed. [Evidence](../product/delivery/evidence/d3-native-approved-bootstrap-2026-10-06.md).
+
+2026-10-06 authentication source checkpoint: a short SDK-signed fixed regional STS identity proof
+binds original allocation, numeric recipient and request digest. Only fixed ECS task credentials
+are used. The receiver must authenticate the signature with AWS and match reviewed role/original
+task session, then perform separate owning admission. This does not prove liveness, settlement or
+retirement; managed role trust must prohibit arbitrary non-ECS task-named sessions. RPC/image/
+bootstrap/IAM and actual managed conformance remain gates; the proposal stays Proposed.
+[Evidence](../product/delivery/evidence/d3-native-task-caller-proof-2026-10-06.md).
+
+2026-10-06 source checkpoint: the private cover-letter runtime connects a fixed admitted original
+allocation, scalar controls, actual memory renderers and HTTPS server. Local Linux evidence covers
+real PDF/DOCX reads and process retirement with synthetic remote ports. Trusted bootstrap still
+owns approved source/admission/provider adapters, listener binding, image/TLS/IAM/routing and
+managed conformance; this proposal remains Proposed. [Evidence](../product/delivery/evidence/d3-native-runtime-composition-2026-10-06.md).
+
 ## Context
 
 [ADR-038](038-one-off-generated-application-materials.md) limits generated material to bounded
@@ -164,3 +196,47 @@ synthetic events and emitted capability/source-bound artifact proof leave manage
 IAM, retained original versions, retries/DLQ and task conformance unfinished. This proposal remains
 Proposed and deployment/activation/accountable gates remain.
 [Evidence](../product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
+
+
+## Allocation-bound scalar control checkpoint — 2026-10-06
+
+A default-off adapter now supplies the native original actor only fixed claim/settlement/completion
+ports. Normal signed regional numeric Lambda transport binds the original task/work/consent;
+unknown acknowledgements never retry, and active transport stays admitted until actual settlement.
+Existing owning SQL requires bound/current unsealed native admission before a provider claim.
+Local original-task equality is not caller authentication. Fifty cases, actual emitted isolation,
+full clean verification and seventeen actual Linux/kernel scenarios leave authenticated evidence/
+private task admission, managed image/bootstrap/IAM/provider/client/ATS/accountable acceptance
+unfinished. This proposal remains Proposed and no activation or new deployment is authorized.
+[Evidence](../product/delivery/evidence/d3-native-material-controls-2026-10-06.md).
+
+## Native owner evidence admission checkpoint — 2026-10-06
+
+Default-off source now wraps original lease-bound owner evidence with short exact owning native
+admission checks and fixed context comparison. Locks are released before owner reads and original
+work authority is unchanged. Local units and PostgreSQL admission proof do not authenticate callers
+or establish managed evidence composition. This proposal remains Proposed; all release gates remain.
+[Evidence](../product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
+
+
+## Authenticated owner RPC checkpoint — 2026-10-06
+
+A separate strict private envelope now authenticates the original task before lazy owner access,
+then supplies owning admission, original reviewed-context/consent evidence and original scalar
+work/completion. Its production signing/invocation uses explicit ECS credentials; proofs are not
+passed to owners or responses, and authenticated mode cannot fall back to standalone contracts.
+Local synthetic transport, actual owning PostgreSQL and Linux process evidence leave native
+image/bootstrap/IAM/routing/managed/client/provider/accountable acceptance open. This proposal
+remains Proposed; no deployment/activation or new review acceptance is implied.
+[Evidence](../product/delivery/evidence/d3-native-owner-rpc-2026-10-06.md).
+
+## Original route checkpoint lifecycle - 2026-10-07
+
+A private source-only durable component now checkpoints the original scalar DNS intent and
+connects one-attempt creation, propagation, owner-checked attachment and exact deletion. It uses
+the existing durable checkpoint store, with at-most-once-per-retry plus no retries for DNS writes.
+It requires exactly one original allocation-bound named execution; ambiguous work remains
+unresolved. Local SDK/adapter tests do not prove managed interruption, terminal reconciliation,
+TLS/ingress or client acceptance. Existing 900-second deployment configuration is insufficient
+for the full route lifetime and must be extended during integration. This proposal remains
+Proposed; [evidence](../product/delivery/evidence/d3-native-resume-route-lifecycle-2026-10-07.md).

@@ -31,8 +31,18 @@ application's mutable later state. HTTP never performs model generation.
 The runtime accepts only a Documents context/read port, with no provider credential or AI call.
 Approval rechecks a carried letter's current evidence/job binding; missing ports or transport
 failures refuse with `503` before approval. Preparation acceptance/status remain default-off behind
-`coverLetterPreparationEnabled`, which no production entry point enables. Compatible migrations,
-owned dispatch/terminal recovery and ADR-016 isolated provider composition must precede enabling it.
+`NATIVE_COVER_LETTER_PREPARATION_ENABLED` in both entry points. It requires packet protection,
+read authorization and native cover-letter locations. Intake uses the pure AI SDK context subpath
+and an Applications active-candidate lease across Profile/Jobs owner reads; it queues the existing
+transactional preparation/outbox without model or generated-body access. Original receipt replay
+and operation status remain readable after intake withdrawal. Compatible migrations and the owned
+dispatch/recovery runtime must precede activation. `NATIVE_MATERIAL_AVAILABILITY_ENABLED` adds
+bodyless native HTTPS checks for approval and submission binding reads. Its credential is scoped
+to the authenticated owner/application request and cleared afterward. Native transport proves
+current packet and held memory before returning the exact reference; metadata lookup alone is
+not liveness. Both task images need the HEAD support before activation, along with explicitly
+configured private application NAT and matching task network groups. Cancellation/terminal
+memory disposal and managed/client/ATS acceptance remain separate unfinished work.
 Route unit tests use test tokens and fake owner ports; PostgreSQL lifecycle regression checks use
 synthetic data. This is backend source/local evidence, not UI, managed-OIDC or deployed acceptance.
 
@@ -279,3 +289,33 @@ identity through the normal authenticated boundary and delegates to the independ
 Applications capability. No generated body is read/forwarded by this endpoint. Its production
 runtime flag is not composed. See
 [authorization evidence](../../docs/product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).
+
+
+### Owner material withdrawal and durable cleanup
+
+`PUT /v1/material-withdrawals/{requestId}` accepts an authenticated `applications:write` caller and a
+UUIDv7 request ID with no body or query parameters. Reuse that ID on retries. It atomically withdraws
+older native work and queues cleanup, returning 202 with `pending` or the original settled status.
+`GET` on the same resource requires `applications:read` and resolves only the authenticated owner.
+Neither route accepts an owner/task identifier or changes application submission status.
+
+Both routes remain default-off behind `NATIVE_OWNER_MATERIAL_CLEANUP_ENABLED=true`, the existing
+`NATIVE_APPLICATION_DISPOSAL_ENABLED` gate, and retained exact task deployments. Apply Applications
+0014 before enabling. The queue contains identifiers, timestamps, a lease token and pagination state;
+no material content. Accepted cleanup survives sign-out or later owner quarantine. Expired leases
+recover after five minutes; pending full scans back off for 30 seconds. Completion is immutable.
+
+`native-material-cleanup-worker.handler` is the private numeric-version worker entry point. Its
+scheduled input is exactly `{ "schemaVersion": 1, "action": "drain" }`; IAM provides invocation
+authority. One invocation claims one request and processes at most five applications. It records the
+next cursor or settlement only while its original lease is valid. It uses the managed database secret
+and exact task deployment allowlist; it does not accept HTTP/candidate/task input. Build with `node scripts/build-native-material-cleanup-worker-lambda.mjs` after the Gateway build.
+The default-off Terraform release supplies a private, concurrency-one worker with a 240-second
+timeout, numeric scheduled target and exact retained-cluster task permissions. Gateway withdrawal
+activation requires the enabled schedule and worker coverage of every retained Gateway deployment.
+Immutable artifact publication, deployment and managed acceptance remain; no cloud activation occurred.
+
+`native_tasks_settled` means no unretired native generation remains through the original exact
+cutoff. It does not certify provider retention, route deletion or all-copy disposal. Unknown original
+launches require the existing task recovery path. Newer explicit generations survive old request
+replay. The web sign-out hook remains outside the current backend scope.

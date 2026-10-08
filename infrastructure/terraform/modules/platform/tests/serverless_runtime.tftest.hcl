@@ -1487,3 +1487,225 @@ run "migration_task_has_private_image_and_log_paths" {
     error_message = "Migration AWS interface endpoints must admit only TLS from the application security group."
   }
 }
+
+run "quiesced_rights_retain_storage_without_maintenance" {
+  command = plan
+  variables {
+    private_application_networking                           = false
+    deploy_document_intake                                   = true
+    serverless_runtime_enabled                               = false
+    restricted_answer_vault_enabled                          = false
+    restricted_answer_export_enabled                         = false
+    candidate_rights_enabled                                 = true
+    candidate_rights_policy_version                          = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256                           = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory                         = "identity,profile,documents,jobs,matching,billing,trust,applications"
+    candidate_rights_subprocessor_inventory                  = "none"
+    candidate_rights_export_lifetime_seconds                 = 3600
+    candidate_rights_download_grant_seconds                  = 300
+    candidate_rights_backup_retention_days                   = 7
+    candidate_rights_recent_auth_max_age_seconds             = 900
+    candidate_rights_export_lifecycle_days                   = 1
+    document_processing_deployment_stage                     = "parser-dark"
+    document_parser_artifact_s3_key                          = "lambda/parser.zip"
+    document_parser_artifact_s3_object_version               = "synthetic-parser-version"
+    document_parser_artifact_sha256                          = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    document_parser_artifact_base64sha256                    = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+    applications_attempt_recovery_enabled                    = true
+    applications_attempt_recovery_artifact_s3_key            = "lambda/attempt-recovery.zip"
+    applications_attempt_recovery_artifact_s3_object_version = "attempt-version"
+    applications_attempt_recovery_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    applications_attempt_recovery_artifact_base64sha256      = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+  }
+  assert {
+    condition     = length(aws_s3_bucket.candidate_data_exports) == 1 && length(aws_s3_bucket.candidate_deletion_recovery) == 1 && length(aws_sqs_queue.applications_attempt_recovery_dead_letter) == 1
+    error_message = "Shutdown must preserve candidate-rights storage and recovery queues."
+  }
+  assert {
+    condition     = aws_cloudwatch_event_rule.candidate_rights_maintenance[0].state == "DISABLED" && aws_cloudwatch_event_rule.applications_attempt_recovery[0].state == "DISABLED"
+    error_message = "Retained maintenance rules must follow the global runtime gate."
+  }
+}
+
+run "active_rights_preserve_maintenance" {
+  command = plan
+  variables {
+    private_application_networking                           = true
+    deploy_document_intake                                   = true
+    serverless_runtime_enabled                               = true
+    restricted_answer_vault_enabled                          = false
+    restricted_answer_export_enabled                         = false
+    candidate_rights_enabled                                 = true
+    candidate_rights_policy_version                          = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256                           = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory                         = "identity,profile,documents,jobs,matching,billing,trust,applications"
+    candidate_rights_subprocessor_inventory                  = "none"
+    candidate_rights_export_lifetime_seconds                 = 3600
+    candidate_rights_download_grant_seconds                  = 300
+    candidate_rights_backup_retention_days                   = 7
+    candidate_rights_recent_auth_max_age_seconds             = 900
+    candidate_rights_export_lifecycle_days                   = 1
+    document_processing_deployment_stage                     = "parser-dark"
+    document_parser_artifact_s3_key                          = "lambda/parser.zip"
+    document_parser_artifact_s3_object_version               = "synthetic-parser-version"
+    document_parser_artifact_sha256                          = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    document_parser_artifact_base64sha256                    = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+    applications_attempt_recovery_enabled                    = true
+    applications_attempt_recovery_artifact_s3_key            = "lambda/attempt-recovery.zip"
+    applications_attempt_recovery_artifact_s3_object_version = "attempt-version"
+    applications_attempt_recovery_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    applications_attempt_recovery_artifact_base64sha256      = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+  }
+  assert {
+    condition     = length(aws_s3_bucket.candidate_data_exports) == 1 && length(aws_s3_bucket.candidate_deletion_recovery) == 1 && length(aws_sqs_queue.applications_attempt_recovery_dead_letter) == 1
+    error_message = "Shutdown must preserve candidate-rights storage and recovery queues."
+  }
+  assert {
+    condition     = aws_cloudwatch_event_rule.candidate_rights_maintenance[0].state == "ENABLED" && aws_cloudwatch_event_rule.applications_attempt_recovery[0].state == "ENABLED"
+    error_message = "Retained maintenance rules must follow the global runtime gate."
+  }
+}
+
+run "active_rights_still_require_private_egress" {
+  command = plan
+  variables {
+    private_application_networking                           = false
+    deploy_document_intake                                   = true
+    serverless_runtime_enabled                               = true
+    restricted_answer_vault_enabled                          = false
+    restricted_answer_export_enabled                         = false
+    candidate_rights_enabled                                 = true
+    candidate_rights_policy_version                          = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256                           = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory                         = "identity,profile,documents,jobs,matching,billing,trust,applications"
+    candidate_rights_subprocessor_inventory                  = "none"
+    candidate_rights_export_lifetime_seconds                 = 3600
+    candidate_rights_download_grant_seconds                  = 300
+    candidate_rights_backup_retention_days                   = 7
+    candidate_rights_recent_auth_max_age_seconds             = 900
+    candidate_rights_export_lifecycle_days                   = 1
+    document_processing_deployment_stage                     = "parser-dark"
+    document_parser_artifact_s3_key                          = "lambda/parser.zip"
+    document_parser_artifact_s3_object_version               = "synthetic-parser-version"
+    document_parser_artifact_sha256                          = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    document_parser_artifact_base64sha256                    = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+    applications_attempt_recovery_enabled                    = true
+    applications_attempt_recovery_artifact_s3_key            = "lambda/attempt-recovery.zip"
+    applications_attempt_recovery_artifact_s3_object_version = "attempt-version"
+    applications_attempt_recovery_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    applications_attempt_recovery_artifact_base64sha256      = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+  }
+  expect_failures = [var.candidate_rights_enabled]
+}
+
+run "development_endpoint_shutdown_retains_data" {
+  command = plan
+  variables {
+    private_application_networking                           = false
+    deploy_document_intake                                   = true
+    serverless_runtime_enabled                               = false
+    restricted_answer_vault_enabled                          = false
+    restricted_answer_export_enabled                         = false
+    candidate_rights_enabled                                 = true
+    candidate_rights_policy_version                          = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256                           = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory                         = "identity,profile,documents,jobs,matching,billing,trust,applications"
+    candidate_rights_subprocessor_inventory                  = "none"
+    candidate_rights_export_lifetime_seconds                 = 3600
+    candidate_rights_download_grant_seconds                  = 300
+    candidate_rights_backup_retention_days                   = 7
+    candidate_rights_recent_auth_max_age_seconds             = 900
+    candidate_rights_export_lifecycle_days                   = 1
+    document_processing_deployment_stage                     = "parser-dark"
+    document_parser_artifact_s3_key                          = "lambda/parser.zip"
+    document_parser_artifact_s3_object_version               = "synthetic-parser-version"
+    document_parser_artifact_sha256                          = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    document_parser_artifact_base64sha256                    = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+    applications_attempt_recovery_enabled                    = true
+    applications_attempt_recovery_artifact_s3_key            = "lambda/attempt-recovery.zip"
+    applications_attempt_recovery_artifact_s3_object_version = "attempt-version"
+    applications_attempt_recovery_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    applications_attempt_recovery_artifact_base64sha256      = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+    environment                                              = "development"
+    private_service_endpoints_enabled                        = false
+
+  }
+  assert {
+    condition     = length(aws_vpc_endpoint.migration_ecr_api) + length(aws_vpc_endpoint.migration_ecr_dkr) + length(aws_vpc_endpoint.migration_logs) + length(aws_vpc_endpoint.secretsmanager) + length(aws_vpc_endpoint.sqs) + length(aws_vpc_endpoint.lambda) + length(aws_vpc_endpoint.sts) == 0
+    error_message = "Drained development shutdown must remove every hourly interface endpoint."
+  }
+  assert {
+    condition     = length(aws_db_instance.postgres) == 1 && aws_db_instance.postgres[0].deletion_protection && length(aws_secretsmanager_secret_version.database_url) == 1 && length(aws_s3_bucket.candidate_data_exports) == 1 && length(aws_s3_bucket.candidate_deletion_recovery) == 1
+    error_message = "Endpoint removal must retain protected database, credentials and rights storage."
+  }
+}
+
+run "active_endpoint_shutdown_is_refused" {
+  command = plan
+  variables {
+    private_application_networking                           = true
+    deploy_document_intake                                   = true
+    serverless_runtime_enabled                               = true
+    restricted_answer_vault_enabled                          = false
+    restricted_answer_export_enabled                         = false
+    candidate_rights_enabled                                 = true
+    candidate_rights_policy_version                          = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256                           = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory                         = "identity,profile,documents,jobs,matching,billing,trust,applications"
+    candidate_rights_subprocessor_inventory                  = "none"
+    candidate_rights_export_lifetime_seconds                 = 3600
+    candidate_rights_download_grant_seconds                  = 300
+    candidate_rights_backup_retention_days                   = 7
+    candidate_rights_recent_auth_max_age_seconds             = 900
+    candidate_rights_export_lifecycle_days                   = 1
+    document_processing_deployment_stage                     = "parser-dark"
+    document_parser_artifact_s3_key                          = "lambda/parser.zip"
+    document_parser_artifact_s3_object_version               = "synthetic-parser-version"
+    document_parser_artifact_sha256                          = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    document_parser_artifact_base64sha256                    = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+    applications_attempt_recovery_enabled                    = true
+    applications_attempt_recovery_artifact_s3_key            = "lambda/attempt-recovery.zip"
+    applications_attempt_recovery_artifact_s3_object_version = "attempt-version"
+    applications_attempt_recovery_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    applications_attempt_recovery_artifact_base64sha256      = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+    environment                                              = "development"
+    private_service_endpoints_enabled                        = false
+
+  }
+  expect_failures = [var.private_service_endpoints_enabled]
+}
+
+run "staging_endpoint_override_is_refused" {
+  command = plan
+  variables {
+    private_application_networking                           = false
+    deploy_document_intake                                   = true
+    serverless_runtime_enabled                               = false
+    restricted_answer_vault_enabled                          = false
+    restricted_answer_export_enabled                         = false
+    candidate_rights_enabled                                 = true
+    candidate_rights_policy_version                          = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256                           = "9999999999999999999999999999999999999999999999999999999999999999"
+    candidate_rights_owner_inventory                         = "identity,profile,documents,jobs,matching,billing,trust,applications"
+    candidate_rights_subprocessor_inventory                  = "none"
+    candidate_rights_export_lifetime_seconds                 = 3600
+    candidate_rights_download_grant_seconds                  = 300
+    candidate_rights_backup_retention_days                   = 7
+    candidate_rights_recent_auth_max_age_seconds             = 900
+    candidate_rights_export_lifecycle_days                   = 1
+    document_processing_deployment_stage                     = "parser-dark"
+    document_parser_artifact_s3_key                          = "lambda/parser.zip"
+    document_parser_artifact_s3_object_version               = "synthetic-parser-version"
+    document_parser_artifact_sha256                          = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    document_parser_artifact_base64sha256                    = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+    applications_attempt_recovery_enabled                    = true
+    applications_attempt_recovery_artifact_s3_key            = "lambda/attempt-recovery.zip"
+    applications_attempt_recovery_artifact_s3_object_version = "attempt-version"
+    applications_attempt_recovery_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    applications_attempt_recovery_artifact_base64sha256      = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
+    environment                                              = "staging"
+    private_service_endpoints_enabled                        = false
+
+  }
+  expect_failures = [var.private_service_endpoints_enabled]
+}

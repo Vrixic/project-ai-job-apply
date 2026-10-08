@@ -3,6 +3,8 @@ import {
   defaultFieldDefinitions,
 } from "@ai-job-apply/applications-service";
 import { restrictedPacketWriterFromEnvironment } from "@ai-job-apply/applications-service/restricted-packet-runtime";
+import { nativeMaterialAvailabilityFromEnvironment } from "./native-material-availability.js";
+import { nativeMaterialDisposalFromEnvironment } from "./native-material-disposal-runtime.js";
 import "reflect-metadata";
 import { randomBytes } from "node:crypto";
 import {
@@ -57,6 +59,7 @@ import {
   PostgresUgcContributionConsentStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
+import { createPrivilegedModerationAuditRuntime } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import type {
@@ -76,6 +79,10 @@ import {
   ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
+import {
+  nativeMaterialLocationsFromEnvironment,
+  nativeResumeLocationsFromEnvironment,
+} from "./native-material-location-runtime.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
@@ -255,7 +262,7 @@ const APPLICATION_COVER_LETTER_PATH_PATTERN = new RegExp(
   "u",
 );
 const APPLICATION_MATERIAL_AUTHORIZATION_PATH_PATTERN = new RegExp(
-  `^/v1/applications/${APPLICATION_ID}/cover-letter/authorization$`,
+  `^/v1/applications/${APPLICATION_ID}/(?:cover-letter|resume)/(?:authorization|location)$`,
   "u",
 );
 const APPLICATION_GENERATION_ID_PATTERN = new RegExp(`^${APPLICATION_ID}$`, "u");
@@ -315,6 +322,11 @@ function allowedRoute(
   if (method === "GET" && PUBLIC_PATHS.has(path)) {
     return { acceptsBody: false, protected: false };
   }
+  if (
+    (method === "PUT" || method === "GET") &&
+    new RegExp(`^/v1/material-withdrawals/${APPLICATION_ID}$`, "u").test(path)
+  )
+    return { acceptsBody: false, protected: true };
   if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
     return { acceptsBody: method === "PUT" || method === "POST", protected: true };
   }
@@ -1151,11 +1163,50 @@ async function createConfiguredApplication(
     : undefined;
   // Applications needs its own plain client: the shared one camel-cases columns and installs
   // Drizzle's JSON and timestamp handling, which makes the store fail (see applications-database).
+  const privilegedModerationAudit =
+    process.env.PRIVILEGED_MODERATION_AUDIT_ENABLED === "true"
+      ? createPrivilegedModerationAuditRuntime(
+          databaseUrl,
+          () => process.env.PRIVILEGED_MODERATION_AUDIT_ENABLED === "true",
+        )
+      : undefined;
   const packetProtection = restrictedPacketWriterFromEnvironment(process.env);
+  const nativeMaterialLocations = nativeMaterialLocationsFromEnvironment(
+    databaseUrl,
+    process.env,
+    () => packetProtection?.enabled() === true,
+  );
+  const nativeResumeLocations = nativeResumeLocationsFromEnvironment(
+    databaseUrl,
+    process.env,
+    () => packetProtection?.enabled() === true,
+  );
+  const nativeMaterialDisposal = nativeMaterialDisposalFromEnvironment(databaseUrl, process.env);
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
     profile: store,
     ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
+    ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
+    ...(nativeResumeLocations ? { nativeResumeLocations } : {}),
+    temporaryMaterials: nativeMaterialAvailabilityFromEnvironment(
+      process.env,
+      () => packetProtection?.enabled() === true,
+      nativeMaterialLocations,
+      nativeResumeLocations,
+    ),
+    ...(nativeMaterialDisposal ? { nativeMaterialDisposal } : {}),
+    nativeCoverLetterPreparationEnabled: () =>
+      process.env.NATIVE_COVER_LETTER_PREPARATION_ENABLED === "true" &&
+      process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&
+      process.env.NATIVE_MATERIAL_READ_LOCATIONS_ENABLED === "true" &&
+      nativeMaterialLocations !== undefined &&
+      packetProtection?.enabled() === true,
+    nativeResumePreparationEnabled: () =>
+      process.env.NATIVE_RESUME_PREPARATION_ENABLED === "true" &&
+      packetProtection?.enabled() === true,
+    nativeReadAuthorizationsEnabled: () =>
+      process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&
+      packetProtection?.enabled() === true,
     restrictedAnswerReuseEnabled: process.env.RESTRICTED_ANSWER_REUSE_ENABLED === "true",
     restrictedAnswers: Object.freeze({
       lockCurrentReferences:
@@ -1184,8 +1235,14 @@ async function createConfiguredApplication(
     ugcContributionConsents,
     ...(ugcContributionPolicyVersion ? { ugcContributionPolicyVersion } : {}),
     moderation,
+    ...(privilegedModerationAudit
+      ? { privilegedModerationAudit: privilegedModerationAudit.writer }
+      : {}),
     savedJobs,
     applications,
+    ...(nativeMaterialDisposal
+      ? { nativeMaterialWithdrawals: nativeMaterialDisposal.ownerRequests }
+      : {}),
     privateSavedPageCaptures,
     matchAssessments,
     entitlements,

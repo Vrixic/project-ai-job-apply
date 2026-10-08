@@ -8,6 +8,10 @@
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     },
+    "./native-resume-admission": {
+      "types": "./dist/src/native-resume-admission.d.ts",
+      "default": "./dist/src/native-resume-admission.js"
+    },
     "./native-material-runtime": {
       "types": "./dist/src/native-material-runtime.d.ts",
       "default": "./dist/src/native-material-runtime.js"
@@ -15,6 +19,18 @@
     "./restricted-packet-runtime": {
       "types": "./dist/src/restricted-packet-runtime.d.ts",
       "default": "./dist/src/restricted-packet-runtime.js"
+    },
+    "./native-resume-request-store": {
+      "types": "./dist/src/native-resume-request-store.d.ts",
+      "default": "./dist/src/native-resume-request-store.js"
+    },
+    "./native-material-withdrawal": {
+      "types": "./dist/src/native-material-withdrawal.d.ts",
+      "default": "./dist/src/native-material-withdrawal.js"
+    },
+    "./native-material-cleanup-queue": {
+      "types": "./dist/src/native-material-cleanup-queue.d.ts",
+      "default": "./dist/src/native-material-cleanup-queue.js"
     }
   },
   "scripts": {

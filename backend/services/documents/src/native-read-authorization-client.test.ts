@@ -1,5 +1,9 @@
 import { expect, it, vi } from "vitest";
-import { createNativeReadAuthorizationClient } from "./native-read-authorization-client.js";
+import {
+  createNativeReadAuthorizationClient,
+  createNativeResumeReadAuthorizationClient,
+} from "./native-read-authorization-client.js";
+
 const ids = [
   "019d04cf-1f80-7000-8000-000000000001",
   "019d04cf-1f80-7000-8000-000000000002",
@@ -175,4 +179,42 @@ it.each([
   expect(() => createNativeReadAuthorizationClient({ apiOrigin })).toThrow(
     "NativeReadAuthorizationUnavailable",
   );
+});
+
+it("pins resume authorization to its route and rejects cross-kind proofs", async () => {
+  const ref = { ...fixed(), kind: "tailored_resume" as const };
+  const { ownerUserId: _owner, applicationId: _app, ...metadata } = ref;
+  let wrongKind = false;
+  const fetcher = vi.fn(
+    async (_url: string | URL | Request, _init?: RequestInit) =>
+      new Response(
+        JSON.stringify({
+          schemaVersion: 1,
+          packetId: ids[2],
+          packetHash: "b".repeat(64),
+          temporaryMaterial: { ...metadata, kind: wrongKind ? "cover_letter" : "tailored_resume" },
+        }),
+        { headers: header },
+      ),
+  );
+  const read = createNativeResumeReadAuthorizationClient({
+    apiOrigin: "https://control.test.invalid",
+    enabled: () => true,
+    fetch: fetcher,
+  });
+  await expect(
+    read(ref.ownerUserId, ref.applicationId, ref, new AbortController().signal, token),
+  ).resolves.toMatchObject({ reference: ref });
+  expect(fetcher.mock.calls[0]?.[0]).toBe(
+    `https://control.test.invalid/v1/applications/${ref.applicationId}/resume/authorization?generationId=${ref.generationId}`,
+  );
+  wrongKind = true;
+  await expect(
+    read(ref.ownerUserId, ref.applicationId, ref, new AbortController().signal, token),
+  ).rejects.toThrow("NativeReadAuthorizationUnavailable");
+  fetcher.mockClear();
+  await expect(
+    read(ref.ownerUserId, ref.applicationId, fixed(), new AbortController().signal, token),
+  ).rejects.toThrow("NativeReadAuthorizationUnavailable");
+  expect(fetcher).not.toHaveBeenCalled();
 });

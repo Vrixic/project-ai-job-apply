@@ -1,3 +1,5 @@
+import { nativeMaterialAvailabilityFromEnvironment } from "./native-material-availability.js";
+import { nativeMaterialDisposalFromEnvironment } from "./native-material-disposal-runtime.js";
 import "reflect-metadata";
 import {
   createApplicationsDatabase,
@@ -48,6 +50,7 @@ import {
   PostgresRestrictedAnswerVaultStore,
   PostgresUgcContributionConsentStore,
 } from "@ai-job-apply/profile-service";
+import { createPrivilegedModerationAuditRuntime } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { createGatewayApplication } from "./application.js";
 import { createApplicationsRuntime } from "./applications-runtime.js";
@@ -59,6 +62,10 @@ import {
   ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
+import {
+  nativeMaterialLocationsFromEnvironment,
+  nativeResumeLocationsFromEnvironment,
+} from "./native-material-location-runtime.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
@@ -173,13 +180,55 @@ const candidateDataExportDownloads =
 
 // Applications stay dark unless explicitly enabled for local development. The database must already
 // have the Applications migration applied.
+const privilegedModerationAudit =
+  process.env.PRIVILEGED_MODERATION_AUDIT_ENABLED === "true"
+    ? createPrivilegedModerationAuditRuntime(
+        config.DATABASE_URL,
+        () => process.env.PRIVILEGED_MODERATION_AUDIT_ENABLED === "true",
+      )
+    : undefined;
 const packetProtection = restrictedPacketWriterFromEnvironment(process.env);
+const nativeMaterialLocations = nativeMaterialLocationsFromEnvironment(
+  config.DATABASE_URL,
+  process.env,
+  () => packetProtection?.enabled() === true,
+);
+const nativeResumeLocations = nativeResumeLocationsFromEnvironment(
+  config.DATABASE_URL,
+  process.env,
+  () => packetProtection?.enabled() === true,
+);
+const nativeMaterialDisposal = nativeMaterialDisposalFromEnvironment(
+  config.DATABASE_URL,
+  process.env,
+);
 const applications =
   process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
         client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
         profile: store,
         ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
+        ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
+        ...(nativeResumeLocations ? { nativeResumeLocations } : {}),
+        temporaryMaterials: nativeMaterialAvailabilityFromEnvironment(
+          process.env,
+          () => packetProtection?.enabled() === true,
+          nativeMaterialLocations,
+          nativeResumeLocations,
+        ),
+        ...(nativeMaterialDisposal ? { nativeMaterialDisposal } : {}),
+        nativeCoverLetterPreparationEnabled: () =>
+          process.env.NATIVE_COVER_LETTER_PREPARATION_ENABLED === "true" &&
+          process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&
+          process.env.NATIVE_MATERIAL_READ_LOCATIONS_ENABLED === "true" &&
+          nativeMaterialLocations !== undefined &&
+          packetProtection?.enabled() === true,
+        nativeResumePreparationEnabled: () =>
+          process.env.NATIVE_RESUME_PREPARATION_ENABLED === "true" &&
+          packetProtection?.enabled() === true,
+        nativeReadAuthorizationsEnabled: () =>
+          process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&
+          packetProtection?.enabled() === true,
         restrictedAnswerReuseEnabled: process.env.RESTRICTED_ANSWER_REUSE_ENABLED === "true",
         restrictedAnswers: Object.freeze({
           lockCurrentReferences:
@@ -210,8 +259,14 @@ const app = await createGatewayApplication({
   ugcContributionConsents,
   ...(ugcContributionPolicyVersion ? { ugcContributionPolicyVersion } : {}),
   moderation,
+  ...(privilegedModerationAudit
+    ? { privilegedModerationAudit: privilegedModerationAudit.writer }
+    : {}),
   savedJobs,
   ...(applications ? { applications } : {}),
+  ...(nativeMaterialDisposal
+    ? { nativeMaterialWithdrawals: nativeMaterialDisposal.ownerRequests }
+    : {}),
   privateSavedPageCaptures,
   matchAssessments,
   entitlements,

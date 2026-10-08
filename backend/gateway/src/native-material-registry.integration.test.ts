@@ -6,6 +6,7 @@ import {
   PostgresCoverLetterStore,
   PostgresCoverLetterWorkStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
+import { PostgresNativeApplicationDisposalStore } from "@ai-job-apply/documents-service/native-application-disposal-store";
 import { createNativeMaterialDisposal } from "@ai-job-apply/documents-service/native-material-disposal";
 import {
   type NativeMaterialIntent,
@@ -199,6 +200,77 @@ describe.skipIf(!requested)(
     function disposal() {
       return createNativeMaterialDisposal({ registry, enabled: () => true, testRetire: observe });
     }
+
+    it("abandons only an unclaimed cover-letter launch and fences later dispatch", async () => {
+      const f = await fixture();
+      const pending = await registry.admit(f.input);
+      const shared = new PostgresNativeApplicationDisposalStore(sql, () => true);
+      const retire = vi.fn(observe);
+      const disposer = createNativeMaterialDisposal({
+        registry: shared,
+        enabled: () => true,
+        testRetire: retire,
+      });
+      expect(await disposer.discardApplication(f.owner, f.application)).toBe("discarded");
+      expect(await disposer.discardApplication(f.owner, f.application)).toBe("discarded");
+      expect(retire).not.toHaveBeenCalled();
+      const [row] =
+        await sql`SELECT state,launch_claimed_at,task_arn,stopped_at_ms FROM documents.native_material_allocations WHERE id=${pending.allocationId}`;
+      expect(row).toMatchObject({
+        state: "abandoned",
+        launch_claimed_at: null,
+        task_arn: null,
+        stopped_at_ms: null,
+      });
+      await expect(
+        registry.claimLaunch(
+          {
+            allocationId: pending.allocationId,
+            ownerUserId: f.owner,
+            applicationId: f.application,
+            generationId: pending.generationId,
+            epochId: pending.epochId,
+          },
+          "f".repeat(64),
+        ),
+      ).rejects.toThrow();
+      await expect(registry.bindTask(allocation(pending))).rejects.toThrow();
+      await expect(
+        sql`UPDATE documents.native_material_allocations SET state='pending' WHERE id=${pending.allocationId}`,
+      ).rejects.toMatchObject({ code: "55000" });
+    });
+    it("keeps a claimed unknown launch unresolved after sealing", async () => {
+      const f = await fixture();
+      const pending = await registry.admit(f.input);
+      await registry.claimLaunch(
+        {
+          allocationId: pending.allocationId,
+          ownerUserId: f.owner,
+          applicationId: f.application,
+          generationId: pending.generationId,
+          epochId: pending.epochId,
+        },
+        "f".repeat(64),
+      );
+      const shared = new PostgresNativeApplicationDisposalStore(sql, () => true);
+      const retire = vi.fn(observe);
+      const disposer = createNativeMaterialDisposal({
+        registry: shared,
+        enabled: () => true,
+        testRetire: retire,
+      });
+      await expect(disposer.discardApplication(f.owner, f.application)).rejects.toThrow();
+      expect(retire).not.toHaveBeenCalled();
+      const [head] =
+        await sql`SELECT sealed_at FROM documents.native_material_admission WHERE user_id=${f.owner} AND application_id=${f.application}`;
+      expect(head?.sealed_at).toBeInstanceOf(Date);
+      await expect(
+        sql`UPDATE documents.native_material_allocations SET state='abandoned' WHERE id=${pending.allocationId}`,
+      ).rejects.toThrow();
+      await registry.bindTask(allocation(pending));
+      expect(await disposer.discardApplication(f.owner, f.application)).toBe("discarded");
+      expect(retire).toHaveBeenCalledOnce();
+    });
 
     it("records one original intent under concurrency before a task binding exists", async () => {
       const f = await fixture();
@@ -677,7 +749,7 @@ describe.skipIf(!requested)(
                 workingDirectory: "/materials",
                 entryPoint: ["/usr/local/bin/node"],
                 command: ["native-material/main.mjs"],
-                linuxParameters: { capabilities: { drop: ["ALL"] } },
+                linuxParameters: { capabilities: { drop: ["ALL"] }, initProcessEnabled: true },
                 ulimits: [{ name: "core", softLimit: 0, hardLimit: 0 }],
               },
             ],

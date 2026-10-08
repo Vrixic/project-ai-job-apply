@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "build:lambda": "pnpm --filter @ai-job-apply/gateway... build && node ../../scripts/build-gateway-lambda.mjs",
+    "build:lambda:native-cleanup": "pnpm --filter @ai-job-apply/gateway... build && node ../../scripts/build-native-material-cleanup-worker-lambda.mjs",
     "build:public-job-lambda": "pnpm --filter @ai-job-apply/gateway... build && node ../../scripts/build-public-job-lambda.mjs",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "dev": "node --watch --env-file-if-exists=../../.env --import tsx src/start.ts",
@@ -16,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ai-job-apply/ai-sdk": "workspace:*",
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/applications-service": "workspace:*",
     "@ai-job-apply/auth": "workspace:*",
@@ -43,7 +45,6 @@
     "rxjs": "7.8.2"
   },
   "devDependencies": {
-    "@ai-job-apply/ai-sdk": "workspace:*",
     "@aws-sdk/client-ecs": "3.1133.0",
     "@types/aws-lambda": "8.10.163",
     "tsx": "4.23.13",

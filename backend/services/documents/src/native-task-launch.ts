@@ -1,11 +1,23 @@
+import {
+  type NativeTaskLaunchConfiguration,
+  nativeLaunchedTask,
+  nativeMaterialLaunchEnvironment,
+  nativeTaskLaunchConfiguration,
+  nativeTaskLaunchScope as scope,
+  validateNativeTaskDefinition,
+} from "./native-task-launch-policy.js";
+
+export {
+  type NativeTaskLaunchConfiguration,
+  nativeTaskLaunchConfiguration,
+} from "./native-task-launch-policy.js";
+
 import { createHash } from "node:crypto";
 import {
   DescribeTaskDefinitionCommand,
   DescribeTasksCommand,
   ECSClient,
   RunTaskCommand,
-  type Task,
-  type TaskDefinition,
 } from "@aws-sdk/client-ecs";
 import type {
   NativeMaterialLaunchRecord,
@@ -13,7 +25,6 @@ import type {
   PostgresNativeMaterialRegistry,
 } from "./native-material-registry.js";
 import {
-  type NativeTaskAllocation,
   nativeTaskAllocationRegion,
   nativeTaskDeploymentRegion,
 } from "./native-task-allocation.js";
@@ -25,114 +36,8 @@ interface TaskClient {
     options: { abortSignal: AbortSignal },
   ): Promise<unknown>;
 }
-export interface NativeTaskLaunchConfiguration {
-  clusterArn: string;
-  taskDefinitionArn: string;
-  containerName: string;
-  image: string;
-  executionRoleArn: string;
-  taskRoleArn: string;
-  cpu: "256" | "512" | "1024";
-  memory: "512" | "1024" | "2048";
-  subnets: readonly string[];
-  securityGroups: readonly string[];
-  assignPublicIp: "ENABLED" | "DISABLED";
-}
 const unavailable = () => Error("NativeTaskLaunchUnavailable");
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
-function closed(value: object, keys: readonly string[]) {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Object.getPrototypeOf(value) !== Object.prototype ||
-    Reflect.ownKeys(value).length !== keys.length ||
-    !keys.every((key) => {
-      const d = Object.getOwnPropertyDescriptor(value, key);
-      return d?.enumerable && "value" in d;
-    })
-  )
-    throw unavailable();
-}
-export function nativeTaskLaunchConfiguration(input: NativeTaskLaunchConfiguration) {
-  closed(input, [
-    "clusterArn",
-    "taskDefinitionArn",
-    "containerName",
-    "image",
-    "executionRoleArn",
-    "taskRoleArn",
-    "cpu",
-    "memory",
-    "subnets",
-    "securityGroups",
-    "assignPublicIp",
-  ]);
-  const fixed = input;
-  if (
-    ![fixed.clusterArn, fixed.taskDefinitionArn, fixed.containerName, fixed.image].every(
-      (v) => typeof v === "string",
-    )
-  )
-    throw unavailable();
-  const region = nativeTaskDeploymentRegion(fixed);
-  const account = fixed.clusterArn.split(":")[4];
-  const list = (values: readonly string[], pattern: RegExp, maximum: number) => {
-    if (
-      !Array.isArray(values) ||
-      Object.getPrototypeOf(values) !== Array.prototype ||
-      values.length < 1 ||
-      values.length > maximum ||
-      Reflect.ownKeys(values).length !== values.length + 1 ||
-      !Array.from({ length: values.length }, (_, index) =>
-        Object.getOwnPropertyDescriptor(values, String(index)),
-      ).every(
-        (d) =>
-          d?.enumerable && "value" in d && typeof d.value === "string" && pattern.test(d.value),
-      ) ||
-      new Set(values).size !== values.length
-    )
-      throw unavailable();
-    return Object.freeze([...values].sort());
-  };
-  if (
-    !fixed.image.startsWith(`${account}.dkr.ecr.${region}.amazonaws.com/`) ||
-    !/^[a-z0-9][a-z0-9/_-]{0,200}@sha256:[a-f0-9]{64}$/u.test(
-      fixed.image.split("amazonaws.com/")[1] ?? "",
-    ) ||
-    ![fixed.executionRoleArn, fixed.taskRoleArn].every(
-      (arn) =>
-        typeof arn === "string" &&
-        new RegExp(`^arn:aws:iam::${account}:role/[A-Za-z0-9_+=,.@/-]{1,128}$`, "u").test(arn),
-    ) ||
-    !["256", "512", "1024"].includes(fixed.cpu) ||
-    !["512", "1024", "2048"].includes(fixed.memory) ||
-    (fixed.cpu === "512" && fixed.memory === "512") ||
-    (fixed.cpu === "1024" && fixed.memory !== "2048") ||
-    !["ENABLED", "DISABLED"].includes(fixed.assignPublicIp)
-  )
-    throw unavailable();
-  return Object.freeze({
-    clusterArn: fixed.clusterArn,
-    taskDefinitionArn: fixed.taskDefinitionArn,
-    containerName: fixed.containerName,
-    image: fixed.image,
-    executionRoleArn: fixed.executionRoleArn,
-    taskRoleArn: fixed.taskRoleArn,
-    cpu: fixed.cpu,
-    memory: fixed.memory,
-    assignPublicIp: fixed.assignPublicIp,
-    subnets: list(fixed.subnets, /^subnet-[a-f0-9]{17}$/u, 4),
-    securityGroups: list(fixed.securityGroups, /^sg-[a-f0-9]{17}$/u, 4),
-  });
-}
-function scope(input: NativeMaterialLaunchScope) {
-  const keys = ["allocationId", "ownerUserId", "applicationId", "generationId", "epochId"] as const;
-  closed(input, keys);
-  const fixed = structuredClone(input);
-  if (!keys.every((key) => typeof fixed[key] === "string" && uuid.test(fixed[key])))
-    throw unavailable();
-  return Object.freeze(fixed);
-}
 function checkedRecord(
   record: NativeMaterialLaunchRecord,
   fixed: NativeMaterialLaunchScope,
@@ -176,162 +81,6 @@ function checkedRecord(
       throw unavailable();
   } else if (record.intent.state !== "pending") throw unavailable();
 }
-function taskDefinition(value: unknown, config: NativeTaskLaunchConfiguration) {
-  const d = (value as { taskDefinition?: TaskDefinition } | null)?.taskDefinition;
-  const c = d?.containerDefinitions?.[0];
-  if (
-    !d ||
-    d.taskDefinitionArn !== config.taskDefinitionArn ||
-    d.status !== "ACTIVE" ||
-    d.networkMode !== "awsvpc" ||
-    !d.requiresCompatibilities?.includes("FARGATE") ||
-    d.runtimePlatform?.operatingSystemFamily !== "LINUX" ||
-    d.runtimePlatform.cpuArchitecture !== "X86_64" ||
-    d.cpu !== config.cpu ||
-    d.memory !== config.memory ||
-    d.executionRoleArn !== config.executionRoleArn ||
-    d.taskRoleArn !== config.taskRoleArn ||
-    !Array.isArray(d.containerDefinitions) ||
-    d.containerDefinitions.length !== 1 ||
-    !c ||
-    c.name !== config.containerName ||
-    c.image !== config.image ||
-    c.essential !== true ||
-    c.readonlyRootFilesystem !== true ||
-    c.user !== "65532:65532" ||
-    c.privileged === true ||
-    c.logConfiguration !== undefined ||
-    c.firelensConfiguration !== undefined ||
-    c.healthCheck !== undefined ||
-    c.interactive === true ||
-    c.pseudoTerminal === true ||
-    (c.systemControls?.length ?? 0) !== 0 ||
-    JSON.stringify(c.entryPoint) !== JSON.stringify(["/usr/local/bin/node"]) ||
-    JSON.stringify(c.command) !== JSON.stringify(["native-material/main.mjs"]) ||
-    c.workingDirectory !== "/materials" ||
-    d.pidMode !== undefined ||
-    d.ipcMode !== undefined ||
-    d.proxyConfiguration !== undefined ||
-    (c.secrets?.length ?? 0) !== 0 ||
-    (c.environment?.length ?? 0) !== 0 ||
-    (c.environmentFiles?.length ?? 0) !== 0 ||
-    (c.mountPoints?.length ?? 0) !== 0 ||
-    (c.volumesFrom?.length ?? 0) !== 0 ||
-    (d.volumes?.length ?? 0) !== 0 ||
-    (c.linuxParameters?.capabilities?.add?.length ?? 0) !== 0 ||
-    !c.linuxParameters?.capabilities?.drop?.includes("ALL") ||
-    c.linuxParameters?.initProcessEnabled === true ||
-    (c.linuxParameters?.devices?.length ?? 0) !== 0 ||
-    (c.linuxParameters?.tmpfs?.length ?? 0) !== 0 ||
-    !c.ulimits?.some(
-      (limit) => limit.name === "core" && limit.softLimit === 0 && limit.hardLimit === 0,
-    )
-  )
-    throw unavailable();
-}
-function originalEnvironment(
-  fixed: NativeMaterialLaunchScope,
-  original: NativeMaterialLaunchRecord["original"],
-) {
-  return [
-    { name: "NATIVE_MATERIAL_ALLOCATION_ID", value: fixed.allocationId },
-    { name: "NATIVE_MATERIAL_OWNER_USER_ID", value: fixed.ownerUserId },
-    { name: "NATIVE_MATERIAL_APPLICATION_ID", value: fixed.applicationId },
-    { name: "NATIVE_MATERIAL_GENERATION_ID", value: fixed.generationId },
-    { name: "NATIVE_MATERIAL_EPOCH_ID", value: fixed.epochId },
-    { name: "NATIVE_MATERIAL_WORK_ID", value: original.id },
-    { name: "NATIVE_MATERIAL_REQUEST_SHA256", value: original.requestSha256 },
-  ];
-}
-function actualTask(
-  value: unknown,
-  fixed: NativeMaterialLaunchScope,
-  config: NativeTaskLaunchConfiguration,
-  original: NativeMaterialLaunchRecord["original"],
-  expectedTaskArn?: string,
-): NativeTaskAllocation {
-  const r = value as { tasks?: Task[]; failures?: unknown[] } | null;
-  const t = r?.tasks?.[0];
-  const overrides = t?.overrides;
-  const container = overrides?.containerOverrides?.[0];
-  const expected = originalEnvironment(fixed, original);
-  const environment = container?.environment;
-  if (
-    !overrides ||
-    !Array.isArray(overrides.containerOverrides) ||
-    overrides.containerOverrides.length !== 1 ||
-    !container ||
-    container.name !== config.containerName ||
-    !Array.isArray(environment) ||
-    environment.length !== expected.length ||
-    new Set(environment.map((entry) => entry?.name)).size !== expected.length ||
-    !environment.every(
-      (entry) =>
-        entry &&
-        typeof entry.name === "string" &&
-        typeof entry.value === "string" &&
-        Object.keys(entry).every((key) => key === "name" || key === "value") &&
-        expected.some((wanted) => wanted.name === entry.name && wanted.value === entry.value),
-    ) ||
-    (container.command?.length ?? 0) !== 0 ||
-    (container.environmentFiles?.length ?? 0) !== 0 ||
-    (container.resourceRequirements?.length ?? 0) !== 0 ||
-    (container.cpu !== undefined && container.cpu !== 0) ||
-    (container.memory !== undefined && container.memory !== 0) ||
-    (container.memoryReservation !== undefined && container.memoryReservation !== 0) ||
-    (overrides.cpu !== undefined && overrides.cpu !== config.cpu) ||
-    (overrides.memory !== undefined && overrides.memory !== config.memory) ||
-    (overrides.taskRoleArn !== undefined && overrides.taskRoleArn !== config.taskRoleArn) ||
-    (overrides.executionRoleArn !== undefined &&
-      overrides.executionRoleArn !== config.executionRoleArn) ||
-    (overrides.inferenceAcceleratorOverrides?.length ?? 0) !== 0 ||
-    overrides.ephemeralStorage !== undefined
-  )
-    throw unavailable();
-  if (
-    !r ||
-    !Array.isArray(r.tasks) ||
-    r.tasks.length !== 1 ||
-    (r.failures !== undefined && (!Array.isArray(r.failures) || r.failures.length !== 0)) ||
-    !t ||
-    t.clusterArn !== config.clusterArn ||
-    t.taskDefinitionArn !== config.taskDefinitionArn ||
-    t.startedBy !== fixed.allocationId ||
-    t.launchType !== "FARGATE" ||
-    t.platformVersion !== "1.4.0" ||
-    t.enableExecuteCommand !== false ||
-    typeof t.taskArn !== "string" ||
-    (expectedTaskArn !== undefined && t.taskArn !== expectedTaskArn) ||
-    !Array.isArray(t.containers) ||
-    t.containers.length !== 1 ||
-    t.containers[0]?.name !== config.containerName ||
-    t.containers[0].taskArn !== t.taskArn ||
-    ![
-      "PROVISIONING",
-      "PENDING",
-      "ACTIVATING",
-      "RUNNING",
-      "DEACTIVATING",
-      "STOPPING",
-      "DEPROVISIONING",
-      "STOPPED",
-    ].includes(t.lastStatus ?? "")
-  )
-    throw unavailable();
-  const result = Object.freeze({
-    allocationId: fixed.allocationId,
-    ownerUserId: fixed.ownerUserId,
-    applicationId: fixed.applicationId,
-    generationId: fixed.generationId,
-    clusterArn: config.clusterArn,
-    taskDefinitionArn: config.taskDefinitionArn,
-    containerName: config.containerName,
-    taskArn: t.taskArn,
-  });
-  nativeTaskAllocationRegion(result);
-  return result;
-}
-
 /** Private control-plane launcher only. No content, provider, SQL driver, credential issuer,
  * task listing or stop/settlement capability. Registry ports must be owning/authenticated.
  * Exactly one persisted attempt: a lost claim/RunTask/bind ACK never authorizes another RunTask.
@@ -431,7 +180,7 @@ export function createNativeTaskLaunch(options: {
           new DescribeTaskDefinitionCommand({ taskDefinition: config.taskDefinitionArn }),
         );
         permitted();
-        taskDefinition(definition, config);
+        validateNativeTaskDefinition(definition, config, "native-material/main.mjs");
         const claim = await registry.claimLaunch(fixed, configSha);
         permitted();
         if (typeof claim?.claimed !== "boolean") throw unavailable();
@@ -466,7 +215,7 @@ export function createNativeTaskLaunch(options: {
               containerOverrides: [
                 {
                   name: config.containerName,
-                  environment: originalEnvironment(fixed, record.original),
+                  environment: nativeMaterialLaunchEnvironment(fixed, record.original),
                 },
               ],
             },
@@ -474,7 +223,12 @@ export function createNativeTaskLaunch(options: {
         );
         // An actually fulfilled late launch must be captured even after timeout/withdrawal.
         // The owning registry keeps capture authority independent of new-launch activation.
-        const allocation = actualTask(response, fixed, config, record.original);
+        const allocation = nativeLaunchedTask(
+          response,
+          fixed,
+          config,
+          nativeMaterialLaunchEnvironment(fixed, record.original),
+        );
         const bound = await registry.bindTask(allocation);
         if (!bound.allocation || bound.allocation.taskArn !== allocation.taskArn)
           throw unavailable();
@@ -490,7 +244,13 @@ export function createNativeTaskLaunch(options: {
         new DescribeTasksCommand({ cluster: config.clusterArn, tasks: [taskArn as string] }),
       );
       permitted();
-      const allocation = actualTask(response, fixed, config, record.original, taskArn);
+      const allocation = nativeLaunchedTask(
+        response,
+        fixed,
+        config,
+        nativeMaterialLaunchEnvironment(fixed, record.original),
+        taskArn,
+      );
       const bound = await registry.bindTask(allocation);
       if (!bound.allocation || bound.allocation.taskArn !== allocation.taskArn) throw unavailable();
       permitted();

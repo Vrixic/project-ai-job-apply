@@ -1,5 +1,65 @@
 # Documents Service
 
+Private `./native-resume-dns-route` implements one immutable allocation A-record intent in a
+configured Route 53 zone. It exposes create, exact inspection/deletion and change-propagation
+status, with runtime/creation gates off by default. It does not upsert, retry failed writes or
+treat record absence as cleanup completion. The caller must persist the intent, claim each write
+and reconcile ambiguous responses before enabling preparation/retirement composition. There is
+no DNS deployment or content authorization in this adapter; see
+[DNS transport evidence](../../../docs/product/delivery/evidence/d3-native-resume-dns-transport-2026-10-07.md).
+
+Private `./native-resume-task-address` resolves the original ready resume task's public IPv4
+through signed regional ECS and EC2 metadata reads. It pins the stored launch configuration,
+running task/image/overrides and attached ENI, checks owner/subnet/security groups, and rereads
+task/ledger metadata before returning. It defaults off and has no DNS, launch, stop or ENI-write
+capability. Its result is a point-in-time network observation, not candidate authorization,
+DNS/TLS readiness or continued liveness. The recovery-oriented ledger read permits sealed
+allocations; any future route writer must separately enforce current owner admission. DNS
+registration, propagation, retirement cleanup and private runtime composition are still required.
+
+The native runtime now publishes a scalar ready receipt after grounding and PDF/DOCX verification.
+The authenticated private action carries only the exact material reference, cited fact IDs and
+confidence. Documents migration 0013 makes this metadata immutable and portable. Apply it and pin
+the updated numeric receiver before enabling an updated image; older receivers refuse the action.
+The dedicated default-off native preparation initializer/recovery consumes this receipt.
+Internal `readAllocation` discovers only the original allocation ID from an exact packet material
+reference after ready/work/identity/admission/expiry checks. The separate default-off Gateway
+location route now consumes this metadata with packet proof before/after lookup. Managed
+routing/client integration remains unfinished.
+See [receipt evidence](../../../docs/product/delivery/evidence/d3-native-ready-receipt-2026-10-06.md).
+
+Private `./native-task-bootstrap` binds the task's own ECS container/task metadata, reads its
+original approval over signed owner RPC and starts the existing kernel/content runtime after
+admission. It waits only for the original launcher's task bind and exposes no work issuer or
+renewal. Image-owned provider/TLS/kernel configuration and executable image remain required.
+See [startup evidence](../../../docs/product/delivery/evidence/d3-native-task-bootstrap-2026-10-06.md).
+
+Private native owner RPC additionally reads the original claimed preparation's approval/context
+through Applications and checks Documents' exact original work expiry. The strict nine-scalar
+reply pins the original Documents row version and grants no renewal or work creation capability. See [bootstrap evidence](../../../docs/product/delivery/evidence/d3-native-approved-bootstrap-2026-10-06.md).
+
+Private native owner RPC source now connects task authentication before lazy owner access,
+original reviewed evidence/consent, owning admission and scalar work/completion. It defaults off,
+requires a numeric receiver and explicit original task deployment, and never accepts standalone
+scalar requests as a fallback. Proof headers are ephemeral and never enter owner adapters or
+responses. See [configuration and local evidence](../../../docs/product/delivery/evidence/d3-native-owner-rpc-2026-10-06.md).
+Native image/bootstrap/IAM/routing/managed/provider/client acceptance still gates activation.
+
+
+Private `./native-task-caller-client` and `./native-task-caller-verifier` supply default-off
+original-task authentication before future native owner/control RPC admission. Actual SDK SigV4
+signing binds fixed allocation/target/request metadata; the verifier forwards only the fixed
+regional STS identity action and checks the trusted role and original task session. Production
+signing uses only the fixed ECS task credential endpoint. Credential-bearing proofs are ephemeral,
+never logged or persisted. This is authentication source, not deployed IAM/physical liveness,
+owning admission, provider settlement or purge evidence. Authenticated RPC source is present; managed composition remains required.
+
+The private `./native-cover-letter-runtime` connects one admitted native original allocation to
+scalar work/completion ports, the actual memory actor/renderers and authenticated HTTPS reads.
+Defaults remain off; trusted launch, owner/provider/TLS adapters, native image/routing and managed
+retirement conformance remain release gates. It exposes non-content metadata and its server,
+without exporting the raw session reader or claiming death/provider settlement on termination.
+
 Owns immutable source resumes, normalized resume trees, tailored versions, cover letters,
 rendering state, version diffs, and artifact metadata.
 
@@ -686,3 +746,57 @@ then confirms the current sealed epoch. No task receipt settles provider work. M
 optional technical export and restore boundaries preserve deletion blockers and revoked cleanup
 fences. The private launcher/RPC/IAM/image/routing/managed-task and full client/ATS/provider gates
 remain; nothing is activated. [Registry evidence](../../../docs/product/delivery/evidence/d3-native-material-registry-2026-10-05.md).
+
+The private `./native-evidence-binding` validator and registry `checkEvidenceAdmission` pin
+original task/work/current unsealed admission before owner evidence reads. Admission locks end
+before reading facts/job; it never consumes work or proves task liveness. Existing original
+work-claim guards remain final authority. See [evidence](../../../docs/product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
+
+Private `./native-resume-generation-store` supplies a default-off Documents-owned original
+resume ledger, independent of cover-letter provider consent. Applications/Jobs owner ports run
+on the same transaction; parsed-source hashes, one launch claim, exact task/config binding,
+original completion/ready metadata and positive retirement are scalar-only. Shared admission
+prevents cross-kind overlap and false disposal acknowledgement. Migration 0014, strict export
+consumer rollout and current restore boundary are required before store deployment. Authenticated
+resume RPC/source/Jobs/task/packet/image/client/ATS composition remains unfinished. See
+[evidence](../../../docs/product/delivery/evidence/d3-native-resume-generation-ledger-2026-10-07.md).
+
+The resume ledger's SQL integration now uses actual Applications and Jobs owner ports:
+canonical source eligibility, current packet summary revision and exact resume context
+stay fenced on the original transaction. This does not activate authenticated task,
+source or packet transport. See [local evidence](../../../docs/product/delivery/evidence/d3-native-resume-jobs-admission-2026-10-07.md).
+
+Private native-resume task binding and owner RPC now connect authenticated original
+admission/bootstrap/principal/completion/ready metadata to the generation ledger.
+Resume signing domains are distinct from cover-letter consent/work. Shared transport
+uses fixed ECS credentials, numeric Lambda versions and no retry of unknown transport.
+The independent owner Lambda opens its bounded SQL pool only after task authentication.
+Source bytes, task/image launch/bootstrap and packet/client/ATS composition remain
+separate work. See [source and local evidence](../../../docs/product/delivery/evidence/d3-native-resume-owner-rpc-2026-10-07.md).
+
+Private `./native-resume-source-rpc-client` supplies the session-compatible original
+source loader through a separate authenticated recipient. Its owning source runtime
+uses the ledger, candidate lease, exact Jobs context and bounded version/digest-checked
+normalized object reader. Generated bodies, rendering and provider work are excluded.
+Existing processor/tailoring imports retain compatible re-exports after the source-reader
+extraction. Source/runtime IAM, task/image/launch and managed acceptance remain gates.
+See [local evidence](../../../docs/product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).
+
+## Native bodyless availability (2026-10-07)
+
+The shared cover-letter/resume HTTPS transport accepts HEAD on the exact preview path. It applies
+OIDC identity, current-packet proof and live held-memory revalidation before returning 204 with
+the original scalar reference in `X-Native-Material-Reference`. It never serializes preview text
+for HEAD, and HEAD on file or unknown paths is rejected. The Gateway uses this only as a fresh
+point-in-time binding check; it is not a content lease, lifetime extension or disposal proof.
+Deploy updated native images before enabling Gateway availability. Source/local evidence is in
+[the delivery record](../../../docs/product/delivery/evidence/d3-native-material-availability-2026-10-07.md).
+
+## Shared terminal application disposal
+
+`./native-application-disposal-store` seals both native material kinds in one Documents-owned
+transaction. Only an unclaimed original allocation can be abandoned without task observation.
+Claimed unknown launches remain unresolved; bound allocations require positive original-task
+retirement. Migration 0016 is required. Gateway composes this after its owner-scoped terminal
+application mutation, behind a separate default-off switch and retained-deployment allowlist.
+See [local evidence](../../../docs/product/delivery/evidence/d3-native-application-disposal-2026-10-07.md).

@@ -1,5 +1,77 @@
 # Data Flow and Classification
 
+2026-10-06 native direct reads: authenticated original task admission -> current packet proof from
+the scalar Gateway route -> original task admission again; HTTPS repeats this proof around
+rendering. Sealed admission cannot serve a file while a stale packet reference remains. Gateway
+authorization stays default off and requires existing packet-protection authority; no generated
+body crosses Lambda. [Evidence](../product/delivery/evidence/d3-native-read-admission-2026-10-06.md).
+
+2026-10-06 source-only native preparation activity: exact numeric private activity -> managed
+database secret -> separate owning pools/current packet protection -> original scalar native
+launcher. Fresh-launch shutdown preserves read-only original receipt recovery. This dedicated
+artifact excludes legacy objects, generated content, model, rendering and ECS capabilities.
+Managed caller IAM, key/role, target selection and routing/provider approval remain gates.
+[Evidence](../product/delivery/evidence/d3-native-preparation-runtime-2026-10-06.md).
+
+2026-10-06 source-only/default-off native preparation: claimed Applications preparation -> current
+owner evidence -> memory-only canonical request digest -> original Documents reservation/grant ->
+private native launcher. Recovery reads only exact current-admission scalar receipt -> original
+temporary material/hash/citations/confidence -> Applications completion. No generated body or
+legacy provider object crosses this path; launch and receipt ACKs grant no liveness authority.
+[Evidence](../product/delivery/evidence/d3-native-preparation-flow-2026-10-06.md).
+
+2026-10-06 scalar native ready receipt: verified bounded process -> signed exact-task owner RPC
+-> active owning admission -> original completion/settled work/expiry checks -> Documents immutable
+fact IDs/confidence. No generated body crosses this handoff. Identifiers and hashes remain candidate
+metadata under existing owned-row retention/deletion; candidate portability includes the receipt.
+This is not liveness, process-death, provider acceptance or production approval.
+[Evidence](../product/delivery/evidence/d3-native-ready-receipt-2026-10-06.md).
+
+2026-10-06 native task startup (source-only/default-off): original scalar launch environment
+-> fixed link-local ECS self/container/task metadata -> detached allocation/work binding
+-> signed owning admission -> original stored approval -> trusted image-owned ports -> kernel
+-> scoped owner evidence -> existing memory-only generation/render/HTTPS. Metadata is not caller
+authentication, image attestation, ongoing admission or death. The read-only startup wait cannot
+claim/renew work or admit candidate evidence before the kernel. No SQL/object/task-control path
+is added; executable image and real image-owned configuration/managed acceptance remain.
+[Evidence](../product/delivery/evidence/d3-native-task-bootstrap-2026-10-06.md).
+
+2026-10-06 private native bootstrap (source-only/default-off): authenticated original task request
+-> owning Applications active-candidate/preparation read -> stored approval/context scalars
+-> Documents original-work expiry/context check -> owning preparation recheck -> strict bound
+eight-scalar response. Approval timestamps are never reconstructed from launch overrides or
+renewed. No candidate body or new write capability crosses the bootstrap read. Current packet,
+revision, claimed state and database-time freshness must still match; this does not supply
+continuous admission, live provider permission or managed image trust.
+[Evidence](../product/delivery/evidence/d3-native-approved-bootstrap-2026-10-06.md).
+
+2026-10-06 authenticated native owner RPC (source-only/default-off): fixed task/recipient/operation
+proof -> AWS identity verification -> lazy managed-secret owner composition -> exact native
+admission -> original approved context/consent -> owner facts/job APIs or original scalar
+controls -> proof-free bound response. Evidence is private candidate data, bounded in memory;
+proofs contain credentials and are never logged/persisted/queued/exported or passed to owners.
+Authentication precedes owner access; SQL admission/context checks surround owner awaits.
+No generated content or new issue/renew/background/task-control authority crosses this RPC.
+[Evidence](../product/delivery/evidence/d3-native-owner-rpc-2026-10-06.md). Managed rollout gates remain.
+
+2026-10-06 original native caller proof (source-only/default-off): exact ECS credential endpoint
+-> actual SDK signing of fixed regional STS identity/context -> ephemeral private proof -> fixed
+AWS verification -> trusted role/original task-session match -> future separate owning admission.
+Proof headers carry credential material and must never be logged, persisted, queued or exported.
+Original allocation, recipient and request digest cannot be retargeted. Authentication is not
+liveness, work settlement, death or purge authority. Reviewed ECS-only role trust and managed
+conformance remain required before private RPC/image/bootstrap activation.
+[Evidence](../product/delivery/evidence/d3-native-task-caller-proof-2026-10-06.md).
+
+2026-10-06 native cover-letter composition checkpoint (source-only/default-off): fixed original
+private admission precedes kernel loading; admission surrounds source-evidence awaits and repeats
+before exposing the unbound authenticated HTTPS server. Original controls carry scalar metadata;
+generated material and actual PDF/DOCX verification remain inside the kernel-bounded process.
+Per-document PDF diagnostics are disabled. Source/admission/provider/TLS adapters and trusted
+listener/image/IAM/routing/managed/client conformance remain activation requirements, not evidence
+of authenticated deployment. Termination is a request, never provider settlement or death/purge
+acknowledgement. [Local evidence](../product/delivery/evidence/d3-native-runtime-composition-2026-10-06.md).
+
 ## Source-only private maintenance-fence bootstrap (2026-10-03)
 
 Original owned work references -> closed unchanged cleanup RPC -> independent default-off
@@ -743,3 +815,92 @@ Event/source equality does not authenticate senders. Reviewed service resource p
 version/configuration retention, durable retry/DLQ routing and actual managed event serialization
 remain gates. No generated body/model/database credentials enter this receiver; activation stays
 off. [Local evidence](../product/delivery/evidence/d3-native-task-event-recovery-2026-10-06.md).
+
+
+## Allocation-bound native scalar controls (2026-10-06)
+
+Dedicated content process -> fixed original claim/settlement/completion metadata -> signed numeric
+owning controls. The adapter cannot issue/renew work, select another owner/document, settle a
+background terminal phase, launch/stop tasks or certify purge. Only acknowledged normal original
+provider settlement permits one completion attempt; unknown/late replies never authorize replay.
+Transport holds one active send until actual settlement; kernel host retirement is independent
+from remote provider/work outcomes. The trusted input/task binding is not IAM authentication.
+Per-task/private admission, managed sender/receiver IAM and content runtime remain release gates;
+all flags stay off. [Local evidence](../product/delivery/evidence/d3-native-material-controls-2026-10-06.md).
+
+## Native original owner evidence admission (2026-10-06)
+
+Trusted fixed allocation/work/context -> short owning native admission -> lease-bound owner APIs
+(excluding restricted facts) -> original context comparison -> repeat owning admission -> detached
+original evidence. SQL locks end before content reads; no grant/renewal/body persistence follows.
+Active identity/application and current bound/unsealed exact task gates differ from recovery after
+seal. Point-in-time metadata checks do not authenticate callers or prove task liveness/retirement.
+Private task transport/IAM and managed bootstrap remain gates; activation stays off.
+[Local evidence](../product/delivery/evidence/d3-native-evidence-admission-2026-10-06.md).
+
+## Native image port checkpoint — 2026-10-06
+
+The image reads only exact-version provider/TLS secrets with ECS task credentials. Secret values,
+TLS private key and original principal stay in dedicated process memory; no environment secret,
+SQL/object/task-control authority, logs or candidate content forwarding is added. Profile's owning
+active-candidate projection refuses missing/ambiguous subjects and is surrounded by authenticated
+original work admission. Direct reads reverify managed OIDC and normal Gateway scalar authorization.
+The default image is disabled; managed release/IAM/TLS/routing/provider acceptance remains open.
+See [local evidence](../product/delivery/evidence/d3-native-image-runtime-2026-10-06.md).
+
+## Native original document version — 2026-10-06
+
+The private owning bootstrap now includes Documents' original row version alongside the eight
+Applications approval/context scalars. It is rechecked before reply and pinned in native actor,
+controls, completion and direct-read references; a missing or wrong version cannot fall back to 1.
+The strict nine-scalar reply requires a coordinated exact numeric receiver/image rollout. This
+adds no body, token, fact value, storage, grant renewal or provider authority. Real SQL retains
+original owner/document/work/version comparison; actual managed acceptance remains open.
+See [version evidence](../product/delivery/evidence/d3-native-document-version-2026-10-06.md).
+
+## Native read-location metadata checkpoint — 2026-10-06
+
+A separate default-off Gateway route returns only current packet/original material metadata and a
+configured HTTPS origin derived from Documents' original allocation UUID. Authentication and
+current packet proof surround the owning readiness/allocation lookup. The origin is neither a
+credential nor liveness proof; no generated content crosses this route. Hostname drift, expiry,
+abort and activation withdrawal withhold the reply. Native HTTPS separately authorizes every read.
+Managed DNS/TLS/networking and direct browser/ATS token/content handoff remain release gates.
+[Local source evidence](../product/delivery/evidence/d3-native-read-location-2026-10-06.md).
+
+## D1 privileged moderation audit checkpoint — 2026-10-06
+
+Default-off Jobs moderation access/attempt capture uses the existing Gateway OIDC operator
+fingerprint, fixed action and nullable resource UUID. Profile owns the existing platform audit
+row, records database time and omits candidate linkage, raw identity/body/token/cursor fields.
+Pseudonymous operator metadata expires through separate default-off exact-format 365-day
+counts-only maintenance; candidate exports exclude these unlinked rows. No automatic scheduler,
+managed maintenance, raw audit reader, historical backfill or production approval is asserted.
+[Source/local evidence](../product/delivery/evidence/d1-privileged-moderation-audit-2026-10-06.md).
+
+2026-10-07 native resume retained-source checkpoint (source-only/default-off): original
+SDK-signed task → separate numeric source Lambda → lazy Documents/Jobs ownership and
+candidate source lease → exact normalized S3 version/digest → final admission → bounded
+normalized resume and exact job context. Generated bodies never enter this path. Proofs
+and source values are excluded from logs/persistence; task replies omit object locations
+and credentials. Admission/Jobs transactions end before object I/O; only the separate
+active-candidate source lease spans it. Source holds, completion, sealing and changed
+job/preparation withhold the result. Managed IAM/source/task/client acceptance remains
+open. [Evidence](../product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).
+
+## Native material availability (2026-10-07, default off)
+
+Authenticated candidate approval/submission request -> request-scoped candidate token ->
+owner-resolved exact allocation hostname over verified TLS 1.3 -> native OIDC/current-packet
+proof -> held in-process memory read/revalidation -> HTTP 204 with scalar original reference.
+The Gateway neither downloads nor forwards generated content. It compares the complete reference,
+rejects redirects and nonempty response framing, bounds the lookup/request and rechecks expiry.
+Tokens are cleared when the request-scoped work finishes and are never persisted or logged.
+The native proof calls the existing scalar Gateway authorization endpoint; it does not recursively
+resolve approval bindings. SQL application locks are not held across the HTTPS check.
+
+This proves point-in-time availability, not a transferable memory lease, continued availability,
+submission authority or disposal. Submission binding checks repeat the observation; the ATS
+handoff must still hold/revalidate its own content lease. Transport failures refuse approval.
+Activation requires updated native images, explicitly provisioned application NAT and exact NAT
+source access to native task port 8443. No infrastructure has been applied by this change.

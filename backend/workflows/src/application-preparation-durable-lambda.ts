@@ -1,8 +1,9 @@
-import type { DurableLambdaHandler } from "@aws/durable-execution-sdk-js";
+import { type DurableLambdaHandler, withDurableExecution } from "@aws/durable-execution-sdk-js";
 import { createApplicationPreparationDurableHandler } from "./application-preparation-durable.js";
+import { createNativePreparationRouteWorkflow } from "./native-preparation-route-durable.js";
 
 type Environment = Readonly<Record<string, string | undefined>>;
-type Configuration = { target: string; activity: string };
+type Configuration = { target: string; activity: string; routeControl?: string };
 const unavailable = () => new Error("ApplicationPreparationWorkflowUnavailable");
 
 function configuration(env: Environment): Configuration | undefined {
@@ -35,6 +36,22 @@ function configuration(env: Environment): Configuration | undefined {
     target.slice(0, target.lastIndexOf(":")) === activity.slice(0, activity.lastIndexOf(":"))
   )
     return;
+  const routeEnabled = env.NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED;
+  if (routeEnabled !== undefined && !["true", "false"].includes(routeEnabled)) return;
+  if (routeEnabled === "true") {
+    const routeControl = env.NATIVE_MATERIAL_LAUNCH_FUNCTION_ARN;
+    if (
+      !routeControl?.startsWith(prefix) ||
+      !numeric.test(routeControl) ||
+      [target, activity].some(
+        (arn) =>
+          arn.slice(0, arn.lastIndexOf(":")) ===
+          routeControl.slice(0, routeControl.lastIndexOf(":")),
+      )
+    )
+      return;
+    return { target, activity, routeControl };
+  }
   return { target, activity };
 }
 
@@ -58,12 +75,28 @@ export function createNativeApplicationPreparationDurableHandler(
     if (
       !config ||
       context?.invokedFunctionArn !== config.target ||
-      (pinned && (pinned.target !== config.target || pinned.activity !== config.activity))
+      (pinned && JSON.stringify(pinned) !== JSON.stringify(config))
     )
       throw unavailable();
     if (!runtime) {
       pinned = config;
-      runtime = createApplicationPreparationDurableHandler(config.activity);
+      runtime = config.routeControl
+        ? withDurableExecution(
+            createNativePreparationRouteWorkflow({
+              activityArn: config.activity,
+              controlArn: config.routeControl,
+              enabled: () => {
+                try {
+                  return JSON.stringify(configuration(environment())) === JSON.stringify(pinned);
+                } catch {
+                  return false;
+                }
+              },
+              creationEnabled: () =>
+                environment().NATIVE_MATERIAL_ROUTE_CREATION_ENABLED === "true",
+            }),
+          )
+        : createApplicationPreparationDurableHandler(config.activity);
     }
     // Delegate the original SDK control envelope unchanged; its workflow validates the strict
     // identifier-only application payload. Never wrap SDK continuation/checkpoint exceptions.

@@ -221,8 +221,55 @@ issued idempotent catalog write may finish before the next gate check. The candi
 the dedicated `jobs:moderate` administration port are locally verified source. The privileged API
 provides signed keyset pagination, fixed-code aggregate report counts, explicit case opening, and
 version-fenced resolution while excluding operator identities from transport responses. Reports
-still do not trigger automation, and there is no source-resume operation, approved
-retention/deletion policy, real-report processing, migration apply, or deployment claim.
+still do not trigger automation, and there is no source-resume operation or real-report processing
+claim. The owner accepted the D1 reporting policy in `d1-governance-v1`; deployment and final
+accountable review remain separate gates.
+
+Migration `0025_job_report_retention` implements the candidate-report portion of D1P-06. A report
+links once to the first same-job case active at receipt or explicitly opened within its original
+90-day window. Case opening links retained unlinked reports; later reports join that case while
+it is open. Historical backfill uses the same target/time interval, without asserting human review.
+No case is opened or catalog state changed automatically. An open linked case postpones expiry;
+after closure the deadline is the later of receipt + 90 days and closure + 30 days. Expiry deletes
+the entire report and linkage (including owner, request hash and idempotency hash), retaining only
+per-job fixed-reason counts. Confirmed candidate deletion still removes reports immediately and
+does not create an aggregate. Aggregate moderation counts combine active reports and expired totals.
+
+Apply the migration before deploying new Jobs readers. Deploy aggregate-aware readers before
+enabling cleanup; old readers remain structurally compatible but omit expired totals. Disable
+maintenance to roll back code; deleted candidate linkage cannot be reconstructed. The standalone
+`dist/src/run-job-report-retention.js` requires `JOB_REPORT_RETENTION_ENABLED=true`, an owning
+`DATABASE_URL`, and an optional integer `JOB_REPORT_RETENTION_BATCH_LIMIT` (default 100, max 1000).
+It performs one atomic batch with 30-second statement/idle and two-second lock bounds, emits only
+an expired count and is not a candidate API. SQL execution is denied to PUBLIC; a reviewed
+maintenance principal must receive an exact execution grant. Scheduling, runtime/IAM release,
+privileged audit retention and 30-day alert metadata remain unfinished. Nothing here
+authorizes real candidate reports or activates a hosted cleanup task.
+
+Migration `0026_moderation_case_retention` backfills one minimal block per job and one pause per
+exact source/version/configuration tuple from resolved cases. New explicit resolutions update
+these controls atomically. Closed cases and their decision events expire after 365 days, only
+after linked reports expire and required controls exist. Operator identities and case details
+are deleted; controls contain only target identifiers and last-action time. Needed blocks and
+pauses remain to prevent resurrection. Phase 1 provides no job unblock or source resume authority.
+
+Deploy the control-aware ingestion pause reader before enabling case cleanup; an older reader
+that queries only cases would lose pause evidence after deletion. Roll back with cleanup disabled
+and preserve the control-aware reader once cases have been removed. In addition to the report flag,
+`JOB_MODERATION_RETENTION_ENABLED=true` explicitly selects combined maintenance. One owning
+transaction expires reports first, then cases/events and unused old job controls. With that flag
+unset, the existing report-only command remains unchanged. Both modes default off. The database
+function is bounded, uses row locks with SKIP LOCKED, and denies PUBLIC execution. This is local
+implementation, with no maintenance schedule, principal grant or hosted activation.
+
+Migration `0027_candidate_report_export_status` adds review status to each retained owner report
+in candidate exports. `received` means no exact case link, `under_review` means its linked case
+is open, and `resolved` means that case is closed. This does not attest report accuracy or imply
+a particular moderation decision. No case/operator identity, other reporter, request hash or
+idempotency hash is exported; existing creation audit metadata is preserved. The portable v1
+schema makes this field optional so historical artifacts remain valid, while new SQL exports
+always include it. Deploy schema-aware export consumers before applying the migration: older
+strict validators refuse the new field. Keep those consumers on rollback after migration.
 
 Migration `0009_provider_ingestion_sources` aligns Jobs-owned durable checkpoint persistence with
 the existing bounded source-neutral identifier contract. It permits Greenhouse, Lever, and Ashby
@@ -304,3 +351,11 @@ crawlability, real-source acceptance, or deployment is claimed.
 
 This service determines source truth. Per-user constraint assessment and any future ranking belong
 to Matching.
+
+Private `./native-resume-admission` proves canonical active source truth, the current
+packet summary revision and full resume context on Documents' same short transaction.
+It defaults off and returns no posting content. Existing revision triggers fence
+posting/company/alias commits; exact-member source rows have separate lifetime locks.
+Never hold these locks across source/network/rendering work. Workflows composes the
+actual Applications and Jobs adapters; authenticated task/source/preparation/read and
+managed acceptance remain unfinished. See [local evidence](../../../docs/product/delivery/evidence/d3-native-resume-jobs-admission-2026-10-07.md).

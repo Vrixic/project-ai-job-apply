@@ -192,3 +192,8 @@ output "d2_community_route_ids" {
     } : {}
   )
 }
+
+output "account_id" {
+  description = "Actual environment account for exact private release bindings."
+  value       = data.aws_caller_identity.current.account_id
+}

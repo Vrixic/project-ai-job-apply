@@ -91,3 +91,70 @@ Remote init must explicitly request `use_lockfile=true`, and operators must veri
 cached S3 backend's locking, encryption and exact identity before planning or applying. A provider
 dependency lock is not a remote state lock. Never disable locking. The excluded GitHub Actions
 files retain their old pin and must not be used for cloud planning during this local-only transition.
+
+- `modules/native-resume-task/` supplies an unattached, default-empty native resume task/role release; environment release maps are empty by default.
+
+- `modules/native-resume-source-access/` supplies an unattached owner/source Lambda pair with separate bounded roles and disabled runtime defaults.
+
+- `modules/native-resume-preparation/` supplies unattached private control, durable and dispatcher release wiring with disabled launch/schedule defaults.
+
+
+Native resume control IAM is opt-in through bootstrap `native_resume_control_releases`, keyed by
+original task revision with exact cluster, database secret and platform key. Each entry creates a
+separate principal-bound ceiling and exact deployment permissions; the shared workload boundary
+is unchanged. Keep original entries until trusted drain. The preparation module expects that
+boundary before role creation. Empty input preserves current bootstrap behavior. Policy-size
+validation rejects a combined deployment policy over 6144 characters; do not remove unresolved
+releases to fit a new one. No environment currently enables these inputs.
+
+
+### Optional native resume environment releases
+
+Development and staging now expose three separate default-empty maps:
+`native_resume_source_access_releases`, `native_resume_task_releases`, and
+`native_resume_preparation_releases`. Values hold the respective module's `release` object;
+source/preparation also accept `enabled` (default false), and preparation accepts
+`new_launch_enabled` and `schedule_enabled` (both default false). Actual account identity comes
+from the environment platform. `native_resume_release_bindings` exposes scalar outputs for
+review. No checked-in environment input populates these maps.
+
+Preserve release staging: first review/apply the exact bootstrap boundary and source RPC
+artifacts, then build the image against their original numeric versions, then supply the exact
+image/task and preparation receipts. Image/task/source/preparation bindings must agree; these
+maps do not automatically retarget a previously built image or refresh original recipients.
+Keep source and runtime stages separate and retain all original instances while work is
+unresolved. A populated map is deployment configuration, not authorization or release acceptance.
+
+The current environment locks use AWS provider 6.58.0, matching the native modules. Both roots
+validate and each has three mocked tests for default absence, separate source publication and
+explicit task/preparation binding forwarding. Backend initialization is disabled in these checks;
+no refresh-backed managed plan or actual apply is claimed. DNS/TLS, ingress, original route
+cleanup, managed permissions/runtime and client/ATS acceptance still block activation.
+
+
+### Native owner cleanup release
+
+`native_cleanup_release` selects the immutable worker ZIP/version/checksum, built with
+`pnpm --filter @ai-job-apply/gateway build:lambda:native-cleanup`. The guarded development
+publisher family `NativeMaterialCleanup` isolates its four objects under
+`lambda/native-material/cleanup/<source>/<digest>/` and uses a separate receipt directory.
+Its existing exact-main, dependency audit, deterministic-build and versioned readback gates apply.
+Building locally is supported on a clean feature commit; cloud publication retains its main gate.
+
+Before activation, apply Applications 0014, retain exact original task deployments in
+`native_cleanup_deployments`, and match their clusters in bootstrap `native_cleanup_clusters`.
+The optional release alone leaves `native_cleanup_enabled` and `native_cleanup_schedule_enabled`
+false. Enable the worker and its numeric schedule before enabling Gateway owner cleanup; Terraform
+rejects Gateway activation unless the worker covers every Gateway disposal deployment. Preserve
+retained deployment entries while corresponding queue/native work is unresolved. Managed acceptance
+must verify lease recovery, original task retirement and eventual status through authenticated reads;
+`native_tasks_settled` does not prove provider or client-copy deletion. No release is activated by
+these source defaults. Existing publication/deployment authorization requirements still apply.
+
+
+`native_material_repositories_enabled` defaults false in development/staging. Enabling it creates
+only `ai-job-apply/native-material` and `ai-job-apply/native-resume` ECR repositories with immutable
+tags, platform KMS encryption, push scanning and force deletion disabled. No lifecycle expiry is
+configured: retained original task digests must stay available for recovery. This storage stage does
+not publish images, register tasks, create secrets, configure DNS or activate processing. Review the
+saved environment plan before applying; source defaults remain off.

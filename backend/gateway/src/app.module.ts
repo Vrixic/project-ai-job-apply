@@ -5,7 +5,6 @@ import type {
   ApplicationAttempt,
   ApplicationCoverLetterFile,
   ApplicationCoverLetterPreview,
-  ApplicationTemporaryMaterialAuthorization,
   ApplicationHistoryPage,
   ApplicationPacketPreparation,
   ApplicationPage,
@@ -15,6 +14,8 @@ import type {
   ApplicationSearchRequest,
   ApplicationSubmissionResultRequest,
   ApplicationSubmissionStart,
+  ApplicationTemporaryMaterialAuthorization,
+  ApplicationTemporaryMaterialLocation,
   ApproveApplicationPacketRequest,
   CandidateDataExport,
   CandidateDataExportAccess,
@@ -80,7 +81,10 @@ import type {
   WithdrawTrustContributionRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
-import type { ApplicationsApi } from "@ai-job-apply/applications-service";
+import {
+  type ApplicationsApi,
+  ApplicationsUnavailableError,
+} from "@ai-job-apply/applications-service";
 import {
   type AccessTokenVerifier,
   AuthenticationError,
@@ -169,6 +173,7 @@ import {
   type UgcContributionConsentStore,
   UgcContributionConsentUnavailableError,
 } from "@ai-job-apply/profile-service";
+import type { PrivilegedModerationAuditWriter } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import {
   TrustApplicationError,
   type TrustApplicationService,
@@ -206,6 +211,8 @@ import {
   parseResumeFormatQuery,
   projectApplicationsFailure,
 } from "./applications-http.js";
+import { withNativeMaterialCredential } from "./native-material-availability.js";
+import type { NativeMaterialWithdrawalApi } from "./native-owner-material-cleanup.js";
 import { temporaryMaterialRequestSignal } from "./temporary-material-http.js";
 import {
   type OidcTrustReviewerAuthority,
@@ -221,8 +228,10 @@ const CONTRIBUTION_CAPABILITY_POLICY = Symbol("CONTRIBUTION_CAPABILITY_POLICY");
 const UGC_CONTRIBUTION_CONSENTS = Symbol("UGC_CONTRIBUTION_CONSENTS");
 const UGC_CONTRIBUTION_POLICY_VERSION = Symbol("UGC_CONTRIBUTION_POLICY_VERSION");
 const JOB_MODERATION = Symbol("JOB_MODERATION");
+const PRIVILEGED_MODERATION_AUDIT = Symbol("PRIVILEGED_MODERATION_AUDIT");
 const SAVED_JOBS = Symbol("SAVED_JOBS");
 const APPLICATIONS = Symbol("APPLICATIONS");
+const NATIVE_MATERIAL_WITHDRAWALS = Symbol("NATIVE_MATERIAL_WITHDRAWALS");
 const PRIVATE_SAVED_PAGE_CAPTURES = Symbol("PRIVATE_SAVED_PAGE_CAPTURES");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
@@ -348,6 +357,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/saved-job-captures",
   "/v1/saved-job-captures/:captureId",
   "/v1/entitlements",
+  "/v1/material-withdrawals/:requestId",
   "/v1/applications",
   "/v1/applications/search",
   "/v1/applications/:applicationId",
@@ -1583,13 +1593,24 @@ class AdminModerationController {
   constructor(
     @Inject(RequestIdentity) private readonly identity: RequestIdentity,
     @Inject(JOB_MODERATION) private readonly moderation: JobModeration,
+    @Inject(PRIVILEGED_MODERATION_AUDIT)
+    private readonly audit: PrivilegedModerationAuditWriter | null,
   ) {}
+
+  private async recordAudit(input: Parameters<PrivilegedModerationAuditWriter["record"]>[0]) {
+    if (!this.audit) return;
+    try {
+      await this.audit.record(input);
+    } catch {
+      throw new ModerationServiceUnavailableError();
+    }
+  }
 
   @Post("/cases/search")
   @HttpCode(HttpStatus.OK)
   @Header("cache-control", "no-store")
   async searchCases(@Req() request: AuthenticatedRequest): Promise<ModerationCasePage> {
-    await this.identity.operator(request);
+    const operatorId = await this.identity.operator(request);
     if (
       (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
       !validateModerationCaseSearch(request.body)
@@ -1599,6 +1620,11 @@ class AdminModerationController {
         HttpStatus.BAD_REQUEST,
       );
     }
+    await this.recordAudit({
+      action: "jobs.moderation.case_search.access",
+      operatorId,
+      resourceId: null,
+    });
     const page = await this.moderation.searchCases(request.body as ModerationCaseSearchRequest);
     const projected = {
       items: page.items.map(projectModerationCase),
@@ -1626,6 +1652,11 @@ class AdminModerationController {
       );
     }
     const input = request.body as OpenModerationCaseRequest;
+    await this.recordAudit({
+      action: "jobs.moderation.case_open.attempt",
+      operatorId,
+      resourceId: input.target.kind === "job" ? input.target.jobId : null,
+    });
     return projectModerationCase(
       await this.moderation.openCase({
         target: input.target,
@@ -1657,6 +1688,11 @@ class AdminModerationController {
       );
     }
     const input = request.body as ResolveModerationCaseRequest;
+    await this.recordAudit({
+      action: "jobs.moderation.case_resolve.attempt",
+      operatorId,
+      resourceId: caseId,
+    });
     return projectModerationCase(
       await this.moderation.resolveCase({ caseId, operatorId, ...input }),
     );
@@ -1668,7 +1704,7 @@ class AdminModerationController {
     @Req() request: AuthenticatedRequest,
     @Param("jobId") jobId: string,
   ): Promise<JobReportSummary> {
-    await this.identity.operator(request);
+    const operatorId = await this.identity.operator(request);
     if (
       (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
       request.body !== undefined ||
@@ -1676,6 +1712,11 @@ class AdminModerationController {
     ) {
       throw new HttpException("The report-summary input is invalid", HttpStatus.BAD_REQUEST);
     }
+    await this.recordAudit({
+      action: "jobs.moderation.report_summary.access",
+      operatorId,
+      resourceId: jobId,
+    });
     const summary = await this.moderation.summarizeReports(jobId);
     if (!validateJobReportSummary(summary)) throw new ModerationServiceUnavailableError();
     return summary as JobReportSummary;
@@ -2777,6 +2818,58 @@ class ApplicationsController {
     );
   }
 
+  @Get("/:applicationId/cover-letter/location")
+  @Header("cache-control", "no-store")
+  async temporaryMaterialLocation(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationTemporaryMaterialLocation> {
+    const user = await this.identity.resolve(request, "applications:read");
+    const query = request.query as Record<string, unknown> | undefined;
+    if (
+      request.body !== undefined ||
+      !query ||
+      Object.keys(query).length !== 1 ||
+      typeof query.generationId !== "string"
+    )
+      throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
+    requireApplicationPath(applicationId, query.generationId);
+    if (!this.applications.temporaryMaterialLocation)
+      throw new HttpException("Applications are unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+    return this.applications.temporaryMaterialLocation(
+      user.id,
+      applicationId,
+      query.generationId,
+      temporaryMaterialRequestSignal(request),
+    );
+  }
+
+  @Get("/:applicationId/resume/location")
+  @Header("cache-control", "no-store")
+  async resumeMaterialLocation(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationTemporaryMaterialLocation> {
+    const user = await this.identity.resolve(request, "applications:read");
+    const query = request.query as Record<string, unknown> | undefined;
+    if (
+      request.body !== undefined ||
+      !query ||
+      Object.keys(query).length !== 1 ||
+      typeof query.generationId !== "string"
+    )
+      throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
+    requireApplicationPath(applicationId, query.generationId);
+    if (!this.applications.resumeMaterialLocation)
+      throw new HttpException("Applications are unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+    return this.applications.resumeMaterialLocation(
+      user.id,
+      applicationId,
+      query.generationId,
+      temporaryMaterialRequestSignal(request),
+    );
+  }
+
   @Get("/:applicationId/cover-letter/authorization")
   @Header("cache-control", "no-store")
   async temporaryMaterialAuthorization(
@@ -2796,6 +2889,32 @@ class ApplicationsController {
     if (!this.applications.temporaryMaterialAuthorization)
       throw new HttpException("Applications are unavailable", HttpStatus.SERVICE_UNAVAILABLE);
     return this.applications.temporaryMaterialAuthorization(
+      user.id,
+      applicationId,
+      query.generationId,
+      temporaryMaterialRequestSignal(request),
+    );
+  }
+
+  @Get("/:applicationId/resume/authorization")
+  @Header("cache-control", "no-store")
+  async resumeMaterialAuthorization(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationTemporaryMaterialAuthorization> {
+    const user = await this.identity.resolve(request, "applications:read");
+    const query = request.query as Record<string, unknown> | undefined;
+    if (
+      request.body !== undefined ||
+      !query ||
+      Object.keys(query).length !== 1 ||
+      typeof query.generationId !== "string"
+    )
+      throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
+    requireApplicationPath(applicationId, query.generationId);
+    if (!this.applications.resumeMaterialAuthorization)
+      throw new HttpException("Applications are unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+    return this.applications.resumeMaterialAuthorization(
       user.id,
       applicationId,
       query.generationId,
@@ -2871,7 +2990,12 @@ class ApplicationsController {
       request,
       validateApproveApplicationPacket,
     );
-    return this.applications.approve(user.id, applicationId, body, commandKey);
+    return withNativeMaterialCredential(
+      user.id,
+      applicationId,
+      bearerToken(request.headers.authorization),
+      () => this.applications.approve(user.id, applicationId, body, commandKey),
+    );
   }
 
   @Post("/:applicationId/reopen")
@@ -2919,7 +3043,12 @@ class ApplicationsController {
       request,
       validateStartApplicationSubmission,
     );
-    return this.applications.startSubmission(user.id, applicationId, body, commandKey);
+    return withNativeMaterialCredential(
+      user.id,
+      applicationId,
+      bearerToken(request.headers.authorization),
+      () => this.applications.startSubmission(user.id, applicationId, body, commandKey),
+    );
   }
 
   @Post("/:applicationId/manual-submissions")
@@ -2937,7 +3066,12 @@ class ApplicationsController {
       request,
       validateStartManualApplicationSubmission,
     );
-    return this.applications.startManualSubmission(user.id, applicationId, body, commandKey);
+    return withNativeMaterialCredential(
+      user.id,
+      applicationId,
+      bearerToken(request.headers.authorization),
+      () => this.applications.startManualSubmission(user.id, applicationId, body, commandKey),
+    );
   }
 
   @Post("/:applicationId/attempts/:attemptId/dispatch")
@@ -2951,7 +3085,12 @@ class ApplicationsController {
     const user = await this.identity.resolve(request, "applications:write");
     requireApplicationsRead(request);
     requireApplicationPath(applicationId, attemptId);
-    return this.applications.dispatchAttempt(user.id, applicationId, attemptId);
+    return withNativeMaterialCredential(
+      user.id,
+      applicationId,
+      bearerToken(request.headers.authorization),
+      () => this.applications.dispatchAttempt(user.id, applicationId, attemptId),
+    );
   }
 
   @Post("/:applicationId/attempts/:attemptId/result")
@@ -2993,6 +3132,47 @@ class ApplicationsController {
   }
 }
 
+@Controller("/v1/material-withdrawals")
+@UseFilters(ProblemDetailsFilter)
+class NativeMaterialWithdrawalsController {
+  constructor(
+    @Inject(RequestIdentity) private readonly identity: RequestIdentity,
+    @Inject(NATIVE_MATERIAL_WITHDRAWALS)
+    private readonly withdrawals: NativeMaterialWithdrawalApi | null,
+  ) {}
+
+  @Put("/:requestId")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Header("cache-control", "no-store")
+  async create(@Req() request: AuthenticatedRequest, @Param("requestId") requestId: string) {
+    const user = await this.identity.resolve(request, "applications:write");
+    requireApplicationsRead(request);
+    requireApplicationPath(requestId);
+    try {
+      if (!this.withdrawals) throw Error();
+      return await this.withdrawals.create(user.id, requestId);
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+  }
+  @Get("/:requestId")
+  @Header("cache-control", "no-store")
+  async get(@Req() request: AuthenticatedRequest, @Param("requestId") requestId: string) {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationsRead(request);
+    requireApplicationPath(requestId);
+    let result: Awaited<ReturnType<NativeMaterialWithdrawalApi["get"]>>;
+    try {
+      if (!this.withdrawals) throw Error();
+      result = await this.withdrawals.get(user.id, requestId);
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    if (!result) throw new HttpException("Material withdrawal not found", HttpStatus.NOT_FOUND);
+    return result;
+  }
+}
+
 export interface AppModuleOptions {
   store: ProfileStore;
   restrictedAnswerVault?: RestrictedAnswerVaultStore;
@@ -3003,8 +3183,10 @@ export interface AppModuleOptions {
   ugcContributionConsents: UgcContributionConsentStore;
   ugcContributionPolicyVersion?: string;
   moderation: JobModeration;
+  privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   savedJobs: SavedJobs;
   applications: ApplicationsApi;
+  nativeMaterialWithdrawals?: NativeMaterialWithdrawalApi;
   privateSavedPageCaptures: PrivateSavedPageCaptures;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
@@ -3029,6 +3211,7 @@ export class AppModule {
         CandidateController,
         OwnerTrustController,
         ApplicationsController,
+        NativeMaterialWithdrawalsController,
         AdminModerationController,
         AdminTrustController,
         ...(options.contributionCapabilityPolicy
@@ -3051,8 +3234,16 @@ export class AppModule {
           useValue: options.ugcContributionPolicyVersion ?? null,
         },
         { provide: JOB_MODERATION, useValue: options.moderation },
+        {
+          provide: PRIVILEGED_MODERATION_AUDIT,
+          useValue: options.privilegedModerationAudit ?? null,
+        },
         { provide: SAVED_JOBS, useValue: options.savedJobs },
         { provide: APPLICATIONS, useValue: options.applications },
+        {
+          provide: NATIVE_MATERIAL_WITHDRAWALS,
+          useValue: options.nativeMaterialWithdrawals ?? null,
+        },
         { provide: PRIVATE_SAVED_PAGE_CAPTURES, useValue: options.privateSavedPageCaptures },
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },

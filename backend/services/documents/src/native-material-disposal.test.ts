@@ -159,3 +159,43 @@ it("rejects test ports at construction and after environment changes", async () 
   await expect(discard(client)).rejects.toThrow("NativeMaterialDisposalUnavailable");
   expect(registry.sealApplication).not.toHaveBeenCalled();
 });
+
+it.each(["clusterArn", "taskDefinitionArn", "containerName"] as const)(
+  "refuses an unretained %s before stopping any task",
+  async (field) => {
+    const { registry, retire } = setup();
+    const deployment = {
+      clusterArn: allocation.clusterArn,
+      taskDefinitionArn: allocation.taskDefinitionArn,
+      containerName: allocation.containerName,
+    };
+    deployment[field] += "different";
+    const client = createNativeMaterialDisposal({
+      registry,
+      enabled: () => true,
+      deployments: [deployment],
+      testRetire: retire,
+    });
+    await expect(discard(client)).rejects.toThrow("NativeMaterialDisposalUnavailable");
+    expect(retire).not.toHaveBeenCalled();
+    expect(registry.recordRetirement).not.toHaveBeenCalled();
+  },
+);
+
+it("snapshots the retained deployment before later caller mutation", async () => {
+  const { registry, retire } = setup();
+  const deployment = {
+    clusterArn: allocation.clusterArn,
+    taskDefinitionArn: allocation.taskDefinitionArn,
+    containerName: allocation.containerName,
+  };
+  const client = createNativeMaterialDisposal({
+    registry,
+    enabled: () => true,
+    deployments: [deployment],
+    testRetire: retire,
+  });
+  deployment.taskDefinitionArn = "changed";
+  expect(await discard(client)).toBe("discarded");
+  expect(retire).toHaveBeenCalledExactlyOnceWith(allocation);
+});

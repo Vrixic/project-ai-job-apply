@@ -6,6 +6,10 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FieldDefinition } from "./field-policy.js";
+import { lockNativePreparationLaunchAdmission } from "./native-material-admission.js";
+import { PostgresNativeMaterialCleanupQueue } from "./native-material-cleanup-queue.js";
+import { PostgresNativeMaterialWithdrawalStore } from "./native-material-withdrawal.js";
+import { readNativePreparationBootstrap } from "./native-preparation-bootstrap.js";
 import { PreparationNotFoundError, type PreparationRequest } from "./preparation.js";
 import { PreparationDispatchError, type PreparationTerminalInput } from "./preparation-dispatch.js";
 import {
@@ -123,6 +127,206 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
     return event.id;
   }
   const functionArn = "arn:aws:lambda:us-east-2:123456789012:function:synthetic-preparation:7";
+  const launchAdmission = (scope: {
+    ownerUserId: string;
+    applicationId: string;
+    generationId: string;
+  }) =>
+    client.begin(async (tx) =>
+      lockNativePreparationLaunchAdmission(
+        scope.ownerUserId,
+        scope.applicationId,
+        scope.generationId,
+        async <Rows extends Record<string, unknown>[]>(
+          parts: TemplateStringsArray,
+          ...values: unknown[]
+        ) => await tx<Rows>(parts, ...(values as postgres.ParameterOrFragment<never>[])),
+      ),
+    );
+
+  it("reads only the original claimed preparation without changing approval or creating work", async () => {
+    await withApplication(async (owner, app) => {
+      const [time] = await client<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+      if (!time) throw Error("FixtureTimeMissing");
+      now = time.now;
+      const queued = await store.queuePreparation(command(owner, app));
+      const id = queued.preparation.id;
+      const scope = { ownerUserId: owner, applicationId: app, generationId: id };
+      await expect(readNativePreparationBootstrap(client, scope, () => true)).rejects.toThrow(
+        "NativePreparationBootstrapUnavailable",
+      );
+      await expect(launchAdmission(scope)).rejects.toThrow("NativePreparationLaunchUnavailable");
+      await store.claimPreparationGeneration(await eventId(id), id, context);
+      await expect(launchAdmission(scope)).resolves.toBeUndefined();
+      const before = await store.getPreparation(owner, app, id);
+      const expected = {
+        id,
+        ownerUserId: owner,
+        applicationId: app,
+        ...context,
+        noticeVersion: "openai-cover-letter.v1",
+        approvedAt: before.approvedAt.toISOString(),
+        expiresAt: before.expiresAt.toISOString(),
+      };
+      expect(await readNativePreparationBootstrap(client, scope, () => true)).toEqual(expected);
+      expect(await readNativePreparationBootstrap(client, scope, () => true)).toEqual(expected);
+      expect(await store.getPreparation(owner, app, id)).toEqual(before);
+      for (const foreign of [
+        { ...scope, ownerUserId: uuidv7() },
+        { ...scope, applicationId: uuidv7() },
+        { ...scope, generationId: uuidv7() },
+      ])
+        await expect(readNativePreparationBootstrap(client, foreign, () => true)).rejects.toThrow(
+          "NativePreparationBootstrapUnavailable",
+        );
+      await expect(readNativePreparationBootstrap(client, scope, () => false)).rejects.toThrow(
+        "NativePreparationBootstrapUnavailable",
+      );
+      await store.cancel({
+        ownerUserId: owner,
+        applicationId: app,
+        expectedRevision: 2,
+        idempotencyKey: `cancel-${uuidv7()}`,
+      });
+      await expect(readNativePreparationBootstrap(client, scope, () => true)).rejects.toThrow(
+        "NativePreparationBootstrapUnavailable",
+      );
+    });
+  });
+  it.each(["expired", "future", "failed", "revision", "packet"])(
+    "refuses %s original preparation bootstrap",
+    async (fault) => {
+      await withApplication(async (owner, app) => {
+        const [time] = await client<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+        if (!time) throw Error("FixtureTimeMissing");
+        now = new Date(
+          time.now.getTime() + (fault === "expired" ? -901_000 : fault === "future" ? 60_000 : 0),
+        );
+        const queued = await store.queuePreparation(command(owner, app));
+        const id = queued.preparation.id;
+        const event = await eventId(id);
+        expect((await store.claimPreparationGeneration(event, id, context)).kind).toBe("claimed");
+        if (fault === "failed") await store.failPreparation(event, id, "generation_unavailable");
+        if (fault === "revision")
+          await client`UPDATE applications.applications SET revision=revision+1 WHERE id=${app}`;
+        if (fault === "packet")
+          await store.createPacket({
+            ownerUserId: owner,
+            applicationId: app,
+            expectedRevision: 2,
+            idempotencyKey: `packet-${uuidv7()}`,
+            packet: command(owner, app).packet,
+          });
+        await expect(
+          launchAdmission({ ownerUserId: owner, applicationId: app, generationId: id }),
+        ).rejects.toThrow("NativePreparationLaunchUnavailable");
+        await expect(
+          readNativePreparationBootstrap(
+            client,
+            { ownerUserId: owner, applicationId: app, generationId: id },
+            () => true,
+          ),
+        ).rejects.toThrow("NativePreparationBootstrapUnavailable");
+      });
+    },
+  );
+  it.each([false, true])(
+    "withdraws original preparation idempotently without changing application state (claimed: %s)",
+    async (claimed) => {
+      await withApplication(async (owner, app) => {
+        const [at] = await client<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+        if (!at) throw Error("SyntheticClockMissing");
+        now = at.now;
+        const queued = await store.queuePreparation(command(owner, app));
+        if (claimed)
+          await store.claimPreparationGeneration(
+            await eventId(queued.preparation.id),
+            queued.preparation.id,
+            context,
+          );
+        const before = await store.getApplication(owner, app);
+        const withdrawals = new PostgresNativeMaterialWithdrawalStore(client, () => true);
+        const requestId = uuidv7();
+        const first = await withdrawals.withdraw(owner, requestId);
+        for (const replay of await Promise.all([
+          withdrawals.withdraw(owner, requestId),
+          withdrawals.withdraw(owner, requestId),
+        ]))
+          expect(replay).toEqual(first);
+        const after = await store.getApplication(owner, app);
+        expect(after.application).toEqual(before.application);
+        expect(after.attempts).toEqual(before.attempts);
+        expect(after.nativeMaterialsWithdrawnAtMs).toBe(first.requestedAtMs);
+        expect((await store.getPreparation(owner, app, queued.preparation.id)).state).toBe(
+          "failed",
+        );
+        const audit =
+          await client`SELECT id FROM applications.preparation_audit WHERE preparation_id=${queued.preparation.id} AND action='failed'`;
+        expect(audit).toHaveLength(1);
+        await expect(
+          launchAdmission({
+            ownerUserId: owner,
+            applicationId: app,
+            generationId: queued.preparation.id,
+          }),
+        ).rejects.toThrow();
+        await expect(
+          client`UPDATE applications.native_material_withdrawals SET requested_at=clock_timestamp() WHERE id=${requestId}`,
+        ).rejects.toMatchObject({ code: "55000" });
+        await expect(
+          client`DELETE FROM applications.native_material_withdrawals WHERE id=${requestId}`,
+        ).rejects.toMatchObject({ code: "55000" });
+        await expect(
+          new PostgresNativeMaterialWithdrawalStore(client).withdraw(owner, uuidv7()),
+        ).rejects.toThrow("NativeMaterialWithdrawalUnavailable");
+        // A replay keeps its original cutoff and cannot withdraw a later explicit preparation.
+        now = new Date(first.requestedAtMs + 1000);
+        const later = command(owner, app);
+        later.request.expectedRevision = after.application.revision;
+        const next = await store.queuePreparation(later);
+        await withdrawals.withdraw(owner, requestId);
+        expect((await store.getPreparation(owner, app, next.preparation.id)).state).toBe("queued");
+      });
+    },
+  );
+  it("durably leases withdrawal cleanup and refuses expired or replaced completion", async () => {
+    await withApplication(async (owner, _app) => {
+      const withdrawals = new PostgresNativeMaterialWithdrawalStore(client, () => true);
+      const queue = new PostgresNativeMaterialCleanupQueue(client, () => true);
+      const requestId = uuidv7();
+      await withdrawals.withdraw(owner, requestId);
+      expect(await queue.read(uuidv7(), requestId)).toBeNull();
+      const claims = await Promise.all([queue.claim(), queue.claim()]);
+      expect(claims.filter(Boolean)).toHaveLength(1);
+      const first = claims.find(Boolean);
+      if (!first) throw Error("SyntheticClaimMissing");
+      expect(first).toMatchObject({ ownerUserId: owner, requestId, afterApplicationId: null });
+      await client`UPDATE applications.native_material_cleanup_queue SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE request_id=${requestId}`;
+      const result = { state: "native_tasks_settled" as const, nextApplicationId: null };
+      expect(await queue.finish(first, result)).toBe(false);
+      const replacement = await queue.claim();
+      if (!replacement) throw Error("SyntheticReplacementMissing");
+      expect(replacement.claimToken).not.toBe(first.claimToken);
+      expect(await queue.finish(first, result)).toBe(false);
+      const cursor = uuidv7();
+      expect(await queue.finish(replacement, { state: "pending", nextApplicationId: cursor })).toBe(
+        true,
+      );
+      const next = await queue.claim();
+      expect(next?.afterApplicationId).toBe(cursor);
+      if (!next) throw Error("SyntheticNextMissing");
+      expect(await queue.finish(next, result)).toBe(true);
+      await withdrawals.withdraw(owner, requestId);
+      expect(await queue.read(owner, requestId)).toMatchObject({ state: "native_tasks_settled" });
+      expect(await queue.claim()).toBeNull();
+      await expect(
+        client`UPDATE applications.native_material_cleanup_queue SET state='pending',completed_at=NULL WHERE request_id=${requestId}`,
+      ).rejects.toMatchObject({ code: "55000" });
+      await expect(
+        client`DELETE FROM applications.native_material_cleanup_queue WHERE request_id=${requestId}`,
+      ).rejects.toMatchObject({ code: "55000" });
+    });
+  });
   async function dispatchFor(owner: string, app: string) {
     const queued = await store.queuePreparation(command(owner, app));
     const event = await eventId(queued.preparation.id);
@@ -184,6 +388,22 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
       await expect(store.getPreparation(uuidv7(), app, first.preparation.id)).rejects.toThrow(
         PreparationNotFoundError,
       );
+    });
+  });
+  it("does not accept another owner's withdrawal request identity", async () => {
+    await withApplication(async (owner, app) => {
+      const withdrawals = new PostgresNativeMaterialWithdrawalStore(client, () => true);
+      const requestId = uuidv7();
+      await withdrawals.withdraw(owner, requestId);
+      await withApplication(async (foreign, foreignApp) => {
+        await expect(withdrawals.withdraw(foreign, requestId)).rejects.toThrow(
+          "NativeMaterialWithdrawalUnavailable",
+        );
+        expect(
+          (await store.getApplication(foreign, foreignApp)).nativeMaterialsWithdrawnAtMs,
+        ).toBeUndefined();
+      });
+      expect((await store.getApplication(owner, app)).nativeMaterialsWithdrawnAtMs).toBeDefined();
     });
   });
 
@@ -480,6 +700,41 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
           (row) => row.eventId === event,
         ),
       ).toBe(true);
+    });
+  });
+
+  it("scopes recovery leases to retained releases and separates unbound intake", async () => {
+    await withApplication(async (owner, app) => {
+      const queued = await store.queuePreparation(command(owner, app));
+      const event = await eventId(queued.preparation.id);
+      const foreign = functionArn.replace(":7", ":8");
+      expect(await store.claimPreparationNudges(25, [functionArn], false)).toEqual([]);
+      expect(await store.claimPreparationNudges(25, [functionArn], true)).toEqual([
+        { eventId: event, preparationId: queued.preparation.id },
+      ]);
+      const first = await store.claimPreparationDispatch(event, functionArn);
+      if (first.kind !== "claimed") throw Error("SyntheticMissingClaim");
+      now = new Date(now.getTime() + 60001);
+      expect(await store.claimPreparationNudges(25, [foreign], true)).toEqual([]);
+      expect(await store.claimPreparationNudges(25, [functionArn], false)).toHaveLength(1);
+      await store.markPreparationStarted(
+        event,
+        first.dispatch.leaseId ?? "",
+        `${functionArn}/durable-execution/${first.dispatch.executionName}/synthetic-execution`,
+      );
+      now = new Date(now.getTime() + 60001);
+      expect(await store.claimPreparationExecutionsForReconciliation(25, [foreign])).toEqual([]);
+      expect(
+        await store.claimPreparationExecutionsForReconciliation(25, [functionArn]),
+      ).toHaveLength(1);
+      for (const invalid of [[], [functionArn, functionArn], ["alias:live"]]) {
+        await expect(store.claimPreparationNudges(25, invalid)).rejects.toThrow(
+          PreparationDispatchError,
+        );
+        await expect(
+          store.claimPreparationExecutionsForReconciliation(25, invalid),
+        ).rejects.toThrow(PreparationDispatchError);
+      }
     });
   });
 

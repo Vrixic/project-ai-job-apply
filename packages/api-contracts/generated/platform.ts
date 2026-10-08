@@ -1099,6 +1099,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/applications/{applicationId}/cover-letter/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Default-off scalar current-packet and original native read-location metadata. Authentication and owner resolution use the normal Gateway boundary. The configured origin is derived from owning original allocation metadata, not caller input. No generated body or token is returned. This is point-in-time discovery, not task liveness, renewed expiry or permission to read content; native HTTPS independently authorizes each read. */
+        get: operations["getApplicationTemporaryMaterialLocation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/resume/authorization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Default-off scalar-only owner authorization for a native temporary resume process. Authentication and owner resolution use the normal Gateway boundary. No generated body is read, rendered, reconstructed or persisted. An affirmative result is a point-in-time packet proof, not an approval, expiry renewal, process-stop or purge certificate. */
+        get: operations["authorizeApplicationResumeMaterial"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/resume/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Default-off scalar current-packet and original native read-location metadata. Authentication and owner resolution use the normal Gateway boundary. The configured origin is derived from owning original allocation metadata, not caller input. No generated body or token is returned. This is point-in-time discovery, not task liveness, renewed expiry or permission to read content; native HTTPS independently authorizes each read. */
+        get: operations["getApplicationResumeMaterialLocation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/material-withdrawals/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Read this owner's original native cleanup request. */
+        get: operations["getNativeMaterialWithdrawal"];
+        /** @description Withdraw prior native application materials without changing submission status. The caller retains the same request UUIDv7 on retry. No request body or query parameters. Cleanup continues asynchronously after sign-out. */
+        put: operations["requestNativeMaterialWithdrawal"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2326,6 +2395,8 @@ export interface components {
             matchesPacket: boolean;
             matchedTerms?: string[];
             sections?: components["schemas"]["ApplicationResumeSection"][];
+            /** @description Exact original memory generation and fixed expiry on the native resume path. Do not persist or cache this response; discard platform copies at expiry, logout, cancellation or confirmed submission. */
+            temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
         ApplicationResumeFile: {
             /** @enum {string} */
@@ -2339,6 +2410,8 @@ export interface components {
             /** @description Format-independent content hash that the packet's resume hash binds. */
             contentSha256: string;
             contentBase64: string;
+            /** @description Exact original memory generation and fixed expiry on the native resume path. Do not persist or cache this response; discard platform copies at expiry, logout, cancellation or confirmed submission. */
+            temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
         CreateApplicationRequest: {
             /** Format: uuid */
@@ -2522,6 +2595,24 @@ export interface components {
             packetId: string;
             packetHash: string;
             temporaryMaterial: components["schemas"]["ApplicationTemporaryMaterial"];
+        };
+        /** @description Point-in-time original native read location metadata. Not a credential or liveness proof; direct native HTTPS separately authorizes every read. Never carries generated content or renews expiry. */
+        ApplicationTemporaryMaterialLocation: {
+            /** @constant */
+            schemaVersion: 1;
+            /** Format: uuid */
+            packetId: string;
+            packetHash: string;
+            temporaryMaterial: components["schemas"]["ApplicationTemporaryMaterial"];
+            origin: string;
+        };
+        NativeMaterialWithdrawal: {
+            /** Format: uuid */
+            requestId: string;
+            /** Format: date-time */
+            requestedAt: string;
+            /** @enum {string} */
+            state: "pending" | "native_tasks_settled";
         };
     };
     responses: {
@@ -5071,6 +5162,161 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplicationTemporaryMaterialLocation: {
+        parameters: {
+            query: {
+                generationId: string;
+            };
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current original packet and material metadata only */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationTemporaryMaterialLocation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    authorizeApplicationResumeMaterial: {
+        parameters: {
+            query: {
+                generationId: string;
+            };
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current original packet and material metadata only */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationTemporaryMaterialAuthorization"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplicationResumeMaterialLocation: {
+        parameters: {
+            query: {
+                generationId: string;
+            };
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current original packet and material metadata only */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationTemporaryMaterialLocation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getNativeMaterialWithdrawal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped native task cleanup status; not proof of provider or all-copy disposal */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeMaterialWithdrawal"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    requestNativeMaterialWithdrawal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped native task cleanup status; not proof of provider or all-copy disposal */
+            202: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeMaterialWithdrawal"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

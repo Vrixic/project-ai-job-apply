@@ -1,3 +1,4 @@
+import { coverLetterContext } from "@ai-job-apply/ai-sdk/context";
 import type { ProfileFact } from "@ai-job-apply/api-contracts";
 import {
   type ApplicationCoverLetters,
@@ -41,13 +42,22 @@ export interface ApplicationsRuntimeOptions {
   profile: { listProfileFacts(userId: string): Promise<{ facts: ProfileFact[] }> };
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
   tailoring?: ResumeTailoringClient;
+  nativeResumePreparationEnabled?: () => boolean;
   /** Owned Documents context/read port only; no live provider is composed inside the Gateway. */
   coverLetters?: ApplicationCoverLetters;
   /** Owned memory availability only. No generation, persistence or refreshed reference. */
   temporaryMaterials?: ApplicationTemporaryMaterials;
+  nativeMaterialDisposal?: Pick<ApplicationTemporaryMaterials, "discardApplication">;
   /** Default false. Enable only with compatible migrations and the owned dispatch/recovery runtime. */
   coverLetterPreparationEnabled?: boolean;
+  nativeCoverLetterPreparationEnabled?: () => boolean;
   nativeReadAuthorizationsEnabled?: () => boolean;
+  nativeMaterialLocations?: {
+    resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
+  };
+  nativeResumeLocations?: {
+    resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
+  };
   catalog: Pick<JobCatalogReader, "resolveActiveJobSummaries" | "getActiveJob">;
   definitions: ReadonlyMap<string, FieldDefinition>;
   restrictedAnswers?: VaultReader;
@@ -78,6 +88,9 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
   const clock = options.clock ?? (() => new Date());
   const store = new PostgresApplicationStore(options.client, clock, {
     definitions: options.definitions,
+    ...(options.nativeResumePreparationEnabled
+      ? { nativeResumePreparationEnabled: options.nativeResumePreparationEnabled }
+      : {}),
     ...(options.restrictedPackets ? { restrictedPackets: options.restrictedPackets } : {}),
     ...(options.restrictedAnswerReuseEnabled === true &&
     options.restrictedAnswers?.lockCurrentReferences
@@ -88,6 +101,42 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
         }
       : {}),
   });
+
+  const nativeCoverLetterEnabled = options.nativeCoverLetterPreparationEnabled;
+  const preparationContext: ApplicationCoverLetters["context"] = async ({
+    ownerUserId,
+    applicationId,
+  }) => {
+    if (!nativeCoverLetterEnabled?.()) throw new ApplicationsUnavailableError();
+    return store.readPreparationContext(ownerUserId, applicationId, async (application) => {
+      if (!nativeCoverLetterEnabled()) throw new ApplicationsUnavailableError();
+      const at = new Date(clock().getTime());
+      if (!Number.isFinite(at.getTime())) throw new ApplicationsUnavailableError();
+      const job = await options.catalog.getActiveJob(application.canonicalJobId, at);
+      if (
+        job?.status !== "active" ||
+        !Number.isFinite(job.expiresAt.getTime()) ||
+        job.expiresAt.getTime() <= at.getTime()
+      )
+        throw new ApplicationsUnavailableError();
+      const { facts } = await options.profile.listProfileFacts(ownerUserId);
+      const context = coverLetterContext({
+        facts: facts.filter((fact) => fact.sensitivity !== "restricted").map(toGraphFact),
+        now: at,
+        job: { title: job.title, company: job.company.name, description: job.description },
+      });
+      const finishedAt = clock().getTime();
+      if (
+        !nativeCoverLetterEnabled() ||
+        !Number.isFinite(finishedAt) ||
+        finishedAt < at.getTime() ||
+        finishedAt >= job.expiresAt.getTime()
+      ) {
+        throw new ApplicationsUnavailableError();
+      }
+      return context;
+    });
+  };
 
   async function jobRevision(jobId: string, at: Date): Promise<string> {
     const resolved = await options.catalog.resolveActiveJobSummaries([jobId], at);
@@ -114,7 +163,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     jobId: string,
     mode: "hash" | "preview",
   ): Promise<ResumeTailoringResult | undefined> {
-    if (!options.tailoring) return undefined;
+    if (options.nativeResumePreparationEnabled?.() || !options.tailoring) return undefined;
     const job = await options.catalog.getActiveJob(jobId, clock());
     if (!job) return undefined;
     try {
@@ -136,7 +185,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
 
   const resumes: ResumePreviewSource = {
     async file({ ownerUserId, jobId, format }): Promise<ResumeFileBody | undefined> {
-      if (!options.tailoring) return undefined;
+      if (options.nativeResumePreparationEnabled?.() || !options.tailoring) return undefined;
       const job = await options.catalog.getActiveJob(jobId, clock());
       if (!job) return undefined;
       let result: ResumeTailoringResult;
@@ -303,15 +352,47 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
   return new ApplicationsService({
     store,
     restrictedPackets: store,
-    ...(options.coverLetterPreparationEnabled === true ? { preparations: store } : {}),
+    ...(nativeCoverLetterEnabled
+      ? {
+          preparationContext,
+          preparations: {
+            replayPreparation: store.replayPreparation.bind(store),
+            getPreparation: store.getPreparation.bind(store),
+            queuePreparation: (command) => {
+              if (!nativeCoverLetterEnabled()) throw new ApplicationsUnavailableError();
+              return store.queuePreparation(command);
+            },
+          },
+        }
+      : options.coverLetterPreparationEnabled === true
+        ? { preparations: store }
+        : {}),
     packets,
     bindings,
     jobs,
     resumes,
     ...(options.coverLetters ? { coverLetters: options.coverLetters } : {}),
-    ...(options.temporaryMaterials ? { temporaryMaterials: options.temporaryMaterials } : {}),
+    ...(options.temporaryMaterials || options.nativeMaterialDisposal
+      ? {
+          temporaryMaterials: {
+            // Read withdrawal must not withdraw cleanup for already-admitted work.
+            // A disposal-only composition has no material availability authority.
+            current: async () => {
+              throw new ApplicationsUnavailableError();
+            },
+            ...options.temporaryMaterials,
+            ...options.nativeMaterialDisposal,
+          },
+        }
+      : {}),
     ...(options.nativeReadAuthorizationsEnabled
       ? { nativeReadAuthorizationsEnabled: options.nativeReadAuthorizationsEnabled }
+      : {}),
+    ...(options.nativeMaterialLocations
+      ? { nativeMaterialLocations: options.nativeMaterialLocations }
+      : {}),
+    ...(options.nativeResumeLocations
+      ? { nativeResumeLocations: options.nativeResumeLocations }
       : {}),
     ...(options.metrics ? { metrics: options.metrics } : {}),
     clock,

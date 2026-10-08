@@ -4,12 +4,12 @@ Defines versioned API schemas and generates type-safe clients for web, mobile, e
 
 ## Planned subfolders
 
-- `openapi/` — REST/OpenAPI source documents.
-- `graphql/` — GraphQL schemas if adopted.
-- `json-schema/` — Shared request/response structures.
-- `generated/` — Generated clients and types; never hand-edited.
-- `compatibility/` — Breaking-change and backward-compatibility checks.
-- `tests/` — Schema examples and consumer contract tests.
+- `openapi/` â€” REST/OpenAPI source documents.
+- `graphql/` â€” GraphQL schemas if adopted.
+- `json-schema/` â€” Shared request/response structures.
+- `generated/` â€” Generated clients and types; never hand-edited.
+- `compatibility/` â€” Breaking-change and backward-compatibility checks.
+- `tests/` â€” Schema examples and consumer contract tests.
 
 Contracts contain transport shapes, not backend implementation or persistence models.
 
@@ -108,3 +108,18 @@ The additive v1 temporary cover-letter authorization route and strict
 public material metadata. They carry no owner ID, tokens, answers or document bodies. Normal
 application-read scope and no-store apply; the capability defaults off and is not an approval,
 availability, expiry-renewal or process-stop certificate.
+
+The separate additive v1 `GET /applications/{applicationId}/cover-letter/location` requires
+applications:read and one generationId query. Its strict scalar response adds an original HTTPS
+origin without changing the authorization response consumed by native processes. Deploy compatible
+Gateway/owning runtime before client use; the route stays default off pending reviewed managed
+routing and direct client identity/content acceptance. No generated body or token is returned.
+
+The native resume read contract adds optional `temporaryMaterial` to `ApplicationResumePreview`
+and `ApplicationResumeFile`, and the scalar, owner-only `GET /applications/{applicationId}/resume/authorization`
+route under `applications:read`. The latter accepts only one UUIDv7 `generationId`, no body, and
+returns existing `ApplicationTemporaryMaterialAuthorization` metadata with `no-store`.
+New readers continue to accept old resume responses; older strict validators must be rebuilt
+before native responses include the optional metadata. Deploy compatible consumers and the
+Gateway/Applications metadata route before activating native resume reads. Existing content
+routes are unchanged. No SQL migration, activation or frontend update is included in this change.

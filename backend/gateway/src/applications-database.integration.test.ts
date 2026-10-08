@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
+  ApplicationsUnavailableError,
   createApplicationsDatabase,
   defaultFieldDefinitions,
   StalePacketError,
@@ -31,8 +32,13 @@ const jobId = "019d04cf-1f80-7000-8000-0000000000e1";
 function runtimeFor(
   client: ReturnType<typeof createApplicationsDatabase>,
   state?: { active: boolean; title: string; at: Date },
+  materialOptions: Pick<
+    ApplicationsRuntimeOptions,
+    "nativeMaterialDisposal" | "temporaryMaterials"
+  > = {},
 ) {
   return createApplicationsRuntime({
+    ...materialOptions,
     client,
     definitions: defaultFieldDefinitions(),
     restrictedPackets: packetProtection.options,
@@ -105,6 +111,44 @@ describeWithDatabase("Applications database client boundary", () => {
       runtimeFor(shared.client).create(uuidv7(), jobId, `shared-${uuidv7()}`),
     ).rejects.toMatchObject({ code: "ERR_INVALID_ARG_TYPE" });
   });
+
+  it.each(["unavailable", "throws"] as const)(
+    "retains terminal cleanup without material reads and retries after cleanup %s",
+    async (failure) => {
+      const owner = uuidv7();
+      const calls: Array<[string, string]> = [];
+      let cleanupReady = false;
+      const runtime = runtimeFor(dedicated, undefined, {
+        nativeMaterialDisposal: {
+          async discardApplication(userId, applicationId) {
+            calls.push([userId, applicationId]);
+            const [row] = await dedicated`SELECT status FROM applications.applications
+              WHERE owner_user_id=${userId} AND id=${applicationId}`;
+            // Cleanup follows the committed terminal mutation, with no SQL lock over the port.
+            expect(row?.status).toBe("cancelled");
+            if (!cleanupReady && failure === "throws") throw Error("SyntheticTaskUnavailable");
+            return cleanupReady ? "discarded" : "unavailable";
+          },
+        },
+      });
+      const created = await runtime.create(owner, jobId, `cleanup-create-${uuidv7()}`);
+      // Even without a ready packet, already admitted preparation can require disposal.
+      expect(created.currentPacket).toBeUndefined();
+      const key = `cleanup-cancel-${uuidv7()}`;
+      await expect(runtime.cancel(owner, created.id, created.revision, key)).rejects.toBeInstanceOf(
+        ApplicationsUnavailableError,
+      );
+      expect(calls).toEqual([[owner, created.id]]);
+      cleanupReady = true;
+      const cancelled = await runtime.cancel(owner, created.id, created.revision, key);
+      expect(cancelled.status).toBe("cancelled");
+      expect(cancelled.revision).toBe(created.revision + 1);
+      expect(calls).toEqual([
+        [owner, created.id],
+        [owner, created.id],
+      ]);
+    },
+  );
 
   it.each(["changed", "inactive", "expired"] as const)(
     "refuses queued dispatch through the composed owner runtime when %s",

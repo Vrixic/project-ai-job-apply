@@ -33,6 +33,8 @@ export type ApplicationCoverLetterPreview = components["schemas"]["ApplicationCo
 export type ApplicationCoverLetterFile = components["schemas"]["ApplicationCoverLetterFile"];
 export type ApplicationTemporaryMaterialAuthorization =
   components["schemas"]["ApplicationTemporaryMaterialAuthorization"];
+export type ApplicationTemporaryMaterialLocation =
+  components["schemas"]["ApplicationTemporaryMaterialLocation"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
 export type ProfileFact = components["schemas"]["ProfileFact"];
 export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];
@@ -159,3 +161,5 @@ export function formatValidationErrors(errors: ErrorObject[] | null | undefined)
 }
 
 export { contract };
+
+export type NativeMaterialWithdrawal = components["schemas"]["NativeMaterialWithdrawal"];

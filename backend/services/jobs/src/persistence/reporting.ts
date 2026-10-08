@@ -258,9 +258,13 @@ export class PostgresJobReportStore implements JobReportStore {
         to_regclass('jobs.job_reports') IS NOT NULL
         AND to_regclass('jobs.moderation_cases') IS NOT NULL
         AND to_regclass('jobs.moderation_events') IS NOT NULL
+        AND to_regclass('jobs.job_report_case_links') IS NOT NULL
+        AND to_regclass('jobs.job_report_retention_totals') IS NOT NULL
+        AND to_regclass('jobs.job_moderation_blocks') IS NOT NULL
+        AND to_regclass('jobs.source_moderation_pauses') IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM jobs.schema_migrations
-          WHERE version = '0008_job_reporting_and_moderation'
+          WHERE version = '0027_candidate_report_export_status'
         )
       ) AS ready
     `;
@@ -480,10 +484,13 @@ export class PostgresJobModerationStore implements JobModerationStore {
       throw new TypeError("The summarized job identifier is invalid");
     }
     const rows = await this.client<{ reason: JobReportReason; count: string }[]>`
-      SELECT reason, count(*)::text AS count
-      FROM jobs.job_reports
-      WHERE canonical_job_id = ${canonicalJobId}
-      GROUP BY reason
+      SELECT reason, sum(report_count)::text AS count FROM (
+        SELECT reason, count(*) AS report_count FROM jobs.job_reports
+        WHERE canonical_job_id = ${canonicalJobId} GROUP BY reason
+        UNION ALL
+        SELECT reason, report_count FROM jobs.job_report_retention_totals
+        WHERE canonical_job_id = ${canonicalJobId}
+      ) AS retained GROUP BY reason
     `;
     const counts = Object.fromEntries(jobReportReasons.map((reason) => [reason, 0])) as Record<
       JobReportReason,
@@ -546,6 +553,11 @@ export class PostgresJobModerationStore implements JobModerationStore {
     assertModerationTarget(target);
     const [row] = await this.client<{ paused: boolean }[]>`
       SELECT EXISTS (
+        SELECT 1 FROM jobs.source_moderation_pauses
+        WHERE source_id = ${target.sourceId}
+          AND adapter_version = ${target.adapterVersion}
+          AND adapter_config_sha256 = ${target.adapterConfigSha256}
+      ) OR EXISTS (
         SELECT 1 FROM jobs.moderation_cases
         WHERE target_kind = 'source'
           AND source_id = ${target.sourceId}
@@ -555,6 +567,81 @@ export class PostgresJobModerationStore implements JobModerationStore {
           AND resolution = 'pause_source'
       ) AS paused
     `;
-    return row?.paused === true;
+    if (!row || typeof row.paused !== "boolean")
+      throw new Error("The source pause state is unavailable");
+    return row.paused;
+  }
+}
+
+export interface JobRetentionResult {
+  reportsExpired: number;
+  casesExpired: number;
+  eventsExpired: number;
+  controlsExpired: number;
+}
+
+/** Combined maintenance; expire reporter links before retiring their closed cases. */
+export class PostgresJobRetentionStore {
+  constructor(private readonly client: postgres.Sql) {}
+
+  async purgeExpired(batchLimit = 100): Promise<JobRetentionResult> {
+    if (!Number.isInteger(batchLimit) || batchLimit < 1 || batchLimit > 1_000) {
+      throw new RangeError("The Jobs retention batch limit is invalid");
+    }
+    const result = await this.client.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL statement_timeout = '30s'");
+      await transaction.unsafe("SET LOCAL lock_timeout = '2s'");
+      await transaction.unsafe("SET LOCAL idle_in_transaction_session_timeout = '30s'");
+      const [reports] = await transaction<{ deleted: number }[]>`
+        SELECT jobs.purge_expired_job_reports(${batchLimit}::integer) AS deleted
+      `;
+      const [moderation] = await transaction<
+        { result: { casesDeleted: number; eventsDeleted: number; controlsDeleted: number } }[]
+      >`
+        SELECT jobs.purge_expired_moderation_cases(${batchLimit}::integer) AS result
+      `;
+      return {
+        reportsExpired: reports?.deleted,
+        casesExpired: moderation?.result.casesDeleted,
+        eventsExpired: moderation?.result.eventsDeleted,
+        controlsExpired: moderation?.result.controlsDeleted,
+      };
+    });
+    for (const [key, value] of Object.entries(result)) {
+      const maximum = key === "eventsExpired" ? batchLimit * 2 : batchLimit;
+      if (!Number.isInteger(value) || value === undefined || value < 0 || value > maximum) {
+        throw new Error("The Jobs retention result is invalid");
+      }
+    }
+    return Object.freeze(result) as JobRetentionResult;
+  }
+}
+
+/** Maintenance-only owning port. Database time and policy determine every eligible row. */
+export class PostgresJobReportRetentionStore {
+  constructor(private readonly client: postgres.Sql) {}
+
+  async purgeExpired(batchLimit = 100): Promise<number> {
+    if (!Number.isInteger(batchLimit) || batchLimit < 1 || batchLimit > 1_000) {
+      throw new RangeError("The report retention batch limit is invalid");
+    }
+    const result = await this.client.begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL statement_timeout = '30s'");
+      await transaction.unsafe("SET LOCAL lock_timeout = '2s'");
+      await transaction.unsafe("SET LOCAL idle_in_transaction_session_timeout = '30s'");
+      const [row] = await transaction<{ deleted: number }[]>`
+        SELECT jobs.purge_expired_job_reports(${batchLimit}::integer) AS deleted
+      `;
+      return row;
+    });
+    if (
+      !result ||
+      !Number.isInteger(result.deleted) ||
+      result.deleted < 0 ||
+      result.deleted > batchLimit
+    ) {
+      throw new Error("The report retention result is invalid");
+    }
+    return result.deleted;
   }
 }

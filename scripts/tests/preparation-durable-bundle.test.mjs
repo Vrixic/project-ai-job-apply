@@ -23,15 +23,40 @@ test("native preparation orchestration emits no private/provider/model implement
   );
   assert.ok(inputs.some((name) => name.endsWith("application-preparation-durable.js")));
   assert.ok(inputs.some((name) => name.includes("@aws/durable-execution-sdk-js")));
-  for (const prefix of [
-    "backend/services/",
-    "backend/workers/",
-    "packages/ai-sdk/",
-    "node_modules/postgres/",
-  ])
+  for (const prefix of ["backend/workers/", "packages/ai-sdk/", "node_modules/postgres/"])
     assert.ok(
       !inputs.some((name) => name.includes(prefix)),
       `Unexpected orchestration capability: ${prefix}`,
+    );
+  // Routing adds only strict metadata contracts, a numeric Lambda sender and DNS adapter.
+  const documentModules = new Set([
+    "native-task-allocation.js",
+    "native-launch-control-contract.js",
+    "native-material-route-control-client.js",
+    "native-evidence-binding.js",
+    "native-owner-rpc-contract.js",
+    "native-resume-route-policy.js",
+    "native-material-route-control-contract.js",
+    "native-resume-dns-route.js",
+    "native-task-launch-policy.js",
+  ]);
+  for (const name of inputs.filter((name) => name.includes("backend/services/"))) {
+    assert.ok(
+      name.startsWith("backend/services/documents/dist/src/") &&
+        documentModules.has(path.basename(name)),
+      `Unexpected orchestration service implementation: ${name}`,
+    );
+  }
+  for (const capability of [
+    "/client-s3/",
+    "/client-ecs/",
+    "/client-ec2/",
+    "/client-kms/",
+    "/openai/",
+  ])
+    assert.ok(
+      !inputs.some((name) => name.includes(capability)),
+      `Unexpected orchestration capability: ${capability}`,
     );
   for (const module of [
     "application-preparation-lambda.js",

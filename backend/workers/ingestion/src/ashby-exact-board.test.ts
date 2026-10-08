@@ -283,6 +283,8 @@ describe("Ashby exact-board fixed acquisition boundary", () => {
   it.each([16_000_000, 16_000_001])(
     "enforces all acquired bytes, including trailing whitespace, at %i",
     async (length) => {
+      // Isolate byte accounting from host scheduling; separate cases exercise the 5s deadline.
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
       const prefix = document();
       const raw = prefix + " ".repeat(length - encoder.encode(prefix).byteLength);
       // An inaccurate or compressed-wire Content-Length cannot bypass the acquired-byte count.
@@ -294,7 +296,9 @@ describe("Ashby exact-board fixed acquisition boundary", () => {
         expect(fixture.cancel).toHaveBeenCalledTimes(1);
       }
       expect(fixture.response.body?.locked).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
     },
+    30_000,
   );
 
   it.each(["16000001", "-1", "unknown", "1.5", "1e3"])(

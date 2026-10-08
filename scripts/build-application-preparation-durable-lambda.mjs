@@ -7,6 +7,9 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const artifactName = "application-preparation-durable-lambda";
 const names = [
   "APPLICATION_PREPARATION_DURABLE_ENABLED",
+  "NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED",
+  "NATIVE_MATERIAL_ROUTE_CREATION_ENABLED",
+  "NATIVE_MATERIAL_LAUNCH_FUNCTION_ARN",
   "AWS_REGION",
   "PLATFORM_AWS_ACCOUNT_ID",
   "AWS_LAMBDA_FUNCTION_NAME",
@@ -62,6 +65,10 @@ const artifact = await buildLambdaArtifact({
           ),
         { message: "ApplicationPreparationWorkflowUnavailable" },
       );
+      process.env.NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED = "true";
+      await assert.rejects(() => bundle.handler({}, context), {
+        message: "ApplicationPreparationWorkflowUnavailable",
+      });
       assert.equal(calls, 0);
     } finally {
       globalThis.fetch = fetch;

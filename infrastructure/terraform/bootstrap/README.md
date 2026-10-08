@@ -38,3 +38,54 @@ The workload boundary permits `rds-db:connect` only for the exact database usern
 its exact RDS resource ID. A separately reviewed bootstrap apply must land this boundary revision
 before any anonymous public-job route can be enabled. This source packet neither applies bootstrap
 nor activates public traffic.
+
+## Original resume download route
+
+Optional `route = { hosted_zone_id, base_host }` must agree between the preparation release and
+bootstrap `native_resume_control_releases` for the original revision. Bootstrap supplies a
+principal-bound durable DNS ceiling; the preparation module grants exact-zone CREATE/DELETE A
+records under the original host plus zone inspection/change status. The shared boundary gains
+no DNS capability. Route runtime and creation switches default false and are independent of
+new task launches. Keep lifecycle enabled for original cleanup when creation stops. The durable
+execution budget is 2,400 seconds; encrypted checkpoint retention remains seven days.
+
+Prepare bootstrap first and use a new original release; retain old roles/versions/configuration
+until drain. This does not migrate an existing role boundary or enable retained numeric versions.
+Network reachability, matching TLS/ingress, terminal reconciliation and live download acceptance
+remain required. Local mocked Terraform checks are not effective managed IAM evidence.
+
+## Native application preparation
+
+`native_preparation_releases` defaults empty. Each explicit original release ID provisions one
+principal-conditioned boundary shared by five preparation roles. Common logging/configuration,
+private SQL access, packet cryptography, exact launcher invocation, original durable dispatch,
+metadata-only recovery and queue nudges each name only their appropriate original roles.
+Ordinary deployment can read/use these exact ceilings and manage the original durable stack;
+it cannot update or replace the boundary. Keep original releases until verified drain.
+
+Use the same release ID, exact same-account/environment secret, numeric launcher, distinct packet
+keys and queue/key IDs as the native application preparation module. Apply bootstrap separately
+before runtime planning. Tests cover original-role isolation and coexistence with a retained
+resume/DNS release under IAM's 6,144-character managed-policy limit. A precondition rejects
+oversized combined deployment policies; never delete undrained releases to satisfy it. Empty
+input preserves the original deployment-policy representation and authority. Effective AWS IAM,
+key/queue resource policies and managed release acceptance still require separate verification.
+
+## Native material launcher
+
+`native_material_control_releases` defaults empty. Each retained release ID creates the exact
+`material-launch-${release_id}-boundary` used by native material control. Every statement names
+only its original launcher principal, exact task/cluster, database/configuration key and two
+original task roles. No task stopping, content storage or Lambda invocation is allowed by the
+ceiling. Deployment can read/use the approved boundary but cannot modify it. Match the release
+ID, task revision and bindings to the control/task modules; retain original authority until drain.
+Sixteen bootstrap mock scenarios pass, including combined resume/DNS, preparation and material
+control under IAM's policy-size limit. This does not prove effective managed IAM.
+
+
+Optional `gateway_packet_fingerprint_key_arn` extends the existing workload ceiling only for the
+Gateway's HMAC-SHA-256 operation against that exact retained same-account us-east-2 packet key.
+It defaults to null. Obtain the ARN from platform `restricted_packet_key_bindings` after key
+provisioning; keep it aligned with the original Gateway release. This does not grant other
+principals MAC operations or activate packet protection/native reads. See the
+[Gateway composition](../modules/platform/README.md#gateway-native-material-release).

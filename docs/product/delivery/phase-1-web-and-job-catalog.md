@@ -4,10 +4,39 @@
 - Start: 2026-08-11
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-10-04
+- Last updated: 2026-10-07
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d1--useful-web-product-and-canonical-job-catalog)
 
 ## Objective
+
+2026-10-06 D1-012 private audit-retention Lambda passes full clean verification at `be646832`
+(38 typecheck/39 test/23 builds, unchanged lint and emitted isolation). Its separate artifact
+builds twice identically, with ZIP/source/SBOM integrity and unchanged post-verifier hashes.
+[Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md). Managed invocation IAM,
+scheduling/release, alert retention and accountable acceptance remain; D1/D3 stay In progress.
+Development web restored, Docker/WSL stopped, PC on; no cloud activation or CI/CD work.
+
+2026-10-06 D1-012 adds a private default-off numeric-version audit-retention Lambda with
+managed-secret-only configuration, expiry-only owning pool and counts-only output. Nineteen
+focused cases, seven real PostgreSQL cases and emitted isolation pass; local artifact cold
+refusal passes. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md).
+Full clean-source/artifact verification, managed IAM/scheduling/release and accountable acceptance
+remain. D1/D3 stay In progress; no cloud activation or CI/CD work.
+
+2026-10-06 D1-012 privileged moderation audit passes full clean verification at `18632bdc`
+(38 typecheck/39 test/23 builds, unchanged lint and emitted isolation). Separate six actual SQL
+cases cover capture, 365-day expiry and withdrawal rollback.
+[Evidence](evidence/d1-privileged-moderation-audit-2026-10-06.md). Alert source inspection finds
+30-day application-log configuration and aggregate-only operator evidence; fresh AWS verification
+is unavailable with expired SSO. Managed release/retention and accountable acceptance remain;
+D1/D3 stay In progress, development web restored, Docker/WSL stopped and PC on.
+
+2026-10-06 D1-012 adds default-off privileged moderation access/attempt audit capture through
+Profile's existing platform audit table, plus separately gated bounded 365-day expiry. Fixed
+operator fingerprints/resource IDs replace raw identity/body/token storage. Six actual SQL and
+six validation cases pass; 216 signed synthetic Gateway cases pass. [Evidence](evidence/d1-privileged-moderation-audit-2026-10-06.md).
+Full clean verification, managed capture/maintenance, alert metadata expiry and accountable
+acceptance remain; D1/D3 stay In progress, with no cloud activation.
 
 Deliver a trustworthy candidate web experience and canonical job catalog in which users can
 onboard, discover, understand, save, and report fresh jobs.
@@ -20,6 +49,24 @@ continuously provisioned application compute, or always-on staging without measu
 release/recovery requirement. Keep staging dormant between bounded acceptance windows.
 
 ## Current implementation checkpoint
+
+2026-10-06 D1-012 implements the accepted candidate-report retention lifecycle: exact immutable
+case linkage, bounded database-time expiry and aggregate-only proof. All 109 Jobs PostgreSQL
+checks, a historical 24-to-25 migration replay and a 67-migration/90-relation logical restore pass.
+[Evidence](evidence/d1-job-report-retention-2026-10-06.md). Corrected clean source f553da22 passes
+full verification (38 typechecks, 39 test tasks, 23 builds). Hosted maintenance/runtime release
+and remaining case/control/audit/alert expiry stay open.
+
+2026-10-06 working-flow priority: actual development Gateway is unweighted version `86`,
+release `c6ac1bef2f12e2ba7f18f45829503994e4eaf52d603f5cd333c67322806010a5`; both health endpoints
+return 200 and unauthenticated owner routes refuse. Isolated local web now connects to that API
+instead of an absent localhost:4000 service. Owner regular-Chrome managed sign-in and unfiltered
+job search succeed; sanitized runtime observations confirm jobs and saved-jobs search 200.
+The new process-only development launcher passes configuration/live-health checks without changing
+identity settings. Profile/facts reads pass, saving returns 201 and owner reload confirms durability. Preference
+write/read, resume import and remaining flow/release gates stay open.
+[Evidence](evidence/d1-working-development-flow-2026-10-06.md). No frontend source/cloud state change,
+phase completion or CI/CD work; Docker/WSL stay stopped and PC stays on.
 
 2026-10-04 D3-072 exact clean source 22a4568e passes the maintained verifier: 38 typecheck
 tasks, 39 test tasks and 23 builds; 1,174 Documents/1,588 Workflow units and unchanged lint.
@@ -117,6 +164,8 @@ shared artifacts advance.
 | D1-010A | Build the rolling D1 assurance foundation for observability, accessibility, security, reliability, and recovery. | In progress | Platform/security/QA engineering | D0 platform foundation; D1-001; landed D1 slices | Local API/browser/public-page automation, managed-OIDC read/saved-job/match profiles with exact AWS corroboration, GuardDuty service detection, versioned-object recovery, immutable zero-High/zero-Critical publications, 44 managed alarms, and fail-closed acceptance operators are implemented. The alert operator emits strict aggregate-only status/exercise contracts while requiring an exact recipient-set digest and attributable manual delivery confirmation. Exact backend release source `48f5d5ba0c2339ec45a818a4c461676ad9ef9191` is deployed at state `230`. Its fresh generated-only parser corpus passes `43/43` reviewed PDF/DOCX rejection cases with database bypass, zero persistent rows, exact cleanup, disabled triggers, and no real candidate data. Exactly one guarded provider-failure execution injected and observed one fixed pre-adapter fault, completed one recovery with no provider request or catalog write, cleaned its mutable artifacts, retained the intentional one-run durable history, and passed queue/DLQ, log-privacy, and fresh zero-drift verification. The exact-source protected candidate/admin identity-dark route and security-header matrix is also accepted with zero token/cookie/body/restricted-value retention. D1-010A remains open for accountable representative latency/error/queue thresholds, reviewed recipient binding, attributable manual alert-delivery confirmation, broader authenticated/public/admin hosted browser behavior, and human assistive-technology acceptance. No production capacity/RTO/RPO, row-value integrity, independent capability security, or real-candidate-data claim is made. [Vercel identity-dark acceptance](evidence/d1-vercel-identity-dark-hosted-acceptance-2026-08-27.md), [Document corpus acceptance](evidence/d1-development-document-corpus-acceptance-2026-08-27.md), [provider-failure acceptance](evidence/d1-development-provider-failure-acceptance-2026-08-27.md), [Current dark release and recovery](evidence/d1-current-dark-release-migration-and-recovery-2026-08-25.md), [browser assurance](../../../scripts/tests/d1-browser-assurance/README.md), [representative assurance](../../../infrastructure/runbooks/observability/d1-representative-deployed-acceptance.md) |
 | D1-010B | Execute and accept the exact end-to-end D1 delivery assurance matrix. | Blocked | Platform/security/QA engineering; product/accessibility reviewers | D1-001–D1-009; D1-010A; stable exact release candidate | Blocked until every tested D1 surface exists and is frozen. Requires deployed synthetic browser/API/workflow/load/alert/restore/reconciliation evidence plus human accessibility and capability security/privacy dispositions. D0 workload/restore/tracing evidence is inherited foundation evidence, not current D1 acceptance. |
 | D1-011 | Record source-specific activation and real-candidate-onboarding privacy/security approval before production activation. | In progress | Product/source engineering; security/privacy reviewers | Concrete D1 sources/data flows and capability-specific review deltas | ADR-025 removes separate counsel approval as a Phase 1 gate for the bounded Greenhouse, Lever, and Ashby public GET adapters; LR-D1-01 through LR-D1-03 are `Removed`, not `Approved`, and exact company/product/source-engineering activation evidence remains required. LR-D1-04, ADR-023 acceptance, real-candidate privacy/security/rights controls, and any real-resume trigger authorization remain open. Human acceptance is deliberately deferred to the final stable Phase 1 candidate. The deferred D6 launch-wide accountable reviews remain separate and mandatory before public launch. |
+| D1-012 | Enforce accepted reporting/moderation retention across Jobs, privileged audit and alert metadata. | In progress | Platform engineering; security/privacy reviewers | D1-007; accepted d1-governance-v1 D1P-06 | Candidate-report lifecycle and aggregate-only expiry pass full verification at f553da22. Closed-case/operator expiry and preserved minimal blocks/pauses pass 117 real PostgreSQL tests, historical 25 → 26 replay and local logical restore (68 migrations/92 relations). Source 694e65a7 passes full verification: 38 typechecks, 39 test tasks, 23 builds. Retained-report export status also passes 119 Jobs SQL tests, historical 26 → 27 replay and 69-migration/92-relation logical restore; source 07cf51b9 passes full verification (38 typechecks, 39 test tasks, 23 builds). Default-off privileged audit capture/365-day expiry passes six real SQL cases and full clean verification at 18632bdc (38/39/23 tasks). Hosted release, managed audit/alert retention verification and accountable rights review stay open. [Audit evidence](evidence/d1-privileged-moderation-audit-2026-10-06.md). [Export evidence](evidence/d1-report-export-status-2026-10-06.md). [Report evidence](evidence/d1-job-report-retention-2026-10-06.md), [Case evidence](evidence/d1-moderation-case-retention-2026-10-06.md). |
+| D1-013 | Keep the executable migration-image package boundary aligned with accepted schema changes before release. | In progress | Platform engineering | D1-012; D3-040/D3-041 | Current source/package boundary is 75 migrations/93 relations, including Applications 0012. Frozen `437794fc` cold image passes hardened package smoke, actual fresh/replayed seven-owner migrations and packaged schema verification. The maintained logical recovery harness now checks 75/93 and passes real dump/restore, exact row equality and restored behavior. Existing package/operator and workspace checks pass; full verifier remains limited by the running port-3000 development server. Reproducible publication, scan/disposition and managed release remain pending. [Current evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery). |
 
 Current task-row addendum: the managed-OIDC read, saved-job lifecycle, and match-assessment profiles
 now pass at both application and exact-window AWS boundaries, superseding the older open execution
@@ -630,6 +679,9 @@ crawler policy only after those gates pass.
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-10-06 | Repaired the migration-image smoke's stale 66/88 inventory pins to the accepted 69/92 boundary. All 173 executable cases, cold image build, hardened actual-image smoke and full clean-source verifier pass at `dfa43da7` (38/39/23 tasks). Hosted publication/migration remain pending; Docker/WSL stopped, PC on. | D1-013; D3-040/D3-041 | [Migration image evidence](evidence/d1-migration-image-boundary-2026-10-06.md) |
+| 2026-10-06 | Corrected committed source f553da22 passes 38 typechecks, 39 test tasks, 23 builds and the full maintained guards. Restore runtime/fixture pins bind the new exact manifest; 207 focused contract checks and 697 replay guards pass. Hosted maintenance and remaining policy expiry stay open; Docker/WSL stopped, PC on. | D1-007, D1-012 | [Retention evidence](evidence/d1-job-report-retention-2026-10-06.md) |
+| 2026-10-06 | Implement candidate-report expiry with immutable case linkage and aggregate-only proof. 109 Jobs SQL checks, historical migration replay and 67-migration/90-relation logical restore pass; full repository verification and broader policy/runtime release remain. | D1-007, D1-012 | [Retention evidence](evidence/d1-job-report-retention-2026-10-06.md) |
 | 2026-10-02 | D3-039 full repository verification passes: generated contracts unchanged, offline operator guards, formatting, baseline lint, 38 typecheck tasks, 39 test tasks, 23 builds, dependency-security regressions, Compose and scope. Profile's separate 29 real PostgreSQL cases and repeated deterministic race remain local evidence, not deployed acceptance. Docker Desktop/WSL stopped; the disposable synthetic container is removed and shared volumes retained. Review/merge and deployed acceptance remain; no frontend, migration, Terraform/guard, deployment or apply. Live security gates remain unresolved. | D1-002; D3-001; D3-039 | [Verifier](../../../scripts/verify-phase0.ps1), [Profile tests](../../../backend/services/profile/src/profile.integration.test.ts), [D3 records](phase-3-application-preparation.md) |
 | 2026-10-02 | Owner-approved Profile fact-update concurrency correction (D3-039): the stable owned parent is locked before a fresh latest-version read, preserving the existing conflict error, append-only history and atomic idempotency/audit. Deterministic real PostgreSQL regression reproduces a duplicate-key error before the fix, passes after it, and verifies winning replay plus exactly one appended version/receipt. Profile 87 unit/29 integration cases and five additional race runs, build/typecheck and scoped Biome pass. Full repository verification is pending. No new route/field/schema, migration, frontend, Terraform/guard, deployment or apply. D1 remains In progress; deployed acceptance is not claimed. | D1-002; D3-001; D3-039 | [Transaction](../../../backend/services/profile/src/index.ts), [race test](../../../backend/services/profile/src/profile.integration.test.ts), [D3 task](phase-3-application-preparation.md) |
 | 2026-09-30 | PR #468's fresh dependency audit detected the newly registry-published critical Next.js `next/og` advisory GHSA-vcvr-r3jv-pc5j. Both candidate and admin clients now pin patched Next.js `16.3.6`; the existing exact Sharp override follows that version, and the lockfile changes only Next.js and its associated environment/SWC/peer identities. No `next/og` use was found in repository application source; this is dependency remediation, not evidence of exploitation or hosted patch deployment. Frozen installation and the centralized audit pass with the existing exact image-size remediation and no risk exception. Candidate web 754 tests, admin 174 tests, both optimized production builds, and repository typecheck/lint/format pass. Installed Chrome over the rebuilt production Next app passes all five public-page scenario groups: canonical/noindex/plain-text/WCAG, complete provider-truth links/JobPosting/WCAG, alias/expired/invalid/robots, bounded local concurrency, and exact credentialless/bodyless synthetic upstream requests. Servers and browser context are cleaned up by the harness. This is local generated-synthetic assurance, not hosted OIDC/API, public indexing, representative load, or human accessibility acceptance. D1 remains In progress behind its existing deployed and accountable acceptance gates. | D1-010A | [candidate dependencies](../../../frontend/web/package.json), [admin dependencies](../../../frontend/admin/package.json), [dependency audit](../../../scripts/audit-dependencies.mjs), [browser harness](../../../scripts/tests/d1-public-job-page-assurance/README.md), [maintainer advisory](https://github.com/vercel/next.js/security/advisories/GHSA-vcvr-r3jv-pc5j) |
@@ -771,6 +823,28 @@ crawler policy only after those gates pass.
 
 | 2026-10-03 | PR #511 merged as `3f142c1`; exact merged-main quality/catalog/PostgreSQL integration/both containers pass. Profile passes 29 PostgreSQL cases; Documents passes 50 and skips 66 opt-in ledger cases. Audit and 65 scanner findings remain blocking. Owner-approved source-only D3-041 fixes the stale publisher SQL arrays and binds every exact name/checksum to the existing 57-migration manifest. Both PowerShell hosts pass 149 executable smoke cases, and the exact updated smoke passes on the unchanged retained diagnostic image under hardened networkless restrictions. Full maintained verification passes, including cached workspace tasks; lint remains at 15 baseline warnings/58 infos, and database opt-ins remain unclaimed. No new build, publisher receipt, scan, database migration, API/frontend/Terraform, publication, deployment or apply. D1 remains In progress behind deployed and external exit gates. | D1-002; D3-040; D3-041 | [Publisher](../../../scripts/publish-development-migration-image.ps1), [smoke tests](../../../scripts/tests/development-migration-runtime-smoke.test.mjs), [merged-main CI](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479546), [scanner](https://github.com/Vrixic/project-ai-job-apply/actions/runs/37098479543) |
 
+
+2026-10-06 owner reconfirms Profile access and job save/reload with "done, no errors" in the
+signed-in development browser. These accepted steps need no repeat. Preference writes and resume
+import remain unverified live; D1 remains In progress.
+[Evidence](evidence/d1-working-development-flow-2026-10-06.md).
+
+2026-10-06 working development flow: clean `1a559af2` passes the maintained full verifier
+(38 typecheck, 39 test, 23 build tasks; unchanged lint). The initial run's occupied localhost:3000
+conflict is resolved by stopping only isolated web; all 101 session cases then pass unchanged.
+Owner managed sign-in/search/Profile/save/reload results remain corroborated by actual BFF status
+observations. Enabled development scan mapping/rules and locally parser-verified generated PDF
+prepare the next resume-import check; preference writes and deployed upload/scan/parse remain open.
+[Evidence](evidence/d1-working-development-flow-2026-10-06.md). D1/D3 remain In progress; no
+frontend source/cloud activation, production or CI/CD work. PC stays on; Docker/WSL stopped.
+2026-10-06 owner directs an implementation-first route to a working launch: implement complete
+candidate-flow batches, exercise them end to end, fix concrete failures, then add focused
+regression coverage. Prioritize functional D1 composition over optional hardening or feature
+expansion. Targeted checks during implementation and the maintained verifier at batch handoff
+remain; real-data/privacy/authentication and publication safeguards remain required. Hosted
+CI/CD stays deferred until production launch. Backend work stays isolated from frontend work.
+D1 remains In progress until the working flow and its required release acceptance are evidenced.
+
 ## Decisions and scope changes
 
 2026-10-02 current hosted CI remains a completion gate. Main `1f376b6` quality passes, but its
@@ -820,3 +894,211 @@ D1 remains In progress and no prior private acceptance or manual Apply test is r
 - Accepted residual risks: ADR-023's AWS-managed DNS covert-channel residual is accepted only for
   generated-synthetic development processing. It is not accepted for real documents; all other open
   items remain gates rather than accepted residual risk.
+
+
+2026-10-07 D1-012 connects the existing private audit-expiry Lambda to optional platform release
+composition: immutable numeric version, bounded private role, separately disabled hourly schedule
+and execution/delivery alarms. Platform/development/staging validate; four mocked release cases
+pass. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#optional-release-composition).
+Publication, managed access/expiry/alert acceptance and audit capture activation remain. No cloud
+action or phase completion; D1/D3 stay In progress and PC on.
+
+
+2026-10-07 D1-012 adds the isolated PrivilegedAuditRetention publisher family: one artifact/four
+objects, matching the Terraform key path and existing Profile builder. Local family/receipt
+regressions pass, including case variants and foreign/incomplete/duplicate rejection. Existing
+source/audit/bucket/KMS guards remain. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#guarded-publication-family).
+Clean-source build/readback follows. No publication or activation; D1/D3 remain In progress.
+
+
+2026-10-07 D1-012 corrected audit artifact command compiles Profile before packaging. Clean
+`91dd7478` passes actual publisher four-file readback and byte-identical repeat emission; ZIP
+SHA-256 `afb9234e1b85cd3e2f2a41a3a5f241f6ac9952b0ff68058f233a94d6b83ea716` (22,777 bytes).
+[Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#guarded-publication-family).
+No fresh audit, publication or deployment claim; D1/D3 remain In progress and PC on.
+
+
+2026-10-07 D1-012 connects the existing privileged moderation audit writer to an explicit
+Gateway release flag, default-off and requiring scheduled retention. Six mocked audit release
+cases pass; both environment roots validate. [Evidence](evidence/d1-privileged-audit-maintenance-lambda-2026-10-06.md#audit-capture-release-flag).
+Managed capture/expiry/alert acceptance remains. No activation, D1/D3 In progress and PC on.
+
+
+2026-10-07 D1-012 connects Jobs report/moderation expiry through a private managed-secret Lambda,
+source-bound artifact/publisher family and default-disabled hourly release composition. Twenty-one
+handler cases, nine real PostgreSQL cases and four mocked Terraform cases pass; both environment
+roots validate. [Evidence](evidence/d1-job-report-retention-2026-10-06.md#private-managed-maintenance).
+Managed release/access/alerts remain. Docker/WSL stopped, PC on; D1/D3 In progress.
+
+
+2026-10-07 D1-012 read-only development checks confirm encrypted 30-day application logs and
+an encrypted alert topic with one confirmed email subscription. Both new maintenance Lambdas
+are absent; no deployment is implied by local evidence. Mailbox/incident retention remains
+unverified. [Evidence](evidence/d1-retention-live-configuration-2026-10-07.md).
+Managed AWS session is currently available. No cloud mutation; D1/D3 In progress, PC on.
+
+
+2026-10-07 D1-012 fixes a release-composition gap: new Jobs/audit roles now appear in the shared
+Secrets Manager endpoint policy, and standalone maintenance provisions/waits for private secret
+connectivity. Ten mocked cases and both environment validations pass.
+[Evidence](evidence/d1-retention-live-configuration-2026-10-07.md#private-maintenance-connectivity-correction).
+Read-only native prerequisite inventory finds zero resume task definitions and two existing NATs;
+no live invocation, policy apply or phase completion is claimed. D1/D3 In progress, PC on.
+
+
+2026-10-07 D1-013/D3-015 aligns migration-image and publisher executable boundaries with
+Documents 0015: exact 73-migration/93-relation inventory and required SQL filename. All 181
+runtime-smoke cases and OCI publisher guards pass. The first combined verifier was stopped on
+finding the stale pins; a fresh clean-source pass and updated actual image remain.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#observation-migration-package-alignment-2026-10-07).
+No cloud action; D1/D3 In progress, CI/CD deferred, PC on.
+
+
+2026-10-07 D1-013/D3-064/D3-079 completes the maintained local verification stages across
+clean checkpoints `65976e15`, `66a2c3d1` and `5065427a`, with two stale test fixtures corrected
+between segments. Runtime source is unchanged across those fixture corrections. Results: 38
+typecheck tasks, 39 test tasks, 23 builds, emitted isolation, Compose/scope and unchanged lint
+baseline. The cold Linux migration image passes hardened runtime smoke at the exact 73-migration/
+93-relation boundary. [Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#observation-migration-package-alignment-2026-10-07)
+and [recovery verification](evidence/d3-native-resume-launch-packet-2026-10-07.md#combined-recovery-verification-checkpoint).
+Development web is restored (root 200; anonymous Resume 307). No new signed-in acceptance, cloud
+publication or deployment; D1/D3 remain In progress. Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 fresh dependency audit during the D3 address-reader batch reports node-forge, braces,
+source-map-js, sharp and critical shell-quote advisories at versions already present before the
+batch. The 142 maintained dependency remediation regression cases pass; the registry audit does
+not. [Evidence](evidence/d3-native-resume-task-address-2026-10-07.md). Coordinate remediation with
+frontend work before launch; no acceptance/waiver is implied. D1 remains In progress, CI/CD
+deferred and the PC stays on. Previously accepted browser checks are not reopened.
+
+2026-10-07 D1-013/D3-064/D3-079 retains original resume execution acknowledgements atomically
+in Applications and adds bounded exact-version recovery reads. Forward migration 0011 advances
+the source migration/restore inventory to 74 migrations/93 relations. Applications/Workflows
+builds, 65 real SQL cases and 50 restore tests pass.
+[Evidence](evidence/d3-native-resume-execution-receipts-2026-10-07.md). No image publication or
+managed migration; AWS reconciliation and remaining launch acceptance stay open. D1/D3 In progress.
+
+2026-10-07 connected D1/D3 backend verification passes after correcting deletion replay's
+stale restore-manifest binding. All 38 typecheck/39 test/23 build tasks and remaining packaged
+checks pass; 207 restore-contract, 697 replay and 908 role checks pass. The frozen `0bfe741c`
+74-migration image passes hardened runtime smoke. [Evidence](evidence/d1-d3-connected-verification-2026-10-07.md)
+distinguishes the initial failure, corrected `dd61044a` run and unpublished image. D1/D3 remain
+In progress; managed/live acceptance and existing advisories remain open. Development web
+restored, Docker/WSL stopped, PC on; CI/CD deferred.
+
+
+2026-10-07 D1-013/D3-079 implements default-off scheduled original resume execution observation,
+with leased/token-fenced SQL claims and retained positive failures before scalar queue delivery.
+It preserves original published receipts and does not replay or perform cleanup. The migration
+package now contains 75 migrations/93 relations; previous image/artifacts require refresh.
+Focused workflow, Terraform, restore and package checks pass; final SQL/repository checks and
+clean-source packaging are in progress. Managed recovery drill/activation remain pending.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).
+
+
+2026-10-07 D1-013/D3-079 completes local scheduled execution-reconciliation verification at
+runtime `7cef5f10`: 66 fresh PostgreSQL cases, 39 workspace test tasks, 38 typecheck tasks,
+23 builds, 25 relevant Terraform cases and both environment validations pass. The refreshed
+observer artifact passes emitted refusal and independent integrity checks. The full verifier
+still encounters the existing port-3000 session-fixture conflict; the development server remains
+running. Migration image refresh, publication and managed recovery acceptance remain. D1/D3 stay
+In progress; Docker/WSL stopped, PC on, CI/CD deferred.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).
+
+
+2026-10-07 D1-013/D3-079 refreshes the migration image from frozen `437794fc` and verifies the
+actual hardened image against fresh and replayed PostgreSQL migrations: all seven owners and
+75 migrations/93 relations pass. Corrected the existing logical recovery harness's stale 66/88
+pins; its real dump/restore, all 93 exact row sets and restored behavior pass. Both disposable
+databases are removed; Docker/WSL stopped, PC on. Image remains unpublished; scan/disposition,
+managed migration/PITR and acceptance remain. D1/D3 stay In progress, CI/CD deferred.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).
+
+2026-10-07 clean `18698f7f` produces a locally verified Gateway artifact and current migration
+image. The actual hardened image passes fresh and replayed seven-owner migrations and packaged
+read-only verification: 76 migrations/93 relations. No cloud publication, vulnerability clearance
+or new logical-recovery claim. [Image evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-image-execution),
+[Gateway evidence](evidence/d3-native-application-disposal-2026-10-07.md#refreshed-gateway-artifact).
+D1/D3 remain In progress; disposable database removed, Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 the current 76-migration logical recovery drill passes: actual pg_dump/pg_restore,
+seven owners, all 93 exact relation row sets and restored behavior. A new generated case proves
+never-launched abandoned native work remains terminal after restore, preserves export metadata,
+and cannot fabricate task retirement or reissue a launch. All 14 builds and 15 container-boundary
+checks pass; source rows are unchanged and fixture cleanup succeeds.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-logical-recovery).
+No production source, migration, deployment or phase completion change. Logout integration and
+managed/accountable acceptance remain; D1/D3 In progress, CI/CD deferred, Docker/WSL stopped, PC on.
+
+
+2026-10-08 refreshes the local 78-migration image from clean `0d2b3e42`. Actual hardened-image
+smoke, fresh/replayed seven-owner migrations and packaged 95-relation verification pass. The
+maintained logical recovery drill passes all 14 builds, 15 container guards, exact 95-row-set
+comparison and restored behavior, including three populated cleanup records, original cutoffs,
+expired-lease recovery and stale-claim rejection. Source rows stay unchanged; fixtures removed.
+[Image and recovery evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-78-migration-logical-recovery).
+Docker/WSL stopped, PC on. No publication/deployment or vulnerability waiver; D1/D3 In progress.
+
+
+2026-10-08 owner authorizes recommended work without routine approval prompts. Targeted Next,
+sharp, shell-quote and source-map-js upgrades remove nine raw production registry findings.
+All five selected client/dependency builds, 927 sequential client tests and 142 dependency-security
+checks pass locally. Four raw high findings remain (two image-size records locally remediated,
+node-forge and braces); the central audit still fails without exceptions. Browser control is
+unavailable; no live UI/deployment claim and no repeat request for accepted manual checks.
+[Dependency fix evidence](evidence/d3-native-application-disposal-2026-10-07.md#released-dependency-fixes-2026-10-08).
+D1/D3 remain In progress; CI/CD deferred and PC on.
+
+
+2026-10-08 backports the upstream-proposed node-forge nested DigestAlgorithm check through a
+hash-pinned pnpm patch. Real RSA regressions reproduce 24 malformed acceptances before the fix;
+all 48 checks pass after installation. Frozen install, 190 dependency-security checks, three mobile
+tests and mobile build pass. This covers the Expo Node entry, not prebuilt browser bundles.
+[Backport evidence](evidence/d3-native-application-disposal-2026-10-07.md#node-forge-node-runtime-backport-2026-10-08).
+Audit policy is unchanged; braces and installed-tree audit integration remain. D1/D3 In progress.
+
+
+2026-10-08 fixes braces recursion and integrates exact node-forge/braces installed-source checks
+into the release audit. All 285 dependency-security checks, three mobile tests, mobile build and
+frozen install pass. The complete-lockfile central audit passes with four verified local source
+remediations across 20 mobile build paths; no risk exceptions or weakened severity policy.
+[Audit and regression evidence](evidence/d3-native-application-disposal-2026-10-07.md#braces-and-verified-release-audit-2026-10-08).
+The local dependency-audit blocker is resolved. Native managed bindings/release/acceptance remain;
+D1/D3 In progress, CI/CD deferred and PC on. No deployment or repeated manual UI request.
+
+
+2026-10-08 qualifies all 14 native Lambda artifacts at clean ca6527cf after dependency remediation.
+Two builds produce 56 identical companion files; actual publisher validation and independent ZIP,
+source, manifest and SBOM verification pass. Development account identity is verified; both native
+image repositories remain empty. This is local qualification, not merged-main publication or runtime
+activation. [Release evidence](evidence/d3-native-application-disposal-2026-10-07.md#current-native-lambda-release-qualification-2026-10-08).
+Hostname/DNS, pinned TLS/provider and numeric runtime bindings, managed release and acceptance remain.
+D1/D3 In progress; CI/CD deferred, Docker/WSL stopped, PC on.
+
+
+2026-10-08 implements the default-off web sign-out withdrawal hook. It submits a bounded,
+server-token owner cleanup request before SDK logout, rejects cross-site requests, and reports
+requested versus unconfirmed cleanup without claiming deletion. It never refreshes during logout.
+All 781 web tests, 35 focused checks, production build/typecheck and isolated Next HTTP notice
+rendering pass. Auth/API tests are simulated; browser/live managed acceptance remains.
+[Sign-out evidence](evidence/d3-native-application-disposal-2026-10-07.md#web-sign-out-withdrawal-hookup-2026-10-08).
+The implementation scope question is resolved by the owner's instruction to proceed with
+recommendations. No runtime activation or repeat of accepted human checks. D1/D3 In progress.
+
+
+2026-10-08 adopts main's mandatory prelaunch AWS shutdown rule and fixes candidate-rights quiescence
+so storage is retained while maintenance follows the global runtime gate. All 54 focused Terraform
+cases pass. Reviewed development shutdown apply removes traffic, active triggers and both NATs;
+zero drift passes, state 407 -> 412. RDS is stopping, seven interface endpoints remain, and automatic
+seven-day RDS restart is unresolved. Staging has no SSO token. Full shutdown is explicitly incomplete;
+no data deletion or zero-cost claim. [Shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#prelaunch-development-quiescence-2026-10-08).
+D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-08 removes all seven development interface endpoints independently of retained data.
+All 57 focused Terraform tests, exact seven-delete plan review and postapply zero drift pass;
+state 412 -> 415. RDS is confirmed stopped but will automatically restart October 15; durable
+shutdown remains unfinished. Staging SSO login succeeds but role credentials are denied.
+[Endpoint shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#independent-endpoint-shutdown-2026-10-08).
+Development has zero active event rules/mappings, NATs and interface endpoints. Retained storage,
+security and DNS still incur charges. D1/D3 In progress, Docker/WSL stopped and PC on.

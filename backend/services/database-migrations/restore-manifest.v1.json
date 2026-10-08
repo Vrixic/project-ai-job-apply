@@ -42,6 +42,26 @@
         {
           "version": "0009_restricted_packet_values",
           "checksum": "b8b8b19d90366c48e93ea511c458ba5607a6111c6cb83bb70956c820218bc26e"
+        },
+        {
+          "version": "0010_native_resume_requests",
+          "checksum": "55ba75fe782eda46811d80a229332fee3bed747be85960d1f863069c6ce1423d"
+        },
+        {
+          "version": "0011_native_resume_execution_receipts",
+          "checksum": "d2b92f33fac9cbe01a3ea18758ce8ae0b4ea5f95a5b43125d59c4c3fb422b212"
+        },
+        {
+          "version": "0012_native_resume_execution_observation",
+          "checksum": "5b0313126aec5a45d5905bf733af0aa19db7a368217010c841bdcd2913375249"
+        },
+        {
+          "version": "0013_native_material_withdrawals",
+          "checksum": "80909bec73e9bb66c1499f3cdd7d7dafd9636c9825abc873c86d8922ebb414ca"
+        },
+        {
+          "version": "0014_native_material_cleanup_queue",
+          "checksum": "f93f78f95b7236c0e85cc5bcf4f90e08f1d3575b127c124f3d9ae7fd1eafc714"
         }
       ],
       "relations": [
@@ -50,6 +70,8 @@
         "applications.attempts",
         "applications.command_receipts",
         "applications.history",
+        "applications.native_material_cleanup_queue",
+        "applications.native_material_withdrawals",
         "applications.outbox",
         "applications.packet_preparations",
         "applications.packets",
@@ -134,6 +156,22 @@
         {
           "version": "0012_native_material_launch_claim",
           "checksum": "95c163f5f4b8a58aaf43ac62b96ab0efae1f4497216e91717451f4ebcaa6966b"
+        },
+        {
+          "version": "0013_native_material_ready",
+          "checksum": "e9bd7709515e49c8fb5e56a7521a57f8746327cb40f375ee6dd070bc9c3d6d8f"
+        },
+        {
+          "version": "0014_native_resume_generations",
+          "checksum": "436e78ba6a12fa93941a4200586196cedd48db11f38b8f36f08b96846c9e4d40"
+        },
+        {
+          "version": "0015_native_resume_observation",
+          "checksum": "d52dfc757baac272e37f5b162765cea06573152e20f024aaa8aa99e1eaf4a419"
+        },
+        {
+          "version": "0016_native_application_disposal",
+          "checksum": "431c17af6bdf9b7719fe0d5c0ace7dc6bba3f7dbcb333d9d63d3036bba978215"
         }
       ],
       "relations": [
@@ -144,6 +182,7 @@
         "documents.idempotency_keys",
         "documents.native_material_admission",
         "documents.native_material_allocations",
+        "documents.native_resume_generations",
         "documents.processing_dispositions",
         "documents.processing_receipts",
         "documents.resume_documents",
@@ -250,6 +289,18 @@
         {
           "version": "0024_contribution_appeal_restoration",
           "checksum": "e0b4beaead5a410216ac8c34817e1866b7986612a0d59f04dc9a448419933ac2"
+        },
+        {
+          "version": "0025_job_report_retention",
+          "checksum": "4c9bc91c3ed61ea55f4086c7d1338ea5fc197f5b8de89bd5c64e01727bb300d0"
+        },
+        {
+          "version": "0026_moderation_case_retention",
+          "checksum": "d94186f63ea63bfc76e4cffaca821b8e57015c45f6cb7c73f6dfd727686b92c9"
+        },
+        {
+          "version": "0027_candidate_report_export_status",
+          "checksum": "c09b9be4688af21fdf357537adabd32e61854525412353d29d09a361b21d71b9"
         }
       ],
       "relations": [
@@ -271,11 +322,15 @@
         "jobs.job_contribution_state_events",
         "jobs.job_contribution_trust_decisions",
         "jobs.job_contributions",
+        "jobs.job_moderation_blocks",
+        "jobs.job_report_case_links",
+        "jobs.job_report_retention_totals",
         "jobs.job_reports",
         "jobs.job_sources",
         "jobs.moderation_cases",
         "jobs.moderation_events",
         "jobs.schema_migrations",
+        "jobs.source_moderation_pauses",
         "jobs.source_revalidation_queue",
         "jobs.source_verification_evidence",
         "jobs.status_events"

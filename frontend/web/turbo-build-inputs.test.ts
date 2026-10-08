@@ -23,6 +23,7 @@ const runtimeVariables = [
   "AUTH0_AUDIENCE",
   "APP_BASE_URL",
   "PLATFORM_API_BASE_URL",
+  "NATIVE_MATERIAL_LOGOUT_ENABLED",
 ] as const;
 
 interface EnvironmentReport {

@@ -153,7 +153,7 @@ resource "aws_cloudwatch_event_rule" "applications_attempt_recovery" {
   name                = local.applications_attempt_recovery_rule_name
   description         = "Resolve a submission attempt whose worker vanished before reporting a result"
   schedule_expression = "rate(5 minutes)"
-  state               = "ENABLED"
+  state               = var.serverless_runtime_enabled ? "ENABLED" : "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "applications_attempt_recovery" {

@@ -4923,6 +4923,350 @@
           }
         }
       }
+    },
+    "/applications/{applicationId}/cover-letter/location": {
+      "get": {
+        "operationId": "getApplicationTemporaryMaterialLocation",
+        "description": "Default-off scalar current-packet and original native read-location metadata. Authentication and owner resolution use the normal Gateway boundary. The configured origin is derived from owning original allocation metadata, not caller input. No generated body or token is returned. This is point-in-time discovery, not task liveness, renewed expiry or permission to read content; native HTTPS independently authorizes each read.",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "generationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current original packet and material metadata only",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTemporaryMaterialLocation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/applications/{applicationId}/resume/authorization": {
+      "get": {
+        "operationId": "authorizeApplicationResumeMaterial",
+        "description": "Default-off scalar-only owner authorization for a native temporary resume process. Authentication and owner resolution use the normal Gateway boundary. No generated body is read, rendered, reconstructed or persisted. An affirmative result is a point-in-time packet proof, not an approval, expiry renewal, process-stop or purge certificate.",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "generationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current original packet and material metadata only",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTemporaryMaterialAuthorization"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/applications/{applicationId}/resume/location": {
+      "get": {
+        "operationId": "getApplicationResumeMaterialLocation",
+        "description": "Default-off scalar current-packet and original native read-location metadata. Authentication and owner resolution use the normal Gateway boundary. The configured origin is derived from owning original allocation metadata, not caller input. No generated body or token is returned. This is point-in-time discovery, not task liveness, renewed expiry or permission to read content; native HTTPS independently authorizes each read.",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "generationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current original packet and material metadata only",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationTemporaryMaterialLocation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/material-withdrawals/{requestId}": {
+      "put": {
+        "operationId": "requestNativeMaterialWithdrawal",
+        "security": [
+          {
+            "oidc": ["applications:write"]
+          }
+        ],
+        "description": "Withdraw prior native application materials without changing submission status. The caller retains the same request UUIDv7 on retry. No request body or query parameters. Cleanup continues asynchronously after sign-out.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "202": {
+            "description": "Owner-scoped native task cleanup status; not proof of provider or all-copy disposal",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeMaterialWithdrawal"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getNativeMaterialWithdrawal",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "description": "Read this owner's original native cleanup request.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "200": {
+            "description": "Owner-scoped native task cleanup status; not proof of provider or all-copy disposal",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeMaterialWithdrawal"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9535,6 +9879,10 @@
             "items": {
               "$ref": "#/components/schemas/ApplicationResumeSection"
             }
+          },
+          "temporaryMaterial": {
+            "$ref": "#/components/schemas/ApplicationTemporaryMaterial",
+            "description": "Exact original memory generation and fixed expiry on the native resume path. Do not persist or cache this response; discard platform copies at expiry, logout, cancellation or confirmed submission."
           }
         },
         "additionalProperties": false
@@ -9586,6 +9934,10 @@
             "type": "string",
             "minLength": 4,
             "maxLength": 400000
+          },
+          "temporaryMaterial": {
+            "$ref": "#/components/schemas/ApplicationTemporaryMaterial",
+            "description": "Exact original memory generation and fixed expiry on the native resume path. Do not persist or cache this response; discard platform copies at expiry, logout, cancellation or confirmed submission."
           }
         },
         "additionalProperties": false
@@ -10311,6 +10663,54 @@
           }
         },
         "additionalProperties": false
+      },
+      "ApplicationTemporaryMaterialLocation": {
+        "type": "object",
+        "description": "Point-in-time original native read location metadata. Not a credential or liveness proof; direct native HTTPS separately authorizes every read. Never carries generated content or renews expiry.",
+        "required": ["schemaVersion", "packetId", "packetHash", "temporaryMaterial", "origin"],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "const": 1
+          },
+          "packetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "temporaryMaterial": {
+            "$ref": "#/components/schemas/ApplicationTemporaryMaterial"
+          },
+          "origin": {
+            "type": "string",
+            "maxLength": 250,
+            "pattern": "^https://[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}:8443$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NativeMaterialWithdrawal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requestId", "requestedAt", "state"],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["pending", "native_tasks_settled"]
+          }
+        }
       }
     }
   }

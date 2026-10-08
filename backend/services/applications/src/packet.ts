@@ -188,7 +188,29 @@ export function assemblePacket(
         throw new PacketInvariantError("Document fields must reference their bound artifact hash");
     }
     const definition = definitions.get(proposal.fieldKey);
-    const classification = classifyField(definition, proposal, confidenceThreshold);
+    // A native resume field carries only the already validated original generation digest.
+    // Its evidence is Documents' verified source/render receipt, not invented Profile fact IDs.
+    // Only this exact file binding may omit fact IDs, and it always requires explicit review.
+    const nativeResumeDigest =
+      proposal.fieldKey === "documents.resume" &&
+      proposal.origin === "generated" &&
+      proposal.sourceFactIds.length === 0 &&
+      proposal.sourceConfirmed &&
+      proposal.confidence >= confidenceThreshold &&
+      definition?.valueType === "file" &&
+      definition.answerPolicy === "explicit_each_time" &&
+      definition.sensitivity !== "restricted" &&
+      inputs.temporaryMaterials?.some(
+        (reference) =>
+          reference.kind === "tailored_resume" && reference.contentSha256 === proposal.value,
+      ) === true;
+    const classification = nativeResumeDigest
+      ? {
+          disposition: "review" as const,
+          usable: true,
+          reasons: ["explicit_each_time", "generated_content"] as const,
+        }
+      : classifyField(definition, proposal, confidenceThreshold);
     const reasons: ReviewReason[] = [...classification.reasons];
     let usable = classification.usable;
     if (definition && !valueMatchesDefinition(definition, proposal.value)) {

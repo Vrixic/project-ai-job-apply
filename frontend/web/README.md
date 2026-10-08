@@ -261,3 +261,28 @@ artifacts and technical challenges are absent by construction.
 `NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI=enabled` is a build-time public flag. It is unset by
 default and must stay unset in hosted targets until D3-012 approves real-candidate restricted data
 use and a separately reviewed deployment enables the panel.
+
+
+## Native material sign-out cleanup
+
+NATIVE_MATERIAL_LOGOUT_ENABLED defaults off. Enable it only after the managed owner-withdrawal
+route and durable cleanup worker are accepted, with AUTH0_APPLICATIONS_SCOPES=enabled and the
+correct PLATFORM_API_BASE_URL. This is a server runtime setting, not a public browser variable
+or a build-time secret. Existing sign-in/callback behavior remains on the Auth0 SDK path.
+
+When enabled, the exact /auth/logout route first requests owner-wide withdrawal using the access
+token already held in the authenticated server session. It does not rotate credentials during
+logout. Cross-site/same-site navigation and mismatched origin/referrer requests are refused;
+modern-browser same-origin Settings navigation and explicit user navigation are supported.
+The request has no candidate body and uses a generated UUIDv7. The backend receipt is validated,
+bounded to 4 KiB and never returned to the browser. The whole cleanup attempt is bounded to five
+seconds, including session retrieval and receipt reads.
+
+The SDK then performs normal OIDC logout, returning to /signed-out with fixed requested or
+unconfirmed display state. Missing/expired credentials, backend failure or timeout do not trap
+the user in a session or imply cleanup succeeded. The notice distinguishes request acceptance
+from completed cleanup; its query value is presentation only, not disposal evidence. Logout
+also requests Clear-Site-Data for cache/storage. Browser support, open tabs, downloaded files,
+external copies, offline logout and eventual remote retirement still need managed/client
+acceptance; this header alone does not prove that every memory copy was erased. No cleanup
+activation or phase-completion claim follows from the source flag or local mock-based tests.
