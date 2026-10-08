@@ -42,13 +42,14 @@ it("captures scalar intent before an owning identity await", async () => {
       input.packetHash = "f".repeat(64);
       return [];
     })
+    .mockResolvedValueOnce([])
     .mockResolvedValueOnce([{ admitted: 1 }]);
   await lockNativeResumePreparationAdmission(
     input,
     query as NativeMaterialAdmissionQuery,
     () => true,
   );
-  expect(query.mock.calls[1]?.slice(1)).toEqual([
+  expect(query.mock.calls[2]?.slice(1)).toEqual([
     scope.applicationId,
     scope.ownerUserId,
     scope.canonicalJobId,

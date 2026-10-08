@@ -15,7 +15,7 @@ export class PostgresNativeMaterialWithdrawalStore {
   async withdraw(
     ownerUserId: string,
     requestId: string,
-  ): Promise<{ requestId: string; requestedAtMs: number }> {
+  ): Promise<{ requestId: string; requestedAtMs: number; cutoffEpochMicros: string }> {
     const check = () => {
       if (!this.enabled() || !uuid.test(ownerUserId) || !uuid.test(requestId)) throw unavailable();
     };
@@ -34,8 +34,8 @@ export class PostgresNativeMaterialWithdrawalStore {
           WHERE owner_user_id=${ownerUserId} AND state IN ('queued','running') ORDER BY id FOR UPDATE`;
         await tx`INSERT INTO applications.native_material_withdrawals(id,owner_user_id)
           VALUES (${requestId},${ownerUserId}) ON CONFLICT(id) DO NOTHING`;
-        const [request] = await tx<Array<{ requested_at: Date }>>`
-          SELECT requested_at FROM applications.native_material_withdrawals
+        const [request] = await tx<Array<{ requested_at: Date; cutoff_epoch_micros: string }>>`
+          SELECT requested_at, (extract(epoch FROM requested_at)*1000000)::bigint::text AS cutoff_epoch_micros FROM applications.native_material_withdrawals
           WHERE id=${requestId} AND owner_user_id=${ownerUserId}`;
         if (!request) throw unavailable();
         // Withdraw current queued/running cover-letter requests without resetting their original
@@ -51,7 +51,11 @@ export class PostgresNativeMaterialWithdrawalStore {
           INSERT INTO applications.preparation_audit(id,preparation_id,owner_user_id,action,occurred_at)
           VALUES (${uuidv7()},${row.id},${ownerUserId},'failed',${row.updated_at})`;
         check();
-        return { requestId, requestedAtMs: request.requested_at.getTime() };
+        return {
+          requestId,
+          requestedAtMs: request.requested_at.getTime(),
+          cutoffEpochMicros: request.cutoff_epoch_micros,
+        };
       });
     } catch {
       throw unavailable();

@@ -141,6 +141,11 @@ describe.runIf(requested)(
           tx as unknown as NativeMaterialAdmissionQuery,
           () => true,
         );
+        await sql.begin(async (other) => {
+          const [lock] =
+            await other`SELECT pg_try_advisory_xact_lock(hashtextextended(${`native-material-withdrawal:${scope.ownerUserId}`},0)) AS acquired`;
+          expect(lock?.acquired).toBe(false);
+        });
         await expect(
           sql.begin(async (other) => {
             await other`SELECT id FROM applications.applications WHERE id=${scope.applicationId} FOR UPDATE NOWAIT`;

@@ -289,3 +289,20 @@ identity through the normal authenticated boundary and delegates to the independ
 Applications capability. No generated body is read/forwarded by this endpoint. Its production
 runtime flag is not composed. See
 [authorization evidence](../../docs/product/delivery/evidence/d3-native-read-authorization-2026-10-05.md).
+
+
+### Private owner material cleanup
+
+`nativeMaterialDisposalFromEnvironment` includes an owner cleanup worker step behind the additional
+`NATIVE_OWNER_MATERIAL_CLEANUP_ENABLED=true` gate. It also requires the existing application-disposal
+gate and exact retained task deployments. This is private composition, with no public route or web
+sign-out hook yet. The caller must derive the owner from authenticated context and retain the original
+UUIDv7 request ID across retries.
+
+`ownerCleanup.step(owner, requestId, afterApplicationId)` commits the owner withdrawal, then processes
+at most five old applications. Follow `nextApplicationId` across pages; when it is null but state is
+`pending`, retry from the beginning after original launch recovery. `native_tasks_settled` means no
+unretired native generation remains through that request's exact database cutoff. It does not certify
+provider retention, route deletion or all-copy disposal. Task failures remain pending, application
+submission state stays unchanged, and an old retry cannot seal a generation newer than the cutoff.
+Applications 0013 must be installed before enabling this composition. No cloud activation is supplied.

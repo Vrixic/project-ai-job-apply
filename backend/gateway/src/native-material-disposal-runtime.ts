@@ -1,3 +1,4 @@
+import { PostgresNativeMaterialWithdrawalStore } from "@ai-job-apply/applications-service/native-material-withdrawal";
 import { PostgresNativeApplicationDisposalStore } from "@ai-job-apply/documents-service/native-application-disposal-store";
 import { createNativeMaterialDisposal } from "@ai-job-apply/documents-service/native-material-disposal";
 import {
@@ -5,6 +6,7 @@ import {
   nativeTaskDeploymentRegion,
 } from "@ai-job-apply/documents-service/native-task-allocation";
 import postgres from "postgres";
+import { createNativeOwnerMaterialCleanup } from "./native-owner-material-cleanup.js";
 
 type Deployment = Pick<NativeTaskAllocation, "clusterArn" | "taskDefinitionArn" | "containerName">;
 /** Called only by Applications after its owner-scoped terminal mutation. No public stop-task input.
@@ -48,8 +50,18 @@ export function nativeMaterialDisposalFromEnvironment(url: string, environment: 
     onnotice: () => undefined,
   });
   const registry = new PostgresNativeApplicationDisposalStore(sql, enabled);
+  const disposal = createNativeMaterialDisposal({ registry, deployments, enabled });
+  const ownerEnabled = () =>
+    enabled() && environment.NATIVE_OWNER_MATERIAL_CLEANUP_ENABLED === "true";
+  const ownerCleanup = createNativeOwnerMaterialCleanup({
+    enabled: ownerEnabled,
+    withdrawals: new PostgresNativeMaterialWithdrawalStore(sql, ownerEnabled),
+    inventory: registry,
+    disposal,
+  });
   return Object.freeze({
-    ...createNativeMaterialDisposal({ registry, deployments, enabled }),
+    ...disposal,
+    ownerCleanup,
     close: () => sql.end(),
   });
 }

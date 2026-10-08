@@ -168,3 +168,42 @@ D1/D3 remain In progress. CI/CD stays deferred; no cloud publication, deployment
 
 The owned PostgreSQL container was removed after SQL verification. Docker Desktop and WSL were
 stopped; no WSL distribution remained running. The PC remains on.
+
+
+## Bounded owner cleanup orchestration (2026-10-08)
+
+The Gateway private runtime now composes Applications withdrawal with Documents inventory and exact
+native task retirement. The step is separately default-off, processes at most five applications,
+returns a pagination cursor, and rechecks durable outstanding inventory before returning
+`native_tasks_settled`. Claimed/unbound tasks remain pending for original launch recovery; a failure
+on one application does not prevent the rest of the page from being attempted. No public route,
+authenticated request handler, durable retry scheduler or web sign-out hook is added in this batch.
+
+Native Applications admission now takes a shared owner advisory lock; withdrawal takes the matching
+exclusive lock. Previously admitted reservation transactions finish before the withdrawal is stamped,
+and later old preparation fails its cutoff check. Documents rechecks cutoff eligibility under the
+original application admission lock before sealing, so later explicit generations survive old replay.
+The private withdrawal receipt carries the database epoch in microseconds as a decimal string to avoid
+rounding adjacent generations into the same millisecond. There is no new migration or public contract.
+Existing terminal application disposal retains its behavior and exact deployment allowlist.
+
+Local evidence: Gateway/dependency builds and final Gateway typecheck pass; 398 Applications unit,
+16 disposal unit, 12 Gateway configuration/orchestration, 40 Applications PostgreSQL and 70 connected
+Documents PostgreSQL cases pass. New SQL evidence exercises actual owner withdrawal, bounded inventory,
+sealing, persisted positive task retirement and replay without a second task request, while preserving
+application revision/status. A generation one microsecond newer than a supplied cutoff remains
+unsealed and launchable. The owner admission test also proves withdrawal's exclusive lock cannot be
+acquired while the admission transaction is live. Remote task/provider/AWS transports are synthetic.
+
+Initial verification found a missing pagination parameter and a test optional-property typing error;
+both were fixed before final builds. Reusing the first disposable database exposed existing global
+execution receipts to three suite cases. Those failures showed earlier-run IDs; rerunning against a
+fresh database in the same owned container passed all 70 cases. This suite requires a fresh database.
+Logs: `.tmp/native-owner-cleanup-{build,app-build-final,doc-build-final,gateway-build-final,typecheck,
+app-tests,disposal-tests,gateway-tests-final,admission-sql,sql-fresh}.log`.
+
+Authenticated backend initiation and durable continuation/recovery still need integration; web-hook
+scope remains pending. No deployment, image refresh, managed acceptance or all-copy disposal is claimed.
+D1/D3 remain In progress. CI/CD remains deferred and the PC stays on.
+
+Final changed-file formatting and whitespace checks pass. The owned PostgreSQL container was removed; Docker Desktop and WSL stopped after SQL verification. The PC remains on.

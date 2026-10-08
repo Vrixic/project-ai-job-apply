@@ -1920,6 +1920,75 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       requestSha256: result.authorization.requestSha256,
     };
   }
+  it("cleans an owner withdrawal through the original cutoff without mutating application state", async () => {
+    const { r } = await bound();
+    const owner = input.identity.ownerUserId,
+      app = input.identity.applicationId;
+    const withdrawalModule = await import(
+      fileURLToPath(
+        new URL("../../applications/dist/src/native-material-withdrawal.js", import.meta.url),
+      )
+    );
+    const cleanupModule = await import(
+      fileURLToPath(
+        new URL("../../../gateway/dist/src/native-owner-material-cleanup.js", import.meta.url),
+      )
+    );
+    const registry = new PostgresNativeApplicationDisposalStore(sql, () => true);
+    const retire = vi.fn(async (allocation) => {
+      const at = Date.now();
+      return {
+        schemaVersion: 1 as const,
+        kind: "native_task_stopped" as const,
+        allocationId: allocation.allocationId,
+        generationId: allocation.generationId,
+        ownerUserId: owner,
+        applicationId: app,
+        taskArn: allocation.taskArn,
+        clusterArn: allocation.clusterArn,
+        taskDefinitionArn: allocation.taskDefinitionArn,
+        stoppedAtEpochMs: at,
+        observedAtEpochMs: at,
+      };
+    });
+    const cleanup = cleanupModule.createNativeOwnerMaterialCleanup({
+      enabled: () => true,
+      withdrawals: new withdrawalModule.PostgresNativeMaterialWithdrawalStore(sql, () => true),
+      inventory: registry,
+      disposal: createNativeMaterialDisposal({ registry, enabled: () => true, testRetire: retire }),
+    });
+    const before = await sql`SELECT status,revision FROM applications.applications WHERE id=${app}`;
+    const requestId = uuidv7();
+    expect(await cleanup.step(owner, requestId)).toMatchObject({
+      requestId,
+      state: "native_tasks_settled",
+    });
+    expect(await cleanup.step(owner, requestId)).toMatchObject({
+      requestId,
+      state: "native_tasks_settled",
+    });
+    expect(retire).toHaveBeenCalledOnce();
+    expect(
+      await sql`SELECT status,revision FROM applications.applications WHERE id=${app}`,
+    ).toEqual(before);
+    expect(await registry.confirmApplicationDisposed(owner, app, r.epochId)).toBe(true);
+  });
+  it("does not seal a generation newer than an old withdrawal cutoff", async () => {
+    const r = await store().reserve(input);
+    const registry = new PostgresNativeApplicationDisposalStore(sql, () => true);
+    const [row] =
+      await sql`SELECT (extract(epoch FROM created_at)*1000000)::bigint::text AS at FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`;
+    const cutoff = String(BigInt(row?.at) - 1n);
+    expect(await registry.pendingOwnerApplications(input.identity.ownerUserId, cutoff)).toEqual([]);
+    expect(
+      await registry.sealApplicationThrough(
+        input.identity.ownerUserId,
+        input.identity.applicationId,
+        cutoff,
+      ),
+    ).toBeNull();
+    expect(await store().claimLaunch(scope(r), config)).toMatchObject({ claimed: true });
+  });
   it("disposes an unclaimed resume without inventing a stopped-task receipt", async () => {
     const s = store(),
       r = await s.reserve(input);

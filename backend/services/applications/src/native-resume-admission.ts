@@ -56,6 +56,7 @@ export async function lockNativeResumePreparationAdmission(
       throw unavailable();
     await query`SELECT identity.require_active_candidate(${fixed.ownerUserId}::uuid)`;
     if (!enabled()) throw unavailable();
+    await query`SELECT pg_advisory_xact_lock_shared(hashtextextended(${`native-material-withdrawal:${fixed.ownerUserId}`},0))`;
     const [row] = await query<Array<{ admitted: number }>>`
       SELECT 1 AS admitted FROM applications.applications a
       JOIN applications.packets p ON p.id=a.current_packet_id

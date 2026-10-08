@@ -35,6 +35,9 @@ it("withdraws cleanup authority when pinned configuration changes", async () => 
   );
   if (!runtime) throw Error("Expected enabled disposal runtime");
   try {
+    await expect(runtime.ownerCleanup.step("owner", "request")).rejects.toThrow(
+      "NativeOwnerMaterialCleanupUnavailable",
+    );
     environment.NATIVE_APPLICATION_DISPOSAL_DEPLOYMENTS = "[]";
     await expect(runtime.discardApplication("owner", "application")).rejects.toThrow(
       "NativeMaterialDisposalUnavailable",

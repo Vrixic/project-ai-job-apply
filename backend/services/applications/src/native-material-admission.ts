@@ -13,6 +13,7 @@ export async function lockNativeMaterialApplicationAdmission(
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
   if (!uuid.test(ownerUserId) || !uuid.test(applicationId))
     throw Error("NativeApplicationAdmissionUnavailable");
+  await query`SELECT pg_advisory_xact_lock_shared(hashtextextended(${`native-material-withdrawal:${ownerUserId}`},0))`;
   const [application] = await query<
     Array<{ status: string }>
   >`SELECT status FROM applications.applications
@@ -32,6 +33,7 @@ export async function lockNativePreparationLaunchAdmission(
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
   if (![ownerUserId, applicationId, generationId].every((value) => uuid.test(value)))
     throw Error("NativePreparationLaunchUnavailable");
+  await query`SELECT pg_advisory_xact_lock_shared(hashtextextended(${`native-material-withdrawal:${ownerUserId}`},0))`;
   const [row] = await query<Array<{ admitted: number }>>`
     SELECT 1 AS admitted FROM applications.applications a
     JOIN applications.packet_preparations p ON p.application_id=a.id AND p.owner_user_id=a.owner_user_id

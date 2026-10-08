@@ -34,14 +34,69 @@ export class PostgresNativeApplicationDisposalStore {
   private check(owner: string, application: string) {
     if (!this.enabled() || !uuid.test(owner) || !uuid.test(application)) throw unavailable();
   }
+  /** Bounded outstanding inventory only; the Applications withdrawal barrier must commit first. */
+  async pendingOwnerApplications(
+    owner: string,
+    throughMicros: string,
+    limit = 5,
+    afterApplicationId: string | null = null,
+  ): Promise<string[]> {
+    if (
+      !this.enabled() ||
+      !uuid.test(owner) ||
+      !/^\d{16,17}$/u.test(throughMicros) ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 5 ||
+      (afterApplicationId !== null && !uuid.test(afterApplicationId))
+    )
+      throw unavailable();
+    const rows = await this.sql<Array<{ application_id: string }>>`
+      SELECT application_id FROM (
+        SELECT application_id FROM documents.native_material_allocations
+        WHERE user_id=${owner} AND state NOT IN ('retired','abandoned')
+          AND (extract(epoch FROM created_at)*1000000)::bigint <= ${throughMicros}::bigint
+        UNION
+        SELECT application_id FROM documents.native_resume_generations
+        WHERE user_id=${owner} AND state NOT IN ('retired','abandoned')
+          AND (extract(epoch FROM created_at)*1000000)::bigint <= ${throughMicros}::bigint
+      ) pending WHERE (${afterApplicationId}::uuid IS NULL OR application_id > ${afterApplicationId}::uuid) ORDER BY application_id LIMIT ${limit}`;
+    if (!this.enabled()) throw unavailable();
+    return rows.map((row) => row.application_id);
+  }
+  async sealApplicationThrough(owner: string, application: string, throughMicros: string) {
+    if (!/^\d{16,17}$/u.test(throughMicros)) throw unavailable();
+    return this.seal(owner, application, throughMicros);
+  }
   async sealApplication(
     owner: string,
     application: string,
   ): Promise<{ epochId: string; intents: NativeMaterialIntent[] }> {
+    const plan = await this.seal(owner, application);
+    if (!plan) throw unavailable();
+    return plan;
+  }
+  private async seal(
+    owner: string,
+    application: string,
+    throughMicros?: string,
+  ): Promise<{ epochId: string; intents: NativeMaterialIntent[] } | null> {
     this.check(owner, application);
     try {
       return await this.sql.begin(async (tx) => {
         await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`native-material:${owner}:${application}`},0))`;
+        // Recheck under the same admission lock: a later explicit epoch must survive old logout replay.
+        if (throughMicros !== undefined) {
+          const [pending] = await tx`
+            SELECT epoch_id FROM documents.native_material_allocations
+            WHERE user_id=${owner} AND application_id=${application} AND state NOT IN ('retired','abandoned')
+              AND (extract(epoch FROM created_at)*1000000)::bigint <= ${throughMicros}::bigint
+            UNION ALL
+            SELECT epoch_id FROM documents.native_resume_generations
+            WHERE user_id=${owner} AND application_id=${application} AND state NOT IN ('retired','abandoned')
+              AND (extract(epoch FROM created_at)*1000000)::bigint <= ${throughMicros}::bigint`;
+          if (!pending) return null;
+        }
         // An application with no allocation still needs a durable seal against a delayed admission.
         await tx`WITH at AS (SELECT clock_timestamp() AS now)
           INSERT INTO documents.native_material_admission(user_id,application_id,epoch_id,sealed_at,minimum_work_issued_at,created_at)
