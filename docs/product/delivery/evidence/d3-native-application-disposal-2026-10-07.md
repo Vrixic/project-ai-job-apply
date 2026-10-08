@@ -345,3 +345,52 @@ DNS/TLS/domain and provider bindings, accepted migration/runtime releases and we
 (scope still pending). Preserve the accepted sign-in/search/Profile/save/manual-Apply results;
 do not reopen those tests. Accountable real-data/provider/security/accessibility acceptance and
 applicable authorized ATS fixtures remain separate exit criteria. Docker/WSL remain stopped; PC on.
+
+
+## Read-only development release planning (2026-10-08)
+
+The owner authorized read-only AWS inspection and planning. STS matches the configured development
+account and assumed role in us-east-2. S3 expected-bucket-owner verifies the existing state boundary.
+The current platform state is serial 404, written by Terraform 1.16.2, with 324 resource records.
+Live Gateway alias reads version 86 without weighted routing. Health/live and health/ready return
+200. The regional metric-alarm query returns no ALARM entries. These checks do not exercise
+candidate-authenticated journeys or assert that every resource is healthy.
+
+The retained zero-change baseline `baseline-03114165c0a5-20261001-201651.tfplan` supplies 111 inputs.
+After refreshing the local module/provider cache, Terraform 1.16.2 uses the exact encrypted S3
+backend, platform.tfstate key, us-east-2 region, KMS binding and enabled S3 lockfile. Backend guards
+pass. A normal refresh-backed plan against source `213cec80` completes with detailed exit code 2:
+zero resource changes, five newly exposed empty native-release outputs. No runtime flags or release
+inputs were changed. This is a compatibility baseline, not a populated native deployment plan.
+
+Saved local plan: `.tmp/development-planning-baseline-213cec80.tfplan`.
+SHA-256: `6a6473248363835886b04fab4e7929be4d2b7659b856a0d4b060dc9dc506011e`.
+Logs and private JSON remain under ignored `.tmp/development-planning-*`; state/plan content,
+account/bucket/key identifiers and secret metadata are not copied into shared evidence.
+The before/after state bytes match exactly and serial remains 404. No apply, publication, migration,
+activation, secret-value retrieval or production action occurred. An initial CLI quoting error and
+missing cached modules were corrected locally before the successful plan.
+
+Observed release prerequisites: no development native-prefixed Lambda functions; no Route 53 hosted
+zones in this account; no us-east-2 ACM certificate entries; no native/TLS-labelled secret metadata;
+and ECR contains only the migration repository. Naming checks do not prove the absence of a usable
+secret under another name, and ACM is not substituted for the runtime's versioned TLS secret.
+
+The next native rollout must be staged:
+1. Resolve download hostname/DNS ownership and exact provider/TLS secret bindings. The DNS question
+   remains pending; do not invent a hosted zone or copy candidate/provider secrets into Terraform.
+2. Prepare immutable native image repository/publication and numeric owner/control/source releases,
+   including exact bootstrap ceilings and private network permissions. Existing source alone has not
+   created these managed resources. Preserve the running Gateway and existing triggers.
+3. Bind original task revisions and preparation/recovery releases, then the cleanup release and
+   schedule. Retain every original deployment while work remains unresolved.
+4. Release the verified 78-migration image and current Gateway through the existing guarded process;
+   publication still requires accepted source/artifacts and dependency disposition. The current raw
+   dependency audit failure is not waived by the zero-resource baseline plan.
+5. Enable only the reviewed development slice, verify authenticated preparation/approval/retirement
+   and recovery, then connect the separately scoped web sign-out hook. Already accepted basic/manual
+   checks need not be repeated. Production and accountable acceptance remain separate.
+
+A fully populated applyable native rollout plan cannot yet be produced from available bindings.
+D1/D3 remain In progress. Planning permission is resolved; missing release inputs, not that old
+permission question, are the current planning dependencies. Docker/WSL stayed stopped; PC on.

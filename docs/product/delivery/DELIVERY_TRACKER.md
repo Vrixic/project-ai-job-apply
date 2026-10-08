@@ -5270,3 +5270,12 @@ correction. Centralized dependency audit remains failed; fresh raw production ad
 mobile/admin paths, outside current backend scope. No waiver or managed runtime claim.
 [Combined result and release gates](evidence/d3-native-application-disposal-2026-10-07.md#combined-backend-verification-and-remaining-release-gates-2026-10-08).
 Managed activation and pending web hookup remain; D1/D3 In progress, Docker/WSL stopped, PC on.
+
+
+2026-10-08 owner authorizes read-only AWS inspection/planning. Verified development STS and state
+serial 404; live Gateway is unweighted 86, health/readiness 200, no metric alarms in ALARM. A locked,
+refresh-backed Terraform 1.16.2 compatibility plan at `213cec80` has zero resource changes and five
+empty native outputs. State bytes/serial remain unchanged; no apply/publication/activation.
+[Plan and staged rollout dependencies](evidence/d3-native-application-disposal-2026-10-07.md#read-only-development-release-planning-2026-10-08).
+Native DNS/TLS/provider/artifact bindings and repository/runtime provisioning remain. The prior
+planning-permission blocker is resolved; D1/D3 remain In progress, PC on.
