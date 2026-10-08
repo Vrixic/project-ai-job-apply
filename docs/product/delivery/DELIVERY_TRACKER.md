@@ -5262,3 +5262,11 @@ comparison and restored behavior, including three populated cleanup records, ori
 expired-lease recovery and stale-claim rejection. Source rows stay unchanged; fixtures removed.
 [Image and recovery evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-78-migration-logical-recovery).
 Docker/WSL stopped, PC on. No publication/deployment or vulnerability waiver; D1/D3 In progress.
+
+
+2026-10-08 combined Gateway verification at `118dbffd` passes 376 tests/31 files, with 116
+integration tests/seven files explicitly skipped. Cleanup permission source review found no further
+correction. Centralized dependency audit remains failed; fresh raw production advisories report
+mobile/admin paths, outside current backend scope. No waiver or managed runtime claim.
+[Combined result and release gates](evidence/d3-native-application-disposal-2026-10-07.md#combined-backend-verification-and-remaining-release-gates-2026-10-08).
+Managed activation and pending web hookup remain; D1/D3 In progress, Docker/WSL stopped, PC on.

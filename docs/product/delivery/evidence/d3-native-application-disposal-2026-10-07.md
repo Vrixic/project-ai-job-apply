@@ -319,3 +319,29 @@ Logs: `.tmp/native-cleanup-publisher-build-one.log` and
 all existing families and cleanup receipt rejection. The live Publish action, its dependency audit,
 remote main/account/bucket checks and cloud version readback were not executed. No audit waiver.
 Current 78-migration image/recovery, managed acceptance and web hookup remain outstanding.
+
+
+## Combined backend verification and remaining release gates (2026-10-08)
+
+At clean `118dbffd`, the full Gateway command `pnpm --filter @ai-job-apply/gateway test` passes
+31 files/376 tests; seven integration files/116 tests are explicitly skipped. This verifies the
+combined ordinary Gateway suite, not a new SQL or live managed run. Existing SQL/image/restore
+results above retain their stated scope. Log: `.tmp/gateway-combined-118dbffd.log`.
+
+Source review follows worker database-secret access through its role, the shared Secrets endpoint,
+bootstrap workload ceiling and platform KMS IAM delegation, and follows task observation/stop through
+worker role, exact cluster endpoint policy and bootstrap principal-scoped ceiling. No additional
+source correction was identified. This is not effective-policy simulation against deployed AWS.
+
+The centralized dependency audit still exits 1. A fresh production registry report contains
+13 records (one critical, seven high, four moderate, one low), with reported paths under mobile/admin.
+Raw image-size records must be interpreted with the maintained local remediation checks; raw registry
+counts alone are not a patch disposition. Logs: `.tmp/dependency-launch-review-118dbffd.{log,json}`.
+No dependency change or release waiver was made in this backend-only batch.
+
+Backend source/package/recovery progress does not close D1/D3. The current session excludes cloud
+publication/activation and new PR/main changes. Managed native journey additionally needs exact
+DNS/TLS/domain and provider bindings, accepted migration/runtime releases and web sign-out hookup
+(scope still pending). Preserve the accepted sign-in/search/Profile/save/manual-Apply results;
+do not reopen those tests. Accountable real-data/provider/security/accessibility acceptance and
+applicable authorized ATS fixtures remain separate exit criteria. Docker/WSL remain stopped; PC on.
