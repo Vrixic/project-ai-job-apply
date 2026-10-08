@@ -317,6 +317,8 @@ export interface ApplicationsServiceDependencies {
   /** Absent until preparation persistence and owned Documents context/read boundaries are wired. */
   preparations?: ApplicationPreparations;
   coverLetters?: ApplicationCoverLetters;
+  /** Context-only intake; does not grant generated-content read capabilities. */
+  preparationContext?: ApplicationCoverLetters["context"];
   temporaryMaterials?: ApplicationTemporaryMaterials;
   /** Scalar native-read authorization only; independent of content ports, default off. */
   nativeReadAuthorizationsEnabled?: () => boolean;
@@ -566,11 +568,13 @@ export class ApplicationsService implements ApplicationsApi {
     const prior = await preparations.replayPreparation(command);
     if (prior) return toApiPreparation(prior);
     const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
-    const letters = this.dependencies.coverLetters;
-    if (!letters) throw new ApplicationsUnavailableError();
+    const readContext =
+      this.dependencies.preparationContext ??
+      this.dependencies.coverLetters?.context.bind(this.dependencies.coverLetters);
+    if (!readContext) throw new ApplicationsUnavailableError();
     let context: PreparationContext;
     try {
-      context = await letters.context({ ownerUserId, applicationId });
+      context = await readContext({ ownerUserId, applicationId });
     } catch {
       throw new ApplicationsUnavailableError();
     }

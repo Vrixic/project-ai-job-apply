@@ -31,8 +31,13 @@ application's mutable later state. HTTP never performs model generation.
 The runtime accepts only a Documents context/read port, with no provider credential or AI call.
 Approval rechecks a carried letter's current evidence/job binding; missing ports or transport
 failures refuse with `503` before approval. Preparation acceptance/status remain default-off behind
-`coverLetterPreparationEnabled`, which no production entry point enables. Compatible migrations,
-owned dispatch/terminal recovery and ADR-016 isolated provider composition must precede enabling it.
+`NATIVE_COVER_LETTER_PREPARATION_ENABLED` in both entry points. It requires packet protection,
+read authorization and native cover-letter locations. Intake uses the pure AI SDK context subpath
+and an Applications active-candidate lease across Profile/Jobs owner reads; it queues the existing
+transactional preparation/outbox without model or generated-body access. Original receipt replay
+and operation status remain readable after intake withdrawal. Compatible migrations and the owned
+dispatch/recovery runtime must precede activation. Live native material availability at approval
+still requires composition; location metadata does not prove memory liveness.
 Route unit tests use test tokens and fake owner ports; PostgreSQL lifecycle regression checks use
 synthetic data. This is backend source/local evidence, not UI, managed-OIDC or deployed acceptance.
 

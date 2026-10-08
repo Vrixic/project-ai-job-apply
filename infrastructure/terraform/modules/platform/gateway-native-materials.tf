@@ -1,13 +1,14 @@
 variable "gateway_native_materials" {
   description = "Optional native candidate API configuration. Provisioning grants packet access; all runtime switches default off."
   type = object({
-    packet_protection_enabled      = optional(bool, false)
-    read_authorizations_enabled    = optional(bool, false)
-    cover_letter_base_host         = optional(string)
-    cover_letter_locations_enabled = optional(bool, false)
-    resume_base_host               = optional(string)
-    resume_locations_enabled       = optional(bool, false)
-    resume_preparation_enabled     = optional(bool, false)
+    packet_protection_enabled        = optional(bool, false)
+    read_authorizations_enabled      = optional(bool, false)
+    cover_letter_base_host           = optional(string)
+    cover_letter_locations_enabled   = optional(bool, false)
+    resume_base_host                 = optional(string)
+    resume_locations_enabled         = optional(bool, false)
+    resume_preparation_enabled       = optional(bool, false)
+    cover_letter_preparation_enabled = optional(bool, false)
   })
   default = null
   validation {
@@ -17,9 +18,10 @@ variable "gateway_native_materials" {
       (!var.gateway_native_materials.read_authorizations_enabled || var.gateway_native_materials.packet_protection_enabled) &&
       (!var.gateway_native_materials.cover_letter_locations_enabled || (var.gateway_native_materials.cover_letter_base_host != null && var.gateway_native_materials.read_authorizations_enabled)) &&
       (!var.gateway_native_materials.resume_locations_enabled || (var.gateway_native_materials.resume_base_host != null && var.gateway_native_materials.read_authorizations_enabled)) &&
-      (!var.gateway_native_materials.resume_preparation_enabled || var.gateway_native_materials.resume_locations_enabled)
+      (!var.gateway_native_materials.resume_preparation_enabled || var.gateway_native_materials.resume_locations_enabled) &&
+      (!var.gateway_native_materials.cover_letter_preparation_enabled || var.gateway_native_materials.cover_letter_locations_enabled)
     )
-    error_message = "Native candidate API requires the Gateway and retained packet keys, reviewed DNS hostnames, protection before authorization, authorization before locations and resume locations before intake."
+    error_message = "Native candidate API requires the Gateway and retained packet keys, reviewed DNS hostnames, protection before authorization, authorization before locations and matching material locations before intake."
   }
 }
 
@@ -41,6 +43,7 @@ locals {
     NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED = tostring(var.gateway_native_materials.read_authorizations_enabled)
     NATIVE_MATERIAL_READ_LOCATIONS_ENABLED      = tostring(var.gateway_native_materials.cover_letter_locations_enabled)
     NATIVE_RESUME_READ_LOCATIONS_ENABLED        = tostring(var.gateway_native_materials.resume_locations_enabled)
+    NATIVE_COVER_LETTER_PREPARATION_ENABLED     = tostring(var.gateway_native_materials.cover_letter_preparation_enabled)
     NATIVE_RESUME_PREPARATION_ENABLED           = tostring(var.gateway_native_materials.resume_preparation_enabled)
     }, var.gateway_native_materials.cover_letter_base_host == null ? {} : { NATIVE_MATERIAL_BASE_HOST = var.gateway_native_materials.cover_letter_base_host },
   var.gateway_native_materials.resume_base_host == null ? {} : { NATIVE_RESUME_BASE_HOST = var.gateway_native_materials.resume_base_host })

@@ -1,3 +1,4 @@
+import { coverLetterContext } from "@ai-job-apply/ai-sdk/context";
 import type { ProfileFact } from "@ai-job-apply/api-contracts";
 import {
   type ApplicationCoverLetters,
@@ -48,6 +49,7 @@ export interface ApplicationsRuntimeOptions {
   temporaryMaterials?: ApplicationTemporaryMaterials;
   /** Default false. Enable only with compatible migrations and the owned dispatch/recovery runtime. */
   coverLetterPreparationEnabled?: boolean;
+  nativeCoverLetterPreparationEnabled?: () => boolean;
   nativeReadAuthorizationsEnabled?: () => boolean;
   nativeMaterialLocations?: {
     resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
@@ -98,6 +100,42 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
         }
       : {}),
   });
+
+  const nativeCoverLetterEnabled = options.nativeCoverLetterPreparationEnabled;
+  const preparationContext: ApplicationCoverLetters["context"] = async ({
+    ownerUserId,
+    applicationId,
+  }) => {
+    if (!nativeCoverLetterEnabled?.()) throw new ApplicationsUnavailableError();
+    return store.readPreparationContext(ownerUserId, applicationId, async (application) => {
+      if (!nativeCoverLetterEnabled()) throw new ApplicationsUnavailableError();
+      const at = new Date(clock().getTime());
+      if (!Number.isFinite(at.getTime())) throw new ApplicationsUnavailableError();
+      const job = await options.catalog.getActiveJob(application.canonicalJobId, at);
+      if (
+        job?.status !== "active" ||
+        !Number.isFinite(job.expiresAt.getTime()) ||
+        job.expiresAt.getTime() <= at.getTime()
+      )
+        throw new ApplicationsUnavailableError();
+      const { facts } = await options.profile.listProfileFacts(ownerUserId);
+      const context = coverLetterContext({
+        facts: facts.filter((fact) => fact.sensitivity !== "restricted").map(toGraphFact),
+        now: at,
+        job: { title: job.title, company: job.company.name, description: job.description },
+      });
+      const finishedAt = clock().getTime();
+      if (
+        !nativeCoverLetterEnabled() ||
+        !Number.isFinite(finishedAt) ||
+        finishedAt < at.getTime() ||
+        finishedAt >= job.expiresAt.getTime()
+      ) {
+        throw new ApplicationsUnavailableError();
+      }
+      return context;
+    });
+  };
 
   async function jobRevision(jobId: string, at: Date): Promise<string> {
     const resolved = await options.catalog.resolveActiveJobSummaries([jobId], at);
@@ -313,7 +351,21 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
   return new ApplicationsService({
     store,
     restrictedPackets: store,
-    ...(options.coverLetterPreparationEnabled === true ? { preparations: store } : {}),
+    ...(nativeCoverLetterEnabled
+      ? {
+          preparationContext,
+          preparations: {
+            replayPreparation: store.replayPreparation.bind(store),
+            getPreparation: store.getPreparation.bind(store),
+            queuePreparation: (command) => {
+              if (!nativeCoverLetterEnabled()) throw new ApplicationsUnavailableError();
+              return store.queuePreparation(command);
+            },
+          },
+        }
+      : options.coverLetterPreparationEnabled === true
+        ? { preparations: store }
+        : {}),
     packets,
     bindings,
     jobs,

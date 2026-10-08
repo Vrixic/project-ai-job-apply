@@ -59,6 +59,9 @@ importers:
 
   backend/gateway:
     dependencies:
+      '@ai-job-apply/ai-sdk':
+        specifier: workspace:*
+        version: link:../../packages/ai-sdk
       '@ai-job-apply/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
@@ -135,9 +138,6 @@ importers:
         specifier: 7.8.2
         version: 7.8.2
     devDependencies:
-      '@ai-job-apply/ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/ai-sdk
       '@aws-sdk/client-ecs':
         specifier: 3.1133.0
         version: 3.1133.0

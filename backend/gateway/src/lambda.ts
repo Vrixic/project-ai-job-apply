@@ -1180,6 +1180,12 @@ async function createConfiguredApplication(
     ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
     ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
     ...(nativeResumeLocations ? { nativeResumeLocations } : {}),
+    nativeCoverLetterPreparationEnabled: () =>
+      process.env.NATIVE_COVER_LETTER_PREPARATION_ENABLED === "true" &&
+      process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&
+      process.env.NATIVE_MATERIAL_READ_LOCATIONS_ENABLED === "true" &&
+      nativeMaterialLocations !== undefined &&
+      packetProtection?.enabled() === true,
     nativeResumePreparationEnabled: () =>
       process.env.NATIVE_RESUME_PREPARATION_ENABLED === "true" &&
       packetProtection?.enabled() === true,

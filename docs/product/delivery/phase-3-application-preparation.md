@@ -2503,3 +2503,10 @@ pins; its real dump/restore, all 93 exact row sets and restored behavior pass. B
 databases are removed; Docker/WSL stopped, PC on. Image remains unpublished; scan/disposition,
 managed migration/PITR and acceptance remain. D1/D3 stay In progress, CI/CD deferred.
 [Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).
+
+2026-10-07 D3 native cover-letter intake is wired in both Gateway entry points, default-off,
+using leased owner context reads and the existing atomic preparation/outbox. Local evidence:
+28 PostgreSQL, 293 AI SDK, 396 Applications and nine Terraform tests pass; Gateway builds and
+passes typecheck. [Evidence](evidence/d3-native-cover-letter-intake-2026-10-07.md).
+Live native availability at approval and managed/client/ATS acceptance remain unfinished.
+D1/D3 remain In progress; CI/CD deferred and PC on.

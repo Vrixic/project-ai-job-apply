@@ -110,9 +110,9 @@ run "provisioned_dark" {
 }
 run "candidate_flow_enabled" {
   command = plan
-  variables { gateway_native_materials = { packet_protection_enabled = true, read_authorizations_enabled = true, cover_letter_base_host = "letters.example.com", cover_letter_locations_enabled = true, resume_base_host = "resumes.example.com", resume_locations_enabled = true, resume_preparation_enabled = true } }
+  variables { gateway_native_materials = { packet_protection_enabled = true, read_authorizations_enabled = true, cover_letter_base_host = "letters.example.com", cover_letter_locations_enabled = true, resume_base_host = "resumes.example.com", resume_locations_enabled = true, resume_preparation_enabled = true, cover_letter_preparation_enabled = true } }
   assert {
-    condition     = alltrue([for key, value in local.gateway_native_material_environment : aws_lambda_function.gateway[0].environment[0].variables[key] == value]) && local.gateway_native_material_environment.NATIVE_MATERIAL_BASE_HOST == "letters.example.com" && local.gateway_native_material_environment.NATIVE_RESUME_BASE_HOST == "resumes.example.com" && local.gateway_native_material_environment.NATIVE_RESUME_PREPARATION_ENABLED == "true"
+    condition     = alltrue([for key, value in local.gateway_native_material_environment : aws_lambda_function.gateway[0].environment[0].variables[key] == value]) && local.gateway_native_material_environment.NATIVE_MATERIAL_BASE_HOST == "letters.example.com" && local.gateway_native_material_environment.NATIVE_RESUME_BASE_HOST == "resumes.example.com" && local.gateway_native_material_environment.NATIVE_RESUME_PREPARATION_ENABLED == "true" && local.gateway_native_material_environment.NATIVE_COVER_LETTER_PREPARATION_ENABLED == "true"
     error_message = "Enabled flow must reach the actual Gateway environment with separate reviewed native hosts."
   }
 }
@@ -147,5 +147,11 @@ run "intake_without_location" {
 run "url_instead_of_host" {
   command = plan
   variables { gateway_native_materials = { resume_base_host = "https://resumes.example.com" } }
+  expect_failures = [var.gateway_native_materials]
+}
+
+run "cover_letter_intake_without_location" {
+  command = plan
+  variables { gateway_native_materials = { packet_protection_enabled = true, cover_letter_preparation_enabled = true } }
   expect_failures = [var.gateway_native_materials]
 }

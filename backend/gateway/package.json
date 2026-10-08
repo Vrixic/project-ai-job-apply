@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ai-job-apply/ai-sdk": "workspace:*",
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/applications-service": "workspace:*",
     "@ai-job-apply/auth": "workspace:*",
@@ -43,7 +44,6 @@
     "rxjs": "7.8.2"
   },
   "devDependencies": {
-    "@ai-job-apply/ai-sdk": "workspace:*",
     "@aws-sdk/client-ecs": "3.1133.0",
     "@types/aws-lambda": "8.10.163",
     "tsx": "4.23.13",

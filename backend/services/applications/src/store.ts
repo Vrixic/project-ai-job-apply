@@ -1120,6 +1120,31 @@ export class PostgresApplicationStore {
 
   // ---- Reads (owner-scoped) ---------------------------------------------------------------
 
+  /** Hold the active-candidate lease while composing metadata through other owners.
+   * The callback must use separate owner pools and must not generate or read artifact bodies.
+   * No application row lock is held over those reads; queue acceptance rechecks its revision.
+   */
+  async readPreparationContext(
+    ownerUserId: string,
+    applicationId: string,
+    read: (application: ApplicationRecord) => Promise<PreparationContext>,
+  ): Promise<PreparationContext> {
+    return this.client.begin(async (tx) => {
+      await tx`SELECT identity.require_active_candidate(${ownerUserId}::uuid)`;
+      const [row] = await tx<ApplicationRow[]>`
+        SELECT id, owner_user_id, canonical_job_id, status, revision, current_packet_id, created_at, updated_at
+        FROM applications.applications
+        WHERE id = ${applicationId} AND owner_user_id = ${ownerUserId}
+      `;
+      if (!row) throw new ApplicationNotFoundError();
+      const context = await read(toApplication(row));
+      return {
+        confirmedFactsHash: context.confirmedFactsHash,
+        jobContextHash: context.jobContextHash,
+      };
+    });
+  }
+
   async getApplication(ownerUserId: string, applicationId: string): Promise<ApplicationView> {
     return this.client.begin("READ ONLY", (tx) => this.readView(tx, ownerUserId, applicationId));
   }
