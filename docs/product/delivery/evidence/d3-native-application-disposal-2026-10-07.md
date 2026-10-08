@@ -1049,3 +1049,48 @@ so its actual URL/setup remains an integration prerequisite, alongside the pendi
 location for cover letters. Full client/native read integration, configured image and original task
 registration, runtime/IAM bindings, current migrations/restore replay, live managed journey and
 accountable acceptance remain. D1/D3 stay In progress; hosted CI/CD stays deferred.
+
+## Migration image scan remediation 2026-10-08
+
+PR #572 merged normally as `771f65480fe7e8a4025b5d90ec7b401821ddf04b`, incorporating
+#570 dormancy and #571 publication evidence. The current complete dormant inputs were archived
+under `lifecycle/development/dormant.tfvars.json` in the encrypted, versioned state bucket, using
+an ETag precondition and exact-version byte/encryption readback. Input SHA-256:
+`854161ceb15620ba1bc518a5027a23e2fe2f514fed7ff13bc6ca7f35f72c16b5`.
+The older version remains recoverable. Private receipt: `.tmp/dormant-archive-419-receipt.json`.
+
+The merged-source migration publisher completed two clean, byte-identical Linux/amd64 builds,
+the dependency audit, and the hardened runtime inventory smoke: seven owners, twelve schemas,
+95 relations and 78 checksum-bound migrations. Its eleven required test tasks passed from cache;
+this is not a new execution of every cached unit test. Platform digest:
+`sha256:1f6453cc0b78ab3ab0459e50ff412393dd92733890f1d85252c0c780b55fbec0`.
+ECR upload succeeded, but its COMPLETE scan reported one High finding, **CVE-2026-85091** in
+`zlib 1.3.2-r0`. Publication correctly stopped with the receipt still in `publishing` phase.
+This digest is not an accepted release, has not been independently verified, and was not deployed.
+Private evidence: `.tmp/migration-771f6548-ecr-scan.json` and the publisher logs/receipt in the
+ignored development migration-image directory.
+
+[Alpine's security database](https://secdb.alpinelinux.org/v3.23/main.json) identifies
+`1.3.2-r1` as the fix. The migration runtime now fetches that exact signed APK, verifies SHA-256
+`ee62e1864c235901e2aa4d1868c7ae8f7cc5d0740a98c48a2525332eb4bfda73`, installs it without
+network access, verifies the installed version and removes the temporary APK. The pinned base
+and ECR scan gate remain unchanged. Existing publisher guards are updated; all **191 runtime
+regressions** and publisher OCI guards pass. An actual Linux/amd64 runtime-layer build verifies
+the installed package database and Node gzip round-trip as UID 65532 with no network, read-only
+root, dropped capabilities and no package manager. Full rebuilt-image scan/publication remains
+pending; this local runtime check is not SQL execution or managed acceptance. The runbook's stale
+schema/relation/migration totals now match the executable manifest.
+
+A separate baseline capture refused newly observed provider metadata for the two private native
+roles/functions. Exact review proved four empty-tag normalizations and two computed inline-policy
+snapshots matching their separately managed policies, with every other attribute and sensitivity
+unchanged. All planned resources and outputs were `no-op`. Applying that exact saved plan
+`5cdb06a4958ae53350f6634956348a2bb6ec42b36abc92d77d393d257869d7a8` records the refresh:
+state **419 -> 420**, zero resource mutations. No operator guard was relaxed and no baseline was
+relabeled. Private review/apply evidence: `.tmp/migration-771f6548-metadata-review.json` and
+`.tmp/migration-metadata-apply-receipt.json`. Input bytes are unchanged; obtain a fresh current-state
+baseline before the next task release.
+
+D1/D3 remain In progress. Current managed SQL execution, native task/image integration, HTTPS
+frontend origin, provider-key location and live acceptance remain. CI/CD stays deferred. Docker
+Desktop and WSL were stopped after the runtime check; the PC stays on.

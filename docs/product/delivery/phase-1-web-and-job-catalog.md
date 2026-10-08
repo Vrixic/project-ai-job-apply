@@ -1102,3 +1102,12 @@ shutdown remains unfinished. Staging SSO login succeeds but role credentials are
 [Endpoint shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#independent-endpoint-shutdown-2026-10-08).
 Development has zero active event rules/mappings, NATs and interface endpoints. Retained storage,
 security and DNS still incur charges. D1/D3 In progress, Docker/WSL stopped and PC on.
+
+2026-10-08 merges #572 and archives complete dormant inputs with encrypted exact-version readback.
+The current 78-migration image builds identically twice and passes runtime inventory checks, but
+ECR reports one High zlib finding, so publication stops before deployment. The runtime now pins
+Alpine's corrected zlib package/checksum; 191 runtime regressions, publisher guards and a real
+restricted runtime-layer smoke pass. A reviewed no-op metadata refresh advances state 419 -> 420;
+no resource mutation or guard relaxation. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#migration-image-scan-remediation-2026-10-08).
+Fresh full-image publication/scan and baseline capture remain. D1/D3 In progress; CI/CD deferred,
+Docker/WSL stopped after testing and PC on.
