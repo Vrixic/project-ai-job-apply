@@ -5050,3 +5050,11 @@ network cases pass; development/staging validate. AWS resources are mocked; no l
 or candidate-read acceptance is claimed. Actual managed bindings and acceptance remain. D1/D3
 stay In progress; CI/CD deferred, Docker/WSL stopped and PC on.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#native-https-and-image-reachability).
+
+
+2026-10-07 D3-079 connects the existing candidate Gateway to native location/authorization,
+packet encryption and HMAC permissions through optional default-off release configuration.
+The missing environment/IAM/private-KMS wiring is implemented locally; 23 Terraform checks and
+both environment validations pass. Actual key/host binding and managed candidate-flow acceptance
+remain before activation. D1/D3 remain In progress; CI/CD deferred and PC on.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#gateway-native-material-release-wiring).

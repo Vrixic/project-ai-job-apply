@@ -81,3 +81,11 @@ ceiling. Deployment can read/use the approved boundary but cannot modify it. Mat
 ID, task revision and bindings to the control/task modules; retain original authority until drain.
 Sixteen bootstrap mock scenarios pass, including combined resume/DNS, preparation and material
 control under IAM's policy-size limit. This does not prove effective managed IAM.
+
+
+Optional `gateway_packet_fingerprint_key_arn` extends the existing workload ceiling only for the
+Gateway's HMAC-SHA-256 operation against that exact retained same-account us-east-2 packet key.
+It defaults to null. Obtain the ARN from platform `restricted_packet_key_bindings` after key
+provisioning; keep it aligned with the original Gateway release. This does not grant other
+principals MAC operations or activate packet protection/native reads. See the
+[Gateway composition](../modules/platform/README.md#gateway-native-material-release).

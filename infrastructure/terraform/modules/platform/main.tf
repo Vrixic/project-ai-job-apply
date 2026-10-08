@@ -2044,6 +2044,7 @@ resource "aws_lambda_function" "gateway" {
         OIDC_ISSUER        = var.oidc_issuer
         OIDC_AUDIENCE      = var.oidc_audience
       },
+      local.gateway_native_material_environment,
       var.privileged_moderation_audit_enabled ? {
         PRIVILEGED_MODERATION_AUDIT_ENABLED = "true"
       } : {},
@@ -2119,6 +2120,8 @@ resource "aws_lambda_function" "gateway" {
 
   depends_on = [
     aws_iam_role_policy.gateway_lambda,
+    aws_iam_role_policy.gateway_native_packet,
+    aws_vpc_endpoint.native_preparation_kms,
     aws_vpc_endpoint.secretsmanager
   ]
 }

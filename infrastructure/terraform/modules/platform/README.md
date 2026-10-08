@@ -229,3 +229,29 @@ and registry endpoints. Migration logging access remains unchanged. No additiona
 are created when migration endpoints are absent. Task registration can precede launch composition
 with no admitted task group; that is not evidence of runnable tasks. The existing regional ECR
 layer S3 path remains unchanged.
+
+
+## Gateway native material release
+
+`gateway_native_materials` is null by default in development/staging. Supplying `{}` wires the
+existing Gateway to the separately provisioned packet encryption/HMAC keys and private KMS path,
+with every native API switch false. It requires `restricted_packet_keys_provisioned` and the
+Gateway deployment. Gateway publication waits for its packet policy and KMS endpoint resources.
+No generated document body passes through the location/authorization routes.
+
+Before activation, copy the exact `restricted_packet_key_bindings.fingerprint_key_arn` into
+bootstrap's `gateway_packet_fingerprint_key_arn`; its workload-boundary addition allows only
+`kms:GenerateMac` by the existing Gateway role, against that key, using HMAC-SHA-256. Encryption
+and data-key operations continue under the existing tagged-key boundary and the new exact-key,
+purpose-bound Gateway role policy. The private KMS endpoint preserves existing caller grants and
+adds only the Gateway's exact packet-key operations. Provision keys first; no secret values belong
+in these inputs.
+
+Set `packet_protection_enabled` only after compatible Gateway/preparation/export/rights releases
+and migrations are accepted. `read_authorizations_enabled` requires protection. Candidate reads
+add `cover_letter_base_host`/`resume_base_host` matching the respective original image and route
+configuration, plus the corresponding `*_locations_enabled` switch. Resume intake additionally
+requires `resume_preparation_enabled` and enabled resume locations. This composition does not
+activate vault reuse, publish images, provide DNS/TLS identities, authorize a provider or prove
+managed end-to-end behavior. Initial keys remain retained; changing key identity requires a
+separately reviewed historical-key transition, not replacing these retained resources.

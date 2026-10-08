@@ -44,6 +44,7 @@ provider "aws" {
 }
 
 module "platform" {
+  gateway_native_materials = var.gateway_native_materials
   native_material_image_access = merge(
     { for id, r in var.native_material_task_releases : "material-${id}" => {
       execution_role_arn = "arn:aws:iam::${split(":", r.expected_task_definition_arn)[4]}:role/ai-job-apply-development-native-material-${id}-execution"

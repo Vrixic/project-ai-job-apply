@@ -474,7 +474,7 @@ resource "aws_iam_policy" "workload_boundary" {
         Resource  = "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*",
         Condition = { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-development-deletion-restore" } }
       }
-    ] : [])
+    ] : [], local.gateway_packet_boundary_statements)
   })
 }
 

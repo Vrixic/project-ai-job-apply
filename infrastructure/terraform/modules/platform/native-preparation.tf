@@ -136,14 +136,14 @@ locals {
   )
 }
 resource "aws_vpc_endpoint" "native_preparation_kms" {
-  count               = local.preparation_configured && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (local.preparation_configured || var.gateway_native_materials != null) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.kms"
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
   subnet_ids          = [aws_subnet.private[0].id]
   security_group_ids  = [aws_security_group.secrets_endpoint[0].id]
-  policy = jsonencode({ Version = "2012-10-17", Statement = concat(local.preparation_existing_kms_access, flatten([for id, r in var.native_preparation_releases : [
+  policy = jsonencode({ Version = "2012-10-17", Statement = concat(local.preparation_existing_kms_access, local.gateway_packet_endpoint_statements, flatten([for id, r in var.native_preparation_releases : [
     { Effect = "Allow", Principal = "*", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = r.packet_encryption_key_arn, Condition = { ArnEquals = { "aws:PrincipalArn" = local.preparation_roles[id].activity } } },
     { Effect = "Allow", Principal = "*", Action = ["kms:GenerateMac"], Resource = r.packet_fingerprint_key_arn, Condition = { ArnEquals = { "aws:PrincipalArn" = local.preparation_roles[id].activity } } }
   ]])) })

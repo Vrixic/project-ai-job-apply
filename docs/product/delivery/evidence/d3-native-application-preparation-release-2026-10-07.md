@@ -627,3 +627,36 @@ not image-pull success, public-IP/TLS/provider reachability or candidate browser
 Runtime source and qualified artifact identities remain unchanged. Actual managed inputs and
 synthetic end-to-end acceptance remain before activation. D1/D3 remain In progress; no cloud
 mutation, hosted CI/CD or Docker work occurred, and the PC remains on.
+
+
+## Gateway native material release wiring
+
+Tracing the candidate read path found a release gap: Gateway runtime already implements native
+location/authorization and packet protection, but platform Terraform supplied none of their
+settings or packet-key permissions. Optional `gateway_native_materials` now composes those exact
+runtime variables, separate cover-letter/resume hostnames and retained encryption/HMAC key ARNs
+into the existing Gateway. Null preserves the previous deployment; `{}` provisions permissions
+with all switches false. Validation requires protection before authorization, authorization and
+a reviewed hostname before locations, and resume locations before resume intake.
+
+Gateway IAM grants only GenerateDataKey/Decrypt for the exact packet encryption key with its
+packet purpose and GenerateMac for the exact fingerprint key with HMAC-SHA-256. The existing
+private KMS endpoint now also serves a configured Gateway before preparation releases exist,
+retaining other legitimate caller statements. Its new grants pin the Gateway principal and exact
+keys. Gateway publication depends on its new role policy and endpoint. Bootstrap has a separate
+optional exact fingerprint-key input adding only the Gateway's MAC operation to the existing
+workload ceiling; the populated policy remains within IAM's size limit. No generic environment
+map or broad new KMS grant was introduced.
+
+All 23 relevant Terraform cases pass: eight candidate API composition/refusal cases, three exact
+Gateway boundary cases, five existing preparation boundary cases, and seven preparation/private
+KMS/retained-key cases. Both environments validate and the infrastructure guard passes. These
+are mocked AWS plans and configuration checks, not deployed KMS/identity/DNS/browser acceptance.
+Runtime source and existing qualified artifact identities are unchanged. The last broad workspace
+checks and known full-verifier port-3000 fixture conflict remain recorded above; this Terraform-only
+batch does not rerun that unrelated fixture.
+
+[Platform instructions](../../../../infrastructure/terraform/modules/platform/README.md#gateway-native-material-release)
+state the key-first bootstrap/Gateway sequence and exact host alignment. Compatible preparation,
+export/rights and migration releases plus managed synthetic flow acceptance still precede runtime
+activation. D1/D3 remain In progress. No cloud action, CI/CD, frontend edit or Docker work; PC on.
