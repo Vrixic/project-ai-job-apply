@@ -29,7 +29,7 @@
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/config": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
-    "drizzle-orm": "0.45.2",
+    "drizzle-orm": "0.45.3",
     "postgres": "3.4.9",
     "uuid": "14.0.2"
   }
