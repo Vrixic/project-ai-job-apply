@@ -2,7 +2,7 @@
 
 The prelaunch shutdown rule in AGENTS.md supersedes the older assumption that development runs
 continuously. This procedure covers reversible traffic/trigger quiescence and disposable NAT/interface-endpoint removal.
-It does not yet implement a persistent, data-preserving dormant database lifecycle.
+Complete the data-preserving [database dormancy lifecycle](development-database-dormancy.md) afterward; a temporary RDS stop is not completion.
 
 ## Preserve data while quiescing
 
@@ -39,7 +39,7 @@ numeric aliases without changing their published artifacts. Verify zero API rout
 EventBridge rules, enabled queue mappings and native/ECS tasks, plus removed NAT gateways/EIPs.
 Run a same-input refresh-backed plan and require zero drift.
 
-## Remaining shutdown gap
+## Database dormancy and retained costs
 
 Stopping the retained RDS instance reduces immediate compute usage but is temporary: AWS can restart
 it after seven days. It does not satisfy the strict no-automatic-restart requirement. Database storage,
@@ -47,12 +47,14 @@ backups and any interface endpoints not yet removed continue to incur charges. D
 complete shutdown or zero cost.
 
 The staging dormant lifecycle deletes its synthetic database and cannot be reused for development
-data. Separate interface-endpoint control is implemented; a development dormant lifecycle still
-needs a verified backup/restore path before permanent database compute removal. Report that incomplete work and retained costs.
-Keep the database protected; do not delete it merely to satisfy a shutdown report.
+data. Use the dedicated development database lifecycle with an available encrypted safety snapshot, a
+verified private restore, and a separately reviewed final-snapshot deletion plan. Preserve all data
+and report retained snapshot/storage costs. Until those checks pass, keep the database protected
+and report shutdown incomplete.
 
 Before the next authorized test session, inspect current state and plan reactivation from the full
 retained configuration. Do not blindly replay an old plan or remove newly adopted DNS/TLS inputs.
-Start the preserved database and verify readiness before enabling routes and background work.
+If dormant, restore the exact retained snapshot through the database lifecycle and verify readiness
+before enabling routes and background work. A temporary stopped instance can instead be started.
 Repeat shutdown after the bounded test session. Verify staging separately using its own credentials;
 an expired session is an explicit verification blocker, not evidence that staging is off.

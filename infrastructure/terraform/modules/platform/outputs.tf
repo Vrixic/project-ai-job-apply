@@ -3,7 +3,7 @@ output "vpc_id" {
 }
 
 output "database_endpoint" {
-  value     = var.persistent_data_plane_enabled ? aws_db_instance.postgres[0].endpoint : null
+  value     = local.database_provisioned ? aws_db_instance.postgres[0].endpoint : null
   sensitive = true
 }
 

@@ -881,3 +881,171 @@ Private plan/apply/verify/state/receipt artifacts use .tmp/development-endpoints
 .tmp/development-planning-current-415.tfvars.json. The development shutdown runbook now documents
 endpoint removal and reactivation ordering. Native runtime publication/journey, TLS renewal and
 D1/D3 acceptance remain open. Docker/WSL stayed stopped and PC remains on.
+
+
+## Merged-main native resume publication 2026-10-08
+
+[PR #568](https://github.com/Vrixic/project-ai-job-apply/pull/568) merged as
+`e4bc0d5467f5901baa496f4a37cae0a6495f5216`; its complete tree matches the previously
+verified PR head. Hosted quality was prevented from starting by GitHub billing. CI/CD remains
+owner-deferred; no hosted-green claim or repository-protection override was made here.
+
+The unchanged guarded publisher ran from clean main matching origin/main, using the development
+temporary SSO identity, Terraform 1.16.2, Node 24 and pnpm 10.24.0. It validated the exact
+Terraform-owned artifact bucket, region, versioning, public-access block and customer KMS key.
+Workflow tests passed 1,910 cases; 123 database-dependent cases were skipped. The centralized
+dependency audit passed with four exactly verified local advisory remediations and no risk
+exceptions. Two source-bound builds produced identical artifacts.
+
+Six native-resume Lambda artifacts and their checksum, manifest and CycloneDX companion objects
+were published: 24 immutable S3 versions total. Each was verified during publication, followed
+by a separate receipt-bound Verify invocation with successful exact-version readback.
+
+| Artifact | ZIP SHA-256 |
+| --- | --- |
+| Owner RPC | `60578db351af9baef67bcb0c41de30a7107dcc7827165dc108381fb9b7650d09` |
+| Source RPC | `4ebd2d1fd85f96603f64f1c67efa0edffd8b415fa71bfcc7ac8949274af33131` |
+| Preparation control | `ffd54e1127174c2a4abf9dd32af4dd903cb8b50e5407a5873005b21aaedff7db` |
+| Durable preparation | `44c7147be16d89e46f0cf85438b11c2bc4f50469e74e467855c4b3121024c039` |
+| Request dispatcher | `edd4045cb28bf1aa9f7c5fcff7b0cfb92e297864a04c7c7dafc557c5f1b6a67b` |
+| Task observer | `17ec119a0397381e288eb43de3706561e7975cbef4bd8530432fe5933f5c9ede` |
+
+Private receipt: development `.terraform/development-native-resume-artifacts/receipt-e4bc0d5467f5-20261008-132952.json`.
+Receipt SHA-256: `33db93de2e1fe2fad0fd61205b0f8c5d9028e2416cb05340ac9c647feec1f577`.
+Private logs: `.tmp/native-resume-publish-e4bc0d54.log` and
+`.tmp/native-resume-verify-e4bc0d54.log`. The initial separate Verify invocation rejected a
+repository-relative receipt path; the corrected absolute path passed without changing the guard.
+
+No Lambda code, task definition, route or trigger was deployed or activated. NativePreparation,
+NativeMaterialControls and NativeMaterialCleanup publication, configured images, managed runtime
+bindings, live journey and accountable acceptance remain. Certificate renewal remains separate.
+This publication does not complete D1 or D3.
+
+A fresh read-only development observation at `2026-10-08T17:38:32Z` found zero API routes,
+enabled event rules and enabled Lambda mappings. It also found one protected database available
+and a second database creating during concurrent database-dormancy/recovery work in the separate
+cost-shutdown checkout. This supersedes the earlier stopped-database observation: AWS shutdown
+is incomplete at this observation, and these billable operations were not interrupted. The
+publisher made no runtime or Terraform-state mutation. Staging role access remains unverified
+since the earlier No access denial. Durable storage, artifact versions, snapshots, secrets,
+security and DNS retain charges; no zero-cost or full-shutdown claim. Docker/WSL were not started
+for publication, and the PC stays on.
+
+
+## Complete native Lambda publication 2026-10-08
+
+The remaining NativePreparation, NativeMaterialControls and NativeMaterialCleanup families are
+published from clean merged main `e4bc0d5467f5901baa496f4a37cae0a6495f5216`. Combined with the
+six NativeResume artifacts above, all **14 native Lambda artifacts and 42 companion objects**
+are now stored as immutable development S3 versions. This is artifact publication, not deployment.
+
+Each unchanged publisher invocation validated the temporary development identity, region,
+Terraform-owned storage, encryption and source. Each family passed its mandated tests and
+centralized dependency audit, two identical builds, immutable writes and object verification.
+Separate receipt-bound Verify invocations all passed exact-version readback. Workflow tests
+passed 1,910 cases with 123 database-dependent skips; Gateway tests passed 376 cases with 116
+database-dependent skips. These are repeated family gates, not additional unique test totals or
+new SQL/live managed acceptance. No exception or hosted CI result substitutes for these checks.
+
+| Family | Published objects | Verified receipt SHA-256 |
+| --- | --- | --- |
+| NativePreparation | 16 | `4497823c7483e55ffe1949ccba896431d2d4960bf9d43d56da9f51ab7038f718` |
+| NativeMaterialControls | 12 | `efd34ceff1334c22cb431f488d63eb0693a0b9a7be8747e69ce9a74d97e3d75d` |
+| NativeMaterialCleanup | 4 | `9ae4d94c7f9e80fc859b97d23395b9ffbb6b78de3647f7e0839dfe70abc4dd60` |
+
+| Lambda artifact | ZIP SHA-256 |
+| --- | --- |
+| `native-application-preparation-lambda` | `8c5a63532558a0571d95c7d7d6312666fec2cf551f099afee57ada4b84108cba` |
+| `application-preparation-durable-lambda` | `093794f46eef2f73175831e55dab23fb1eef38a00f7f78578fac228750d69507` |
+| `application-preparation-starter-lambda` | `59ff1877a655a978733ddee8a1a84d561d04c1fab27cf4b769137bb34044e629` |
+| `application-preparation-recovery-lambda` | `4da7e67002992cfe51df32691ebe8bc5cd925ce1bf734297fc8cd501e8f1e47e` |
+| `native-material-launch-lambda` | `50bc0ae43a5286295740049450950d07bf630737a8ebd8e7bc88fd52c5fdf35a` |
+| `native-owner-rpc-lambda` | `4b96c4435776e4a69f39103c24ec265b13548129ba826ec86c452d098175dff9` |
+| `native-material-task-event-lambda` | `388e169184dab7d743df69ac9783abce9d50b96b052c1ab32e5e829cfee928b7` |
+| `native-material-cleanup-worker-lambda` | `be9f1dd2547b251b91282815085f60815146f7aa13711772f263b755372e1885` |
+
+Receipts remain in their dedicated ignored development `.terraform` artifact-family directories.
+Private batch summary: `.tmp/native-remaining-publication-e4bc0d54.json`; individual publish and
+Verify logs use `.tmp/<Family>-{publish,verify}-e4bc0d54.log`. Account/bucket identifiers, object
+version IDs and full command logs remain private. No Lambda, route, task definition, trigger or
+Terraform state was changed by these publishers.
+
+A fresh read-only development observation at **2026-10-08T17:59:10Z** confirms zero database
+instances, API routes, enabled event rules, enabled Lambda mappings, live NAT gateways, live
+interface endpoints and non-stopped ECS tasks. Two encrypted manual recovery snapshots are
+available. The separate [database dormancy work #570](https://github.com/Vrixic/project-ai-job-apply/pull/570)
+completed the database cleanup observed in the previous entry; this publication did not perform
+that deletion or establish SQL/application restore acceptance. Preserve those recovery snapshots
+and use the new dormant baseline for future plans, not the historical stopped-database inputs.
+Private observation: `.tmp/native-release-shutdown-observation.json`. Staging authentication was
+rechecked and still fails at GetRoleCredentials with ForbiddenException / No access; its shutdown
+cannot be verified. Retained snapshots, storage, artifact objects, security and DNS still incur
+charges. WSL reports no running distributions; Docker was not started, and the PC stays on.
+
+Native task images, exact numeric runtime/IAM bindings, current migrations/restore replay,
+managed journey and accountable D1/D3 acceptance remain. Development secret metadata includes
+TLS but no provider-key secret under the project path; the owner was asked for an existing key's
+location, never its value in chat. No provider call or cover-letter activation occurred. D1 and
+D3 remain In progress; hosted CI/CD remains owner-deferred.
+
+
+## Private resume access deployment and image packaging 2026-10-08
+
+The isolated `feat/native-resume-managed-release` branch incorporates the exact #570 dormancy
+source and #571 publication evidence. A refresh-backed baseline using the reviewed dormant inputs
+has zero drift before this release. The historical stopped-database baseline must not be reused.
+
+An exact reviewed plan creates six resources: the private native-resume owner/source Lambda
+functions, their two roles and two policies. Its only update adds one exact-principal
+`s3:GetObjectVersion` statement for normalized `resume.json` versions to the existing S3 gateway
+endpoint policy; every existing statement and every other endpoint attribute is preserved.
+No database, paid networking, public route, dispatcher, schedule, task or task definition is created.
+The handlers are enabled behind their original task authentication boundary, with no automatic
+caller or public ingress. The intended original task revision is 1; ACTIVE and INACTIVE inventories
+contained no native-resume revision, and actual registration must later match the pinned binding.
+
+Saved plan SHA-256:
+`8184e59ad27b6cdda89fff0ecc71a134d27e1215841381f887e4da3a9e4f7574`.
+The apply moves platform state **417 -> 419**; same-input postapply planning has zero drift.
+Both functions publish numeric version **1** with ZIP hashes matching the verified
+`e4bc0d5467f5901baa496f4a37cae0a6495f5216` artifacts and the exact private subnet/security-group
+configuration. Actual managed invocations using empty unauthenticated requests return the expected
+`NativeResumeOwnerUnavailable` and `NativeResumeSourceUnavailable` errors. These are real
+Lambda configuration/cold-handler/refusal checks, not successful owner/source reads: the database
+remains absent, no task runs, and no candidate data or provider call is involved.
+
+Private evidence: `.tmp/native-resume-r1-source-access-{review,verification}.json`, exact plan,
+apply log, before/after state and postapply plan log. Numeric bindings are in
+`.tmp/native-resume-r1-bindings.json`. The **latest complete applied inputs** are
+`.tmp/development-planning-current-419.tfvars.json`; older dormant inputs omit these functions
+and must not be blindly applied.
+
+Image preparation found that `.dockerignore` admitted only the original image-size patch, while
+the frozen installation also requires the reviewed node-forge and braces patches. Commit
+`5e8750e26510c8fbb50e4110dcd105fdf7134f82` adds only those exact files. The existing infrastructure
+guard now derives required exact entries from declared `pnpm.patchedDependencies` and rejects
+broad or undeclared patch inclusions. Four negative probes (each missing new patch, wildcard and
+undeclared patch) are rejected; the correct allowlist and infrastructure validator pass.
+Biome formatting/check passes with five pre-existing warnings; diff whitespace checks pass.
+
+An actual Linux/amd64 `Dockerfile.native-resume` build passes the frozen install, contract generation,
+compilation, native kernel build and final packaging. Local image digest:
+`sha256:f3faf857ffced8f4e56b31f1014f4d54cb88a1aa602dfbeba44ebd1e69f90705`.
+The maintained image verifier passes **24 runtime assertions** and two actual generated files,
+using synthetic external ports, no network, read-only root and UID 65532. Its expected kernel-stop
+exit is 137 with `oomKilled=false`. This uses the default disabled configuration; it is local
+packaging/runtime-fixture evidence, not a configured live image, registry publication or a managed
+browser download. Private build/smoke logs: `.tmp/native-resume-5e8750e2-image-{build,smoke}.log`.
+
+At **2026-10-08T18:15:14Z**, fresh development reads still find zero database instances, API routes,
+enabled event rules/mappings, NAT gateways, interface endpoints and non-stopped ECS tasks. Both
+manual encrypted recovery snapshots are available. New Lambda definitions are retained without
+triggers. Snapshot/storage/security/DNS costs remain; staging access is still unresolved. The
+image test container was removed, Docker Desktop stopped and WSL shut down; PC remains on.
+
+The currently signed-in local web configuration uses `http://localhost:3000`; native transport
+requires an exact HTTPS client origin. No configured HTTPS frontend was found in this checkout,
+so its actual URL/setup remains an integration prerequisite, alongside the pending provider-key
+location for cover letters. Full client/native read integration, configured image and original task
+registration, runtime/IAM bindings, current migrations/restore replay, live managed journey and
+accountable acceptance remain. D1/D3 stay In progress; hosted CI/CD stays deferred.

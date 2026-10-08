@@ -44,6 +44,8 @@ provider "aws" {
 }
 
 module "platform" {
+  development_database_mode            = var.development_database_mode
+  development_database_recovery        = var.development_database_recovery
   private_service_endpoints_enabled    = var.private_service_endpoints_enabled
   native_material_repositories_enabled = var.native_material_repositories_enabled
   native_cleanup_release               = var.native_cleanup_release

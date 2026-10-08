@@ -118,7 +118,9 @@ environments; it is not a deployable architecture option.
 As of 2026-08-10, development and synthetic staging use only the serverless application path.
 Their ECS clusters contain no service and exist solely for reviewed one-off database migrations.
 No continuously assigned application public IP or general workflow provider remains. Development
-is the continuous prelaunch integration environment. Under
+was the continuous prelaunch integration environment. [ADR-042](adr/042-data-preserving-development-dormancy.md)
+supersedes that assumption: development requires data-preserving dormancy between authorized
+test sessions, retaining encrypted snapshots and recovery/security resources. Under
 [ADR-018](adr/018-disposable-prelaunch-staging-data-plane.md), synthetic staging is activated only
 for bounded release, migration, restore, or security acceptance and otherwise removes its RDS
 instance and hourly interface endpoints while retaining its isolated reproducible control plane.

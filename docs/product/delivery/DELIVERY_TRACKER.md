@@ -265,6 +265,8 @@ This is the master record for the delivery phases defined in the [product and sy
 
 ## Summary
 
+2026-10-08 owner-authorized [prelaunch cloud lifecycle follow-up](phase-0-prelaunch-shutdown.md) is Blocked only on staging verification. Development NAT/EIPs and seven paid interface endpoints are removed by #568; database dormancy is deployed with a verified encrypted physical restore, zero remaining RDS instances, no-change Terraform plan and privately archived recovery inputs. [Final evidence](evidence/prelaunch-development-dormancy-2026-10-08.md). Staging verification is blocked by missing account assignment despite fresh SSO sign-in. This does not reopen historical D0 acceptance or activate product features.
+
 2026-10-04 owner D3-064 starts one-off generated-material enforcement on fresh main e48bdf3 plus exact #547 25f0ca05. Accepted ADR-038/#546 controls retention; the pending vault proposal is ADR-039 and historical isolated-bootstrap task is now D3-078. First backend path prevents material text entering packet persistence; full temporary-memory, 30-minute expiry, browser/provider and deployed acceptance remain. [Evidence](evidence/d3-one-off-generated-material-guards-2026-10-04.md). Encryption D3-077 remains open. No D1/D3 completion or activation; CI/CD deferred until production launch.
 
 
@@ -5406,3 +5408,35 @@ serverless policy validation. Patch-file whitespace is intentional unified-diff 
 preserved with its pinned hashes; an unrelated trailing blank line in a Terraform test was removed.
 Hosted CI/CD remains owner-deferred. Development RDS is still stopped with the October 15 automatic
 restart unresolved; staging role credentials remain denied. D1/D3 In progress; PC on.
+
+
+2026-10-08 verifies merged #568 at e4bc0d54 and publishes the six native-resume Lambda artifacts
+plus 18 companion objects from exact clean main. All 1,910 workflow cases pass (123 database cases
+skipped), the dependency audit passes, both builds match, and a separate exact-version S3 readback
+passes. [Publication evidence](evidence/d3-native-application-disposal-2026-10-07.md#merged-main-native-resume-publication-2026-10-08).
+No runtime activation; remaining native families/images, managed bindings/journey and acceptance
+remain. D1/D3 In progress. Fresh development reads show zero routes/rules/mappings, but concurrent
+recovery work has one database available and a second creating: full AWS shutdown remains incomplete.
+Staging access remains unresolved; CI/CD deferred, Docker/WSL not started and PC on.
+
+
+2026-10-08 completes publication and separate exact-version verification for all 14 native Lambda
+artifacts (56 immutable files) at merged e4bc0d54. Remaining families pass mandated workflow/Gateway
+tests, dependency audit and paired identical builds; no runtime activation.
+[Release evidence](evidence/d3-native-application-disposal-2026-10-07.md#complete-native-lambda-publication-2026-10-08).
+Fresh development inspection now finds zero databases, routes, enabled triggers, NATs, interface
+endpoints and non-stopped ECS tasks after separate #570 recovery work; two encrypted snapshots remain.
+Staging still denies role access. Images, runtime/IAM bindings, migration/restore and live acceptance
+remain; provider-key location is pending. D1/D3 In progress, CI/CD deferred and PC on.
+
+
+2026-10-08 deploys the two private native-resume owner/source functions at numeric version 1 from
+published e4bc0d54. Exact plan creates six resources and narrowly updates one S3 gateway policy;
+state 417 -> 419, actual unauthenticated refusal checks and postapply zero drift pass. No database,
+route, trigger or native task activation. Fixes the container allowlist for two required dependency
+patches; real Linux native-resume build and 24 image assertions pass with synthetic external ports.
+[Deployment/image evidence](evidence/d3-native-application-disposal-2026-10-07.md#private-resume-access-deployment-and-image-packaging-2026-10-08).
+A fresh runtime read remains dormant with two encrypted recovery snapshots. The latest complete
+inputs are private state-419 inputs; old dormant inputs are stale. Configured HTTPS client origin,
+provider key, image/task/runtime composition and managed acceptance remain. D1/D3 In progress;
+CI/CD deferred, Docker/WSL stopped and PC on.
