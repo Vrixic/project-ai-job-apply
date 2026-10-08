@@ -5457,3 +5457,17 @@ saved plan unchanged. Recovery inputs are archived at state 420; fresh developme
 dormant with two encrypted snapshots. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#empty-drift-baseline-correction-2026-10-08).
 The zlib-only rebuild is superseded by the combined candidate before publication. Full merged image
 scan, managed capture and SQL execution remain. D1/D3 In progress; CI/CD deferred and PC on.
+
+2026-10-08 publishes and independently verifies the current 78-migration image from merged
+38d79a3f. Two clean builds match, hardened runtime inventory passes, and ECR reports COMPLETE with
+zero High/Critical findings. Supported schema-7 zero-drift capture succeeds at state 420 without
+mutation. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#verified-current-migration-image-2026-10-08).
+A protected snapshot-restore plan is prepared but unapplied; managed SQL and native integration/
+acceptance remain. D1/D3 In progress; CI/CD deferred, Docker/WSL stopped and PC on.
+
+The same 2026-10-08 release now deploys idle migration task revision 61 through the reviewed
+image-only plan, state 420 -> 421; no SQL execution or runtime activation. Postapply zero drift and
+encrypted exact-version recovery-input archive verification pass. Fresh 19:11:49Z development
+readback confirms all test runtimes remain off and both encrypted recovery snapshots available.
+The old restore plan is stale; use complete state-421 inputs for a fresh plan. D1/D3 remain
+In progress; [release/shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#verified-current-migration-image-2026-10-08).
