@@ -5341,3 +5341,13 @@ rendering pass. Auth/API tests are simulated; browser/live managed acceptance re
 [Sign-out evidence](evidence/d3-native-application-disposal-2026-10-07.md#web-sign-out-withdrawal-hookup-2026-10-08).
 The implementation scope question is resolved by the owner's instruction to proceed with
 recommendations. No runtime activation or repeat of accepted human checks. D1/D3 In progress.
+
+
+2026-10-08 full repository verification passes at implementation e71aedc6: 38 typecheck tasks,
+39 test tasks, 23 builds and all operational/security/bundle/Compose/scope gates. This includes
+781 web tests and 285 dependency-security regressions; database integration cases are explicitly
+skipped in this run. Existing lint remains 15 warnings/58 informational notes, zero errors.
+[Combined verification evidence](evidence/d3-native-application-disposal-2026-10-07.md#combined-repository-verification-2026-10-08).
+Corrected stale D3 summaries: the default-off web sign-out hook is implemented; managed acceptance
+remains. No publication/activation or phase completion. D1/D3 In progress; CI/CD deferred,
+Docker/WSL stopped and PC on.

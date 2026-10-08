@@ -656,3 +656,30 @@ sign-in/search/Profile/save/manual-Apply test is requested. Logs: .tmp/native-lo
 .tmp/native-logout-http-proof.log. Full repository phase-zero verification was not rerun for this
 web-only batch. The runtime flag remains off; deployment requires the accepted withdrawal route,
 worker/schedule and Applications scopes. D1/D3 In progress; CI/CD deferred and PC on.
+
+
+## Combined repository verification (2026-10-08)
+
+The existing full `scripts/verify-phase0.ps1` run completed with exit code zero against
+implementation commit `e71aedc6e60c09b22f48532aaa261c6a03ad6255`. Only delivery-document
+corrections were uncommitted during the run; executable source and generated contracts remained
+unchanged. The terminal output is `Phase 0 repository verification passed.`
+
+All 38 typecheck tasks, 39 test tasks and 23 build tasks passed, including 781 web tests and
+285 dependency-security regressions. Terraform/operator, deletion/recovery, candidate-rights
+fixture, migration-runtime, artifact-publication, emitted bundle-isolation, Compose configuration
+and product-scope checks passed. Lint retains the existing 15 warnings and 58 informational notes,
+with no errors. Turbo reused two typecheck-task results and sixteen build-task results; this is
+not an all-cold rebuild. The mobile build emits the existing missing-output declaration warning.
+
+Database integration cases were skipped in this verifier: Matching 10, Profile 53, Billing 8,
+Gateway 116 and Workflows 123. No database fixture or live managed authentication/API acceptance
+was run here. Prior separately recorded SQL/image checks retain their own scope and source.
+Docker Desktop's backend and WSL were confirmed stopped after the run; the PC remains on.
+
+Local log: `.tmp/phase0-e71aedc6.log`, SHA-256
+`6a1e4f8ce2386046f1289a84c0d47531b680756f052fe3fa1b60c7133a782d62`.
+The current D3 task and exit-gate summaries now correctly distinguish the implemented default-off
+web hook from outstanding managed acceptance. No cloud publication, migration, activation or
+phase completion is claimed. Native hostname/DNS, trusted TLS/provider and numeric runtime
+bindings, managed journey and accountable acceptance remain. D1/D3 remain In progress.
