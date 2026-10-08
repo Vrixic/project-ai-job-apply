@@ -1,5 +1,11 @@
 # Delivery Tracker
 
+2026-10-08 20:34 UTC: Development returned to verified dormancy after a later test-session restore
+and access interruption. A new snapshot physically restored successfully, both database instances
+are now absent, state 427 preserves all 289 other managed identities, and the final plan has no
+changes. Recovery archive refreshed; development authentication remains available without runtime
+activation. [Repeat shutdown evidence](evidence/prelaunch-development-dormancy-2026-10-08.md#repeated-development-shutdown-after-interrupted-testing--2026-10-08).
+
 2026-10-07 D3-064/D3-079 connects Prepare to an atomic resume request in the existing
 Applications outbox, owner-checked source capture and private scheduled durable dispatch. All
 46 PostgreSQL checks pass, plus 236 Gateway checks (three skips), 50 restore, 20 event and eight
