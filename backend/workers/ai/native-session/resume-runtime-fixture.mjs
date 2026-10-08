@@ -431,6 +431,17 @@ export async function exerciseResumeRuntime(mode, kernelPath, imageStart = start
     r.bytes.fill(0);
     assertions++;
   };
+  const available = await send(path, `Bearer ${token}`, { method: "HEAD" });
+  assert.equal(available.status, 204);
+  assert.equal(available.bytes.byteLength, 0);
+  assert.equal(available.headers["cache-control"], "no-store");
+  assert.deepEqual(
+    JSON.parse(
+      Buffer.from(available.headers["x-native-material-reference"], "base64url").toString("utf8"),
+    ),
+    original,
+  );
+  assertions++;
   for (const format of ["preview", "pdf", "docx"]) {
     const r = await send(
       format === "preview" ? path : `${path}/file?format=${format}`,

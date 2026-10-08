@@ -5159,3 +5159,11 @@ read-only verification: 76 migrations/93 relations. No cloud publication, vulner
 or new logical-recovery claim. [Image evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-76-migration-image-execution),
 [Gateway evidence](evidence/d3-native-application-disposal-2026-10-07.md#refreshed-gateway-artifact).
 D1/D3 remain In progress; disposable database removed, Docker/WSL stopped, PC on, CI/CD deferred.
+
+2026-10-07 both native material images built from frozen `18698f7f` pass actual-image checks:
+five cover-letter scenarios and 24 resume assertions, including real rendering and authenticated
+bodyless HEAD with the original reference. All 42 shared Linux process/transport cases pass.
+[Evidence](evidence/d3-native-material-availability-2026-10-07.md#refreshed-native-images).
+Logout admission withdrawal/original-task retirement and its web hook are explicitly unfinished;
+the hook is outside the current backend-only scope pending the owner response. Managed/client/ATS
+acceptance remains. D1/D3 stay In progress, CI/CD deferred, PC on; no publication or activation.

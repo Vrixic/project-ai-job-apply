@@ -54,6 +54,43 @@ Log: `.tmp/native-cover-letter-intake-verify.log`. This is not a full verificati
 
 ## Remaining acceptance
 
-Complete combined real database/native approval and cleanup behavior, refresh native images and
-Gateway artifacts, then obtain authorized managed/client/ATS acceptance. ADR-040 remains Proposed.
+Combined real database/native approval now passes for both material types:
+[approval evidence](d3-native-postgresql-approval-2026-10-07.md#tailored-resume-and-packet-replacement).
+Terminal application cleanup and the refreshed Gateway artifact have separate
+[local evidence](d3-native-application-disposal-2026-10-07.md). Logout still needs the web sign-out
+hook and backend admission withdrawal/positive original-task retirement integration. It must
+prevent previously queued preparation from recreating material after logout, preserve ambiguous
+submission state, and not represent a stop acknowledgement as completed retirement. The current
+backend-only scope remains in force while the web-hook scope question is pending.
+Managed/client/ATS acceptance remains. ADR-040 remains Proposed.
 D1/D3 remain In progress. CI/CD stays deferred and the PC remains on.
+
+## Refreshed native images
+
+Both Linux amd64 images were built locally from frozen runtime source
+`18698f7f3232e6b3c626069f8057ddab1c496302`. The source label and non-root user
+`65532:65532` were independently inspected. Builds may reuse unchanged layers; this is not a
+reproducibility or vulnerability-clearance claim. Configuration remains default-disabled.
+
+| Image | Inspected immutable ID |
+| --- | --- |
+| Cover letter | `sha256:8fff8a03841e8951ccdf0e3a2d317a739c584b069a9ab41027820bc48f1b722f` |
+| Tailored resume | `sha256:f728e767ca06cc056cdfff2ed44d44868e8a57791abff3fcda31f28489758e92` |
+
+Updated runtime fixtures assert authenticated HEAD returns 204, zero body bytes, no-store and
+the exact original scalar reference. The cover-letter sealed-read case also refuses HEAD.
+The image runners exercise the image-owned runtime rather than replacing it with workspace code.
+
+- `verify-native-material-image.mjs`: all five scenarios pass: normal, sealed read,
+  second generation, secret refusal and TLS refusal.
+- `verify-native-resume-image.mjs`: 24 assertions pass, including two actual rendered files,
+  authenticated HEAD and original process retirement (exit 137, OOMKilled false).
+- `verify-native-memory-session.mjs`: all 42 Linux process/transport cases pass in isolation
+  in 126.7 seconds with the updated fixtures; no timing thresholds changed.
+
+Logs: `.tmp/native-material-18698f7f-proof.log` and
+`.tmp/native-resume-18698f7f-proof.log`. Tests use real local TLS/rendering and synthetic external
+ports in isolated containers. No live OIDC, provider, managed task or browser behavior is claimed.
+Nothing was published, deployed or activated.
+The shared suite log is `.tmp/native-head-18698f7f-linux.log`. Fixture formatting/lint and
+`git diff --check` pass. Docker Desktop and WSL are stopped after the checks; the PC stays on.

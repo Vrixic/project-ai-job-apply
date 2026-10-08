@@ -501,15 +501,17 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
     "/file?format=pdf",
     "/file?format=docx",
     ...(sealedReadScenario ? ["/file?format=pdf"] : []),
+    "HEAD",
   ];
   for (const [index, suffix] of paths.entries()) {
-    if (index === 3) readAdmissionSealed = true;
+    if (index === 3 && sealedReadScenario) readAdmissionSealed = true;
     const result = await new Promise((resolve, reject) => {
       const call = request(
         {
           hostname: "127.0.0.1",
           port: runtime.server.address().port,
-          path: `/v1/applications/${ids[1]}/cover-letter${suffix}`,
+          path: `/v1/applications/${ids[1]}/cover-letter${suffix === "HEAD" ? "" : suffix}`,
+          method: suffix === "HEAD" ? "HEAD" : "GET",
           servername: imageMode ? imageHost : "material.test.invalid",
           ca: certificate,
           minVersion: "TLSv1.3",
@@ -540,6 +542,18 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
       assert.equal(result.headers["cache-control"], "no-store");
       assert.ok(!result.bytes.toString().includes("TypeScript"));
       result.bytes.fill(0);
+      continue;
+    }
+    if (suffix === "HEAD") {
+      assert.equal(result.status, 204);
+      assert.equal(result.bytes.byteLength, 0);
+      assert.equal(result.headers["cache-control"], "no-store");
+      assert.deepEqual(
+        JSON.parse(
+          Buffer.from(result.headers["x-native-material-reference"], "base64url").toString("utf8"),
+        ),
+        reference,
+      );
       continue;
     }
     assert.equal(result.status, 200);
