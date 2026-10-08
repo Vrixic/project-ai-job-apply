@@ -150,3 +150,11 @@ retained deployment entries while corresponding queue/native work is unresolved.
 must verify lease recovery, original task retirement and eventual status through authenticated reads;
 `native_tasks_settled` does not prove provider or client-copy deletion. No release is activated by
 these source defaults. Existing publication/deployment authorization requirements still apply.
+
+
+`native_material_repositories_enabled` defaults false in development/staging. Enabling it creates
+only `ai-job-apply/native-material` and `ai-job-apply/native-resume` ECR repositories with immutable
+tags, platform KMS encryption, push scanning and force deletion disabled. No lifecycle expiry is
+configured: retained original task digests must stay available for recovery. This storage stage does
+not publish images, register tasks, create secrets, configure DNS or activate processing. Review the
+saved environment plan before applying; source defaults remain off.

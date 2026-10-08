@@ -394,3 +394,16 @@ The next native rollout must be staged:
 A fully populated applyable native rollout plan cannot yet be produced from available bindings.
 D1/D3 remain In progress. Planning permission is resolved; missing release inputs, not that old
 permission question, are the current planning dependencies. Docker/WSL stayed stopped; PC on.
+
+
+## Native image repository prerequisite (2026-10-08)
+
+Live inspection found only the migration ECR repository. Added a default-off development/staging
+input creating the exact native-material/native-resume image repositories, using platform KMS,
+immutable tags, push scans and force deletion disabled. No automatic image expiry is configured,
+so retained original task digests are not removed by an unrelated cleanup policy. Existing task
+execution roles already scope pull authority to their supplied exact repository under the bootstrap
+ai-job-apply namespace ceiling; this change adds no role or runtime authority.
+Two mocked Terraform cases pass: default absence and enabled encrypted/scanned storage without
+cleanup runtime activation. Log: `.tmp/native-repositories-tests.log`. The real saved development
+plan follows committed source; no repository has been created or image published by this work.
