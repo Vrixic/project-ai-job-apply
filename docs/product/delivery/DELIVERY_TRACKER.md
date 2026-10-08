@@ -5235,5 +5235,6 @@ minute schedule, scoped task/endpoint/boundary permissions and execution/deliver
 activation requires a scheduled worker covering all retained Gateway deployments. All 26 selected
 mock-provider cases, bootstrap/development/staging validation and Gateway builds pass locally.
 [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#cleanup-worker-release-composition-2026-10-08).
-Exact-source artifact verification follows; publication/deployment, web hookup and managed acceptance
-remain. D1/D3 In progress; no cloud activation, CI/CD deferred and PC on.
+Exact clean source `9d0c681d` also builds the 404,464-byte worker ZIP with 34 SBOM components;
+bundled default-off refusal and independent artifact integrity checks pass. Publication/deployment,
+web hookup and managed acceptance remain. D1/D3 In progress; no cloud activation, CI/CD deferred and PC on.

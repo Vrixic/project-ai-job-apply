@@ -280,3 +280,12 @@ script/config Biome checks pass. Logs: `.tmp/native-cleanup-tf-tests-windows.log
 and `.tmp/native-cleanup-package-build.log`. Exact-source artifact verification follows this commit.
 No AWS calls, publication, plan/apply, migration or managed acceptance occurred. Web hookup remains
 outside backend scope. D1/D3 remain In progress; CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+Exact clean source `9d0c681d29fa6e914a82388e5cffb66c8485344d` builds the worker ZIP successfully:
+404,464 bytes, 34 SBOM components, SHA-256
+`ed5c3aac907795abbe18ef723fc3356640705b749c5ba1c48a4b278d1c74e8ab`.
+The build invokes the actual bundled handler and confirms default-off refusal. Independent checks
+verify source commit, ZIP's sole index.mjs entry, archive size/SHA/base64 SHA, bundle digest/source
+marker, checksum companion and SBOM digest/component count. Log: `.tmp/native-cleanup-artifact.log`.
+The artifact is local only; source provenance does not imply deployment or live acceptance.
