@@ -5416,3 +5416,13 @@ No runtime activation; remaining native families/images, managed bindings/journe
 remain. D1/D3 In progress. Fresh development reads show zero routes/rules/mappings, but concurrent
 recovery work has one database available and a second creating: full AWS shutdown remains incomplete.
 Staging access remains unresolved; CI/CD deferred, Docker/WSL not started and PC on.
+
+
+2026-10-08 completes publication and separate exact-version verification for all 14 native Lambda
+artifacts (56 immutable files) at merged e4bc0d54. Remaining families pass mandated workflow/Gateway
+tests, dependency audit and paired identical builds; no runtime activation.
+[Release evidence](evidence/d3-native-application-disposal-2026-10-07.md#complete-native-lambda-publication-2026-10-08).
+Fresh development inspection now finds zero databases, routes, enabled triggers, NATs, interface
+endpoints and non-stopped ECS tasks after separate #570 recovery work; two encrypted snapshots remain.
+Staging still denies role access. Images, runtime/IAM bindings, migration/restore and live acceptance
+remain; provider-key location is pending. D1/D3 In progress, CI/CD deferred and PC on.

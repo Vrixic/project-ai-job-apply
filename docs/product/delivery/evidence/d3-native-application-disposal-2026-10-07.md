@@ -930,3 +930,60 @@ publisher made no runtime or Terraform-state mutation. Staging role access remai
 since the earlier No access denial. Durable storage, artifact versions, snapshots, secrets,
 security and DNS retain charges; no zero-cost or full-shutdown claim. Docker/WSL were not started
 for publication, and the PC stays on.
+
+
+## Complete native Lambda publication 2026-10-08
+
+The remaining NativePreparation, NativeMaterialControls and NativeMaterialCleanup families are
+published from clean merged main `e4bc0d5467f5901baa496f4a37cae0a6495f5216`. Combined with the
+six NativeResume artifacts above, all **14 native Lambda artifacts and 42 companion objects**
+are now stored as immutable development S3 versions. This is artifact publication, not deployment.
+
+Each unchanged publisher invocation validated the temporary development identity, region,
+Terraform-owned storage, encryption and source. Each family passed its mandated tests and
+centralized dependency audit, two identical builds, immutable writes and object verification.
+Separate receipt-bound Verify invocations all passed exact-version readback. Workflow tests
+passed 1,910 cases with 123 database-dependent skips; Gateway tests passed 376 cases with 116
+database-dependent skips. These are repeated family gates, not additional unique test totals or
+new SQL/live managed acceptance. No exception or hosted CI result substitutes for these checks.
+
+| Family | Published objects | Verified receipt SHA-256 |
+| --- | --- | --- |
+| NativePreparation | 16 | `4497823c7483e55ffe1949ccba896431d2d4960bf9d43d56da9f51ab7038f718` |
+| NativeMaterialControls | 12 | `efd34ceff1334c22cb431f488d63eb0693a0b9a7be8747e69ce9a74d97e3d75d` |
+| NativeMaterialCleanup | 4 | `9ae4d94c7f9e80fc859b97d23395b9ffbb6b78de3647f7e0839dfe70abc4dd60` |
+
+| Lambda artifact | ZIP SHA-256 |
+| --- | --- |
+| `native-application-preparation-lambda` | `8c5a63532558a0571d95c7d7d6312666fec2cf551f099afee57ada4b84108cba` |
+| `application-preparation-durable-lambda` | `093794f46eef2f73175831e55dab23fb1eef38a00f7f78578fac228750d69507` |
+| `application-preparation-starter-lambda` | `59ff1877a655a978733ddee8a1a84d561d04c1fab27cf4b769137bb34044e629` |
+| `application-preparation-recovery-lambda` | `4da7e67002992cfe51df32691ebe8bc5cd925ce1bf734297fc8cd501e8f1e47e` |
+| `native-material-launch-lambda` | `50bc0ae43a5286295740049450950d07bf630737a8ebd8e7bc88fd52c5fdf35a` |
+| `native-owner-rpc-lambda` | `4b96c4435776e4a69f39103c24ec265b13548129ba826ec86c452d098175dff9` |
+| `native-material-task-event-lambda` | `388e169184dab7d743df69ac9783abce9d50b96b052c1ab32e5e829cfee928b7` |
+| `native-material-cleanup-worker-lambda` | `be9f1dd2547b251b91282815085f60815146f7aa13711772f263b755372e1885` |
+
+Receipts remain in their dedicated ignored development `.terraform` artifact-family directories.
+Private batch summary: `.tmp/native-remaining-publication-e4bc0d54.json`; individual publish and
+Verify logs use `.tmp/<Family>-{publish,verify}-e4bc0d54.log`. Account/bucket identifiers, object
+version IDs and full command logs remain private. No Lambda, route, task definition, trigger or
+Terraform state was changed by these publishers.
+
+A fresh read-only development observation at **2026-10-08T17:59:10Z** confirms zero database
+instances, API routes, enabled event rules, enabled Lambda mappings, live NAT gateways, live
+interface endpoints and non-stopped ECS tasks. Two encrypted manual recovery snapshots are
+available. The separate [database dormancy work #570](https://github.com/Vrixic/project-ai-job-apply/pull/570)
+completed the database cleanup observed in the previous entry; this publication did not perform
+that deletion or establish SQL/application restore acceptance. Preserve those recovery snapshots
+and use the new dormant baseline for future plans, not the historical stopped-database inputs.
+Private observation: `.tmp/native-release-shutdown-observation.json`. Staging authentication was
+rechecked and still fails at GetRoleCredentials with ForbiddenException / No access; its shutdown
+cannot be verified. Retained snapshots, storage, artifact objects, security and DNS still incur
+charges. WSL reports no running distributions; Docker was not started, and the PC stays on.
+
+Native task images, exact numeric runtime/IAM bindings, current migrations/restore replay,
+managed journey and accountable D1/D3 acceptance remain. Development secret metadata includes
+TLS but no provider-key secret under the project path; the owner was asked for an existing key's
+location, never its value in chat. No provider call or cover-letter activation occurred. D1 and
+D3 remain In progress; hosted CI/CD remains owner-deferred.
