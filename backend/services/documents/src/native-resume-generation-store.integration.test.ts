@@ -774,6 +774,7 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
         });
         const [event] =
           await sql`SELECT id FROM applications.outbox WHERE application_id=${input.identity.applicationId} AND resume_packet_id=${created.view.currentPacket.id} AND event_type='application.resume-preparation.requested.v1'`;
+        if (!event) throw Error("SyntheticResumeObservationRequestMissing");
         const claim = await f.requests.claim(event.id, target);
         expect(claim).not.toBeNull();
         expect(
