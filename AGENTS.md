@@ -66,3 +66,24 @@ jobs panels. Keep the phase document updated with results and remaining human-on
 
 When a Docker-dependent step is complete and no immediately following step needs Docker, stop the
 Docker Desktop engine and shut down WSL. Do not leave either runtime running unnecessarily.
+
+## AWS shutdown before handoff (strict until product launch)
+
+Until the owner explicitly confirms product launch, AWS services must be off whenever testing is
+finished. Before ending a turn or handing work back after testing, shut down the project's AWS
+test runtimes using the applicable deployment/lifecycle runbooks. This is a mandatory completion
+gate, including after failed or interrupted tests; do not leave services running for convenience
+or a possible future session.
+
+Disable scheduled triggers and background work, stop or scale runtime capacity to zero, and
+remove disposable billable infrastructure through the documented lifecycle where stopping does
+not eliminate its ongoing charges. Account for automatic restarts; a temporary stop that later
+resumes billing does not satisfy this rule. Preserve durable data, Terraform state, credentials,
+and required recovery/security resources; do not use indiscriminate deletion as shutdown.
+
+Verify the resulting AWS state and report the environment, shutdown evidence, and any retained
+resources that still incur charges. Never equate an idle application with services being off or
+claim zero cost without evidence. If access, authorization, or a failed shutdown prevents cleanup,
+report the exact blocker and remaining billable resources as incomplete required work before
+ending; do not silently waive this rule. Restart services only for the next authorized testing
+session, and repeat shutdown when that session ends.
