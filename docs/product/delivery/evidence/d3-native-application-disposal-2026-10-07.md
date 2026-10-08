@@ -475,3 +475,29 @@ Affected paths are admin/mobile. Targeted dependency-remediation scope was reque
 current backend-only instruction excludes those paths. No dependency, audit rule or risk waiver was
 changed. The pending DNS/hostname and web-hook decisions remain independent. Storage is deployed;
 artifacts/native runtime activation and D1/D3 acceptance are not complete.
+
+
+## Released dependency fixes (2026-10-08)
+
+The owner's instruction to proceed with recommendations resolves the targeted dependency-scope
+question. Updated web/admin Next 16.3.6 to 16.3.8, its sharp override to 0.35.5, and added narrow
+shell-quote 1.11.0 and source-map-js 1.2.2 overrides. Regenerated and installed the pnpm 10.24.0
+lockfile. No application logic, audit acceptance rule, local image-size patch or cloud runtime changed.
+
+Local verification on the development worktree based on df13d74b: all five selected build tasks
+(web/admin/mobile and dependencies) pass; dependency-security tests pass 142/142. An initial test
+run alongside builds hit two admin fork startup timeouts. After builds finished, the sequential
+client run passed all 174 admin, 750 web and three mobile tests (71 files), with no worker errors.
+Manifest formatting and git diff whitespace checks pass. Web tests emitted jsdom navigation/canvas
+limitations; these are simulated unit/component checks, not signed-in browser acceptance.
+Browser-control execution tooling is unavailable in this session; no live UI verification is claimed
+and the already accepted owner sign-in/search/Profile/save/manual-Apply checks are not reopened.
+
+Fresh raw production audit reports four high findings, down from thirteen total: the two existing
+image-size records covered by the verified local remediation, plus node-forge and braces. No critical,
+moderate or low records remain in this production report. The central release audit still exits 1;
+its policy has not been weakened. Further compatible remediation is needed for node-forge/braces.
+Logs: .tmp/dependency-fixes-builds.log, .tmp/dependency-fixes-tests-sequential.log,
+.tmp/dependency-fixes-security-tests.log, .tmp/dependency-fixes-final-audit.json and
+.tmp/dependency-fixes-central-audit.log. These are local results, not hosted CI or a deployed release.
+D1/D3 remain In progress. CI/CD remains deferred; no Docker/WSL start or PC shutdown occurred.

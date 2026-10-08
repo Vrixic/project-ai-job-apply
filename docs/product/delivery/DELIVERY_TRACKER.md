@@ -5295,3 +5295,13 @@ repositories with push scanning. Gateway remains unweighted 86 with health/readi
 saved verification plan has zero changes. Current private input baseline retains storage enabled.
 [Applied storage evidence](evidence/d3-native-application-disposal-2026-10-07.md#approved-native-image-storage-applied-2026-10-08).
 No image publication, native activation or application/migration release. D1/D3 In progress; PC on.
+
+
+2026-10-08 owner authorizes recommended work without routine approval prompts. Targeted Next,
+sharp, shell-quote and source-map-js upgrades remove nine raw production registry findings.
+All five selected client/dependency builds, 927 sequential client tests and 142 dependency-security
+checks pass locally. Four raw high findings remain (two image-size records locally remediated,
+node-forge and braces); the central audit still fails without exceptions. Browser control is
+unavailable; no live UI/deployment claim and no repeat request for accepted manual checks.
+[Dependency fix evidence](evidence/d3-native-application-disposal-2026-10-07.md#released-dependency-fixes-2026-10-08).
+D1/D3 remain In progress; CI/CD deferred and PC on.
