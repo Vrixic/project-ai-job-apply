@@ -407,3 +407,19 @@ ai-job-apply namespace ceiling; this change adds no role or runtime authority.
 Two mocked Terraform cases pass: default absence and enabled encrypted/scanned storage without
 cleanup runtime activation. Log: `.tmp/native-repositories-tests.log`. The real saved development
 plan follows committed source; no repository has been created or image published by this work.
+
+
+The refresh-backed development plan from clean source `f9653438` completes under Terraform 1.16.2
+with the existing encrypted/KMS-bound S3 backend and lockfile. Saved artifact:
+`.tmp/native-repositories-development.tfplan`, SHA-256
+`1d16736583830970390785bce8c99173e5836ecd415d89ce89cd9a99f93b641a`.
+Inspection of the saved binary plan proves exactly two resource creates:
+`module.platform.aws_ecr_repository.native_material["native-material"]` and
+`module.platform.aws_ecr_repository.native_material["native-resume"]`. No updates, replacements
+or deletions; all 111 prior baseline inputs are unchanged. Both resources have immutable tags,
+KMS encryption, push scanning and force deletion false. Only the new repository opt-in is supplied.
+The real plan validates development; staging validates locally. State remains byte-identical at
+serial 404 after planning. No repository/image/task/runtime mutation occurred.
+Log: `.tmp/native-repositories-development-plan.log`; local test/validation logs use the
+`.tmp/native-repositories-` prefix. Applying this concrete storage-only plan requires separate
+owner authorization; current permission covers inspection/planning only. D1/D3 remain In progress.

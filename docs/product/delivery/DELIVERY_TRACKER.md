@@ -5279,3 +5279,11 @@ empty native outputs. State bytes/serial remain unchanged; no apply/publication/
 [Plan and staged rollout dependencies](evidence/d3-native-application-disposal-2026-10-07.md#read-only-development-release-planning-2026-10-08).
 Native DNS/TLS/provider/artifact bindings and repository/runtime provisioning remain. The prior
 planning-permission blocker is resolved; D1/D3 remain In progress, PC on.
+
+
+2026-10-08 source `f9653438` fills the native image storage prerequisite with opt-in immutable,
+KMS-encrypted ECR repositories. Two mocked tests and staging validation pass. The real locked
+refresh-backed development plan proposes exactly two repository creates, no updates/deletions,
+and preserves 111 baseline inputs. State remains byte-identical at 404. No apply or publication.
+[Concrete storage plan](evidence/d3-native-application-disposal-2026-10-07.md#native-image-repository-prerequisite-2026-10-08).
+Storage-only apply authorization is pending; DNS/TLS/provider/release and managed acceptance remain.
