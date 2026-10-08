@@ -5100,3 +5100,12 @@ still encounters the existing port-3000 session-fixture conflict; the developmen
 running. Migration image refresh, publication and managed recovery acceptance remain. D1/D3 stay
 In progress; Docker/WSL stopped, PC on, CI/CD deferred.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).
+
+
+2026-10-07 D1-013/D3-079 refreshes the migration image from frozen `437794fc` and verifies the
+actual hardened image against fresh and replayed PostgreSQL migrations: all seven owners and
+75 migrations/93 relations pass. Corrected the existing logical recovery harness's stale 66/88
+pins; its real dump/restore, all 93 exact row sets and restored behavior pass. Both disposable
+databases are removed; Docker/WSL stopped, PC on. Image remains unpublished; scan/disposition,
+managed migration/PITR and acceptance remain. D1/D3 stay In progress, CI/CD deferred.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).

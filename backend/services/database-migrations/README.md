@@ -9,10 +9,10 @@ another service's tables.
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
   after Trust): twelve owned schemas (including the empty-table `jobs_public` projection schema and separate
-  `applications_restricted` storage), 92 regular relations, and 70 checksum-bound migrations
-  (Profile through `0011`; Jobs through `0027`; Applications through `0009`; Documents through `0013`). The
+  `applications_restricted` storage), 93 regular relations, and 75 checksum-bound migrations
+  (Profile through `0011`; Jobs through `0027`; Applications through `0012`; Documents through `0015`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
-  purges Applications data (run 2026-09-18 against an isolated local cluster).
+  purges Applications data in an isolated local cluster.
 
 Adding a schema owner requires adding its independently checksum-verified runner here, including it
 in `Dockerfile.migration`, and updating restore verification. The container remains a bounded
@@ -37,12 +37,12 @@ orchestrator, checks the disposable-container ownership guards, and uses a uniqu
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.
 
-The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 65-migration
+The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 75-migration
 seven-owner boundary while retaining its D2-focused generated-data and behavior assertions,
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through
 the existing stores. A real custom-format `pg_dump` and `pg_restore` run inside tmpfs only.
-The source/target aggregate verifier results and exact sorted full-row JSON for all 88 relations
+The source/target aggregate verifier results and exact sorted full-row JSON for all 93 relations
 must match; 18 Phase 2 relations must contain generated data. Restored behavioral checks cover
 owner isolation, current/revoked/cancelled consent, lease immutability and concurrent renewal,
 stale-lease refusal, and idempotent publication. No rows or dump files are retained on the host.
@@ -79,3 +79,8 @@ maintained fixture includes pending, bound and retired claims and verifies that 
 remain unresolved without reissuing authority or settling original provider grants. Exact full-row
 comparison includes the private claim columns; this is local logical recovery, not managed task
 recovery, image publication, production grants or deployed PITR acceptance.
+
+
+Current 75-migration/93-relation image execution and logical recovery evidence is recorded in the
+[local migration verification](../../../docs/product/delivery/evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).
+This remains local synthetic evidence; managed restore and release acceptance are separate.

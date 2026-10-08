@@ -200,8 +200,8 @@ try {
   const source = loadCurrentRestoreManifest();
   assert.equal(source.manifest.contributors.length, 7);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 12);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 88);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 66);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 93);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 75);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
     "0005_development_test_removal",
@@ -334,10 +334,10 @@ try {
   assert.deepEqual(await exactRows(sourceReader, source.manifest), sourceRows);
   result = {
     profile: "d2_generated_logical_recovery_v1",
-    migrationCount: 66,
+    migrationCount: 75,
     ownerCount: 7,
     schemaCount: 12,
-    exactRelationRowSetsMatched: 88,
+    exactRelationRowSetsMatched: 93,
     nonemptyD2RelationsMatched: requiredNonemptyD2Relations.length,
     aggregateVerifierMatched: true,
     sourceUnchanged: true,

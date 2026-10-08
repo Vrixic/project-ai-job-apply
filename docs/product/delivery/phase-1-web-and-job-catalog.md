@@ -4,7 +4,7 @@
 - Start: 2026-08-11
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-10-06
+- Last updated: 2026-10-07
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d1--useful-web-product-and-canonical-job-catalog)
 
 ## Objective
@@ -165,7 +165,7 @@ shared artifacts advance.
 | D1-010B | Execute and accept the exact end-to-end D1 delivery assurance matrix. | Blocked | Platform/security/QA engineering; product/accessibility reviewers | D1-001–D1-009; D1-010A; stable exact release candidate | Blocked until every tested D1 surface exists and is frozen. Requires deployed synthetic browser/API/workflow/load/alert/restore/reconciliation evidence plus human accessibility and capability security/privacy dispositions. D0 workload/restore/tracing evidence is inherited foundation evidence, not current D1 acceptance. |
 | D1-011 | Record source-specific activation and real-candidate-onboarding privacy/security approval before production activation. | In progress | Product/source engineering; security/privacy reviewers | Concrete D1 sources/data flows and capability-specific review deltas | ADR-025 removes separate counsel approval as a Phase 1 gate for the bounded Greenhouse, Lever, and Ashby public GET adapters; LR-D1-01 through LR-D1-03 are `Removed`, not `Approved`, and exact company/product/source-engineering activation evidence remains required. LR-D1-04, ADR-023 acceptance, real-candidate privacy/security/rights controls, and any real-resume trigger authorization remain open. Human acceptance is deliberately deferred to the final stable Phase 1 candidate. The deferred D6 launch-wide accountable reviews remain separate and mandatory before public launch. |
 | D1-012 | Enforce accepted reporting/moderation retention across Jobs, privileged audit and alert metadata. | In progress | Platform engineering; security/privacy reviewers | D1-007; accepted d1-governance-v1 D1P-06 | Candidate-report lifecycle and aggregate-only expiry pass full verification at f553da22. Closed-case/operator expiry and preserved minimal blocks/pauses pass 117 real PostgreSQL tests, historical 25 → 26 replay and local logical restore (68 migrations/92 relations). Source 694e65a7 passes full verification: 38 typechecks, 39 test tasks, 23 builds. Retained-report export status also passes 119 Jobs SQL tests, historical 26 → 27 replay and 69-migration/92-relation logical restore; source 07cf51b9 passes full verification (38 typechecks, 39 test tasks, 23 builds). Default-off privileged audit capture/365-day expiry passes six real SQL cases and full clean verification at 18632bdc (38/39/23 tasks). Hosted release, managed audit/alert retention verification and accountable rights review stay open. [Audit evidence](evidence/d1-privileged-moderation-audit-2026-10-06.md). [Export evidence](evidence/d1-report-export-status-2026-10-06.md). [Report evidence](evidence/d1-job-report-retention-2026-10-06.md), [Case evidence](evidence/d1-moderation-case-retention-2026-10-06.md). |
-| D1-013 | Keep the executable migration-image package boundary aligned with accepted schema changes before release. | In progress | Platform engineering | D1-012; D3-040/D3-041 | Current source/package boundary is 75 migrations/93 relations, including Applications 0012. All 185 executable package cases, publisher guards and exact-commit migration operator checks pass; restore replay identity is refreshed. Current workspace checks pass (38 typecheck/39 test/23 build tasks); full verifier remains limited by the running port-3000 development server. The prior 74-migration cold image requires a new build; publication, scan and managed release remain pending. [Current evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation). |
+| D1-013 | Keep the executable migration-image package boundary aligned with accepted schema changes before release. | In progress | Platform engineering | D1-012; D3-040/D3-041 | Current source/package boundary is 75 migrations/93 relations, including Applications 0012. Frozen `437794fc` cold image passes hardened package smoke, actual fresh/replayed seven-owner migrations and packaged schema verification. The maintained logical recovery harness now checks 75/93 and passes real dump/restore, exact row equality and restored behavior. Existing package/operator and workspace checks pass; full verifier remains limited by the running port-3000 development server. Reproducible publication, scan/disposition and managed release remain pending. [Current evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery). |
 
 Current task-row addendum: the managed-OIDC read, saved-job lifecycle, and match-assessment profiles
 now pass at both application and exact-window AWS boundaries, superseding the older open execution
@@ -1004,3 +1004,12 @@ still encounters the existing port-3000 session-fixture conflict; the developmen
 running. Migration image refresh, publication and managed recovery acceptance remain. D1/D3 stay
 In progress; Docker/WSL stopped, PC on, CI/CD deferred.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).
+
+
+2026-10-07 D1-013/D3-079 refreshes the migration image from frozen `437794fc` and verifies the
+actual hardened image against fresh and replayed PostgreSQL migrations: all seven owners and
+75 migrations/93 relations pass. Corrected the existing logical recovery harness's stale 66/88
+pins; its real dump/restore, all 93 exact row sets and restored behavior pass. Both disposable
+databases are removed; Docker/WSL stopped, PC on. Image remains unpublished; scan/disposition,
+managed migration/PITR and acceptance remain. D1/D3 stay In progress, CI/CD deferred.
+[Evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).

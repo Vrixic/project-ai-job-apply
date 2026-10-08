@@ -104,3 +104,46 @@ session 18829. Anonymous root returns 200 and Resume returns its expected 307; t
 not fresh authenticated acceptance. Only the inspected Next-generated development type-import
 changes were restored. Docker and WSL are stopped; PC remains on. Publication, DNS/TLS/routing,
 managed migration/runtime and accountable acceptance remain open; D1/D3 remain In progress.
+
+
+## Current 75-migration image and logical recovery
+
+2026-10-07 closes the local image refresh left by Applications 0012. Frozen source
+`437794fc328d43f6dc337689dce6eaa985dd59af` was archived without workstation files and built with
+`--pull --no-cache --platform linux/amd64`, the committed `SOURCE_DATE_EPOCH`, and its full source
+revision label. No image/dependency pins or production runtime source were changed in this batch.
+The existing context allowlist still excludes credentials, environment files and generated data.
+
+The local image `ai-job-apply-migration:local-437794fc` has inspected image ID
+`sha256:36be80aa2cd971d427181e6d49517f653d3039974e3eb30b119d71a28bcd964f`, Linux/amd64,
+UID/GID `65532:65532`, and the exact source revision above. The publisher's unchanged inline
+runtime smoke passes with network disabled, read-only root, all capabilities dropped and
+no-new-privileges. Its exact filenames/checksums and packaged restore inventory are
+**75 migrations, 93 relations, 12 schemas and seven owners**.
+
+The actual packaged migration runner then applied every owner's migrations to a fresh disposable
+PostgreSQL 16.14 database and replayed them successfully. Both passes emit all seven owner success
+markers plus aggregate success. The image's read-only restore verifier independently confirms
+75 migrations/93 relations afterward. The test containers share only an isolated loopback network
+namespace with external networking disabled; the database uses tmpfs. Only generated local
+credentials were supplied. No host database, production data, managed TLS or AWS identity was used.
+
+Inspection also found the maintained logical recovery harness still pinned to 66 migrations/88
+relations. Its four inventory assertions/result counts now match 75/93, and the database-migrations
+README reflects the current source. No restore, owner-isolation or cleanup guard was weakened.
+`pnpm test:d2-recovery` passes: 14 build tasks, 15 disposable-container boundary cases, fresh and
+replayed seven-owner migrations, real custom-format pg_dump/pg_restore, aggregate verification and
+exact sorted full-row comparison across all 93 relations. Its 18 required D2 relations contain
+generated data; existing response, temporary/restricted packet, native-launch, consent, lease and
+owner-isolation behavior checks pass. Source rows remain unchanged and cleanup succeeds. This
+covers the existing generated scenarios, not every state of every newly added relation.
+
+Local logs/receipts are `.tmp/migration-image-437794fc-{build,smoke,fresh,replay,verify}.log`,
+`.tmp/migration-image-437794fc-inspect.json`, and `.tmp/migration-75-logical-recovery.log`.
+The disposable databases were removed; Docker Desktop and WSL stopped, PC on. The running
+Windows development server was preserved.
+
+This is one local cold build and logical recovery proof. Reproducible publication, vulnerability
+scan/disposition, cloud migration, managed PITR/RTO/RPO and runtime activation remain pending.
+The known production dependency audit failure is not waived, and the publisher's complete release
+gate was not run or claimed. D1/D3 remain In progress; CI/CD remains deferred.

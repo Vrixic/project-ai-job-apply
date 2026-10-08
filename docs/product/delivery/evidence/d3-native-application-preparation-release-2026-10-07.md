@@ -818,3 +818,9 @@ The prior 74-migration image does not cover this batch: a fresh migration-image 
 publication/drill remain release work. The observer artifact is refreshed locally but unpublished.
 D1/D3 remain In progress; CI/CD deferred. The owned disposable PostgreSQL container is removed,
 Docker Desktop and WSL are stopped, and the PC remains on.
+
+
+2026-10-07 follow-up: the 75-migration image refresh above is now locally verified at frozen
+`437794fc`, including actual packaged fresh/replayed migrations and separate 93-relation logical
+recovery. [Current migration image evidence](d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery).
+Publication, scan/disposition and managed acceptance remain; no runtime activation is claimed.
