@@ -5025,3 +5025,11 @@ Terraform scenarios pass and both environments validate.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#preparation-routing-release-composition).
 No cloud action or activation; artifact rebuilding and managed acceptance remain. D1/D3 In progress;
 CI/CD deferred, Docker/WSL stopped and PC on.
+
+
+2026-10-07 rebuilt the routed preparation family from `c194a979`: four artifacts/sixteen companions
+pass bundled refusal and independent source/hash/SBOM integrity checks. The complete affected
+Terraform set passes 34 scenarios.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#rebuilt-routed-preparation-family).
+Artifacts unpublished; managed original image/provider/TLS/network and acceptance remain.
+D1/D3 In progress, CI/CD deferred, Docker/WSL stopped and PC on.

@@ -548,3 +548,27 @@ port-3000 sign-in-fixture conflict remains recorded above; it was not rerun for 
 and packaging changes. Docker/WSL were not started. No AWS publication, deployment or activation.
 Updated builders include route-protocol default-off refusal in the actual bundled entrypoints.
 Rebuilt immutable artifacts and managed synthetic acceptance remain before activation.
+
+
+## Rebuilt routed preparation family
+
+The four preparation artifacts were rebuilt from clean source `c194a979a9e3d45781befe8582bec5750c23f4c8`.
+The family command compiles its workspace dependencies and runs each original builder, including
+bundled route-protocol default-off refusals. Independent inspection verifies all sixteen
+companions, exact source/embedded marker, ZIP bytes/SHA256/base64, bundle SHA256, SBOM hash and
+component count. This is one qualified local packaging pass, not repeated clean reproducibility,
+a fresh dependency audit or managed acceptance. The additional twelve shared bootstrap/material
+scenarios pass, making 34 relevant Terraform cases for this batch.
+
+| Artifact | ZIP SHA256 | Bytes | Components |
+|---|---|---:|---:|
+| native-application-preparation-lambda | `98434f858c187a865496b42a17a2bbd8c1f2afa0efc6cba02fc4cc4c553cde1a` | 678304 | 46 |
+| application-preparation-durable-lambda | `ec9e03883d3f468f314e35822abb9194850eef15021b634f1d32119424d20e23` | 482706 | 33 |
+| application-preparation-starter-lambda | `5d34aadcbe5ea4dc92267a4fdad7022be1c2f11069d097fd53f6dd765680dad0` | 440087 | 35 |
+| application-preparation-recovery-lambda | `f2a89082ab4933ad7550da76cbbbfadefe13154b097b455ba6eddcf263fe793f` | 453903 | 35 |
+
+Local build/integrity logs: `.tmp/d3-preparation-routed-family-build.log` and
+`.tmp/d3-preparation-routed-family-integrity.json`. Artifacts remain unpublished. Actual original
+image/provider/TLS/network binding, managed synthetic end-to-end/recovery/drain/disposal evidence
+and accountable client/ATS/security acceptance remain. D1/D3 remain In progress. Docker/WSL were
+not started; PC on, hosted CI/CD deferred and no cloud mutations.
