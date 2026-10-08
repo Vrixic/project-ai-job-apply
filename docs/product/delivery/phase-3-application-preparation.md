@@ -2510,3 +2510,11 @@ using leased owner context reads and the existing atomic preparation/outbox. Loc
 passes typecheck. [Evidence](evidence/d3-native-cover-letter-intake-2026-10-07.md).
 Live native availability at approval and managed/client/ATS acceptance remain unfinished.
 D1/D3 remain In progress; CI/CD deferred and PC on.
+
+2026-10-07 native availability is composed into Gateway approval/submission bindings through
+bodyless authenticated HTTPS HEAD. Local Gateway regressions and 21 Terraform cases pass;
+42 Linux process/transport cases pass. [Evidence](evidence/d3-native-material-availability-2026-10-07.md).
+The independent switch remains off. Combined database/native approval, cancellation/terminal
+disposal, refreshed images/artifacts and managed/client/ATS acceptance remain. Full verification
+stopped at the existing port-3000 candidate-rights fixture conflict. D1/D3 remain In progress;
+no deployment or CI/CD activation, PC on.

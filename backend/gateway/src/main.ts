@@ -1,3 +1,4 @@
+import { nativeMaterialAvailabilityFromEnvironment } from "./native-material-availability.js";
 import "reflect-metadata";
 import {
   createApplicationsDatabase,
@@ -204,6 +205,12 @@ const applications =
         ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
         ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
         ...(nativeResumeLocations ? { nativeResumeLocations } : {}),
+        temporaryMaterials: nativeMaterialAvailabilityFromEnvironment(
+          process.env,
+          () => packetProtection?.enabled() === true,
+          nativeMaterialLocations,
+          nativeResumeLocations,
+        ),
         nativeCoverLetterPreparationEnabled: () =>
           process.env.NATIVE_COVER_LETTER_PREPARATION_ENABLED === "true" &&
           process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&

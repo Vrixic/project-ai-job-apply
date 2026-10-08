@@ -208,6 +208,7 @@ import {
   parseResumeFormatQuery,
   projectApplicationsFailure,
 } from "./applications-http.js";
+import { withNativeMaterialCredential } from "./native-material-availability.js";
 import { temporaryMaterialRequestSignal } from "./temporary-material-http.js";
 import {
   type OidcTrustReviewerAuthority,
@@ -2983,7 +2984,12 @@ class ApplicationsController {
       request,
       validateApproveApplicationPacket,
     );
-    return this.applications.approve(user.id, applicationId, body, commandKey);
+    return withNativeMaterialCredential(
+      user.id,
+      applicationId,
+      bearerToken(request.headers.authorization),
+      () => this.applications.approve(user.id, applicationId, body, commandKey),
+    );
   }
 
   @Post("/:applicationId/reopen")
@@ -3031,7 +3037,12 @@ class ApplicationsController {
       request,
       validateStartApplicationSubmission,
     );
-    return this.applications.startSubmission(user.id, applicationId, body, commandKey);
+    return withNativeMaterialCredential(
+      user.id,
+      applicationId,
+      bearerToken(request.headers.authorization),
+      () => this.applications.startSubmission(user.id, applicationId, body, commandKey),
+    );
   }
 
   @Post("/:applicationId/manual-submissions")
@@ -3049,7 +3060,12 @@ class ApplicationsController {
       request,
       validateStartManualApplicationSubmission,
     );
-    return this.applications.startManualSubmission(user.id, applicationId, body, commandKey);
+    return withNativeMaterialCredential(
+      user.id,
+      applicationId,
+      bearerToken(request.headers.authorization),
+      () => this.applications.startManualSubmission(user.id, applicationId, body, commandKey),
+    );
   }
 
   @Post("/:applicationId/attempts/:attemptId/dispatch")
@@ -3063,7 +3079,12 @@ class ApplicationsController {
     const user = await this.identity.resolve(request, "applications:write");
     requireApplicationsRead(request);
     requireApplicationPath(applicationId, attemptId);
-    return this.applications.dispatchAttempt(user.id, applicationId, attemptId);
+    return withNativeMaterialCredential(
+      user.id,
+      applicationId,
+      bearerToken(request.headers.authorization),
+      () => this.applications.dispatchAttempt(user.id, applicationId, attemptId),
+    );
   }
 
   @Post("/:applicationId/attempts/:attemptId/result")

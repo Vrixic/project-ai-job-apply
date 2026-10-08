@@ -1,6 +1,7 @@
 variable "gateway_native_materials" {
   description = "Optional native candidate API configuration. Provisioning grants packet access; all runtime switches default off."
   type = object({
+    availability_enabled             = optional(bool, false)
     packet_protection_enabled        = optional(bool, false)
     read_authorizations_enabled      = optional(bool, false)
     cover_letter_base_host           = optional(string)

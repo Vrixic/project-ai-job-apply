@@ -34,7 +34,9 @@ No browser, live OIDC, provider call, AWS deployment or generated-document avail
 - Applications: 396 unit tests passed.
 - Terraform platform native-material configuration: nine tests passed with mocked AWS.
 
-Repository-wide `scripts/verify-phase0.ps1` is running; its result is not yet claimed.
+Repository-wide `scripts/verify-phase0.ps1` stopped in candidate-rights session fixtures:
+`EADDRINUSE 127.0.0.1:3000`, with the existing development server preserved. No full pass is
+claimed. The log is `.tmp/native-cover-letter-intake-verify.log`.
 The disposable SQL container was removed and Docker Desktop/WSL stopped after SQL checks.
 
 ## Remaining work

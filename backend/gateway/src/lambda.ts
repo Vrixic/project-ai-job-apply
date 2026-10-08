@@ -3,6 +3,7 @@ import {
   defaultFieldDefinitions,
 } from "@ai-job-apply/applications-service";
 import { restrictedPacketWriterFromEnvironment } from "@ai-job-apply/applications-service/restricted-packet-runtime";
+import { nativeMaterialAvailabilityFromEnvironment } from "./native-material-availability.js";
 import "reflect-metadata";
 import { randomBytes } from "node:crypto";
 import {
@@ -1180,6 +1181,12 @@ async function createConfiguredApplication(
     ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
     ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
     ...(nativeResumeLocations ? { nativeResumeLocations } : {}),
+    temporaryMaterials: nativeMaterialAvailabilityFromEnvironment(
+      process.env,
+      () => packetProtection?.enabled() === true,
+      nativeMaterialLocations,
+      nativeResumeLocations,
+    ),
     nativeCoverLetterPreparationEnabled: () =>
       process.env.NATIVE_COVER_LETTER_PREPARATION_ENABLED === "true" &&
       process.env.NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED === "true" &&

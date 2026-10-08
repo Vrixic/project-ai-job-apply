@@ -1,6 +1,7 @@
 variable "gateway_native_materials" {
   description = "Optional native candidate API configuration. Provisioning grants packet access; all runtime switches default off."
   type = object({
+    availability_enabled             = optional(bool, false)
     packet_protection_enabled        = optional(bool, false)
     read_authorizations_enabled      = optional(bool, false)
     cover_letter_base_host           = optional(string)
@@ -14,6 +15,12 @@ variable "gateway_native_materials" {
   validation {
     condition = var.gateway_native_materials == null ? true : (
       var.restricted_packet_keys_provisioned && var.deploy_gateway_lambda &&
+      (!var.gateway_native_materials.availability_enabled || (
+        var.private_application_networking && var.gateway_native_materials.read_authorizations_enabled &&
+        (var.gateway_native_materials.cover_letter_locations_enabled || var.gateway_native_materials.resume_locations_enabled) &&
+        (!var.gateway_native_materials.cover_letter_locations_enabled || contains(keys(var.native_material_read_networks), "cover_letter")) &&
+        (!var.gateway_native_materials.resume_locations_enabled || contains(keys(var.native_material_read_networks), "resume"))
+      )) &&
       alltrue([for host in [var.gateway_native_materials.cover_letter_base_host, var.gateway_native_materials.resume_base_host] : host == null ? true : (length(host) <= 200 && can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.])+[a-z]{2,63}$", host)))]) &&
       (!var.gateway_native_materials.read_authorizations_enabled || var.gateway_native_materials.packet_protection_enabled) &&
       (!var.gateway_native_materials.cover_letter_locations_enabled || (var.gateway_native_materials.cover_letter_base_host != null && var.gateway_native_materials.read_authorizations_enabled)) &&
@@ -21,7 +28,7 @@ variable "gateway_native_materials" {
       (!var.gateway_native_materials.resume_preparation_enabled || var.gateway_native_materials.resume_locations_enabled) &&
       (!var.gateway_native_materials.cover_letter_preparation_enabled || var.gateway_native_materials.cover_letter_locations_enabled)
     )
-    error_message = "Native candidate API requires the Gateway and retained packet keys, reviewed DNS hostnames, protection before authorization, authorization before locations and matching material locations before intake."
+    error_message = "Native candidate API requires the Gateway and retained packet keys, reviewed DNS hostnames, protection before authorization, authorization before locations and matching material locations before intake; availability also requires private application NAT and matching native task groups."
   }
 }
 
@@ -40,6 +47,7 @@ locals {
     RESTRICTED_PACKET_PROTECTION_ENABLED        = tostring(var.gateway_native_materials.packet_protection_enabled)
     RESTRICTED_PACKET_ENCRYPTION_KEY_ARN        = aws_kms_key.restricted_packet_encryption[0].arn
     RESTRICTED_PACKET_FINGERPRINT_KEY_ARN       = aws_kms_key.restricted_packet_fingerprint[0].arn
+    NATIVE_MATERIAL_AVAILABILITY_ENABLED        = tostring(var.gateway_native_materials.availability_enabled)
     NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED = tostring(var.gateway_native_materials.read_authorizations_enabled)
     NATIVE_MATERIAL_READ_LOCATIONS_ENABLED      = tostring(var.gateway_native_materials.cover_letter_locations_enabled)
     NATIVE_RESUME_READ_LOCATIONS_ENABLED        = tostring(var.gateway_native_materials.resume_locations_enabled)

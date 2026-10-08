@@ -155,3 +155,26 @@ run "cover_letter_intake_without_location" {
   variables { gateway_native_materials = { packet_protection_enabled = true, cover_letter_preparation_enabled = true } }
   expect_failures = [var.gateway_native_materials]
 }
+
+run "availability_without_network" {
+  command = plan
+  variables { gateway_native_materials = { availability_enabled = true, packet_protection_enabled = true, read_authorizations_enabled = true, cover_letter_locations_enabled = true, cover_letter_base_host = "letters.example.com" } }
+  expect_failures = [var.gateway_native_materials]
+}
+run "availability_network" {
+  command = plan
+  variables {
+    private_application_networking = true
+    native_material_read_networks  = { cover_letter = {} }
+    gateway_native_materials       = { availability_enabled = true, packet_protection_enabled = true, read_authorizations_enabled = true, cover_letter_locations_enabled = true, cover_letter_base_host = "letters.example.com" }
+  }
+  override_resource {
+    target          = aws_eip.nat[0]
+    override_during = plan
+    values          = { public_ip = "198.51.100.7" }
+  }
+  assert {
+    condition     = local.gateway_native_material_environment.NATIVE_MATERIAL_AVAILABILITY_ENABLED == "true" && toset(local.native_material_read_cidrs.cover_letter) == toset(["198.51.100.7/32"])
+    error_message = "Availability requires exact NAT source access to the native HTTPS task group."
+  }
+}

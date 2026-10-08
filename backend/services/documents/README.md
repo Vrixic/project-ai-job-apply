@@ -781,3 +781,13 @@ normalized object reader. Generated bodies, rendering and provider work are excl
 Existing processor/tailoring imports retain compatible re-exports after the source-reader
 extraction. Source/runtime IAM, task/image/launch and managed acceptance remain gates.
 See [local evidence](../../../docs/product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).
+
+## Native bodyless availability (2026-10-07)
+
+The shared cover-letter/resume HTTPS transport accepts HEAD on the exact preview path. It applies
+OIDC identity, current-packet proof and live held-memory revalidation before returning 204 with
+the original scalar reference in `X-Native-Material-Reference`. It never serializes preview text
+for HEAD, and HEAD on file or unknown paths is rejected. The Gateway uses this only as a fresh
+point-in-time binding check; it is not a content lease, lifetime extension or disposal proof.
+Deploy updated native images before enabling Gateway availability. Source/local evidence is in
+[the delivery record](../../../docs/product/delivery/evidence/d3-native-material-availability-2026-10-07.md).

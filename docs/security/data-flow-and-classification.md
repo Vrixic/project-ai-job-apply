@@ -887,3 +887,20 @@ and credentials. Admission/Jobs transactions end before object I/O; only the sep
 active-candidate source lease spans it. Source holds, completion, sealing and changed
 job/preparation withhold the result. Managed IAM/source/task/client acceptance remains
 open. [Evidence](../product/delivery/evidence/d3-native-resume-source-rpc-2026-10-07.md).
+
+## Native material availability (2026-10-07, default off)
+
+Authenticated candidate approval/submission request -> request-scoped candidate token ->
+owner-resolved exact allocation hostname over verified TLS 1.3 -> native OIDC/current-packet
+proof -> held in-process memory read/revalidation -> HTTP 204 with scalar original reference.
+The Gateway neither downloads nor forwards generated content. It compares the complete reference,
+rejects redirects and nonempty response framing, bounds the lookup/request and rechecks expiry.
+Tokens are cleared when the request-scoped work finishes and are never persisted or logged.
+The native proof calls the existing scalar Gateway authorization endpoint; it does not recursively
+resolve approval bindings. SQL application locks are not held across the HTTPS check.
+
+This proves point-in-time availability, not a transferable memory lease, continued availability,
+submission authority or disposal. Submission binding checks repeat the observation; the ATS
+handoff must still hold/revalidate its own content lease. Transport failures refuse approval.
+Activation requires updated native images, explicitly provisioned application NAT and exact NAT
+source access to native task port 8443. No infrastructure has been applied by this change.

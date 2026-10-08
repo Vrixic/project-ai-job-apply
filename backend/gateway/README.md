@@ -36,8 +36,13 @@ read authorization and native cover-letter locations. Intake uses the pure AI SD
 and an Applications active-candidate lease across Profile/Jobs owner reads; it queues the existing
 transactional preparation/outbox without model or generated-body access. Original receipt replay
 and operation status remain readable after intake withdrawal. Compatible migrations and the owned
-dispatch/recovery runtime must precede activation. Live native material availability at approval
-still requires composition; location metadata does not prove memory liveness.
+dispatch/recovery runtime must precede activation. `NATIVE_MATERIAL_AVAILABILITY_ENABLED` adds
+bodyless native HTTPS checks for approval and submission binding reads. Its credential is scoped
+to the authenticated owner/application request and cleared afterward. Native transport proves
+current packet and held memory before returning the exact reference; metadata lookup alone is
+not liveness. Both task images need the HEAD support before activation, along with explicitly
+configured private application NAT and matching task network groups. Cancellation/terminal
+memory disposal and managed/client/ATS acceptance remain separate unfinished work.
 Route unit tests use test tokens and fake owner ports; PostgreSQL lifecycle regression checks use
 synthetic data. This is backend source/local evidence, not UI, managed-OIDC or deployed acceptance.
 

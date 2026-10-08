@@ -12,18 +12,26 @@ variable "native_material_read_networks" {
   }
 }
 
+locals {
+  native_material_availability_network = var.gateway_native_materials == null ? false : var.gateway_native_materials.availability_enabled
+  native_material_read_cidrs = { for kind, network in var.native_material_read_networks : kind => sort(distinct(concat(
+    tolist(network.client_ipv4_cidrs),
+    local.native_material_availability_network ? [for address in aws_eip.nat : "${address.public_ip}/32"] : []
+  ))) }
+}
+
 resource "aws_security_group" "native_material_read" {
   for_each    = var.native_material_read_networks
   name_prefix = "${var.name}-${var.environment}-native-${replace(each.key, "_", "-")}-read-"
   description = "Dedicated authenticated native HTTPS task reads"
   vpc_id      = aws_vpc.this.id
   # Explicit empty list withdraws previously configured inline read access.
-  ingress = length(each.value.client_ipv4_cidrs) == 0 ? [] : [{
-    description      = "Reviewed candidate HTTPS clients"
+  ingress = length(local.native_material_read_cidrs[each.key]) == 0 ? [] : [{
+    description      = "Reviewed candidate clients and Gateway NAT"
     from_port        = 8443
     to_port          = 8443
     protocol         = "tcp"
-    cidr_blocks      = sort(tolist(each.value.client_ipv4_cidrs))
+    cidr_blocks      = local.native_material_read_cidrs[each.key]
     ipv6_cidr_blocks = []
     prefix_list_ids  = []
     security_groups  = []

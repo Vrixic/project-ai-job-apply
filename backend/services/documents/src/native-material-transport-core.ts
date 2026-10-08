@@ -144,7 +144,8 @@ export function createNativeMaterialTransportCore(
             ? "docx"
             : undefined;
       if (
-        (request.method !== "GET" && request.method !== "OPTIONS") ||
+        (request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS") ||
+        (request.method === "HEAD" && request.url !== base) ||
         request.headers.host !== host ||
         headerNames.filter((v) => v === "authorization").length > 1 ||
         headerNames.filter((v) => v === "host").length !== 1 ||
@@ -273,6 +274,19 @@ export function createNativeMaterialTransportCore(
           status = 401;
           await authenticate();
           status = 503;
+          // Bodyless availability uses the same authenticated current-packet proof and held
+          // memory read. Never serialize the generated preview into the Gateway response.
+          if (request.method === "HEAD") {
+            if (!live() || result.signal.aborted || !result.isCurrent())
+              throw Error("ReadUnavailable");
+            response.setHeader(
+              "X-Native-Material-Reference",
+              Buffer.from(JSON.stringify(reference), "utf8").toString("base64url"),
+            );
+            response.statusCode = 204;
+            response.end();
+            return;
+          }
           const { ownerUserId: _owner, applicationId: _application, ...metadata } = reference;
           bytes = Buffer.from(
             JSON.stringify({ ...(value as Record<string, unknown>), temporaryMaterial: metadata }),

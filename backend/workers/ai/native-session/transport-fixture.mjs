@@ -1,19 +1,25 @@
 // Synthetic HTTPS acceptance inside the actual Linux kernel-bounded material process.
 import assert from "node:assert/strict";
+import dns from "node:dns";
 import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import { request } from "node:https";
+import { compileComponentValidator } from "../../../../packages/api-contracts/src/index.ts";
 import { createTestTokenIssuer } from "../../../../packages/auth/src/testing.ts";
+import {
+  createNativeMaterialAvailability,
+  withNativeMaterialCredential,
+} from "../../../gateway/src/native-material-availability.ts";
 import { authorizeNativeMaterialRead } from "../../../services/applications/src/native-material-read.ts";
 import { createNativeMemoryTransport } from "../../../services/documents/src/native-memory-transport.ts";
 import { createNativeReadAuthorizationClient } from "../../../services/documents/src/native-read-authorization-client.ts";
-import { compileComponentValidator } from "../../../../packages/api-contracts/src/index.ts";
 
 export async function exerciseNativeTransport(session, generated, ids) {
   const issuer = await createTestTokenIssuer();
   const token = await issuer.issue("synthetic-candidate", { scope: "applications:read" });
   const foreign = await issuer.issue("other-candidate", { scope: "applications:read" });
   const unscoped = await issuer.issue("synthetic-candidate", { scope: "profile:read" });
+  const nativeHost = `${ids[2]}.material.test.invalid`;
   const certificate = readFileSync("/native/cert.pem");
   let mode = "ready";
   let reads = 0;
@@ -44,7 +50,7 @@ export async function exerciseNativeTransport(session, generated, ids) {
       audience: "ai-job-apply-api",
       subject: "synthetic-candidate",
     },
-    host: "material.test.invalid",
+    host: `${nativeHost}:8443`,
     origin: "https://candidate.test.invalid",
     tls: { key: readFileSync("/native/key.pem"), cert: certificate },
     testVerifier: issuer.verifier,
@@ -97,7 +103,7 @@ export async function exerciseNativeTransport(session, generated, ids) {
   );
   process.env.NODE_ENV = "test";
   const server = createNativeMemoryTransport(transportOptions);
-  server.listen(0, "127.0.0.1");
+  server.listen(8443, "127.0.0.1");
   await once(server, "listening");
   const path = `/v1/applications/${ids[1]}/cover-letter`;
   const send = (url = path, authorization = `Bearer ${token}`, extra = {}) =>
@@ -107,12 +113,12 @@ export async function exerciseNativeTransport(session, generated, ids) {
           hostname: "127.0.0.1",
           port: server.address().port,
           path: url,
-          servername: "material.test.invalid",
+          servername: nativeHost,
           ca: certificate,
           minVersion: "TLSv1.3",
           ...extra.tls,
           headers: {
-            host: "material.test.invalid",
+            host: `${nativeHost}:8443`,
             ...(authorization ? { authorization } : {}),
             ...extra.headers,
           },
@@ -164,6 +170,47 @@ export async function exerciseNativeTransport(session, generated, ids) {
     result.bytes.fill(0);
     assertions++;
   }
+  const available = await send(path, `Bearer ${token}`, { method: "HEAD" });
+  assert.equal(available.status, 204);
+  assert.equal(available.bytes.byteLength, 0);
+  assert.equal(available.headers["cache-control"], "no-store");
+  assert.deepEqual(
+    JSON.parse(
+      Buffer.from(available.headers["x-native-material-reference"], "base64url").toString("utf8"),
+    ),
+    generated.reference,
+  );
+  assertions++;
+  // Exercise the production Gateway client over real TLS with a synthetic DNS mapping.
+  // The verifier process trusts only the generated test CA through NODE_EXTRA_CA_CERTS.
+  const originalLookup = dns.lookup;
+  dns.lookup = (hostname, options, callback) => {
+    if (hostname !== nativeHost) return originalLookup(hostname, options, callback);
+    queueMicrotask(() =>
+      options.all
+        ? callback(null, [{ address: "127.0.0.1", family: 4 }])
+        : callback(null, "127.0.0.1", 4),
+    );
+  };
+  try {
+    const availability = createNativeMaterialAvailability({
+      enabled: () => true,
+      coverLetter: {
+        baseHost: "material.test.invalid",
+        resolve: async () => `https://${nativeHost}:8443`,
+      },
+    });
+    const current = await withNativeMaterialCredential(ids[0], ids[1], token, () =>
+      availability.current(ids[0], ids[1], generated.reference),
+    );
+    assert.deepEqual(current, generated.reference);
+    assertions++;
+  } finally {
+    dns.lookup = originalLookup;
+  }
+  await expectStatus(401, path, "", { method: "HEAD" });
+  await expectStatus(403, path, `Bearer ${foreign}`, { method: "HEAD" });
+  await expectStatus(400, `${path}/file?format=pdf`, `Bearer ${token}`, { method: "HEAD" });
   await expectStatus(401, path, "");
   await expectStatus(401, path, "Bearer forged.synthetic.token");
   await expectStatus(403, path, `Bearer ${foreign}`);
@@ -208,6 +255,8 @@ export async function exerciseNativeTransport(session, generated, ids) {
     mode = testMode;
     reads = 0;
     await expectStatus(status);
+    reads = 0;
+    await expectStatus(status, path, `Bearer ${token}`, { method: "HEAD" });
   }
   mode = "pending";
   reads = 0;
