@@ -49,6 +49,12 @@ function setup() {
   }));
   const runtime = vi.fn(() => ({
     observe,
+    reconcileExecutions: vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      inspected: 0,
+      notified: 0,
+      unresolved: 0,
+    })),
     inspectExecutions: vi.fn(async () => ({
       schemaVersion: 1 as const,
       results: [],
@@ -271,4 +277,25 @@ it("rejects default-off execution inspection before secret access", async () => 
     ),
   ).rejects.toThrow();
   expect(x.resolve).not.toHaveBeenCalled();
+});
+
+it("requires exact inspection and queue configuration before scheduled reconciliation", async () => {
+  const x = setup();
+  const raw = { schemaVersion: 1, action: "reconcile_executions" };
+  await expect(x.handler(raw, { invokedFunctionArn: target })).rejects.toThrow();
+  expect(x.resolve).not.toHaveBeenCalled();
+  x.env.NATIVE_RESUME_EXECUTION_INSPECTION_ENABLED = "true";
+  x.env.NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON = JSON.stringify([
+    "arn:aws:lambda:us-east-2:123456789012:function:resume-durable:9",
+  ]);
+  x.env.NATIVE_RESUME_EXECUTION_RECONCILIATION_ENABLED = "true";
+  x.env.NATIVE_RESUME_OBSERVATION_QUEUE_ARN =
+    "arn:aws:sqs:us-east-2:123456789012:original-failures";
+  await expect(x.handler(raw, { invokedFunctionArn: target })).resolves.toMatchObject({
+    inspected: 0,
+    notified: 0,
+  });
+  expect(x.runtime.mock.results[0]?.value.reconcileExecutions).toHaveBeenCalledOnce();
+  x.env.NATIVE_RESUME_EXECUTION_RECONCILIATION_ENABLED = "false";
+  await expect(x.handler(raw, { invokedFunctionArn: target })).rejects.toThrow();
 });

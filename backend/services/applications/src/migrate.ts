@@ -18,6 +18,7 @@ const migrationVersions = [
   "0009_restricted_packet_values",
   "0010_native_resume_requests",
   "0011_native_resume_execution_receipts",
+  "0012_native_resume_execution_observation",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -74,6 +75,7 @@ try {
         restrictedDeleteBodyCount: number;
         resumeRequestConstraintCount: number;
         resumeExecutionGuardCount: number;
+        resumeObservationGuardCount: number;
         resumeRequestTriggerCount: number;
       }[]
     >`
@@ -179,6 +181,11 @@ try {
          (SELECT count(*)::int FROM pg_trigger WHERE tgrelid='applications.outbox'::regclass
           AND tgenabled='O' AND tgname='outbox_native_resume_execution_guard') +
          (to_regclass('applications.outbox_native_resume_execution_scan') IS NOT NULL)::int) AS "resumeExecutionGuardCount",
+        ((SELECT count(*)::int FROM pg_constraint WHERE conrelid='applications.outbox'::regclass
+          AND convalidated AND conname='outbox_resume_observation_ck') +
+         (SELECT count(*)::int FROM pg_trigger WHERE tgrelid='applications.outbox'::regclass
+          AND tgenabled='O' AND tgname='outbox_resume_execution_observation_guard') +
+         (to_regclass('applications.outbox_resume_execution_observation_due') IS NOT NULL)::int) AS "resumeObservationGuardCount",
         (SELECT count(*)::int FROM pg_trigger WHERE tgrelid='applications.outbox'::regclass
           AND tgenabled='O' AND tgname='outbox_native_resume_binding_guard') AS "resumeRequestTriggerCount"
     `;
@@ -199,6 +206,7 @@ try {
       verification.restrictedDeleteBodyCount !== 1 ||
       verification.resumeRequestConstraintCount !== 2 ||
       verification.resumeExecutionGuardCount !== 3 ||
+      verification.resumeObservationGuardCount !== 3 ||
       verification.resumeRequestTriggerCount !== 1
     ) {
       throw new Error(

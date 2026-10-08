@@ -5081,3 +5081,12 @@ critical mobile dependency. The centralized repository audit exits 1; existing i
 validation remains distinct from raw registry findings. No dependency/exemption changes were made
 in this backend-only branch. D1/D3 remain In progress and no release security clearance is claimed.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#current-dependency-release-check).
+
+
+2026-10-07 D1-013/D3-079 implements default-off scheduled original resume execution observation,
+with leased/token-fenced SQL claims and retained positive failures before scalar queue delivery.
+It preserves original published receipts and does not replay or perform cleanup. The migration
+package now contains 75 migrations/93 relations; previous image/artifacts require refresh.
+Focused workflow, Terraform, restore and package checks pass; final SQL/repository checks and
+clean-source packaging are in progress. Managed recovery drill/activation remain pending.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).

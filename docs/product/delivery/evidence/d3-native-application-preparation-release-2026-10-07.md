@@ -751,3 +751,44 @@ managed image/domain/TLS/key inputs and publication/acceptance remain pending. O
 recovery has a manual runbook and private bounded inspection; automatic missed-event reconciliation
 remains a separately identified local follow-up. CI/CD remains deferred and no hosted run, cloud
 mutation, frontend edit or Docker work occurred. D1/D3 remain In progress; PC on.
+
+
+## Scheduled original execution reconciliation
+
+2026-10-07 implements the remaining local missed-terminal-event scan in the existing original
+observer. Applications migration 0012 adds four identifier/status observation columns to its
+existing outbox, a bounded due index and immutable positive-observation guards. The published
+outbox exception permits only these four columns on an original started resume receipt; original
+payload, dispatch identity, status and all other fields remain immutable. Candidate deletion
+already removes the owning rows. No public API or event schema changes.
+
+The private `reconcile_executions` action claims at most two receipts with SKIP LOCKED, a
+five-minute retry lease and token fencing. It reads metadata without execution payloads, persists
+confirmed terminal status before queue delivery, and records notification only after SQS ACK.
+Cached failures can retry notification without remaining AWS execution history. Lost ACKs can
+produce duplicate scalar notices. Success ends scanning; inaccessible/mismatched/missing metadata
+remains unresolved. It cannot invoke workflows, launch/stop tasks, mutate DNS or settle packets.
+
+Optional default-off Terraform wiring schedules the exact numeric observer each minute, retains
+original-version inspection, binds private SQS access to its exact queue/principal and adds
+observer/delivery/DLQ alarms. Queue/KMS EventBridge bindings now include the exact original sweep
+and execution-scan rules. Two observations/minute is a bounded launch capacity, not an unlimited
+backlog guarantee. Follow the [terminal recovery runbook](../../../../infrastructure/runbooks/observability/native-resume-terminal-recovery.md#scheduled-receipt-reconciliation)
+for the synthetic managed drill and original-history retention deadline.
+
+Local verification: 47 focused workflow cases, 22 preparation and three platform Terraform
+cases, both development/staging configuration validations, 50 migration/restore unit cases and
+185 executable migration-package cases pass. Real PostgreSQL initially exposed the published
+outbox trigger conflict; after the fix all 66 cases passed. Final null-safe guard refinement is
+under recheck; a subsequent concurrent-build run passed the new observation case but hit an
+existing five-second RPC fixture timeout and its following configuration case. Broader local
+checks and exact-commit artifact qualification are pending at this implementation checkpoint.
+AWS metadata/queue responses are simulated; no managed recovery or activation is claimed.
+
+The source/package inventory is now **75 migrations, 93 relations, 12 schemas, seven owners**.
+Apply migration 0012 before enabling the new observer. Old writers leave the additive observation
+columns null; rollback disables the schedule and retains the migration/positive observations.
+The prior 74-migration image and prior observer artifact do not cover this batch. New clean-source
+observer packaging and migration-image qualification/publication remain release work. The
+migration operator fixture reads committed source, so its new inventory assertion requires the
+implementation commit before verification. D1/D3 remain In progress; CI/CD deferred, PC on.

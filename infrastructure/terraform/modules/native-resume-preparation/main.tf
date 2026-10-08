@@ -407,11 +407,13 @@ resource "aws_lambda_function" "observer" {
   kms_key_arn                    = var.release.platform_kms_key_arn
   environment {
     variables = merge(local.common_environment, {
-      RELEASE_SHA                                = var.release.artifacts.observer.sha256,
-      NATIVE_RESUME_TASK_OBSERVER_ENABLED        = tostring(var.enabled),
-      NATIVE_RESUME_EXECUTION_INSPECTION_ENABLED = tostring(var.execution_inspection_enabled),
-      NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON    = jsonencode(local.resume_inspection_arns),
-      NATIVE_RESUME_OBSERVER_CONFIGURATION_JSON  = jsonencode(local.launch)
+      RELEASE_SHA                                    = var.release.artifacts.observer.sha256,
+      NATIVE_RESUME_TASK_OBSERVER_ENABLED            = tostring(var.enabled),
+      NATIVE_RESUME_EXECUTION_INSPECTION_ENABLED     = tostring(var.execution_inspection_enabled),
+      NATIVE_RESUME_EXECUTION_RECONCILIATION_ENABLED = tostring(var.execution_reconciliation_enabled),
+      NATIVE_RESUME_OBSERVATION_QUEUE_ARN            = var.release.observer_dead_letter_arn,
+      NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON        = jsonencode(local.resume_inspection_arns),
+      NATIVE_RESUME_OBSERVER_CONFIGURATION_JSON      = jsonencode(local.launch)
     })
   }
   vpc_config {

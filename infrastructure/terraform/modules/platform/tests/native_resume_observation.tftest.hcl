@@ -83,7 +83,7 @@ run "original_failures_are_retained_and_alerted" {
     error_message = "Failed observations need fourteen-day customer-key retention."
   }
   assert {
-    condition     = jsondecode(aws_sqs_queue_policy.native_resume_observation["7"].policy).Statement[0].Condition.ArnEquals["aws:SourceArn"] == ["arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-observer-r7", "arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-durable-r7-terminal"] && jsondecode(aws_sqs_queue_policy.native_resume_observation["7"].policy).Statement[1].Effect == "Deny"
+    condition     = jsondecode(aws_sqs_queue_policy.native_resume_observation["7"].policy).Statement[0].Condition.ArnEquals["aws:SourceArn"] == ["arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-observer-r7", "arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-durable-r7-terminal", "arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-observer-r7-sweep", "arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-observer-r7-executions"] && jsondecode(aws_sqs_queue_policy.native_resume_observation["7"].policy).Statement[1].Effect == "Deny"
     error_message = "Queue policy must bind the original rule and require TLS."
   }
   assert {
@@ -93,5 +93,20 @@ run "original_failures_are_retained_and_alerted" {
   assert {
     condition     = length([for statement in data.aws_iam_policy_document.platform_kms.statement : statement if statement.sid == "OriginalResumeObservationFailureEncryption" && contains(flatten([for condition in statement.condition : condition.values]), "arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-development-resume-observer-r7")]) == 1
     error_message = "Encryption permission must bind the original event rule."
+  }
+}
+
+run "scheduled_receipt_queue_path" {
+  command = apply
+  variables {
+    native_resume_observation_releases = { "7" = {
+      queue_arn              = "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-development-resume-observer-r7-dlq"
+      kms_key_arn            = "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-1234-1234-123456789012"
+      reconciliation_enabled = true
+    } }
+  }
+  assert {
+    condition     = length(aws_vpc_endpoint.sqs) == 1 && length(aws_cloudwatch_metric_alarm.native_resume_execution_reconciliation) == 3 && length([for s in data.aws_iam_policy_document.outbox_sqs_endpoint[0].statement : s if s.sid == "ResumeExecutionNotice7" && toset(s.actions) == toset(["sqs:SendMessage"]) && toset(s.resources) == toset([var.native_resume_observation_releases["7"].queue_arn]) && toset(one(s.condition).values) == toset(["arn:aws:iam::111122223333:role/ai-job-apply-development-resume-observer-r7"])]) == 1
+    error_message = "Original observer needs exact-queue private access and delivery/execution alarms."
   }
 }

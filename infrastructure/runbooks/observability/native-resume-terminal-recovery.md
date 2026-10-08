@@ -56,7 +56,8 @@ Remove the notice only after accountable disposition; message deletion is not re
 for duplicate notices for the same original execution without treating duplicates as new work.
 Retain original releases until every owned task/route/attachment is accounted for. If execution
 history is unavailable or mutation ordering cannot be proven, keep the incident unresolved and
-block release retirement. Automated missed-event reconciliation remains a separate launch gap.
+block release retirement. The optional scheduled receipt reconciliation below can recover a
+missed failure notice; it does not perform recovery actions or establish cleanup.
 
 ## Bounded private receipt inspection
 
@@ -75,3 +76,30 @@ is an explicit operator read, not an enabled scheduled sweep. Keep identifiers i
 operations context. Unknown receipt/status is not failed work, no-source is not an execution,
 and SUCCEEDED is not independent proof of route cleanup. Existing role/boundary/endpoint grants
 must all be released and verified before relying on managed results.
+
+## Scheduled receipt reconciliation
+
+Apply Applications migration 0012 before deploying the new observer. Enable original execution
+inspection and then `execution_reconciliation_enabled` for that retained preparation release.
+Both switches default off. The exact original numeric observer receives the strict private
+`reconcile_executions` action every minute. Retain the original workflow-version allowlist,
+private SQS endpoint, exact queue permissions and encryption permissions with the release.
+
+Each invocation claims at most two published original execution receipts. Claims rotate by
+least-recent check, with a five-minute retry lease and token fencing for concurrent observers.
+Metadata reads exclude execution data. Positive SUCCEEDED observations stop scanning; confirmed
+FAILED, TIMED_OUT or STOPPED observations are persisted before sending the existing scalar
+`native_resume_terminal` envelope to the original encrypted queue. Only an acknowledged send
+records notification completion. A lost acknowledgement can duplicate a notice. A cached positive
+failure survives later checkpoint expiry, so delivery retries do not need another AWS read.
+
+Unknown metadata, inaccessible or expired history, missing dispatch acknowledgement and identity
+mismatches remain unresolved. This mechanism does not launch tasks, replay executions, settle
+application state, remove DNS, or certify deletion. Queue messages remain operator work.
+
+The bound is two observations per scheduled minute, with repeat checks consuming capacity.
+Before activation, drill missed terminal delivery and lost queue acknowledgement with synthetic
+managed executions and prove backlog drains within the seven-day execution-history retention.
+Watch original observer errors, schedule delivery/DLQ failures and existing queue alarms. A
+sustained backlog or unresolved history requires operator disposition; do not infer success from
+an empty queue. Local database tests and simulated AWS responses do not replace that drill.

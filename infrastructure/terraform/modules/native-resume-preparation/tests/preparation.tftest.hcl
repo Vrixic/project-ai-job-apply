@@ -269,3 +269,25 @@ run "inspection_rejects_alias" {
   variables { retained_workflow_versions = ["live"] }
   expect_failures = [var.retained_workflow_versions]
 }
+
+run "scheduled_execution_reconciliation" {
+  command = plan
+  variables {
+    enabled                          = true
+    execution_inspection_enabled     = true
+    execution_reconciliation_enabled = true
+  }
+  assert {
+    condition     = aws_cloudwatch_event_rule.execution_reconciliation[0].state == "ENABLED" && aws_cloudwatch_event_rule.execution_reconciliation[0].schedule_expression == "rate(1 minute)" && jsondecode(aws_cloudwatch_event_target.execution_reconciliation[0].input).action == "reconcile_executions" && aws_lambda_function.observer[0].environment[0].variables.NATIVE_RESUME_EXECUTION_RECONCILIATION_ENABLED == "true"
+    error_message = "Receipt reconciliation must be separately scheduled on the original observer with its private action."
+  }
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_iam_role_policy.observer[0].policy).Statement : s if s.Effect == "Deny"]).Action, "lambda:InvokeFunction")
+    error_message = "The observer must retain its prohibition on launching executions or tasks."
+  }
+}
+run "reconciliation_requires_inspection" {
+  command = plan
+  variables { execution_reconciliation_enabled = true }
+  expect_failures = [var.execution_reconciliation_enabled]
+}

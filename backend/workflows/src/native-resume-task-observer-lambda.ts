@@ -19,6 +19,7 @@ import {
   createNativeResumeExecutionInspection,
   type NativeResumeExecutionReader,
 } from "./native-resume-execution-inspection.js";
+import { createNativeResumeExecutionReconciliation } from "./native-resume-execution-reconciliation.js";
 import { nativeResumeStoppedTaskEvent } from "./native-resume-task-event.js";
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -96,7 +97,25 @@ function configuration(env: Environment) {
     }
     inspectionArns = values as string[];
   }
-  return { target, secretId, task, inspectionArns };
+  let reconciliationQueue: string | undefined;
+  if (env.NATIVE_RESUME_EXECUTION_RECONCILIATION_ENABLED === "true") {
+    reconciliationQueue = env.NATIVE_RESUME_OBSERVATION_QUEUE_ARN;
+    if (
+      !inspectionArns.length ||
+      !new RegExp(
+        `^arn:aws:sqs:us-east-2:${env.PLATFORM_AWS_ACCOUNT_ID}:[A-Za-z0-9_-]{1,80}$`,
+        "u",
+      ).test(reconciliationQueue ?? "")
+    )
+      throw unavailable();
+  }
+  return {
+    target,
+    secretId,
+    task,
+    inspectionArns,
+    ...(reconciliationQueue ? { reconciliationQueue } : {}),
+  };
 }
 type Configuration = ReturnType<typeof configuration>;
 
@@ -153,8 +172,22 @@ export function createNativeResumeTaskObserverRuntime(
         enabled,
       })
     : undefined;
+  const reconcile =
+    client && config.reconciliationQueue
+      ? createNativeResumeExecutionReconciliation({
+          requests: new PostgresNativeResumeRequestStore(database, enabled),
+          client,
+          workflowArns: config.inspectionArns,
+          queueArn: config.reconciliationQueue,
+          enabled,
+        })
+      : undefined;
   let sweeping = false;
   return Object.freeze({
+    async reconcileExecutions() {
+      if (!reconcile) throw unavailable();
+      return reconcile();
+    },
     async inspectExecutions(workflowArn: string, afterEventId: string | null) {
       if (!inspect) throw unavailable();
       return inspect(workflowArn, afterEventId);
@@ -241,6 +274,20 @@ export function createNativeResumeTaskObserverLambda(
             field.value === (key === "schemaVersion" ? 1 : "sweep")
           );
         });
+      const reconciliation =
+        raw &&
+        typeof raw === "object" &&
+        Object.getPrototypeOf(raw) === Object.prototype &&
+        Reflect.ownKeys(raw).length === 2 &&
+        ["schemaVersion", "action"].every((key) => {
+          const field = Object.getOwnPropertyDescriptor(raw, key);
+          return (
+            field?.enumerable &&
+            "value" in field &&
+            field.value === (key === "schemaVersion" ? 1 : "reconcile_executions")
+          );
+        });
+      if (reconciliation && !config.reconciliationQueue) throw unavailable();
       let inspection: { workflowArn: string; afterEventId: string | null } | undefined;
       if (
         raw &&
@@ -267,7 +314,7 @@ export function createNativeResumeTaskObserverLambda(
         inspection = { workflowArn: input.workflowArn, afterEventId: input.afterEventId };
       }
       const hint =
-        sweep || inspection
+        sweep || inspection || reconciliation
           ? undefined
           : isEvent
             ? nativeResumeStoppedTaskEvent(raw, config.task)
@@ -296,11 +343,13 @@ export function createNativeResumeTaskObserverLambda(
         throw unavailable();
       }
       if (!enabled()) throw unavailable();
-      const result = inspection
-        ? await runtime.inspectExecutions(inspection.workflowArn, inspection.afterEventId)
-        : hint
-          ? await runtime.observe(hint.scope, hint.taskArn)
-          : await runtime.sweep();
+      const result = reconciliation
+        ? await runtime.reconcileExecutions()
+        : inspection
+          ? await runtime.inspectExecutions(inspection.workflowArn, inspection.afterEventId)
+          : hint
+            ? await runtime.observe(hint.scope, hint.taskArn)
+            : await runtime.sweep();
       if (!enabled()) throw unavailable();
       return result;
     } catch {

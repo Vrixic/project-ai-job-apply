@@ -762,6 +762,73 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       requests: new requests.PostgresNativeResumeRequestStore(sql, () => true),
     };
   }
+  it("rotates concurrent execution observations and fences stale or duplicate terminal acknowledgements", async () => {
+    const f = await queuedResumeFixture();
+    const target = `arn:aws:lambda:us-east-2:123456789012:function:observation-${uuidv7()}:9`;
+    try {
+      for (let n = 0; n < 3; n++) {
+        const created = await f.applicationStore.createPacket({
+          ...f.command,
+          expectedRevision: 2 + n,
+          idempotencyKey: `observation-${uuidv7()}`,
+        });
+        const [event] =
+          await sql`SELECT id FROM applications.outbox WHERE application_id=${input.identity.applicationId} AND resume_packet_id=${created.view.currentPacket.id} AND event_type='application.resume-preparation.requested.v1'`;
+        const claim = await f.requests.claim(event.id, target);
+        expect(claim).not.toBeNull();
+        expect(
+          await f.requests.started(
+            claim,
+            `${target}/durable-execution/resume-${event.id}/original`,
+          ),
+        ).toBe(true);
+      }
+      const batches = await Promise.all([
+        f.requests.claimExecutionObservations([target]),
+        f.requests.claimExecutionObservations([target]),
+      ]);
+      const claims = batches.flat();
+      expect(claims).toHaveLength(3);
+      expect(new Set(claims.map((c: { eventId: string }) => c.eventId)).size).toBe(3);
+      expect(await f.requests.claimExecutionObservations([target])).toEqual([]);
+      const first = claims[0];
+      expect(await f.requests.recordExecutionObservation(first, "FAILED")).toBe(true);
+      await sql`UPDATE applications.outbox SET resume_execution_checked_at=clock_timestamp()-interval '6 minutes' WHERE id=${first.eventId}`;
+      const [retry] = await f.requests.claimExecutionObservations([target]);
+      expect(retry.terminalStatus).toBe("FAILED");
+      expect(retry.inspectionToken).not.toBe(first.inspectionToken);
+      expect(await f.requests.recordExecutionObservation(first, "FAILED", true)).toBe(false);
+      expect(await f.requests.recordExecutionObservation(retry, "SUCCEEDED")).toBe(false);
+      expect(await f.requests.recordExecutionObservation(retry, "FAILED", true)).toBe(true);
+      expect(await f.requests.recordExecutionObservation(retry, "FAILED", true)).toBe(true);
+      await expect(
+        sql`UPDATE applications.outbox SET resume_execution_terminal_status=NULL WHERE id=${first.eventId}`,
+      ).rejects.toThrow();
+      await expect(
+        sql`UPDATE applications.outbox SET resume_execution_notified_at=NULL WHERE id=${first.eventId}`,
+      ).rejects.toThrow();
+      await expect(
+        sql`UPDATE applications.outbox SET status='pending' WHERE id=${first.eventId}`,
+      ).rejects.toThrow("terminal state is immutable");
+      await expect(
+        sql`UPDATE applications.outbox SET resume_execution_arn=resume_execution_arn || '-changed' WHERE id=${first.eventId}`,
+      ).rejects.toThrow();
+      await expect(
+        sql`UPDATE applications.outbox SET attempt_count=attempt_count+1 WHERE id=${first.eventId}`,
+      ).rejects.toThrow("terminal state is immutable");
+      for (const claim of claims.slice(1))
+        expect(await f.requests.recordExecutionObservation(claim, "SUCCEEDED")).toBe(true);
+      await sql`UPDATE applications.outbox SET resume_execution_checked_at=clock_timestamp()-interval '6 minutes' WHERE resume_workflow_arn=${target}`;
+      expect(await f.requests.claimExecutionObservations([target])).toEqual([]);
+      expect(
+        (await f.requests.executionReceipts(target)).every(
+          (r: { dispatchResult: string }) => r.dispatchResult === "started",
+        ),
+      ).toBe(true);
+    } finally {
+      f.protection.destroy();
+    }
+  });
   it("queues one original resume with the Prepare packet and dispatches its captured source", async () => {
     const f = await queuedResumeFixture();
     try {

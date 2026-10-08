@@ -87,17 +87,18 @@ variable "native_resume_preparation_releases" {
       subnet_ids               = list(string)
       security_group_ids       = list(string)
     })
-    enabled                      = optional(bool, false)
-    new_launch_enabled           = optional(bool, false)
-    observation_events_enabled   = optional(bool, false)
-    observation_schedule_enabled = optional(bool, false)
-    schedule_enabled             = optional(bool, false)
-    route                        = optional(object({ hosted_zone_id = string, base_host = string }))
-    route_enabled                = optional(bool, false)
-    route_creation_enabled       = optional(bool, false)
-    terminal_events_enabled      = optional(bool, false)
-    execution_inspection_enabled = optional(bool, false)
-    retained_workflow_versions   = optional(set(string), [])
+    enabled                          = optional(bool, false)
+    new_launch_enabled               = optional(bool, false)
+    observation_events_enabled       = optional(bool, false)
+    observation_schedule_enabled     = optional(bool, false)
+    schedule_enabled                 = optional(bool, false)
+    route                            = optional(object({ hosted_zone_id = string, base_host = string }))
+    route_enabled                    = optional(bool, false)
+    route_creation_enabled           = optional(bool, false)
+    terminal_events_enabled          = optional(bool, false)
+    execution_inspection_enabled     = optional(bool, false)
+    execution_reconciliation_enabled = optional(bool, false)
+    retained_workflow_versions       = optional(set(string), [])
   }))
   default  = {}
   nullable = false
@@ -108,23 +109,24 @@ variable "native_resume_preparation_releases" {
 
 }
 module "native_resume_preparation" {
-  depends_on                   = [module.platform]
-  source                       = "../../modules/native-resume-preparation"
-  for_each                     = var.native_resume_preparation_releases
-  account_id                   = module.platform.account_id
-  environment                  = "staging"
-  release                      = each.value.release
-  enabled                      = each.value.enabled
-  new_launch_enabled           = each.value.new_launch_enabled
-  observation_events_enabled   = each.value.observation_events_enabled
-  observation_schedule_enabled = each.value.observation_schedule_enabled
-  schedule_enabled             = each.value.schedule_enabled
-  route                        = each.value.route
-  route_enabled                = each.value.route_enabled
-  route_creation_enabled       = each.value.route_creation_enabled
-  terminal_events_enabled      = each.value.terminal_events_enabled
-  execution_inspection_enabled = each.value.execution_inspection_enabled
-  retained_workflow_versions   = each.value.retained_workflow_versions
+  depends_on                       = [module.platform]
+  source                           = "../../modules/native-resume-preparation"
+  for_each                         = var.native_resume_preparation_releases
+  account_id                       = module.platform.account_id
+  environment                      = "staging"
+  release                          = each.value.release
+  enabled                          = each.value.enabled
+  new_launch_enabled               = each.value.new_launch_enabled
+  observation_events_enabled       = each.value.observation_events_enabled
+  observation_schedule_enabled     = each.value.observation_schedule_enabled
+  schedule_enabled                 = each.value.schedule_enabled
+  route                            = each.value.route
+  route_enabled                    = each.value.route_enabled
+  route_creation_enabled           = each.value.route_creation_enabled
+  terminal_events_enabled          = each.value.terminal_events_enabled
+  execution_inspection_enabled     = each.value.execution_inspection_enabled
+  execution_reconciliation_enabled = each.value.execution_reconciliation_enabled
+  retained_workflow_versions       = each.value.retained_workflow_versions
 }
 
 output "native_resume_release_bindings" {

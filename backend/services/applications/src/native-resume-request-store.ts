@@ -18,6 +18,14 @@ export interface NativeResumeRequestClaim {
   workflowArn: string;
   application: NativeResumePreparationScope;
 }
+export type NativeResumeExecutionTerminalStatus = "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "STOPPED";
+export interface NativeResumeExecutionObservationClaim {
+  eventId: string;
+  workflowArn: string;
+  executionArn: string;
+  inspectionToken: string;
+  terminalStatus: NativeResumeExecutionTerminalStatus | null;
+}
 /** Owns only Applications metadata. Delivery retries retain the original numeric workflow
  * version; source/generation capture is a Documents responsibility. No AWS calls in SQL. */
 export class PostgresNativeResumeRequestStore {
@@ -177,6 +185,88 @@ export class PostgresNativeResumeRequestStore {
       executionArn: row.resume_execution_arn,
       dispatchResult: row.resume_dispatch_result,
     }));
+  }
+  /** Fair, bounded observation independent of candidate/packet changes. A crash leaves a
+   * five-minute lease; the next claim changes its token and fences an older acknowledgement. */
+  async claimExecutionObservations(
+    workflowArns: readonly string[],
+  ): Promise<NativeResumeExecutionObservationClaim[]> {
+    this.check();
+    const arns = [...workflowArns];
+    if (
+      !arns.length ||
+      arns.length > 8 ||
+      new Set(arns).size !== arns.length ||
+      arns.some(
+        (arn) => !isPreparationFunctionArn(arn) || !arn.startsWith("arn:aws:lambda:us-east-2:"),
+      )
+    )
+      throw unavailable();
+    return this.sql.begin(async (tx) => {
+      const token = uuidv7();
+      const rows = await tx<
+        Array<{
+          id: string;
+          resume_workflow_arn: string;
+          resume_execution_arn: string;
+          resume_execution_terminal_status: NativeResumeExecutionTerminalStatus | null;
+        }>
+      >`
+        WITH due AS (
+          SELECT id FROM applications.outbox
+          WHERE event_type='application.resume-preparation.requested.v1' AND status='published'
+            AND resume_dispatch_result='started' AND resume_workflow_arn IN ${tx(arns)}
+            AND resume_execution_notified_at IS NULL
+            AND resume_execution_terminal_status IS DISTINCT FROM 'SUCCEEDED'
+            AND (resume_execution_checked_at IS NULL OR resume_execution_checked_at <= clock_timestamp()-interval '5 minutes')
+          ORDER BY resume_execution_checked_at NULLS FIRST,id LIMIT 2 FOR UPDATE SKIP LOCKED
+        )
+        UPDATE applications.outbox e SET resume_execution_checked_at=clock_timestamp(),resume_execution_inspection_token=${token}
+        FROM due WHERE e.id=due.id
+        RETURNING e.id,e.resume_workflow_arn,e.resume_execution_arn,e.resume_execution_terminal_status`;
+      this.check();
+      return rows.map((row) => ({
+        eventId: row.id,
+        workflowArn: row.resume_workflow_arn,
+        executionArn: row.resume_execution_arn,
+        inspectionToken: token,
+        terminalStatus: row.resume_execution_terminal_status,
+      }));
+    });
+  }
+  /** Persist positive terminal observation before notice delivery. Null is unresolved and never
+   * erases an earlier positive observation. A notice receipt is recorded only after queue ACK. */
+  async recordExecutionObservation(
+    claim: NativeResumeExecutionObservationClaim,
+    terminalStatus: NativeResumeExecutionTerminalStatus | null,
+    notified = false,
+  ): Promise<boolean> {
+    this.check();
+    const fixed = structuredClone(claim);
+    if (
+      !uuid.test(fixed.inspectionToken) ||
+      !matchesPreparationExecutionArn(
+        fixed.executionArn,
+        fixed.workflowArn,
+        nativeResumeExecutionName(fixed.eventId),
+      ) ||
+      (terminalStatus !== null &&
+        !["SUCCEEDED", "FAILED", "TIMED_OUT", "STOPPED"].includes(terminalStatus)) ||
+      (notified && (terminalStatus === null || terminalStatus === "SUCCEEDED"))
+    )
+      throw unavailable();
+    return this.sql.begin(async (tx) => {
+      const rows = await tx`
+        UPDATE applications.outbox SET resume_execution_terminal_status=COALESCE(resume_execution_terminal_status,${terminalStatus}),
+          resume_execution_notified_at=CASE WHEN ${notified} THEN COALESCE(resume_execution_notified_at,clock_timestamp()) ELSE resume_execution_notified_at END
+        WHERE id=${fixed.eventId} AND event_type='application.resume-preparation.requested.v1'
+          AND resume_dispatch_result='started' AND resume_workflow_arn=${fixed.workflowArn}
+          AND resume_execution_arn=${fixed.executionArn} AND resume_execution_inspection_token=${fixed.inspectionToken}
+          AND (resume_execution_terminal_status IS NULL OR ${terminalStatus}::text IS NULL OR resume_execution_terminal_status=${terminalStatus})
+        RETURNING id`;
+      this.check();
+      return rows.length === 1;
+    });
   }
   private async finish(
     fixed: NativeResumeRequestClaim,

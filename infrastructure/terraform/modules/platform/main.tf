@@ -174,7 +174,7 @@ data "aws_iam_policy_document" "platform_kms" {
       condition {
         test     = "ArnEquals"
         variable = "aws:SourceArn"
-        values   = concat(values(local.native_resume_observer_rules), values(local.native_resume_terminal_rules))
+        values   = concat(values(local.native_resume_observer_rules), values(local.native_resume_terminal_rules), values(local.native_resume_sweep_rules), values(local.native_resume_execution_rules))
       }
     }
   }
@@ -1830,7 +1830,7 @@ resource "aws_iam_role_policy" "gateway_lambda" {
 }
 
 resource "aws_security_group" "secrets_endpoint" {
-  count       = local.material_private_configured || local.preparation_configured || local.native_resume_rpc_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
+  count       = local.native_resume_reconciliation_configured || local.material_private_configured || local.preparation_configured || local.native_resume_rpc_configured || length(var.native_resume_secret_readers) > 0 || local.audit_retention_deployed || local.job_retention_deployed || var.deploy_gateway_lambda || var.deploy_serverless_outbox || var.deploy_profile_readiness_durable || local.document_complete_dark_enabled || var.deploy_ingestion_runtime ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-secrets-endpoint-"
   description = "TLS from private application functions to the Secrets Manager endpoint"
   vpc_id      = aws_vpc.this.id
@@ -2667,7 +2667,25 @@ resource "aws_iam_role_policy" "outbox_reconciler" {
 }
 
 data "aws_iam_policy_document" "outbox_sqs_endpoint" {
-  count = local.preparation_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed ? 1 : 0
+  count = local.native_resume_reconciliation_configured || local.preparation_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed ? 1 : 0
+  dynamic "statement" {
+    for_each = local.native_resume_reconciliation_releases
+    content {
+      sid       = "ResumeExecutionNotice${statement.key}"
+      effect    = "Allow"
+      actions   = ["sqs:SendMessage"]
+      resources = [statement.value.queue_arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-observer-r${statement.key}"]
+      }
+    }
+  }
   dynamic "statement" {
     for_each = local.preparation_queue_access
     content {
@@ -2794,7 +2812,7 @@ data "aws_iam_policy_document" "outbox_sqs_endpoint" {
 }
 
 resource "aws_vpc_endpoint" "sqs" {
-  count               = (local.preparation_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = (local.native_resume_reconciliation_configured || local.preparation_configured || var.deploy_serverless_outbox || local.document_complete_dark_enabled || var.deploy_ingestion_runtime || local.d2_community_deployed) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.sqs"
   vpc_endpoint_type   = "Interface"

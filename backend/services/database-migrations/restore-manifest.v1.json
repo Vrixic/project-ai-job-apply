@@ -50,6 +50,10 @@
         {
           "version": "0011_native_resume_execution_receipts",
           "checksum": "d2b92f33fac9cbe01a3ea18758ce8ae0b4ea5f95a5b43125d59c4c3fb422b212"
+        },
+        {
+          "version": "0012_native_resume_execution_observation",
+          "checksum": "5b0313126aec5a45d5905bf733af0aa19db7a368217010c841bdcd2913375249"
         }
       ],
       "relations": [

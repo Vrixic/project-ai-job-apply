@@ -985,3 +985,12 @@ checks pass; 207 restore-contract, 697 replay and 908 role checks pass. The froz
 distinguishes the initial failure, corrected `dd61044a` run and unpublished image. D1/D3 remain
 In progress; managed/live acceptance and existing advisories remain open. Development web
 restored, Docker/WSL stopped, PC on; CI/CD deferred.
+
+
+2026-10-07 D1-013/D3-079 implements default-off scheduled original resume execution observation,
+with leased/token-fenced SQL claims and retained positive failures before scalar queue delivery.
+It preserves original published receipts and does not replay or perform cleanup. The migration
+package now contains 75 migrations/93 relations; previous image/artifacts require refresh.
+Focused workflow, Terraform, restore and package checks pass; final SQL/repository checks and
+clean-source packaging are in progress. Managed recovery drill/activation remain pending.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#scheduled-original-execution-reconciliation).
