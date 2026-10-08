@@ -1,6 +1,7 @@
 variable "native_preparation_releases" {
   description = "Original native preparation releases; retain until drain. Empty grants no new authority."
   type = map(object({
+    route                      = optional(object({ hosted_zone_id = string, base_host = string }))
     database_secret_arn        = string
     platform_kms_key_arn       = string
     packet_encryption_key_arn  = string
@@ -15,6 +16,7 @@ variable "native_preparation_releases" {
   validation {
     condition = length(var.native_preparation_releases) <= 4 && (length(var.native_preparation_releases) == 0 || var.aws_region == "us-east-2") && alltrue([for id, r in var.native_preparation_releases :
       can(regex("^[a-z0-9]{1,12}$", id)) &&
+      (r.route == null ? true : (can(regex("^Z[A-Z0-9]{1,31}$", r.route.hosted_zone_id)) && length(r.route.base_host) <= 200 && can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.])+[a-z]{2,63}$", r.route.base_host)))) &&
       can(regex("^arn:aws:secretsmanager:us-east-2:${data.aws_caller_identity.current.account_id}:secret:ai-job-apply/${var.environment}/[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{6}$", r.database_secret_arn)) &&
       alltrue([for key in [r.platform_kms_key_arn, r.packet_encryption_key_arn, r.packet_fingerprint_key_arn, r.queue_kms_key_arn] : can(regex("^arn:aws:kms:us-east-2:${data.aws_caller_identity.current.account_id}:key/[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$", key))]) &&
       length(distinct([r.platform_kms_key_arn, r.packet_encryption_key_arn, r.packet_fingerprint_key_arn])) == 3 &&
@@ -35,8 +37,11 @@ locals {
       activity  = "arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:ai-job-apply-${var.environment}-prep-activity-${id}"
     }
   }]...)
-  preparation_boundary_arns = [for id in keys(var.native_preparation_releases) : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/ai-job-apply-${var.environment}-prep-runtime-${id}-boundary"]
-  preparation_stack_arns    = [for id in keys(var.native_preparation_releases) : "arn:aws:cloudformation:us-east-2:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-prep-durable-${id}/*"]
+  preparation_boundary_arns = concat(
+    [for id in keys(var.native_preparation_releases) : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/ai-job-apply-${var.environment}-prep-runtime-${id}-boundary"],
+    [for id, r in var.native_preparation_releases : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/ai-job-apply-${var.environment}-prep-durable-${id}-boundary" if r.route != null]
+  )
+  preparation_stack_arns = [for id in keys(var.native_preparation_releases) : "arn:aws:cloudformation:us-east-2:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-prep-durable-${id}/*"]
 }
 locals {
   preparation_role_sets = { for id, r in var.native_preparation_releases : id => {
@@ -92,4 +97,38 @@ resource "aws_iam_policy" "native_preparation_boundary" {
 }
 output "native_preparation_boundary_arns" {
   value = { for id, policy in aws_iam_policy.native_preparation_boundary : id => policy.arn }
+}
+
+resource "aws_iam_policy" "native_preparation_durable_boundary" {
+  for_each    = { for id, r in var.native_preparation_releases : id => r if r.route != null }
+  name        = "ai-job-apply-${var.environment}-prep-durable-${each.key}-boundary"
+  description = "Original preparation durable routing ceiling; no SQL, packet cryptography or task launch."
+  policy = jsonencode({ Version = "2012-10-17", Statement = [for s in [
+    { Sid = "Logs", Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "arn:aws:logs:us-east-2:${data.aws_caller_identity.current.account_id}:log-group:/ai-job-apply/${var.environment}/application:*" },
+    { Sid = "Configuration", Effect = "Allow", Action = ["kms:Decrypt"], Resource = each.value.platform_kms_key_arn },
+    { Sid = "Checkpoints", Effect = "Allow", Action = ["lambda:CheckpointDurableExecution", "lambda:GetDurableExecutionState"], Resource = "${local.preparation_actors["${each.key}/durable"].function}:*" },
+    { Sid = "OriginalActivity", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = "${local.preparation_actors["${each.key}/activity"].function}:*" },
+    { Sid = "OriginalRouteControl", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = each.value.launcher_function_arn },
+    { Sid = "OriginalRecords", Effect = "Allow", Action = ["route53:ChangeResourceRecordSets"], Resource = "arn:aws:route53:::hostedzone/${each.value.route.hosted_zone_id}",
+      Condition = {
+        "ForAllValues:StringEquals" = { "route53:ChangeResourceRecordSetsRecordTypes" = ["A"], "route53:ChangeResourceRecordSetsActions" = ["CREATE", "DELETE"] },
+        "ForAllValues:StringLike"   = { "route53:ChangeResourceRecordSetsNormalizedRecordNames" = ["????????-????-7???-????-????????????.${each.value.route.base_host}"] }
+      }
+    },
+    { Sid = "InspectOriginalZone", Effect = "Allow", Action = ["route53:ListResourceRecordSets"], Resource = "arn:aws:route53:::hostedzone/${each.value.route.hosted_zone_id}" },
+    { Sid = "ObserveOriginalChange", Effect = "Allow", Action = ["route53:GetChange"], Resource = "arn:aws:route53:::change/*" }
+  ] : merge(s, { Condition = merge(try(s.Condition, {}), { ArnEquals = { "aws:PrincipalArn" = [local.preparation_actors["${each.key}/durable"].principal] } }) })] })
+  lifecycle {
+    precondition {
+      condition     = length(jsonencode(local.github_deploy_policy)) <= 6144
+      error_message = "Combined deployment ceiling exceeds IAM size; retain unresolved original releases."
+    }
+    postcondition {
+      condition     = length(self.policy) <= 6144
+      error_message = "Original preparation durable boundary exceeds IAM size."
+    }
+  }
+}
+output "native_preparation_durable_boundary_arns" {
+  value = { for id, policy in aws_iam_policy.native_preparation_durable_boundary : id => policy.arn }
 }

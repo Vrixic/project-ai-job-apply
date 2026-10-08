@@ -515,3 +515,36 @@ verifier pass; subsequent typecheck/test/build commands ran separately. Logs are
 `.tmp/d3-preparation-stage-{verify,typecheck,tests,build,format,lint}.log`.
 The owned temporary PostgreSQL container was removed; Docker Desktop and WSL are stopped.
 The PC remains on. No browser sign-in or previously accepted human checks were repeated.
+
+
+## Preparation routing release composition
+
+Preparation Terraform and both environment maps now forward the optional original DNS binding,
+route lifecycle flag and independent creation flag. Routed intake requires route creation;
+original drain/cleanup can remain enabled with creation off. The activity and durable runtime
+receive matching route mode and the original numeric material-control target. Configured routing
+has a 3600-second execution window for preparation plus expiry/cleanup; legacy configuration
+retains 900 seconds. The version identity includes timeout as well as environment configuration.
+
+Only the routed durable role receives A-record CREATE/DELETE for UUIDv7 allocation hostnames
+within the exact original hosted zone, zone inspection and change observation. Bootstrap gives
+that actor a separate principal-bound ceiling; the original shared ceiling remains unchanged.
+This avoids exceeding the 6144-character managed-policy limit without broadening other roles.
+No UPSERT, SQL secret, packet cryptography, ECS launch or object access reaches the durable actor.
+Bootstrap/workload/control route inputs must agree and stay retained until original work drains.
+
+An upgrade check also found that retaining a workflow did not retain its activity invocation
+permission. `retained_activity_versions` now preserves an explicit bounded numeric set alongside
+the current activity; callers must list activities referenced by their retained workflows.
+Existing actor permissions and empty environment defaults are preserved. These versioned flags
+do not disable an already published version remotely.
+
+Local Terraform 1.16.2: 17 preparation module scenarios and five bootstrap scenarios pass,
+including routed cleanup, exact grants, policy size, resume coexistence and retained activity
+access. Development and staging validate. Infrastructure policy validation, touched JavaScript
+Biome and whitespace checks pass. No database/runtime source changes in this batch; the preceding
+38/39/23 local typecheck/test/build results remain the runtime evidence. The broad verifier's
+port-3000 sign-in-fixture conflict remains recorded above; it was not rerun for these Terraform
+and packaging changes. Docker/WSL were not started. No AWS publication, deployment or activation.
+Updated builders include route-protocol default-off refusal in the actual bundled entrypoints.
+Rebuilt immutable artifacts and managed synthetic acceptance remain before activation.

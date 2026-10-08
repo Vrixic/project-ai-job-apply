@@ -73,3 +73,27 @@ operations plus exact existing vault/export/deletion-locator owners when configu
 owners receive no packet-key access. Include any newly composed packet owner explicitly before
 activation. Managed launch,
 owner/task/route composition and acceptance remain.
+
+
+Optional `route` pins the hosted zone and base host to the original numeric material control.
+Supply the same route to bootstrap and the material-control release; retain it unchanged until
+original work drains. Routing gives only the durable actor a separate
+`prep-durable-${release_id}-boundary`. Its policy allows the original numeric control, original
+activity, durable checkpoints and A-record CREATE/DELETE for UUIDv7 allocation names within that
+zone. No UPSERT, owner database, packet keys or task launch is granted. Other actors retain their
+existing shared boundary. Bootstrap must create the separate ceiling before workload role updates.
+
+`route_enabled` switches both activity and workflow to stage/propagate/attach.
+`route_creation_enabled` independently controls creation; configured routing requires it before
+new intake. Leave routing and its permissions available for cleanup when creation is disabled.
+Configured routing uses a 3600-second durable execution window for preparation and 30-minute
+material expiry/cleanup; legacy unconfigured releases retain 900 seconds. Versioned Lambda
+configuration is immutable: changes publish new versions, so retain original numeric functions,
+roles and route bindings for existing work. These flags do not remotely disable retained versions.
+Both environment maps forward these fields and still default empty/all-disabled.
+
+When publishing a changed activity, include the numeric activities referenced by retained
+workflows in `retained_activity_versions` (up to nineteen, in addition to current). The durable
+role's identity policy grants that exact set; keeping only `retained_versions` would retain a
+workflow without permission to invoke its earlier activity. Do not repoint an original release's
+control ARN/route binding while any retained execution still uses it.

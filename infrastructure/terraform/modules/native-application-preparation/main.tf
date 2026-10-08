@@ -36,8 +36,8 @@ variable "intake_enabled" {
   default  = false
   nullable = false
   validation {
-    condition     = !var.intake_enabled || (var.enabled && var.launch_enabled && var.recovery_enabled)
-    error_message = "New intake requires runtime, launch and recovery."
+    condition     = !var.intake_enabled || (var.enabled && var.launch_enabled && var.recovery_enabled && (var.route == null || (var.route_enabled && var.route_creation_enabled)))
+    error_message = "New intake requires runtime, launch, recovery and any configured route creation."
   }
 }
 variable "drain_enabled" {
@@ -55,6 +55,36 @@ variable "recovery_enabled" {
   default  = false
   nullable = false
 }
+variable "route" {
+  description = "Original DNS binding; must match the pinned material control and remain until original work drains."
+  type        = object({ hosted_zone_id = string, base_host = string })
+  default     = null
+  validation {
+    condition = var.route == null ? true : (
+      var.release != null && can(regex("^Z[A-Z0-9]{1,31}$", var.route.hosted_zone_id)) &&
+      length(var.route.base_host) <= 200 && can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.])+[a-z]{2,63}$", var.route.base_host))
+    )
+    error_message = "Routing requires an original release, exact hosted zone and lowercase base hostname."
+  }
+}
+variable "route_enabled" {
+  type     = bool
+  default  = false
+  nullable = false
+  validation {
+    condition     = !var.route_enabled || (var.enabled && var.route != null)
+    error_message = "Route lifecycle requires the preparation runtime and original DNS binding."
+  }
+}
+variable "route_creation_enabled" {
+  type     = bool
+  default  = false
+  nullable = false
+  validation {
+    condition     = !var.route_creation_enabled || var.route_enabled
+    error_message = "Route creation requires lifecycle; retain lifecycle for cleanup when creation stops."
+  }
+}
 variable "retained_versions" {
   description = "Original numeric workflow versions retained for dispatch and settlement."
   type        = set(string)
@@ -62,6 +92,15 @@ variable "retained_versions" {
   validation {
     condition     = length(var.retained_versions) <= 19 && alltrue([for v in var.retained_versions : can(regex("^[1-9][0-9]{0,8}$", v))])
     error_message = "Retain at most nineteen numeric versions of this original workflow."
+  }
+}
+variable "retained_activity_versions" {
+  description = "Original numeric activity versions referenced by retained workflows; retain until those executions drain."
+  type        = set(string)
+  default     = []
+  validation {
+    condition     = length(var.retained_activity_versions) <= 19 && alltrue([for v in var.retained_activity_versions : can(regex("^[1-9][0-9]{0,8}$", v))])
+    error_message = "Retain at most nineteen original numeric activity versions."
   }
 }
 variable "release" {
@@ -127,6 +166,7 @@ locals {
     APPLICATION_PREPARATION_RETAINED_FUNCTION_ARNS = jsonencode(local.workflow_arns)
   } : {}
   activity_environment = local.deployed ? merge(local.common, local.database, {
+    NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED  = tostring(var.route_enabled)
     NATIVE_APPLICATION_PREPARATION_ENABLED        = tostring(var.enabled)
     NATIVE_APPLICATION_PREPARATION_LAUNCH_ENABLED = tostring(var.launch_enabled)
     NATIVE_MATERIAL_LAUNCH_FUNCTION_ARN           = var.release.launcher_function_arn
@@ -154,6 +194,9 @@ locals {
   durable_environment = local.deployed ? merge(local.common, {
     APPLICATION_PREPARATION_DURABLE_ENABLED       = tostring(var.enabled)
     APPLICATION_PREPARATION_ACTIVITY_FUNCTION_ARN = aws_lambda_function.activity[0].qualified_arn
+    NATIVE_APPLICATION_PREPARATION_ROUTE_ENABLED  = tostring(var.route_enabled)
+    NATIVE_MATERIAL_ROUTE_CREATION_ENABLED        = tostring(var.route_creation_enabled)
+    NATIVE_MATERIAL_LAUNCH_FUNCTION_ARN           = var.release.launcher_function_arn
     RELEASE_SHA                                   = var.release.artifacts.durable.sha256
   }) : {}
 }
@@ -164,7 +207,7 @@ resource "aws_iam_role" "runtime" {
   for_each = local.kinds
   name     = local.names[each.key]
   # Separately reviewed bootstrap owns these ceilings; this module cannot broaden them.
-  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/ai-job-apply-${var.environment}-prep-runtime-${var.release.release_id}-boundary"
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/ai-job-apply-${var.environment}-prep-${each.key == "durable" && var.route != null ? "durable" : "runtime"}-${var.release.release_id}-boundary"
   assume_role_policy   = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Principal = { Service = "lambda.amazonaws.com" } }] })
 }
 resource "aws_iam_role_policy" "base" {
@@ -266,11 +309,21 @@ resource "aws_iam_role_policy" "durable" {
   count = local.deployed ? 1 : 0
   name  = "original-workflow"
   role  = aws_iam_role.runtime["durable"].id
-  policy = jsonencode({ Version = "2012-10-17", Statement = [
+  policy = jsonencode({ Version = "2012-10-17", Statement = concat([
     { Effect = "Allow", Action = ["lambda:CheckpointDurableExecution", "lambda:GetDurableExecutionState"], Resource = "${local.durable_arn}:*" },
-    { Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = aws_lambda_function.activity[0].qualified_arn },
+    { Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = sort(distinct(concat([aws_lambda_function.activity[0].qualified_arn], [for v in var.retained_activity_versions : "arn:aws:lambda:us-east-2:${var.account_id}:function:${local.names.activity}:${v}"]))) },
     { Effect = "Deny", Action = ["secretsmanager:*", "rds-db:*"], Resource = "*" }
-  ] })
+    ], flatten([for route in var.route[*] : [
+      { Sid = "OriginalRouteControl", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = var.release.launcher_function_arn },
+      { Sid = "OriginalRecords", Effect = "Allow", Action = ["route53:ChangeResourceRecordSets"], Resource = "arn:aws:route53:::hostedzone/${route.hosted_zone_id}",
+        Condition = {
+          "ForAllValues:StringEquals" = { "route53:ChangeResourceRecordSetsRecordTypes" = ["A"], "route53:ChangeResourceRecordSetsActions" = ["CREATE", "DELETE"] },
+          "ForAllValues:StringLike"   = { "route53:ChangeResourceRecordSetsNormalizedRecordNames" = ["????????-????-7???-????-????????????.${route.base_host}"] }
+        }
+      },
+      { Sid = "InspectOriginalZone", Effect = "Allow", Action = ["route53:ListResourceRecordSets"], Resource = "arn:aws:route53:::hostedzone/${route.hosted_zone_id}" },
+      { Sid = "ObserveOriginalChange", Effect = "Allow", Action = ["route53:GetChange"], Resource = "arn:aws:route53:::change/*" }
+  ]])) })
 }
 resource "aws_cloudformation_stack" "durable" {
   count      = local.deployed ? 1 : 0
@@ -285,12 +338,12 @@ resource "aws_cloudformation_stack" "durable" {
         MemorySize    = 512, Timeout = 30, ReservedConcurrentExecutions = 2,
         Code          = { S3Bucket = var.release.artifact_bucket, S3Key = var.release.artifacts.durable.key, S3ObjectVersion = var.release.artifacts.durable.version_id },
         KmsKeyArn     = var.release.platform_kms_key_arn,
-        DurableConfig = { ExecutionTimeout = 900, RetentionPeriodInDays = 7, KMSKeyArn = var.release.platform_kms_key_arn },
+        DurableConfig = { ExecutionTimeout = var.route == null ? 900 : 3600, RetentionPeriodInDays = 7, KMSKeyArn = var.release.platform_kms_key_arn },
         Environment   = { Variables = local.durable_environment },
         LoggingConfig = { LogFormat = "JSON", ApplicationLogLevel = "ERROR", SystemLogLevel = "WARN", LogGroup = local.log_group }
       } }
       DurableVersion = { Type = "AWS::Lambda::Version", DeletionPolicy = "Retain", UpdateReplacePolicy = "Retain", Properties = {
-        FunctionName = { Ref = "DurableFunction" }, CodeSha256 = var.release.artifacts.durable.base64sha256, Description = "Immutable ${sha256(jsonencode(local.durable_environment))}"
+        FunctionName = { Ref = "DurableFunction" }, CodeSha256 = var.release.artifacts.durable.base64sha256, Description = "Immutable ${sha256(jsonencode({ environment = local.durable_environment, execution_timeout = var.route == null ? 900 : 3600 }))}"
       } }
     }
     Outputs = { DurableVersionArn = { Value = { "Fn::Join" = [":", [{ "Fn::GetAtt" = ["DurableFunction", "Arn"] }, { "Fn::GetAtt" = ["DurableVersion", "Version"] }]] } } }

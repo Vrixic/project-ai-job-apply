@@ -19,12 +19,16 @@ variable "native_preparation_releases" {
       subnet_ids                 = list(string)
       security_group_ids         = list(string)
     })
-    enabled           = optional(bool, false)
-    launch_enabled    = optional(bool, false)
-    intake_enabled    = optional(bool, false)
-    recovery_enabled  = optional(bool, false)
-    drain_enabled     = optional(bool, false)
-    retained_versions = optional(set(string), [])
+    route                      = optional(object({ hosted_zone_id = string, base_host = string }))
+    route_enabled              = optional(bool, false)
+    route_creation_enabled     = optional(bool, false)
+    enabled                    = optional(bool, false)
+    launch_enabled             = optional(bool, false)
+    intake_enabled             = optional(bool, false)
+    recovery_enabled           = optional(bool, false)
+    drain_enabled              = optional(bool, false)
+    retained_versions          = optional(set(string), [])
+    retained_activity_versions = optional(set(string), [])
   }))
   default  = {}
   nullable = false
@@ -34,18 +38,22 @@ variable "native_preparation_releases" {
   }
 }
 module "native_preparation" {
-  depends_on        = [module.platform]
-  for_each          = var.native_preparation_releases
-  source            = "../../modules/native-application-preparation"
-  account_id        = module.platform.account_id
-  environment       = "staging"
-  release           = each.value.release
-  enabled           = each.value.enabled
-  launch_enabled    = each.value.launch_enabled
-  intake_enabled    = each.value.intake_enabled
-  recovery_enabled  = each.value.recovery_enabled
-  drain_enabled     = each.value.drain_enabled
-  retained_versions = each.value.retained_versions
+  depends_on                 = [module.platform]
+  for_each                   = var.native_preparation_releases
+  source                     = "../../modules/native-application-preparation"
+  account_id                 = module.platform.account_id
+  environment                = "staging"
+  release                    = each.value.release
+  route                      = each.value.route
+  route_enabled              = each.value.route_enabled
+  route_creation_enabled     = each.value.route_creation_enabled
+  enabled                    = each.value.enabled
+  launch_enabled             = each.value.launch_enabled
+  intake_enabled             = each.value.intake_enabled
+  recovery_enabled           = each.value.recovery_enabled
+  drain_enabled              = each.value.drain_enabled
+  retained_versions          = each.value.retained_versions
+  retained_activity_versions = each.value.retained_activity_versions
 }
 output "native_preparation_bindings" {
   value = { for id, runtime in module.native_preparation : id => {

@@ -46,6 +46,19 @@ const artifact = await buildLambdaArtifact({
         bundle.handler({ ...input, body: "Synthetic forbidden" }, context),
         /ApplicationPreparationActivityInputRejected/u,
       );
+      const stage = {
+        schemaVersion: 1,
+        protocol: "native-preparation-route.v1",
+        eventId: id(1),
+        preparationId: id(2),
+        action: "stage",
+      };
+      assert.deepEqual(await bundle.handler(stage, context), {
+        schemaVersion: 1,
+        request: stage,
+        outcome: "pending",
+        original: null,
+      });
       assert.equal(effects, 0);
     } finally {
       globalThis.fetch = savedFetch;

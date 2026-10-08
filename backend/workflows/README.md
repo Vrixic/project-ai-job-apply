@@ -331,6 +331,6 @@ without packet mutation; attachment reloads current context and compares the exa
 reference after DNS propagation. The durable runtime requires the original numeric
 `NATIVE_MATERIAL_LAUNCH_FUNCTION_ARN`; `NATIVE_MATERIAL_ROUTE_CREATION_ENABLED` independently gates
 new DNS writes while preserving cleanup. Flags default off. Routing refuses legacy advance.
-Preparation Terraform/Route53 ceiling and longer execution timeout are not wired yet; do not
-activate this mode with the existing 900-second deployment configuration. See
+Preparation Terraform now supplies a separate durable Route53 ceiling and a 3600-second
+execution window when routing is configured. All flags remain off until managed acceptance. See
 [local evidence](../../docs/product/delivery/evidence/d3-native-application-preparation-release-2026-10-07.md#connected-preparation-staging-and-attachment).

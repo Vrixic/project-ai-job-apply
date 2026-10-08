@@ -5017,3 +5017,11 @@ hosted CI/CD stays deferred until production launch. No cloud action; PC stays o
 Batch-wide local typecheck/test/build passed (38/39/23 tasks); full verifier stopped on the
 existing development server's port-3000 collision with sign-in fixtures. Server preserved.
 Docker/WSL stopped; PC remains on. See the linked staging/attachment evidence for limits.
+
+
+2026-10-07 preparation release now wires routed staging/attachment flags, scoped durable DNS
+permissions, a full cleanup timeout and retained numeric activity access. All 22 affected
+Terraform scenarios pass and both environments validate.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#preparation-routing-release-composition).
+No cloud action or activation; artifact rebuilding and managed acceptance remain. D1/D3 In progress;
+CI/CD deferred, Docker/WSL stopped and PC on.

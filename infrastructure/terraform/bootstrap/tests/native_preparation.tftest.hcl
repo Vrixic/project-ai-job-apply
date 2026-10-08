@@ -74,11 +74,36 @@ run "foreign_launcher_refused" {
 run "resume_and_cover_letter_coexist" {
   command = plan
   variables {
-    native_preparation_releases    = { r1 = { "database_secret_arn" : "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/staging/database-Abc123", "platform_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012", "packet_encryption_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/22345678-1234-4234-8234-123456789012", "packet_fingerprint_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/32345678-1234-4234-8234-123456789012", "launcher_function_arn" : "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-staging-native-launch:9", "queue_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-preparation", "dead_letter_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-preparation-dlq", "queue_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012" } }
+    native_preparation_releases    = { r1 = { "route" : { "hosted_zone_id" : "ZSYNTHETIC", "base_host" : "materials.example.com" }, "database_secret_arn" : "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/staging/database-Abc123", "platform_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012", "packet_encryption_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/22345678-1234-4234-8234-123456789012", "packet_fingerprint_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/32345678-1234-4234-8234-123456789012", "launcher_function_arn" : "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-staging-native-launch:9", "queue_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-preparation", "dead_letter_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-preparation-dlq", "queue_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012" } }
     native_resume_control_releases = { "7" = { "observer_dead_letter_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-resume-dlq", "cluster_name" : "native-resume", "database_secret_arn" : "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/staging/database-Abc123", "platform_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012", "route" : { "hosted_zone_id" : "ZSYNTHETIC", "base_host" : "resume.example.com" } } }
   }
   assert {
     condition     = length(jsonencode(local.github_deploy_policy)) <= 6144
     error_message = "Combined preparation and resume deployment ceiling must fit IAM."
+  }
+}
+
+run "original_routing_boundary" {
+  command = plan
+  variables { native_preparation_releases = { r1 = { "route" : { "hosted_zone_id" : "ZSYNTHETIC", "base_host" : "materials.example.com" }, "database_secret_arn" : "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/staging/database-Abc123", "platform_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012", "packet_encryption_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/22345678-1234-4234-8234-123456789012", "packet_fingerprint_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/32345678-1234-4234-8234-123456789012", "launcher_function_arn" : "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-staging-native-launch:9", "queue_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-preparation", "dead_letter_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-preparation-dlq", "queue_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012" } } }
+  assert {
+    condition     = alltrue([for s in jsondecode(aws_iam_policy.native_preparation_durable_boundary["r1"].policy).Statement : s.Condition.ArnEquals["aws:PrincipalArn"] == [local.preparation_actors["r1/durable"].principal] if contains(["OriginalRouteControl", "OriginalRecords", "InspectOriginalZone", "ObserveOriginalChange"], s.Sid)])
+    error_message = "Only original durable actor can control routing or mutate DNS."
+  }
+  assert {
+    condition     = one([for s in jsondecode(aws_iam_policy.native_preparation_durable_boundary["r1"].policy).Statement : s.Resource if s.Sid == "OriginalRecords"]) == "arn:aws:route53:::hostedzone/ZSYNTHETIC" && one([for s in jsondecode(aws_iam_policy.native_preparation_durable_boundary["r1"].policy).Statement : s.Condition["ForAllValues:StringLike"]["route53:ChangeResourceRecordSetsNormalizedRecordNames"] if s.Sid == "OriginalRecords"])[0] == "????????-????-7???-????-????????????.materials.example.com"
+    error_message = "Bootstrap must preserve the exact zone and original allocation hostname ceiling."
+  }
+  assert {
+    condition     = length(aws_iam_policy.native_preparation_durable_boundary["r1"].policy) <= 6144
+    error_message = "Routing ceiling must fit the managed-policy limit."
+  }
+  assert {
+    condition     = alltrue([for s in jsondecode(aws_iam_policy.native_preparation_durable_boundary["r1"].policy).Statement : s.Condition.ArnEquals["aws:PrincipalArn"] == [local.preparation_actors["r1/durable"].principal] && length(setintersection(toset(s.Action), toset(["secretsmanager:GetSecretValue", "kms:GenerateMac", "kms:GenerateDataKey", "ecs:RunTask", "s3:GetObject", "iam:PassRole"]))) == 0]) && !anytrue([for s in jsondecode(aws_iam_policy.native_preparation_boundary["r1"].policy).Statement : anytrue([for action in s.Action : startswith(action, "route53:")])])
+    error_message = "Routed durable has no owner/task capabilities; shared ceiling has no DNS capabilities."
+  }
+  assert {
+    condition     = contains(local.additional_runtime_boundary_arns, "arn:aws:iam::111122223333:policy/ai-job-apply-staging-prep-durable-r1-boundary")
+    error_message = "Deployment may attach only the reviewed original routing ceiling."
   }
 }
