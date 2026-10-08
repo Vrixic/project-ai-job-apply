@@ -660,3 +660,30 @@ batch does not rerun that unrelated fixture.
 state the key-first bootstrap/Gateway sequence and exact host alignment. Compatible preparation,
 export/rights and migration releases plus managed synthetic flow acceptance still precede runtime
 activation. D1/D3 remain In progress. No cloud action, CI/CD, frontend edit or Docker work; PC on.
+
+
+## Protected packet export release wiring
+
+The existing private candidate-rights activity already composes the Applications-owned protected
+packet export reader, but Terraform lacked its environment, exact-key IAM and private KMS
+endpoint grant. Both environments now expose `restricted_packet_export_enabled`, false by
+default. Enabling it requires retained packet keys and candidate rights with Applications in the
+accepted owner inventory. The activity receives the existing export flag, encryption key and
+fingerprint identity. Its role and endpoint grant only Decrypt on the packet encryption key,
+restricted to `restricted-application-packet.v1`. No packet writes, data-key generation or MAC
+permission is granted. The original tagged-key workload boundary already covers that decryption.
+Activity publication waits for the export policy and KMS endpoint resources.
+
+Export can establish its KMS path independently of preparation releases; pausing generation need
+not remove candidate portability. Existing Gateway, vault, recovery and preparation endpoint
+grants remain intact. The [platform instructions](../../../../infrastructure/terraform/modules/platform/README.md#gateway-native-material-release)
+require a compatible, verified export release before protected packet writes and retaining keys
+through the lifetime of stored packets.
+
+Fourteen relevant Terraform scenarios pass: five export cases (coexistence, independent export,
+default-off, missing prerequisites, missing Applications owner), eight Gateway native cases and
+the existing shared KMS regression. Development/staging validate, the infrastructure guard and
+whitespace checks pass. AWS plans are mocked. Runtime source, SQL and artifacts are unchanged;
+prior runtime export/restore evidence remains applicable, but no live KMS/export/deletion proof
+is added. Managed publication, exact key binding and synthetic rights acceptance remain. D1/D3
+remain In progress. No AWS mutation, frontend edit, CI/CD or Docker work; PC stays on.

@@ -240,6 +240,7 @@ resource "aws_lambda_function" "profile_readiness_activity" {
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
         CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN        = local.candidate_rights_maintenance_rule_arn
       } : {},
+      local.packet_export_environment,
       var.restricted_answer_export_enabled ? {
         RESTRICTED_ANSWER_EXPORT_ENABLED    = "enabled"
         RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN = aws_kms_key.restricted_answer_vault[0].arn
@@ -265,6 +266,8 @@ resource "aws_lambda_function" "profile_readiness_activity" {
 
   depends_on = [
     aws_iam_role_policy.profile_readiness_activity,
+    aws_iam_role_policy.restricted_packet_export,
+    aws_vpc_endpoint.native_preparation_kms,
     aws_vpc_endpoint.secretsmanager
   ]
 }

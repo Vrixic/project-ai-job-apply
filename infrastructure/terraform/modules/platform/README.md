@@ -255,3 +255,18 @@ requires `resume_preparation_enabled` and enabled resume locations. This composi
 activate vault reuse, publish images, provide DNS/TLS identities, authorize a provider or prove
 managed end-to-end behavior. Initial keys remain retained; changing key identity requires a
 separately reviewed historical-key transition, not replacing these retained resources.
+
+
+Protected packet export uses the separate `restricted_packet_export_enabled` switch, false by
+default. It requires retained packet keys and an enabled candidate-rights activity whose accepted
+owner inventory includes Applications. The existing rights activity receives export configuration,
+the exact encryption key and fingerprint identity. IAM and the private KMS endpoint grant only
+purpose-bound `kms:Decrypt` on the encryption key; fingerprint identity does not grant MAC access.
+The existing tagged-key workload ceiling already admits decryption, so no new bootstrap grant is
+needed for this reader. Its publication waits for the reader policy and KMS endpoint.
+
+This read path works independently of native generation/preparation releases so candidate export
+can remain available during a generation pause. Keep the original keys and reader capability for
+retained protected packets. Enable and verify the compatible export release before starting
+protected packet writes. Historical key replacement and deployed export/deletion acceptance are
+separate release work; no flag supplies those proofs.

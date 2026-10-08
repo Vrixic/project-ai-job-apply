@@ -2452,3 +2452,10 @@ The missing environment/IAM/private-KMS wiring is implemented locally; 23 Terraf
 both environment validations pass. Actual key/host binding and managed candidate-flow acceptance
 remain before activation. D1/D3 remain In progress; CI/CD deferred and PC on.
 [Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#gateway-native-material-release-wiring).
+
+
+2026-10-07 D3-077/D3-079 connects the existing protected-packet export reader to its exact
+retained key and private KMS path, independent of generation releases and default off. Fourteen
+relevant Terraform cases and both environment validations pass. Managed key/release and candidate
+rights acceptance remain; no phase completion or activation. Docker/WSL remain stopped, PC on.
+[Evidence](evidence/d3-native-application-preparation-release-2026-10-07.md#protected-packet-export-release-wiring).
