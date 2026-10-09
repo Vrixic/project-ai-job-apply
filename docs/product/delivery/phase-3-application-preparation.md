@@ -34,7 +34,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Cover-letter request/status UI (D3-081) | Default-off versioned disclosure opt-in, explicit asynchronous requests, retry-stable admission, bounded status polling, current-packet checks and latest-revision cancellation are locally verified, including the full repository verifier and synthetic Chromium checks. Preview availability binds every material-reference scalar, including later versions of the same generation. | Live native preview/download, generation and cleanup acceptance remain open; browser source is tracked in D3-083. |
 | Form-plan safety (D3-082) | Conflicting control claims and duplicate normalized options fail closed; challenges produce no fill/attach actions; restricted fields always require candidate action under the adopted D3-013 threshold. All 20 synthetic SDK tests, the synthetic connected Chromium journey and the full repository verifier pass. | Provider fixtures, first adapter integration and live acceptance remain open. |
 
-| Native browser materials (D3-083) | Owner-selected separate in-memory Auth0 popup PKCE, direct native resume/cover-letter previews, explicit review integration and approved PDF/DOCX downloads are implemented behind a default-off flag. 35 new auth/transport/UI/header regressions and the synthetic Chromium journey pass. | Inspect the existing separate SPA registration and exact public identifiers; controlled same-owner sign-in, live DNS/TLS/CORS and native/provider/release acceptance remain. |
+| Native browser materials (D3-083) | Owner-selected separate in-memory Auth0 popup PKCE, direct native resume/cover-letter previews, explicit review integration and approved PDF/DOCX downloads are implemented behind a default-off flag. 35 new auth/transport/UI/header regressions and the synthetic Chromium journey pass. The owner-approved separate SPA registration is configured and saved grant/origin settings are inspected. | Controlled same-owner sign-in, live DNS/TLS/CORS and native/provider/release acceptance remain. |
 
 ## Decisions and scope changes
 
@@ -77,3 +77,9 @@ browser and managed evidence. The named development provider choice remains dist
 ADR-038 retention approval; no reviewer disposition or release gate was changed.
 
 2026-10-09: The owner selected separate in-memory Auth0 PKCE. D3-083 connects native resume/cover-letter review and four approved downloads; expiry/disconnect revoke local availability. Synthetic Chromium includes ten-minute credential expiry, reconnect, review/approve and confirmed manual history. Live registration identity/configuration is being inspected; no new SPA or permission grant was assumed.
+
+2026-10-09: After inventory inspection found no SPA and an application limit, the owner confirmed
+repurposing Default App. The saved separate SPA has Authorization Code only, the existing exact
+HTTPS candidate origin and one user-delegated platform scope, `applications:read`; machine and
+anonymous platform access remain zero. This is configuration evidence, not live sign-in or
+native acceptance. Public identifiers are held only in ignored local configuration; UI stays off.

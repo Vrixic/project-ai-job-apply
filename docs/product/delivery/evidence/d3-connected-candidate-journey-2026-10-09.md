@@ -115,7 +115,7 @@ runtime test or acceptance is claimed.
 GitHub Actions cannot start jobs: its check annotation reports failed recent account payments
 or an insufficient spending limit. Remote CI is unavailable; billing settings were not changed.
 
-The owner selected separate in-memory Auth0 popup PKCE on October 9 ([ADR-044](../../../adr/044-browser-native-material-identity.md)). D3-083 now implements default-off native browser reads and cover-letter preview/download UI. The local files identify candidate-web and extension clients but no material-SPA mapping; this does not establish that the SPA is absent. The owner expects the separate SPA to exist. The Auth0 dashboard requires sign-in through the available browser before its existing registration can be inspected. No duplicate SPA, permission grant, token-returning BFF or serverless generated-content proxy was created.
+The owner selected separate in-memory Auth0 popup PKCE on October 9 ([ADR-044](../../../adr/044-browser-native-material-identity.md)). D3-083 now implements default-off native browser reads and cover-letter preview/download UI. Subsequent signed-in dashboard inspection found no SPA and an application limit. After the owner explicitly confirmed repurposing Default App, it was configured as the separate native-material SPA with Authorization Code only, exact existing HTTPS candidate origin and only user-delegated `applications:read` on the platform API. Machine and anonymous platform access remain zero. Saved settings were inspected; live exchange and native acceptance remain unverified. No duplicate registration, token-returning BFF or serverless generated-content proxy was created.
 
 Observed-form answer selection, Greenhouse adapter and extension application executor/handoff remain unfinished source work, dependent on the adopted authorized/independently accepted provider-derived fixture matrix. They are not represented as completed or solely external acceptance.
 Live validation additionally needs disposable controlled sign-in/MFA, approved provider/model
@@ -177,3 +177,23 @@ cache was changed; a temporary public configuration check did not grant access. 
 development shutdown verification remains incomplete, even though this batch started no resources.
 
 Configured and default-off Next production builds both passed after the scoped popup-header change. Their emitted route manifests respectively contain the `/jobs` exception and retain only the strict global opener policy. The final local build is default off. At 2026-10-09T17:37Z, Docker Desktop status could not find a running Desktop service and no Docker process existed; `wsl --shutdown` completed with an empty running-distribution list. The PC remains on.
+
+
+### D3-083 owner-approved SPA configuration follow-up, 2026-10-09
+
+The dashboard saved and subsequently displayed the separate SPA name/type, exact callback/logout/
+web origin, RS256/OIDC conformance, code-only grants and one platform user-delegated scope. An
+initial save rejected the inherited client-credentials grant; removing that grant allowed the
+public SPA configuration to save. No secret was copied or rotated. Public client identifiers
+were saved only to ignored local configuration, with the native UI explicitly disabled.
+
+Management API user-delegated access is inherited from its existing API policy; its panel lists
+current-user operations and no per-app grant. No management grant or tenant-wide policy change
+was made. The application requests only the platform audience/scope. Live Auth0 exchange,
+same-owner native access and the managed release remain unverified. Configuration inspection
+does not change D3 completion or independent D1 acceptance.
+
+No AWS runtime was started during this configuration follow-up. Fresh staging readback again
+shows zero RDS instances and ECS running/pending tasks/services. Development still cannot load
+its SSO session, so fresh development shutdown verification remains incomplete. WSL shutdown
+completed with no running distributions, and no Docker process was found; the PC remains on.

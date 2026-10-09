@@ -59,6 +59,14 @@ Auth0 tenant settings, same-owner acceptance, native DNS/TLS/CORS, provider no-r
 remote writer settlement or all-copy disposal. Controlled sign-in/MFA and exact managed release
 acceptance remain required. Independent D1 acceptance, including hosted admin, stays deferred.
 
+On 2026-10-09, dashboard inventory found no SPA and reported an application limit. The owner
+confirmed repurposing Default App as the separate native-material SPA. Saved settings show
+Authorization Code only, the existing exact HTTPS candidate origin, RS256/OIDC conformance and
+one user-delegated platform API scope, `applications:read`; machine and anonymous platform access
+are zero. The inherited Management API user-delegated policy was inspected without a tenant-wide
+change or new management grant. Configuration inspection does not establish live token exchange
+or native acceptance. The material UI remains disabled.
+
 SDK reference: [Auth0 SPA client](https://github.com/auth0/auth0-spa-js/blob/main/src/Auth0Client.ts).
 
 Browser reference: [Chromium opener isolation](https://chromium.googlesource.com/chromium/src.git/+/master/docs/security/post-spectre-webdev.md).
