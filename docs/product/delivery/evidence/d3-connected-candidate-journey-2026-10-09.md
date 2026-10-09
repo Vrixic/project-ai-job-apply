@@ -78,6 +78,7 @@ and keyboard/axe checks. The full scripts/verify-phase0.ps1 run exited zero: 64 
 23 builds, 39 test/build graph tasks, guards, security checks and isolation/Compose checks passed.
 No live generation/provider activation
 or native content transport is claimed. The flag must stay off until the owning release gates close.
+Merged in [PR #606](https://github.com/Vrixic/project-ai-job-apply/pull/606).
 
 ## D3-082 form-plan safety follow-up
 
@@ -91,6 +92,13 @@ shape, adapter activation, provider scope or external effect changes.
 All 20 synthetic SDK tests pass, including five new regressions. The actual Chromium connected
 journey was repeated and passed with synthetic BFF/native responses; it still proves no live
 generation, provider fidelity, external submission or installed-extension acceptance.
+Source review: [PR #607](https://github.com/Vrixic/project-ai-job-apply/pull/607).
+The final full verifier exited zero on D3-082 code: 38 typecheck tasks, 23 production builds,
+39 test/build graph tasks, security/operator checks, native bundle isolation, Compose and scope
+checks passed. The web suite remains 812 tests; ATS SDK has 20. Live/SQL opt-in skips remain
+explicit. Logs are ignored local files `.tmp/d3-form-plan-verify.log` and
+`.tmp/d3-form-plan-browser.log`. An earlier verifier invocation was stopped when source inspection
+expanded this batch to enforce the adopted restricted-field threshold; the final run passed whole.
 
 ## Remaining work and genuine gates
 
@@ -126,3 +134,8 @@ is empty. Additional development readback found no ECS services, enabled Schedul
 or non-terminated EC2 instances.
 The PC remains on.
 D3-081 shutdown readback at 2026-10-09T16:09:28Z reconfirmed the development runtime counts above, no enabled Scheduler schedules, and no active Lambda event-source mappings. WSL shutdown completed with no running distributions or Docker processes. Staging SSO remains unavailable.
+D3-082 development readback at 2026-10-09T16:20:50Z reconfirmed zero RDS/ECS/NAT/interface-endpoint/
+API-route capacity and no enabled Scheduler schedules or active Lambda event-source mappings;
+only the retained GuardDuty protection rule is enabled. Docker has no processes and WSL has no
+running distributions. Staging still cannot load its separate SSO token; no browser SSO session
+is available through the enabled browser surfaces. The PC remains on.
