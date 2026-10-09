@@ -62,6 +62,10 @@
         {
           "version": "0014_native_material_cleanup_queue",
           "checksum": "f93f78f95b7236c0e85cc5bcf4f90e08f1d3575b127c124f3d9ae7fd1eafc714"
+        },
+        {
+          "version": "0015_legacy_receipt_archive",
+          "checksum": "f95d24dea7048d56452f2d1485465f93f1376a73713481dee541a33c54282215"
         }
       ],
       "relations": [
@@ -78,6 +82,7 @@
         "applications.preparation_audit",
         "applications.preparation_outbox",
         "applications.schema_migrations",
+        "applications_restricted.legacy_receipts",
         "applications_restricted.packet_read_audit",
         "applications_restricted.packet_values"
       ]

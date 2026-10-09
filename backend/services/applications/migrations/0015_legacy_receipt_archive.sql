@@ -1,6 +1,5 @@
--- Proposed ADR-043: post-0009 archive boundary. Not invoked by the migration driver yet.
--- The future explicit transition must install this boundary and transfer original receipts
--- atomically. This file does not move records or disable any immutability/delete guard.
+-- ADR-043: protected legacy receipt archive. Fresh/current databases install an empty boundary.
+-- Historical receipt transfer remains an explicit atomic maintenance operation.
 ALTER TABLE applications.command_receipts DROP CONSTRAINT command_receipts_operation_check;
 ALTER TABLE applications.command_receipts ADD CONSTRAINT command_receipts_operation_check CHECK (
   operation IN ('create_application', 'create_packet', 'approve', 'cancel', 'start_attempt',

@@ -1204,3 +1204,11 @@ owner/key reservation while the original digest stays encrypted. [Evidence](evid
 Atomic old-row transfer, migration/restore integration and production wiring remain unfinished.
 D1/D3 stay In progress; no cloud mutation, development remains dormant, Docker/WSL stopped,
 PC on and hosted CI/CD deferred.
+
+2026-10-08 D3-077 implements the atomic historical receipt transition and canonical migration 0015.
+Eight real PostgreSQL historical-transition cases and eleven archive/replay cases pass with
+simulated KMS. Local dump/restore matches all 96 relation row sets across 79 migrations, including
+populated archives. [Evidence](evidence/d3-legacy-receipt-transition-2026-10-08.md#atomic-historical-transition-and-canonical-forward-migration).
+Original packets/approval/receipt metadata and old migration checksums remain intact; failures roll
+back the table replacement and all migrations. Managed operator, key/release wiring and live
+acceptance remain. D1/D3 stay In progress; AWS is dormant, Docker/WSL stopped and PC on.

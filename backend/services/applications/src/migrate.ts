@@ -22,6 +22,7 @@ const migrationVersions = [
   "0012_native_resume_execution_observation",
   "0013_native_material_withdrawals",
   "0014_native_material_cleanup_queue",
+  "0015_legacy_receipt_archive",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -80,6 +81,9 @@ try {
         resumeExecutionGuardCount: number;
         resumeObservationGuardCount: number;
         resumeRequestTriggerCount: number;
+        legacyArchiveGuardCount: number;
+        legacyArchiveConstraintCount: number;
+        legacyArchiveDeleteBodyCount: number;
       }[]
     >`
       SELECT
@@ -95,7 +99,8 @@ try {
          (to_regclass('applications.preparation_audit') IS NOT NULL)::int +
          (to_regclass('applications.schema_migrations') IS NOT NULL)::int +
          (to_regclass('applications_restricted.packet_values') IS NOT NULL)::int +
-         (to_regclass('applications_restricted.packet_read_audit') IS NOT NULL)::int)::int AS "relationCount",
+         (to_regclass('applications_restricted.packet_read_audit') IS NOT NULL)::int +
+         (to_regclass('applications_restricted.legacy_receipts') IS NOT NULL)::int)::int AS "relationCount",
         (SELECT count(*)::int FROM pg_trigger
           WHERE tgname IN (
             'packets_immutable', 'history_immutable', 'command_receipts_immutable',
@@ -190,10 +195,22 @@ try {
           AND tgenabled='O' AND tgname='outbox_resume_execution_observation_guard') +
          (to_regclass('applications.outbox_resume_execution_observation_due') IS NOT NULL)::int) AS "resumeObservationGuardCount",
         (SELECT count(*)::int FROM pg_trigger WHERE tgrelid='applications.outbox'::regclass
-          AND tgenabled='O' AND tgname='outbox_native_resume_binding_guard') AS "resumeRequestTriggerCount"
+          AND tgenabled='O' AND tgname='outbox_native_resume_binding_guard') AS "resumeRequestTriggerCount",
+        (SELECT count(*)::int FROM pg_trigger WHERE NOT tgisinternal AND tgenabled='O' AND (
+          (tgrelid='applications.command_receipts'::regclass AND tgname='legacy_receipt_marker_pair' AND tgdeferrable AND tginitdeferred)
+          OR (tgrelid='applications_restricted.legacy_receipts'::regclass AND (
+            (tgname='legacy_receipt_archive_pair' AND tgdeferrable AND tginitdeferred)
+            OR tgname IN ('legacy_receipts_immutable','legacy_receipts_candidate_delete','legacy_receipts_active_candidate')))))
+          AS "legacyArchiveGuardCount",
+        (SELECT count(*)::int FROM pg_constraint WHERE conrelid='applications_restricted.legacy_receipts'::regclass
+          AND convalidated AND conname IN ('legacy_receipt_marker_fk','legacy_receipt_application_fk'))
+          AS "legacyArchiveConstraintCount",
+        (SELECT count(*)::int FROM pg_proc WHERE oid=to_regprocedure('applications.delete_candidate_data(uuid,uuid)')
+          AND prosecdef AND pg_get_functiondef(oid) LIKE '%DELETE FROM applications_restricted.legacy_receipts%')
+          AS "legacyArchiveDeleteBodyCount"
     `;
     if (
-      verification?.relationCount !== 13 ||
+      verification?.relationCount !== 14 ||
       verification.guardTriggerCount !== 20 ||
       verification.supportingIndexCount !== 9 ||
       verification.migrationCount !== migrationVersions.length ||
@@ -210,7 +227,10 @@ try {
       verification.resumeRequestConstraintCount !== 2 ||
       verification.resumeExecutionGuardCount !== 3 ||
       verification.resumeObservationGuardCount !== 3 ||
-      verification.resumeRequestTriggerCount !== 1
+      verification.resumeRequestTriggerCount !== 1 ||
+      verification.legacyArchiveGuardCount !== 5 ||
+      verification.legacyArchiveConstraintCount !== 2 ||
+      verification.legacyArchiveDeleteBodyCount !== 1
     ) {
       throw new Error(
         `Applications migration verification failed: ${JSON.stringify(verification)}`,
