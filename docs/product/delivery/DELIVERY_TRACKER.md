@@ -5658,3 +5658,12 @@ identities are preserved. Zero drift, exact recovery archive and runtime shutdow
 [Managed preparation evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-preparation-recovery-verified).
 No task or candidate journey ran. Fifteen encrypted snapshots are retained; ongoing durable-resource
 and monitoring charges remain. Docker/WSL stopped, PC on. D1/D3 remain In progress.
+
+
+2026-10-09 original resume hostname and disposal bindings are verified on dormant Gateway 89
+at state 481. The artifact, packet protection and all prior identities are preserved; native
+runtime flags stay off. Zero drift and exact recovery archive pass.
+[Gateway binding evidence](evidence/d3-native-application-disposal-2026-10-07.md#dormant-gateway-resume-bindings-verified).
+AWS runtimes remain off with fifteen encrypted recovery snapshots; retained charges remain.
+Docker/WSL stopped, PC on. Controlled sign-in and connected native acceptance remain; D1/D3
+are In progress.
