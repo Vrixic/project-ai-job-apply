@@ -35,6 +35,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Form-plan safety (D3-082) | Conflicting control claims and duplicate normalized options fail closed; challenges produce no fill/attach actions; restricted fields always require candidate action under the adopted D3-013 threshold. All 20 synthetic SDK tests, the synthetic connected Chromium journey and the full repository verifier pass. | Provider fixtures, first adapter integration and live acceptance remain open. |
 | Native browser materials (D3-083) | Owner-selected separate in-memory Auth0 popup PKCE, direct native resume/cover-letter previews, explicit review integration and approved PDF/DOCX downloads are implemented behind a default-off flag. 35 new auth/transport/UI/header regressions and the synthetic Chromium journey pass. The owner-approved separate SPA registration is configured and saved grant/origin settings are inspected. | Controlled same-owner sign-in, live DNS/TLS/CORS and native/provider/release acceptance remain. |
 | Form extraction limits (D3-084) | Oversized forms/options/question text are rejected instead of hashing or planning from a prefix. All 24 synthetic SDK tests pass, including exact-boundary, overflow and radio-requiredness regressions. | The full repository verifier and synthetic Chromium journey pass; future adapter integration must handle extraction refusal. Provider fixtures and live acceptance remain open. |
+| Shutdown status dependency (D3-085) | Staging status uses exact function inventory rather than treating empty mappings as proof of deployment. Nine synthetic absence/presence/active-trigger/read-failure cases, the full repository verifier and the synthetic connected Chromium journey pass. The corrected read-only operator verifies dormant staging. | AWS access/checks are sequential per the owner. This required shutdown dependency adds no D1 acceptance or D3 provider activation. |
 
 ## Decisions and scope changes
 
@@ -88,3 +89,8 @@ native acceptance. Public identifiers are held only in ignored local configurati
 and the synthetic connected Chromium journey pass. Development SSO is restored and dormant
 runtime readback is verified; staging fresh verification now lacks its separate SSO session.
 D3 remains In progress; no provider/native release or independent D1 acceptance is claimed.
+
+2026-10-09: D3-085 fixes the optional-processor detection that blocked staging shutdown status.
+Nine regressions, the full repository verifier and the synthetic connected Chromium journey pass;
+live read-only staging status verifies dormant. The owner clarified that AWS access must be
+sequential; staging need not remain signed in during development testing. D3 remains In progress.

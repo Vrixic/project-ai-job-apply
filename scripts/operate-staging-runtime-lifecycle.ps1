@@ -313,12 +313,17 @@ function Get-TriggerState {
         "ai-job-apply-staging-outbox-starter:staging", "--output", "json"
       )).EventSourceMappings)
   $enabledMappings = @($mapping | Where-Object { $_.State -in @("Enabled", "Enabling") }).Count
-  $documentProcessorPresent = $false
-  $documentMappingRaw = & aws lambda list-event-source-mappings --function-name `
-    "ai-job-apply-staging-document-processor:staging" --output json 2>$null
-  if ($LASTEXITCODE -eq 0) {
-    $documentProcessorPresent = $true
-    $documentMappings = @(($documentMappingRaw | ConvertFrom-Json).EventSourceMappings)
+  # ListEventSourceMappings also succeeds with an empty list for a nonexistent function.
+  # Resolve deployment from the function inventory; failed inventory reads must fail closed.
+  $functionNames = @(Invoke-AwsJson @(
+      "lambda", "list-functions", "--query", "Functions[].FunctionName", "--output", "json"
+    ))
+  $documentProcessorPresent = $functionNames -ccontains "ai-job-apply-staging-document-processor"
+  if ($documentProcessorPresent) {
+    $documentMappings = @((Invoke-AwsJson @(
+          "lambda", "list-event-source-mappings", "--function-name",
+          "ai-job-apply-staging-document-processor:staging", "--output", "json"
+        )).EventSourceMappings)
     $enabledMappings += @($documentMappings | Where-Object {
         $_.State -in @("Enabled", "Enabling")
       }).Count
@@ -336,9 +341,8 @@ function Get-TriggerState {
         "ai-job-apply-staging-document-scan-results",
         "ai-job-apply-staging-document-processing-reconciler"
       )) {
-      $documentRuleRaw = & aws events describe-rule --name $documentRuleName --output json 2>$null
-      if ($LASTEXITCODE -ne 0) { throw "A deployed document-processing rule is unavailable." }
-      if ([string](($documentRuleRaw | ConvertFrom-Json).State) -eq "ENABLED") { $enabledRules++ }
+      $documentRule = Invoke-AwsJson @("events", "describe-rule", "--name", $documentRuleName, "--output", "json")
+      if ([string]$documentRule.State -eq "ENABLED") { $enabledRules++ }
     }
   }
   return [pscustomobject]@{
