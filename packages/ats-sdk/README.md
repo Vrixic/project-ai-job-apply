@@ -17,3 +17,9 @@ Provider-specific behavior belongs in its adapter folder; the SDK remains provid
 ## Current D3 slice (source and local verification only)
 
 Provider-neutral only. `extractGenericForm` reads standard form structure; `formStructureHash` binds packets to the form; `mapFormFields` maps controls to taxonomy keys and refuses ambiguous claims; `buildFillPlan` plans only approved values and hands attestations, signatures, unmapped, and unmatched controls to the candidate; `planAssistedManual` is the no-action fallback for unknown sites; `AdapterRegistry` keeps every adapter off unless its kill switch is on, live ATS effects are approved (D3-012), and unexpired QA-accepted provider-derived fixture evidence covers the exact variant (ADR-021). Greenhouse, Lever, and Ashby adapters are declared with no supported variants until D3-013 supplies authorized fixtures.
+
+D3-082 fails closed on conflicting taxonomy claims within a control or across controls and on
+duplicate normalized option labels. A detected challenge produces only candidate-action steps.
+Restricted authorization/demographic/disclosure fields require direct candidate action even when
+the approved packet carries an answer, matching D3-013's adopted zero-sensitive-fill threshold.
+These synthetic SDK checks do not establish provider fidelity or live acceptance.
