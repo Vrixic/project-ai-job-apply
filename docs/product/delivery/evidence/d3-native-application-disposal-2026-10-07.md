@@ -1965,3 +1965,33 @@ This closes disabled resume-preparation/cleanup deployment only. Gateway native 
 restored database readiness, exact RPC activation, authenticated generation/download/retirement,
 cover-letter provider configuration and the remaining candidate/client/ATS/accountable acceptance
 gates are still open. D1/D3 remain In progress; accepted manual checks and CI deferral are unchanged.
+
+
+### Dormant Gateway resume bindings verified
+
+At merged source `7aeb0c96b5a048915057eabfae4ac885b8e612fd`, the reviewed three-resource plan
+adds only the original resume download hostname, original task disposal binding and scoped
+Gateway disposal policy. Existing packet protection and legacy receipt replay remain configured;
+all native runtime switches remain off. The Gateway artifact is unchanged.
+
+Development state **481** independently verifies Gateway version **89**, an unweighted alias,
+exact environment/code identity and the original-cluster DescribeTasks/StopTask policy. All 350
+previous managed identities are preserved; only one IAM policy is added. No task or API route
+was activated. The full-input refresh-backed plan reports zero drift.
+
+Applied plan SHA-256: `e18c074872733700b450b81e22203778394772d6439e716bbf8dd868096b6904`.
+Complete dormant inputs SHA-256: `19d678365c1d436a8da315eb0ba76eb0e6df5f6dd4976f2fe5b973c5772c07e2`.
+Canonical versioned customer-KMS recovery inputs/proof/manifest were updated and exact-version
+readback passed. These inputs supersede state 480.
+
+Shutdown observation at **2026-10-09T13:36:21Z** confirms zero database instances, enabled rules
+or consumers, public API routes, live NAT/interface endpoints and non-stopped ECS tasks.
+Fifteen encrypted available recovery snapshots remain. Retained storage, monitoring, keys,
+secrets and DNS continue to incur charges. Docker/WSL remain stopped; PC remains on.
+
+Connected acceptance is still pending. In-app browser control is unavailable in this session and
+the local sign-in application is stopped. The local identity configuration has the required
+client settings but does not enable Applications scopes; the earlier deployed-web real-token
+Applications acceptance remains valid historical evidence. Prepare the controlled sign-in/test
+session before restoring paid runtime resources. No token, cookie or secret value was recorded,
+and no existing accepted manual checks were reopened. D1/D3 remain In progress.
