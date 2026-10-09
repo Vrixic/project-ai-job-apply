@@ -137,3 +137,27 @@ run "foreign_cluster_rejected" {
   }
   expect_failures = [var.native_resume_control_network]
 }
+
+run "dormant_retains_control_binding_without_paid_endpoints" {
+  command = plan
+  variables {
+    development_database_mode         = "dormant"
+    private_service_endpoints_enabled = false
+    development_database_recovery = {
+      address                   = "database.cluster.us-east-2.rds.amazonaws.com"
+      port                      = 5432
+      name                      = "ai_job_apply"
+      resource_id               = "db-ABCDEFGHIJKLMNOPQRSTUVWX"
+      final_snapshot_identifier = "ai-job-apply-development-shutdown-native"
+    }
+    native_resume_control_network = { "7" = {
+      cluster_arn        = "arn:aws:ecs:us-east-2:111122223333:cluster/native-resume"
+      security_group_ids = ["sg-0123456789abcdef0"]
+      address_lookup     = true
+    } }
+  }
+  assert {
+    condition     = length(aws_db_instance.postgres) == 0 && length(aws_vpc_endpoint.native_resume_api) == 0 && length(aws_security_group.native_resume_api) == 1
+    error_message = "Retained control bindings must respect the paid-endpoint shutdown switch."
+  }
+}

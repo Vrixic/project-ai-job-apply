@@ -1680,3 +1680,32 @@ databases, enabled rules/mappings, API routes, non-stopped ECS tasks, NAT gatewa
 endpoints. Fifteen encrypted manual recovery snapshots are available. No cloud mutation occurred;
 retained recovery/storage/security/DNS costs remain. Docker and WSL are stopped; the PC stays on.
 D1/D3 remain In progress; this operator repair does not close managed journey acceptance.
+
+
+## Native release shutdown compatibility (2026-10-09)
+
+PR #590's merged operator independently verified the original `444c9346` migration publication:
+receipt and immutable image match; scan COMPLETE with zero High/Critical findings. No migration
+or Terraform mutation occurred. Current `c386a4c5` Gateway publication passes tests, dependency
+audit, two matching builds and independent exact-version readback of all four objects. Its receipt
+SHA-256 is `531381328603ee22a8c54dc9b19a167c9747e00d05494679cfd20f9dfdc9f8a0`.
+NativePreparation also published and independently verified sixteen companions at that source;
+the remaining connected native artifact publication batch is still running. No activation is claimed.
+
+Pre-deployment review found that native KMS and ECS/EC2 interface endpoints ignored the existing
+paid-endpoint shutdown switch. Both now honor it while retaining queues, release bindings, keys
+and security groups. Database dormancy already preserves `persistent_data_plane_enabled`; no queue
+precondition change is needed. Development input validation additionally rejects native source,
+owner, launch, intake, routing, observation and recovery activity during shutdown, restore or
+interface-endpoint removal.
+Disabled original release maps remain allowed; normal retained-database activation is preserved.
+
+Final Terraform verification passes **22 platform cases and 32 environment input cases**, plus
+platform/development validation. Cases cover retained queues/security groups with endpoints absent,
+all native activity flags, normal retained-database activation, snapshot preparation, restore and
+endpoint removal independent of database dormancy. These use mocked providers/modules, not live
+cloud deployment.
+The existing prelaunch shutdown runbook now includes optional native endpoints and explicit native
+quiescence. D1/D3 remain In progress. AWS development was independently observed dormant at
+2026-10-09T12:02:11Z with fifteen encrypted recovery snapshots; no runtime deployment occurred.
+Retained storage/security/DNS costs remain. Docker/WSL are stopped, PC on and hosted CI/CD deferred.

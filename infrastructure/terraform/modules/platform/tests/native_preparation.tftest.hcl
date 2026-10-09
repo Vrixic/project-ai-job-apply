@@ -111,3 +111,32 @@ run "alias_refused" {
   variables { native_preparation_releases = { r1 = { "queue_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-development-prep-r1", "dead_letter_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-development-prep-failed-r1", "kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012", "database_secret_arn" : "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/database-Abc123", "launcher_function_arn" : "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-native-launch:live", "packet_encryption_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/22345678-1234-4234-8234-123456789012", "packet_fingerprint_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/32345678-1234-4234-8234-123456789012", "security_group_ids" : ["sg-0123456789abcdef0"] } } }
   expect_failures = [var.native_preparation_releases]
 }
+
+run "dormant_retains_preparation_queues_without_paid_endpoints" {
+  command = plan
+  override_resource {
+    target          = aws_sqs_queue.native_preparation_failure["r1"]
+    override_during = plan
+    values          = { arn = "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-development-prep-failed-r1" }
+  }
+  variables {
+    native_preparation_releases       = { r1 = { "queue_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-development-prep-r1", "dead_letter_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-development-prep-failed-r1", "kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012", "database_secret_arn" : "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/database-Abc123", "launcher_function_arn" : "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-native-launch:9", "packet_encryption_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/22345678-1234-4234-8234-123456789012", "packet_fingerprint_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/32345678-1234-4234-8234-123456789012", "security_group_ids" : ["sg-0123456789abcdef0"] } }
+    development_database_mode         = "dormant"
+    private_service_endpoints_enabled = false
+    development_database_recovery = {
+      address                   = "database.cluster.us-east-2.rds.amazonaws.com"
+      port                      = 5432
+      name                      = "ai_job_apply"
+      resource_id               = "db-ABCDEFGHIJKLMNOPQRSTUVWX"
+      final_snapshot_identifier = "ai-job-apply-development-shutdown-native"
+    }
+  }
+  assert {
+    condition     = length(aws_db_instance.postgres) == 0 && length(aws_sqs_queue.native_preparation) == 1 && length(aws_sqs_queue.native_preparation_failure) == 1
+    error_message = "Dormancy must retain original preparation queues while removing database compute."
+  }
+  assert {
+    condition     = length(aws_vpc_endpoint.native_preparation_kms) == 0 && length(aws_vpc_endpoint.lambda) == 0 && length(aws_vpc_endpoint.sqs) == 0 && length(aws_vpc_endpoint.secretsmanager) == 0
+    error_message = "Retained preparation release must not force paid endpoints during shutdown."
+  }
+}
