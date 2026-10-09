@@ -79,6 +79,19 @@ and keyboard/axe checks. The full scripts/verify-phase0.ps1 run exited zero: 64 
 No live generation/provider activation
 or native content transport is claimed. The flag must stay off until the owning release gates close.
 
+## D3-082 form-plan safety follow-up
+
+Static inspection found conflicting label/name claims chose one taxonomy key, normalized duplicate
+options chose the first match, and a challenge flag still accompanied fill/attachment actions.
+The planner now refuses these actions. Restricted authorization/demographic/disclosure fields
+always require candidate action, including previously reviewed packet values, enforcing the
+owner-adopted zero-sensitive-fill threshold in the D3-013 fixture request. No API/persistence
+shape, adapter activation, provider scope or external effect changes.
+
+All 20 synthetic SDK tests pass, including five new regressions. The actual Chromium connected
+journey was repeated and passed with synthetic BFF/native responses; it still proves no live
+generation, provider fidelity, external submission or installed-extension acceptance.
+
 ## Remaining work and genuine gates
 
 GitHub Actions cannot start jobs: its check annotation reports failed recent account payments

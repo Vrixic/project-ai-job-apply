@@ -48,12 +48,24 @@ export interface FillPlan {
   unresolvedRequired: string[];
 }
 
-const DIRECT_ACTION_PREFIXES = ["attestation.", "signature.", "challenge.", "captcha.", "mfa."];
+// D3-013's adopted threshold requires candidate action for every restricted field, even when
+// the approved packet carries a previously reviewed value.
+const DIRECT_ACTION_PREFIXES = [
+  "authorization.",
+  "demographic.",
+  "disclosure.",
+  "attestation.",
+  "signature.",
+  "challenge.",
+  "captcha.",
+  "mfa.",
+];
 const MIN_CONFIDENCE = 0.8;
 
 function optionMatch(field: FormField, value: string): string | undefined {
   const wanted = value.trim().toLowerCase();
-  return field.options.find((option) => option.trim().toLowerCase() === wanted);
+  const matches = field.options.filter((option) => option.trim().toLowerCase() === wanted);
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 /**
@@ -80,6 +92,12 @@ export function buildFillPlan(
       actions.push({ kind: "require_user", ref: field.ref, fieldKey, reason });
       if (field.required) unresolved.push(field.ref);
     };
+
+    // A challenge stops every page action, including otherwise safe fills and attachments.
+    if (form.challengePresent) {
+      requireUser("unsupported_control", mapping.fieldKey);
+      continue;
+    }
 
     if (mapping.reason === "unmapped" || mapping.reason === "ambiguous") {
       if (field.required) {

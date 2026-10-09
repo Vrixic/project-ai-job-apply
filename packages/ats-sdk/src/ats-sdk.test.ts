@@ -92,6 +92,35 @@ describe("generic form extraction", () => {
 });
 
 describe("field mapping", () => {
+  it("refuses conflicting label/name claims, including sensitive and direct-action controls", () => {
+    for (const html of [
+      '<label>Phone <input name="email" required></label>',
+      '<label>Do you require sponsorship? <input name="email" required></label>',
+      '<label>I certify this is accurate <input type="checkbox" name="email" required></label>',
+      '<label>Email and phone <input name="answer" required></label>',
+    ]) {
+      const form = extractGenericForm(page(html));
+      expect(mapFormFields(form)).toEqual([
+        { ref: "f0", fieldKey: null, confidence: 0, reason: "ambiguous" },
+      ]);
+      expect(
+        buildFillPlan(
+          form,
+          [{ fieldKey: "contact.email", value: "alex@example.test", needsUserAction: false }],
+          { resume: false, coverLetter: false },
+        ).actions,
+      ).toEqual([{ kind: "require_user", ref: "f0", fieldKey: null, reason: "ambiguous_mapping" }]);
+      expect(planAssistedManual(form).suggestions).toEqual([]);
+    }
+  });
+
+  it("keeps competing claims ambiguous even when one control also claims a different key", () => {
+    const form = extractGenericForm(
+      page('<label>Phone <input name="email"></label><label>Email <input name="address"></label>'),
+    );
+    expect(mapFormFields(form).map((entry) => entry.reason)).toEqual(["ambiguous", "ambiguous"]);
+  });
+
   it("maps common labels, including sensitive keys, so they are recognized", () => {
     const form = extractGenericForm(page(BASIC));
     const keys = mapFormFields(form).map((mapping) => mapping.fieldKey);
@@ -135,10 +164,9 @@ describe("fill plan", () => {
     const byRef = new Map(plan.actions.map((action) => [action.ref, action]));
     expect(byRef.get("f0")).toMatchObject({ kind: "fill", value: "Alex" });
     expect(byRef.get("f2")).toMatchObject({ kind: "fill", value: "alex@example.test" });
-    // Option matching is exact and case-insensitive; "Yes" is chosen for "yes".
-    expect(byRef.get("f4")).toMatchObject({ kind: "select", option: "Yes" });
-    // A value with no exact option is never coerced to the nearest one.
-    expect(byRef.get("f5")).toMatchObject({ kind: "require_user", reason: "option_not_found" });
+    // Restricted answers always require candidate action, including previously reviewed values.
+    expect(byRef.get("f4")).toMatchObject({ kind: "require_user", reason: "direct_action_field" });
+    expect(byRef.get("f5")).toMatchObject({ kind: "require_user", reason: "direct_action_field" });
     expect(byRef.get("f6")).toMatchObject({
       kind: "attach_artifact",
       fieldKey: "documents.resume",
@@ -147,7 +175,7 @@ describe("fill plan", () => {
     expect(byRef.get("f7")).toMatchObject({ kind: "require_user", reason: "direct_action_field" });
     expect(byRef.get("f3")).toMatchObject({ kind: "require_user", reason: "no_packet_value" });
     expect(byRef.get("f8")).toMatchObject({ kind: "skip", reason: "unmapped_optional" });
-    expect(plan.unresolvedRequired).toEqual(["f7"]);
+    expect(plan.unresolvedRequired).toEqual(["f4", "f7"]);
     expect(plan.requiresTakeover).toBe(false);
   });
 
@@ -164,6 +192,82 @@ describe("fill plan", () => {
     const challenged = extractGenericForm(page(`${BASIC}<div class="g-recaptcha"></div>`));
     const plan = buildFillPlan(challenged, packet, { resume: true, coverLetter: false });
     expect(plan.requiresTakeover).toBe(true);
+    expect(plan.actions.every((action) => action.kind === "require_user")).toBe(true);
+    expect(plan.unresolvedRequired).toEqual(["f0", "f1", "f2", "f4", "f6", "f7"]);
+  });
+
+  it("refuses duplicate option labels after normalization instead of choosing the first", () => {
+    for (const html of [
+      '<label for="site">Website</label><select id="site" required><option>Example</option><option> EXAMPLE </option></select>',
+      '<fieldset><legend>Website</legend><label><input type="radio" name="site" required>Example</label><label><input type="radio" name="site"> EXAMPLE </label></fieldset>',
+    ]) {
+      const form = extractGenericForm(page(html));
+      const plan = buildFillPlan(
+        form,
+        [{ fieldKey: "links.portfolio", value: "example", needsUserAction: false }],
+        { resume: false, coverLetter: false },
+      );
+      expect(plan.actions).toEqual([
+        {
+          kind: "require_user",
+          ref: "f0",
+          fieldKey: "links.portfolio",
+          reason: "option_not_found",
+        },
+      ]);
+      expect(plan.unresolvedRequired).toEqual(["f0"]);
+    }
+  });
+
+  it("never fills restricted answers or signatures even when supplied and reviewed in the packet", () => {
+    const cases = [
+      ["Work authorization", "authorization.us_authorized"],
+      ["Sponsorship", "authorization.sponsorship_required"],
+      ["Export control", "authorization.export_control"],
+      ["Gender", "demographic.gender"],
+      ["Race", "demographic.race_ethnicity"],
+      ["Veteran", "demographic.veteran"],
+      ["Disability", "demographic.disability"],
+      ["Signature", "signature.electronic"],
+    ];
+    for (const [label, fieldKey] of cases) {
+      const form = extractGenericForm(page(`<label>${label}<input required></label>`));
+      const plan = buildFillPlan(
+        form,
+        [
+          {
+            fieldKey: fieldKey as string,
+            value: "Candidate-reviewed answer",
+            needsUserAction: false,
+          },
+        ],
+        { resume: false, coverLetter: false },
+      );
+      expect(plan.actions).toEqual([
+        { kind: "require_user", ref: "f0", fieldKey, reason: "direct_action_field" },
+      ]);
+      expect(plan.unresolvedRequired).toEqual(["f0"]);
+    }
+  });
+
+  it("selects a single exact normalized non-sensitive option and refuses a nearest match", () => {
+    const form = extractGenericForm(
+      page(
+        '<label for="site">Website</label><select id="site" required><option>Example</option><option>Other</option></select>',
+      ),
+    );
+    const plan = (value: string) =>
+      buildFillPlan(form, [{ fieldKey: "links.portfolio", value, needsUserAction: false }], {
+        resume: false,
+        coverLetter: false,
+      });
+    expect(plan(" EXAMPLE ").actions).toEqual([
+      { kind: "select", ref: "f0", fieldKey: "links.portfolio", option: "Example" },
+    ]);
+    expect(plan("Exampl").actions[0]).toMatchObject({
+      kind: "require_user",
+      reason: "option_not_found",
+    });
   });
 
   it("does not plan a value the packet marks as needing candidate action", () => {

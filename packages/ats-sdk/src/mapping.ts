@@ -117,10 +117,10 @@ function normalize(label: string): string {
     .trim();
 }
 
-function matchOne(field: FormField): { key: string; confidence: number } | null {
+function matchesFor(field: FormField): Map<string, number> {
   const label = normalize(field.label || field.name);
   const name = normalize(field.name.replace(/[_\-[\]]+/gu, " "));
-  let best: { key: string; confidence: number } | null = null;
+  const matches = new Map<string, number>();
   for (const synonym of SYNONYMS) {
     if (synonym.types && !synonym.types.includes(field.type)) continue;
     for (const pattern of synonym.patterns) {
@@ -128,28 +128,30 @@ function matchOne(field: FormField): { key: string; confidence: number } | null 
         const match = pattern.exec(text);
         if (!match) continue;
         const confidence = match[0].length === text.length ? 1 : 0.8;
-        if (!best || confidence > best.confidence) best = { key: synonym.key, confidence };
+        matches.set(synonym.key, Math.max(matches.get(synonym.key) ?? 0, confidence));
       }
     }
   }
-  return best;
+  return matches;
 }
 
 /**
- * Maps form controls to taxonomy keys. A key claimed by more than one control is ambiguous and
- * mapped to none: the candidate decides, the SDK never picks.
+ * Maps form controls to taxonomy keys. Conflicting keys within one control and keys claimed by
+ * more than one control are ambiguous and mapped to none: the candidate decides, the SDK never picks.
  */
 export function mapFormFields(form: ApplicationFormModel): FieldMapping[] {
-  const matches = form.fields.map((field) => ({ field, match: matchOne(field) }));
+  const matches = form.fields.map((field) => ({ field, matches: matchesFor(field) }));
   const claims = new Map<string, number>();
-  for (const { match } of matches) {
-    if (match) claims.set(match.key, (claims.get(match.key) ?? 0) + 1);
+  for (const entry of matches) {
+    for (const key of entry.matches.keys()) claims.set(key, (claims.get(key) ?? 0) + 1);
   }
-  return matches.map(({ field, match }): FieldMapping => {
-    if (!match) return { ref: field.ref, fieldKey: null, confidence: 0, reason: "unmapped" };
-    if ((claims.get(match.key) ?? 0) > 1) {
+  return matches.map(({ field, matches: candidates }): FieldMapping => {
+    if (candidates.size === 0)
+      return { ref: field.ref, fieldKey: null, confidence: 0, reason: "unmapped" };
+    const [key, confidence] = candidates.entries().next().value as [string, number];
+    if (candidates.size !== 1 || (claims.get(key) ?? 0) > 1) {
       return { ref: field.ref, fieldKey: null, confidence: 0, reason: "ambiguous" };
     }
-    return { ref: field.ref, fieldKey: match.key, confidence: match.confidence, reason: "matched" };
+    return { ref: field.ref, fieldKey: key, confidence, reason: "matched" };
   });
 }
