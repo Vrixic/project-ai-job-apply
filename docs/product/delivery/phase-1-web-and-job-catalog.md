@@ -1179,3 +1179,12 @@ Full migration-operator and schema-7/schema-8 adversarial suites plus infrastruc
 pass. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#post-apply-delivery-evidence-compatibility).
 No cloud mutation; development remains dormant at state 450. Managed legacy inventory and
 compatible transition remain; D1/D3 stay In progress, CI/CD deferred and PC on.
+
+2026-10-08 managed revision-63 diagnostics establish a legacy blocker: seven create-packet
+receipts, seven packets, one packet with approval, and zero counted restricted values, protected
+markers or ambiguous attempts. Applications remains at three applied migrations after rollback;
+its guard and failed receipt are preserved. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-legacy-inventory-from-revision-63).
+An explicit receipt-compatible transition and complete field-shape proof remain before retry.
+Mandatory shutdown completes at state 456: both databases absent, twelve encrypted snapshots,
+289 other identities preserved, zero drift and verified recovery archive. D1/D3 stay In progress;
+staging SSO is unavailable, retained costs remain, Docker/WSL stopped, PC on and CI/CD deferred.
