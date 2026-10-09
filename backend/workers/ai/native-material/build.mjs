@@ -80,9 +80,10 @@ const require = createRequire(path.join(root, "backend/services/documents/packag
 const pdfRequire = createRequire(require.resolve("pdfjs-dist/package.json"));
 const canvasRoot = path.dirname(pdfRequire.resolve("@napi-rs/canvas/package.json"));
 const canvasRequire = createRequire(path.join(canvasRoot, "package.json"));
-const binaryRoot = path.dirname(
-  canvasRequire.resolve("@napi-rs/canvas-linux-x64-gnu/package.json"),
-);
+const canvasBinary = process.report.getReport().header.glibcVersionRuntime
+  ? "canvas-linux-x64-gnu"
+  : "canvas-linux-x64-musl";
+const binaryRoot = path.dirname(canvasRequire.resolve(`@napi-rs/${canvasBinary}/package.json`));
 const nativeModules = path.join(output, "node_modules/@napi-rs");
 mkdirSync(nativeModules, { recursive: true });
 cpSync(canvasRoot, path.join(nativeModules, "canvas"), {
@@ -90,7 +91,7 @@ cpSync(canvasRoot, path.join(nativeModules, "canvas"), {
   dereference: true,
   filter: (name) => path.basename(name) !== "node_modules",
 });
-cpSync(binaryRoot, path.join(nativeModules, "canvas-linux-x64-gnu"), {
+cpSync(binaryRoot, path.join(nativeModules, canvasBinary), {
   recursive: true,
   dereference: true,
   filter: (name) => path.basename(name) !== "node_modules",
