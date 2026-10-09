@@ -30,6 +30,7 @@ cover-letter opt-in/status/cancellation UI is locally tested behind a separate d
 Provider-neutral form plans reject conflicting claims/duplicate options and leave restricted answers and challenges to candidate action.
 Native browser transport, cover-letter preview/download UI and saved-answer selection remain unfinished source work.
 Connected native/provider acceptance, ATS adapters/fixtures, all-copy expiry, rights/restore and accountable reviews remain.
+The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
 [Implemented and remaining capabilities](phase-3-application-preparation.md).
 
 ## D0 — Product, data, and legal foundation
