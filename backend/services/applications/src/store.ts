@@ -23,6 +23,10 @@ import {
 import { canonicalHash } from "./canonical.js";
 import { type CurrentAction, deriveCurrentAction } from "./current-action.js";
 import type { FieldDefinition, FieldValue } from "./field-policy.js";
+import {
+  createLegacyReceiptReplay,
+  LegacyReceiptReplayConflictError,
+} from "./legacy-receipt-replay.js";
 import type { NativeMaterialAdmissionQuery } from "./native-material-admission.js";
 import {
   lockNativeResumePreparationAdmission,
@@ -402,10 +406,13 @@ export class RestrictedPacketStoreUnavailableError extends Error {
 interface ProtectedRequestHash {
   hash: string;
   keyArn: string;
+  legacyProof?: object;
 }
 class RestrictedPacketReceiptAuthorityChangedError extends Error {}
 
 export interface ApplicationStoreOptions {
+  /** Explicit transition readers only; absent by default and never enables archive writes. */
+  legacyReceipts?: Parameters<typeof createLegacyReceiptReplay>[1];
   /** Atomic Prepare producer only. Default off until the matching dispatcher is composed. */
   nativeResumePreparationEnabled?: () => boolean;
   nativeResumeMaterials?: {
@@ -437,6 +444,7 @@ import {
 } from "./vault.js";
 
 export class PostgresApplicationStore {
+  private readonly legacyReceipts: ReturnType<typeof createLegacyReceiptReplay> | undefined;
   private readonly restrictedPackets: ApplicationStoreOptions["restrictedPackets"];
   private readonly restrictedCarryDefinitions: ReadonlyMap<string, FieldDefinition>;
   private readonly restrictedProtection:
@@ -447,6 +455,9 @@ export class PostgresApplicationStore {
     private readonly clock: () => Date = () => new Date(),
     private readonly options: ApplicationStoreOptions = { definitions: new Map() },
   ) {
+    this.legacyReceipts = options.legacyReceipts
+      ? createLegacyReceiptReplay(client, options.legacyReceipts)
+      : undefined;
     this.restrictedCarryDefinitions = new Map(
       [...options.definitions].map(([key, definition]) => [key, structuredClone(definition)]),
     );
@@ -526,12 +537,32 @@ export class PostgresApplicationStore {
     const { configured } = this.requireRestrictedProtection();
     await this.restrictedOwnerView(command.ownerUserId, command.applicationId);
     const [prior] = await this.client<
-      Array<{ operation: string; scheme: string; key: string | null }>
+      Array<{ operation: string; scheme: string; key: string | null; application_id: string }>
     >`
-      SELECT operation, request_hash_scheme AS scheme, request_key_arn AS key
+      SELECT operation, request_hash_scheme AS scheme, request_key_arn AS key, application_id
       FROM applications.command_receipts
       WHERE owner_user_id = ${command.ownerUserId} AND idempotency_key = ${command.idempotencyKey}
     `;
+    if (prior?.operation === "archived_legacy") {
+      if (prior.application_id !== command.applicationId)
+        throw new ApplicationIdempotencyConflictError();
+      if (!this.legacyReceipts) throw new RestrictedPacketStoreUnavailableError();
+      try {
+        const legacyProof = await this.legacyReceipts.prepare(
+          command.ownerUserId,
+          command.applicationId,
+          command.idempotencyKey,
+          operation,
+          canonicalHash(request),
+        );
+        this.requireRestrictedProtection();
+        return Object.freeze({ hash: "", keyArn: "", legacyProof });
+      } catch (error) {
+        if (error instanceof LegacyReceiptReplayConflictError)
+          throw new ApplicationIdempotencyConflictError();
+        throw new RestrictedPacketStoreUnavailableError();
+      }
+    }
     if (prior && prior.operation !== operation) throw new ApplicationIdempotencyConflictError();
     if (
       prior &&
@@ -2720,6 +2751,31 @@ export class PostgresApplicationStore {
       FROM applications.command_receipts
       WHERE owner_user_id = ${ownerUserId} AND idempotency_key = ${idempotencyKey}
     `;
+    if (row?.operation === "archived_legacy") {
+      if (operation !== "create_packet" && operation !== "queue_preparation")
+        throw new ApplicationIdempotencyConflictError();
+      if (typeof requestHash === "string" || !requestHash.legacyProof || !this.legacyReceipts)
+        throw new RestrictedPacketStoreUnavailableError();
+      try {
+        const original = await this.legacyReceipts.assert(
+          tx,
+          requestHash.legacyProof,
+          ownerUserId,
+          idempotencyKey,
+          operation,
+        );
+        return {
+          applicationId: original.applicationId,
+          note: original.outcomeCode
+            ? { code: original.outcomeCode, subjectId: original.subjectId }
+            : null,
+        };
+      } catch {
+        throw new RestrictedPacketStoreUnavailableError();
+      }
+    }
+    if (typeof requestHash !== "string" && requestHash.legacyProof)
+      throw new RestrictedPacketStoreUnavailableError();
     if (!row) return null;
     if (row.operation !== operation) throw new ApplicationIdempotencyConflictError();
     if (operation === "create_packet" || operation === "queue_preparation") {
