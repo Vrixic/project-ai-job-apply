@@ -287,6 +287,14 @@ as `ReviewedBaselineToCurrentDeltaSha256`; do not reuse a digest after the merge
    current `main`; the descriptor binds both the applied release SHA and exact operator SHA. The
    request has count one, Fargate, public control-plane/image access, an idempotency token, and no
    `overrides` property.
+   The same post-apply check permits modifications to exactly four existing delivery documents:
+   `DELIVERY_TRACKER.md`, `phase-1-web-and-job-catalog.md`, `phase-3-application-preparation.md`
+   under `docs/product/delivery/`, and its
+   `evidence/d3-native-application-disposal-2026-10-07.md`. Recording shutdown evidence therefore
+   does not require rebuilding the unchanged migration image. Every changed path must remain an
+   existing blob at both revisions. Additions, deletions, renames, other documentation paths,
+   migration/image inputs, application code and Terraform changes remain refused. This exception
+   does not change `PlanTask`/`ApplyTask` current-main requirements or any receipt/digest checks.
 4. `Execute` accepts only that checksum-reviewed descriptor, submits it through
    `--cli-input-json`, first conditionally creates an immutable customer-KMS execution claim in
    the versioned state bucket, writes a local receipt immediately, waits for `STOPPED`, and

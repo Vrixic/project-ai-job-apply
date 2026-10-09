@@ -737,6 +737,33 @@ Assert-OperatorOnlyReleaseDelta -ChangeRecords @(
   "M`tscripts/build-gateway-lambda.mjs",
   "M`tinfrastructure/runbooks/deployments/database-migration.md"
 )
+$deliveryEvidenceDelta = @(
+  "M`tdocs/product/delivery/DELIVERY_TRACKER.md",
+  "M`tdocs/product/delivery/phase-1-web-and-job-catalog.md",
+  "M`tdocs/product/delivery/phase-3-application-preparation.md",
+  "M`tdocs/product/delivery/evidence/d3-native-application-disposal-2026-10-07.md"
+)
+Assert-OperatorOnlyReleaseDelta -ChangeRecords $deliveryEvidenceDelta
+Assert-RecoveryOperatorBinding -ExecutionOperatorSourceSha $releaseSource `
+  -CurrentOperatorSourceSha $operatorSource -IsAncestor $true -ChangeRecords $deliveryEvidenceDelta
+foreach ($record in $deliveryEvidenceDelta) {
+  foreach ($status in @("A", "D", "T", "R100")) {
+    $rejected = $false
+    try { Assert-OperatorOnlyReleaseDelta -ChangeRecords @($status + $record.Substring(1)) } catch { $rejected = $true }
+    if (-not $rejected) { throw "Delivery evidence accepted a non-modification change." }
+  }
+}
+foreach ($unexpectedPath in @(
+    "backend/services/applications/migrations/0009_restricted_packet_values.sql",
+    "backend/services/applications/src/migrate.ts",
+    "docs/product/delivery/evidence/unreviewed.md",
+    "docs/product/delivery/DELIVERY_TRACKER.md/extra",
+    "docs/PRODUCT_AND_SYSTEM_ARCHITECTURE.md"
+  )) {
+  $rejected = $false
+  try { Assert-OperatorOnlyReleaseDelta -ChangeRecords @($deliveryEvidenceDelta + "M`t$unexpectedPath") } catch { $rejected = $true }
+  if (-not $rejected) { throw "Delivery evidence masked a non-allowlisted release change." }
+}
 Assert-RecoveryOperatorBinding -ExecutionOperatorSourceSha $releaseSource `
   -CurrentOperatorSourceSha $operatorSource -IsAncestor $true -ChangeRecords @(
     "M`tscripts/operate-development-document-migration.ps1"
@@ -793,6 +820,7 @@ function git {
     if ($script:recoveryGitMode -ceq "valid") {
       return "M`tscripts/operate-development-document-migration.ps1"
     }
+    if ($script:recoveryGitMode -ceq "evidence") { return $deliveryEvidenceDelta }
     if ($script:recoveryGitMode -ceq "invalid") {
       return "M`tbackend/services/profile/src/index.ts"
     }
@@ -819,6 +847,12 @@ try {
   Assert-RecoveryOperatorSource -ExecutionOperatorSourceSha $mockExecutionOperatorSourceSha
   if ($script:recoveryGitDiffCalls -ne 1 -or $script:recoveryGitCatFileCalls -ne 2) {
     throw "Allowlisted ancestor recovery did not inspect the exact nonempty blob delta."
+  }
+
+  $script:recoveryGitMode = "evidence"
+  Assert-RecoveryOperatorSource -ExecutionOperatorSourceSha $mockExecutionOperatorSourceSha
+  if ($script:recoveryGitDiffCalls -ne 2 -or $script:recoveryGitCatFileCalls -ne 10) {
+    throw "Delivery evidence recovery did not inspect both revisions of every document."
   }
 
   $script:recoveryGitMode = "invalid"

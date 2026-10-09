@@ -1171,3 +1171,11 @@ readback passes. Migration task revision 63 is deployed but has not run; managed
 and compatible transition remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restored-access-and-development-shutdown-at-state-450).
 D1/D3 stay In progress. Staging verification remains incomplete because its SSO token is missing.
 Retained storage/security/DNS charges remain; Docker/WSL stopped, PC on, hosted CI/CD deferred.
+
+2026-10-08 fixes the migration operator's post-apply source check for the four exact existing
+D1/D3 delivery evidence documents. The actual published-image-to-shutdown-evidence delta now
+passes without changing image identity; mixed runtime/SQL/infrastructure changes remain refused.
+Full migration-operator and schema-7/schema-8 adversarial suites plus infrastructure validation
+pass. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#post-apply-delivery-evidence-compatibility).
+No cloud mutation; development remains dormant at state 450. Managed legacy inventory and
+compatible transition remain; D1/D3 stay In progress, CI/CD deferred and PC on.
